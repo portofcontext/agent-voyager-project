@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anthropic-aep"
+version = "0.1.0"
+description = "AEP runner — wraps the Anthropic Python SDK to emit agent execution protocol events"
+requires-python = ">=3.11"
+dependencies = ["anthropic>=0.40", "agent-execution-protocol>=0.1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-mock>=3.12"]
+
+[project.scripts]
+anthropic-aep-runner = "anthropic_aep._run:run_from_stdin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["anthropic_aep"]
+
+[tool.uv.sources]
+agent-execution-protocol = { path = "../../agent-execution-protocol", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["slow: requires ANTHROPIC_API_KEY and makes real API calls"]
