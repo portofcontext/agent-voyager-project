@@ -40,9 +40,10 @@ _DEFAULT_PRICING = (3.00, 15.00, 0.30, 3.75)
 
 # Built-in code_execution tool required for Anthropic Agent Skills.
 _CODE_EXECUTION_TOOL: dict = {
-    "type": "code_execution_20250522",
+    "type": "code_execution_20250825",
     "name": "code_execution",
 }
+_SKILLS_BETAS = ["skills-2025-10-02", "code-execution-2025-08-25"]
 
 
 def _compute_cost(
@@ -188,8 +189,8 @@ async def query(
             all_tools = list(tools or [])
             if _use_skills:
                 all_tools.append(_CODE_EXECUTION_TOOL)
-                kwargs["container"] = {"type": "persistent", "skills": skills}
-                kwargs["betas"] = ["skills-2025-10-02", "code-execution-2025-08-25"]
+                kwargs["container"] = {"skills": skills}
+                kwargs["betas"] = _SKILLS_BETAS
 
             if all_tools:
                 kwargs["tools"] = all_tools
@@ -200,7 +201,8 @@ async def query(
             # in real time as the model produces content blocks.
             server_tool_uses: list[str] = []
 
-            async with client.messages.stream(**kwargs) as stream:
+            _stream_fn = client.beta.messages.stream if _use_skills else client.messages.stream
+            async with _stream_fn(**kwargs) as stream:
                 async for event in stream:
                     # Detect Anthropic Agent Skills invocations.
                     if (

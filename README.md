@@ -2,34 +2,48 @@
 
 > **Status:** Draft — v0.1
 
-AEP is an open, minimal contract for agent observability. Any agent runner — regardless of SDK, model, or framework — can be AEP-compliant. Any orchestrator that speaks AEP can run any compliant agent without coupling to a specific SDK.
+AEP is an open, minimal contract for agent observability. 
 
-Think of it as what OpenTelemetry is to distributed tracing, applied to agent execution.
+Any framework or SDK can be AEP-compliant. 
+
+Any orchestrator that speaks AEP can run any compliant agent without coupling to a specific SDK.
+
+It's like OpenTelemetry applied to agent execution.
+
+---
+
+## How It Works
+
+```
+Supervisor            Runner
+──────────            ──────
+    │                  │
+    │   Config ─────▶  │  prompt, model,
+    │                  │  boundaries, hooks
+    │                  │
+    │  ◀── agent_start │
+    │  ◀── tool_call   │
+    │  ◀── tool_result │
+    │  ◀── cost_update │
+    │                  │
+    │  ◀─ hook_request │  runner pauses
+    │  verdict ──────▶ │  continue / stop / inject
+    │                  │
+    │  ◀── agent_stop  │
+    │                  │
+    ╰── NDJSON stdio ──╯
+        or HTTP/SSE 
+```
 
 ---
 
 ## What AEP Defines
 
-**Two things only:**
+**Three things:**
 
-1. **Config** — what an orchestrator passes to a runner at startup (NDJSON over stdin)
-2. **Event stream** — what the runner emits during execution (NDJSON over stdout)
-
-Transport: NDJSON over stdio (local subprocess) or HTTP/SSE (remote). Identical schema.
-
----
-
-## Compliance
-
-A runner is AEP-compliant if it:
-
-1. Reads an AEP config JSON from stdin before starting
-2. Emits `agent_start` as the first line to stdout
-3. Emits `tool_call` before each tool invocation and `tool_result` after
-4. Emits `cost_update` at least once per turn
-5. Emits `agent_stop` as the last line to stdout
-6. All output is valid NDJSON (one JSON object per line)
-7. Flushes stdout after each line
+1. **Config** — what a supervisor passes to a runner at startup (prompt, model, boundaries, hooks)
+2. **Event stream** — what the runner emits during execution
+3. **Hooks** — bidirectional mid-run control: the runner pauses at declared trigger points, the supervisor inspects and responds with a verdict (continue, stop, or inject a message)
 
 ---
 
