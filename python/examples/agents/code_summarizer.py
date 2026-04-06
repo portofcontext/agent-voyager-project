@@ -18,11 +18,12 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from claude_agent_sdk_aep import query          # ← only AEP change
+from claude_agent_sdk_aep import query  # ← only AEP change
 from claude_agent_sdk import ClaudeAgentOptions
 
 
 # ── agent ─────────────────────────────────────────────────────────────────────
+
 
 async def run(target: str) -> None:
     async for _ in query(
@@ -60,4 +61,6 @@ if __name__ == "__main__":
             elif t == "text_output":
                 print(f"\n{event['text']}\n")
             elif t == "agent_stop":
-                print(f"[stop]   reason={event['reason']}  turns={event['total_turns']}  ${event['total_cost_usd']:.4f}")
+                print(
+                    f"[stop]   reason={event['reason']}  turns={event['total_turns']}  ${event['total_cost_usd']:.4f}"
+                )

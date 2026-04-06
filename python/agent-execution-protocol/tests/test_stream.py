@@ -4,11 +4,21 @@ import io
 import json
 import pytest
 from agent_execution_protocol import (
-    AgentStart, AgentStop, ToolCall, ToolResult,
-    HookRequest, HookVerdict, HookVerdictApplied,
-    SkillRead, SkillExecute,
-    parse_stream, iter_stream, write_event, read_config,
-    read_verdict, send_verdict,
+    AgentStart,
+    AgentStop,
+    ToolCall,
+    ToolResult,
+    HookRequest,
+    HookVerdict,
+    HookVerdictApplied,
+    SkillRead,
+    SkillExecute,
+    parse_stream,
+    iter_stream,
+    write_event,
+    read_config,
+    read_verdict,
+    send_verdict,
 )
 
 
@@ -19,6 +29,7 @@ MINIMAL_STREAM = """\
 
 
 # ── parse_stream ──────────────────────────────────────────────────────────────
+
 
 def test_parse_stream_minimal():
     events, errors = parse_stream(MINIMAL_STREAM)
@@ -45,7 +56,10 @@ def test_parse_stream_reports_bad_json():
 
 
 def test_parse_stream_unknown_event_type_passes_through_as_dict():
-    text = MINIMAL_STREAM + '{"type":"future_event","run_id":"r1","ts":"2026-01-01T00:00:02Z"}\n'
+    text = (
+        MINIMAL_STREAM
+        + '{"type":"future_event","run_id":"r1","ts":"2026-01-01T00:00:02Z"}\n'
+    )
     events, errors = parse_stream(text)
     assert len(events) == 3
     assert errors == []
@@ -89,7 +103,7 @@ def test_parse_stream_skill_events():
 def test_parse_stream_continues_after_bad_line():
     text = (
         '{"type":"agent_start","schema_version":"0.2","run_id":"r1","model":"m","ts":"2026-01-01T00:00:00Z"}\n'
-        'GARBAGE\n'
+        "GARBAGE\n"
         '{"type":"agent_stop","run_id":"r1","reason":"converged","total_tokens":0,"total_cost_usd":0,"total_turns":1,"duration_ms":0,"ts":"2026-01-01T00:00:01Z"}\n'
     )
     events, errors = parse_stream(text)
@@ -118,6 +132,7 @@ def test_parse_stream_supervisor_stopped_reason():
 
 
 # ── iter_stream ───────────────────────────────────────────────────────────────
+
 
 def test_iter_stream_yields_tuples():
     f = io.StringIO(MINIMAL_STREAM)
@@ -154,6 +169,7 @@ def test_iter_stream_skips_blank_lines():
 
 # ── write_event ───────────────────────────────────────────────────────────────
 
+
 def test_write_event_produces_single_ndjson_line():
     buf = io.StringIO()
     e = AgentStart(run_id="r1", model="m")
@@ -167,8 +183,17 @@ def test_write_event_produces_single_ndjson_line():
 def test_write_event_multiple_events():
     buf = io.StringIO()
     write_event(AgentStart(run_id="r1", model="m"), file=buf)
-    write_event(AgentStop(run_id="r1", reason="converged", total_tokens=0,
-                          total_cost_usd=0, total_turns=1, duration_ms=0), file=buf)
+    write_event(
+        AgentStop(
+            run_id="r1",
+            reason="converged",
+            total_tokens=0,
+            total_cost_usd=0,
+            total_turns=1,
+            duration_ms=0,
+        ),
+        file=buf,
+    )
     lines = [l for l in buf.getvalue().splitlines() if l]
     assert len(lines) == 2
     assert json.loads(lines[0])["type"] == "agent_start"
@@ -177,8 +202,14 @@ def test_write_event_multiple_events():
 
 def test_write_event_hook_request():
     buf = io.StringIO()
-    e = HookRequest(run_id="r1", request_id="hr-1", hook_name="h",
-                    trigger="on_stop", step=1, timeout_ms=30000)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-1",
+        hook_name="h",
+        trigger="on_stop",
+        step=1,
+        timeout_ms=30000,
+    )
     write_event(e, file=buf)
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "hook_request"
@@ -194,6 +225,7 @@ def test_write_event_skill_read():
 
 
 # ── read_config ───────────────────────────────────────────────────────────────
+
 
 def test_read_config_parses_json():
     d = {"run_id": "r1", "model": "m"}
@@ -214,7 +246,12 @@ def test_read_config_raises_on_invalid_json():
 
 def test_read_config_reads_only_first_line():
     """Config is only the first line; remaining stdin is for hook verdicts."""
-    lines = json.dumps({"run_id": "r1", "model": "m"}) + "\n" + json.dumps({"type": "hook_verdict"}) + "\n"
+    lines = (
+        json.dumps({"run_id": "r1", "model": "m"})
+        + "\n"
+        + json.dumps({"type": "hook_verdict"})
+        + "\n"
+    )
     f = io.StringIO(lines)
     result = read_config(f)
     assert result["run_id"] == "r1"
@@ -225,9 +262,15 @@ def test_read_config_reads_only_first_line():
 
 # ── read_verdict ──────────────────────────────────────────────────────────────
 
+
 def test_read_verdict_continue():
-    payload = {"type": "hook_verdict", "run_id": "r1", "request_id": "hr-001",
-               "verdict": "continue", "ts": "2026-01-01T00:00:00Z"}
+    payload = {
+        "type": "hook_verdict",
+        "run_id": "r1",
+        "request_id": "hr-001",
+        "verdict": "continue",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     f = io.StringIO(json.dumps(payload) + "\n")
     v = read_verdict(f)
     assert isinstance(v, HookVerdict)
@@ -236,17 +279,27 @@ def test_read_verdict_continue():
 
 
 def test_read_verdict_stop():
-    payload = {"type": "hook_verdict", "run_id": "r1", "request_id": "hr-002",
-               "verdict": "stop", "ts": "2026-01-01T00:00:00Z"}
+    payload = {
+        "type": "hook_verdict",
+        "run_id": "r1",
+        "request_id": "hr-002",
+        "verdict": "stop",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     f = io.StringIO(json.dumps(payload) + "\n")
     v = read_verdict(f)
     assert v.verdict == "stop"
 
 
 def test_read_verdict_inject_with_message():
-    payload = {"type": "hook_verdict", "run_id": "r1", "request_id": "hr-003",
-               "verdict": "inject", "message": "Try a safer path.",
-               "ts": "2026-01-01T00:00:00Z"}
+    payload = {
+        "type": "hook_verdict",
+        "run_id": "r1",
+        "request_id": "hr-003",
+        "verdict": "inject",
+        "message": "Try a safer path.",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     f = io.StringIO(json.dumps(payload) + "\n")
     v = read_verdict(f)
     assert v.verdict == "inject"
@@ -272,8 +325,13 @@ def test_read_verdict_raises_on_invalid_json():
 
 @pytest.mark.parametrize("missing_field", ["run_id", "request_id", "verdict"])
 def test_read_verdict_raises_on_missing_required_field(missing_field):
-    payload = {"type": "hook_verdict", "run_id": "r1", "request_id": "hr-001",
-               "verdict": "continue", "ts": "2026-01-01T00:00:00Z"}
+    payload = {
+        "type": "hook_verdict",
+        "run_id": "r1",
+        "request_id": "hr-001",
+        "verdict": "continue",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     del payload[missing_field]
     f = io.StringIO(json.dumps(payload) + "\n")
     with pytest.raises(ValueError, match=missing_field):
@@ -281,14 +339,20 @@ def test_read_verdict_raises_on_missing_required_field(missing_field):
 
 
 def test_read_verdict_message_is_none_when_absent():
-    payload = {"type": "hook_verdict", "run_id": "r1", "request_id": "hr-001",
-               "verdict": "continue", "ts": "2026-01-01T00:00:00Z"}
+    payload = {
+        "type": "hook_verdict",
+        "run_id": "r1",
+        "request_id": "hr-001",
+        "verdict": "continue",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     f = io.StringIO(json.dumps(payload) + "\n")
     v = read_verdict(f)
     assert v.message is None
 
 
 # ── send_verdict ──────────────────────────────────────────────────────────────
+
 
 def test_send_verdict_writes_ndjson():
     buf = io.StringIO()
@@ -311,8 +375,9 @@ def test_send_verdict_stop():
 
 def test_send_verdict_inject_with_message():
     buf = io.StringIO()
-    v = HookVerdict(run_id="r1", request_id="hr-001", verdict="inject",
-                    message="Please reconsider.")
+    v = HookVerdict(
+        run_id="r1", request_id="hr-001", verdict="inject", message="Please reconsider."
+    )
     send_verdict(v, file=buf)
     d = json.loads(buf.getvalue().strip())
     assert d["verdict"] == "inject"
@@ -329,11 +394,16 @@ def test_send_verdict_produces_exactly_one_line():
 
 # ── read_verdict / send_verdict round trip ────────────────────────────────────
 
+
 def test_send_then_read_verdict_round_trip():
     """Supervisor writes a verdict; runner reads it back."""
     pipe = io.StringIO()
-    original = HookVerdict(run_id="r1", request_id="hr-042", verdict="inject",
-                           message="Course-correct: avoid /etc paths.")
+    original = HookVerdict(
+        run_id="r1",
+        request_id="hr-042",
+        verdict="inject",
+        message="Course-correct: avoid /etc paths.",
+    )
     send_verdict(original, file=pipe)
     pipe.seek(0)
     received = read_verdict(pipe)

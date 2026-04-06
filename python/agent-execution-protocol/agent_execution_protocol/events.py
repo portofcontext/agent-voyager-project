@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -29,6 +30,7 @@ def emit(event: dict[str, Any], file=None) -> None:
 
 # ── Event dataclasses ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class AgentStart:
     type: Literal["agent_start"] = field(default="agent_start", init=False)
@@ -38,6 +40,7 @@ class AgentStart:
     prompt: str | None = None
     system_prompt: str | None = None
     tools: list[dict] | None = None
+    skills: list[str] | None = None
     ts: str = field(default_factory=_now)
     thread_id: str | None = None
     session_id: str | None = None
@@ -58,6 +61,8 @@ class AgentStart:
             d["system_prompt"] = self.system_prompt
         if self.tools is not None:
             d["tools"] = self.tools
+        if self.skills is not None:
+            d["skills"] = self.skills
         if self.thread_id is not None:
             d["thread_id"] = self.thread_id
         if self.session_id is not None:
@@ -78,7 +83,12 @@ class ModelTurnStart:
     context_messages: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"type": self.type, "run_id": self.run_id, "step": self.step, "ts": self.ts}
+        d: dict[str, Any] = {
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "ts": self.ts,
+        }
         if self.context_messages is not None:
             d["context_messages"] = self.context_messages
         return d
@@ -124,7 +134,9 @@ class ToolCall:
     tool: str = ""
     input: Any = field(default_factory=dict)
     ts: str = field(default_factory=_now)
-    subtype: str | None = None  # "shell" | "function" | "retrieval" | "embedding" | "mcp"
+    subtype: str | None = (
+        None  # "shell" | "function" | "retrieval" | "embedding" | "mcp"
+    )
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -152,7 +164,9 @@ class ToolResult:
     duration_ms: int = 0
     ts: str = field(default_factory=_now)
     rejected: bool = False
-    rejection_reason: str | None = None  # "path_not_in_allow_write" | "ceiling_reached" | "tool_not_allowed"
+    rejection_reason: str | None = (
+        None  # "path_not_in_allow_write" | "ceiling_reached" | "tool_not_allowed"
+    )
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -203,7 +217,13 @@ class TextOutput:
     ts: str = field(default_factory=_now)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": self.type, "run_id": self.run_id, "step": self.step, "text": self.text, "ts": self.ts}
+        return {
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "text": self.text,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -235,8 +255,11 @@ class SkillRead:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
-            "type": self.type, "run_id": self.run_id, "step": self.step,
-            "name": self.name, "ts": self.ts,
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "name": self.name,
+            "ts": self.ts,
         }
         if self.source is not None:
             d["source"] = self.source
@@ -253,20 +276,27 @@ class SkillExecute:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "type": self.type, "run_id": self.run_id, "step": self.step,
-            "name": self.name, "ts": self.ts,
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "name": self.name,
+            "ts": self.ts,
         }
 
 
 @dataclass
 class ContextCompaction:
-    type: Literal["context_compaction"] = field(default="context_compaction", init=False)
+    type: Literal["context_compaction"] = field(
+        default="context_compaction", init=False
+    )
     run_id: str = ""
     step: int = 0
     tokens_before: int = 0
     tokens_after: int = 0
     ts: str = field(default_factory=_now)
-    compacted_messages: list[dict] | None = None  # synthetic messages produced by compaction
+    compacted_messages: list[dict] | None = (
+        None  # synthetic messages produced by compaction
+    )
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -291,7 +321,13 @@ class RunError:
     ts: str = field(default_factory=_now)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": self.type, "run_id": self.run_id, "code": self.code, "message": self.message, "ts": self.ts}
+        return {
+            "type": self.type,
+            "run_id": self.run_id,
+            "code": self.code,
+            "message": self.message,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -330,6 +366,7 @@ class HookRequest:
     ``hook_verdict`` response. The supervisor reads this event, runs whatever
     checks it wants, and writes a ``hook_verdict`` back on the runner's stdin.
     """
+
     type: Literal["hook_request"] = field(default="hook_request", init=False)
     run_id: str = ""
     request_id: str = ""
@@ -338,7 +375,7 @@ class HookRequest:
     step: int = 0
     timeout_ms: int = 30000
     ts: str = field(default_factory=_now)
-    call_id: str | None = None   # present when trigger is on_tool:<name>
+    call_id: str | None = None  # present when trigger is on_tool:<name>
     context: dict[str, Any] | None = None  # snapshot of triggering event context
 
     def to_dict(self) -> dict[str, Any]:
@@ -367,6 +404,7 @@ class HookVerdict:
     It is included as a dataclass so supervisors have a typed object to
     construct and runners have a typed object after deserializing it.
     """
+
     type: Literal["hook_verdict"] = field(default="hook_verdict", init=False)
     run_id: str = ""
     request_id: str = ""
@@ -395,7 +433,10 @@ class HookVerdictApplied:
     making it unambiguous what happened at the hook point and whether the
     verdict came from the supervisor or from a timeout.
     """
-    type: Literal["hook_verdict_applied"] = field(default="hook_verdict_applied", init=False)
+
+    type: Literal["hook_verdict_applied"] = field(
+        default="hook_verdict_applied", init=False
+    )
     run_id: str = ""
     request_id: str = ""
     verdict: str = "continue"  # "continue" | "stop" | "inject"
@@ -408,6 +449,96 @@ class HookVerdictApplied:
             "run_id": self.run_id,
             "request_id": self.request_id,
             "verdict": self.verdict,
+            "ts": self.ts,
+        }
+        if self.timed_out:
+            d["timed_out"] = True
+        return d
+
+
+@dataclass
+class ToolExecRequest:
+    """Emitted by the runner when it needs the supervisor to execute a config-declared tool.
+
+    The runner emits this to stdout and then blocks reading stdin for a
+    ``tool_exec_result`` response. The supervisor reads this event, executes the
+    tool locally, and writes a ``tool_exec_result`` back on the runner's stdin.
+    """
+
+    type: Literal["tool_exec_request"] = field(default="tool_exec_request", init=False)
+    run_id: str = ""
+    step: int = 0
+    call_id: str = ""  # matches the tool_call.call_id
+    tool: str = ""
+    input: Any = field(default_factory=dict)
+    timeout_ms: int = 30000
+    ts: str = field(default_factory=_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "call_id": self.call_id,
+            "tool": self.tool,
+            "input": self.input,
+            "timeout_ms": self.timeout_ms,
+            "ts": self.ts,
+        }
+
+
+@dataclass
+class ToolExecResult:
+    """Sent by the supervisor over stdin in response to a tool_exec_request.
+
+    This message flows supervisor → runner (stdin), not runner → stdout.
+    Either ``output`` or ``error`` should be set, not both.
+    """
+
+    type: Literal["tool_exec_result"] = field(default="tool_exec_result", init=False)
+    run_id: str = ""
+    call_id: str = ""
+    output: str = ""
+    error: str | None = None
+    ts: str = field(default_factory=_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "type": self.type,
+            "run_id": self.run_id,
+            "call_id": self.call_id,
+            "output": self.output,
+            "ts": self.ts,
+        }
+        if self.error is not None:
+            d["error"] = self.error
+        return d
+
+
+@dataclass
+class ToolExecApplied:
+    """Emitted by the runner after it receives and applies a tool_exec_result.
+
+    Closes the tool_exec_request/tool_exec_applied pair in the trajectory.
+    ``timed_out`` is True if the supervisor did not respond within ``timeout_ms``
+    and the runner used an empty string as the tool output.
+    """
+
+    type: Literal["tool_exec_applied"] = field(default="tool_exec_applied", init=False)
+    run_id: str = ""
+    step: int = 0
+    call_id: str = ""
+    tool: str = ""
+    timed_out: bool = False
+    ts: str = field(default_factory=_now)
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "type": self.type,
+            "run_id": self.run_id,
+            "step": self.step,
+            "call_id": self.call_id,
+            "tool": self.tool,
             "ts": self.ts,
         }
         if self.timed_out:
@@ -432,6 +563,9 @@ AepEvent = (
     | HookRequest
     | HookVerdict
     | HookVerdictApplied
+    | ToolExecRequest
+    | ToolExecResult
+    | ToolExecApplied
 )
 
 _EVENT_TYPES = {
@@ -451,12 +585,22 @@ _EVENT_TYPES = {
     "hook_request": HookRequest,
     "hook_verdict": HookVerdict,
     "hook_verdict_applied": HookVerdictApplied,
+    "tool_exec_request": ToolExecRequest,
+    "tool_exec_result": ToolExecResult,
+    "tool_exec_applied": ToolExecApplied,
 }
 
-VALID_STOP_REASONS = frozenset({
-    "converged", "budget_exhausted", "token_limit", "turn_limit",
-    "error", "interrupted", "supervisor_stopped",
-})
+VALID_STOP_REASONS = frozenset(
+    {
+        "converged",
+        "budget_exhausted",
+        "token_limit",
+        "turn_limit",
+        "error",
+        "interrupted",
+        "supervisor_stopped",
+    }
+)
 
 VALID_ERROR_CODES = frozenset(
     {"rate_limit", "context_limit", "auth_error", "runner_crash", "unknown"}
@@ -488,6 +632,7 @@ def event_from_dict(d: dict[str, Any]) -> AepEvent | dict:
 
 # ── Emit helpers (write to stdout) ────────────────────────────────────────────
 
+
 def emit_agent_start(
     *,
     run_id: str,
@@ -495,66 +640,152 @@ def emit_agent_start(
     prompt: str | None = None,
     system_prompt: str | None = None,
     tools: list[dict] | None = None,
+    skills: list[str] | None = None,
     thread_id: str | None = None,
     session_id: str | None = None,
     tags: list[str] | None = None,
     meta: dict[str, Any] | None = None,
     file=None,
 ) -> None:
-    e = AgentStart(run_id=run_id, model=model, prompt=prompt, system_prompt=system_prompt,
-                   tools=tools, thread_id=thread_id, session_id=session_id,
-                   tags=tags or [], meta=meta or {})
+    e = AgentStart(
+        run_id=run_id,
+        model=model,
+        prompt=prompt,
+        system_prompt=system_prompt,
+        tools=tools,
+        skills=skills,
+        thread_id=thread_id,
+        session_id=session_id,
+        tags=tags or [],
+        meta=meta or {},
+    )
     emit(e.to_dict(), file=file)
 
 
-def emit_model_turn_start(*, run_id: str, step: int, context_messages: int | None = None, file=None) -> None:
-    emit(ModelTurnStart(run_id=run_id, step=step, context_messages=context_messages).to_dict(), file=file)
+def emit_model_turn_start(
+    *, run_id: str, step: int, context_messages: int | None = None, file=None
+) -> None:
+    emit(
+        ModelTurnStart(
+            run_id=run_id, step=step, context_messages=context_messages
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_model_turn_end(
-    *, run_id: str, step: int, tokens_input: int, tokens_output: int,
-    cost_usd: float, duration_ms: int,
-    tokens_cache_read: int | None = None, tokens_cache_write: int | None = None,
+    *,
+    run_id: str,
+    step: int,
+    tokens_input: int,
+    tokens_output: int,
+    cost_usd: float,
+    duration_ms: int,
+    tokens_cache_read: int | None = None,
+    tokens_cache_write: int | None = None,
     file=None,
 ) -> None:
-    emit(ModelTurnEnd(run_id=run_id, step=step, tokens_input=tokens_input,
-                      tokens_output=tokens_output, cost_usd=cost_usd,
-                      duration_ms=duration_ms, tokens_cache_read=tokens_cache_read,
-                      tokens_cache_write=tokens_cache_write).to_dict(), file=file)
+    emit(
+        ModelTurnEnd(
+            run_id=run_id,
+            step=step,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            cost_usd=cost_usd,
+            duration_ms=duration_ms,
+            tokens_cache_read=tokens_cache_read,
+            tokens_cache_write=tokens_cache_write,
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_context_compaction(
-    *, run_id: str, step: int, tokens_before: int, tokens_after: int,
-    compacted_messages: list[dict] | None = None, file=None,
+    *,
+    run_id: str,
+    step: int,
+    tokens_before: int,
+    tokens_after: int,
+    compacted_messages: list[dict] | None = None,
+    file=None,
 ) -> None:
-    emit(ContextCompaction(run_id=run_id, step=step, tokens_before=tokens_before,
-                           tokens_after=tokens_after,
-                           compacted_messages=compacted_messages).to_dict(), file=file)
+    emit(
+        ContextCompaction(
+            run_id=run_id,
+            step=step,
+            tokens_before=tokens_before,
+            tokens_after=tokens_after,
+            compacted_messages=compacted_messages,
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_tool_call(
-    *, run_id: str, step: int, call_id: str, tool: str, input: Any,
-    subtype: str | None = None, file=None,
+    *,
+    run_id: str,
+    step: int,
+    call_id: str,
+    tool: str,
+    input: Any,
+    subtype: str | None = None,
+    file=None,
 ) -> None:
-    emit(ToolCall(run_id=run_id, step=step, call_id=call_id, tool=tool,
-                  input=input, subtype=subtype).to_dict(), file=file)
+    emit(
+        ToolCall(
+            run_id=run_id,
+            step=step,
+            call_id=call_id,
+            tool=tool,
+            input=input,
+            subtype=subtype,
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_tool_result(
-    *, run_id: str, step: int, call_id: str, tool: str, output: str,
-    duration_ms: int, rejected: bool = False, rejection_reason: str | None = None,
+    *,
+    run_id: str,
+    step: int,
+    call_id: str,
+    tool: str,
+    output: str,
+    duration_ms: int,
+    rejected: bool = False,
+    rejection_reason: str | None = None,
     file=None,
 ) -> None:
-    emit(ToolResult(run_id=run_id, step=step, call_id=call_id, tool=tool,
-                    output=output, duration_ms=duration_ms, rejected=rejected,
-                    rejection_reason=rejection_reason).to_dict(), file=file)
+    emit(
+        ToolResult(
+            run_id=run_id,
+            step=step,
+            call_id=call_id,
+            tool=tool,
+            output=output,
+            duration_ms=duration_ms,
+            rejected=rejected,
+            rejection_reason=rejection_reason,
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_tool_call_failed(
-    *, run_id: str, step: int, call_id: str, tool: str, error: str, file=None,
+    *,
+    run_id: str,
+    step: int,
+    call_id: str,
+    tool: str,
+    error: str,
+    file=None,
 ) -> None:
-    emit(ToolCallFailed(run_id=run_id, step=step, call_id=call_id, tool=tool,
-                        error=error).to_dict(), file=file)
+    emit(
+        ToolCallFailed(
+            run_id=run_id, step=step, call_id=call_id, tool=tool, error=error
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_text_output(*, run_id: str, step: int, text: str, file=None) -> None:
@@ -562,10 +793,18 @@ def emit_text_output(*, run_id: str, step: int, text: str, file=None) -> None:
 
 
 def emit_cost_update(
-    *, run_id: str, total_cost_usd: float, total_tokens: int, file=None,
+    *,
+    run_id: str,
+    total_cost_usd: float,
+    total_tokens: int,
+    file=None,
 ) -> None:
-    emit(CostUpdate(run_id=run_id, total_cost_usd=total_cost_usd,
-                    total_tokens=total_tokens).to_dict(), file=file)
+    emit(
+        CostUpdate(
+            run_id=run_id, total_cost_usd=total_cost_usd, total_tokens=total_tokens
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_error(*, run_id: str, code: str, message: str, file=None) -> None:
@@ -573,16 +812,37 @@ def emit_error(*, run_id: str, code: str, message: str, file=None) -> None:
 
 
 def emit_agent_stop(
-    *, run_id: str, reason: str, total_tokens: int, total_cost_usd: float,
-    total_turns: int, duration_ms: int, output: Any = None, file=None,
+    *,
+    run_id: str,
+    reason: str,
+    total_tokens: int,
+    total_cost_usd: float,
+    total_turns: int,
+    duration_ms: int,
+    output: Any = None,
+    file=None,
 ) -> None:
-    emit(AgentStop(run_id=run_id, reason=reason, total_tokens=total_tokens,
-                   total_cost_usd=total_cost_usd, total_turns=total_turns,
-                   duration_ms=duration_ms, output=output).to_dict(), file=file)
+    emit(
+        AgentStop(
+            run_id=run_id,
+            reason=reason,
+            total_tokens=total_tokens,
+            total_cost_usd=total_cost_usd,
+            total_turns=total_turns,
+            duration_ms=duration_ms,
+            output=output,
+        ).to_dict(),
+        file=file,
+    )
 
 
-def emit_skill_read(*, run_id: str, step: int, name: str, source: str | None = None, file=None) -> None:
-    emit(SkillRead(run_id=run_id, step=step, name=name, source=source).to_dict(), file=file)
+def emit_skill_read(
+    *, run_id: str, step: int, name: str, source: str | None = None, file=None
+) -> None:
+    emit(
+        SkillRead(run_id=run_id, step=step, name=name, source=source).to_dict(),
+        file=file,
+    )
 
 
 def emit_skill_execute(*, run_id: str, step: int, name: str, file=None) -> None:
@@ -590,17 +850,83 @@ def emit_skill_execute(*, run_id: str, step: int, name: str, file=None) -> None:
 
 
 def emit_hook_request(
-    *, run_id: str, request_id: str, hook_name: str, trigger: str, step: int,
-    timeout_ms: int = 30000, call_id: str | None = None,
-    context: dict[str, Any] | None = None, file=None,
+    *,
+    run_id: str,
+    request_id: str,
+    hook_name: str,
+    trigger: str,
+    step: int,
+    timeout_ms: int = 30000,
+    call_id: str | None = None,
+    context: dict[str, Any] | None = None,
+    file=None,
 ) -> None:
-    emit(HookRequest(run_id=run_id, request_id=request_id, hook_name=hook_name,
-                     trigger=trigger, step=step, timeout_ms=timeout_ms,
-                     call_id=call_id, context=context).to_dict(), file=file)
+    emit(
+        HookRequest(
+            run_id=run_id,
+            request_id=request_id,
+            hook_name=hook_name,
+            trigger=trigger,
+            step=step,
+            timeout_ms=timeout_ms,
+            call_id=call_id,
+            context=context,
+        ).to_dict(),
+        file=file,
+    )
 
 
 def emit_hook_verdict_applied(
-    *, run_id: str, request_id: str, verdict: str, timed_out: bool = False, file=None,
+    *,
+    run_id: str,
+    request_id: str,
+    verdict: str,
+    timed_out: bool = False,
+    file=None,
 ) -> None:
-    emit(HookVerdictApplied(run_id=run_id, request_id=request_id,
-                            verdict=verdict, timed_out=timed_out).to_dict(), file=file)
+    emit(
+        HookVerdictApplied(
+            run_id=run_id, request_id=request_id, verdict=verdict, timed_out=timed_out
+        ).to_dict(),
+        file=file,
+    )
+
+
+def emit_tool_exec_request(
+    *,
+    run_id: str,
+    step: int,
+    call_id: str,
+    tool: str,
+    input: Any,
+    timeout_ms: int = 30000,
+    file=None,
+) -> None:
+    emit(
+        ToolExecRequest(
+            run_id=run_id,
+            step=step,
+            call_id=call_id,
+            tool=tool,
+            input=input,
+            timeout_ms=timeout_ms,
+        ).to_dict(),
+        file=file,
+    )
+
+
+def emit_tool_exec_applied(
+    *,
+    run_id: str,
+    step: int,
+    call_id: str,
+    tool: str,
+    timed_out: bool = False,
+    file=None,
+) -> None:
+    emit(
+        ToolExecApplied(
+            run_id=run_id, step=step, call_id=call_id, tool=tool, timed_out=timed_out
+        ).to_dict(),
+        file=file,
+    )

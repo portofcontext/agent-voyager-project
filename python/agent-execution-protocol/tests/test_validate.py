@@ -2,12 +2,23 @@
 
 import pytest
 from agent_execution_protocol import (
-    AgentStart, AgentStop, ModelTurnStart, ModelTurnEnd,
-    ToolCall, ToolResult, ToolCallFailed, TextOutput,
-    CostUpdate, ContextCompaction, RunError,
-    HookRequest, HookVerdictApplied,
-    SkillRead, SkillExecute,
-    validate, Violation,
+    AgentStart,
+    AgentStop,
+    ModelTurnStart,
+    ModelTurnEnd,
+    ToolCall,
+    ToolResult,
+    ToolCallFailed,
+    TextOutput,
+    CostUpdate,
+    ContextCompaction,
+    RunError,
+    HookRequest,
+    HookVerdictApplied,
+    SkillRead,
+    SkillExecute,
+    validate,
+    Violation,
 )
 
 
@@ -16,9 +27,14 @@ def _start(run_id="r1"):
 
 
 def _stop(run_id="r1", reason="converged"):
-    return AgentStop(run_id=run_id, reason=reason,
-                     total_tokens=10, total_cost_usd=0.001,
-                     total_turns=1, duration_ms=100)
+    return AgentStop(
+        run_id=run_id,
+        reason=reason,
+        total_tokens=10,
+        total_cost_usd=0.001,
+        total_turns=1,
+        duration_ms=100,
+    )
 
 
 def _minimal(run_id="r1"):
@@ -26,8 +42,14 @@ def _minimal(run_id="r1"):
 
 
 def _hook_req(request_id="hr-1", hook_name="h", trigger="on_stop", step=1):
-    return HookRequest(run_id="r1", request_id=request_id, hook_name=hook_name,
-                       trigger=trigger, step=step, timeout_ms=30000)
+    return HookRequest(
+        run_id="r1",
+        request_id=request_id,
+        hook_name=hook_name,
+        trigger=trigger,
+        step=step,
+        timeout_ms=30000,
+    )
 
 
 def _hook_applied(request_id="hr-1", verdict="continue"):
@@ -35,6 +57,7 @@ def _hook_applied(request_id="hr-1", verdict="continue"):
 
 
 # ── Happy path ────────────────────────────────────────────────────────────────
+
 
 def test_valid_minimal_stream():
     assert validate(_minimal()) == []
@@ -44,7 +67,14 @@ def test_valid_stream_with_tool_call():
     events = [
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={"cmd": "ls"}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash", output="file.txt", duration_ms=5),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="bash",
+            output="file.txt",
+            duration_ms=5,
+        ),
         _stop(),
     ]
     assert validate(events) == []
@@ -65,14 +95,19 @@ def test_valid_stream_multiple_tool_calls():
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={}),
         ToolCall(run_id="r1", step=1, call_id="c2", tool="bash", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash", output="a", duration_ms=1),
-        ToolResult(run_id="r1", step=1, call_id="c2", tool="bash", output="b", duration_ms=1),
+        ToolResult(
+            run_id="r1", step=1, call_id="c1", tool="bash", output="a", duration_ms=1
+        ),
+        ToolResult(
+            run_id="r1", step=1, call_id="c2", tool="bash", output="b", duration_ms=1
+        ),
         _stop(),
     ]
     assert validate(events) == []
 
 
 # ── Hook happy paths ──────────────────────────────────────────────────────────
+
 
 def test_valid_stream_with_hook_pair():
     events = [
@@ -110,7 +145,14 @@ def test_valid_stream_with_multiple_hooks():
         _hook_req("hr-1", trigger="on_start"),
         _hook_applied("hr-1", "continue"),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="write_file", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="write_file", output="ok", duration_ms=5),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="write_file",
+            output="ok",
+            duration_ms=5,
+        ),
         _hook_req("hr-2", trigger="on_tool:write_file", step=1),
         _hook_applied("hr-2", "continue"),
         _stop(),
@@ -123,7 +165,9 @@ def test_valid_stream_with_timed_out_hook():
     start.ts = "2026-01-01T00:00:00Z"
     hr = _hook_req("hr-1")
     hr.ts = "2026-01-01T00:00:01Z"
-    applied = HookVerdictApplied(run_id="r1", request_id="hr-1", verdict="continue", timed_out=True)
+    applied = HookVerdictApplied(
+        run_id="r1", request_id="hr-1", verdict="continue", timed_out=True
+    )
     applied.ts = "2026-01-01T00:00:02Z"
     stop = _stop()
     stop.ts = "2026-01-01T00:00:03Z"
@@ -132,6 +176,7 @@ def test_valid_stream_with_timed_out_hook():
 
 
 # ── Hook error cases ──────────────────────────────────────────────────────────
+
 
 def test_unmatched_hook_verdict_applied():
     events = [
@@ -163,7 +208,7 @@ def test_duplicate_hook_request_id():
     events = [
         _start(),
         _hook_req("hr-1"),
-        _hook_req("hr-1"),   # same request_id
+        _hook_req("hr-1"),  # same request_id
         _hook_applied("hr-1"),
         _stop(),
     ]
@@ -217,7 +262,9 @@ def test_hook_verdict_applied_before_request_is_unmatched():
         _start(),
         _hook_applied("hr-1"),  # no prior hook_request
         _hook_req("hr-1"),
-        _hook_applied("hr-1"),  # second applied — first was unmatched, second resolves the request
+        _hook_applied(
+            "hr-1"
+        ),  # second applied — first was unmatched, second resolves the request
         _stop(),
     ]
     codes = [v.code for v in validate(events)]
@@ -225,6 +272,7 @@ def test_hook_verdict_applied_before_request_is_unmatched():
 
 
 # ── Skill events ──────────────────────────────────────────────────────────────
+
 
 def test_skill_read_passes_validation():
     events = [
@@ -266,6 +314,7 @@ def test_skill_events_run_id_mismatch_caught():
 
 # ── Stop reasons ──────────────────────────────────────────────────────────────
 
+
 def test_supervisor_stopped_is_valid_stop_reason():
     events = [_start(), _stop(reason="supervisor_stopped")]
     codes = [v.code for v in validate(events)]
@@ -278,17 +327,28 @@ def test_invalid_stop_reason():
     assert "INVALID_STOP_REASON" in codes
 
 
-@pytest.mark.parametrize("reason", [
-    "converged", "budget_exhausted", "token_limit",
-    "turn_limit", "error", "interrupted", "supervisor_stopped",
-])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "converged",
+        "budget_exhausted",
+        "token_limit",
+        "turn_limit",
+        "error",
+        "interrupted",
+        "supervisor_stopped",
+    ],
+)
 def test_all_valid_stop_reasons(reason):
     events = [_start(), _stop(reason=reason)]
     codes = [v.code for v in validate(events)]
-    assert "INVALID_STOP_REASON" not in codes, f"unexpected violation for reason={reason!r}"
+    assert "INVALID_STOP_REASON" not in codes, (
+        f"unexpected violation for reason={reason!r}"
+    )
 
 
 # ── EMPTY_STREAM ──────────────────────────────────────────────────────────────
+
 
 def test_empty_stream():
     violations = validate([])
@@ -298,6 +358,7 @@ def test_empty_stream():
 
 
 # ── MISSING_AGENT_START ───────────────────────────────────────────────────────
+
 
 def test_missing_agent_start():
     events = [_stop()]
@@ -309,6 +370,7 @@ def test_missing_agent_start():
 
 
 # ── MISSING_AGENT_STOP ────────────────────────────────────────────────────────
+
 
 def test_missing_agent_stop():
     events = [_start()]
@@ -327,6 +389,7 @@ def test_missing_both_start_and_stop():
 
 
 # ── RUN_ID_MISMATCH ───────────────────────────────────────────────────────────
+
 
 def test_run_id_mismatch():
     events = [
@@ -353,8 +416,14 @@ def test_no_run_id_mismatch_when_consistent():
 def test_hook_events_run_id_checked():
     events = [
         _start("r1"),
-        HookRequest(run_id="r2", request_id="hr-1", hook_name="h",
-                    trigger="on_stop", step=1, timeout_ms=30000),
+        HookRequest(
+            run_id="r2",
+            request_id="hr-1",
+            hook_name="h",
+            trigger="on_stop",
+            step=1,
+            timeout_ms=30000,
+        ),
         HookVerdictApplied(run_id="r1", request_id="hr-1", verdict="continue"),
         _stop("r1"),
     ]
@@ -363,6 +432,7 @@ def test_hook_events_run_id_checked():
 
 
 # ── TIMESTAMP_REGRESSION ─────────────────────────────────────────────────────
+
 
 def test_timestamp_regression():
     start = _start()
@@ -386,12 +456,15 @@ def test_equal_timestamps_are_ok():
 
 # ── DUPLICATE_CALL_ID ─────────────────────────────────────────────────────────
 
+
 def test_duplicate_call_id():
     events = [
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={}),
         ToolCall(run_id="r1", step=2, call_id="c1", tool="bash", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash", output="a", duration_ms=1),
+        ToolResult(
+            run_id="r1", step=1, call_id="c1", tool="bash", output="a", duration_ms=1
+        ),
         _stop(),
     ]
     codes = [v.code for v in validate(events)]
@@ -400,10 +473,13 @@ def test_duplicate_call_id():
 
 # ── UNMATCHED_TOOL_RESULT ─────────────────────────────────────────────────────
 
+
 def test_unmatched_tool_result():
     events = [
         _start(),
-        ToolResult(run_id="r1", step=1, call_id="c99", tool="bash", output="x", duration_ms=1),
+        ToolResult(
+            run_id="r1", step=1, call_id="c99", tool="bash", output="x", duration_ms=1
+        ),
         _stop(),
     ]
     codes = [v.code for v in validate(events)]
@@ -422,6 +498,7 @@ def test_unmatched_tool_call_failed():
 
 # ── UNCLOSED_TOOL_CALL ────────────────────────────────────────────────────────
 
+
 def test_unclosed_tool_call():
     events = [
         _start(),
@@ -434,6 +511,7 @@ def test_unclosed_tool_call():
 
 # ── INVALID_ERROR_CODE ────────────────────────────────────────────────────────
 
+
 def test_invalid_error_code():
     events = [
         _start(),
@@ -445,21 +523,37 @@ def test_invalid_error_code():
 
 
 def test_valid_error_codes():
-    for code in ("rate_limit", "context_limit", "auth_error", "runner_crash", "unknown"):
+    for code in (
+        "rate_limit",
+        "context_limit",
+        "auth_error",
+        "runner_crash",
+        "unknown",
+    ):
         events = [_start(), RunError(run_id="r1", code=code, message="msg"), _stop()]
         codes = [v.code for v in validate(events)]
-        assert "INVALID_ERROR_CODE" not in codes, f"unexpected violation for code={code!r}"
+        assert "INVALID_ERROR_CODE" not in codes, (
+            f"unexpected violation for code={code!r}"
+        )
 
 
 # ── INVALID_REJECTION_REASON ──────────────────────────────────────────────────
+
 
 def test_invalid_rejection_reason():
     events = [
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash",
-                   output="x", duration_ms=1,
-                   rejected=True, rejection_reason="made_up_reason"),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="bash",
+            output="x",
+            duration_ms=1,
+            rejected=True,
+            rejection_reason="made_up_reason",
+        ),
         _stop(),
     ]
     codes = [v.code for v in validate(events)]
@@ -468,13 +562,21 @@ def test_invalid_rejection_reason():
 
 # ── REJECTION_REASON_WITHOUT_REJECTED ────────────────────────────────────────
 
+
 def test_rejection_reason_without_rejected():
     events = [
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash",
-                   output="x", duration_ms=1,
-                   rejected=False, rejection_reason="ceiling_reached"),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="bash",
+            output="x",
+            duration_ms=1,
+            rejected=False,
+            rejection_reason="ceiling_reached",
+        ),
         _stop(),
     ]
     codes = [v.code for v in validate(events)]
@@ -485,15 +587,23 @@ def test_rejected_true_with_valid_reason_passes():
     events = [
         _start(),
         ToolCall(run_id="r1", step=1, call_id="c1", tool="bash", input={}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="bash",
-                   output="blocked", duration_ms=1,
-                   rejected=True, rejection_reason="ceiling_reached"),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="bash",
+            output="blocked",
+            duration_ms=1,
+            rejected=True,
+            rejection_reason="ceiling_reached",
+        ),
         _stop(),
     ]
     assert validate(events) == []
 
 
 # ── Custom / unknown event types ──────────────────────────────────────────────
+
 
 def test_custom_event_type_passes_validation():
     start = _start()
@@ -504,6 +614,7 @@ def test_custom_event_type_passes_validation():
 
 
 # ── Violation.__str__ ─────────────────────────────────────────────────────────
+
 
 def test_violation_str_with_index():
     v = Violation("SOME_CODE", "something went wrong", event_index=3)
@@ -519,10 +630,13 @@ def test_violation_str_without_index():
 
 # ── Context compaction ────────────────────────────────────────────────────────
 
+
 def test_context_compaction_passes_validation():
     events = [
         _start(),
-        ContextCompaction(run_id="r1", step=1, tokens_before=148000, tokens_after=12000),
+        ContextCompaction(
+            run_id="r1", step=1, tokens_before=148000, tokens_after=12000
+        ),
         _stop(),
     ]
     assert validate(events) == []
@@ -531,8 +645,13 @@ def test_context_compaction_passes_validation():
 def test_context_compaction_with_compacted_messages_passes():
     events = [
         _start(),
-        ContextCompaction(run_id="r1", step=1, tokens_before=148000, tokens_after=12000,
-                          compacted_messages=[{"role": "user", "content": "Summary here."}]),
+        ContextCompaction(
+            run_id="r1",
+            step=1,
+            tokens_before=148000,
+            tokens_after=12000,
+            compacted_messages=[{"role": "user", "content": "Summary here."}],
+        ),
         _stop(),
     ]
     assert validate(events) == []
@@ -540,16 +659,32 @@ def test_context_compaction_with_compacted_messages_passes():
 
 # ── Complex combined scenarios ────────────────────────────────────────────────
 
+
 def test_full_run_with_hooks_skills_and_tools():
     events = [
         _start(),
         SkillRead(run_id="r1", step=1, name="code-review"),
         SkillExecute(run_id="r1", step=1, name="code-review"),
         ModelTurnStart(run_id="r1", step=1),
-        ModelTurnEnd(run_id="r1", step=1, tokens_input=100, tokens_output=50,
-                     cost_usd=0.001, duration_ms=500),
-        ToolCall(run_id="r1", step=1, call_id="c1", tool="write_file", input={"path": "a.py"}),
-        ToolResult(run_id="r1", step=1, call_id="c1", tool="write_file", output="ok", duration_ms=5),
+        ModelTurnEnd(
+            run_id="r1",
+            step=1,
+            tokens_input=100,
+            tokens_output=50,
+            cost_usd=0.001,
+            duration_ms=500,
+        ),
+        ToolCall(
+            run_id="r1", step=1, call_id="c1", tool="write_file", input={"path": "a.py"}
+        ),
+        ToolResult(
+            run_id="r1",
+            step=1,
+            call_id="c1",
+            tool="write_file",
+            output="ok",
+            duration_ms=5,
+        ),
         _hook_req("hr-1", trigger="on_tool:write_file", step=1),
         _hook_applied("hr-1", "continue"),
         _stop(),
@@ -561,10 +696,18 @@ def test_multiple_violations_reported_together():
     """Validator reports all violations, not just the first."""
     events = [
         _start("r1"),
-        ToolResult(run_id="r1", step=1, call_id="c99", tool="bash", output="x", duration_ms=1),
+        ToolResult(
+            run_id="r1", step=1, call_id="c99", tool="bash", output="x", duration_ms=1
+        ),
         _hook_applied("hr-99"),
-        AgentStop(run_id="r1", reason="made_up",
-                  total_tokens=0, total_cost_usd=0, total_turns=1, duration_ms=0),
+        AgentStop(
+            run_id="r1",
+            reason="made_up",
+            total_tokens=0,
+            total_cost_usd=0,
+            total_turns=1,
+            duration_ms=0,
+        ),
     ]
     codes = [v.code for v in validate(events)]
     assert "UNMATCHED_TOOL_RESULT" in codes

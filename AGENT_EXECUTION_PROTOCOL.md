@@ -32,7 +32,7 @@ The supervisor/runner boundary is a process boundary. Communication is over stdi
 
 ---
 
-## AEP Config (stdin → runner)
+## AEP Config
 
 The config is the complete specification of what the runner needs to execute the agent. Any AEP-compliant runner reads this config and translates it to its SDK's options internally. The supervisor never needs to know which SDK is running.
 
@@ -49,6 +49,10 @@ The config is the complete specification of what the runner needs to execute the
     "max_steps": 30,
     "max_tokens": 150000
   },
+  "skills": [
+    { "name": "pptx", "source": "anthropic:pptx@latest" },
+    { "name": "style-guide", "source": "./skills/style-guide" }
+  ],
   "hooks": [
     {
       "name": "after-each-write",
@@ -74,10 +78,57 @@ The config is the complete specification of what the runner needs to execute the
 | `system_prompt` | string | no | System prompt prepended to all turns |
 | `thread_id` | string | no | Links multi-turn sessions |
 | `boundary` | object | no | Execution limits the runner enforces — stops the agent when any limit is reached |
+| `skills` | object[] | no | Skills the runner should make available — see below |
+| `tools` | object[] | no | Supervisor-executed tools the runner presents to the LLM — see below |
 | `output_schema` | object | no | JSON schema for structured output |
 | `hooks` | object[] | no | Supervisor hook declarations — trigger points where the runner pauses for a verdict |
 | `meta` | object | no | Arbitrary metadata passed through to trajectory |
 | `tags` | string[] | no | For filtering and organization |
+
+### `skills` fields
+
+Each skill is a reference to a SKILL.md — the runner loads it and makes it available to the agent.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Display name — used in `skill_read` and `skill_execute` events |
+| `source` | string | yes | Where to load the skill from — scheme determines how the runner loads it (see below) |
+| `config` | object | no | Opaque provider-specific options — AEP does not interpret this |
+
+**`source` scheme conventions:**
+
+| Scheme | Example | Runner behavior |
+|---|---|---|
+| `anthropic:<id>@<version>` | `anthropic:pptx@latest` | Anthropic-managed skill — runner uses beta API with `container` |
+| Local path | `./skills/my-skill` or `/abs/path` | Runner reads `SKILL.md` from the path and injects content into context |
+| Remote URL | `https://github.com/owner/repo/tree/main/skills/my-skill` | Runner fetches `SKILL.md` and injects content into context |
+| Unknown scheme | `myplatform:skill-id` | Runner emits `skill_read` (trajectory records the request) then skips — does not fail the run |
+
+### `tools` fields
+
+Each entry declares a tool the runner registers with the LLM. When the model calls the tool, the runner pauses, emits `tool_exec_request`, reads `tool_exec_result` from stdin, and returns the result. The tool's logic runs on the supervisor side — config-declared tools are always supervisor-executed.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Tool name — used in `tool_call`, `tool_exec_request`, `tool_exec_applied` events |
+| `description` | string | yes | Shown to the LLM to explain when to call the tool |
+| `input_schema` | object | yes | JSON Schema for the tool's arguments |
+| `output_schema` | object | no | JSON Schema documenting what the tool returns — not enforced by AEP |
+
+**Supervisor tool execution flow:**
+
+```
+LLM calls tool
+  → runner emits tool_call
+  → runner emits tool_exec_request {call_id, tool, input}   [stdout]
+  → supervisor executes tool locally
+  → supervisor sends tool_exec_result {call_id, output}      [stdin]
+  → runner returns result to LLM
+  → runner emits tool_result
+  → runner emits tool_exec_applied {call_id}                 [stdout]
+```
+
+On timeout: runner uses `""` as output and emits `tool_exec_applied` with `timed_out: true`.
 
 ### `boundary` fields
 
@@ -93,7 +144,7 @@ The config is the complete specification of what the runner needs to execute the
 
 ---
 
-## AEP Event Stream (runner → stdout, NDJSON)
+## AEP Event Stream: NDJSON
 
 Each line is one JSON object. Required fields on every event: `type`, `run_id`, `ts` (ISO8601).
 
@@ -118,7 +169,7 @@ Each line is one JSON object. Required fields on every event: `type`, `run_id`, 
 
 ### `agent_start`
 
-The first event. Captures full run context — prompt, model, tools, system prompt. Without this, a trajectory is uninterpretable.
+The first event. Captures full run context — prompt, model, tools, skills, system prompt. Without this, a trajectory is uninterpretable.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -129,6 +180,7 @@ The first event. Captures full run context — prompt, model, tools, system prom
 | `prompt` | string | no | The prompt/task given to the agent |
 | `system_prompt` | string | no | System prompt provided to the model |
 | `tools` | array | no | Tools available — each object has at minimum `name: string` |
+| `skills` | string[] | no | Names of skills loaded for this run |
 | `thread_id` | string | no | Links multi-turn sessions |
 | `session_id` | string | no | SDK-internal session identifier |
 | `ts` | ISO8601 | yes | |
@@ -383,6 +435,48 @@ Emitted by the runner after it receives and acts on a verdict. Closes the `hook_
 | `request_id` | string | yes | Matches `hook_request.request_id` |
 | `verdict` | string | yes | The verdict that was applied |
 | `timed_out` | bool | no | `true` if `default_verdict` was applied due to timeout |
+| `ts` | ISO8601 | yes | |
+
+### `tool_exec_request`
+
+Emitted by the runner when the model calls a config-declared tool. The runner pauses execution and waits for a `tool_exec_result` from the supervisor over stdin.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `"tool_exec_request"` | yes | |
+| `run_id` | string | yes | |
+| `step` | int | yes | |
+| `call_id` | string | yes | Matches `tool_call.call_id` |
+| `tool` | string | yes | Tool name |
+| `input` | object | yes | Arguments the model passed |
+| `timeout_ms` | int | yes | How long the runner waits before falling back to `""` |
+| `ts` | ISO8601 | yes | |
+
+### `tool_exec_result` (stdin → runner)
+
+Sent by the supervisor in response to a `tool_exec_request`. Flows over stdin (not emitted to stdout). The runner reads this and returns the output to the model.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `"tool_exec_result"` | yes | |
+| `run_id` | string | yes | |
+| `call_id` | string | yes | Must match the `tool_exec_request.call_id` |
+| `output` | string | yes | Tool result returned to the model |
+| `error` | string | no | Error message; runner prefixes with `"Error: "` and returns to model |
+| `ts` | ISO8601 | yes | |
+
+### `tool_exec_applied`
+
+Emitted by the runner after it receives and applies a tool result. Closes the `tool_exec_request` / `tool_exec_applied` pair in the trajectory.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `"tool_exec_applied"` | yes | |
+| `run_id` | string | yes | |
+| `step` | int | yes | |
+| `call_id` | string | yes | Matches `tool_exec_request.call_id` |
+| `tool` | string | yes | Tool name |
+| `timed_out` | bool | no | `true` if supervisor did not respond within `timeout_ms`; runner used `""` as output |
 | `ts` | ISO8601 | yes | |
 
 ### Wire format example

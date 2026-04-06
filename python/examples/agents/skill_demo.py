@@ -1,14 +1,14 @@
-"""Skill demo — run an Anthropic Agent Skill and observe skill_read / skill_execute events.
+"""Skill demo — declare a skill in AEP config, run it, observe skill_read / skill_execute events.
 
-The agent is asked to create a simple spreadsheet using the ``xlsx`` skill.
-The supervisor watches the AEP event stream and asserts that:
+The supervisor declares the ``xlsx`` Anthropic Agent Skill in an AEP config and
+passes it to the runner as a subprocess. The runner translates the ``skills``
+field to the Anthropic beta API. The supervisor watches the event stream and asserts:
 
   1. A ``skill_read`` event was emitted at startup (skill loaded)
   2. A ``skill_execute`` event was emitted (skill was invoked)
 
-This requires the Anthropic Skills beta.  The runner automatically sets the
-``skills-2025-10-02`` beta flag and passes a persistent container when skills
-are provided.
+This requires the Anthropic Skills beta. The runner automatically sets the
+required beta flags when it sees an ``anthropic:`` skill source.
 
 Setup::
 
@@ -16,7 +16,7 @@ Setup::
 
 Usage::
 
-    ANTHROPIC_API_KEY=... python python/examples/agents/skill_demo.py
+    ANTHROPIC_API_KEY=... python ../../examples/agents/skill_demo.py
 """
 
 from __future__ import annotations
@@ -24,28 +24,46 @@ from __future__ import annotations
 import asyncio
 import sys
 
+from agent_execution_protocol import AepConfig, AepSkill
 from anthropic_aep import query
 
 
-# ── skills ───────────────────────────────────────────────────────────────────
+# ── AEP config (supervisor declares the skill) ────────────────────────────────
 
-SKILLS = [
-    {"type": "anthropic", "skill_id": "xlsx", "version": "latest"},
-]
-
-PROMPT = (
-    "Create a simple spreadsheet with three columns: Name, Role, Start Date. "
-    "Add three example rows of employee data."
+CONFIG = AepConfig(
+    run_id="skill-demo-xlsx",
+    model="anthropic/claude-sonnet-4-6",
+    prompt=(
+        "Create a simple spreadsheet with three columns: Name, Role, Start Date. "
+        "Add three example rows of employee data."
+    ),
+    skills=[
+        AepSkill(name="xlsx", source="anthropic:xlsx@latest"),
+    ],
 )
 
 
-# ── agent ────────────────────────────────────────────────────────────────────
+# ── agent (runner reads config and translates skills to SDK format) ───────────
+
 
 async def run() -> None:
+    # _run.py normally handles this translation when launched as a subprocess.
+    # In library mode we translate the skills field manually here.
+    managed_skills = [
+        {
+            "type": "anthropic",
+            "skill_id": s.source[len("anthropic:") :].partition("@")[0],
+            "version": s.source.partition("@")[2] or "latest",
+        }
+        for s in CONFIG.skills
+        if s.source.startswith("anthropic:")
+    ]
+
     async for _ in query(
-        prompt=PROMPT,
-        model="claude-sonnet-4-6",
-        skills=SKILLS,
+        prompt=CONFIG.prompt or "",
+        model=CONFIG.model.split("/", 1)[-1] if CONFIG.model else "claude-sonnet-4-6",
+        skills=managed_skills or None,
+        run_id=CONFIG.run_id,
     ):
         pass
 
@@ -92,7 +110,9 @@ if __name__ == "__main__":
         # 2. skill_execute emitted during run
         exec_names = [e["name"] for e in skill_executes]
         has_exec = len(exec_names) > 0
-        print(f"{'✓' if has_exec else '✗'}  skill_execute emitted  ({exec_names or '–'})")
+        print(
+            f"{'✓' if has_exec else '✗'}  skill_execute emitted  ({exec_names or '–'})"
+        )
 
         passed = has_read and has_exec
         print(f"\n{'PASS' if passed else 'FAIL'}")

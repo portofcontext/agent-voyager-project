@@ -163,16 +163,25 @@ async def query(
 
             if isinstance(message, AssistantMessage):
                 usage = getattr(message, "usage", None) or {}
-                total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                total_tokens += usage.get("input_tokens", 0) + usage.get(
+                    "output_tokens", 0
+                )
 
                 for block in getattr(message, "content", []):
                     if isinstance(block, TextBlock):
                         text = getattr(block, "text", "")
                         if text.strip():
-                            emit_text_output(run_id=_run_id, step=step_ref[0], text=text)
+                            emit_text_output(
+                                run_id=_run_id, step=step_ref[0], text=text
+                            )
 
                 # on_turn_end hook (also fires `always` hooks via trigger matching)
-                if await fire_hooks("on_turn_end", _run_id, step_ref[0], _aep_hooks, hook_stdin) == "stop":
+                if (
+                    await fire_hooks(
+                        "on_turn_end", _run_id, step_ref[0], _aep_hooks, hook_stdin
+                    )
+                    == "stop"
+                ):
                     reason = "supervisor_stopped"
                     break
 

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import sys
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, Callable
+from typing import Any, Callable, IO
 
 import anthropic
 
@@ -21,6 +24,8 @@ from agent_execution_protocol import (
     emit_text_output,
     emit_tool_call,
     emit_tool_result,
+    emit_tool_exec_request,
+    emit_tool_exec_applied,
 )
 
 
@@ -70,12 +75,63 @@ def _compute_cost(
     )
 
 
+async def _read_tool_exec_result(
+    call_id: str,
+    stdin: IO[str],
+    timeout_ms: int = 30000,
+) -> tuple[str, bool]:
+    """Read one tool_exec_result from stdin with timeout.
+
+    Returns ``(output, timed_out)``. Falls back to ``""`` on timeout or error.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        line = await asyncio.wait_for(
+            loop.run_in_executor(None, stdin.readline),
+            timeout=timeout_ms / 1000,
+        )
+    except asyncio.TimeoutError:
+        return "", True
+
+    if not line or not line.strip():
+        return "", True
+
+    try:
+        d = json.loads(line)
+    except json.JSONDecodeError:
+        sys.stderr.write(
+            f"anthropic-aep-runner: invalid JSON for tool_exec_result: {line!r}\n"
+        )
+        return "", True
+
+    if d.get("type") != "tool_exec_result":
+        sys.stderr.write(
+            f"anthropic-aep-runner: unexpected message type '{d.get('type')}'"
+            " waiting for tool_exec_result\n"
+        )
+        return "", True
+
+    if d.get("call_id") != call_id:
+        sys.stderr.write(
+            f"anthropic-aep-runner: call_id mismatch: got '{d.get('call_id')}'"
+            f" expected '{call_id}'\n"
+        )
+        return "", True
+
+    if d.get("error"):
+        return f"Error: {d['error']}", False
+
+    return d.get("output", ""), False
+
+
 async def query(
     prompt: str,
     *,
     model: str = DEFAULT_MODEL,
     tools: list[dict] | None = None,
     tool_handlers: dict[str, Callable[[dict], Any]] | None = None,
+    supervisor_tools: set[str] | None = None,
+    hook_stdin: IO[str] | None = None,
     skills: list[dict] | None = None,
     system_prompt: str | None = None,
     run_id: str | None = None,
@@ -127,6 +183,7 @@ async def query(
     """
     _run_id = run_id or str(uuid.uuid4())
     _handlers = tool_handlers or {}
+    _supervisor_tools = supervisor_tools or set()
     _use_skills = bool(skills)
 
     client = (
@@ -144,7 +201,6 @@ async def query(
     run_start = time.monotonic()
     stop_reason = "converged"
 
-    # Resolve skill names for emit_agent_start metadata.
     skill_names: list[str] | None = None
     if _use_skills:
         skill_names = [s.get("skill_id", str(s)) for s in (skills or [])]
@@ -155,9 +211,10 @@ async def query(
         prompt=prompt,
         system_prompt=system_prompt,
         tools=[t["name"] for t in (tools or [])] or None,
+        skills=skill_names,
         thread_id=thread_id,
         tags=tags or [],
-        meta={**(meta or {}), **({"skills": skill_names} if skill_names else {})},
+        meta=meta or {},
     )
 
     # Emit skill_read for each Anthropic Agent Skill at startup.
@@ -201,7 +258,9 @@ async def query(
             # in real time as the model produces content blocks.
             server_tool_uses: list[str] = []
 
-            _stream_fn = client.beta.messages.stream if _use_skills else client.messages.stream
+            _stream_fn = (
+                client.beta.messages.stream if _use_skills else client.messages.stream
+            )
             async with _stream_fn(**kwargs) as stream:
                 async for event in stream:
                     # Detect Anthropic Agent Skills invocations.
@@ -281,14 +340,34 @@ async def query(
                 )
 
                 tool_start = time.monotonic()
-                try:
-                    if tool_name in _handlers:
-                        raw = _handlers[tool_name](tool_input)
-                        output = str(raw) if not isinstance(raw, str) else raw
-                    else:
-                        output = f"Unknown tool: {tool_name}"
-                except Exception as exc:
-                    output = f"Error executing {tool_name}: {exc}"
+                timed_out = False
+                if tool_name in _supervisor_tools and hook_stdin is not None:
+                    emit_tool_exec_request(
+                        run_id=_run_id,
+                        step=step,
+                        call_id=call_id,
+                        tool=tool_name,
+                        input=tool_input,
+                    )
+                    output, timed_out = await _read_tool_exec_result(
+                        call_id, hook_stdin, timeout_ms=30000
+                    )
+                    emit_tool_exec_applied(
+                        run_id=_run_id,
+                        step=step,
+                        call_id=call_id,
+                        tool=tool_name,
+                        timed_out=timed_out,
+                    )
+                else:
+                    try:
+                        if tool_name in _handlers:
+                            raw = _handlers[tool_name](tool_input)
+                            output = str(raw) if not isinstance(raw, str) else raw
+                        else:
+                            output = f"Unknown tool: {tool_name}"
+                    except Exception as exc:
+                        output = f"Error executing {tool_name}: {exc}"
 
                 tool_ms = int((time.monotonic() - tool_start) * 1000)
 

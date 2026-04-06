@@ -84,6 +84,98 @@ class AepBoundary:
 
 
 @dataclass
+class AepTool:
+    """A tool declared by the supervisor for the runner to expose to the LLM.
+
+    When the model calls this tool, the runner pauses, emits a ``tool_exec_request``
+    event to stdout, reads a ``tool_exec_result`` from stdin, and returns the
+    result to the model. All config-declared tools are supervisor-executed —
+    runner-native tools are a runner concern and do not belong in config.
+
+    ``input_schema`` is a JSON Schema object describing the tool's arguments.
+    ``output_schema`` is optional and documents what the tool returns; AEP does
+    not enforce it.
+    """
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
+        if self.output_schema is not None:
+            d["output_schema"] = self.output_schema
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "AepTool":
+        if "name" not in d:
+            raise ValueError("AepTool missing required field: name")
+        if "description" not in d:
+            raise ValueError("AepTool missing required field: description")
+        if "input_schema" not in d:
+            raise ValueError("AepTool missing required field: input_schema")
+        return cls(
+            name=d["name"],
+            description=d["description"],
+            input_schema=d["input_schema"],
+            output_schema=d.get("output_schema"),
+        )
+
+
+@dataclass
+class AepSkill:
+    """A skill the supervisor wants the runner to make available.
+
+    A skill is a SKILL.md file — markdown with YAML frontmatter (name, description)
+    plus instructions the agent loads into context. The ``source`` field tells the
+    runner where and how to load it:
+
+        ``anthropic:pptx@latest``
+            Anthropic-managed skill — runner calls the beta API with container + betas.
+
+        ``./path/to/skill`` or ``/absolute/path``
+            Local SKILL.md — runner reads the file and injects content into context.
+
+        ``https://github.com/owner/repo/tree/main/skills/my-skill``
+            Remote SKILL.md — runner fetches and injects content into context.
+
+        Unknown scheme
+            Runner emits ``skill_read`` (so the trajectory records it was requested)
+            then skips activation — does not fail the run.
+
+    ``config`` is opaque provider-specific data AEP never interprets.
+    """
+
+    name: str
+    source: str
+    config: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"name": self.name, "source": self.source}
+        if self.config:
+            d["config"] = self.config
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "AepSkill":
+        if "name" not in d:
+            raise ValueError("AepSkill missing required field: name")
+        if "source" not in d:
+            raise ValueError("AepSkill missing required field: source")
+        return cls(
+            name=d["name"],
+            source=d["source"],
+            config=d.get("config", {}),
+        )
+
+
+@dataclass
 class AepConfig:
     run_id: str
     schema_version: str = "0.2"
@@ -96,6 +188,8 @@ class AepConfig:
     meta: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
     hooks: list[AepHook] = field(default_factory=list)
+    skills: list[AepSkill] = field(default_factory=list)
+    tools: list[AepTool] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AepConfig":
@@ -103,6 +197,8 @@ class AepConfig:
         boundary_raw = d.get("boundary")
         boundary = AepBoundary.from_dict(boundary_raw) if boundary_raw else None
         hooks = [AepHook.from_dict(h) for h in d.get("hooks", [])]
+        skills = [AepSkill.from_dict(s) for s in d.get("skills", [])]
+        tools = [AepTool.from_dict(t) for t in d.get("tools", [])]
         return cls(
             schema_version=d.get("schema_version", "0.2"),
             run_id=d["run_id"],
@@ -115,6 +211,8 @@ class AepConfig:
             meta=d.get("meta", {}),
             tags=d.get("tags", []),
             hooks=hooks,
+            skills=skills,
+            tools=tools,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -140,6 +238,10 @@ class AepConfig:
             d["tags"] = self.tags
         if self.hooks:
             d["hooks"] = [h.to_dict() for h in self.hooks]
+        if self.skills:
+            d["skills"] = [s.to_dict() for s in self.skills]
+        if self.tools:
+            d["tools"] = [t.to_dict() for t in self.tools]
         return d
 
 

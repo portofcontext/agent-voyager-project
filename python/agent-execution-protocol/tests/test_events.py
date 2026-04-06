@@ -4,25 +4,47 @@ import json
 import io
 import pytest
 from agent_execution_protocol import (
-    AgentStart, ModelTurnStart, ModelTurnEnd,
-    ToolCall, ToolResult, ToolCallFailed,
-    TextOutput, CostUpdate, ContextCompaction, RunError, AgentStop,
-    HookRequest, HookVerdict, HookVerdictApplied,
-    SkillRead, SkillExecute,
+    AgentStart,
+    ModelTurnStart,
+    ModelTurnEnd,
+    ToolCall,
+    ToolResult,
+    ToolCallFailed,
+    TextOutput,
+    CostUpdate,
+    ContextCompaction,
+    RunError,
+    AgentStop,
+    HookRequest,
+    HookVerdict,
+    HookVerdictApplied,
+    SkillRead,
+    SkillExecute,
     event_from_dict,
-    emit_agent_start, emit_tool_call, emit_tool_result,
-    emit_agent_stop, emit_error,
-    emit_hook_request, emit_hook_verdict_applied,
-    emit_skill_read, emit_skill_execute,
+    emit_agent_start,
+    emit_tool_call,
+    emit_tool_result,
+    emit_agent_stop,
+    emit_error,
+    emit_hook_request,
+    emit_hook_verdict_applied,
+    emit_skill_read,
+    emit_skill_execute,
 )
 from agent_execution_protocol.events import VALID_STOP_REASONS
 
 
 # ── AgentStart ────────────────────────────────────────────────────────────────
 
+
 def test_agent_start_round_trip():
-    e = AgentStart(run_id="r1", model="anthropic/claude-sonnet-4-6",
-                   thread_id="t1", tags=["x"], meta={"k": "v"})
+    e = AgentStart(
+        run_id="r1",
+        model="anthropic/claude-sonnet-4-6",
+        thread_id="t1",
+        tags=["x"],
+        meta={"k": "v"},
+    )
     d = e.to_dict()
     assert d["type"] == "agent_start"
     assert d["run_id"] == "r1"
@@ -44,8 +66,13 @@ def test_agent_start_omits_optional_nones():
 
 def test_agent_start_with_observability_fields():
     tools = [{"name": "bash", "description": "Run shell commands"}, {"name": "read"}]
-    e = AgentStart(run_id="r1", model="m", prompt="Do the thing",
-                   system_prompt="You are a helpful agent.", tools=tools)
+    e = AgentStart(
+        run_id="r1",
+        model="m",
+        prompt="Do the thing",
+        system_prompt="You are a helpful agent.",
+        tools=tools,
+    )
     d = e.to_dict()
     assert d["prompt"] == "Do the thing"
     assert d["system_prompt"] == "You are a helpful agent."
@@ -59,6 +86,7 @@ def test_agent_start_with_observability_fields():
 
 
 # ── ModelTurnStart ────────────────────────────────────────────────────────────
+
 
 def test_model_turn_start_no_messages_field():
     """messages array was removed — must not appear."""
@@ -80,27 +108,48 @@ def test_model_turn_start_omits_context_messages_when_none():
 
 # ── ModelTurnEnd ──────────────────────────────────────────────────────────────
 
+
 def test_model_turn_end_cache_tokens():
-    e = ModelTurnEnd(run_id="r1", step=1, tokens_input=10, tokens_output=5,
-                     cost_usd=0.001, duration_ms=200,
-                     tokens_cache_read=5000, tokens_cache_write=100)
+    e = ModelTurnEnd(
+        run_id="r1",
+        step=1,
+        tokens_input=10,
+        tokens_output=5,
+        cost_usd=0.001,
+        duration_ms=200,
+        tokens_cache_read=5000,
+        tokens_cache_write=100,
+    )
     d = e.to_dict()
     assert d["tokens_cache_read"] == 5000
     assert d["tokens_cache_write"] == 100
 
 
 def test_model_turn_end_omits_cache_when_none():
-    d = ModelTurnEnd(run_id="r1", step=1, tokens_input=10, tokens_output=5,
-                     cost_usd=0.001, duration_ms=200).to_dict()
+    d = ModelTurnEnd(
+        run_id="r1",
+        step=1,
+        tokens_input=10,
+        tokens_output=5,
+        cost_usd=0.001,
+        duration_ms=200,
+    ).to_dict()
     assert "tokens_cache_read" not in d
     assert "tokens_cache_write" not in d
 
 
 # ── ToolCall / ToolResult ─────────────────────────────────────────────────────
 
+
 def test_tool_call_round_trip():
-    e = ToolCall(run_id="r1", step=2, call_id="c1", tool="myrunner__bash",
-                 input={"command": "ls"}, subtype="shell")
+    e = ToolCall(
+        run_id="r1",
+        step=2,
+        call_id="c1",
+        tool="myrunner__bash",
+        input={"command": "ls"},
+        subtype="shell",
+    )
     d = e.to_dict()
     assert d["type"] == "tool_call"
     assert d["subtype"] == "shell"
@@ -115,26 +164,42 @@ def test_tool_call_omits_none_subtype():
 
 
 def test_tool_result_rejected_fields():
-    e = ToolResult(run_id="r1", step=1, call_id="c1", tool="t", output="err",
-                   duration_ms=1, rejected=True, rejection_reason="ceiling_reached")
+    e = ToolResult(
+        run_id="r1",
+        step=1,
+        call_id="c1",
+        tool="t",
+        output="err",
+        duration_ms=1,
+        rejected=True,
+        rejection_reason="ceiling_reached",
+    )
     d = e.to_dict()
     assert d["rejected"] is True
     assert d["rejection_reason"] == "ceiling_reached"
 
 
 def test_tool_result_omits_rejected_when_false():
-    d = ToolResult(run_id="r1", step=1, call_id="c1", tool="t",
-                   output="ok", duration_ms=5).to_dict()
+    d = ToolResult(
+        run_id="r1", step=1, call_id="c1", tool="t", output="ok", duration_ms=5
+    ).to_dict()
     assert "rejected" not in d
     assert "rejection_reason" not in d
 
 
 # ── AgentStop ─────────────────────────────────────────────────────────────────
 
+
 def test_agent_stop_with_output():
-    e = AgentStop(run_id="r1", reason="converged", total_tokens=100,
-                  total_cost_usd=0.01, total_turns=3, duration_ms=5000,
-                  output={"result": "done"})
+    e = AgentStop(
+        run_id="r1",
+        reason="converged",
+        total_tokens=100,
+        total_cost_usd=0.01,
+        total_turns=3,
+        duration_ms=5000,
+        output={"result": "done"},
+    )
     d = e.to_dict()
     assert d["output"] == {"result": "done"}
     e2 = event_from_dict(d)
@@ -143,14 +208,26 @@ def test_agent_stop_with_output():
 
 
 def test_agent_stop_omits_none_output():
-    d = AgentStop(run_id="r1", reason="converged", total_tokens=0,
-                  total_cost_usd=0.0, total_turns=1, duration_ms=0).to_dict()
+    d = AgentStop(
+        run_id="r1",
+        reason="converged",
+        total_tokens=0,
+        total_cost_usd=0.0,
+        total_turns=1,
+        duration_ms=0,
+    ).to_dict()
     assert "output" not in d
 
 
 def test_agent_stop_supervisor_stopped_reason():
-    e = AgentStop(run_id="r1", reason="supervisor_stopped", total_tokens=50,
-                  total_cost_usd=0.005, total_turns=2, duration_ms=1000)
+    e = AgentStop(
+        run_id="r1",
+        reason="supervisor_stopped",
+        total_tokens=50,
+        total_cost_usd=0.005,
+        total_turns=2,
+        duration_ms=1000,
+    )
     d = e.to_dict()
     assert d["reason"] == "supervisor_stopped"
     e2 = event_from_dict(d)
@@ -160,16 +237,25 @@ def test_agent_stop_supervisor_stopped_reason():
 
 # ── VALID_STOP_REASONS ────────────────────────────────────────────────────────
 
+
 def test_valid_stop_reasons_includes_supervisor_stopped():
     assert "supervisor_stopped" in VALID_STOP_REASONS
 
 
 def test_valid_stop_reasons_includes_all_original():
-    for reason in ("converged", "budget_exhausted", "token_limit", "turn_limit", "error", "interrupted"):
+    for reason in (
+        "converged",
+        "budget_exhausted",
+        "token_limit",
+        "turn_limit",
+        "error",
+        "interrupted",
+    ):
         assert reason in VALID_STOP_REASONS
 
 
 # ── ContextCompaction ─────────────────────────────────────────────────────────
+
 
 def test_context_compaction_round_trip():
     e = ContextCompaction(run_id="r1", step=3, tokens_before=148000, tokens_after=12000)
@@ -183,14 +269,23 @@ def test_context_compaction_round_trip():
 
 
 def test_context_compaction_omits_compacted_messages_when_none():
-    d = ContextCompaction(run_id="r1", step=1, tokens_before=50000, tokens_after=5000).to_dict()
+    d = ContextCompaction(
+        run_id="r1", step=1, tokens_before=50000, tokens_after=5000
+    ).to_dict()
     assert "compacted_messages" not in d
 
 
 def test_context_compaction_with_compacted_messages():
-    msgs = [{"role": "user", "content": "Summary of prior work: implemented auth module."}]
-    e = ContextCompaction(run_id="r1", step=5, tokens_before=148000, tokens_after=3000,
-                          compacted_messages=msgs)
+    msgs = [
+        {"role": "user", "content": "Summary of prior work: implemented auth module."}
+    ]
+    e = ContextCompaction(
+        run_id="r1",
+        step=5,
+        tokens_before=148000,
+        tokens_after=3000,
+        compacted_messages=msgs,
+    )
     d = e.to_dict()
     assert d["compacted_messages"] == msgs
     e2 = event_from_dict(d)
@@ -203,16 +298,22 @@ def test_context_compaction_multiple_compacted_messages():
         {"role": "user", "content": "Context summary part 1."},
         {"role": "assistant", "content": "Acknowledged. Continuing from here."},
     ]
-    e = ContextCompaction(run_id="r1", step=10, tokens_before=200000, tokens_after=4000,
-                          compacted_messages=msgs)
+    e = ContextCompaction(
+        run_id="r1",
+        step=10,
+        tokens_before=200000,
+        tokens_after=4000,
+        compacted_messages=msgs,
+    )
     d = e.to_dict()
     assert len(d["compacted_messages"]) == 2
 
 
 def test_context_compaction_empty_compacted_messages_list():
     # Empty list is different from None — it means compaction produced no messages
-    e = ContextCompaction(run_id="r1", step=1, tokens_before=100, tokens_after=10,
-                          compacted_messages=[])
+    e = ContextCompaction(
+        run_id="r1", step=1, tokens_before=100, tokens_after=10, compacted_messages=[]
+    )
     d = e.to_dict()
     assert "compacted_messages" in d
     assert d["compacted_messages"] == []
@@ -220,9 +321,16 @@ def test_context_compaction_empty_compacted_messages_list():
 
 # ── HookRequest ───────────────────────────────────────────────────────────────
 
+
 def test_hook_request_minimal():
-    e = HookRequest(run_id="r1", request_id="hr-001", hook_name="check-writes",
-                    trigger="on_tool:write_file", step=3, timeout_ms=10000)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-001",
+        hook_name="check-writes",
+        trigger="on_tool:write_file",
+        step=3,
+        timeout_ms=10000,
+    )
     d = e.to_dict()
     assert d["type"] == "hook_request"
     assert d["request_id"] == "hr-001"
@@ -233,24 +341,43 @@ def test_hook_request_minimal():
 
 
 def test_hook_request_omits_call_id_when_none():
-    e = HookRequest(run_id="r1", request_id="hr-001", hook_name="h",
-                    trigger="on_turn_end", step=1, timeout_ms=30000)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-001",
+        hook_name="h",
+        trigger="on_turn_end",
+        step=1,
+        timeout_ms=30000,
+    )
     d = e.to_dict()
     assert "call_id" not in d
 
 
 def test_hook_request_omits_context_when_none():
-    e = HookRequest(run_id="r1", request_id="hr-001", hook_name="h",
-                    trigger="on_stop", step=5, timeout_ms=30000)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-001",
+        hook_name="h",
+        trigger="on_stop",
+        step=5,
+        timeout_ms=30000,
+    )
     d = e.to_dict()
     assert "context" not in d
 
 
 def test_hook_request_with_call_id_and_context():
     ctx = {"tool": "write_file", "input": {"path": "/etc/evil"}, "output": "written"}
-    e = HookRequest(run_id="r1", request_id="hr-002", hook_name="review-writes",
-                    trigger="on_tool:write_file", step=2, timeout_ms=15000,
-                    call_id="c7", context=ctx)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-002",
+        hook_name="review-writes",
+        trigger="on_tool:write_file",
+        step=2,
+        timeout_ms=15000,
+        call_id="c7",
+        context=ctx,
+    )
     d = e.to_dict()
     assert d["call_id"] == "c7"
     assert d["context"] == ctx
@@ -258,9 +385,16 @@ def test_hook_request_with_call_id_and_context():
 
 def test_hook_request_round_trip():
     ctx = {"tool": "bash", "input": {"command": "rm -rf /"}, "output": "error"}
-    e = HookRequest(run_id="r1", request_id="hr-003", hook_name="safety",
-                    trigger="on_tool:bash", step=4, timeout_ms=5000,
-                    call_id="c1", context=ctx)
+    e = HookRequest(
+        run_id="r1",
+        request_id="hr-003",
+        hook_name="safety",
+        trigger="on_tool:bash",
+        step=4,
+        timeout_ms=5000,
+        call_id="c1",
+        context=ctx,
+    )
     d = e.to_dict()
     e2 = event_from_dict(d)
     assert isinstance(e2, HookRequest)
@@ -269,6 +403,7 @@ def test_hook_request_round_trip():
 
 
 # ── HookVerdict ───────────────────────────────────────────────────────────────
+
 
 def test_hook_verdict_continue():
     e = HookVerdict(run_id="r1", request_id="hr-001", verdict="continue")
@@ -286,8 +421,12 @@ def test_hook_verdict_stop():
 
 
 def test_hook_verdict_inject_with_message():
-    e = HookVerdict(run_id="r1", request_id="hr-001", verdict="inject",
-                    message="You wrote to /etc — try src/ instead.")
+    e = HookVerdict(
+        run_id="r1",
+        request_id="hr-001",
+        verdict="inject",
+        message="You wrote to /etc — try src/ instead.",
+    )
     d = e.to_dict()
     assert d["verdict"] == "inject"
     assert d["message"] == "You wrote to /etc — try src/ instead."
@@ -299,8 +438,12 @@ def test_hook_verdict_omits_message_when_none():
 
 
 def test_hook_verdict_round_trip():
-    e = HookVerdict(run_id="r1", request_id="hr-001", verdict="inject",
-                    message="Please reconsider this approach.")
+    e = HookVerdict(
+        run_id="r1",
+        request_id="hr-001",
+        verdict="inject",
+        message="Please reconsider this approach.",
+    )
     d = e.to_dict()
     e2 = event_from_dict(d)
     assert isinstance(e2, HookVerdict)
@@ -309,6 +452,7 @@ def test_hook_verdict_round_trip():
 
 
 # ── HookVerdictApplied ────────────────────────────────────────────────────────
+
 
 def test_hook_verdict_applied_continue():
     e = HookVerdictApplied(run_id="r1", request_id="hr-001", verdict="continue")
@@ -325,7 +469,9 @@ def test_hook_verdict_applied_stop():
 
 
 def test_hook_verdict_applied_timed_out():
-    e = HookVerdictApplied(run_id="r1", request_id="hr-001", verdict="continue", timed_out=True)
+    e = HookVerdictApplied(
+        run_id="r1", request_id="hr-001", verdict="continue", timed_out=True
+    )
     d = e.to_dict()
     assert d["timed_out"] is True
 
@@ -336,7 +482,9 @@ def test_hook_verdict_applied_omits_timed_out_when_false():
 
 
 def test_hook_verdict_applied_round_trip():
-    e = HookVerdictApplied(run_id="r1", request_id="hr-005", verdict="inject", timed_out=False)
+    e = HookVerdictApplied(
+        run_id="r1", request_id="hr-005", verdict="inject", timed_out=False
+    )
     d = e.to_dict()
     e2 = event_from_dict(d)
     assert isinstance(e2, HookVerdictApplied)
@@ -345,7 +493,9 @@ def test_hook_verdict_applied_round_trip():
 
 
 def test_hook_verdict_applied_timed_out_round_trip():
-    e = HookVerdictApplied(run_id="r1", request_id="hr-006", verdict="stop", timed_out=True)
+    e = HookVerdictApplied(
+        run_id="r1", request_id="hr-006", verdict="stop", timed_out=True
+    )
     d = e.to_dict()
     e2 = event_from_dict(d)
     assert isinstance(e2, HookVerdictApplied)
@@ -353,6 +503,7 @@ def test_hook_verdict_applied_timed_out_round_trip():
 
 
 # ── SkillRead ─────────────────────────────────────────────────────────────────
+
 
 def test_skill_read_minimal():
     e = SkillRead(run_id="r1", step=2, name="pdf-processing")
@@ -364,8 +515,9 @@ def test_skill_read_minimal():
 
 
 def test_skill_read_with_source():
-    e = SkillRead(run_id="r1", step=1, name="code-review",
-                  source="~/.claude/skills/code-review")
+    e = SkillRead(
+        run_id="r1", step=1, name="code-review", source="~/.claude/skills/code-review"
+    )
     d = e.to_dict()
     assert d["source"] == "~/.claude/skills/code-review"
 
@@ -376,7 +528,9 @@ def test_skill_read_omits_source_when_none():
 
 
 def test_skill_read_round_trip():
-    e = SkillRead(run_id="r1", step=3, name="data-analysis", source="/skills/data-analysis")
+    e = SkillRead(
+        run_id="r1", step=3, name="data-analysis", source="/skills/data-analysis"
+    )
     d = e.to_dict()
     e2 = event_from_dict(d)
     assert isinstance(e2, SkillRead)
@@ -393,6 +547,7 @@ def test_skill_read_round_trip_no_source():
 
 
 # ── SkillExecute ──────────────────────────────────────────────────────────────
+
 
 def test_skill_execute_basic():
     e = SkillExecute(run_id="r1", step=4, name="pdf-processing")
@@ -418,22 +573,53 @@ def test_skill_execute_no_extra_fields():
 
 # ── Parametrized round-trips for all event types ──────────────────────────────
 
-@pytest.mark.parametrize("cls,kwargs", [
-    (ModelTurnStart, {"run_id": "r1", "step": 1}),
-    (ModelTurnEnd, {"run_id": "r1", "step": 1, "tokens_input": 10, "tokens_output": 5,
-                    "cost_usd": 0.001, "duration_ms": 200}),
-    (ToolCallFailed, {"run_id": "r1", "step": 1, "call_id": "c1", "tool": "t", "error": "oops"}),
-    (TextOutput, {"run_id": "r1", "step": 1, "text": "hello"}),
-    (CostUpdate, {"run_id": "r1", "total_cost_usd": 0.05, "total_tokens": 500}),
-    (RunError, {"run_id": "r1", "code": "rate_limit", "message": "429"}),
-    (ContextCompaction, {"run_id": "r1", "step": 1, "tokens_before": 50000, "tokens_after": 5000}),
-    (SkillRead, {"run_id": "r1", "step": 1, "name": "my-skill"}),
-    (SkillExecute, {"run_id": "r1", "step": 2, "name": "my-skill"}),
-    (HookRequest, {"run_id": "r1", "request_id": "hr-1", "hook_name": "h",
-                   "trigger": "on_stop", "step": 1, "timeout_ms": 30000}),
-    (HookVerdict, {"run_id": "r1", "request_id": "hr-1", "verdict": "continue"}),
-    (HookVerdictApplied, {"run_id": "r1", "request_id": "hr-1", "verdict": "continue"}),
-])
+
+@pytest.mark.parametrize(
+    "cls,kwargs",
+    [
+        (ModelTurnStart, {"run_id": "r1", "step": 1}),
+        (
+            ModelTurnEnd,
+            {
+                "run_id": "r1",
+                "step": 1,
+                "tokens_input": 10,
+                "tokens_output": 5,
+                "cost_usd": 0.001,
+                "duration_ms": 200,
+            },
+        ),
+        (
+            ToolCallFailed,
+            {"run_id": "r1", "step": 1, "call_id": "c1", "tool": "t", "error": "oops"},
+        ),
+        (TextOutput, {"run_id": "r1", "step": 1, "text": "hello"}),
+        (CostUpdate, {"run_id": "r1", "total_cost_usd": 0.05, "total_tokens": 500}),
+        (RunError, {"run_id": "r1", "code": "rate_limit", "message": "429"}),
+        (
+            ContextCompaction,
+            {"run_id": "r1", "step": 1, "tokens_before": 50000, "tokens_after": 5000},
+        ),
+        (SkillRead, {"run_id": "r1", "step": 1, "name": "my-skill"}),
+        (SkillExecute, {"run_id": "r1", "step": 2, "name": "my-skill"}),
+        (
+            HookRequest,
+            {
+                "run_id": "r1",
+                "request_id": "hr-1",
+                "hook_name": "h",
+                "trigger": "on_stop",
+                "step": 1,
+                "timeout_ms": 30000,
+            },
+        ),
+        (HookVerdict, {"run_id": "r1", "request_id": "hr-1", "verdict": "continue"}),
+        (
+            HookVerdictApplied,
+            {"run_id": "r1", "request_id": "hr-1", "verdict": "continue"},
+        ),
+    ],
+)
 def test_event_type_round_trips(cls, kwargs):
     e = cls(**kwargs)
     d = e.to_dict()
@@ -443,6 +629,7 @@ def test_event_type_round_trips(cls, kwargs):
 
 
 # ── event_from_dict passthrough for unknown types ─────────────────────────────
+
 
 def test_unknown_event_type_returns_dict():
     d = {"type": "not_a_real_type", "run_id": "r1"}
@@ -457,13 +644,18 @@ def test_missing_type_returns_dict():
 
 
 def test_event_from_dict_custom_namespaced_type():
-    d = {"type": "myframework.verifier_result", "run_id": "r1", "ts": "2026-01-01T00:00:00Z"}
+    d = {
+        "type": "myframework.verifier_result",
+        "run_id": "r1",
+        "ts": "2026-01-01T00:00:00Z",
+    }
     result = event_from_dict(d)
     assert isinstance(result, dict)
     assert result["type"] == "myframework.verifier_result"
 
 
 # ── Emit helpers ──────────────────────────────────────────────────────────────
+
 
 def test_emit_agent_start_writes_ndjson():
     buf = io.StringIO()
@@ -482,8 +674,15 @@ def test_emit_flushes_immediately():
 
 def test_emit_agent_stop_writes_valid_json():
     buf = io.StringIO()
-    emit_agent_stop(run_id="r1", reason="converged", total_tokens=100,
-                    total_cost_usd=0.01, total_turns=2, duration_ms=3000, file=buf)
+    emit_agent_stop(
+        run_id="r1",
+        reason="converged",
+        total_tokens=100,
+        total_cost_usd=0.01,
+        total_turns=2,
+        duration_ms=3000,
+        file=buf,
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "agent_stop"
     assert d["reason"] == "converged"
@@ -499,9 +698,17 @@ def test_emit_error_writes_code_and_message():
 
 def test_emit_hook_request():
     buf = io.StringIO()
-    emit_hook_request(run_id="r1", request_id="hr-001", hook_name="check-writes",
-                      trigger="on_tool:write_file", step=3, timeout_ms=10000,
-                      call_id="c5", context={"tool": "write_file"}, file=buf)
+    emit_hook_request(
+        run_id="r1",
+        request_id="hr-001",
+        hook_name="check-writes",
+        trigger="on_tool:write_file",
+        step=3,
+        timeout_ms=10000,
+        call_id="c5",
+        context={"tool": "write_file"},
+        file=buf,
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "hook_request"
     assert d["request_id"] == "hr-001"
@@ -511,8 +718,14 @@ def test_emit_hook_request():
 
 def test_emit_hook_request_minimal():
     buf = io.StringIO()
-    emit_hook_request(run_id="r1", request_id="hr-001", hook_name="h",
-                      trigger="on_stop", step=1, file=buf)
+    emit_hook_request(
+        run_id="r1",
+        request_id="hr-001",
+        hook_name="h",
+        trigger="on_stop",
+        step=1,
+        file=buf,
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "hook_request"
     assert "call_id" not in d
@@ -521,7 +734,9 @@ def test_emit_hook_request_minimal():
 
 def test_emit_hook_verdict_applied():
     buf = io.StringIO()
-    emit_hook_verdict_applied(run_id="r1", request_id="hr-001", verdict="stop", file=buf)
+    emit_hook_verdict_applied(
+        run_id="r1", request_id="hr-001", verdict="stop", file=buf
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "hook_verdict_applied"
     assert d["verdict"] == "stop"
@@ -530,16 +745,22 @@ def test_emit_hook_verdict_applied():
 
 def test_emit_hook_verdict_applied_timed_out():
     buf = io.StringIO()
-    emit_hook_verdict_applied(run_id="r1", request_id="hr-001", verdict="continue",
-                              timed_out=True, file=buf)
+    emit_hook_verdict_applied(
+        run_id="r1", request_id="hr-001", verdict="continue", timed_out=True, file=buf
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["timed_out"] is True
 
 
 def test_emit_skill_read():
     buf = io.StringIO()
-    emit_skill_read(run_id="r1", step=1, name="pdf-processing",
-                    source="~/.claude/skills/pdf-processing", file=buf)
+    emit_skill_read(
+        run_id="r1",
+        step=1,
+        name="pdf-processing",
+        source="~/.claude/skills/pdf-processing",
+        file=buf,
+    )
     d = json.loads(buf.getvalue().strip())
     assert d["type"] == "skill_read"
     assert d["name"] == "pdf-processing"
@@ -565,10 +786,17 @@ def test_each_emit_produces_exactly_one_line():
     """Every emit helper must produce exactly one NDJSON line."""
     cases = [
         lambda buf: emit_agent_start(run_id="r1", model="m", file=buf),
-        lambda buf: emit_hook_request(run_id="r1", request_id="x", hook_name="h",
-                                       trigger="on_stop", step=1, file=buf),
-        lambda buf: emit_hook_verdict_applied(run_id="r1", request_id="x",
-                                               verdict="continue", file=buf),
+        lambda buf: emit_hook_request(
+            run_id="r1",
+            request_id="x",
+            hook_name="h",
+            trigger="on_stop",
+            step=1,
+            file=buf,
+        ),
+        lambda buf: emit_hook_verdict_applied(
+            run_id="r1", request_id="x", verdict="continue", file=buf
+        ),
         lambda buf: emit_skill_read(run_id="r1", step=1, name="s", file=buf),
         lambda buf: emit_skill_execute(run_id="r1", step=1, name="s", file=buf),
     ]

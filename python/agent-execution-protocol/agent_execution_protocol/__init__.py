@@ -4,6 +4,7 @@ Core types:
     AepConfig       — config passed to a runner on stdin
     AepBoundary     — execution limits the runner enforces
     AepHook         — supervisor hook declared in config
+    AepSkill        — skill reference declared in config
     AepEvent        — union of all event dataclasses
     AgentStart, ModelTurnStart, ModelTurnEnd, ToolCall, ToolResult,
     ToolCallFailed, TextOutput, CostUpdate, SkillRead, SkillExecute,
@@ -31,7 +32,7 @@ Validation:
     Violation               — code, message, event_index
 """
 
-from .config import AepConfig, AepBoundary, AepHook
+from .config import AepConfig, AepBoundary, AepHook, AepSkill, AepTool
 from .events import (
     AepEvent,
     AgentStart,
@@ -50,6 +51,9 @@ from .events import (
     HookRequest,
     HookVerdict,
     HookVerdictApplied,
+    ToolExecRequest,
+    ToolExecResult,
+    ToolExecApplied,
     emit,
     emit_agent_start,
     emit_model_turn_start,
@@ -66,29 +70,76 @@ from .events import (
     emit_agent_stop,
     emit_hook_request,
     emit_hook_verdict_applied,
+    emit_tool_exec_request,
+    emit_tool_exec_applied,
     event_from_dict,
 )
-from .stream import write_event, read_config, read_verdict, send_verdict, parse_stream, iter_stream
+from .stream import (
+    write_event,
+    read_config,
+    read_verdict,
+    send_verdict,
+    parse_stream,
+    iter_stream,
+)
 from .validate import validate, Violation
 
 __all__ = [
     # Config
-    "AepConfig", "AepBoundary", "AepHook",
+    "AepConfig",
+    "AepBoundary",
+    "AepHook",
+    "AepSkill",
+    "AepTool",
     # Event types
-    "AepEvent", "AgentStart", "ModelTurnStart", "ModelTurnEnd",
-    "ToolCall", "ToolResult", "ToolCallFailed", "TextOutput",
-    "CostUpdate", "SkillRead", "SkillExecute", "ContextCompaction", "RunError", "AgentStop",
-    "HookRequest", "HookVerdict", "HookVerdictApplied",
+    "AepEvent",
+    "AgentStart",
+    "ModelTurnStart",
+    "ModelTurnEnd",
+    "ToolCall",
+    "ToolResult",
+    "ToolCallFailed",
+    "TextOutput",
+    "CostUpdate",
+    "SkillRead",
+    "SkillExecute",
+    "ContextCompaction",
+    "RunError",
+    "AgentStop",
+    "HookRequest",
+    "HookVerdict",
+    "HookVerdictApplied",
+    "ToolExecRequest",
+    "ToolExecResult",
+    "ToolExecApplied",
     # Emit helpers
-    "emit", "emit_agent_start", "emit_model_turn_start", "emit_model_turn_end",
-    "emit_tool_call", "emit_tool_result", "emit_tool_call_failed",
-    "emit_text_output", "emit_cost_update", "emit_context_compaction",
-    "emit_skill_read", "emit_skill_execute",
-    "emit_error", "emit_agent_stop",
-    "emit_hook_request", "emit_hook_verdict_applied",
+    "emit",
+    "emit_agent_start",
+    "emit_model_turn_start",
+    "emit_model_turn_end",
+    "emit_tool_call",
+    "emit_tool_result",
+    "emit_tool_call_failed",
+    "emit_text_output",
+    "emit_cost_update",
+    "emit_context_compaction",
+    "emit_skill_read",
+    "emit_skill_execute",
+    "emit_error",
+    "emit_agent_stop",
+    "emit_hook_request",
+    "emit_hook_verdict_applied",
+    "emit_tool_exec_request",
+    "emit_tool_exec_applied",
     # Stream
-    "write_event", "read_config", "read_verdict", "send_verdict",
-    "parse_stream", "iter_stream", "event_from_dict",
+    "write_event",
+    "read_config",
+    "read_verdict",
+    "send_verdict",
+    "parse_stream",
+    "iter_stream",
+    "event_from_dict",
     # Validation
-    "validate", "Violation",
+    "validate",
+    "Violation",
 ]

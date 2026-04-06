@@ -17,6 +17,8 @@ from agent_execution_protocol import (
     emit_tool_result,
     emit_hook_request,
     emit_hook_verdict_applied,
+    emit_tool_exec_request,
+    emit_tool_exec_applied,
 )
 
 
@@ -29,6 +31,7 @@ def _ms() -> int:
 
 
 # ── Supervisor hook firing ─────────────────────────────────────────────────────
+
 
 async def fire_hooks(
     trigger: str,
@@ -115,7 +118,9 @@ async def _read_verdict(
         return hook.default_verdict, True
 
     if d.get("type") != "hook_verdict":
-        sys.stderr.write(f"[aep] unexpected message type '{d.get('type')}' waiting for verdict\n")
+        sys.stderr.write(
+            f"[aep] unexpected message type '{d.get('type')}' waiting for verdict\n"
+        )
         return hook.default_verdict, True
 
     if d.get("request_id") != request_id:
@@ -136,14 +141,60 @@ def _trigger_matches(hook_trigger: str, fired_trigger: str) -> bool:
     but NOT at on_start or on_stop.
     """
     if hook_trigger == "always":
-        return (
-            fired_trigger == "on_turn_end"
-            or fired_trigger.startswith("on_tool:")
-        )
+        return fired_trigger == "on_turn_end" or fired_trigger.startswith("on_tool:")
     return hook_trigger == fired_trigger
 
 
+# ── Supervisor tool execution ──────────────────────────────────────────────────
+
+
+async def read_tool_exec_result(
+    call_id: str,
+    stdin: IO[str],
+    timeout_ms: int = 30000,
+) -> tuple[str, bool]:
+    """Read one tool_exec_result from stdin with timeout.
+
+    Returns ``(output, timed_out)``. Falls back to ``""`` on timeout or error.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        line = await asyncio.wait_for(
+            loop.run_in_executor(None, stdin.readline),
+            timeout=timeout_ms / 1000,
+        )
+    except asyncio.TimeoutError:
+        return "", True
+
+    if not line or not line.strip():
+        return "", True
+
+    try:
+        d = json.loads(line)
+    except json.JSONDecodeError:
+        sys.stderr.write(f"[aep] invalid JSON for tool_exec_result: {line!r}\n")
+        return "", True
+
+    if d.get("type") != "tool_exec_result":
+        sys.stderr.write(
+            f"[aep] unexpected message type '{d.get('type')}' waiting for tool_exec_result\n"
+        )
+        return "", True
+
+    if d.get("call_id") != call_id:
+        sys.stderr.write(
+            f"[aep] call_id mismatch: got '{d.get('call_id')}' expected '{call_id}'\n"
+        )
+        return "", True
+
+    if d.get("error"):
+        return f"Error: {d['error']}", False
+
+    return d.get("output", ""), False
+
+
 # ── SDK hook builders ──────────────────────────────────────────────────────────
+
 
 def build_tool_hooks(
     run_id: str,
@@ -173,7 +224,9 @@ def build_tool_hooks(
         )
         return {}
 
-    async def post_tool_use(input_data: dict, tool_use_id: str | None, ctx: Any) -> dict:
+    async def post_tool_use(
+        input_data: dict, tool_use_id: str | None, ctx: Any
+    ) -> dict:
         call_id = tool_use_id or "unknown"
         start = call_timers.pop(call_id, _ms())
         raw = input_data.get("tool_response") or input_data.get("tool_result") or {}
@@ -202,21 +255,26 @@ def build_tool_hooks(
 
         return {}
 
-    async def post_tool_use_failure(input_data: dict, tool_use_id: str | None, ctx: Any) -> dict:
+    async def post_tool_use_failure(
+        input_data: dict, tool_use_id: str | None, ctx: Any
+    ) -> dict:
         call_id = tool_use_id or "unknown"
         call_timers.pop(call_id, None)
-        emit({
-            "type": "tool_call_failed",
-            "run_id": run_id,
-            "step": step_ref[0],
-            "call_id": call_id,
-            "tool": input_data.get("tool_name", "unknown"),
-            "error": str(input_data.get("error", "unknown error")),
-            "ts": _now(),
-        })
+        emit(
+            {
+                "type": "tool_call_failed",
+                "run_id": run_id,
+                "step": step_ref[0],
+                "call_id": call_id,
+                "tool": input_data.get("tool_name", "unknown"),
+                "error": str(input_data.get("error", "unknown error")),
+                "ts": _now(),
+            }
+        )
         return {}
 
     from claude_agent_sdk import HookMatcher
+
     return {
         "PreToolUse": [HookMatcher(hooks=[pre_tool_use])],
         "PostToolUse": [HookMatcher(hooks=[post_tool_use])],
@@ -237,7 +295,9 @@ def _extract_output(raw: Any) -> str:
         # MCP content array: {"content": [{"type": "text", "text": "..."}]}
         content = raw.get("content", [])
         if isinstance(content, list):
-            parts = [c.get("text", "") if isinstance(c, dict) else str(c) for c in content]
+            parts = [
+                c.get("text", "") if isinstance(c, dict) else str(c) for c in content
+            ]
             return "\n".join(p for p in parts if p)
         return str(raw.get("output", raw.get("result", raw)))
     if hasattr(raw, "content"):

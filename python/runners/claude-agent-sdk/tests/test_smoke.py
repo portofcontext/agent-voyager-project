@@ -22,6 +22,7 @@ SLOW = pytest.mark.slow
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _events(stdout: str) -> list[dict]:
     return [json.loads(line) for line in stdout.splitlines() if line.strip()]
 
@@ -44,6 +45,7 @@ def _run_subprocess(config: dict) -> subprocess.CompletedProcess:
 
 # ── unit: import smoke ────────────────────────────────────────────────────────
 
+
 def test_imports():
     from claude_agent_sdk_aep import query, aep_options, run_from_stdin  # noqa: F401
 
@@ -64,6 +66,7 @@ def test_aep_options_accepts_run_id():
 
 
 # ── unit: hook trigger matching ───────────────────────────────────────────────
+
 
 def test_trigger_matches_exact():
     from claude_agent_sdk_aep._hooks import _trigger_matches
@@ -104,6 +107,7 @@ def test_trigger_always_does_not_match_lifecycle():
 
 # ── unit: fire_hooks with no hooks ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_fire_hooks_no_hooks_returns_continue():
     from claude_agent_sdk_aep._hooks import fire_hooks
@@ -140,13 +144,15 @@ async def test_fire_hooks_continue_verdict(capsys):
     from agent_execution_protocol import AepHook
     from claude_agent_sdk_aep._hooks import fire_hooks
 
-    verdict_line = json.dumps({
-        "type": "hook_verdict",
-        "run_id": "r1",
-        "request_id": "hr-00000000",  # will be overridden; we just need any valid verdict
-        "verdict": "continue",
-        "ts": "2026-01-01T00:00:00Z",
-    })
+    verdict_line = json.dumps(
+        {
+            "type": "hook_verdict",
+            "run_id": "r1",
+            "request_id": "hr-00000000",  # will be overridden; we just need any valid verdict
+            "verdict": "continue",
+            "ts": "2026-01-01T00:00:00Z",
+        }
+    )
     # We can't easily control the request_id in the verdict, so use default_verdict
     hooks = [AepHook(name="h", trigger="on_start", default_verdict="continue")]
     stdin = io.StringIO("")  # empty → timeout → default_verdict
@@ -209,6 +215,7 @@ async def test_fire_hooks_matching_verdict_not_timed_out(capsys):
             emitted.append(s)
             sys.__stdout__.write(s)
             return len(s)
+
         def flush(self) -> None:
             sys.__stdout__.flush()
 
@@ -228,13 +235,18 @@ async def test_fire_hooks_matching_verdict_not_timed_out(capsys):
                 except Exception:
                     continue
                 if d.get("type") == "hook_request":
-                    verdict = json.dumps({
-                        "type": "hook_verdict",
-                        "run_id": "r1",
-                        "request_id": d["request_id"],
-                        "verdict": "continue",
-                        "ts": "2026-01-01T00:00:00Z",
-                    }) + "\n"
+                    verdict = (
+                        json.dumps(
+                            {
+                                "type": "hook_verdict",
+                                "run_id": "r1",
+                                "request_id": d["request_id"],
+                                "verdict": "continue",
+                                "ts": "2026-01-01T00:00:00Z",
+                            }
+                        )
+                        + "\n"
+                    )
                     stdin_write_end.write(verdict)
                     stdin_write_end.flush()
                     return
@@ -256,6 +268,7 @@ async def test_fire_hooks_matching_verdict_not_timed_out(capsys):
 
 
 # ── integration: subprocess runner ───────────────────────────────────────────
+
 
 @SKIP_NO_KEY
 @SLOW
@@ -368,13 +381,18 @@ def test_run_from_stdin_hook_on_start_continue():
             continue
         events.append(event)
         if event.get("type") == "hook_request":
-            verdict = json.dumps({
-                "type": "hook_verdict",
-                "run_id": config["run_id"],
-                "request_id": event["request_id"],
-                "verdict": "continue",
-                "ts": "2026-01-01T00:00:00Z",
-            }) + "\n"
+            verdict = (
+                json.dumps(
+                    {
+                        "type": "hook_verdict",
+                        "run_id": config["run_id"],
+                        "request_id": event["request_id"],
+                        "verdict": "continue",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
             proc.stdin.write(verdict)
             proc.stdin.flush()
 
@@ -421,13 +439,18 @@ def test_run_from_stdin_hook_on_start_stop():
             continue
         events.append(event)
         if event.get("type") == "hook_request":
-            verdict = json.dumps({
-                "type": "hook_verdict",
-                "run_id": config["run_id"],
-                "request_id": event["request_id"],
-                "verdict": "stop",
-                "ts": "2026-01-01T00:00:00Z",
-            }) + "\n"
+            verdict = (
+                json.dumps(
+                    {
+                        "type": "hook_verdict",
+                        "run_id": config["run_id"],
+                        "request_id": event["request_id"],
+                        "verdict": "stop",
+                        "ts": "2026-01-01T00:00:00Z",
+                    }
+                )
+                + "\n"
+            )
             proc.stdin.write(verdict)
             proc.stdin.flush()
 
