@@ -1,0 +1,85 @@
+name: Build skill artifact
+
+# Re-package aep.skill whenever the skill bundle's contents change. Path filter
+# scopes this to files that actually end up inside the .skill — code-only changes
+# under python/runners/ or root README.md don't trigger a rebuild.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "SKILL.md"
+      - "AGENT_EXECUTION_PROTOCOL.md"
+      - "examples/**"
+      - "spec/v0.1/**"
+      - "conformance/v0.1/**"
+      - "python/aep/**"
+      - "scripts/build-skill.sh"
+      - ".github/workflows/build-skill.yml"
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths:
+      - "SKILL.md"
+      - "examples/**"
+      - "scripts/build-skill.sh"
+      - ".github/workflows/build-skill.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to attach .skill to a Release on tag pushes
+
+jobs:
+  build:
+    name: Package aep.skill
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pyyaml (required by quick_validate)
+        run: python -m pip install pyyaml
+
+      - name: Fetch anthropics/skills (source of package_skill.py)
+        run: |
+          git clone --depth 1 https://github.com/anthropics/skills.git /tmp/anthropics-skills
+
+      - name: Build aep.skill
+        env:
+          # Locate the skill-creator subdir inside the cloned anthropics/skills repo.
+          SKILL_CREATOR_DIR: /tmp/anthropics-skills/skill-creator
+          PYTHON: python
+        run: bash scripts/build-skill.sh dist
+
+      - name: Verify .skill is a valid zip and contains SKILL.md
+        run: |
+          python -c "
+          import zipfile, sys
+          with zipfile.ZipFile('dist/aep.skill') as z:
+              names = z.namelist()
+              assert any(n == 'aep/SKILL.md' for n in names), f'aep/SKILL.md missing from .skill; saw {names[:5]}...'
+              print(f'✓ aep.skill OK — {len(names)} files')
+          "
+
+      - name: Upload aep.skill as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aep-skill
+          path: dist/aep.skill
+          if-no-files-found: error
+          retention-days: 30
+
+      # On tag pushes (e.g. `v0.1.0`), attach the .skill to the GitHub Release.
+      - name: Attach .skill to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/aep.skill
+          fail_on_unmatched_files: true
+          generate_release_notes: true

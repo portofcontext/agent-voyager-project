@@ -1,0 +1,32 @@
+{
+  "id": "re-observation-shell-injects-and-emits-injected",
+  "title": "Re-observation (shell source): runner executes the shell command before each turn and emits re_observation_injected",
+  "description": "A Config.re_observation entry with source.shell causes the runner to execute the command, capture stdout, inject the content as a fresh user-role observation into the next turn's context, and emit re_observation_injected with source_kind='shell'. NO supervisor interaction occurs for shell-source observations.",
+  "spec_refs": ["spec/v0.1/SPEC.md#9-re-observation-first-class", "spec/v0.1/SPEC.md#92-wire-flow--shell-source"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "re-obs-shell",
+    "re_observation": [
+      {
+        "name": "git_state",
+        "source": { "shell": "echo 'On branch feature/x'" },
+        "trigger": "before_each_turn"
+      }
+    ],
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      { "match": { "type": "re_observation_injected", "source": "runner", "name": "git_state", "trigger": "before_each_turn", "source_kind": "shell" } },
+      { "match": { "type": "model_turn_started", "step": 1 } }
+    ],
+    "forbidden_events": [
+      { "label": "shell-source re-observations MUST NOT emit re_observation_request", "match": { "type": "re_observation_request" } }
+    ]
+  }
+}

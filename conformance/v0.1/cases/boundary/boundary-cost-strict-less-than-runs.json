@@ -1,0 +1,32 @@
+{
+  "id": "boundary-cost-strict-less-than-runs",
+  "title": "Boundary: total_cost_usd strictly less than max_cost_usd permits another turn (strict-greater semantics)",
+  "description": "Pins down the edge: with max_cost_usd=2.00 and total=1.99 after turn 1, the runner MUST start turn 2. After turn 2 brings total to 2.10, the post-turn check (2.10 > 2.00 true) MUST stop the run with reason='budget_exhausted'. Cost overshoots the cap by 0.10 — that is intentional under v0.1 strict-greater semantics (see SPEC.md §10.2).",
+  "spec_refs": ["spec/v0.1/SPEC.md#102-boundary-check-normative-algorithm", "spec/v0.1/SPEC.md#104-cost--token-accounting-rules-normative"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "boundary-cost-strict-less",
+    "boundary": { "max_cost_usd": 2.0 },
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    { "tokens_input": 100, "tokens_output": 50, "cost_usd": 1.99, "duration_ms": 1, "text": "first turn", "converged": false },
+    { "tokens_input": 100, "tokens_output": 50, "cost_usd": 0.11, "duration_ms": 1, "text": "second turn", "converged": false }
+  ],
+  "expectations": {
+    "events": [
+      { "match": { "type": "model_turn_started", "step": 1 } },
+      { "match": { "type": "model_turn_ended", "step": 1, "cost_usd": 1.99 } },
+      { "match": { "type": "model_turn_started", "step": 2 } },
+      { "match": { "type": "model_turn_ended", "step": 2 } },
+      { "match": { "type": "agent_stopped", "source": "runner", "reason": "budget_exhausted" } }
+    ],
+    "final_state": {
+      "stop_reason": "budget_exhausted",
+      "total_turns": 2,
+      "min_total_cost_usd": 2.1,
+      "max_total_cost_usd": 2.1
+    }
+  }
+}

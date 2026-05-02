@@ -1,0 +1,42 @@
+{
+  "id": "timeout-tool-exec-returns-empty-string",
+  "title": "Supervisor-tool timeout: tool_exec_timed_out emitted and tool_returned.output is the empty string",
+  "description": "When a config-declared tool's tool_exec_requested is not answered within timeout_ms, the runner MUST (a) emit tool_exec_timed_out with source='runner', (b) return the empty string '' to the model as the tool result, and (c) emit tool_returned with output=''. This pins down the SPEC.md §10.3 fallback for the supervisor-tool path.",
+  "spec_refs": ["spec/v0.1/SPEC.md#8-supervisor-tools", "spec/v0.1/SPEC.md#103-the-loop", "spec/v0.1/aep.schema.json#/$defs/ToolExecTimedOutEvent"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "timeout-tool-exec",
+    "tools": [
+      {
+        "name": "slow_lookup",
+        "description": "A supervisor-executed tool the supervisor will deliberately ignore.",
+        "input_schema": { "type": "object", "properties": {}, "additionalProperties": true },
+        "timeout_ms": 50
+      }
+    ],
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "calling tool",
+      "tool_calls": [{ "call_id": "c1", "tool": "slow_lookup", "input": {} }],
+      "converged": false
+    },
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+  ],
+  "scripted_supervisor": [
+    { "on": { "match": { "type": "tool_exec_request", "tool": "slow_lookup" } }, "skip": true }
+  ],
+  "expectations": {
+    "events": [
+      { "match": { "type": "tool_invoked", "call_id": "c1", "tool": "slow_lookup" } },
+      { "match": { "type": "tool_exec_request", "call_id": "c1", "tool": "slow_lookup", "timeout_ms": 50 } },
+      { "match": { "type": "tool_exec_timed_out", "source": "runner", "call_id": "c1", "tool": "slow_lookup" } },
+      { "match": { "type": "tool_returned", "call_id": "c1", "tool": "slow_lookup", "output": "" } }
+    ],
+    "forbidden_events": [
+      { "label": "no tool_exec_resolved when supervisor never responded", "match": { "type": "tool_exec_resolved" } }
+    ]
+  }
+}

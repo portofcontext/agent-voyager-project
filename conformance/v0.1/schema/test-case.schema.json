@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aep.dev/conformance/v0.1/test-case.schema.json",
+  "title": "AEP Conformance Test Case (v0.1)",
+  "description": "Language-agnostic test case format. Each SDK implements a thin harness (see HARNESS.md) that reads cases of this shape, runs them against its implementation, and asserts. Cases describe (a) the Config the runner receives, (b) a deterministic script of model responses, tool outputs, and supervisor messages, and (c) expectations over the emitted event trajectory. This is the operational answer to spec drift: any behavior the spec mandates should be encoded as a case here, and every SDK MUST pass.",
+  "type": "object",
+  "required": ["id", "title", "applies_to", "config", "expectations"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Stable identifier. SHOULD match the file name (without .json)."
+    },
+    "title": {
+      "type": "string",
+      "description": "One-line summary of what this case asserts."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer prose. Cite the specific spec ambiguity or requirement this case pins down."
+    },
+    "spec_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Section refs into spec/v0.1/SPEC.md or schema fragments this case verifies."
+    },
+    "applies_to": {
+      "type": "array",
+      "items": { "enum": ["runner", "supervisor"] },
+      "minItems": 1,
+      "description": "Which side(s) of the seam this case validates. Most cases test runner behavior given a scripted supervisor; supervisor cases assert the supervisor produces conforming messages given a scripted runner."
+    },
+    "config": {
+      "$ref": "https://aep.dev/schema/v0.1/config.schema.json"
+    },
+    "scripted_model": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ModelResponse" },
+      "description": "One entry per turn the harness should serve in order. The harness's mock model returns these responses to the runner regardless of conversation history."
+    },
+    "scripted_tools": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/ToolResponse" },
+      "description": "Map from tool name to the response the harness returns when that tool is called. Tools not listed here are assumed to be supervisor-executed (declared in config.tools) and routed via tool_exec_requested."
+    },
+    "scripted_supervisor": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SupervisorScriptStep" },
+      "description": "Triggered actions for the harness's mock supervisor. When an event matching 'on' is observed, the harness sends 'send' (or, if 'skip' is true, deliberately does nothing — used to test timeouts)."
+    },
+    "expectations": {
+      "type": "object",
+      "required": ["events"],
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EventMatcher" },
+          "description": "Ordered patterns the trajectory must contain (see 'ordering')."
+        },
+        "ordering": {
+          "enum": ["in_order_subsequence", "in_order_strict", "any_order"],
+          "default": "in_order_subsequence",
+          "description": "in_order_subsequence: matches must appear in this order, but unmatched events MAY interleave. in_order_strict: matches must be the entire trajectory in order, no extras. any_order: matches must each appear somewhere."
+        },
+        "forbidden_events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EventMatcher" },
+          "description": "Patterns that MUST NOT appear anywhere in the trajectory."
+        },
+        "final_state": { "$ref": "#/$defs/FinalState" }
+      }
+    }
+  },
+
+  "$defs": {
+    "ModelResponse": {
+      "type": "object",
+      "required": ["tokens_input", "tokens_output", "cost_usd", "duration_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "tokens_input": { "type": "integer", "minimum": 0 },
+        "tokens_output": { "type": "integer", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "tokens_cache_read": { "type": "integer", "minimum": 0 },
+        "tokens_cache_write": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["call_id", "tool", "input"],
+            "additionalProperties": false,
+            "properties": {
+              "call_id": { "type": "string" },
+              "tool": { "type": "string" },
+              "input": { "type": "object", "additionalProperties": true }
+            }
+          }
+        },
+        "converged": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true and tool_calls is empty, the runner should treat the response as terminal and stop with reason=converged."
+        }
+      }
+    },
+    "ToolResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["output"],
+          "additionalProperties": false,
+          "properties": {
+            "output": { "type": "string" },
+            "duration_ms": { "type": "integer", "minimum": 0, "default": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["error"],
+          "additionalProperties": false,
+          "properties": {
+            "error": { "type": "string" },
+            "duration_ms": { "type": "integer", "minimum": 0, "default": 1 }
+          }
+        }
+      ]
+    },
+    "SupervisorScriptStep": {
+      "type": "object",
+      "required": ["on"],
+      "additionalProperties": false,
+      "properties": {
+        "on": { "$ref": "#/$defs/EventMatcher" },
+        "delay_ms": { "type": "integer", "minimum": 0, "default": 0 },
+        "send": { "$ref": "https://aep.dev/schema/v0.1/supervisor-message.schema.json" },
+        "skip": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the harness deliberately does NOT respond — used to assert timeout behavior."
+        }
+      },
+      "anyOf": [
+        { "required": ["send"] },
+        { "required": ["skip"] }
+      ]
+    },
+    "EventMatcher": {
+      "type": "object",
+      "required": ["match"],
+      "additionalProperties": false,
+      "description": "Partial-match pattern. Every key/value in 'match' must appear in the event with that exact value (deep-equal for nested objects). Other keys MAY be present.",
+      "properties": {
+        "match": { "type": "object", "additionalProperties": true },
+        "label": { "type": "string", "description": "Human-readable name for assertion failure messages." }
+      }
+    },
+    "FinalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stop_reason": { "type": "string", "description": "Expected agent_stopped.reason." },
+        "total_turns": { "type": "integer", "minimum": 0 },
+        "min_total_cost_usd": { "type": "number", "minimum": 0 },
+        "max_total_cost_usd": { "type": "number", "minimum": 0 },
+        "min_total_tokens": { "type": "integer", "minimum": 0 },
+        "max_total_tokens": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

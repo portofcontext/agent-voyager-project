@@ -1,0 +1,29 @@
+{
+  "id": "boundary-cost-equality-permits-next-turn",
+  "title": "Boundary: total_cost_usd exactly equal to max_cost_usd does NOT halt; the next turn proceeds and stops once total exceeds the cap",
+  "description": "Strict-greater means equality is permitted. After turn 1 brings total to exactly 2.00, check 2.00>2.00 false → continue. Turn 2 starts. After turn 2 brings total to 2.01, check 2.01>2.00 true → stop. A naive >= implementation would stop after turn 1 and fail this case.",
+  "spec_refs": ["spec/v0.1/SPEC.md#102-boundary-check-normative-algorithm"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "boundary-cost-equality",
+    "boundary": { "max_cost_usd": 2.0 },
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    { "tokens_input": 100, "tokens_output": 50, "cost_usd": 2.0, "duration_ms": 1, "text": "expensive turn 1", "converged": false },
+    { "tokens_input": 100, "tokens_output": 50, "cost_usd": 0.01, "duration_ms": 1, "text": "small turn 2 that pushes us over", "converged": false }
+  ],
+  "expectations": {
+    "events": [
+      { "match": { "type": "model_turn_ended", "step": 1, "cost_usd": 2.0 } },
+      { "label": "turn 2 MUST start despite total_cost == max_cost", "match": { "type": "model_turn_started", "step": 2 } },
+      { "match": { "type": "model_turn_ended", "step": 2 } },
+      { "match": { "type": "agent_stopped", "reason": "budget_exhausted" } }
+    ],
+    "forbidden_events": [
+      { "label": "MUST NOT stop after turn 1 — equality does not halt under strict-greater", "match": { "type": "agent_stopped", "total_turns": 1 } }
+    ],
+    "final_state": { "stop_reason": "budget_exhausted", "total_turns": 2 }
+  }
+}

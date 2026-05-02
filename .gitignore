@@ -33,6 +33,13 @@ htmlcov/
 # Distribution
 *.whl
 *.tar.gz
+*.skill
 MANIFEST
 
+# Skill / eval workspaces
+aep-workspace/
+.anthropic-key
+
 .claude/
+
+.ruff_cache

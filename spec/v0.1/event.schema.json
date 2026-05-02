@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aep.dev/schema/v0.1/event.schema.json",
+  "title": "AEP Event (v0.1)",
+  "description": "Entry-point schema for one event in the canonical trajectory. Validates a single NDJSON line on the runner's stdout (or one SSE 'data:' frame on HTTP/SSE transport). Accepts events from either source ('runner' or 'supervisor').",
+  "$ref": "https://aep.dev/schema/v0.1/aep.schema.json#/$defs/Event"
+}

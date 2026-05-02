@@ -1,0 +1,29 @@
+{
+  "id": "boundary-steps-projection-stops-before-overshoot",
+  "title": "Boundary: max_steps is checked PROJECTED against (total_turns + 1); a max_steps=N run completes EXACTLY N turns",
+  "description": "Unlike cost/tokens, the step boundary projects the next would-be turn before starting it. With max_steps=2: before turn 3, project=3, 3>2 true → stop, do not run turn 3. The run completes EXACTLY 2 turns (never 3). The third scripted model response is unused.",
+  "spec_refs": ["spec/v0.1/SPEC.md#102-boundary-check-normative-algorithm"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "boundary-steps-projection",
+    "boundary": { "max_steps": 2 },
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "t1", "converged": false },
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "t2", "converged": false },
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "should not run", "converged": true }
+  ],
+  "expectations": {
+    "events": [
+      { "match": { "type": "model_turn_ended", "step": 1 } },
+      { "match": { "type": "model_turn_ended", "step": 2 } },
+      { "match": { "type": "agent_stopped", "reason": "turn_limit", "total_turns": 2 } }
+    ],
+    "forbidden_events": [
+      { "label": "turn 3 MUST NOT start under max_steps=2", "match": { "type": "model_turn_started", "step": 3 } }
+    ],
+    "final_state": { "stop_reason": "turn_limit", "total_turns": 2 }
+  }
+}

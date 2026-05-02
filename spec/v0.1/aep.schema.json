@@ -1,0 +1,1767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aep.dev/schema/v0.1/aep.schema.json",
+  "title": "Agent Execution Protocol (AEP) v0.1",
+  "description": "Wire format for the Agent Execution Protocol. AEP defines two flows: the Config (supervisor \u2192 runner, once at startup, declares the agent's complete environment) and Events (runner \u2192 supervisor, streamed, the canonical trajectory). The supervisor configures the environment; the agent operates within it; the runner emits. Mid-run bidirectional control is intentionally absent \u2014 the agent's environment is fully specified at setup so the bounded context is intact and the agent never gets blocked by a force it didn't know existed. Tool execution and re-observation against supervisor-provided RPC services are the only mid-run wire interactions; both are agent-initiated calls into the environment, not supervisor-initiated reach-ins.",
+  "type": "object",
+  "$defs": {
+    "Iso8601": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 / RFC 3339 timestamp. UTC ('Z' suffix) RECOMMENDED."
+    },
+    "RunId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique run identifier. Stable for the lifetime of one run."
+    },
+    "CallId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifies a single tool invocation by the model. Unique within a run. Appears on tool_invoked, tool_returned, tool_failed, and on tool_exec_* interaction events that reference the underlying call."
+    },
+    "RequestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifies one agent-initiated RPC into an environmental service (tool_exec or re_observation supervisor-source). Unique within a run. The same request_id appears on the opening event (tool_exec_request, re_observation_request) and the closing event (tool_exec_resolved, tool_exec_timed_out, re_observation_resolved, re_observation_timed_out)."
+    },
+    "CorrelationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional opaque grouping key. Either side MAY set this to mark events that form a single user-meaningful unit (a write-then-test sequence, a multi-tool retrieval, a plan-then-execute span). Multiple events sharing a correlation_id are guaranteed to belong to the same logical operation; the absence of one means no claim about grouping. Supervisors and post-hoc analyzers MUST treat correlation_id as opaque \u2014 do not parse, only group. Runners SHOULD set correlation_id when they have a coherent notion of operation; doing so is a quality-of-implementation lever supervisors will reward."
+    },
+    "Source": {
+      "type": "string",
+      "enum": [
+        "runner",
+        "supervisor"
+      ],
+      "description": "Which side of the seam authored this event. 'runner' is the agent process emitting facts about what happened. 'supervisor' appears only on RPC replies (tool_exec_resolved, re_observation_resolved) that the runner records into the trajectory verbatim \u2014 these document who computed the value, not who decided anything."
+    },
+    "Step": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Turn counter. The runner MUST use a consistent origin (0- or 1-based) within a run."
+    },
+    "Meta": {
+      "type": "object",
+      "description": "Arbitrary key/value metadata. Not interpreted by AEP.",
+      "additionalProperties": true
+    },
+    "Tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Free-form labels for filtering and organization."
+    },
+    "RunStateSnapshot": {
+      "type": "object",
+      "description": "Cumulative run-state at a point in time. Used in cost_recorded events and agent_stopped. Defining this as a named type lets supervisor SDKs surface typed run-state without inventing fields per implementation.",
+      "required": [
+        "total_cost_usd",
+        "total_tokens",
+        "total_turns"
+      ],
+      "properties": {
+        "total_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Cumulative billable cost (post-cache-discount), in USD."
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cumulative input + output tokens. Cache reads are counted (they ARE input tokens; cache changes billing, not work)."
+        },
+        "total_turns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of completed model turns."
+        },
+        "tokens_input_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_output_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_cache_read_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_cache_write_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tools_invoked": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Map of tool name \u2192 invocation count over the run so far."
+        },
+        "started_at": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wall time since started_at."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Boundary": {
+      "type": "object",
+      "description": "Hard execution limits the runner enforces. Semantics are normative: see SPEC.md \u00a710. In short \u2014 checks happen AFTER each model_turn_ended (and after each tool_returned for cost/tokens). Comparison is strict greater-than: a run halts only when cumulative usage exceeds a set limit. Cost and tokens MAY overshoot a max by one final event; total_turns will not exceed max_steps because the step check projects the next would-be turn.",
+      "properties": {
+        "max_cost_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stop when state.total_cost_usd > max_cost_usd. Triggers agent_stopped reason='budget_exhausted'. State.total_cost_usd is the sum of model_turn_ended.cost_usd over completed turns (post-cache-discount, the actual amount billed)."
+        },
+        "max_steps": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Stop when (state.total_turns + 1) > max_steps. The check projects the next would-be turn before starting it, so a max_steps=N run completes EXACTLY N turns (never N+1). Triggers agent_stopped reason='turn_limit'."
+        },
+        "max_tokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Stop when state.total_tokens > max_tokens. Triggers agent_stopped reason='token_limit'."
+        }
+      },
+      "additionalProperties": false
+    },
+    "Skill": {
+      "type": "object",
+      "description": "Reference to a SKILL.md the runner loads and exposes to the agent.",
+      "required": [
+        "name",
+        "source"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name. Echoed in skill_loaded and skill_executed events."
+        },
+        "source": {
+          "type": "string",
+          "description": "Where to load the skill from. Scheme determines load behavior: 'anthropic:<id>@<version>' uses the Anthropic-managed skills API; a filesystem path reads SKILL.md from disk; an https URL fetches it. Unknown schemes MUST emit skill_loaded for trajectory completeness and then be skipped without failing the run."
+        },
+        "config": {
+          "type": "object",
+          "description": "Opaque provider-specific options. Not interpreted by AEP.",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "Tool": {
+      "type": "object",
+      "description": "Supervisor-declared tool the agent calls. The implementation lives in the agent's environment \u2014 it may be in-process or, when out-of-process, accessed via the tool_exec_* RPC lifecycle (\u00a76 / \u00a78). From the agent's perspective every tool is just a tool; the agent does not know whether the impl is local or RPC. Calls flow: tool_invoked \u2192 (locally executed OR tool_exec_request \u2192 tool_exec_resolved over the RPC channel) \u2192 tool_returned.",
+      "required": [
+        "name",
+        "description",
+        "input_schema"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Tool name. Used in tool_invoked and the tool_exec_* lifecycle."
+        },
+        "description": {
+          "type": "string",
+          "description": "Shown to the LLM."
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema describing the tool's arguments."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "JSON Schema documenting the return shape. Informational only."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 30000,
+          "description": "How long the runner waits for tool_exec_resolved before falling back to '' and emitting tool_exec_timed_out."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReObservationSource": {
+      "description": "How the agent fetches the observation. 'shell' runs a command locally. 'supervisor: true' makes an RPC into a service the supervisor stood up at Config time \u2014 the agent emits re_observation_request and awaits re_observation_resolved on stdin (or HTTP). Either way the agent initiates the call; the supervisor never reaches in.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "shell"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "shell": {
+              "type": "string",
+              "description": "Shell command. The runner executes it, captures stdout, and treats the output as the observation content."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "supervisor"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supervisor": {
+              "const": true,
+              "description": "When true, the runner emits a re_observation_request and waits for the supervisor to send re_observation_resolved with the content."
+            }
+          }
+        }
+      ]
+    },
+    "ReObservation": {
+      "type": "object",
+      "description": "Supervisor-declared observation source the agent runs before each turn (or every Nth) to refresh its view of the world. The source is either a shell command the agent runs locally OR a supervisor-provided RPC the agent calls via re_observation_request / re_observation_resolved. From the agent's perspective an observation is a fact it pulls from its environment, not something the supervisor pushes.",
+      "required": [
+        "name",
+        "source"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Identifier for this observation. Echoed on re_observation_* events."
+        },
+        "source": {
+          "$ref": "#/$defs/ReObservationSource"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "before_each_turn",
+            "before_first_turn",
+            "every_n_turns"
+          ],
+          "default": "before_each_turn"
+        },
+        "every_n": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Required when trigger='every_n_turns'. The observation fires before turn 1, turn 1+N, turn 1+2N, etc."
+        },
+        "max_tokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Truncation budget for the observation. The runner truncates output to fit and sets truncated=true on re_observation_injected. If unset, the observation is injected verbatim."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 30000,
+          "description": "Only applies when source.supervisor=true. How long the runner waits for re_observation_resolved before falling back (no injection) and emitting re_observation_timed_out."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "trigger"
+            ],
+            "properties": {
+              "trigger": {
+                "const": "every_n_turns"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "every_n"
+            ]
+          }
+        }
+      ]
+    },
+    "ToolSubtype": {
+      "type": "string",
+      "enum": [
+        "shell",
+        "function",
+        "retrieval",
+        "embedding",
+        "mcp"
+      ],
+      "description": "Optional classification. Informational."
+    },
+    "RejectionReason": {
+      "type": "string",
+      "description": "Why a tool call was rejected by the runner before execution. Open enum.",
+      "examples": [
+        "path_not_in_allow_write",
+        "ceiling_reached",
+        "tool_not_allowed"
+      ]
+    },
+    "StopReason": {
+      "type": "string",
+      "enum": [
+        "converged",
+        "budget_exhausted",
+        "token_limit",
+        "turn_limit",
+        "error",
+        "interrupted",
+        "verifier_failed"
+      ],
+      "description": "Why the run ended. 'converged' = agent finished naturally. 'budget_exhausted' / 'token_limit' / 'turn_limit' = a Boundary fired. 'error' = unrecoverable runner error. 'interrupted' = signal/cancellation. 'verifier_failed' = a declared verifier with on_failure='halt' produced passed=false."
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "rate_limit",
+        "context_limit",
+        "auth_error",
+        "runner_crash",
+        "unknown"
+      ],
+      "description": "General error classification. Open via 'unknown'."
+    },
+    "Config": {
+      "type": "object",
+      "description": "AEP Config \u2014 the supervisor's complete declaration of the agent's environment. Sent once at startup. The agent runs within this environment unidirectionally; mid-run reach-in by the supervisor is intentionally absent. Field order is supervisor-first (tools, re_observation, verifiers, boundary, output_schema) before runner-plane fields (prompt, system_prompt, model, skills) because the protocol exists to put the supervisor in charge of the environment.",
+      "required": [
+        "schema_version",
+        "run_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1",
+          "description": "AEP protocol version this config conforms to."
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tool"
+          },
+          "description": "Supervisor-executed tools exposed to the LLM. Calls are routed back to the supervisor over the same wire as hooks."
+        },
+        "re_observation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReObservation"
+          },
+          "description": "Declarative re-observations the runner injects before each (or every Nth) model turn. First-class answer to context rot \u2014 see SPEC.md \u00a79."
+        },
+        "verifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Verifier"
+          },
+          "description": "Declarative deterministic checks. The agent runs each at its declared trigger and emits verifier_evaluated."
+        },
+        "boundary": {
+          "$ref": "#/$defs/Boundary"
+        },
+        "output_schema": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "JSON Schema for structured output. When set, agent_stopped.output MUST validate against this schema."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Initial user prompt / task."
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "System prompt prepended to all turns."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model identifier, e.g. 'anthropic/claude-sonnet-4-6'. If omitted, the runner uses its own default."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Skill"
+          }
+        },
+        "thread_id": {
+          "type": "string",
+          "description": "Optional identifier linking multi-turn sessions across runs."
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventBase": {
+      "type": "object",
+      "description": "Fields common to every AEP event. Every event line MUST contain at minimum 'type', 'source', 'run_id', and 'ts'. 'correlation_id' is optional \u2014 set it to mark events that form one logical operation. 'extensions' is the forward-compatible escape hatch: implementations MAY put non-spec fields under 'extensions.<namespaced_key>'. Future spec versions MAY tighten event subtypes to reject other unknown fields.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Forward-compatible namespace for non-spec fields. Implementers SHOULD use dot-namespaced keys (e.g. 'myframework.session_id') to avoid future conflicts."
+        }
+      }
+    },
+    "AgentStartedEvent": {
+      "type": "object",
+      "description": "First event of every run. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "schema_version",
+        "run_id",
+        "model",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "agent_started"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "model": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "description": "Snapshot of tools registered with the LLM. Each entry MUST carry name + description so post-hoc analyzers can interpret subsequent tool_invoked events. input_schema is RECOMMENDED.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "description"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "input_schema": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ModelTurnStartedEvent": {
+      "type": "object",
+      "description": "Emitted immediately before the runner sends a request to the model. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "model_turn_started"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "context_messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ModelTurnEndedEvent": {
+      "type": "object",
+      "description": "Emitted when the model response is received. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "tokens_input",
+        "tokens_output",
+        "cost_usd",
+        "duration_ms",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "model_turn_ended"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "tokens_input": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total input tokens for this turn. Cache reads are included (they ARE input tokens; cache changes billing, not work)."
+        },
+        "tokens_output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Billable cost of this turn (post-cache-discount)."
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_cache_read": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_cache_write": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolInvokedEvent": {
+      "type": "object",
+      "description": "Emitted when the model invokes a tool. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "call_id",
+        "tool",
+        "input",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_invoked"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "call_id": {
+          "$ref": "#/$defs/CallId"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "subtype": {
+          "$ref": "#/$defs/ToolSubtype"
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolReturnedEvent": {
+      "type": "object",
+      "description": "Emitted after a tool finishes (success or boundary rejection). For execution errors, see tool_failed. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "call_id",
+        "tool",
+        "output",
+        "duration_ms",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_returned"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "call_id": {
+          "$ref": "#/$defs/CallId"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string",
+          "description": "Result string returned to the model. The model only sees this; supervisors and analyzers SHOULD prefer 'output_json' when present."
+        },
+        "output_json": {
+          "description": "Structured form of the tool result, when the underlying tool returned non-string data. Runners MUST also set 'output' to a string representation of this. Type may be any JSON value."
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "boolean"
+        },
+        "rejection_reason": {
+          "$ref": "#/$defs/RejectionReason"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolFailedEvent": {
+      "type": "object",
+      "description": "Tool raised an execution error. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "call_id",
+        "tool",
+        "error",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_failed"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "call_id": {
+          "$ref": "#/$defs/CallId"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "TextEmittedEvent": {
+      "type": "object",
+      "description": "Assistant text output. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "text",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "text_emitted"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "text": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "CostRecordedEvent": {
+      "type": "object",
+      "description": "Cumulative cost / token snapshot. Embeds RunStateSnapshot. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "state",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "cost_recorded"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "state": {
+          "$ref": "#/$defs/RunStateSnapshot"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "SkillLoadedEvent": {
+      "type": "object",
+      "description": "Runner loaded a skill's SKILL.md into context. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "name",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "skill_loaded"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "name": {
+          "type": "string"
+        },
+        "skill_source": {
+          "type": "string",
+          "description": "Path or URL the skill was loaded from. Named skill_source to avoid collision with the event 'source' field."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "SkillExecutedEvent": {
+      "type": "object",
+      "description": "Runner activated and began executing a skill. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "name",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "skill_executed"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ContextCompactedEvent": {
+      "type": "object",
+      "description": "Runner compacted conversation history. compacted_messages preserves trajectory interpretability past the compaction. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "tokens_before",
+        "tokens_after",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "context_compacted"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "tokens_before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "compacted_messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ErrorOccurredEvent": {
+      "type": "object",
+      "description": "General (non-tool-specific) error emitted by the agent. RPC-service errors come back as tool_exec_resolved or re_observation_resolved with the error field set instead.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "code",
+        "message",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "error_occurred"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "AgentStoppedEvent": {
+      "type": "object",
+      "description": "Final event of every run. source MUST be 'runner'. Embeds the final RunStateSnapshot in 'state'. The legacy top-level fields (total_tokens, total_cost_usd, total_turns, duration_ms) remain present for ergonomic destructuring.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "reason",
+        "state",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "agent_stopped"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "reason": {
+          "$ref": "#/$defs/StopReason"
+        },
+        "state": {
+          "$ref": "#/$defs/RunStateSnapshot"
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total_turns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": [
+            "object",
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "null"
+          ],
+          "description": "Structured output if Config.output_schema was set. When Config.output_schema is set, this MUST validate against it."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolExecRequestEvent": {
+      "type": "object",
+      "description": "Agent is calling an environmental service to execute a Config-declared tool. Opens an RPC; closed by exactly one of tool_exec_resolved (service replied) or tool_exec_timed_out. The service is the supervisor's process or anything the supervisor stood up at Config time \u2014 from the agent's perspective it is just a remote tool.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "request_id",
+        "call_id",
+        "tool",
+        "input",
+        "timeout_ms",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_exec_request"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "call_id": {
+          "$ref": "#/$defs/CallId"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolExecResolvedEvent": {
+      "type": "object",
+      "description": "Service's reply to a tool_exec_request. Sent over stdin (or as HTTP body); recorded into the trajectory verbatim with source='supervisor' so the audit trail captures who computed the result. Closes the RPC.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "request_id",
+        "output",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_exec_resolved"
+        },
+        "source": {
+          "const": "supervisor"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "output": {
+          "type": "string"
+        },
+        "output_json": {
+          "description": "Optional structured form. The runner MUST set 'output' to a string representation of this."
+        },
+        "error": {
+          "type": "string",
+          "description": "Optional error message; when present, runner prefixes 'Error: ' before returning to the model."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ToolExecTimedOutEvent": {
+      "type": "object",
+      "description": "Agent did not receive tool_exec_resolved within timeout_ms; returned '' to the model. Closes the RPC.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "request_id",
+        "call_id",
+        "tool",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "tool_exec_timed_out"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "call_id": {
+          "$ref": "#/$defs/CallId"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ReObservationRequestEvent": {
+      "type": "object",
+      "description": "Agent is calling an environmental service for fresh observation content. Emitted only when the corresponding ReObservation has source.supervisor=true. Opens an RPC; closed by exactly one of re_observation_resolved or re_observation_timed_out. re_observation_injected follows the close on success.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "request_id",
+        "name",
+        "timeout_ms",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "re_observation_request"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "name": {
+          "type": "string",
+          "description": "Matches the ReObservation.name from config."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ReObservationResolvedEvent": {
+      "type": "object",
+      "description": "Service's reply to a re_observation_request. Recorded into the trajectory verbatim with source='supervisor'. Closes the RPC.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "request_id",
+        "content",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "re_observation_resolved"
+        },
+        "source": {
+          "const": "supervisor"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "content": {
+          "type": "string",
+          "description": "Observation content to inject into the agent's context."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ReObservationTimedOutEvent": {
+      "type": "object",
+      "description": "Agent did not receive re_observation_resolved within timeout_ms; SKIPS injection for this turn. Closes the RPC.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "request_id",
+        "name",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "re_observation_timed_out"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "request_id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ReObservationInjectedEvent": {
+      "type": "object",
+      "description": "Runner injected an observation into the agent's context for the upcoming turn. Records what was injected and how big it was (post-truncation). Emitted for shell-source observations directly, and for supervisor-source observations after re_observation_resolved. source MUST be 'runner'.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "step",
+        "name",
+        "trigger",
+        "injected_size",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "re_observation_injected"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "step": {
+          "$ref": "#/$defs/Step",
+          "description": "The upcoming turn this observation precedes."
+        },
+        "name": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "before_each_turn",
+            "before_first_turn",
+            "every_n_turns"
+          ]
+        },
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "shell",
+            "supervisor"
+          ],
+          "description": "Where the content originated."
+        },
+        "content_preview": {
+          "type": "string",
+          "description": "First N characters of the content (implementation-defined N, RECOMMENDED 200-2000)."
+        },
+        "injected_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size of the content actually injected, in characters or tokens (implementation-defined; runners SHOULD use tokens)."
+        },
+        "original_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pre-truncation size, when truncated=true."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True if the content was truncated to fit ReObservation.max_tokens."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Event": {
+      "description": "Any AEP event. Every line in the canonical NDJSON trajectory (the runner's stdout) validates against this. The 'type' field discriminates the variant; the 'source' field captures who authored it. Custom 'type' values are permitted and MUST be ignored by consumers that do not recognize them \u2014 implementations are encouraged to use dot-namespaced types ('myframework.verifier_result') to avoid future conflicts.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/EventBase"
+        },
+        {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AgentStartedEvent"
+            },
+            {
+              "$ref": "#/$defs/AgentStoppedEvent"
+            },
+            {
+              "$ref": "#/$defs/ModelTurnStartedEvent"
+            },
+            {
+              "$ref": "#/$defs/ModelTurnEndedEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolInvokedEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolReturnedEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolFailedEvent"
+            },
+            {
+              "$ref": "#/$defs/TextEmittedEvent"
+            },
+            {
+              "$ref": "#/$defs/CostRecordedEvent"
+            },
+            {
+              "$ref": "#/$defs/SkillLoadedEvent"
+            },
+            {
+              "$ref": "#/$defs/SkillExecutedEvent"
+            },
+            {
+              "$ref": "#/$defs/ContextCompactedEvent"
+            },
+            {
+              "$ref": "#/$defs/ErrorOccurredEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolExecRequestEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolExecResolvedEvent"
+            },
+            {
+              "$ref": "#/$defs/ToolExecTimedOutEvent"
+            },
+            {
+              "$ref": "#/$defs/ReObservationRequestEvent"
+            },
+            {
+              "$ref": "#/$defs/ReObservationResolvedEvent"
+            },
+            {
+              "$ref": "#/$defs/ReObservationTimedOutEvent"
+            },
+            {
+              "$ref": "#/$defs/ReObservationInjectedEvent"
+            },
+            {
+              "$ref": "#/$defs/VerifierEvaluatedEvent"
+            },
+            {
+              "$comment": "Custom / extension event. Any 'type' value not enumerated above is accepted; only EventBase fields are required.",
+              "type": "object",
+              "required": [
+                "type",
+                "source",
+                "run_id",
+                "ts"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "not": {
+                    "enum": [
+                      "agent_started",
+                      "agent_stopped",
+                      "context_compacted",
+                      "cost_recorded",
+                      "error_occurred",
+                      "model_turn_ended",
+                      "model_turn_started",
+                      "re_observation_injected",
+                      "re_observation_request",
+                      "re_observation_resolved",
+                      "re_observation_timed_out",
+                      "skill_executed",
+                      "skill_loaded",
+                      "text_emitted",
+                      "tool_exec_request",
+                      "tool_exec_resolved",
+                      "tool_exec_timed_out",
+                      "tool_failed",
+                      "tool_invoked",
+                      "tool_returned",
+                      "verifier_evaluated"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "SupervisorMessage": {
+      "description": "RPC replies the supervisor's services send to the runner during a run. The runner records each into the trajectory verbatim. v0.1 has exactly two: tool_exec_resolved (response to a tool_exec_request) and re_observation_resolved (response to a re_observation_request). Both are agent-initiated calls \u2014 the supervisor never reaches in.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ToolExecResolvedEvent"
+        },
+        {
+          "$ref": "#/$defs/ReObservationResolvedEvent"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "VerifierEvaluatedEvent": {
+      "type": "object",
+      "description": "A deterministic pass/fail signal recorded into the trajectory by the agent. Verifiers are MECHANICAL checks (test suites, file existence, schema validation, DDD invariant evaluation) declared in Config.verifiers. The agent runs the verifier at its declared trigger, emits this event, and takes the declared on_failure action. The supervisor does NOT emit verifier results in v0.1 \u2014 verifiers are agent-side facts about the environment.",
+      "required": [
+        "type",
+        "source",
+        "run_id",
+        "name",
+        "passed",
+        "ts"
+      ],
+      "properties": {
+        "type": {
+          "const": "verifier_evaluated"
+        },
+        "source": {
+          "const": "runner"
+        },
+        "run_id": {
+          "$ref": "#/$defs/RunId"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/CorrelationId"
+        },
+        "name": {
+          "type": "string",
+          "description": "Verifier identifier in the supervisor or runner's vocabulary. Convention: kebab-case ('tests-pass') or PascalCase ('IngestAtomicity'). Echoed on on_verifier:<name> hook triggers."
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether the verifier passed. The supervisor framework MUST treat this as load-bearing: passed=false is a Boolean fact, not an interpretation."
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "subject_call_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CallId"
+          },
+          "description": "Optional. Tool calls this verifier evaluated."
+        },
+        "subject_request_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequestId"
+          },
+          "description": "Optional. Supervisor interactions this verifier evaluated."
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Free-form verifier-specific evidence. Schema is verifier-defined; not interpreted by AEP. Examples: {command, exit_code, duration_ms} for a shell verifier; {invariant, violations[], aggregate_id} for a DDD invariant verifier."
+        },
+        "ts": {
+          "$ref": "#/$defs/Iso8601"
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "VerifierTrigger": {
+      "description": "When the agent runs the verifier. Built-ins fire at lifecycle points; on_tool:<name> fires after a tool_returned for the named tool.",
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "before_first_turn",
+            "before_each_turn",
+            "after_each_turn",
+            "at_end"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^on_tool:.+"
+        }
+      ]
+    },
+    "VerifierSource": {
+      "description": "Where the verifier's check is implemented. v0.1 ships shell-source verifiers; future versions may add RPC-source.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "shell"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "shell": {
+              "type": "string",
+              "description": "Shell command. The verifier passes iff the command exits 0; otherwise it fails."
+            }
+          }
+        }
+      ]
+    },
+    "Verifier": {
+      "type": "object",
+      "description": "Declarative deterministic check. Runs at its declared trigger, emits a verifier_evaluated event, and (on failure) takes the declared on_failure action. Verifiers are mechanical Boolean checks: test suites, file existence, schema validation, DDD invariant evaluation. Distinct from boundaries (consumption limits) and from tool calls (model-initiated).",
+      "required": [
+        "name",
+        "trigger",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Verifier identifier. Convention: kebab-case ('tests-pass') or PascalCase ('IngestAtomicity'). Echoed on verifier_evaluated."
+        },
+        "trigger": {
+          "$ref": "#/$defs/VerifierTrigger"
+        },
+        "source": {
+          "$ref": "#/$defs/VerifierSource"
+        },
+        "on_failure": {
+          "type": "string",
+          "enum": [
+            "halt",
+            "inject_correction",
+            "continue"
+          ],
+          "default": "continue",
+          "description": "What the agent does when passed=false. 'halt' \u2192 agent_stopped reason='verifier_failed'. 'inject_correction' \u2192 correction_message inserted as a user-role message before the next turn. 'continue' \u2192 just emit the event and proceed."
+        },
+        "correction_message": {
+          "type": "string",
+          "description": "Required when on_failure='inject_correction'. Inserted as user-role into conversation history."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 30000,
+          "description": "Maximum time the verifier may run. Verifier exceeding this is treated as passed=false with a synthesized error."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "on_failure"
+            ],
+            "properties": {
+              "on_failure": {
+                "const": "inject_correction"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "correction_message"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Config"
+    },
+    {
+      "$ref": "#/$defs/Event"
+    },
+    {
+      "$ref": "#/$defs/SupervisorMessage"
+    }
+  ]
+}
