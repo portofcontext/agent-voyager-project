@@ -1,0 +1,60 @@
+{
+  "id": "extensions-envelope-on-tool-exec-resolved-records-verbatim",
+  "title": "extensions envelope on a supervisor RPC reply is recorded verbatim",
+  "description": "SPEC.md §12: 'For non-spec FIELDS within a known event type, implementers MUST use the extensions envelope (an optional object on every event) with dot-namespaced keys.' This case pins that a supervisor's extensions data round-trips through the trajectory unchanged — so vendor-specific metadata can hitchhike on standard events without forking the schema.",
+  "spec_refs": ["spec/v0.1/SPEC.md#12-custom-event-types"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "extensions-passthrough",
+    "tools": [
+      {
+        "name": "lookup_user",
+        "description": "Demo RPC tool.",
+        "input_schema": { "type": "object", "properties": {}, "additionalProperties": true },
+        "timeout_ms": 1000
+      }
+    ],
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "calling",
+      "tool_calls": [{ "call_id": "c1", "tool": "lookup_user", "input": {} }],
+      "converged": false
+    },
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+  ],
+  "scripted_supervisor": [
+    {
+      "on": { "match": { "type": "tool_exec_request", "tool": "lookup_user" } },
+      "send": {
+        "type": "tool_exec_resolved",
+        "source": "supervisor",
+        "run_id": "extensions-passthrough",
+        "ts": "2026-05-04T18:00:00Z",
+        "request_id": "{{event.request_id}}",
+        "output": "ok",
+        "extensions": {
+          "vendor.trace_id": "trace-9f3e",
+          "vendor.priority": "high"
+        }
+      }
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "tool_exec_resolved",
+          "source": "supervisor",
+          "extensions": {
+            "vendor.trace_id": "trace-9f3e",
+            "vendor.priority": "high"
+          }
+        }
+      }
+    ]
+  }
+}

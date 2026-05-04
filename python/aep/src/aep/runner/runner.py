@@ -215,7 +215,25 @@ class AEPRunner:
                         text=response.text,
                     )
                 )
-                self._history.append({"role": "assistant", "content": response.text})
+
+            # Always record the assistant turn (text + tool_calls if any) before
+            # dispatching tools. Without the assistant message, the next model
+            # turn would receive a user-role tool_result that references a
+            # tool_use_id with no matching tool_use block in the conversation —
+            # which Anthropic (and most LLM APIs) reject as malformed.
+            if response.text or response.tool_calls:
+                self._history.append(
+                    {
+                        "role": "assistant",
+                        "content": response.text or "",
+                        "tool_calls": [
+                            {"call_id": tc.call_id, "tool": tc.tool, "input": tc.input}
+                            for tc in response.tool_calls
+                        ]
+                        if response.tool_calls
+                        else None,
+                    }
+                )
 
             for tc in response.tool_calls:
                 self._handle_tool_call(tc, state)

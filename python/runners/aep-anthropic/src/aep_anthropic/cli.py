@@ -20,20 +20,27 @@ from typing import IO
 from aep import Config, parse_supervisor_message, write_event
 from aep.runner import AEPRunner
 from aep.runner.drivers import SupervisorDriver
-from aep.runner.mock import ScriptedTools  # placeholder; replace with your real ToolDriver
 from aep_anthropic.driver import AnthropicModelDriver
+from aep_anthropic.shell_tools import SHELL_TOOL_SCHEMAS, ShellTools
 
 
 class StdinSupervisor(SupervisorDriver):
-    """SupervisorDriver that reads RPC replies line-by-line from a file (typically stdin).
+    """SupervisorDriver that reads RPC replies line-by-line from a file (typically stdin)
+    and streams every runner-emitted event to a configurable sink (typically stdout).
 
     Per SPEC.md §5.1: after the Config is consumed, stdin stays open and carries
     NDJSON SupervisorMessage lines. v0.1: only `tool_exec_resolved` is valid;
     anything else is malformed.
+
+    The observe() side is what makes the trajectory observable to the parent
+    supervisor — without it the runner's trajectory stays in-process. We write
+    NDJSON, one event per line, flushed after each write so the supervisor sees
+    events as they happen.
     """
 
-    def __init__(self, source: IO[str]) -> None:
+    def __init__(self, source: IO[str], sink: IO[str] | None = None) -> None:
         self._source = source
+        self._sink = sink
         self._tool: dict[str, object] = {}
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
@@ -66,7 +73,20 @@ class StdinSupervisor(SupervisorDriver):
             self._tool[msg.request_id] = msg
 
     def observe(self, event: object) -> None:
-        return  # this supervisor is downstream of stdin only
+        if self._sink is None:
+            return
+        # SupervisorDriver.observe is called for EVERY runner-emitted event (and
+        # for the supervisor RPC replies the runner records into the trajectory).
+        # Writing it here is what makes the trajectory observable to the parent
+        # process. Per SPEC.md §5.1: NDJSON, one event per line, flushed.
+        from pydantic import BaseModel as _BM
+
+        if isinstance(event, _BM):
+            write_event(event, file=self._sink)
+        else:
+            # Custom (non-Pydantic) events: passthrough as JSON dict.
+            self._sink.write(json.dumps(event) + "\n")
+            self._sink.flush()
 
     def _wait_for(
         self, table: dict[str, object], request_id: str, timeout_ms: int
@@ -85,17 +105,6 @@ class StdinSupervisor(SupervisorDriver):
         return self._wait_for(self._tool, request_id, timeout_ms)
 
 
-def _capture_writer(runner: AEPRunner, out: IO[str]) -> None:
-    """Patch the runner's trajectory append to also stream events to stdout."""
-    original_append = runner.trajectory.append
-
-    def streaming_append(ev):  # type: ignore[no-untyped-def]
-        original_append(ev)
-        write_event(ev, file=out)
-
-    runner.trajectory.append = streaming_append  # type: ignore[method-assign]
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="aep-anthropic",
@@ -111,30 +120,81 @@ def main(argv: list[str] | None = None) -> int:
     if not config_blob.strip():
         print("aep-anthropic: expected one Config JSON line on stdin", file=sys.stderr)
         return 2
-    config = Config.model_validate(json.loads(config_blob))
+    try:
+        config = Config.model_validate(json.loads(config_blob))
+    except Exception as e:
+        # SPEC.md §14: a runner that receives a Config with an unsupported
+        # schema_version (or any other invalid Config) MUST emit error_occurred
+        # with code='unknown' and a descriptive message, then emit agent_stopped
+        # with reason='error'. We can't construct a fully-valid Config here
+        # (that's what failed) so we emit minimal hand-rolled NDJSON that still
+        # validates against EventBase: type, source, run_id, ts.
+        import contextlib
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+
+        run_id = "unknown"
+        with contextlib.suppress(Exception):
+            run_id = str(json.loads(config_blob).get("run_id", "unknown"))
+        ts = _dt.now(_UTC).isoformat().replace("+00:00", "Z")
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "type": "error_occurred",
+                    "source": "runner",
+                    "run_id": run_id,
+                    "ts": ts,
+                    "code": "unknown",
+                    "message": f"invalid Config: {e}",
+                }
+            )
+            + "\n"
+        )
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "type": "agent_stopped",
+                    "source": "runner",
+                    "run_id": run_id,
+                    "ts": ts,
+                    "reason": "error",
+                    "state": {"total_cost_usd": 0.0, "total_tokens": 0, "total_turns": 0},
+                }
+            )
+            + "\n"
+        )
+        sys.stdout.flush()
+        return 2
 
     model = args.model or config.model or "claude-sonnet-4-6"
-    tools_param = None
+
+    # Build the tools[] surface we expose to the LLM:
+    #  1. Runner built-ins (bash / read_file / write_file)
+    #  2. Supervisor-declared RPC tools (Config.tools)
+    # Then filter by Config.allowed_tools if it's set.
+    tools_param: list[dict] = list(SHELL_TOOL_SCHEMAS)
     if config.tools:
-        tools_param = [
+        tools_param.extend(
             {"name": t.name, "description": t.description, "input_schema": t.input_schema}
             for t in config.tools
-        ]
+        )
+    if config.allowed_tools is not None:
+        allowed = set(config.allowed_tools)
+        tools_param = [t for t in tools_param if t["name"] in allowed]
 
     driver = AnthropicModelDriver(
         model=model,
-        tools_param=tools_param,
+        tools_param=tools_param or None,
         max_tokens=args.max_tokens,
     )
-    supervisor = StdinSupervisor(sys.stdin)
+    supervisor = StdinSupervisor(sys.stdin, sink=sys.stdout)
 
     runner = AEPRunner(
         config=config,
         model=driver,
-        tools=ScriptedTools(),
+        tools=ShellTools(),
         supervisor=supervisor,
     )
-    _capture_writer(runner, sys.stdout)
     runner.run()
     return 0
 

@@ -83,10 +83,16 @@ def _aep_history_to_anthropic_messages(
     """Split AEP history into (system_prompt, messages[]) per Anthropic API shape.
 
     AEP history items:
-        {role: "system", content: "..."}                           (Anthropic: system param, not in messages)
-        {role: "user",   content: "...", kind?: "observation"}     (Anthropic: user message)
-        {role: "assistant", content: "..."}                        (Anthropic: assistant message)
-        {role: "tool", tool, call_id, output}                      (Anthropic: user message with tool_result block)
+        {role: "system", content: "..."}
+        {role: "user",   content: "...", kind?: "observation"}
+        {role: "assistant", content: "...", tool_calls: [{call_id, tool, input}, ...] | None}
+        {role: "tool", tool, call_id, output}
+
+    Assistant entries with tool_calls are rendered as Anthropic content blocks:
+    a TextBlock for the text (if any) followed by a ToolUseBlock per call. The
+    matching `role: tool` entries become user-role tool_result blocks. Sending
+    the assistant turn is REQUIRED — otherwise the tool_result has no matching
+    tool_use_id and the API rejects the next turn.
     """
     system: str | None = None
     messages: list[dict[str, Any]] = []
@@ -97,7 +103,24 @@ def _aep_history_to_anthropic_messages(
         elif role == "user":
             messages.append({"role": "user", "content": str(item.get("content", ""))})
         elif role == "assistant":
-            messages.append({"role": "assistant", "content": str(item.get("content", ""))})
+            text = str(item.get("content", "") or "")
+            tool_calls = item.get("tool_calls") or []
+            if tool_calls:
+                blocks: list[dict[str, Any]] = []
+                if text:
+                    blocks.append({"type": "text", "text": text})
+                for tc in tool_calls:
+                    blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.get("call_id", ""),
+                            "name": tc.get("tool", ""),
+                            "input": tc.get("input", {}) or {},
+                        }
+                    )
+                messages.append({"role": "assistant", "content": blocks})
+            else:
+                messages.append({"role": "assistant", "content": text})
         elif role == "tool":
             messages.append(
                 {
