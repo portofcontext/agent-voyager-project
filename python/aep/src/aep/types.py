@@ -66,38 +66,6 @@ class Tool(BaseModel):
     timeout_ms: int = Field(default=30000, gt=0)
 
 
-class ReObservationSourceShell(BaseModel):
-    model_config = _STRICT
-    shell: str
-
-
-class ReObservationSourceSupervisor(BaseModel):
-    model_config = _STRICT
-    supervisor: Literal[True]
-
-
-ReObservationSource = Annotated[
-    ReObservationSourceShell | ReObservationSourceSupervisor,
-    Field(union_mode="left_to_right"),
-]
-
-
-class ReObservation(BaseModel):
-    model_config = _STRICT
-    name: str
-    source: ReObservationSource
-    trigger: Literal["before_each_turn", "before_first_turn", "every_n_turns"] = "before_each_turn"
-    every_n: int | None = Field(default=None, gt=0)
-    max_tokens: int | None = Field(default=None, gt=0)
-    timeout_ms: int = Field(default=30000, gt=0)
-
-    @model_validator(mode="after")
-    def _every_n_required_for_every_n_turns(self) -> ReObservation:
-        if self.trigger == "every_n_turns" and self.every_n is None:
-            raise ValueError("ReObservation.every_n is required when trigger='every_n_turns'")
-        return self
-
-
 class VerifierSourceShell(BaseModel):
     model_config = _STRICT
     shell: str
@@ -165,7 +133,7 @@ class Config(BaseModel):
 
     # Supervisor plane (the environment)
     tools: list[Tool] | None = None
-    re_observation: list[ReObservation] | None = None
+    allowed_tools: list[str] | None = None
     verifiers: list[Verifier] | None = None
     boundary: Boundary | None = None
     output_schema: dict[str, Any] | None = None
@@ -309,15 +277,6 @@ class SkillExecutedEvent(_EventBase):
     name: str
 
 
-class ContextCompactedEvent(_EventBase):
-    type: Literal["context_compacted"] = "context_compacted"
-    source: Literal[Source.runner] = Source.runner
-    step: int = Field(ge=0)
-    tokens_before: int = Field(ge=0)
-    tokens_after: int = Field(ge=0)
-    compacted_messages: list[dict[str, Any]] | None = None
-
-
 class ErrorOccurredEvent(_EventBase):
     type: Literal["error_occurred"] = "error_occurred"
     source: Literal[Source.runner] = Source.runner  # v0.1: runner-only
@@ -358,45 +317,6 @@ class ToolExecTimedOutEvent(_EventBase):
     tool: str
 
 
-class ReObservationRequestEvent(_EventBase):
-    """Agent calling an environmental service for fresh observation content."""
-
-    type: Literal["re_observation_request"] = "re_observation_request"
-    source: Literal[Source.runner] = Source.runner
-    step: int = Field(ge=0)
-    request_id: str = Field(min_length=1)
-    name: str
-    timeout_ms: int = Field(gt=0)
-
-
-class ReObservationResolvedEvent(_EventBase):
-    type: Literal["re_observation_resolved"] = "re_observation_resolved"
-    source: Literal[Source.supervisor] = Source.supervisor
-    request_id: str = Field(min_length=1)
-    content: str
-
-
-class ReObservationTimedOutEvent(_EventBase):
-    type: Literal["re_observation_timed_out"] = "re_observation_timed_out"
-    source: Literal[Source.runner] = Source.runner
-    step: int = Field(ge=0)
-    request_id: str = Field(min_length=1)
-    name: str
-
-
-class ReObservationInjectedEvent(_EventBase):
-    type: Literal["re_observation_injected"] = "re_observation_injected"
-    source: Literal[Source.runner] = Source.runner
-    step: int = Field(ge=0)
-    name: str
-    trigger: Literal["before_each_turn", "before_first_turn", "every_n_turns"]
-    source_kind: Literal["shell", "supervisor"] | None = None
-    content_preview: str | None = None
-    injected_size: int = Field(ge=0)
-    original_size: int | None = Field(default=None, ge=0)
-    truncated: bool | None = None
-
-
 class VerifierEvaluatedEvent(_EventBase):
     """A deterministic pass/fail signal recorded by the agent. v0.1: runner-emitted only."""
 
@@ -425,21 +345,14 @@ _RUNNER_EVENT_TYPES = (
     CostRecordedEvent,
     SkillLoadedEvent,
     SkillExecutedEvent,
-    ContextCompactedEvent,
     ErrorOccurredEvent,
     ToolExecRequestEvent,
     ToolExecTimedOutEvent,
-    ReObservationRequestEvent,
-    ReObservationTimedOutEvent,
-    ReObservationInjectedEvent,
     VerifierEvaluatedEvent,
 )
 
 # v0.1: only RPC replies cross the supervisor channel.
-_SUPERVISOR_EVENT_TYPES = (
-    ToolExecResolvedEvent,
-    ReObservationResolvedEvent,
-)
+_SUPERVISOR_EVENT_TYPES = (ToolExecResolvedEvent,)
 
 Event = Annotated[
     AgentStartedEvent
@@ -453,23 +366,15 @@ Event = Annotated[
     | CostRecordedEvent
     | SkillLoadedEvent
     | SkillExecutedEvent
-    | ContextCompactedEvent
     | ErrorOccurredEvent
     | ToolExecRequestEvent
     | ToolExecResolvedEvent
     | ToolExecTimedOutEvent
-    | ReObservationRequestEvent
-    | ReObservationResolvedEvent
-    | ReObservationTimedOutEvent
-    | ReObservationInjectedEvent
     | VerifierEvaluatedEvent,
     Field(discriminator="type"),
 ]
 
-SupervisorMessage = Annotated[
-    ToolExecResolvedEvent | ReObservationResolvedEvent,
-    Field(discriminator="type"),
-]
+SupervisorMessage = ToolExecResolvedEvent
 
 _TYPE_TO_MODEL: dict[str, type[BaseModel]] = {}
 for _cls in _RUNNER_EVENT_TYPES + _SUPERVISOR_EVENT_TYPES:

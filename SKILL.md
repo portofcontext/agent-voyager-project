@@ -1,7 +1,7 @@
 ---
 name: aep
 description: |
-  Use this skill for ANY work on AEP (Agent Execution Protocol) — runners, supervisor Configs, conformance cases, or debugging AEP runs. AEP wires runners (drive an LLM, emit events) to supervisors (declare environment). Trigger when AEP is named OR these terms appear: events agent_started/stopped, model_turn_started/ended, tool_invoked/returned, tool_exec_request/resolved, re_observation_*, verifier_evaluated, cost_recorded; Config primitives verifiers/on_failure (halt|inject_correction|continue), boundary strict-greater, source: runner|supervisor, RunStateSnapshot, call_id; spec/v0.1/, conformance/v0.1/, §10.4 cache-token math; imports aep, aep_anthropic, aep_claude_agent. Use for wrapping any LLM SDK as a runner, declaring agent invariants, authoring conformance, or "why does my AEP run/Config/verifier do X?" debugging. Claude under-triggers this — when in doubt, USE IT. Do NOT trigger for: OpenTelemetry, generic API logging, prompt engineering, multi-provider cost dashboards, or unrelated agent frameworks.
+  Use this skill for ANY work on AEP (Agent Execution Protocol) — runners, supervisor Configs, conformance cases, or debugging AEP runs. AEP wires runners (drive an LLM, emit events) to supervisors (declare environment).
 ---
 
 # AEP — Agent Execution Protocol
@@ -10,7 +10,7 @@ AEP is a wire format between two roles, with two unidirectional flows:
 
 ```
                                       agent's environment
-                          (boundary, tools, skills, re_obs, verifiers, prompt)
+                          (boundary, tools, skills, verifiers, prompt)
                                               │
                                               ▼
    supervisor ──── Config (one-time, setup) ──▶ runner
@@ -24,7 +24,7 @@ AEP is a wire format between two roles, with two unidirectional flows:
 
 The supervisor declares a complete environment in a Config. The runner runs the agent inside it. The runner emits a stream of source-tagged events. **No mid-run reach-in.** The agent's bounded context is intact because its environment was fully specified at setup.
 
-The one runtime exception is **environmental services**: if a Config-declared tool's implementation is out-of-process, the agent issues an RPC (`tool_exec_request`) and the supervisor's service replies (`tool_exec_resolved`). Same for `re_observation` with `source: { supervisor: true }`. Both are agent-initiated calls into services the supervisor stood up at Config time — not supervisor decisions made during the run.
+The one runtime exception is **environmental services**: if a Config-declared tool's implementation is out-of-process, the agent issues an RPC (`tool_exec_request`) and the supervisor's service replies (`tool_exec_resolved`). This is an agent-initiated call into a service the supervisor stood up at Config time — not a supervisor decision made during the run.
 
 ## When to do what
 
@@ -71,8 +71,8 @@ The pattern: build a `Config` (`aep.types.Config`) with the supervisor primitive
 | Concern | Field | Notes |
 |---|---|---|
 | What the agent can do | `tools` | Each `Tool` has `name`, `description`, `input_schema`. RPC-impl tools route through the `tool_exec_*` lifecycle (the runner emits requests; the supervisor's service replies). Local-impl tools the runner has built in are NOT declared here. |
-| What the agent perceives | `re_observation` | Each `ReObservation` has `name`, `source` (shell or supervisor RPC), `trigger` (`before_each_turn`, `before_first_turn`, `every_n_turns`), and optional `max_tokens` truncation budget. |
-| What rules it must respect | `verifiers` | Each `Verifier` has `name`, `trigger`, `source.shell`, and `on_failure: halt \| inject_correction \| continue`. The agent runs the verifier at the trigger and acts on `passed: false` per declaration. This is how DDD invariants compile to runtime checks. |
+| Which tools to expose | `allowed_tools` | Optional allowlist of names exposed to the model. When present, both runner built-ins AND `Config.tools` entries are filtered through it; every `Config.tools` name MUST appear in `allowed_tools` or the runner errors at startup. When absent, the runner exposes its full default set. Use this to compose category-based profiles ("DDD-strict", "Compliance") without enumerating runner internals. |
+| What rules it must respect | `verifiers` | Each `Verifier` has `name`, `trigger`, `source.shell`, and `on_failure: halt \| inject_correction \| continue`. The agent runs the verifier at the trigger and acts on `passed: false` per declaration. This is how DDD invariants compile to runtime checks. Shell paths resolve relative to the runner's CWD = the agent's workspace; the supervisor's deployment layer is responsible for putting referenced files there before the run starts. |
 | What limits it must respect | `boundary` | `max_cost_usd`, `max_steps`, `max_tokens`. Strict-greater algorithm; cost/tokens may overshoot by one final turn; steps cannot. |
 | What it produces | `output_schema` | JSON schema validated against `agent_stopped.output`. |
 | What it runs | `prompt`, `system_prompt`, `model`, `skills` | Standard runner-plane fields. |
@@ -85,7 +85,7 @@ Whatever you build, the trajectory carries three distinct kinds of facts. Surfac
 
 | Class | Event types | Semantics |
 |---|---|---|
-| What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `re_observation_injected` | Mechanical actions |
+| What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted` | Mechanical actions |
 | What the rules said | `verifier_evaluated` | Deterministic Boolean checks |
 | What the run cost | `cost_recorded`, `model_turn_ended.usage` | Resource accounting |
 
@@ -99,21 +99,29 @@ Two conforming runners with identical inputs MUST agree on whether one more turn
 - `max_steps: N`: projected check before each turn — `(state.total_turns + 1) > N`. Run completes EXACTLY N turns.
 - `max_tokens` behaves like `max_cost_usd`. Cache reads count as input tokens (cache changes billing, not work).
 
-If the user is tempted to write `>=` anywhere, redirect to `>` and explain the overshoot semantics. See `spec/v0.1/SPEC.md` §10.2 for the exact pseudocode.
+If the user is tempted to write `>=` anywhere, redirect to `>` and explain the overshoot semantics. See `spec/v0.1/SPEC.md` §9.2 for the exact pseudocode.
+
+## Workspace and deployment scope
+
+The agent's workspace is the **runner's current working directory**. Verifier shell paths and tool inputs containing relative paths resolve there. The supervisor's deployment layer (whatever stages the runner — git checkout, container, tmpdir) is responsible for making referenced files exist in that directory before the run starts.
+
+Workspace provisioning, secret injection, RPC-service hosting, runner placement, and OS-level sandboxing are all **outside AEP's scope** — see `spec/v0.1/SPEC.md` §14. AEP defines the wire, not the deployment topology. If a user asks about any of these and treats AEP as the answer, redirect them to the deployment layer instead.
+
+For verifiers whose code shouldn't ship to the workspace, expose them as RPC tools and host the logic in a supervisor-side service.
 
 ## What the supervisor is NOT allowed to do
 
 Common temptations to push back on:
 
 - **No mid-run hooks.** The supervisor cannot pause the agent and decide based on what just happened. If the user wants this, redirect them: declare it as a `Verifier` with the appropriate trigger and `on_failure` action, OR build it as an environmental service the agent calls. The rule lives in Config, not in a callback.
-- **No supervisor-emitted runtime events** other than RPC replies (`tool_exec_resolved`, `re_observation_resolved`). Domain interpretations / annotations are post-hoc, not on the runtime wire.
+- **No supervisor-emitted runtime events** other than `tool_exec_resolved` RPC replies. Domain interpretations / annotations are post-hoc, not on the runtime wire.
 - **No verifier that auto-halts** without `on_failure: halt`. Verifier results are facts; the response is declared per-verifier. A `passed: false` with `on_failure: continue` is a valid pattern (monitoring without gating).
 
 ## When in doubt, read these — in this order
 
 1. `spec/v0.1/SPEC.md` — normative spec, RFC 2119 keywords, reference algorithm. The source of truth for any wire-format question.
 2. `spec/v0.1/aep.schema.json` — JSON Schema bundle. Authoritative for field-by-field shape.
-3. `conformance/v0.1/cases/` — 15 test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
+3. `conformance/v0.1/cases/` — executable test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
 4. `python/aep/src/aep/types.py` — Pydantic models that mirror the schema. Authoritative Python surface.
 5. `python/aep/src/aep/runner/runner.py` — the canonical runner loop in working code.
 6. `python/runners/aep-anthropic/` — complete real-LLM driver runner.
@@ -137,7 +145,7 @@ When reviewing AEP code or generating it, watch for:
 
 1. Identify which of Tasks A / B / C they're asking about (or which combination).
 2. Read the relevant template in `examples/` first to ground yourself in current shape.
-3. Cross-reference with `spec/v0.1/SPEC.md` §6 (interactions), §7 (verifiers), §8 (tools), §9 (re-observation), §10 (the loop).
+3. Cross-reference with `spec/v0.1/SPEC.md` §6 (interactions), §7 (verifiers), §8 (tools), §9 (the loop).
 4. For runtime correctness questions, the conformance cases under `conformance/v0.1/cases/` are precedent — find the case that matches the situation.
 5. Generate code that imports from `aep.types`, `aep.runner`, `aep.io`. Do NOT inline-redefine the wire types.
 6. If asked about a behavior the spec doesn't cover, say so explicitly and propose a path that doesn't violate any of the existing conformance cases.

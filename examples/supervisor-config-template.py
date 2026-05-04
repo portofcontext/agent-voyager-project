@@ -5,8 +5,8 @@ environment up front. The agent runs inside what you declared; you observe the
 trajectory; you don't reach in mid-run.
 
 This template builds a Config that exercises every supervisor primitive:
-boundary, tools (both local and RPC), re_observation (shell + supervisor RPC),
-verifiers (all three on_failure modes), output_schema, skills.
+boundary, tools (RPC), verifiers (all three on_failure modes), output_schema,
+skills.
 
 To run:
     pip install -e python/aep
@@ -22,7 +22,7 @@ def build_config(*, run_id: str = "demo-supervisor-config") -> Config:
     """A worked example: a code-refactoring agent operating inside a Rust repo.
 
     Read alongside spec/v0.1/SPEC.md sections §7 (verifiers), §8 (tools),
-    §9 (re-observation), §10.2 (boundary semantics)."""
+    §9.2 (boundary semantics)."""
 
     return Config(
         schema_version="0.1",
@@ -46,26 +46,15 @@ def build_config(*, run_id: str = "demo-supervisor-config") -> Config:
                 "timeout_ms": 15000,
             },
         ],
-        # ── Re-observation ─────────────────────────────────────────────────
-        # State refresh sources the agent runs before turns to combat context
-        # rot. Source can be {shell: ...} (runner runs locally) or
-        # {supervisor: true} (runner makes an RPC).
-        re_observation=[
-            {
-                "name": "git_state",
-                "source": {"shell": "git status --porcelain && git diff --stat"},
-                "trigger": "before_each_turn",
-                "max_tokens": 500,
-            },
-            {
-                "name": "session_context",
-                "source": {"supervisor": True},  # RPC: runner emits re_observation_request
-                "trigger": "every_n_turns",
-                "every_n": 3,
-                "max_tokens": 1000,
-                "timeout_ms": 5000,
-            },
-        ],
+        # ── Tool allowlist (optional) ──────────────────────────────────────
+        # When set, the runner exposes ONLY these names to the model — both
+        # Config.tools entries above and the runner's built-ins (e.g., bash,
+        # file IO) are filtered through this list. Every Config.tools name
+        # MUST appear here, or the runner errors at startup. Omit this field
+        # entirely to expose the runner's full default surface.
+        # Supervisor frameworks typically keep category-based profiles
+        # ("DDD-strict", "Compliance") that resolve to a list like this.
+        allowed_tools=["lookup_user", "bash", "read_file", "write_file"],
         # ── Verifiers — the deterministic-rule primitive ───────────────────
         # Three on_failure modes; pick the one that matches the rule.
         verifiers=[

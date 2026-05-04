@@ -4,7 +4,7 @@ Three drivers:
 
 - ModelDriver       — produces the next ModelResponse given conversation history.
 - ToolDriver        — executes locally-handled (non-RPC) tools.
-- SupervisorDriver  — handles RPC interactions (tool_exec, re_observation supervisor-source).
+- SupervisorDriver  — handles tool_exec RPC interactions.
 """
 
 from __future__ import annotations
@@ -63,9 +63,9 @@ class ToolDriver(Protocol):
 
 
 class SupervisorDriver(Protocol):
-    """Handles RPC replies for the runner.
+    """Handles tool_exec RPC replies for the runner.
 
-    v0.1: only two RPC kinds. No unsolicited messages, no hook responses.
+    v0.1: only one RPC kind (tool_exec). No unsolicited messages, no hook responses.
     """
 
     def observe(self, event: BaseModel) -> None:
@@ -73,5 +73,3 @@ class SupervisorDriver(Protocol):
         ...
 
     def get_tool_exec_response(self, request_id: str, timeout_ms: int) -> BaseModel | None: ...
-
-    def get_re_observation_response(self, request_id: str, timeout_ms: int) -> BaseModel | None: ...

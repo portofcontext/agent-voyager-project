@@ -2,7 +2,7 @@
 
 This package wraps the [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python) so it speaks AEP v0.1.
 
-**Pattern: driver.** This runner owns the agent loop. The reference `AEPRunner` (from the [`aep`](../../aep/) package) drives the loop and calls `AnthropicModelDriver.step()` once per turn. The driver translates AEP history ↔ Anthropic messages, calls `client.messages.create(...)`, and translates the response ↔ AEP `ModelResponse`. The runner does the rest (events, supervisor-tools via RPC, re-observation, verifiers, boundary).
+**Pattern: driver.** This runner owns the agent loop. The reference `AEPRunner` (from the [`aep`](../../aep/) package) drives the loop and calls `AnthropicModelDriver.step()` once per turn. The driver translates AEP history ↔ Anthropic messages, calls `client.messages.create(...)`, and translates the response ↔ AEP `ModelResponse`. The runner does the rest (events, supervisor-tools via RPC, verifiers, boundary).
 
 ## Install
 

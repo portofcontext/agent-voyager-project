@@ -1,19 +1,15 @@
 """Lightweight constructors for SupervisorMessage instances (v0.1).
 
-v0.1 has only two SupervisorMessage types — both RPC replies the agent's
-environment provides. No hook resolution, no unsolicited domain events.
+v0.1 has one SupervisorMessage type: tool_exec_resolved (the RPC reply for a
+supervisor-provided tool service). No hook resolution, no unsolicited domain
+events.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from aep.types import (
-    ReObservationRequestEvent,
-    ReObservationResolvedEvent,
-    ToolExecRequestEvent,
-    ToolExecResolvedEvent,
-)
+from aep.types import ToolExecRequestEvent, ToolExecResolvedEvent
 
 
 def resolve_tool(
@@ -32,14 +28,4 @@ def resolve_tool(
     )
 
 
-def resolve_re_observation(
-    request: ReObservationRequestEvent, *, content: str
-) -> ReObservationResolvedEvent:
-    return ReObservationResolvedEvent(
-        run_id=request.run_id,
-        request_id=request.request_id,
-        content=content,
-    )
-
-
-__all__ = ["resolve_re_observation", "resolve_tool"]
+__all__ = ["resolve_tool"]

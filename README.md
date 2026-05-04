@@ -15,7 +15,7 @@ AEP draws one line, between two roles, and ships a wire format across that line.
 
 ```
                                       agent's environment
-                          (boundary, tools, skills, re_obs, verifiers, prompt)
+                          (boundary, tools, skills, verifiers, prompt)
                                               │
                                               ▼
    supervisor ──── Config (one-time, setup) ──▶ runner
@@ -37,7 +37,7 @@ Three message classes:
 
 1. **Config** — supervisor → runner, once at startup. Declares the agent's full environment.
 2. **Events** — runner → supervisor, streamed throughout the run. The trajectory.
-3. **SupervisorMessage** — supervisor service → runner, RPC replies only (`tool_exec_resolved`, `re_observation_resolved`). The runner records each into the trajectory.
+3. **SupervisorMessage** — supervisor service → runner, RPC replies only (`tool_exec_resolved`). The runner records each into the trajectory.
 
 ---
 

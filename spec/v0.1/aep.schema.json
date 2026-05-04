@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aep.dev/schema/v0.1/aep.schema.json",
   "title": "Agent Execution Protocol (AEP) v0.1",
-  "description": "Wire format for the Agent Execution Protocol. AEP defines two flows: the Config (supervisor \u2192 runner, once at startup, declares the agent's complete environment) and Events (runner \u2192 supervisor, streamed, the canonical trajectory). The supervisor configures the environment; the agent operates within it; the runner emits. Mid-run bidirectional control is intentionally absent \u2014 the agent's environment is fully specified at setup so the bounded context is intact and the agent never gets blocked by a force it didn't know existed. Tool execution and re-observation against supervisor-provided RPC services are the only mid-run wire interactions; both are agent-initiated calls into the environment, not supervisor-initiated reach-ins.",
+  "description": "Wire format for the Agent Execution Protocol. AEP defines two flows: the Config (supervisor \u2192 runner, once at startup, declares the agent's complete environment) and Events (runner \u2192 supervisor, streamed, the canonical trajectory). The supervisor configures the environment; the agent operates within it; the runner emits. Mid-run bidirectional control is intentionally absent \u2014 the agent's environment is fully specified at setup so the bounded context is intact and the agent never gets blocked by a force it didn't know existed. Tool execution against supervisor-provided RPC services is the only mid-run wire interaction; the agent initiates the call, the supervisor's service replies.",
   "type": "object",
   "$defs": {
     "Iso8601": {
@@ -23,7 +23,7 @@
     "RequestId": {
       "type": "string",
       "minLength": 1,
-      "description": "Identifies one agent-initiated RPC into an environmental service (tool_exec or re_observation supervisor-source). Unique within a run. The same request_id appears on the opening event (tool_exec_request, re_observation_request) and the closing event (tool_exec_resolved, tool_exec_timed_out, re_observation_resolved, re_observation_timed_out)."
+      "description": "Identifies one agent-initiated RPC into a supervisor-provided tool service. Unique within a run. The same request_id appears on the opening event (tool_exec_request) and the closing event (tool_exec_resolved or tool_exec_timed_out)."
     },
     "CorrelationId": {
       "type": "string",
@@ -36,7 +36,7 @@
         "runner",
         "supervisor"
       ],
-      "description": "Which side of the seam authored this event. 'runner' is the agent process emitting facts about what happened. 'supervisor' appears only on RPC replies (tool_exec_resolved, re_observation_resolved) that the runner records into the trajectory verbatim \u2014 these document who computed the value, not who decided anything."
+      "description": "Which side of the seam authored this event. 'runner' is the agent process emitting facts about what happened. 'supervisor' appears only on tool_exec_resolved RPC replies that the runner records into the trajectory verbatim \u2014 these document who computed the value, not who decided anything."
     },
     "Step": {
       "type": "integer",
@@ -194,99 +194,6 @@
       },
       "additionalProperties": false
     },
-    "ReObservationSource": {
-      "description": "How the agent fetches the observation. 'shell' runs a command locally. 'supervisor: true' makes an RPC into a service the supervisor stood up at Config time \u2014 the agent emits re_observation_request and awaits re_observation_resolved on stdin (or HTTP). Either way the agent initiates the call; the supervisor never reaches in.",
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "shell"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "shell": {
-              "type": "string",
-              "description": "Shell command. The runner executes it, captures stdout, and treats the output as the observation content."
-            }
-          }
-        },
-        {
-          "type": "object",
-          "required": [
-            "supervisor"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "supervisor": {
-              "const": true,
-              "description": "When true, the runner emits a re_observation_request and waits for the supervisor to send re_observation_resolved with the content."
-            }
-          }
-        }
-      ]
-    },
-    "ReObservation": {
-      "type": "object",
-      "description": "Supervisor-declared observation source the agent runs before each turn (or every Nth) to refresh its view of the world. The source is either a shell command the agent runs locally OR a supervisor-provided RPC the agent calls via re_observation_request / re_observation_resolved. From the agent's perspective an observation is a fact it pulls from its environment, not something the supervisor pushes.",
-      "required": [
-        "name",
-        "source"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Identifier for this observation. Echoed on re_observation_* events."
-        },
-        "source": {
-          "$ref": "#/$defs/ReObservationSource"
-        },
-        "trigger": {
-          "type": "string",
-          "enum": [
-            "before_each_turn",
-            "before_first_turn",
-            "every_n_turns"
-          ],
-          "default": "before_each_turn"
-        },
-        "every_n": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "description": "Required when trigger='every_n_turns'. The observation fires before turn 1, turn 1+N, turn 1+2N, etc."
-        },
-        "max_tokens": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "description": "Truncation budget for the observation. The runner truncates output to fit and sets truncated=true on re_observation_injected. If unset, the observation is injected verbatim."
-        },
-        "timeout_ms": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "default": 30000,
-          "description": "Only applies when source.supervisor=true. How long the runner waits for re_observation_resolved before falling back (no injection) and emitting re_observation_timed_out."
-        }
-      },
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "trigger"
-            ],
-            "properties": {
-              "trigger": {
-                "const": "every_n_turns"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "every_n"
-            ]
-          }
-        }
-      ]
-    },
     "ToolSubtype": {
       "type": "string",
       "enum": [
@@ -333,7 +240,7 @@
     },
     "Config": {
       "type": "object",
-      "description": "AEP Config \u2014 the supervisor's complete declaration of the agent's environment. Sent once at startup. The agent runs within this environment unidirectionally; mid-run reach-in by the supervisor is intentionally absent. Field order is supervisor-first (tools, re_observation, verifiers, boundary, output_schema) before runner-plane fields (prompt, system_prompt, model, skills) because the protocol exists to put the supervisor in charge of the environment.",
+      "description": "AEP Config \u2014 the supervisor's complete declaration of the agent's environment. Sent once at startup. The agent runs within this environment unidirectionally; mid-run reach-in by the supervisor is intentionally absent. Field order is supervisor-first (tools, verifiers, boundary, output_schema) before runner-plane fields (prompt, system_prompt, model, skills) because the protocol exists to put the supervisor in charge of the environment.",
       "required": [
         "schema_version",
         "run_id"
@@ -354,12 +261,14 @@
           },
           "description": "Supervisor-executed tools exposed to the LLM. Calls are routed back to the supervisor over the same wire as hooks."
         },
-        "re_observation": {
+        "allowed_tools": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ReObservation"
+            "type": "string",
+            "minLength": 1
           },
-          "description": "Declarative re-observations the runner injects before each (or every Nth) model turn. First-class answer to context rot \u2014 see SPEC.md \u00a79."
+          "uniqueItems": true,
+          "description": "Optional allowlist of tool names the runner exposes to the LLM. When PRESENT, ONLY these tools are exposed \u2014 both Config.tools (RPC) entries and runner built-ins are filtered through this list. When ABSENT, the runner exposes all its built-ins plus every Config.tools entry (default behavior). Every Config.tools name MUST appear in allowed_tools when this field is set; mismatch triggers error_occurred + agent_stopped reason='error'. Names in allowed_tools that match neither a Config.tools entry nor a runner built-in are runner-detected at tool-call time."
         },
         "verifiers": {
           "type": "array",
@@ -947,61 +856,9 @@
         }
       }
     },
-    "ContextCompactedEvent": {
-      "type": "object",
-      "description": "Runner compacted conversation history. compacted_messages preserves trajectory interpretability past the compaction. source MUST be 'runner'.",
-      "required": [
-        "type",
-        "source",
-        "run_id",
-        "step",
-        "tokens_before",
-        "tokens_after",
-        "ts"
-      ],
-      "properties": {
-        "type": {
-          "const": "context_compacted"
-        },
-        "source": {
-          "const": "runner"
-        },
-        "run_id": {
-          "$ref": "#/$defs/RunId"
-        },
-        "correlation_id": {
-          "$ref": "#/$defs/CorrelationId"
-        },
-        "step": {
-          "$ref": "#/$defs/Step"
-        },
-        "tokens_before": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "tokens_after": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "compacted_messages": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": true
-          }
-        },
-        "ts": {
-          "$ref": "#/$defs/Iso8601"
-        },
-        "extensions": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
     "ErrorOccurredEvent": {
       "type": "object",
-      "description": "General (non-tool-specific) error emitted by the agent. RPC-service errors come back as tool_exec_resolved or re_observation_resolved with the error field set instead.",
+      "description": "General (non-tool-specific) error emitted by the agent. RPC-service errors come back as tool_exec_resolved with the error field set instead.",
       "required": [
         "type",
         "source",
@@ -1254,214 +1111,6 @@
         }
       }
     },
-    "ReObservationRequestEvent": {
-      "type": "object",
-      "description": "Agent is calling an environmental service for fresh observation content. Emitted only when the corresponding ReObservation has source.supervisor=true. Opens an RPC; closed by exactly one of re_observation_resolved or re_observation_timed_out. re_observation_injected follows the close on success.",
-      "required": [
-        "type",
-        "source",
-        "run_id",
-        "step",
-        "request_id",
-        "name",
-        "timeout_ms",
-        "ts"
-      ],
-      "properties": {
-        "type": {
-          "const": "re_observation_request"
-        },
-        "source": {
-          "const": "runner"
-        },
-        "run_id": {
-          "$ref": "#/$defs/RunId"
-        },
-        "correlation_id": {
-          "$ref": "#/$defs/CorrelationId"
-        },
-        "step": {
-          "$ref": "#/$defs/Step"
-        },
-        "request_id": {
-          "$ref": "#/$defs/RequestId"
-        },
-        "name": {
-          "type": "string",
-          "description": "Matches the ReObservation.name from config."
-        },
-        "timeout_ms": {
-          "type": "integer",
-          "exclusiveMinimum": 0
-        },
-        "ts": {
-          "$ref": "#/$defs/Iso8601"
-        },
-        "extensions": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
-    "ReObservationResolvedEvent": {
-      "type": "object",
-      "description": "Service's reply to a re_observation_request. Recorded into the trajectory verbatim with source='supervisor'. Closes the RPC.",
-      "required": [
-        "type",
-        "source",
-        "run_id",
-        "request_id",
-        "content",
-        "ts"
-      ],
-      "properties": {
-        "type": {
-          "const": "re_observation_resolved"
-        },
-        "source": {
-          "const": "supervisor"
-        },
-        "run_id": {
-          "$ref": "#/$defs/RunId"
-        },
-        "correlation_id": {
-          "$ref": "#/$defs/CorrelationId"
-        },
-        "request_id": {
-          "$ref": "#/$defs/RequestId"
-        },
-        "content": {
-          "type": "string",
-          "description": "Observation content to inject into the agent's context."
-        },
-        "ts": {
-          "$ref": "#/$defs/Iso8601"
-        },
-        "extensions": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
-    "ReObservationTimedOutEvent": {
-      "type": "object",
-      "description": "Agent did not receive re_observation_resolved within timeout_ms; SKIPS injection for this turn. Closes the RPC.",
-      "required": [
-        "type",
-        "source",
-        "run_id",
-        "step",
-        "request_id",
-        "name",
-        "ts"
-      ],
-      "properties": {
-        "type": {
-          "const": "re_observation_timed_out"
-        },
-        "source": {
-          "const": "runner"
-        },
-        "run_id": {
-          "$ref": "#/$defs/RunId"
-        },
-        "correlation_id": {
-          "$ref": "#/$defs/CorrelationId"
-        },
-        "step": {
-          "$ref": "#/$defs/Step"
-        },
-        "request_id": {
-          "$ref": "#/$defs/RequestId"
-        },
-        "name": {
-          "type": "string"
-        },
-        "ts": {
-          "$ref": "#/$defs/Iso8601"
-        },
-        "extensions": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
-    "ReObservationInjectedEvent": {
-      "type": "object",
-      "description": "Runner injected an observation into the agent's context for the upcoming turn. Records what was injected and how big it was (post-truncation). Emitted for shell-source observations directly, and for supervisor-source observations after re_observation_resolved. source MUST be 'runner'.",
-      "required": [
-        "type",
-        "source",
-        "run_id",
-        "step",
-        "name",
-        "trigger",
-        "injected_size",
-        "ts"
-      ],
-      "properties": {
-        "type": {
-          "const": "re_observation_injected"
-        },
-        "source": {
-          "const": "runner"
-        },
-        "run_id": {
-          "$ref": "#/$defs/RunId"
-        },
-        "correlation_id": {
-          "$ref": "#/$defs/CorrelationId"
-        },
-        "step": {
-          "$ref": "#/$defs/Step",
-          "description": "The upcoming turn this observation precedes."
-        },
-        "name": {
-          "type": "string"
-        },
-        "trigger": {
-          "type": "string",
-          "enum": [
-            "before_each_turn",
-            "before_first_turn",
-            "every_n_turns"
-          ]
-        },
-        "source_kind": {
-          "type": "string",
-          "enum": [
-            "shell",
-            "supervisor"
-          ],
-          "description": "Where the content originated."
-        },
-        "content_preview": {
-          "type": "string",
-          "description": "First N characters of the content (implementation-defined N, RECOMMENDED 200-2000)."
-        },
-        "injected_size": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Size of the content actually injected, in characters or tokens (implementation-defined; runners SHOULD use tokens)."
-        },
-        "original_size": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Pre-truncation size, when truncated=true."
-        },
-        "truncated": {
-          "type": "boolean",
-          "description": "True if the content was truncated to fit ReObservation.max_tokens."
-        },
-        "ts": {
-          "$ref": "#/$defs/Iso8601"
-        },
-        "extensions": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
     "Event": {
       "description": "Any AEP event. Every line in the canonical NDJSON trajectory (the runner's stdout) validates against this. The 'type' field discriminates the variant; the 'source' field captures who authored it. Custom 'type' values are permitted and MUST be ignored by consumers that do not recognize them \u2014 implementations are encouraged to use dot-namespaced types ('myframework.verifier_result') to avoid future conflicts.",
       "allOf": [
@@ -1504,9 +1153,6 @@
               "$ref": "#/$defs/SkillExecutedEvent"
             },
             {
-              "$ref": "#/$defs/ContextCompactedEvent"
-            },
-            {
               "$ref": "#/$defs/ErrorOccurredEvent"
             },
             {
@@ -1517,18 +1163,6 @@
             },
             {
               "$ref": "#/$defs/ToolExecTimedOutEvent"
-            },
-            {
-              "$ref": "#/$defs/ReObservationRequestEvent"
-            },
-            {
-              "$ref": "#/$defs/ReObservationResolvedEvent"
-            },
-            {
-              "$ref": "#/$defs/ReObservationTimedOutEvent"
-            },
-            {
-              "$ref": "#/$defs/ReObservationInjectedEvent"
             },
             {
               "$ref": "#/$defs/VerifierEvaluatedEvent"
@@ -1549,15 +1183,10 @@
                     "enum": [
                       "agent_started",
                       "agent_stopped",
-                      "context_compacted",
                       "cost_recorded",
                       "error_occurred",
                       "model_turn_ended",
                       "model_turn_started",
-                      "re_observation_injected",
-                      "re_observation_request",
-                      "re_observation_resolved",
-                      "re_observation_timed_out",
                       "skill_executed",
                       "skill_loaded",
                       "text_emitted",
@@ -1580,13 +1209,10 @@
       "unevaluatedProperties": false
     },
     "SupervisorMessage": {
-      "description": "RPC replies the supervisor's services send to the runner during a run. The runner records each into the trajectory verbatim. v0.1 has exactly two: tool_exec_resolved (response to a tool_exec_request) and re_observation_resolved (response to a re_observation_request). Both are agent-initiated calls \u2014 the supervisor never reaches in.",
+      "description": "RPC replies the supervisor's services send to the runner during a run. The runner records each into the trajectory verbatim. v0.1 has exactly one: tool_exec_resolved (response to a tool_exec_request). Agent-initiated \u2014 the supervisor never reaches in.",
       "oneOf": [
         {
           "$ref": "#/$defs/ToolExecResolvedEvent"
-        },
-        {
-          "$ref": "#/$defs/ReObservationResolvedEvent"
         }
       ],
       "unevaluatedProperties": false

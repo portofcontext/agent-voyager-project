@@ -12,12 +12,12 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 
 AEP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
 
-- **Supervisor** — declares the agent's complete environment in a Config sent at startup. Tools the agent can call. Skills the agent can load. Observation sources the agent should refresh from. Verifiers the agent should run. Hard limits the agent enforces on itself. Once the Config is sent, the supervisor's role is to OBSERVE the trajectory — it does not reach in mid-run.
+- **Supervisor** — declares the agent's complete environment in a Config sent at startup. Tools the agent can call. Skills the agent can load. Verifiers the agent should run. Hard limits the agent enforces on itself. Once the Config is sent, the supervisor's role is to OBSERVE the trajectory — it does not reach in mid-run.
 - **Runner** — runs the agent inside the supervisor's environment. Emits a stream of facts (events) that the supervisor observes.
 
 ```
-                                      agent's environment
-                          (boundary, tools, skills, re_obs, verifiers, prompt)
+                                  agent's environment
+                          (boundary, tools, skills, verifiers, prompt)
                                               │
                                               ▼
    supervisor ──── Config (one-time, setup) ──▶ runner
@@ -31,7 +31,7 @@ AEP defines exactly one boundary, between two roles, with **two unidirectional f
 
 This is the v0.1 architectural choice: **control flows down at setup; observation flows up during the run.** No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front; the agent never gets blocked by a force it didn't know about.
 
-The one apparent exception is **environmental services**: when the agent calls a tool whose implementation is out-of-process, or queries an observation source provided by the supervisor, the agent issues an RPC and awaits a reply. This is **agent-initiated** — the supervisor stood up the service at Config time but doesn't decide anything mid-run. See §6.
+The one apparent exception is **environmental services**: when the agent calls a tool whose implementation is out-of-process, the agent issues an RPC and awaits a reply. This is **agent-initiated** — the supervisor stood up the service at Config time but doesn't decide anything mid-run. See §6.
 
 ---
 
@@ -43,7 +43,7 @@ The one apparent exception is **environmental services**: when the agent calls a
 | `Event` | runner → supervisor (and supervisor RPC service → runner for replies, recorded into the same trajectory) | streamed throughout the run | [`event.schema.json`](./event.schema.json) |
 | `SupervisorMessage` | supervisor service → runner | streamed, in reply to RPC requests only | [`supervisor-message.schema.json`](./supervisor-message.schema.json) |
 
-`SupervisorMessage` in v0.1 is exactly two event types — `tool_exec_resolved` and `re_observation_resolved` — both RPC replies the runner records into the trajectory verbatim (`source: "supervisor"`). Nothing else crosses this channel.
+`SupervisorMessage` in v0.1 is exactly one event type — `tool_exec_resolved` — the RPC reply the runner records into the trajectory verbatim (`source: "supervisor"`). Nothing else crosses this channel.
 
 ---
 
@@ -52,7 +52,7 @@ The one apparent exception is **environmental services**: when the agent calls a
 The runner's stdout is the **canonical trajectory**. Every event line MUST contain a `source` field of either `"runner"` or `"supervisor"`.
 
 - **`source: "runner"`** is the overwhelming majority of events — the agent emitting facts about what it did.
-- **`source: "supervisor"`** appears only on RPC replies (`tool_exec_resolved`, `re_observation_resolved`). The runner records these verbatim. The supervisor's voice in the record documents who computed the value, not who decided anything.
+- **`source: "supervisor"`** appears only on `tool_exec_resolved` RPC replies. The runner records these verbatim. The supervisor's voice in the record documents who computed the value, not who decided anything.
 
 Implementations MUST NOT strip or rewrite supervisor-recorded events when writing the trajectory.
 
@@ -60,9 +60,9 @@ Implementations MUST NOT strip or rewrite supervisor-recorded events when writin
 
 ## 4. Conformance — overview
 
-A **runner** is conforming if it reads exactly one valid `Config` at startup, runs the agent inside the declared environment per §10, emits the events required by §11–§12, records supervisor-emitted RPC replies verbatim, and enforces boundary semantics per §10.4. See §14.1 for the full checklist.
+A **runner** is conforming if it reads exactly one valid `Config` at startup, runs the agent inside the declared environment per §9, emits the events required by §10–§11, records supervisor-emitted RPC replies verbatim, and enforces boundary semantics per §9.4. See §13.1 for the full checklist.
 
-A **supervisor** is conforming if every `Config` it sends validates against `config.schema.json` and any `SupervisorMessage` (RPC reply) it sends validates against `supervisor-message.schema.json`. See §14.2.
+A **supervisor** is conforming if every `Config` it sends validates against `config.schema.json` and any `SupervisorMessage` (RPC reply) it sends validates against `supervisor-message.schema.json`. See §13.2.
 
 ---
 
@@ -81,18 +81,17 @@ A conforming implementation MUST support at least one transport. Both transports
 ### 5.2 HTTP (remote)
 
 - The supervisor POSTs a single `Config` to start a run; the runner streams events back via Server-Sent Events.
-- For RPC interactions: when the runner emits `tool_exec_request` or `re_observation_request`, it POSTs the event to a `service_callback_url` declared at Config time; the response body MUST be the corresponding `*_resolved` SupervisorMessage. (See `Config.service_callback_url` if shipped — TBD by transport profile.)
+- For RPC interactions: when the runner emits `tool_exec_request`, it POSTs the event to a `service_callback_url` declared at Config time; the response body MUST be a `tool_exec_resolved` SupervisorMessage. (See `Config.service_callback_url` if shipped — TBD by transport profile.)
 
 ---
 
 ## 6. Environmental services (agent-initiated RPC)
 
-An **environmental service** is an out-of-process implementation the supervisor stood up at Config time and the agent calls into during a run. v0.1 has two such services:
+An **environmental service** is an out-of-process implementation the supervisor stood up at Config time and the agent calls into during a run. v0.1 has one such service:
 
 | Service kind | Triggered by | Opening event | Closing events |
 |---|---|---|---|
 | **Tool execution** | The model calls a `Config.tools` declared tool whose implementation is not local | `tool_exec_request` | `tool_exec_resolved` ∣ `tool_exec_timed_out` |
-| **Re-observation fetch** | A `Config.re_observation` entry with `source.supervisor: true` fires for an upcoming turn | `re_observation_request` | `re_observation_resolved` ∣ `re_observation_timed_out` |
 
 Lifecycle:
 
@@ -123,7 +122,7 @@ This is RPC. The agent calls; the service replies. The supervisor's process happ
 
 `request_id` correlates the RPC across opening and closing events. `call_id` (from the underlying tool call) appears alongside `request_id` on `tool_exec_*` events when relevant.
 
-> **Naming asymmetry, deliberately.** Opening events use the imperative noun form (`tool_exec_request`, `re_observation_request`) because they ARE pending RPCs. Closing events use past-tense (`*_resolved`, `*_timed_out`) because they are facts about what happened. Reading any single line should make clear whether the runner is waiting on a service.
+> **Naming asymmetry, deliberately.** Opening events use the imperative noun form (`tool_exec_request`) because they ARE pending RPCs. Closing events use past-tense (`tool_exec_resolved`, `tool_exec_timed_out`) because they are facts about what happened. Reading any single line should make clear whether the runner is waiting on a service.
 
 ---
 
@@ -189,6 +188,12 @@ The supervisor declares the rule upfront in Config; the agent enforces it determ
 
 The supervisor is not involved at runtime. The verifier was declared in Config; the agent enforces it.
 
+### 7.5 Path resolution
+
+Shell verifier paths (e.g., `scripts/scan_secrets.sh`) resolve relative to the **runner's current working directory** — by convention, the agent's workspace. A verifier whose source is `cargo test` requires `Cargo.toml` to be in the workspace; one whose source is `scripts/scan_secrets.sh` requires that file to exist there.
+
+How the workspace gets provisioned (git checkout, container volume, tmpdir) is **outside AEP's scope** — see §14. The supervisor's deployment layer is responsible for ensuring referenced files exist before the run starts. For verifiers whose code shouldn't ship to the workspace, expose them as RPC tools (§8) the agent calls and have the supervisor's service host the logic.
+
 ---
 
 ## 8. Tools
@@ -205,68 +210,31 @@ Wire flow:
 
 `Config.tools` is the schema-typed declaration of RPC tools. Locally-implemented tools (the runner's built-ins like `bash`, file I/O, etc.) are runner-specific and not declared in Config.
 
----
+### 8.1 Restricting the exposed tool set: `Config.allowed_tools`
 
-## 9. Re-observation
+`Config.allowed_tools` is an **optional allowlist** of tool names the runner exposes to the model. It is the supervisor's lever for narrowing the agent's tool surface without enumerating the runner's internals.
 
-Re-observation refreshes the agent's view of the world before each (or every Nth) turn to combat context rot.
+Semantics:
 
-### 9.1 Config
+- **Absent.** The runner exposes all of its built-ins plus every `Config.tools` entry. This is the default, backwards-compatible behavior.
+- **Present.** The runner MUST expose ONLY tools whose names are in this list. Both `Config.tools` (RPC) entries and runner built-ins are filtered through it.
+- **Cross-field coherence.** Every name in `Config.tools` MUST also appear in `Config.allowed_tools` (when set). A `Config.tools` entry missing from `allowed_tools` is a configuration conflict — the supervisor declared an RPC tool while simultaneously forbidding its exposure. The runner MUST detect this at startup, emit `error_occurred`, and stop with `reason: "error"` before any model turn runs.
+- **Unrecognized names.** Names in `allowed_tools` that match neither a `Config.tools` entry nor a runner built-in are runner-specific. The runner MAY validate them at startup; failing that, the runtime check rejects any actual call to such a name as `tool_failed` (see below).
+- **Runtime rejection.** If the model nevertheless calls a tool whose name is not in `allowed_tools`, the runner MUST emit `tool_failed` with an error message identifying the allowlist as the cause, and MUST NOT execute the tool. (`tool_invoked` is still emitted first to keep the trajectory faithful — the agent attempted the call.)
 
-```jsonc
-{
-  "re_observation": [
-    {
-      "name": "git_state",
-      "source": { "shell": "git status --porcelain && git diff --stat" },
-      "trigger": "before_each_turn",
-      "max_tokens": 500
-    },
-    {
-      "name": "session_context",
-      "source": { "supervisor": true },
-      "trigger": "every_n_turns",
-      "every_n": 3,
-      "max_tokens": 1000,
-      "timeout_ms": 5000
-    }
-  ]
-}
-```
-
-`source` is one of:
-
-- `{ "shell": "<cmd>" }` — runner executes the command locally and captures stdout
-- `{ "supervisor": true }` — runner emits `re_observation_request` and awaits `re_observation_resolved` from a supervisor-stood-up service (§6)
-
-Either way, the agent is initiating the call; the supervisor never reaches in.
-
-### 9.2 Wire flow
-
-**Shell-source:**
-
-1. Trigger fires. Runner runs the shell command, captures stdout.
-2. Runner truncates to `max_tokens` if set.
-3. Runner injects content as a user-role observation into the next turn's context.
-4. Runner emits `re_observation_injected` with `source_kind: "shell"`, `injected_size`, and (when truncated) `truncated: true` + `original_size`.
-
-**Supervisor-source (RPC):**
-
-1. Trigger fires. Runner emits `re_observation_request` (source=runner) with `request_id`, `name`, `timeout_ms`.
-2. Runner awaits `re_observation_resolved` (source=supervisor, recorded verbatim) OR times out and emits `re_observation_timed_out` then SKIPS injection.
-3. On success: runner truncates, injects, emits `re_observation_injected` with `source_kind: "supervisor"`.
+Supervisors MAY maintain category-based profiles (e.g., "DDD-strict", "Compliance") at the framework layer that resolve to a specific `allowed_tools` per runner; AEP itself takes no opinion on profiles.
 
 ---
 
-## 10. The runner loop (normative)
+## 9. The runner loop (normative)
 
 A conforming runner MUST behave as if executing the following algorithm. (The runner MAY reorder operations that are not externally observable, provided the emitted event sequence is indistinguishable.)
 
-### 10.1 Run state
+### 9.1 Run state
 
 The runner maintains a `RunStateSnapshot` (see [`aep.schema.json#/$defs/RunStateSnapshot`](./aep.schema.json)) tracking `total_turns`, `total_cost_usd`, `total_tokens`, etc.
 
-### 10.2 Boundary check (normative algorithm)
+### 9.2 Boundary check (normative algorithm)
 
 Strict greater-than. Cost and tokens checked AFTER each `model_turn_ended` (and after each `tool_returned` for cost/tokens). The step boundary is checked BEFORE starting a new turn against the projected next-turn count.
 
@@ -287,7 +255,7 @@ function check_step_projection(state) -> (decision, reason | null):
 
 `max_steps: N` runs EXACTLY N turns. Cost/tokens MAY overshoot a max by one final turn since cost cannot be projected pre-call.
 
-### 10.3 The loop
+### 9.3 The loop
 
 ```
 read config from stdin
@@ -301,7 +269,6 @@ loop:
         run verifiers_for("at_end"); apply on_failure actions
         emit agent_stopped(reason); return
 
-    run re_observations_for(state.total_turns + 1)
     run verifiers_for("before_each_turn"); apply on_failure actions
 
     state.total_turns += 1
@@ -350,7 +317,7 @@ apply_on_failure_action(verifier, result):
     # "continue" → nothing
 ```
 
-### 10.4 Cost / token accounting rules (normative)
+### 9.4 Cost / token accounting rules (normative)
 
 - `cost_usd` on `model_turn_ended` is the BILLABLE cost (post-cache-discount).
 - `tokens_input` on `model_turn_ended` is the total input tokens INCLUDING cache-read tokens.
@@ -360,13 +327,13 @@ apply_on_failure_action(verifier, result):
 
 ---
 
-## 11. Three classes of trajectory facts
+## 10. Three classes of trajectory facts
 
 The trajectory holds three semantically distinct kinds of facts. Implementations and supervisor frameworks SHOULD surface them separately to consumers:
 
 | Class | Event types | Semantics |
 |---|---|---|
-| **What the agent did** | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `re_observation_injected` | Mechanical actions the agent took |
+| **What the agent did** | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted` | Mechanical actions the agent took |
 | **What the rules said** | `verifier_evaluated` | Deterministic Boolean checks — invariants, tests, schema validation |
 | **What the run cost** | `cost_recorded`, `model_turn_ended.usage` | Resource accounting |
 
@@ -376,7 +343,7 @@ Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected
 
 ---
 
-## 12. Event reference
+## 11. Event reference
 
 All non-RPC-request event types are past-tense facts. `*_request` events keep imperative form because they ARE pending RPCs.
 
@@ -393,49 +360,44 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 | `cost_recorded` | runner | Cumulative `RunStateSnapshot` snapshot. |
 | `skill_loaded` | runner | SKILL.md loaded into context. |
 | `skill_executed` | runner | Skill activated. |
-| `context_compacted` | runner | History compacted. |
 | `error_occurred` | runner | Non-tool error. |
 | `tool_exec_request` | runner | Agent calling an RPC tool service. |
 | `tool_exec_resolved` | supervisor | Service's reply to a tool_exec_request. |
 | `tool_exec_timed_out` | runner | No reply received in time. |
-| `re_observation_request` | runner | Agent calling an RPC observation service. |
-| `re_observation_resolved` | supervisor | Service's reply with observation content. |
-| `re_observation_timed_out` | runner | No reply; injection skipped for this turn. |
-| `re_observation_injected` | runner | Observation injected into next turn's context. |
 | `verifier_evaluated` | runner | Deterministic pass/fail check (see §7). |
 
 Field-level definitions are in [`aep.schema.json`](./aep.schema.json).
 
 ---
 
-## 13. Custom event types
+## 12. Custom event types
 
-Any `type` value not enumerated in §12 is a custom event. Implementations MAY emit custom events. Consumers MUST:
+Any `type` value not enumerated in §11 is a custom event. Implementations MAY emit custom events. Consumers MUST:
 
 - Validate them against `EventBase` (the `type`, `source`, `run_id`, `ts` fields).
 - Pass them through without error if they do not recognize the `type`.
 
-Implementers SHOULD use dot-namespaced `type` values (`myframework.verifier_result`) to avoid future conflicts. Names listed in §12 are reserved.
+Implementers SHOULD use dot-namespaced `type` values (`myframework.verifier_result`) to avoid future conflicts. Names listed in §11 are reserved.
 
 For non-spec FIELDS within a known event type, implementers MUST use the `extensions` envelope (an optional object on every event) with dot-namespaced keys.
 
 ---
 
-## 14. Conformance
+## 13. Conformance
 
-### 14.1 Runner
+### 13.1 Runner
 
 A runner is conforming if and only if all of the following hold:
 
 1. It reads exactly one valid `Config` (per `config.schema.json`) before emitting any events.
 2. The first event it emits MUST be `agent_started` (source=runner). It MUST include `prompt` and `tools` when those are available; each tool entry MUST include `name` and `description`.
-3. Every event it emits MUST include a `source` field. Runner-authored events MUST set `source: "runner"`. Supervisor-authored RPC replies (`tool_exec_resolved`, `re_observation_resolved`) received over the input channel MUST be recorded into the trajectory verbatim, retaining `source: "supervisor"`.
+3. Every event it emits MUST include a `source` field. Runner-authored events MUST set `source: "runner"`. Supervisor-authored `tool_exec_resolved` RPC replies received over the input channel MUST be recorded into the trajectory verbatim, retaining `source: "supervisor"`.
 4. For every model inference, it MUST emit `model_turn_started` immediately before the request and `model_turn_ended` immediately after the response.
 5. For every tool call, it MUST emit `tool_invoked` before invocation and either `tool_returned` (success or boundary rejection) or `tool_failed` (execution error) afterward.
 6. It MUST emit `cost_recorded` at least once per turn. The `state` field MUST validate against `RunStateSnapshot`.
 7. The last event it emits MUST be `agent_stopped` (source=runner). After emitting `agent_stopped`, the runner MUST NOT emit additional events.
 8. All emitted events MUST validate against `event.schema.json`.
-9. It MUST enforce `Config.boundary` per §10.2 and §10.4. Two conforming runners with identical inputs MUST agree on whether one more turn is permitted.
+9. It MUST enforce `Config.boundary` per §9.2 and §9.4. Two conforming runners with identical inputs MUST agree on whether one more turn is permitted.
 
 If `Config.tools` declares any RPC-implementation tool, the runner additionally MUST:
 
@@ -443,30 +405,45 @@ If `Config.tools` declares any RPC-implementation tool, the runner additionally 
 11. When the model calls a declared tool, emit `tool_exec_request`, suspend, and either: (a) receive a `tool_exec_resolved` with matching `request_id`, record it verbatim, and return its `output` to the model; or (b) emit `tool_exec_timed_out` and return `""`.
 12. If `tool_exec_resolved.error` is set, prefix `Error: ` before returning to the model.
 
-If `Config.re_observation` is non-empty, the runner additionally MUST:
+If `Config.allowed_tools` is set, the runner additionally MUST:
 
-13. Evaluate each `ReObservation`'s trigger before each model turn (per §9).
-14. For shell-source observations: execute the command, capture stdout, truncate to `max_tokens` if set, inject as user-role into next turn's context, emit `re_observation_injected`.
-15. For supervisor-source observations: emit `re_observation_request`, suspend, and either: (a) record `re_observation_resolved` verbatim, truncate, inject, emit `re_observation_injected`; or (b) emit `re_observation_timed_out` and SKIP injection.
+A1. Verify that every `Config.tools` entry's `name` appears in `Config.allowed_tools`. If any does not, emit `error_occurred` and `agent_stopped` with `reason: "error"` before running any model turn (§8.1).
+A2. Reject any tool call whose `tool` name is not in `Config.allowed_tools` by emitting `tool_failed` (after `tool_invoked`) and not executing the tool.
 
 If `Config.verifiers` is non-empty, the runner additionally MUST:
 
-16. Evaluate each `Verifier`'s trigger at the appropriate lifecycle point (per §7.2).
-17. Execute the verifier's source (e.g., shell command). The verifier passes iff the source exits 0 (or returns a passed result for non-shell sources).
-18. Emit `verifier_evaluated` (source=runner) with `name`, `passed`, and optional `data`/`subject_*` fields.
-19. On `passed: false`, take the verifier's declared `on_failure` action: `continue` (no-op), `halt` (emit `agent_stopped` with `reason: "verifier_failed"`), or `inject_correction` (insert `correction_message` as user-role into history before the next turn).
-20. Verifier failure MUST NOT alter accounting in `state`; the agent did the work, the verifier just reports on it.
+13. Evaluate each `Verifier`'s trigger at the appropriate lifecycle point (per §7.2).
+14. Execute the verifier's source (e.g., shell command). The verifier passes iff the source exits 0 (or returns a passed result for non-shell sources).
+15. Emit `verifier_evaluated` (source=runner) with `name`, `passed`, and optional `data`/`subject_*` fields.
+16. On `passed: false`, take the verifier's declared `on_failure` action: `continue` (no-op), `halt` (emit `agent_stopped` with `reason: "verifier_failed"`), or `inject_correction` (insert `correction_message` as user-role into history before the next turn).
+17. Verifier failure MUST NOT alter accounting in `state`; the agent did the work, the verifier just reports on it.
 
-### 14.2 Supervisor
+### 13.2 Supervisor
 
 A supervisor is conforming if and only if all of the following hold:
 
 1. The `Config` it sends validates against `config.schema.json`.
-2. Every `SupervisorMessage` it sends validates against `supervisor-message.schema.json` (only `tool_exec_resolved` and `re_observation_resolved` are valid in v0.1).
+2. Every `SupervisorMessage` it sends validates against `supervisor-message.schema.json` (only `tool_exec_resolved` is valid in v0.1).
 3. Every `tool_exec_resolved.request_id` corresponds to a `tool_exec_request.request_id` previously emitted by the runner in the same run.
-4. Every `re_observation_resolved.request_id` corresponds to a `re_observation_request.request_id` previously emitted by the runner in the same run.
 
 Supervisors MUST NOT send unsolicited messages. Runners MAY ignore unsolicited messages.
+
+---
+
+## 14. Deployment scope
+
+AEP defines the **wire format**, not the deployment topology. The following are explicitly **out of scope**, and implementations choose:
+
+- **Workspace provisioning.** What directory the runner runs in, how files (verifier scripts, reference data, source trees) get there, and how it's cleaned up after — git checkout, container volume mount, tmpdir, NFS share, etc.
+- **Secret injection.** How API keys and credentials reach the runner process (env vars, secrets manager, mounted files).
+- **Service hosting.** Where the supervisor's RPC tool services run, how they're discovered, how they're scaled.
+- **Runner placement.** Local subprocess, Docker container, remote VM, serverless function, browser sandbox.
+- **OS-level sandboxing.** seccomp, AppArmor, cgroups, network policies, filesystem capabilities.
+- **Authentication of the supervisor↔runner channel** beyond what stdio / HTTP transports inherit from their environment.
+
+The agent's **workspace** is conventionally the runner's current working directory (CWD). Shell verifier paths (§7.5) and any tool inputs containing relative paths resolve there. The supervisor's deployment layer — whatever it is — is responsible for ensuring referenced scripts and files exist in that workspace before the run starts.
+
+This section names the lines so readers don't trip on them. A complete production deployment will involve more than this spec covers; that's by design.
 
 ---
 

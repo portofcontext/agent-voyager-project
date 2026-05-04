@@ -6,7 +6,7 @@ python/runners/aep-anthropic/. This template is provider-agnostic.
 
 You implement ONE thing: ModelDriver.step(history) -> ModelResponse. The
 AEPRunner does the rest — lifecycle events, boundary enforcement, verifier
-scheduling, re_observation, RPC tool routing, NDJSON emission.
+scheduling, RPC tool routing, NDJSON emission.
 
 To run:
     pip install -e python/aep
@@ -82,14 +82,6 @@ def main() -> None:
                 "trigger": "after_each_turn",
                 "source": {"shell": "true"},  # replace with `cargo test` etc.
                 "on_failure": "halt",
-            },
-        ],
-        re_observation=[
-            {
-                "name": "git_state",
-                "source": {"shell": "echo 'clean working tree'"},
-                "trigger": "before_each_turn",
-                "max_tokens": 200,
             },
         ],
     )

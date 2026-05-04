@@ -97,8 +97,8 @@ class _ScriptedStep:
 class ScriptedSupervisor:
     """Conformance-harness supervisor for v0.1.
 
-    Only handles RPC replies (tool_exec_resolved, re_observation_resolved).
-    No hook dispatch, no unsolicited messages.
+    Only handles tool_exec_resolved RPC replies. No hook dispatch, no
+    unsolicited messages.
     """
 
     def __init__(self, steps: list[dict[str, Any]] | None = None) -> None:
@@ -112,7 +112,6 @@ class ScriptedSupervisor:
             for s in (steps or [])
         ]
         self._tool_responses: dict[str, BaseModel | None] = {}
-        self._reobs_responses: dict[str, BaseModel | None] = {}
 
     @staticmethod
     def _matches(pattern: dict[str, Any], doc: dict[str, Any]) -> bool:
@@ -164,14 +163,10 @@ class ScriptedSupervisor:
         return re.sub(r"\{\{([^}]+)\}\}", repl, s)
 
     def observe(self, event: BaseModel) -> None:
-        from aep.types import (
-            ReObservationResolvedEvent,
-            ToolExecResolvedEvent,
-            parse_supervisor_message,
-        )
+        from aep.types import ToolExecResolvedEvent, parse_supervisor_message
 
         # Supervisor-recorded RPC replies loop back here; ignore so we don't double-dispatch.
-        if isinstance(event, (ToolExecResolvedEvent, ReObservationResolvedEvent)):
+        if isinstance(event, ToolExecResolvedEvent):
             return
 
         ev_dict = event.model_dump(mode="json", exclude_none=True)
@@ -183,26 +178,18 @@ class ScriptedSupervisor:
                 time.sleep(step.delay_ms / 1000.0)
             if step.skip or step.send is None:
                 req_id = ev_dict.get("request_id")
-                if isinstance(req_id, str):
-                    self._sentinel_skip(ev_dict.get("type"), req_id)
+                if isinstance(req_id, str) and ev_dict.get("type") == "tool_exec_request":
+                    self._tool_responses[req_id] = None
                 continue
             payload = self._substitute(step.send, event=ev_dict)
             msg = parse_supervisor_message(payload)
             self._dispatch(msg, ev_dict)
 
-    def _sentinel_skip(self, runner_event_type: str | None, request_id: str) -> None:
-        if runner_event_type == "tool_exec_request":
-            self._tool_responses[request_id] = None
-        elif runner_event_type == "re_observation_request":
-            self._reobs_responses[request_id] = None
-
     def _dispatch(self, msg: BaseModel, ev_dict: dict[str, Any]) -> None:
-        from aep.types import ReObservationResolvedEvent, ToolExecResolvedEvent
+        from aep.types import ToolExecResolvedEvent
 
         if isinstance(msg, ToolExecResolvedEvent):
             self._tool_responses[msg.request_id] = msg
-        elif isinstance(msg, ReObservationResolvedEvent):
-            self._reobs_responses[msg.request_id] = msg
         else:
             raise TypeError(f"unexpected SupervisorMessage subtype: {type(msg).__name__}")
 
@@ -219,9 +206,6 @@ class ScriptedSupervisor:
 
     def get_tool_exec_response(self, request_id: str, timeout_ms: int) -> BaseModel | None:
         return self._wait_for(self._tool_responses, request_id, timeout_ms)
-
-    def get_re_observation_response(self, request_id: str, timeout_ms: int) -> BaseModel | None:
-        return self._wait_for(self._reobs_responses, request_id, timeout_ms)
 
 
 __all__ = [

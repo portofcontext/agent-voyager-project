@@ -23,22 +23,7 @@
     }
   ],
 
-  "re_observation": [
-    {
-      "name": "git_state",
-      "source": { "shell": "git status --porcelain && git diff --stat" },
-      "trigger": "before_each_turn",
-      "max_tokens": 500
-    },
-    {
-      "name": "session_context",
-      "source": { "supervisor": true },
-      "trigger": "every_n_turns",
-      "every_n": 3,
-      "max_tokens": 1000,
-      "timeout_ms": 5000
-    }
-  ],
+  "allowed_tools": ["lookup_user", "bash", "read_file", "write_file"],
 
   "verifiers": [
     {

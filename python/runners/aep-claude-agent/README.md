@@ -9,7 +9,7 @@ This package wraps the [Claude Agent SDK](https://github.com/anthropics/claude-a
 Under the v0.1 model, AEP draws a clear line:
 
 - **Observability** — runner emits the event stream. Required.
-- **Environment** — supervisor declares Config (boundary, tools, skills, re_observation, verifiers). Optional but recommended.
+- **Environment** — supervisor declares Config (boundary, tools, skills, verifiers). Optional but recommended.
 
 There is **no mid-run bidirectional control** in v0.1 — no hooks reaching in, no synchronous supervisor decisions. The supervisor configures the environment; the agent operates within it; the runner emits.
 
@@ -24,7 +24,6 @@ This means observer-pattern integrations like `aep-claude-agent` are first-class
 | `cost_recorded` | ✅ usage from each model message |
 | Boundary (cost / tokens / steps, strict-greater) | ✅ runner tallies post-turn and stops the iterator |
 | Verifiers (`verifier_evaluated`, on_failure: halt/inject_correction/continue) | ✅ runner runs declared shell verifiers; agent handles on_failure locally |
-| Re-observation (shell + supervisor-source RPC) | ✅ runner injects between turns |
 | Tool exec RPC (supervisor-stood-up tool service) | ✅ register the RPC tool as a Python callable in the SDK; on call, route via `tool_exec_request`/`tool_exec_resolved` |
 
 The TODOs marked `# TODO(claude-agent-sdk):` in `translator.py` are SDK-version-specific glue (which lifecycle events the SDK emits, what its tool-registration API looks like). Once filled in, this runner passes the conformance suite.

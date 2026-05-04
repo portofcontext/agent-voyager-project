@@ -1,10 +1,10 @@
 """AEPRunner — the v0.1 normative loop.
 
 The agent runs inside the supervisor's declared environment. Boundary, tools,
-re_observation, verifiers all come from Config. The supervisor does not reach
-in mid-run; the agent enforces declared rules and emits facts. Two RPC
-interactions remain (tool_exec, re_observation supervisor-source); both are
-agent-initiated calls into services the supervisor stood up at Config time.
+verifiers all come from Config. The supervisor does not reach in mid-run; the
+agent enforces declared rules and emits facts. The only mid-run wire interaction
+is tool_exec, an agent-initiated RPC into a service the supervisor stood up at
+Config time.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from aep.enums import OnFailure, StopReason
+from aep.enums import ErrorCode, OnFailure, StopReason
 from aep.runner.boundary import (
     check_consumption,
     check_step_projection,
@@ -33,15 +33,9 @@ from aep.types import (
     AgentStoppedEvent,
     Config,
     CostRecordedEvent,
+    ErrorOccurredEvent,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
-    ReObservation,
-    ReObservationInjectedEvent,
-    ReObservationRequestEvent,
-    ReObservationResolvedEvent,
-    ReObservationSourceShell,
-    ReObservationSourceSupervisor,
-    ReObservationTimedOutEvent,
     RunStateSnapshot,
     SkillLoadedEvent,
     TextEmittedEvent,
@@ -116,6 +110,9 @@ class AEPRunner:
         self.trajectory: list[BaseModel | dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
         self._supervisor_tools_by_name: dict[str, Tool] = {t.name: t for t in (config.tools or [])}
+        self._allowed_tools: frozenset[str] | None = (
+            frozenset(config.allowed_tools) if config.allowed_tools is not None else None
+        )
         self._req_seq = itertools.count(1)
         self._next_request_id = lambda: f"req-{next(self._req_seq)}"
 
@@ -136,6 +133,9 @@ class AEPRunner:
 
         self._emit_agent_started()
         self._emit_skills_loaded()
+
+        if not self._validate_allowed_tools():
+            return self._emit_agent_stopped(StopReason.error)
 
         try:
             self._run_verifiers_for("before_first_turn")
@@ -161,8 +161,6 @@ class AEPRunner:
                 self._emit_agent_stopped(decision.reason or StopReason.turn_limit)
                 return
 
-            upcoming = state.total_turns + 1
-            self._run_re_observations(upcoming)
             self._run_verifiers_for("before_each_turn")
 
             state.total_turns += 1
@@ -237,6 +235,37 @@ class AEPRunner:
 
     # ── Tool handling ────────────────────────────────────────────────────────
 
+    def _validate_allowed_tools(self) -> bool:
+        """Cross-field check: every Config.tools name MUST be in allowed_tools (when set).
+
+        A Config.tools entry that's not in allowed_tools is a configuration conflict —
+        the supervisor declared an RPC tool but also forbade its exposure. Emit
+        error_occurred and let the caller stop the run with reason='error'.
+
+        Names in allowed_tools that match neither Config.tools nor a runner built-in
+        are not flagged here — runner built-ins are not enumerated through this
+        protocol; the runtime check in _handle_tool_call surfaces unrecognized names
+        as tool_failed when (and only when) the model actually calls them.
+        """
+        if self._allowed_tools is None:
+            return True
+        cfg = self.config
+        declared = {t.name for t in (cfg.tools or [])}
+        excluded = sorted(declared - self._allowed_tools)
+        if excluded:
+            self._emit(
+                ErrorOccurredEvent(
+                    run_id=cfg.run_id,
+                    code=ErrorCode.unknown,
+                    message=(
+                        "Config.allowed_tools must include every name in Config.tools; "
+                        f"missing: {excluded}"
+                    ),
+                )
+            )
+            return False
+        return True
+
     def _handle_tool_call(self, tc, state: _MutableState) -> None:
         cfg = self.config
         self._emit(
@@ -249,6 +278,18 @@ class AEPRunner:
             )
         )
         state.tools_invoked[tc.tool] = state.tools_invoked.get(tc.tool, 0) + 1
+
+        if self._allowed_tools is not None and tc.tool not in self._allowed_tools:
+            self._emit(
+                ToolFailedEvent(
+                    run_id=cfg.run_id,
+                    step=state.total_turns,
+                    call_id=tc.call_id,
+                    tool=tc.tool,
+                    error=f"tool {tc.tool!r} not in Config.allowed_tools",
+                )
+            )
+            return
 
         if tc.tool in self._supervisor_tools_by_name:
             self._handle_rpc_tool(tc, state)
@@ -428,116 +469,6 @@ class AEPRunner:
             )
             return
         raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
-
-    # ── Re-observation handling ────────────────────────────────────────────
-
-    def _run_re_observations(self, upcoming_turn: int) -> None:
-        cfg = self.config
-        if not cfg.re_observation:
-            return
-        for entry in cfg.re_observation:
-            if not self._re_obs_should_fire(entry, upcoming_turn):
-                continue
-            self._fire_re_observation(entry, upcoming_turn)
-
-    @staticmethod
-    def _re_obs_should_fire(entry: ReObservation, upcoming_turn: int) -> bool:
-        if entry.trigger == "before_each_turn":
-            return True
-        if entry.trigger == "before_first_turn":
-            return upcoming_turn == 1
-        if entry.trigger == "every_n_turns":
-            n = entry.every_n or 1
-            return (upcoming_turn - 1) % n == 0
-        return False
-
-    def _fire_re_observation(self, entry: ReObservation, upcoming_turn: int) -> None:
-        cfg = self.config
-        if isinstance(entry.source, ReObservationSourceShell):
-            content = self._fetch_shell_observation(entry.source.shell)
-            self._inject_observation(
-                entry, content, source_kind="shell", upcoming_turn=upcoming_turn
-            )
-            return
-        assert isinstance(entry.source, ReObservationSourceSupervisor)
-        request_id = self._next_request_id()
-        self._emit(
-            ReObservationRequestEvent(
-                run_id=cfg.run_id,
-                step=upcoming_turn,
-                request_id=request_id,
-                name=entry.name,
-                timeout_ms=entry.timeout_ms,
-            )
-        )
-        msg = self.supervisor.get_re_observation_response(request_id, entry.timeout_ms)
-        if msg is None:
-            self._emit(
-                ReObservationTimedOutEvent(
-                    run_id=cfg.run_id,
-                    step=upcoming_turn,
-                    request_id=request_id,
-                    name=entry.name,
-                )
-            )
-            return
-        assert isinstance(msg, ReObservationResolvedEvent)
-        self._emit(msg)
-        self._inject_observation(
-            entry,
-            msg.content,
-            source_kind="supervisor",
-            upcoming_turn=upcoming_turn,
-        )
-
-    def _fetch_shell_observation(self, command: str) -> str:
-        result = subprocess.run(
-            ["sh", "-c", command],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.stdout
-
-    def _inject_observation(
-        self,
-        entry: ReObservation,
-        content: str,
-        *,
-        source_kind: str,
-        upcoming_turn: int,
-    ) -> None:
-        original_size = len(content)
-        injected = content
-        truncated = False
-        if entry.max_tokens is not None and original_size > entry.max_tokens:
-            injected = content[: entry.max_tokens]
-            truncated = True
-        injected_size = len(injected)
-        preview = injected[:200]
-
-        cfg = self.config
-        self._emit(
-            ReObservationInjectedEvent(
-                run_id=cfg.run_id,
-                step=upcoming_turn,
-                name=entry.name,
-                trigger=entry.trigger,
-                source_kind=source_kind,  # type: ignore[arg-type]
-                content_preview=preview,
-                injected_size=injected_size,
-                original_size=original_size if truncated else None,
-                truncated=True if truncated else None,
-            )
-        )
-        self._history.append(
-            {
-                "role": "user",
-                "content": injected,
-                "kind": "observation",
-                "observation_name": entry.name,
-            }
-        )
 
     # ── First / last events ─────────────────────────────────────────────────
 

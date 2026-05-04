@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aep.dev/schema/v0.1/supervisor-message.schema.json",
   "title": "AEP Supervisor Message (v0.1)",
-  "description": "Entry-point schema for RPC replies the supervisor's services send to the runner during a run: tool_exec_resolved (response to tool_exec_request) and re_observation_resolved (response to re_observation_request). The runner records each into the trajectory verbatim.",
+  "description": "Entry-point schema for RPC replies the supervisor's services send to the runner during a run. v0.1 defines exactly one: tool_exec_resolved (response to tool_exec_request). The runner records each into the trajectory verbatim.",
   "$ref": "https://aep.dev/schema/v0.1/aep.schema.json#/$defs/SupervisorMessage"
 }

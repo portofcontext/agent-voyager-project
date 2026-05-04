@@ -1,2 +1,1 @@
 {"type":"tool_exec_resolved","source":"supervisor","run_id":"auth-refactor-20260502-abc123","request_id":"r-007","output":"{\"id\":\"u_42\",\"name\":\"Ada Lovelace\"}","output_json":{"id":"u_42","name":"Ada Lovelace"},"ts":"2026-05-02T10:01:30Z"}
-{"type":"re_observation_resolved","source":"supervisor","run_id":"auth-refactor-20260502-abc123","request_id":"r-014","content":"Ticket AUTH-1234 is in QA. Test coverage for jwt.rs: 87%. No new commits since 09:42Z.","ts":"2026-05-02T10:02:00Z"}

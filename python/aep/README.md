@@ -7,10 +7,10 @@ This package ships:
 
 - **Wire types** (`aep.types`) — Pydantic v2 models for every Config / Event / SupervisorMessage variant in v0.1, with discriminated unions on `type`.
 - **NDJSON IO** (`aep.io`) — line-buffered stdio readers and writers for trajectories and supervisor messages.
-- **Reference runner** (`aep.runner`) — implements the normative loop in [`SPEC.md` §10.3](../../spec/v0.1/SPEC.md#103-the-loop): strict-greater boundary, hook lifecycle, supervisor-tool lifecycle, re-observation lifecycle. Pluggable model and tool drivers (mock drivers ship with the package for testing).
+- **Reference runner** (`aep.runner`) — implements the normative loop in [`SPEC.md` §9.3](../../spec/v0.1/SPEC.md#93-the-loop): strict-greater boundary, supervisor-tool RPC lifecycle, verifier lifecycle. Pluggable model and tool drivers (mock drivers ship with the package for testing).
 - **Conformance harness** (`aep.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference runner with scripted model / tools / supervisor, asserts captured trajectory against the expectations. CLI: `aep-conformance --suite path/to/cases`.
 
-The reference runner is the gate for AEP v0.1 correctness. All 21 conformance cases MUST pass before any other AEP-compliant runner (e.g. a closed-source Rust supervisor talking to a real-LLM runner) is wired up against it.
+The reference runner is the gate for AEP v0.1 correctness. All conformance cases MUST pass before any other AEP-compliant runner (e.g. a closed-source Rust supervisor talking to a real-LLM runner) is wired up against it.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ src/aep/
   runner/
     __init__.py         # AEPRunner — the loop
     boundary.py         # strict-greater check_consumption + check_step_projection
-    interactions.py     # supervisor interaction primitives (hook, tool_exec, re_observation)
+    interactions.py     # supervisor interaction primitives (tool_exec)
     drivers.py          # ModelDriver, ToolDriver, SupervisorDriver protocols
     mock.py             # ScriptedModel, ScriptedTools, ScriptedSupervisor for tests
   conformance/

@@ -1,0 +1,34 @@
+{
+  "id": "allowed-tools-absent-permits-default-tool-set",
+  "title": "Config.allowed_tools absent → runner exposes its default tool set (backwards-compatible)",
+  "description": "When Config.allowed_tools is omitted, the runner MUST exhibit pre-allowlist behavior: any tool the model calls dispatches normally. This pins backwards-compatibility — adding the field cannot have changed default semantics.",
+  "spec_refs": ["spec/v0.1/SPEC.md#8-tools", "spec/v0.1/aep.schema.json#/$defs/Config"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "allowed-tools-absent",
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 20, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "running echo",
+      "tool_calls": [{ "call_id": "c1", "tool": "echo", "input": { "msg": "hi" } }],
+      "converged": false
+    },
+    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+  ],
+  "scripted_tools": {
+    "echo": { "output": "hi", "duration_ms": 1 }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      { "match": { "type": "tool_invoked", "call_id": "c1", "tool": "echo" } },
+      { "match": { "type": "tool_returned", "call_id": "c1", "tool": "echo" } },
+      { "match": { "type": "agent_stopped", "reason": "converged" } }
+    ],
+    "forbidden_events": [
+      { "label": "no tool may be rejected as not-in-allowlist when allowed_tools is absent", "match": { "type": "tool_failed" } }
+    ]
+  }
+}

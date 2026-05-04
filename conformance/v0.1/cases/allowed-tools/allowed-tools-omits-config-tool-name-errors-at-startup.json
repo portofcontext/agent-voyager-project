@@ -1,0 +1,31 @@
+{
+  "id": "allowed-tools-omits-config-tool-name-errors-at-startup",
+  "title": "Config.tools entry missing from Config.allowed_tools is a configuration conflict — error_occurred + agent_stopped reason='error'",
+  "description": "Cross-field coherence. If a Config.tools entry's name is not also in Config.allowed_tools, the supervisor has declared an RPC tool while simultaneously forbidding its exposure. The runner MUST detect this at startup, emit error_occurred, and stop with reason='error' before any model turn runs.",
+  "spec_refs": ["spec/v0.1/SPEC.md#8-tools", "spec/v0.1/aep.schema.json#/$defs/Config"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "allowed-tools-config-conflict",
+    "model": "test/mock",
+    "tools": [
+      { "name": "lookup_user", "description": "RPC tool", "input_schema": {} }
+    ],
+    "allowed_tools": ["bash"]
+  },
+  "scripted_model": [
+    { "tokens_input": 1, "tokens_output": 1, "cost_usd": 0.0, "duration_ms": 1, "text": "should not run", "converged": true }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      { "match": { "type": "agent_started" } },
+      { "match": { "type": "error_occurred" } },
+      { "match": { "type": "agent_stopped", "reason": "error" } }
+    ],
+    "forbidden_events": [
+      { "label": "no model turn may run when startup validation fails", "match": { "type": "model_turn_started" } },
+      { "label": "no tool may be invoked when startup validation fails", "match": { "type": "tool_invoked" } }
+    ]
+  }
+}
