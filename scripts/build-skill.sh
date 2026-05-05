@@ -7,7 +7,7 @@
 #
 # What goes in the bundle:
 #   SKILL.md, examples/, spec/v0.1/, conformance/v0.1/, python/aep/,
-#   plus AGENT_EXECUTION_PROTOCOL.md and LICENSE for context.
+#   plus README.md and LICENSE for context.
 #
 # What's stripped:
 #   __pycache__, *.pyc, .pytest_cache, *.egg-info, .DS_Store
@@ -23,7 +23,7 @@ trap cleanup EXIT
 
 # Stage the bundle under a directory named "aep" so the .skill extracts into ~/.claude/skills/aep
 mkdir -p "$STAGE"
-cp "$REPO/SKILL.md" "$REPO/AGENT_EXECUTION_PROTOCOL.md" "$REPO/LICENSE" "$STAGE/"
+cp "$REPO/SKILL.md" "$REPO/README.md" "$REPO/LICENSE" "$STAGE/"
 cp -r "$REPO/examples" "$STAGE/"
 mkdir -p "$STAGE/spec" "$STAGE/conformance" "$STAGE/python"
 cp -r "$REPO/spec/v0.1" "$STAGE/spec/"

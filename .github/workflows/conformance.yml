@@ -56,8 +56,11 @@ jobs:
           # claude-agent-sdk may not be available on all Python versions; tolerate skip.
           pip install "claude-agent-sdk>=0.1" || echo "claude-agent-sdk install skipped (translator tests will still run)"
 
-      - name: Validate schema bundle and conformance cases
-        run: python conformance/v0.1/validate.py
+      - name: Validate conformance case files against test-case schema
+        run: aep-conformance validate
+
+      - name: Check every event type has conformance coverage
+        run: aep-conformance check-coverage
 
       - name: Run aep package tests (full conformance suite)
         run: |

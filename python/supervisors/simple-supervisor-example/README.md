@@ -96,9 +96,9 @@ When you read the examples, notice how little supervisor code there is. AEP does
 The fastest path — uses `~/.anthropic-key` if it exists, otherwise `$ANTHROPIC_API_KEY`:
 
 ```bash
-./scripts/run-examples.sh                # all three (~$0.10 total)
-./scripts/run-examples.sh 01             # just example 01
-./scripts/run-examples.sh 01 02          # any subset
+uv run simple-supervisor examples            # all three (~$0.10 total)
+uv run simple-supervisor examples 01         # just example 01
+uv run simple-supervisor examples 01 02      # any subset
 ```
 
 Or invoke them directly:

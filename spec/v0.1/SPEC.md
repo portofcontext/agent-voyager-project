@@ -12,7 +12,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 
 AEP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
 
-- **Supervisor** — declares the agent's complete environment in a Config sent at startup. Tools the agent can call. Skills the agent can load. Verifiers the agent should run. Hard limits the agent enforces on itself. Once the Config is sent, the supervisor's role is to OBSERVE the trajectory — it does not reach in mid-run.
+- **Supervisor** — declares the agent's complete environment in a Config sent at startup. Tools the agent can call. Skills the agent can load. Verifiers the agent should run. Hard limits the agent enforces on itself. Once the Config is sent, the supervisor observes the trajectory and replies to any agent-initiated RPC requests — it does not reach in unilaterally.
 - **Runner** — runs the agent inside the supervisor's environment. Emits a stream of facts (events) that the supervisor observes.
 
 ```
