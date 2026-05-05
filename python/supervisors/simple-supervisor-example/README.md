@@ -93,22 +93,28 @@ When you read the examples, notice how little supervisor code there is. AEP does
 
 ## Running the examples
 
+The fastest path — uses `~/.anthropic-key` if it exists, otherwise `$ANTHROPIC_API_KEY`:
+
 ```bash
-# Set your key (only needed for the real-LLM examples)
-export ANTHROPIC_API_KEY="..."
+./scripts/run-examples.sh                # all three (~$0.10 total)
+./scripts/run-examples.sh 01             # just example 01
+./scripts/run-examples.sh 01 02          # any subset
+```
 
-# Free — mock SDK, no API key required
-uv run python python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py
+Or invoke them directly:
 
-# Real Haiku, ~$0.001 each
+```bash
+export ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)"
+
+# Real Haiku, ~$0.001 each (driver pattern)
 uv run python python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py
 uv run python python/supervisors/simple-supervisor-example/examples/02_anthropic_self_correcting.py
 
-# Real claude-agent-sdk integration
+# Real claude-agent-sdk + Claude Code, ~$0.10 (observer pattern)
 USE_REAL_SDK=1 uv run python python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py
 ```
 
-Each example prints (a) live event line-by-line as it streams, then (b) a compact post-run summary.
+Each example prints (a) the compiled Config, (b) live events line-by-line as they stream, then (c) a compact post-run summary in the three trajectory classes.
 
 ## Where this leaves you
 

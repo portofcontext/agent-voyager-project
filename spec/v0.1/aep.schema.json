@@ -234,6 +234,7 @@
         "context_limit",
         "auth_error",
         "runner_crash",
+        "accounting_reset",
         "unknown"
       ],
       "description": "General error classification. Open via 'unknown'."
@@ -1266,6 +1267,11 @@
           },
           "description": "Optional. Supervisor interactions this verifier evaluated."
         },
+        "error": {
+          "type": "string",
+          "enum": ["source_unavailable", "source_timed_out", "source_crashed"],
+          "description": "When set, distinguishes an environment failure (script missing, timed out, crashed) from a genuine rule failure. Consumers can use this to skip retries that would re-trigger the same environment problem, or to alert on broken supervisor deployments. When set, `passed` MUST be false. When null, `passed: false` is a legitimate rule failure produced by the verifier's own logic."
+        },
         "data": {
           "type": "object",
           "additionalProperties": true,
@@ -1287,7 +1293,6 @@
           "type": "string",
           "enum": [
             "before_first_turn",
-            "before_each_turn",
             "after_each_turn",
             "at_end"
           ]

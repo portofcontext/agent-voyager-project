@@ -168,7 +168,14 @@ def _build_runner(case: dict[str, Any]) -> AEPRunner:
     model = parse_scripted_model(case.get("scripted_model", []))
     tools = ScriptedTools(case.get("scripted_tools") or {})
     supervisor = ScriptedSupervisor(case.get("scripted_supervisor") or [])
-    return AEPRunner(config=config, model=model, tools=tools, supervisor=supervisor)
+    builtin_tools = case.get("runner_builtin_tools") or None
+    return AEPRunner(
+        config=config,
+        model=model,
+        tools=tools,
+        supervisor=supervisor,
+        runner_builtin_tools=builtin_tools,
+    )
 
 
 def run_case(path: Path) -> CaseResult:

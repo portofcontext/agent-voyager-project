@@ -120,7 +120,6 @@ The supervisor declares the rule upfront in Config; the agent enforces it determ
 | Trigger | Fires |
 |---|---|
 | `before_first_turn` | once, after `agent_started` |
-| `before_each_turn` | before every `model_turn_started` |
 | `after_each_turn` | after every `model_turn_ended` |
 | `on_tool:<name>` | after `tool_returned` for the named tool |
 | `at_end` | once, before `agent_stopped` |

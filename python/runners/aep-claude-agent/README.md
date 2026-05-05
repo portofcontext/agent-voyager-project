@@ -58,3 +58,51 @@ translator.run()
 ```bash
 echo '<config json>' | aep-claude-agent
 ```
+
+## Known SDK quirks (observed empirically, not yet resolved)
+
+The translator wraps a moving target — the `claude_agent_sdk` Python package
+plus the `claude` CLI binary it shells out to. These behaviors surfaced
+running `examples/03_claude_code_audited.py` end-to-end and are worth
+flagging for whoever picks up the next round of translator work:
+
+### 1. Cumulative usage drops without a PreCompact / SubagentStart signal
+
+The translator hooks `PreCompact` and `SubagentStart` to anticipate
+SDK-side cumulative-counter resets gracefully (see
+`_on_baseline_reset_hook`). In practice we observe additional cumulative
+drops that fire neither hook — usually within a single "turn" between
+multiple AssistantMessages. The translator handles these correctly per
+SPEC.md §9.4: emits `error_occurred` with `code: "accounting_reset"` and
+adopts the new cumulative as a fresh baseline so subsequent deltas are
+still computable.
+
+What's open: identify the SDK lifecycle event (if any) that signals these
+internal resets so we can convert the error into a graceful baseline-reset
+hook subscription. Candidates worth checking: `Notification` hook,
+`PostToolUseFailure`, undocumented internal CLI events. If no signal
+exists, current behavior is the correct end state — the trajectory tells
+the supervisor "treat totals as a lower bound" rather than silently
+swallowing usage.
+
+### 2. Duplicate `PreToolUse` for a single tool dispatch
+
+In real runs we observe two `tool_invoked` events for one tool execution
+(e.g., `Read` fires PreToolUse twice before the single PostToolUse +
+ToolReturned pair). Most likely the SDK fires PreToolUse once for permission
+check and again at actual execution.
+
+What's open: dedupe on `tool_use_id` if both hook fires carry the same id —
+emit `tool_invoked` only on the first fire per id. If they carry different
+ids, the SDK is doing two genuine invocations and the trajectory is
+correctly recording both. Investigation needed before we change behavior;
+the current "emit both" path is overcounting-but-faithful, which is the
+safer default until the cause is confirmed.
+
+### 3. Heavy session bootstrap
+
+Claude Code's first turn loads a lot of context (CLAUDE.md files, skill
+definitions, system prompt) — typically $0.05–$0.10 even on Haiku before
+the first user-meaningful turn. Supervisors setting `Config.boundary.max_cost_usd`
+against this runner should account for this baseline. The driver-pattern
+runners (`aep-anthropic`) don't have this overhead.

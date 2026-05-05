@@ -23,6 +23,7 @@ from aep.enums import (
     OnFailure,
     Source,
     StopReason,
+    VerifierError,
     is_on_tool_trigger,
 )
 
@@ -318,7 +319,13 @@ class ToolExecTimedOutEvent(_EventBase):
 
 
 class VerifierEvaluatedEvent(_EventBase):
-    """A deterministic pass/fail signal recorded by the agent. v0.1: runner-emitted only."""
+    """A deterministic pass/fail signal recorded by the agent. v0.1: runner-emitted only.
+
+    `error` distinguishes environment failures (script missing, timed out,
+    crashed) from genuine rule failures. When `error` is set, `passed` MUST
+    be false. When `error` is null, a `passed: false` is a legitimate
+    rule-level failure that the agent's logic produced.
+    """
 
     type: Literal["verifier_evaluated"] = "verifier_evaluated"
     source: Literal[Source.runner] = Source.runner  # v0.1: runner-only
@@ -327,7 +334,14 @@ class VerifierEvaluatedEvent(_EventBase):
     step: int | None = Field(default=None, ge=0)
     subject_call_ids: list[str] | None = None
     subject_request_ids: list[str] | None = None
+    error: VerifierError | None = None
     data: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _error_implies_failed(self) -> VerifierEvaluatedEvent:
+        if self.error is not None and self.passed:
+            raise ValueError("VerifierEvaluatedEvent.error set but passed=True; mutually exclusive")
+        return self
 
 
 # ── Discriminated unions ─────────────────────────────────────────────────────

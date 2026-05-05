@@ -49,6 +49,20 @@
       "items": { "$ref": "#/$defs/SupervisorScriptStep" },
       "description": "Triggered actions for the harness's mock supervisor. When an event matching 'on' is observed, the harness sends 'send' (or, if 'skip' is true, deliberately does nothing — used to test timeouts)."
     },
+    "runner_builtin_tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "input_schema"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "input_schema": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "description": "Optional. Declares the runner's built-in tool catalog so cases can exercise SPEC.md §13.1.2 (agent_started.tools reflects effective surface = Config.tools ∪ runner_builtin_tools, filtered by allowed_tools). Each entry is a tool descriptor the runner exposes natively (e.g., bash, read_file). Cases that don't set this exercise the Config.tools-only path."
+    },
     "expectations": {
       "type": "object",
       "required": ["events"],

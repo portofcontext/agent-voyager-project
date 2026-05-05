@@ -6,6 +6,7 @@ from aep.enums import (
     OnFailure,
     Source,
     StopReason,
+    VerifierError,
     is_on_tool_trigger,
 )
 from aep.io import (
@@ -85,6 +86,7 @@ __all__ = [
     "ToolInvokedEvent",
     "ToolReturnedEvent",
     "Verifier",
+    "VerifierError",
     "VerifierEvaluatedEvent",
     "VerifierSourceShell",
     "__version__",

@@ -250,6 +250,118 @@ def test_run_with_fake_query_emits_full_lifecycle() -> None:
     assert abs(stop.total_cost_usd - 0.0042) < 1e-9
 
 
+def test_assistant_message_with_no_new_output_or_content_is_not_a_turn() -> None:
+    """SPEC.md §9.1: a 'turn' is one fresh model call with new output. The
+    Claude Agent SDK emits AssistantMessages for non-turn things
+    (continuations, restatements). The translator MUST skip those — count
+    AEP turns only when delta_output > 0 OR new content is present.
+
+    Pre-fix the translator incremented _step on every AssistantMessage,
+    inflating state.total_turns above what AEP §9.2 promises."""
+    t, out = _new_translator()
+
+    # Real turn 1
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[TextBlock("real")],
+            usage={"input_tokens": 100, "output_tokens": 20},
+            model="claude-sonnet-4-6",
+        )
+    )
+    # SDK-internal restatement: same cumulative as before, no new content
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[],
+            usage={"input_tokens": 100, "output_tokens": 20},  # same as turn 1
+            model="claude-sonnet-4-6",
+        )
+    )
+    # Real turn 2
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[TextBlock("more")],
+            usage={"input_tokens": 200, "output_tokens": 35},
+            model="claude-sonnet-4-6",
+        )
+    )
+
+    turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
+    assert len(turn_ended) == 2, "expected exactly 2 turns (the empty restatement should NOT count)"
+    assert turn_ended[0].step == 1
+    assert turn_ended[1].step == 2
+
+
+def test_unannounced_cumulative_reset_emits_error_occurred() -> None:
+    """SPEC.md §9.4: when the SDK's cumulative usage drops without a
+    PreCompact / SubagentStart signal, the translator MUST emit
+    error_occurred (code='accounting_reset') rather than silently clamping.
+    Consumers cannot tell silent clamping apart from a quiet turn."""
+    t, out = _new_translator()
+
+    # Turn 1: cumulative 100 input
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[TextBlock("first")],
+            usage={"input_tokens": 100, "output_tokens": 20},
+            model="claude-sonnet-4-6",
+        )
+    )
+    # Turn 2: cumulative DROPS to 50 input — unannounced reset
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[
+                TextBlock("after-reset"),
+            ],
+            usage={"input_tokens": 50, "output_tokens": 5},
+            model="claude-sonnet-4-6",
+        )
+    )
+
+    types = [type(ev).__name__ for ev in out]
+    assert "ErrorOccurredEvent" in types
+    err = next(ev for ev in out if type(ev).__name__ == "ErrorOccurredEvent")
+    assert err.code.value == "accounting_reset"
+
+
+def test_baseline_reset_hook_handles_legitimate_compaction_gracefully() -> None:
+    """A PreCompact / SubagentStart hook fire signals that the SDK is about
+    to reset its cumulative usage counters. The translator MUST adopt the
+    next message's cumulative as a fresh baseline rather than emitting
+    accounting_reset."""
+    import asyncio
+
+    t, out = _new_translator()
+
+    # Turn 1: cumulative 100 input
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[TextBlock("first")],
+            usage={"input_tokens": 100, "output_tokens": 20},
+            model="claude-sonnet-4-6",
+        )
+    )
+    # Compaction signal
+    asyncio.run(t._on_baseline_reset_hook({}, None, None))
+
+    # Turn 2 after compaction: cumulative starts fresh at 30 — would normally
+    # look like a drop, but the hook preceded so it's accepted as new baseline.
+    t._handle_assistant_message(
+        AssistantMessage(
+            content=[TextBlock("after-compact")],
+            usage={"input_tokens": 30, "output_tokens": 8},
+            model="claude-sonnet-4-6",
+        )
+    )
+
+    types = [type(ev).__name__ for ev in out]
+    assert "ErrorOccurredEvent" not in types, (
+        "PreCompact-preceded reset should NOT emit accounting_reset"
+    )
+    # The post-compact message IS a real turn (has new content)
+    turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
+    assert len(turn_ended) == 2
+
+
 def test_run_propagates_sdk_error_to_agent_stopped_error() -> None:
     """A query() that raises is wrapped: error_occurred + agent_stopped reason='error'."""
 

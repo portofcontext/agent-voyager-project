@@ -1,16 +1,16 @@
 {
-  "id": "timeout-tool-exec-returns-empty-string",
-  "title": "Supervisor-tool timeout: tool_exec_timed_out emitted and tool_returned.output is the empty string",
-  "description": "When a config-declared tool's tool_exec_requested is not answered within timeout_ms, the runner MUST (a) emit tool_exec_timed_out with source='runner', (b) return the empty string '' to the model as the tool result, and (c) emit tool_returned with output=''. This pins down the SPEC.md §10.3 fallback for the supervisor-tool path.",
-  "spec_refs": ["spec/v0.1/SPEC.md#8-supervisor-tools", "spec/v0.1/SPEC.md#103-the-loop", "spec/v0.1/aep.schema.json#/$defs/ToolExecTimedOutEvent"],
+  "id": "timeout-tool-exec-returns-error-string",
+  "title": "Supervisor-tool timeout: tool_returned.output is 'Error: tool execution timed out after Nms'",
+  "description": "When a Config-declared RPC tool's tool_exec_request is not answered within timeout_ms, the runner MUST (a) emit tool_exec_timed_out with source='runner', (b) return an Error: -prefixed string to the model so it can reason about retry, and (c) emit tool_returned carrying that string. The Error: prefix is symmetric with §8 step-4 (Error: prefix on tool_exec_resolved.error) so models have one convention for both 'tool failed' cases. SPEC.md §9.3 normative.",
+  "spec_refs": ["spec/v0.1/SPEC.md#8-tools", "spec/v0.1/SPEC.md#9-the-runner-loop", "spec/v0.1/aep.schema.json#/$defs/ToolExecTimedOutEvent"],
   "applies_to": ["runner"],
   "config": {
     "schema_version": "0.1",
-    "run_id": "timeout-tool-exec",
+    "run_id": "timeout-tool-exec-error-string",
     "tools": [
       {
         "name": "slow_lookup",
-        "description": "A supervisor-executed tool the supervisor will deliberately ignore.",
+        "description": "A supervisor-executed tool the supervisor deliberately ignores.",
         "input_schema": { "type": "object", "properties": {}, "additionalProperties": true },
         "timeout_ms": 50
       }
@@ -33,7 +33,14 @@
       { "match": { "type": "tool_invoked", "call_id": "c1", "tool": "slow_lookup" } },
       { "match": { "type": "tool_exec_request", "call_id": "c1", "tool": "slow_lookup", "timeout_ms": 50 } },
       { "match": { "type": "tool_exec_timed_out", "source": "runner", "call_id": "c1", "tool": "slow_lookup" } },
-      { "match": { "type": "tool_returned", "call_id": "c1", "tool": "slow_lookup", "output": "" } }
+      {
+        "match": {
+          "type": "tool_returned",
+          "call_id": "c1",
+          "tool": "slow_lookup",
+          "output": "Error: tool execution timed out after 50ms"
+        }
+      }
     ],
     "forbidden_events": [
       { "label": "no tool_exec_resolved when supervisor never responded", "match": { "type": "tool_exec_resolved" } }

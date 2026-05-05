@@ -53,7 +53,7 @@ jobs:
       - name: Build aep.skill
         env:
           # Locate the skill-creator subdir inside the cloned anthropics/skills repo.
-          SKILL_CREATOR_DIR: /tmp/anthropics-skills/skill-creator
+          SKILL_CREATOR_DIR: /tmp/anthropics-skills/skills/skill-creator
           PYTHON: python
         run: bash scripts/build-skill.sh dist
 

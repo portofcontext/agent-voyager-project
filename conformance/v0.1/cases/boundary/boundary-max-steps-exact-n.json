@@ -1,0 +1,42 @@
+{
+  "id": "boundary-max-steps-exact-n",
+  "title": "max_steps: 3 runs EXACTLY 3 turns and stops with reason='turn_limit'",
+  "description": "SPEC.md §9.2: 'max_steps: N runs EXACTLY N turns.' This is the strictest boundary promise — unlike cost/tokens which MAY overshoot by one final turn, the step projection is checked BEFORE starting the next would-be turn (state.total_turns + 1) > max_steps so the run terminates ahead of overshoot.\n\nThis case scripts 5 model responses but sets max_steps=3. The runner MUST execute exactly 3 turns and emit agent_stopped with reason='turn_limit'. SPEC.md §9.4 also requires two conforming runners with identical inputs to agree on this — pinning it normatively here lets translator runners (which delegate turn-counting to their SDK in some configurations) be checked against the canonical answer.",
+  "spec_refs": ["spec/v0.1/SPEC.md#9-the-runner-loop", "spec/v0.1/SPEC.md#94-cost-token-accounting-rules-normative"],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "boundary-max-steps-exact-3",
+    "boundary": { "max_steps": 3 },
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    { "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "1", "converged": false },
+    { "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "2", "converged": false },
+    { "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "3", "converged": false },
+    { "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "4 (must not run)", "converged": false },
+    { "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "5 (must not run)", "converged": false }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      { "match": { "type": "model_turn_started", "step": 1 } },
+      { "match": { "type": "model_turn_ended", "step": 1 } },
+      { "match": { "type": "model_turn_started", "step": 2 } },
+      { "match": { "type": "model_turn_ended", "step": 2 } },
+      { "match": { "type": "model_turn_started", "step": 3 } },
+      { "match": { "type": "model_turn_ended", "step": 3 } },
+      { "match": { "type": "agent_stopped", "reason": "turn_limit" } }
+    ],
+    "forbidden_events": [
+      {
+        "label": "the run MUST stop at exactly 3 turns — no 4th model_turn_started may appear",
+        "match": { "type": "model_turn_started", "step": 4 }
+      },
+      {
+        "label": "no model_turn_ended past turn 3",
+        "match": { "type": "model_turn_ended", "step": 4 }
+      }
+    ]
+  }
+}

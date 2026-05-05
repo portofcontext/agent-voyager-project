@@ -194,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         model=driver,
         tools=ShellTools(),
         supervisor=supervisor,
+        runner_builtin_tools=list(SHELL_TOOL_SCHEMAS),
     )
     runner.run()
     return 0

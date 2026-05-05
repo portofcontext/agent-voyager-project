@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from aep.enums import ErrorCode, OnFailure, StopReason
+from aep.enums import ErrorCode, OnFailure, StopReason, VerifierError
 from aep.runner.boundary import (
     check_consumption,
     check_step_projection,
@@ -102,7 +102,14 @@ class AEPRunner:
         model: ModelDriver,
         tools: ToolDriver,
         supervisor: SupervisorDriver,
+        runner_builtin_tools: list[dict[str, Any]] | None = None,
     ) -> None:
+        """`runner_builtin_tools` declares the runner's built-in tool catalog
+        (bash, read_file, etc. for shell runners; Read/Bash/Edit for the Claude
+        Agent SDK). Each entry is `{name, description, input_schema}`. Used to
+        compute the effective tool surface for `agent_started.tools` so the
+        trajectory reflects what the model could actually call, not just the
+        Config-declared RPC tools."""
         self.config = config
         self.model = model
         self.tools = tools
@@ -110,6 +117,7 @@ class AEPRunner:
         self.trajectory: list[BaseModel | dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
         self._supervisor_tools_by_name: dict[str, Tool] = {t.name: t for t in (config.tools or [])}
+        self._runner_builtin_tools = list(runner_builtin_tools or [])
         self._allowed_tools: frozenset[str] | None = (
             frozenset(config.allowed_tools) if config.allowed_tools is not None else None
         )
@@ -160,8 +168,6 @@ class AEPRunner:
                 self._run_verifiers_for("at_end")
                 self._emit_agent_stopped(decision.reason or StopReason.turn_limit)
                 return
-
-            self._run_verifiers_for("before_each_turn")
 
             state.total_turns += 1
             self._emit(
@@ -388,7 +394,13 @@ class AEPRunner:
                     tool=tc.tool,
                 )
             )
-            output = ""
+            # SPEC.md §9.3: model-visible output on timeout is an Error: -prefixed
+            # string for symmetry with §8 step-4 (the same prefix on
+            # tool_exec_resolved.error). Models can therefore use a single
+            # convention to detect 'this tool didn't return useful data, consider
+            # retrying' regardless of whether the cause was an explicit error or
+            # a timeout.
+            output = f"Error: tool execution timed out after {tool_decl.timeout_ms}ms"
         else:
             assert isinstance(msg, ToolExecResolvedEvent)
             self._emit(msg)
@@ -429,7 +441,7 @@ class AEPRunner:
             self._run_verifier(verifier)
 
     def _run_verifier(self, verifier: Verifier) -> None:
-        passed, data = self._execute_verifier(verifier)
+        passed, error, data = self._execute_verifier(verifier)
         cfg = self.config
         self._emit(
             VerifierEvaluatedEvent(
@@ -437,6 +449,7 @@ class AEPRunner:
                 name=verifier.name,
                 passed=passed,
                 step=self._state.total_turns or None,
+                error=error,
                 data=data,
             )
         )
@@ -444,8 +457,17 @@ class AEPRunner:
             return
         self._apply_on_failure(verifier)
 
-    def _execute_verifier(self, verifier: Verifier) -> tuple[bool, dict[str, Any] | None]:
-        """Execute a verifier source. Returns (passed, optional data dict)."""
+    def _execute_verifier(
+        self, verifier: Verifier
+    ) -> tuple[bool, VerifierError | None, dict[str, Any] | None]:
+        """Execute a verifier source. Returns (passed, error, optional data dict).
+
+        `error` distinguishes environment failures from rule failures:
+          - source_timed_out: subprocess.TimeoutExpired
+          - source_unavailable: shell exit 127 ("command not found")
+          - source_crashed: any other unexpected subprocess error
+          - None: the script ran to completion; exit 0 is pass, non-0 is rule fail
+        """
         src = verifier.source
         # v0.1 only ships shell-source verifiers
         try:
@@ -457,18 +479,40 @@ class AEPRunner:
                 timeout=verifier.timeout_ms / 1000.0,
             )
         except subprocess.TimeoutExpired:
-            return False, {"error": "verifier timeout", "timeout_ms": verifier.timeout_ms}
-        passed = result.returncode == 0
+            return (
+                False,
+                VerifierError.source_timed_out,
+                {
+                    "command": src.shell,
+                    "timeout_ms": verifier.timeout_ms,
+                },
+            )
+        except OSError as e:
+            return (
+                False,
+                VerifierError.source_crashed,
+                {
+                    "command": src.shell,
+                    "stderr": str(e)[:2000],
+                },
+            )
+
         data: dict[str, Any] = {
             "command": src.shell,
             "exit_code": result.returncode,
         }
-        # Trim outputs to keep trajectory small.
         if result.stdout:
             data["stdout"] = result.stdout[:2000]
         if result.stderr:
             data["stderr"] = result.stderr[:2000]
-        return passed, data
+
+        # Exit 127 = "command not found" from sh. Treat as source-unavailable
+        # so consumers can distinguish "the rule script wasn't there" from
+        # "the rule script ran and said no."
+        if result.returncode == 127:
+            return False, VerifierError.source_unavailable, data
+        passed = result.returncode == 0
+        return passed, None, data
 
     def _apply_on_failure(self, verifier: Verifier) -> None:
         if verifier.on_failure == OnFailure.continue_:
@@ -492,12 +536,22 @@ class AEPRunner:
 
     def _emit_agent_started(self) -> None:
         cfg = self.config
-        tools_meta = None
+        # SPEC.md §13.1.2: agent_started.tools MUST reflect the EFFECTIVE tool
+        # surface — what the model can actually call — not just Config.tools.
+        # Effective = (Config.tools RPC entries ∪ runner built-ins) filtered
+        # by Config.allowed_tools when set. Consumers reading the trajectory
+        # rely on this for "was the agent allowed to write files?" type
+        # questions; un-filtered Config.tools alone gives the wrong answer.
+        candidate_tools: list[dict[str, Any]] = []
         if cfg.tools:
-            tools_meta = [
+            candidate_tools.extend(
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in cfg.tools
-            ]
+            )
+        candidate_tools.extend(self._runner_builtin_tools)
+        if self._allowed_tools is not None:
+            candidate_tools = [t for t in candidate_tools if t["name"] in self._allowed_tools]
+        tools_meta = candidate_tools or None
         skills_meta = [s.name for s in (cfg.skills or [])] or None
         self._emit(
             AgentStartedEvent(

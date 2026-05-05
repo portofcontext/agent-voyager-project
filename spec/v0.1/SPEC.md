@@ -165,7 +165,6 @@ The supervisor declares the rule upfront in Config; the agent enforces it determ
 | Trigger | Fires |
 |---|---|
 | `before_first_turn` | once, after `agent_started`, before turn 1 |
-| `before_each_turn` | before every `model_turn_started` |
 | `after_each_turn` | after every `model_turn_ended` |
 | `on_tool:<name>` | after `tool_returned` for the named tool |
 | `at_end` | once, after the final turn, before `agent_stopped` |
@@ -230,7 +229,22 @@ Supervisors MAY maintain category-based profiles (e.g., "DDD-strict", "Complianc
 
 A conforming runner MUST behave as if executing the following algorithm. (The runner MAY reorder operations that are not externally observable, provided the emitted event sequence is indistinguishable.)
 
-### 9.1 Run state
+### 9.1 Run state and the definition of a turn
+
+A **turn** in AEP is exactly one `model_turn_started` / `model_turn_ended`
+pair where the model produced new output (either text or tool calls or
+both). Continuations and SDK-internal restatements that do not represent a
+fresh model call MUST NOT be counted as turns.
+
+This matters most for translator-pattern runners wrapping SDKs that emit
+"assistant message" objects for things that aren't fresh model calls (e.g.,
+follow-up wrappers around tool results). Translator runners MUST count an
+event as a turn only when the SDK-reported usage carries non-zero new
+output tokens (delta-output > 0), or — if the SDK doesn't report per-call
+usage — when the message includes content the model itself produced.
+Wrappers that double-count are non-conformant: §9.2 promises `max_steps: N`
+runs EXACTLY N turns, and §9.4 requires two conforming runners to agree on
+"is one more turn permitted" for any given Config.
 
 The runner maintains a `RunStateSnapshot` (see [`aep.schema.json#/$defs/RunStateSnapshot`](./aep.schema.json)) tracking `total_turns`, `total_cost_usd`, `total_tokens`, etc.
 
@@ -269,8 +283,6 @@ loop:
         run verifiers_for("at_end"); apply on_failure actions
         emit agent_stopped(reason); return
 
-    run verifiers_for("before_each_turn"); apply on_failure actions
-
     state.total_turns += 1
     emit model_turn_started(step)
     response = call_model()
@@ -291,7 +303,7 @@ loop:
             emit tool_exec_request(request_id, ...)
             wait for tool_exec_resolved OR timeout_ms
               on response: record verbatim; output = response.output (with "Error: " prefix iff error set)
-              on timeout: emit tool_exec_timed_out; output = ""
+              on timeout: emit tool_exec_timed_out; output = "Error: tool execution timed out after Nms"
         else:
             output = execute_tool_locally(input)
         emit tool_returned(call_id, output)
@@ -324,6 +336,7 @@ apply_on_failure_action(verifier, result):
 - `tokens_cache_read` and `tokens_cache_write` are informational; they MUST NOT alter `state.total_tokens` independently.
 - `state.total_cost_usd` and `state.total_tokens` are monotonically non-decreasing.
 - Two conforming runners with identical inputs MUST agree on whether one more turn is permitted under any given boundary.
+- **Translator runners over cumulative-usage SDKs.** Some SDKs (notably the Claude Agent SDK) report usage as a running session total per message rather than as a per-call delta. Translators MUST derive deltas (subtract previous cumulative) to populate per-turn `tokens_*` and `cost_usd` correctly. When the SDK's cumulative drops without warning (`cum < prev`), the translator MUST emit `error_occurred` with `code: "accounting_reset"` rather than silently clamping; consumers cannot distinguish a swallowed delta from a legitimate quiet turn otherwise. SDKs that signal context compaction or sub-agent dispatch via lifecycle events SHOULD be hooked so the translator resets its baselines deliberately, not via the error path.
 
 ---
 
@@ -390,7 +403,7 @@ For non-spec FIELDS within a known event type, implementers MUST use the `extens
 A runner is conforming if and only if all of the following hold:
 
 1. It reads exactly one valid `Config` (per `config.schema.json`) before emitting any events.
-2. The first event it emits MUST be `agent_started` (source=runner). It MUST include `prompt` and `tools` when those are available; each tool entry MUST include `name` and `description`.
+2. The first event it emits MUST be `agent_started` (source=runner). It MUST include `prompt` when available. The `tools` field MUST list the EFFECTIVE tool surface — the union of `Config.tools` entries and the runner's built-in tools, filtered by `Config.allowed_tools` if set. Consumers rely on this to determine what the model could actually call. Each tool entry MUST include `name` and `description`.
 3. Every event it emits MUST include a `source` field. Runner-authored events MUST set `source: "runner"`. Supervisor-authored `tool_exec_resolved` RPC replies received over the input channel MUST be recorded into the trajectory verbatim, retaining `source: "supervisor"`.
 4. For every model inference, it MUST emit `model_turn_started` immediately before the request and `model_turn_ended` immediately after the response.
 5. For every tool call, it MUST emit `tool_invoked` before invocation and either `tool_returned` (success or boundary rejection) or `tool_failed` (execution error) afterward.
@@ -402,7 +415,7 @@ A runner is conforming if and only if all of the following hold:
 If `Config.tools` declares any RPC-implementation tool, the runner additionally MUST:
 
 10. Register each declared tool with the LLM using `name`, `description`, `input_schema`.
-11. When the model calls a declared tool, emit `tool_exec_request`, suspend, and either: (a) receive a `tool_exec_resolved` with matching `request_id`, record it verbatim, and return its `output` to the model; or (b) emit `tool_exec_timed_out` and return `""`.
+11. When the model calls a declared tool, emit `tool_exec_request`, suspend, and either: (a) receive a `tool_exec_resolved` with matching `request_id`, record it verbatim, and return its `output` to the model; or (b) emit `tool_exec_timed_out` and return `"Error: tool execution timed out after Nms"` (where N is the declared `timeout_ms`).
 12. If `tool_exec_resolved.error` is set, prefix `Error: ` before returning to the model.
 
 If `Config.allowed_tools` is set, the runner additionally MUST:
@@ -442,6 +455,12 @@ AEP defines the **wire format**, not the deployment topology. The following are 
 - **Authentication of the supervisor↔runner channel** beyond what stdio / HTTP transports inherit from their environment.
 
 The agent's **workspace** is conventionally the runner's current working directory (CWD). Shell verifier paths (§7.5) and any tool inputs containing relative paths resolve there. The supervisor's deployment layer — whatever it is — is responsible for ensuring referenced scripts and files exist in that workspace before the run starts.
+
+### 14.1 Pattern: pre-turn world refresh
+
+A common temptation is "I want to update the agent's view of the world between turns" — re-read a config file, re-fetch a dashboard, inject the current build status. This is sometimes called *re-observation*. **AEP does not provide a hook for this**, by design — mid-run reach-in by the supervisor breaks the bounded-context guarantee that makes trajectories meaningful.
+
+The supported pattern is to expose the world refresh as an **RPC tool** (§8). The agent calls it; the supervisor's service computes the current value; the runner records `tool_exec_request` / `tool_exec_resolved` into the trajectory. The agent decides when to refresh and which information to pull, the trajectory shows exactly what context informed each turn, and there's no asymmetry between driver-pattern and translator-pattern runners (both can call RPC tools cleanly).
 
 This section names the lines so readers don't trip on them. A complete production deployment will involve more than this spec covers; that's by design.
 

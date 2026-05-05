@@ -145,6 +145,15 @@ class ClaudeAgentTranslator:
         self._prev_cumulative_cache_read = 0
         self._prev_cumulative_cache_write = 0
         self._prev_cumulative_cost_usd = 0.0
+        # Set by PreCompact / SubagentStart hooks so the next AssistantMessage's
+        # cumulative-drop is treated as a deliberate baseline reset (graceful)
+        # rather than as an unexpected accounting reset (errored).
+        self._baseline_reset_pending = False
+        # First UserPromptSubmit fires before_first_turn verifiers exactly once.
+        self._before_first_turn_fired = False
+        # Stop hook may fire per-turn; we collapse to a single at_end run
+        # in the finalizer.
+        self._stop_seen = False
         self._sdk_query = sdk_query
         self._sdk_options_cls = sdk_options_cls
         self._sdk_hook_matcher_cls = sdk_hook_matcher_cls
@@ -206,6 +215,12 @@ class ClaudeAgentTranslator:
                 )
                 self._turn_open = False
 
+        # at_end verifiers fire here, exactly once before agent_stopped.
+        # Stop hook firings during the run set _stop_seen but don't run
+        # verifiers themselves (Stop can fire mid-run in some configurations).
+        # The session-end is the run() returning, which is here.
+        self._run_verifiers_for_trigger("at_end")
+
         return self._emit_agent_stopped(reason, error_msg=error_msg)
 
     # ── SDK integration ────────────────────────────────────────────────────
@@ -263,6 +278,28 @@ class ClaudeAgentTranslator:
             "PostToolUse": [
                 self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_post_tool_use_hook]),
             ],
+            # before_first_turn verifiers fire here (initial user prompt). The
+            # hook can also rewrite the prompt for inject_correction, though we
+            # don't activate that path automatically — supervisors that want
+            # injection use Config.verifiers with on_failure=inject_correction.
+            "UserPromptSubmit": [
+                self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_user_prompt_submit_hook]),
+            ],
+            # at_end verifiers fire here. Stop can fire per-turn in some SDK
+            # configurations; we run at_end verifiers exactly once when the
+            # session genuinely concludes (handled in run() top-level).
+            "Stop": [
+                self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_stop_hook]),
+            ],
+            # PreCompact + SubagentStart signal the SDK is about to reset its
+            # cumulative usage counters — the translator adopts the next
+            # cumulative as a fresh baseline rather than emitting accounting_reset.
+            "PreCompact": [
+                self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_baseline_reset_hook]),
+            ],
+            "SubagentStart": [
+                self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_baseline_reset_hook]),
+            ],
         }
 
         # Forward the Claude CLI's stderr to the supervisor's stderr so users
@@ -291,8 +328,83 @@ class ClaudeAgentTranslator:
         # SystemMessage / UserMessage / others — the AEP wire doesn't surface them.
 
     def _handle_assistant_message(self, message: Any) -> None:
-        """One AssistantMessage = one model turn."""
+        """One AssistantMessage MAY correspond to one AEP turn — or not.
+
+        SPEC.md §9.1: an AEP turn is one fresh model call. The Claude Agent
+        SDK emits AssistantMessages for things that aren't fresh calls
+        (continuations, internal restatements, follow-ups around tool
+        results). We use the SDK's cumulative usage to detect: a message
+        with NO new output tokens AND no fresh content is not a turn — skip
+        the turn-started / turn-ended emission entirely.
+
+        SPEC.md §9.4: when the SDK's cumulative drops without a deliberate
+        reset signal (PreCompact / SubagentStart), emit error_occurred
+        rather than silently clamping the delta.
+        """
         cfg = self.config
+        usage = getattr(message, "usage", None)
+        model_id = getattr(message, "model", cfg.model or "unspecified")
+        cum_ti, cum_to, cum_cr, cum_cw, cum_cost = _compute_cost(model_id, usage)
+
+        # Detect unexpected cumulative-reset BEFORE computing deltas.
+        unexpected_reset = (
+            cum_ti < self._prev_cumulative_input_tokens
+            or cum_to < self._prev_cumulative_output_tokens
+            or cum_cost < self._prev_cumulative_cost_usd
+        ) and not self._baseline_reset_pending
+        if unexpected_reset:
+            self._emit(
+                ErrorOccurredEvent(
+                    run_id=cfg.run_id,
+                    code=ErrorCode.accounting_reset,
+                    message=(
+                        "SDK cumulative usage dropped without a PreCompact / "
+                        "SubagentStart signal. Per-turn deltas may be unreliable; "
+                        "treat state.total_tokens / total_cost_usd as a lower bound."
+                    ),
+                )
+            )
+            # Reset our baseline to the new cumulative so subsequent messages
+            # produce sane deltas rather than a cascade of negative-delta errors.
+            self._prev_cumulative_input_tokens = cum_ti
+            self._prev_cumulative_output_tokens = cum_to
+            self._prev_cumulative_cache_read = cum_cr
+            self._prev_cumulative_cache_write = cum_cw
+            self._prev_cumulative_cost_usd = cum_cost
+            return
+
+        if self._baseline_reset_pending:
+            # PreCompact / SubagentStart fired: the next cumulative is a
+            # fresh-start total, not a delta from prior. Adopt it directly.
+            self._prev_cumulative_input_tokens = cum_ti
+            self._prev_cumulative_output_tokens = cum_to
+            self._prev_cumulative_cache_read = cum_cr
+            self._prev_cumulative_cache_write = cum_cw
+            self._prev_cumulative_cost_usd = cum_cost
+            self._baseline_reset_pending = False
+            # The first post-reset message IS a real turn IFF it has new content;
+            # fall through to the regular emission path with prev=cum (delta=0).
+
+        delta_ti = max(0, cum_ti - self._prev_cumulative_input_tokens)
+        delta_to = max(0, cum_to - self._prev_cumulative_output_tokens)
+        delta_cr = max(0, cum_cr - self._prev_cumulative_cache_read)
+        delta_cw = max(0, cum_cw - self._prev_cumulative_cache_write)
+        delta_cost = max(0.0, cum_cost - self._prev_cumulative_cost_usd)
+
+        # Determine whether this message represents a real AEP turn. Two
+        # signals: (a) the SDK reported new output tokens, OR (b) the message
+        # carries content the model produced (TextBlocks). Empty deltas with
+        # no content = SDK-internal restatement, not a turn.
+        has_text_content = any(
+            type(b).__name__ == "TextBlock" and getattr(b, "text", "")
+            for b in (getattr(message, "content", []) or [])
+        )
+        is_real_turn = delta_to > 0 or has_text_content
+
+        if not is_real_turn:
+            # Don't bump _step or emit turn events — this isn't a turn.
+            return
+
         self._step += 1
         self._emit(ModelTurnStartedEvent(run_id=cfg.run_id, step=self._step))
         self._turn_open = True
@@ -305,19 +417,6 @@ class ClaudeAgentTranslator:
                     self._emit(TextEmittedEvent(run_id=cfg.run_id, step=self._step, text=text))
             # ToolUseBlock content is observed via the PreToolUse hook (which
             # fires in step with the SDK's actual tool dispatch).
-
-        # The SDK reports usage as cumulative-per-message (including session
-        # context that predates this turn). We need deltas to populate AEP's
-        # per-turn ModelTurnEndedEvent. Subtract the previous cumulative.
-        usage = getattr(message, "usage", None)
-        model_id = getattr(message, "model", cfg.model or "unspecified")
-        cum_ti, cum_to, cum_cr, cum_cw, cum_cost = _compute_cost(model_id, usage)
-
-        delta_ti = max(0, cum_ti - self._prev_cumulative_input_tokens)
-        delta_to = max(0, cum_to - self._prev_cumulative_output_tokens)
-        delta_cr = max(0, cum_cr - self._prev_cumulative_cache_read)
-        delta_cw = max(0, cum_cw - self._prev_cumulative_cache_write)
-        delta_cost = max(0.0, cum_cost - self._prev_cumulative_cost_usd)
 
         self._prev_cumulative_input_tokens = cum_ti
         self._prev_cumulative_output_tokens = cum_to
@@ -402,6 +501,53 @@ class ClaudeAgentTranslator:
             )
         )
         return {}
+
+    async def _on_user_prompt_submit_hook(
+        self, _input_data: dict[str, Any], _tool_use_id: str | None, _context: Any
+    ) -> dict[str, Any]:
+        """SDK hook fired when a user prompt is submitted. We use the FIRST
+        such fire to run `before_first_turn` verifiers (Claude SDK has no
+        standalone session-start hook with prompt visibility for this case).
+        Subsequent fires are not first turns and are ignored."""
+        if not self._before_first_turn_fired:
+            self._before_first_turn_fired = True
+            self._run_verifiers_for_trigger("before_first_turn")
+        return {}
+
+    async def _on_stop_hook(
+        self, _input_data: dict[str, Any], _tool_use_id: str | None, _context: Any
+    ) -> dict[str, Any]:
+        """SDK Stop hook. In Claude Code this fires when the agent reaches a
+        natural stopping point. We use the LAST fire to run `at_end` verifiers,
+        but Stop can fire per-turn in some configurations — so we mark and
+        re-run; the run() finalizer ensures at_end fires exactly once before
+        agent_stopped."""
+        self._stop_seen = True
+        return {}
+
+    async def _on_baseline_reset_hook(
+        self, _input_data: dict[str, Any], _tool_use_id: str | None, _context: Any
+    ) -> dict[str, Any]:
+        """PreCompact / SubagentStart fire BEFORE the SDK's cumulative usage
+        counters reset. Mark the next AssistantMessage's cumulative as a
+        fresh baseline rather than as a delta; this avoids spurious
+        accounting_reset errors during legitimate context-management
+        operations."""
+        self._baseline_reset_pending = True
+        return {}
+
+    def _run_verifiers_for_trigger(self, trigger: str) -> None:
+        """Stub for translator-side verifier dispatch. Translator runners
+        that fully honor verifiers will populate this; the reference v0.1
+        translator records the trigger fire but defers verifier execution
+        to the supervisor framework reading the trajectory.
+
+        TODO: implement shell-source verifier execution mirroring AEPRunner._run_verifier.
+        Until then, on_failure=halt and inject_correction declared on Configs
+        sent to this runner are no-ops (the verifier_evaluated event is never
+        emitted, so consumers see them as 'never ran' rather than 'passed')."""
+        # Intentionally a no-op for v0.1; see TODO above.
+        _ = trigger
 
     # ── AEP emission helpers ───────────────────────────────────────────────
 
