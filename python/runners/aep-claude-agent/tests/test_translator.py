@@ -8,6 +8,10 @@ and without an API key. They exercise:
   - AssistantMessage / ResultMessage handling (the message-stream path)
   - PreToolUse / PostToolUse hook callbacks (the hook path)
   - Full run() lifecycle with a fake query() that yields canned messages
+  - Verifier dispatch at all four trigger points (before_first_turn,
+    after_each_turn, on_tool:<name>, at_end)
+  - on_failure: halt aborts with reason=verifier_failed
+  - on_failure: inject_correction is rejected at startup (SPEC §13.1.18)
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from aep import (
     TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
+    VerifierEvaluatedEvent,
 )
 from aep_claude_agent import ClaudeAgentTranslator
 
@@ -376,3 +381,285 @@ def test_run_propagates_sdk_error_to_agent_stopped_error() -> None:
     types = [type(ev).__name__ for ev in out]
     assert "ErrorOccurredEvent" in types
     assert types[-1] == "AgentStoppedEvent"
+
+
+# ── Verifier dispatch (SPEC §13.1.13–18) ─────────────────────────────────────
+
+
+def _cfg_with_verifiers(verifiers: list[dict[str, Any]]) -> Config:
+    return Config(
+        schema_version="0.1",
+        run_id="vt",
+        model="claude-sonnet-4-6",
+        prompt="hello",
+        allowed_tools=["bash"],
+        verifiers=verifiers,
+        boundary={"max_steps": 5},
+    )
+
+
+def test_inject_correction_verifier_rejected_at_startup() -> None:
+    """SPEC §13.1.18: the translator pattern cannot honor inject_correction
+    (the SDK owns the prompt-input channel). Such Configs MUST be refused
+    at startup with error_occurred + agent_stopped(reason=error), not
+    silently accepted with the action dropped at runtime."""
+
+    async def fake_query(*, prompt: str, options: Any):
+        # Should never be reached — startup validation aborts first.
+        if False:
+            yield None
+        raise AssertionError("SDK should not have been invoked")
+
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "no-secrets",
+                "trigger": "after_each_turn",
+                "source": {"shell": "true"},
+                "on_failure": "inject_correction",
+                "correction_message": "Don't leak secrets.",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg, sdk_query=fake_query)
+    stop = t.run()
+
+    assert stop.reason == StopReason.error
+    types = [type(ev).__name__ for ev in out]
+    assert types[0] == "AgentStartedEvent"
+    assert "ErrorOccurredEvent" in types
+    err = next(ev for ev in out if type(ev).__name__ == "ErrorOccurredEvent")
+    assert "inject_correction" in err.message
+    assert "no-secrets" in err.message
+    assert types[-1] == "AgentStoppedEvent"
+    # No turns ran: no model_turn_started, no verifier_evaluated.
+    assert "ModelTurnStartedEvent" not in types
+    assert "VerifierEvaluatedEvent" not in types
+
+
+def test_after_each_turn_verifier_fires_and_emits_evaluated() -> None:
+    """A passing verifier with trigger=after_each_turn fires after every
+    model_turn_ended and emits verifier_evaluated(passed=True)."""
+
+    async def fake_query(*, prompt: str, options: Any):
+        yield AssistantMessage(
+            content=[TextBlock("a")],
+            usage={"input_tokens": 10, "output_tokens": 5},
+        )
+        yield AssistantMessage(
+            content=[TextBlock("b")],
+            usage={"input_tokens": 30, "output_tokens": 10},
+        )
+        yield ResultMessage(total_cost_usd=0.001)
+
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "always-pass",
+                "trigger": "after_each_turn",
+                "source": {"shell": "true"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg, sdk_query=fake_query)
+    stop = t.run()
+
+    assert stop.reason == StopReason.converged
+    evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
+    assert len(evals) == 2, "expected one verifier_evaluated per turn (2 turns ran)"
+    for ev in evals:
+        assert ev.name == "always-pass"
+        assert ev.passed is True
+        assert ev.error is None
+
+
+def test_on_tool_verifier_fires_after_post_tool_use() -> None:
+    """A verifier with trigger=on_tool:<name> fires after the named tool's
+    PostToolUse hook (which is also where tool_returned is emitted)."""
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "post-bash-check",
+                "trigger": "on_tool:bash",
+                "source": {"shell": "true"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg)
+
+    asyncio.run(
+        t._on_pre_tool_use_hook(
+            {"tool_use_id": "c1", "tool_name": "bash", "tool_input": {"command": "ls"}},
+            "c1",
+            None,
+        )
+    )
+    asyncio.run(
+        t._on_post_tool_use_hook(
+            {"tool_use_id": "c1", "tool_name": "bash", "tool_response": "out"},
+            "c1",
+            None,
+        )
+    )
+
+    types = [type(ev).__name__ for ev in out]
+    # tool_invoked → tool_returned → verifier_evaluated
+    assert types == ["ToolInvokedEvent", "ToolReturnedEvent", "VerifierEvaluatedEvent"]
+    assert out[2].name == "post-bash-check"
+    assert out[2].passed is True
+
+
+def test_on_tool_verifier_does_not_fire_for_other_tools() -> None:
+    """on_tool:<name> only fires for the named tool — not for unrelated calls."""
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "post-bash-only",
+                "trigger": "on_tool:bash",
+                "source": {"shell": "true"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg)
+
+    asyncio.run(
+        t._on_pre_tool_use_hook(
+            {"tool_use_id": "c1", "tool_name": "Read", "tool_input": {"path": "x"}},
+            "c1",
+            None,
+        )
+    )
+    asyncio.run(
+        t._on_post_tool_use_hook(
+            {"tool_use_id": "c1", "tool_name": "Read", "tool_response": "data"},
+            "c1",
+            None,
+        )
+    )
+
+    types = [type(ev).__name__ for ev in out]
+    assert types == ["ToolInvokedEvent", "ToolReturnedEvent"]
+    # No verifier_evaluated — the verifier is keyed to bash, not Read.
+
+
+def test_at_end_verifier_fires_before_agent_stopped() -> None:
+    """SPEC §7.2: at_end fires once after the final turn, before agent_stopped."""
+
+    async def fake_query(*, prompt: str, options: Any):
+        yield AssistantMessage(
+            content=[TextBlock("done")], usage={"input_tokens": 10, "output_tokens": 3}
+        )
+        yield ResultMessage(total_cost_usd=0.0001)
+
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "final-check",
+                "trigger": "at_end",
+                "source": {"shell": "true"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg, sdk_query=fake_query)
+    stop = t.run()
+
+    assert stop.reason == StopReason.converged
+    types = [type(ev).__name__ for ev in out]
+    # The last verifier_evaluated must precede agent_stopped.
+    last_eval_idx = max(i for i, n in enumerate(types) if n == "VerifierEvaluatedEvent")
+    last_stop_idx = types.index("AgentStoppedEvent")
+    assert last_eval_idx < last_stop_idx
+    final_eval = out[last_eval_idx]
+    assert final_eval.name == "final-check"
+
+
+def test_halt_verifier_terminates_with_verifier_failed() -> None:
+    """A failing verifier with on_failure=halt aborts the SDK iteration and
+    produces agent_stopped(reason=verifier_failed)."""
+
+    async def fake_query(*, prompt: str, options: Any):
+        # Yield one turn, then the after_each_turn verifier fails-halt.
+        yield AssistantMessage(
+            content=[TextBlock("doomed")], usage={"input_tokens": 10, "output_tokens": 3}
+        )
+        # If halt didn't actually abort, we'd see this turn too.
+        yield AssistantMessage(
+            content=[TextBlock("should-not-emit")],
+            usage={"input_tokens": 25, "output_tokens": 5},
+        )
+        yield ResultMessage(total_cost_usd=0.001)
+
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "always-fail",
+                "trigger": "after_each_turn",
+                "source": {"shell": "false"},  # exits 1 → passed=False
+                "on_failure": "halt",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg, sdk_query=fake_query)
+    stop = t.run()
+
+    assert stop.reason == StopReason.verifier_failed
+    # Exactly one verifier_evaluated — the halting one.
+    evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
+    assert len(evals) == 1
+    assert evals[0].name == "always-fail"
+    assert evals[0].passed is False
+    # Only one model turn observed — the second was aborted by halt.
+    turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
+    assert len(turn_ended) == 1, "halt should have aborted before turn 2"
+
+
+def test_before_first_turn_verifier_fires_on_first_user_prompt_submit() -> None:
+    """before_first_turn fires on the FIRST UserPromptSubmit hook fire only.
+    Subsequent fires are not first turns."""
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "preflight",
+                "trigger": "before_first_turn",
+                "source": {"shell": "true"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg)
+
+    asyncio.run(t._on_user_prompt_submit_hook({}, None, None))
+    asyncio.run(t._on_user_prompt_submit_hook({}, None, None))  # second fire — should NOT re-run
+
+    evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
+    assert len(evals) == 1, "before_first_turn should fire exactly once"
+    assert evals[0].name == "preflight"
+
+
+def test_verifier_source_unavailable_marks_error_distinguisher() -> None:
+    """SPEC §7.5 / VerifierError.source_unavailable: when the verifier's
+    shell command can't be located (exit 127), passed=False AND
+    error='source_unavailable' so consumers can distinguish 'environment
+    broken' from 'rule legitimately failed'."""
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "missing-script",
+                "trigger": "before_first_turn",
+                "source": {"shell": "no-such-command-exists-anywhere-12345"},
+                "on_failure": "continue",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg)
+    asyncio.run(t._on_user_prompt_submit_hook({}, None, None))
+
+    evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
+    assert len(evals) == 1
+    assert evals[0].passed is False
+    assert evals[0].error is not None
+    assert evals[0].error.value == "source_unavailable"
