@@ -117,8 +117,8 @@ def _validate_outcome(events: list) -> list[str]:
     if stop is None:
         issues.append("no agent_stopped event — translator exited mid-trajectory")
         return issues
-    if str(stop.reason) != "converged":
-        issues.append(f"expected stop reason 'converged'; got {stop.reason!r}")
+    if str(stop.data.aep_reason) != "converged":
+        issues.append(f"expected stop reason 'converged'; got {stop.data.aep_reason!r}")
 
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:

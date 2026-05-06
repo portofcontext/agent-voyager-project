@@ -212,14 +212,14 @@ def _validate_outcome(events: list, workspace: Path) -> list[str]:
     # converged is the goal; turn_limit means the agent ran out of budget,
     # which we still accept as long as the final workspace invariants hold
     # (the supervisor's whole point is that even failed runs leave clean state).
-    if str(stop.reason) not in ("converged", "turn_limit"):
+    if str(stop.data.aep_reason) not in ("converged", "turn_limit"):
         issues.append(
-            f"unexpected stop reason {stop.reason!r}; expected 'converged' or 'turn_limit'"
+            f"unexpected stop reason {stop.data.aep_reason!r}; expected 'converged' or 'turn_limit'"
         )
 
     # Every trigger fired at least once — proves the verifier dispatch is alive.
     verifier_evals = [ev for ev in events if type(ev).__name__ == "VerifierEvaluatedEvent"]
-    fired_names = {ev.name for ev in verifier_evals}
+    fired_names = {ev.data.aep_verifier_name for ev in verifier_evals}
     expected_verifiers = {
         "domain-layer-purity",
         "aggregate-invariants",

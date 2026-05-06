@@ -75,8 +75,8 @@ def test_simple_text_response_completes_successfully() -> None:
     types = _types(runner.trajectory)
 
     assert isinstance(stop, AgentStoppedEvent)
-    assert stop.reason == StopReason.converged, (
-        f"expected converged, got {stop.reason}: trajectory types={types}"
+    assert stop.data.aep_reason == StopReason.converged, (
+        f"expected converged, got {stop.data.aep_reason}: trajectory types={types}"
     )
 
     # Lifecycle invariants
@@ -88,9 +88,10 @@ def test_simple_text_response_completes_successfully() -> None:
     assert "TextEmittedEvent" in types  # Claude will produce text on a converged run
 
     # Real call → non-zero cost and tokens
-    assert stop.state.total_cost_usd > 0
-    assert stop.state.total_tokens > 0
-    assert stop.state.total_turns >= 1
+    snap = stop.data.aep_state
+    assert snap.total_cost_usd > 0
+    assert snap.total_tokens > 0
+    assert snap.total_turns >= 1
 
 
 def test_token_and_cost_accounting_monotonic_across_turns() -> None:
@@ -108,10 +109,11 @@ def test_token_and_cost_accounting_monotonic_across_turns() -> None:
     last_cost = -1.0
     last_tokens = -1
     for ce in cost_events:
-        assert ce.state.total_cost_usd >= last_cost
-        assert ce.state.total_tokens >= last_tokens
-        last_cost = ce.state.total_cost_usd
-        last_tokens = ce.state.total_tokens
+        snap = ce.data.aep_state
+        assert snap.total_cost_usd >= last_cost
+        assert snap.total_tokens >= last_tokens
+        last_cost = snap.total_cost_usd
+        last_tokens = snap.total_tokens
 
 
 def test_boundary_max_steps_enforced_against_real_model() -> None:
@@ -135,16 +137,16 @@ def test_boundary_max_steps_enforced_against_real_model() -> None:
     # Either Claude converged in 1 turn (reason=converged with total_turns=1)
     # or hit the max_steps boundary (reason=turn_limit with total_turns=1).
     # Both prove the runner respected the boundary; total_turns MUST equal exactly 1.
-    assert stop.state.total_turns == 1, (
-        f"max_steps=1 must yield exactly 1 turn, got {stop.state.total_turns}"
-    )
-    assert stop.reason in (StopReason.converged, StopReason.turn_limit)
+    snap = stop.data.aep_state
+    assert snap.total_turns == 1, f"max_steps=1 must yield exactly 1 turn, got {snap.total_turns}"
+    assert stop.data.aep_reason in (StopReason.converged, StopReason.turn_limit)
 
 
 def test_token_input_includes_cache_reads_when_present() -> None:
-    """If the API reports cache_read_input_tokens, the AEP wire's tokens_input MUST
-    include them (per SPEC.md §10.4). On a single short call we likely get 0 cache reads;
-    this test just asserts the math: tokens_input >= tokens_cache_read when present."""
+    """If the API reports cache_read_input_tokens, the AEP wire's
+    gen_ai.usage.input_tokens MUST include them (per SPEC.md §9.4). On a
+    single short call we likely get 0 cache reads; this test just asserts
+    the math: input_tokens >= cache_read.input_tokens when present."""
     runner = _new_runner(
         prompt="Reply with 'ok'.",
         run_id="smoke-cache-tokens",
@@ -154,8 +156,10 @@ def test_token_input_includes_cache_reads_when_present() -> None:
     turn_ends = [ev for ev in runner.trajectory if isinstance(ev, ModelTurnEndedEvent)]
     assert turn_ends
     for te in turn_ends:
-        if te.tokens_cache_read is not None:
-            assert te.tokens_input >= te.tokens_cache_read, (
-                f"AEP §10.4: tokens_input ({te.tokens_input}) MUST include cache reads "
-                f"({te.tokens_cache_read}); driver may be subtracting them"
+        cache_read = te.data.gen_ai_usage_cache_read_input_tokens
+        if cache_read is not None:
+            input_total = te.data.gen_ai_usage_input_tokens
+            assert input_total >= cache_read, (
+                f"AEP §9.4: gen_ai.usage.input_tokens ({input_total}) MUST include "
+                f"cache reads ({cache_read}); driver may be subtracting them"
             )

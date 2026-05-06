@@ -143,8 +143,8 @@ def _validate_outcome(events: list, target_file: Path) -> list[str]:
     if stop is None:
         issues.append("no agent_stopped event — runner exited mid-trajectory")
         return issues
-    if str(stop.reason) != "converged":
-        issues.append(f"expected stop reason 'converged'; got {stop.reason!r}")
+    if str(stop.data.aep_reason) != "converged":
+        issues.append(f"expected stop reason 'converged'; got {stop.data.aep_reason!r}")
 
     if not target_file.exists():
         issues.append(f"target file not written: {target_file}")

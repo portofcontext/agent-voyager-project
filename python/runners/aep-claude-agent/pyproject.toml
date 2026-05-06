@@ -31,3 +31,6 @@ packages = ["src/aep_claude_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_llm: tests that hit a live LLM via the Claude Agent SDK (require ANTHROPIC_API_KEY + claude CLI in PATH; cost real money)",
+]

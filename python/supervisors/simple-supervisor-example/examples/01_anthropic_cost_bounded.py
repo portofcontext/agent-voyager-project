@@ -113,8 +113,10 @@ def _validate_outcome(events: list) -> list[str]:
 
     stop = next(ev for ev in events if type(ev).__name__ == "AgentStoppedEvent")
     accepted_reasons = {"converged", "budget_exhausted", "turn_limit"}
-    if str(stop.reason) not in accepted_reasons:
-        issues.append(f"unexpected stop reason {stop.reason!r}; expected one of {accepted_reasons}")
+    if str(stop.data.aep_reason) not in accepted_reasons:
+        issues.append(
+            f"unexpected stop reason {stop.data.aep_reason!r}; expected one of {accepted_reasons}"
+        )
 
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:
