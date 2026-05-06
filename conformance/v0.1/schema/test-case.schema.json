@@ -49,6 +49,11 @@
       "items": { "$ref": "#/$defs/SupervisorScriptStep" },
       "description": "Triggered actions for the harness's mock supervisor. When an event matching 'on' is observed, the harness sends 'send' (or, if 'skip' is true, deliberately does nothing — used to test timeouts)."
     },
+    "scripted_subagents": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/SubagentOutcomeSpec" },
+      "description": "Map from subagent name (matching Config.subagents[].name) to a canned outcome the harness's mock SubagentDriver will return. When set, the runner is constructed with a ScriptedSubagentDriver; when omitted and Config.subagents is non-empty, the runner runs without a driver and any subagent invocation surfaces as subagent_failed."
+    },
     "runner_builtin_tools": {
       "type": "array",
       "items": {
@@ -170,6 +175,50 @@
       "properties": {
         "match": { "type": "object", "additionalProperties": true },
         "label": { "type": "string", "description": "Human-readable name for assertion failure messages." }
+      }
+    },
+    "SubagentOutcomeSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Canned outcome for one subagent invocation, parallel to runner.drivers.SubagentOutcome. The harness emits subagent_invoked, runs this canned outcome, then emits subagent_returned (or subagent_failed if `error` is set).",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Result text the subagent returned to the parent (becomes the parent's tool_result-equivalent)."
+        },
+        "structured": {
+          "description": "Optional structured result (any JSON value). Surfaces on subagent_returned.data.aep.subagent.result.structured."
+        },
+        "reason": {
+          "enum": ["converged", "budget_exhausted", "token_limit", "turn_limit", "error", "interrupted", "verifier_failed"],
+          "default": "converged",
+          "description": "How the subagent terminated; mirrors AEP StopReason."
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Subagent's RunStateSnapshot rollup. Reflected on subagent_returned.data.aep.subagent.usage AND added to the parent's cumulative state for boundary checks.",
+          "properties": {
+            "total_cost_usd": { "type": "number", "minimum": 0 },
+            "total_tokens":   { "type": "integer", "minimum": 0 },
+            "total_turns":    { "type": "integer", "minimum": 0 },
+            "tokens_input_total":  { "type": "integer", "minimum": 0 },
+            "tokens_output_total": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "error": {
+          "type": "string",
+          "description": "When set, the harness emits subagent_failed instead of subagent_returned with this error message."
+        },
+        "error_code": {
+          "type": "string",
+          "description": "Optional stable error code accompanying `error`."
+        }
       }
     },
     "FinalState": {

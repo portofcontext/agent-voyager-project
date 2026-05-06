@@ -119,6 +119,21 @@
           "default": null,
           "title": "Skills"
         },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_SubagentDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subagents"
+        },
         "aep.thread_id": {
           "anyOf": [
             {
@@ -1995,6 +2010,505 @@
       "title": "StopReason",
       "type": "string"
     },
+    "SubagentFailedData": {
+      "additionalProperties": true,
+      "description": "Subagent invocation errored. The parent treats the error as a\ntool-call failure: the model receives an `Error: ...` string in place\nof the result and may retry or proceed.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.agent.name": {
+          "title": "Gen Ai.Agent.Name",
+          "type": "string"
+        },
+        "aep.subagent.invocation_id": {
+          "minLength": 1,
+          "title": "Aep.Subagent.Invocation Id",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "aep.subagent.error": {
+          "title": "Aep.Subagent.Error",
+          "type": "string"
+        },
+        "aep.subagent.error.code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Subagent.Error.Code"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.agent.name",
+        "aep.subagent.invocation_id",
+        "duration_ms",
+        "aep.subagent.error"
+      ],
+      "title": "SubagentFailedData",
+      "type": "object"
+    },
+    "SubagentFailedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.subagent_failed",
+          "default": "aep.subagent_failed",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SubagentFailedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "SubagentFailedEvent",
+      "type": "object"
+    },
+    "SubagentInvokedData": {
+      "additionalProperties": true,
+      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.agent.name": {
+          "title": "Gen Ai.Agent.Name",
+          "type": "string"
+        },
+        "gen_ai.agent.description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Agent.Description"
+        },
+        "gen_ai.operation.name": {
+          "const": "invoke_agent",
+          "default": "invoke_agent",
+          "title": "Gen Ai.Operation.Name",
+          "type": "string"
+        },
+        "aep.subagent.invocation_id": {
+          "minLength": 1,
+          "title": "Aep.Subagent.Invocation Id",
+          "type": "string"
+        },
+        "aep.subagent.input": {
+          "additionalProperties": true,
+          "title": "Aep.Subagent.Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.agent.name",
+        "aep.subagent.invocation_id",
+        "aep.subagent.input"
+      ],
+      "title": "SubagentInvokedData",
+      "type": "object"
+    },
+    "SubagentInvokedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.subagent_invoked",
+          "default": "aep.subagent_invoked",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SubagentInvokedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "SubagentInvokedEvent",
+      "type": "object"
+    },
+    "SubagentReturnedData": {
+      "additionalProperties": true,
+      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them. `aep.subagent.usage`\nrolls up the subagent's own consumption (cost, tokens, turns) — this\nrollup is also reflected in the parent run's cumulative state, but the\nbreakdown is preserved here so consumers can attribute spend to the\nsubagent that incurred it.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.agent.name": {
+          "title": "Gen Ai.Agent.Name",
+          "type": "string"
+        },
+        "aep.subagent.invocation_id": {
+          "minLength": 1,
+          "title": "Aep.Subagent.Invocation Id",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "aep.subagent.result.text": {
+          "title": "Aep.Subagent.Result.Text",
+          "type": "string"
+        },
+        "aep.subagent.result.structured": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Subagent.Result.Structured"
+        },
+        "aep.subagent.reason": {
+          "$ref": "#/$defs/StopReason"
+        },
+        "aep.subagent.usage": {
+          "$ref": "#/$defs/RunStateSnapshot"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.agent.name",
+        "aep.subagent.invocation_id",
+        "duration_ms",
+        "aep.subagent.result.text",
+        "aep.subagent.reason",
+        "aep.subagent.usage"
+      ],
+      "title": "SubagentReturnedData",
+      "type": "object"
+    },
+    "SubagentReturnedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.subagent_returned",
+          "default": "aep.subagent_returned",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SubagentReturnedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "SubagentReturnedEvent",
+      "type": "object"
+    },
     "TextEmittedData": {
       "additionalProperties": true,
       "properties": {
@@ -3342,6 +3856,39 @@
       "title": "VerifierEvaluatedEvent",
       "type": "object"
     },
+    "_SubagentDecl": {
+      "additionalProperties": true,
+      "description": "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "_SubagentDecl",
+      "type": "object"
+    },
     "_ToolDecl": {
       "additionalProperties": true,
       "description": "Tool descriptor in `agent_started.data.tools` — MCP-shaped + AEP fields.",
@@ -3424,6 +3971,9 @@
       "aep.model_turn_started": "#/$defs/ModelTurnStartedEvent",
       "aep.skill_executed": "#/$defs/SkillExecutedEvent",
       "aep.skill_loaded": "#/$defs/SkillLoadedEvent",
+      "aep.subagent_failed": "#/$defs/SubagentFailedEvent",
+      "aep.subagent_invoked": "#/$defs/SubagentInvokedEvent",
+      "aep.subagent_returned": "#/$defs/SubagentReturnedEvent",
       "aep.text_emitted": "#/$defs/TextEmittedEvent",
       "aep.tool_exec_request": "#/$defs/ToolExecRequestEvent",
       "aep.tool_exec_resolved": "#/$defs/ToolExecResolvedEvent",
@@ -3456,6 +4006,15 @@
     },
     {
       "$ref": "#/$defs/ToolFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/SubagentInvokedEvent"
+    },
+    {
+      "$ref": "#/$defs/SubagentReturnedEvent"
+    },
+    {
+      "$ref": "#/$defs/SubagentFailedEvent"
     },
     {
       "$ref": "#/$defs/TextEmittedEvent"

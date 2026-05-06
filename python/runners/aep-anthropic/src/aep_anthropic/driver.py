@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from aep import Config
 from aep.runner.drivers import ModelDriver, ModelResponse, ScriptedToolCall
 
 logger = logging.getLogger(__name__)
@@ -252,3 +253,64 @@ class AnthropicModelDriver(ModelDriver):
         response = self.client.messages.create(**kwargs)
         duration_ms = int((time.monotonic() - t0) * 1000)
         return _anthropic_response_to_aep(response, self.model, self.prices, duration_ms)
+
+
+# ── Config → Anthropic tools[] translation ────────────────────────────────────
+
+
+_DEFAULT_SUBAGENT_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "prompt": {"type": "string", "description": "Task description for the subagent."}
+    },
+    "required": ["prompt"],
+}
+
+
+def build_anthropic_tools(
+    config: Config,
+    *,
+    builtins: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Build the `tools` parameter for Anthropic's Messages API from an AEP Config.
+
+    Merges three sources into one Anthropic-shaped tools[] list:
+      1. `builtins` — runner-provided tools the driver always exposes (e.g.
+         `aep_anthropic.shell_tools.SHELL_TOOL_SCHEMAS`). Pass `None` to omit.
+      2. `config.tools` — supervisor-declared RPC tools. Names + inputSchema
+         come straight off the Config.
+      3. `config.subagents` — declared subagents become MCP-shaped tools the
+         model can call by name. The runner routes the call through the
+         subagent lifecycle on dispatch (NOT the tool lifecycle), but the
+         model sees them as ordinary tools — this matches Claude Agent SDK,
+         Google ADK AgentTool, and DeepAgents conventions.
+
+    Applies `config.allowed_tools` as a final allowlist filter when set.
+
+    Translates camelCase MCP `inputSchema` to snake_case `input_schema` (the
+    Anthropic API's wire spelling) at the boundary.
+
+    Use this whenever you wire `AEPRunner` directly with `AnthropicModelDriver`
+    — without it, the model sees no tools at all and any tool/subagent
+    dispatch path is unreachable. The `aep-anthropic` CLI calls this for you;
+    in-process callers (tests, custom supervisors) need to call it themselves.
+    """
+    out: list[dict[str, Any]] = list(builtins or [])
+    if config.tools:
+        out.extend(
+            {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
+            for t in config.tools
+        )
+    if config.subagents:
+        out.extend(
+            {
+                "name": sa.name,
+                "description": sa.description,
+                "input_schema": sa.inputSchema or _DEFAULT_SUBAGENT_INPUT_SCHEMA,
+            }
+            for sa in config.subagents
+        )
+    if config.allowed_tools is not None:
+        allowed = set(config.allowed_tools)
+        out = [t for t in out if t["name"] in allowed]
+    return out

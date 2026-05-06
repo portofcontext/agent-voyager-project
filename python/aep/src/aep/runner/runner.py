@@ -40,6 +40,7 @@ from aep.runner.boundary import (
 )
 from aep.runner.drivers import (
     ModelDriver,
+    SubagentDriver,
     SupervisorDriver,
     ToolDriver,
     ToolOutcome,
@@ -68,6 +69,13 @@ from aep.types import (
     RunStateSnapshot,
     SkillLoadedData,
     SkillLoadedEvent,
+    Subagent,
+    SubagentFailedData,
+    SubagentFailedEvent,
+    SubagentInvokedData,
+    SubagentInvokedEvent,
+    SubagentReturnedData,
+    SubagentReturnedEvent,
     TextEmittedData,
     TextEmittedEvent,
     Tool,
@@ -144,10 +152,15 @@ class AEPRunner:
         tools: ToolDriver,
         supervisor: SupervisorDriver,
         runner_builtin_tools: list[dict[str, Any]] | None = None,
+        subagent_driver: SubagentDriver | None = None,
     ) -> None:
         """`runner_builtin_tools` declares the runner's built-in tool catalog.
         Each entry is `{name, description, input_schema}` (snake_case, internal).
-        Used to compute the effective tool surface for `agent_started.data.tools`."""
+        Used to compute the effective tool surface for `agent_started.data.tools`.
+
+        `subagent_driver` is required iff `config.subagents` is non-empty.
+        Without one declared, subagent invocations fail with a clear error
+        rather than silently degrading."""
         self.config = config
         self.model = model
         self.tools = tools
@@ -155,12 +168,18 @@ class AEPRunner:
         self.trajectory: list[BaseModel | dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
         self._supervisor_tools_by_name: dict[str, Tool] = {t.name: t for t in (config.tools or [])}
+        self._subagents_by_name: dict[str, Subagent] = {
+            sa.name: sa for sa in (config.subagents or [])
+        }
+        self._subagent_driver = subagent_driver
         self._runner_builtin_tools = list(runner_builtin_tools or [])
         self._allowed_tools: frozenset[str] | None = (
             frozenset(config.allowed_tools) if config.allowed_tools is not None else None
         )
         self._req_seq = itertools.count(1)
         self._next_request_id = lambda: f"req-{next(self._req_seq)}"
+        self._sa_seq = itertools.count(1)
+        self._next_subagent_invocation_id = lambda: f"sa-{next(self._sa_seq)}"
 
         # Span tree state. trace_id is allocated per run; agent_span_id is the
         # root span (lifetime = the run); turn / tool / rpc spans are nested.
@@ -358,11 +377,37 @@ class AEPRunner:
     # ── Tool handling ────────────────────────────────────────────────────────
 
     def _validate_allowed_tools(self) -> bool:
-        """Cross-field check: every Config.tools name MUST be in allowed_tools (when set)."""
+        """Cross-field checks at run start:
+        - Subagent names MUST NOT collide with tool names (the model sees a
+          single name → one resource).
+        - Every Config.tools name AND every Config.subagents name MUST be in
+          allowed_tools (when set).
+        """
+        cfg = self.config
+        tool_names = {t.name for t in (cfg.tools or [])}
+        builtin_names = {bt["name"] for bt in self._runner_builtin_tools}
+        subagent_names = {sa.name for sa in (cfg.subagents or [])}
+        collisions = sorted(subagent_names & (tool_names | builtin_names))
+        if collisions:
+            self._emit(
+                ErrorOccurredEvent(
+                    subject=cfg.run_id,
+                    data=ErrorOccurredData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "aep.error.code": ErrorCode.unknown,
+                            "aep.error.message": (
+                                "Config.subagents[].name must not collide with tool names; "
+                                f"colliding: {collisions}"
+                            ),
+                        },
+                    ),
+                )
+            )
+            return False
         if self._allowed_tools is None:
             return True
-        cfg = self.config
-        declared = {t.name for t in (cfg.tools or [])}
+        declared = tool_names | subagent_names
         excluded = sorted(declared - self._allowed_tools)
         if excluded:
             self._emit(
@@ -374,7 +419,7 @@ class AEPRunner:
                             "aep.error.code": ErrorCode.unknown,
                             "aep.error.message": (
                                 "Config.allowed_tools must include every name in "
-                                f"Config.tools; missing: {excluded}"
+                                f"Config.tools and Config.subagents; missing: {excluded}"
                             ),
                         },
                     ),
@@ -418,6 +463,40 @@ class AEPRunner:
 
     def _handle_tool_call(self, tc, state: _MutableState) -> None:
         cfg = self.config
+
+        # Subagent invocations route through their own lifecycle
+        # (subagent_invoked / subagent_returned / subagent_failed) — they do
+        # not surface as tool_invoked. The subagent's frame is its own span;
+        # its internal model_turn / tool / text events nest under that frame.
+        if tc.tool in self._subagents_by_name:
+            if self._allowed_tools is not None and tc.tool not in self._allowed_tools:
+                # Allowed-tools applies to subagent names too — they're what
+                # the model sees. Emit tool_failed (same rejection shape as
+                # any other allowlist miss); never emit subagent_invoked for
+                # an invocation we never dispatched.
+                tool_span_id = new_span_id()
+                self._tool_span_by_call_id[tc.call_id] = tool_span_id
+                self._emit(
+                    ToolInvokedEvent(
+                        subject=cfg.run_id,
+                        data=ToolInvokedData(
+                            **self._shared_span(tool_span_id, self._current_turn_span_id),
+                            step=state.total_turns,
+                            **{
+                                "gen_ai.tool.call.id": tc.call_id,
+                                "gen_ai.tool.name": tc.tool,
+                                "gen_ai.tool.call.arguments": tc.input,
+                            },
+                        ),
+                    )
+                )
+                self._emit_tool_failed(
+                    tc, state, f"subagent {tc.tool!r} not in Config.allowed_tools"
+                )
+                return
+            self._handle_subagent_call(tc, state)
+            return
+
         tool_span_id = new_span_id()
         self._tool_span_by_call_id[tc.call_id] = tool_span_id
 
@@ -623,6 +702,191 @@ class AEPRunner:
             }
         )
 
+    def _handle_subagent_call(self, tc, state: _MutableState) -> None:
+        """Dispatch a parent-agent tool call to a declared subagent.
+
+        Emits `subagent_invoked` to open a frame span, runs the subagent
+        through `self._subagent_driver`, then emits either `subagent_returned`
+        (success) or `subagent_failed` (driver returned an error or raised).
+        Internal turns of the subagent observe via `parent_observer` —
+        their `parent_span_id` chains through the frame span_id this method
+        allocates, so the trajectory reconstructs as a nested tree.
+
+        The subagent's result is appended to the parent's history as a
+        `tool` message keyed by `tc.call_id`, so the parent's next model
+        turn sees the result the same way it sees any tool reply. (The
+        model invoked the subagent through a tool_use block; it expects a
+        matching tool_result.)
+        """
+        cfg = self.config
+        sa = self._subagents_by_name[tc.tool]
+        invocation_id = self._next_subagent_invocation_id()
+        frame_span_id = new_span_id()
+        # Reuse the tool_span map so inject_correction / on_tool verifiers
+        # that look up subject_call_ids still find the subagent invocation.
+        self._tool_span_by_call_id[tc.call_id] = frame_span_id
+        state.tools_invoked[tc.tool] = state.tools_invoked.get(tc.tool, 0) + 1
+
+        invoked_data: dict[str, Any] = {
+            "step": state.total_turns,
+            "gen_ai.agent.name": sa.name,
+            "aep.subagent.invocation_id": invocation_id,
+            "aep.subagent.input": dict(tc.input or {}),
+        }
+        if sa.description:
+            invoked_data["gen_ai.agent.description"] = sa.description
+
+        self._emit(
+            SubagentInvokedEvent(
+                subject=cfg.run_id,
+                data=SubagentInvokedData(
+                    **self._shared_span(frame_span_id, self._current_turn_span_id),
+                    **invoked_data,
+                ),
+            )
+        )
+
+        if self._subagent_driver is None:
+            self._emit_subagent_failed(
+                tc=tc,
+                state=state,
+                sa=sa,
+                invocation_id=invocation_id,
+                frame_span_id=frame_span_id,
+                error="no SubagentDriver configured for this runner",
+                error_code="not_configured",
+                duration_ms=0,
+            )
+            return
+
+        t0 = _time.monotonic()
+        try:
+            outcome = self._subagent_driver.invoke(
+                sa,
+                dict(tc.input or {}),
+                parent_trace_id=self._trace_id,
+                parent_frame_span_id=frame_span_id,
+                parent_observer=self._emit,
+            )
+        except Exception as e:
+            duration_ms = int((_time.monotonic() - t0) * 1000)
+            self._emit_subagent_failed(
+                tc=tc,
+                state=state,
+                sa=sa,
+                invocation_id=invocation_id,
+                frame_span_id=frame_span_id,
+                error=f"{type(e).__name__}: {e}",
+                error_code="driver_exception",
+                duration_ms=duration_ms,
+            )
+            return
+
+        # Roll the subagent's spend into the parent's cumulative state so the
+        # parent's boundary checks see the true total. The breakdown is
+        # preserved on subagent_returned.data.aep.subagent.usage for
+        # attribution.
+        sa_usage = outcome.usage
+        state.total_cost_usd += sa_usage.total_cost_usd
+        state.total_tokens += sa_usage.total_tokens
+        state.tokens_input_total += sa_usage.tokens_input_total or 0
+        state.tokens_output_total += sa_usage.tokens_output_total or 0
+        if sa_usage.tokens_cache_read_total:
+            state.tokens_cache_read_total += sa_usage.tokens_cache_read_total
+        if sa_usage.tokens_cache_write_total:
+            state.tokens_cache_write_total += sa_usage.tokens_cache_write_total
+
+        if outcome.error is not None:
+            self._emit_subagent_failed(
+                tc=tc,
+                state=state,
+                sa=sa,
+                invocation_id=invocation_id,
+                frame_span_id=frame_span_id,
+                error=outcome.error,
+                error_code=outcome.error_code,
+                duration_ms=outcome.duration_ms,
+            )
+            return
+
+        returned_data: dict[str, Any] = {
+            "step": state.total_turns,
+            "gen_ai.agent.name": sa.name,
+            "aep.subagent.invocation_id": invocation_id,
+            "duration_ms": outcome.duration_ms,
+            "aep.subagent.result.text": outcome.text,
+            "aep.subagent.reason": outcome.reason,
+            "aep.subagent.usage": sa_usage,
+        }
+        if outcome.structured is not None:
+            returned_data["aep.subagent.result.structured"] = outcome.structured
+
+        self._emit(
+            SubagentReturnedEvent(
+                subject=cfg.run_id,
+                data=SubagentReturnedData(
+                    **self._shared_span(frame_span_id, self._current_turn_span_id),
+                    **returned_data,
+                ),
+            )
+        )
+        # Push the subagent's result back into the parent's history so the
+        # parent's next model turn sees it as a normal tool_result. The model
+        # invoked the subagent through a tool_use block; without a matching
+        # tool_result the API rejects the next turn.
+        self._history.append(
+            {
+                "role": "tool",
+                "tool": tc.tool,
+                "call_id": tc.call_id,
+                "output": outcome.text,
+            }
+        )
+
+    def _emit_subagent_failed(
+        self,
+        *,
+        tc,
+        state: _MutableState,
+        sa: Subagent,
+        invocation_id: str,
+        frame_span_id: str,
+        error: str,
+        error_code: str | None,
+        duration_ms: int,
+    ) -> None:
+        cfg = self.config
+        failed_data: dict[str, Any] = {
+            "step": state.total_turns,
+            "gen_ai.agent.name": sa.name,
+            "aep.subagent.invocation_id": invocation_id,
+            "duration_ms": duration_ms,
+            "aep.subagent.error": error,
+        }
+        if error_code is not None:
+            failed_data["aep.subagent.error.code"] = error_code
+
+        self._emit(
+            SubagentFailedEvent(
+                subject=cfg.run_id,
+                data=SubagentFailedData(
+                    **self._shared_span(frame_span_id, self._current_turn_span_id),
+                    **failed_data,
+                ),
+            )
+        )
+        # Per the same constraint as _emit_tool_failed: the model's tool_use
+        # MUST be answered with a tool_result, even on failure, or the next
+        # API call rejects with an unmatched-tool_use_id error.
+        self._history.append(
+            {
+                "role": "tool",
+                "tool": tc.tool,
+                "call_id": tc.call_id,
+                "output": f"Error: {error}",
+            }
+        )
+
     # ── Verifier handling ──────────────────────────────────────────────────
 
     def _run_verifiers_for(self, trigger: str) -> None:
@@ -759,10 +1023,28 @@ class AEPRunner:
             candidates = [c for c in candidates if c["name"] in self._allowed_tools]
         return candidates or None
 
+    def _build_subagent_decls(self) -> list[dict[str, Any]] | None:
+        """Subagent descriptors for `agent_started.data.subagents`. Filtered
+        by allowed_tools when set (same rule as tools — the model only sees
+        what's permitted)."""
+        cfg = self.config
+        if not cfg.subagents:
+            return None
+        decls: list[dict[str, Any]] = []
+        for sa in cfg.subagents:
+            entry: dict[str, Any] = {"name": sa.name, "description": sa.description}
+            if sa.inputSchema is not None:
+                entry["inputSchema"] = sa.inputSchema
+            decls.append(entry)
+        if self._allowed_tools is not None:
+            decls = [d for d in decls if d["name"] in self._allowed_tools]
+        return decls or None
+
     def _emit_agent_started(self) -> None:
         cfg = self.config
         tools_meta = self._build_tool_decls()
         skills_meta = [s.name for s in (cfg.skills or [])] or None
+        subagents_meta = self._build_subagent_decls()
 
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
@@ -772,6 +1054,7 @@ class AEPRunner:
             "system_prompt": cfg.system_prompt,
             "tools": tools_meta,
             "skills": skills_meta,
+            "subagents": subagents_meta,
         }
         if cfg.model:
             data_kwargs["gen_ai.request.model"] = cfg.model

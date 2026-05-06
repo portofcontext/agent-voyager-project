@@ -20,8 +20,9 @@ from typing import IO
 from aep import Config, parse_supervisor_message, write_event
 from aep.runner import AEPRunner
 from aep.runner.drivers import SupervisorDriver
-from aep_anthropic.driver import AnthropicModelDriver
+from aep_anthropic.driver import AnthropicModelDriver, build_anthropic_tools
 from aep_anthropic.shell_tools import SHELL_TOOL_SCHEMAS, ShellTools
+from aep_anthropic.subagent import AnthropicSubagentDriver
 
 
 class StdinSupervisor(SupervisorDriver):
@@ -185,21 +186,10 @@ def main(argv: list[str] | None = None) -> int:
 
     model = args.model or config.model or "claude-sonnet-4-6"
 
-    # Build the tools[] surface we expose to the LLM:
-    #  1. Runner built-ins (bash / read_file / write_file)
-    #  2. Supervisor-declared RPC tools (Config.tools)
-    # Then filter by Config.allowed_tools if it's set.
-    tools_param: list[dict] = list(SHELL_TOOL_SCHEMAS)
-    if config.tools:
-        # Anthropic API expects `input_schema` (snake_case); MCP / AEP wire is
-        # `inputSchema` (camelCase). Translate at the boundary.
-        tools_param.extend(
-            {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
-            for t in config.tools
-        )
-    if config.allowed_tools is not None:
-        allowed = set(config.allowed_tools)
-        tools_param = [t for t in tools_param if t["name"] in allowed]
+    # Build the tools[] surface we expose to the LLM. Single source of truth
+    # is `build_anthropic_tools(config, builtins=...)` so in-process callers
+    # (tests, custom supervisors) and the CLI agree on what's exposed.
+    tools_param: list[dict] = build_anthropic_tools(config, builtins=list(SHELL_TOOL_SCHEMAS))
 
     driver = AnthropicModelDriver(
         model=model,
@@ -208,12 +198,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     supervisor = StdinSupervisor(sys.stdin, sink=sys.stdout)
 
+    subagent_driver = AnthropicSubagentDriver(default_model=model) if config.subagents else None
+
     runner = AEPRunner(
         config=config,
         model=driver,
         tools=ShellTools(),
         supervisor=supervisor,
         runner_builtin_tools=list(SHELL_TOOL_SCHEMAS),
+        subagent_driver=subagent_driver,
     )
     runner.run()
     return 0
