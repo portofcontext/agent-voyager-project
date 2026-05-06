@@ -93,6 +93,7 @@ The conventions AEP adopts (verified against the upstream
 | `gen_ai.usage.cache_creation.input_tokens` | Cache-creation portion of input |
 | `gen_ai.usage.reasoning.output_tokens` | Reasoning-model output tokens (Claude thinking, o-series). Recommended when applicable. |
 | `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.tool.call.arguments` | Tool dispatch attributes |
+| `gen_ai.agent.name`, `gen_ai.agent.description` | Subagent identity attributes (used on `subagent_invoked` / `subagent_returned`); per OTel GenAI agent-spans semconv. |
 | `gen_ai.response.finish_reasons` | Termination reasons array |
 | `gen_ai.request.stream`, `gen_ai.response.time_to_first_chunk` | Streaming-specific attributes |
 
@@ -353,6 +354,19 @@ A Config sent at startup uses three of these specs:
       "source": "./skills/style-guide" }            // filesystem
   ],
 
+  // AEP-specific Subagent primitive — model-facing surface is MCP-shaped
+  // (name, description, inputSchema), so the model sees subagents the same
+  // way it sees tools. The wire surfaces them as their own lifecycle
+  // (subagent_invoked / subagent_returned) so nested runs observe as a
+  // span tree instead of flattening into a single tool_use → tool_result.
+  "subagents": [
+    { "name": "summarizer",
+      "description": "Compresses a passage to bullets.",
+      "system_prompt": "You are a precise summarizer.",
+      "model": "claude-haiku-4-5-20251001",
+      "boundary": { "max_steps": 2 } }
+  ],
+
   // AEP-specific: verifier, boundary
   "verifiers": [ { "name": "tests-pass", ... } ],
   "boundary":  { "max_cost_usd": 2.0, "max_steps": 30 }
@@ -361,9 +375,9 @@ A Config sent at startup uses three of these specs:
 
 A Config validates against:
 - The AEP `config.schema.json` (whole document)
-- MCP tool-descriptor schema (each `tools[]` entry)
+- MCP tool-descriptor schema (each `tools[]` entry; `subagents[].inputSchema` follows the same shape)
 - Agent Skills source-resolution scheme (each `skills[]` entry)
-- AEP-specific schemas for `verifiers[]` and `boundary` (no upstream)
+- AEP-specific schemas for `verifiers[]`, `boundary`, and `subagents[]` (no upstream)
 
 ---
 

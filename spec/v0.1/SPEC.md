@@ -246,6 +246,35 @@ Supervisors MAY maintain category-based profiles (e.g., "DDD-strict", "Complianc
 
 ---
 
+## 8.5 Subagents
+
+`Config.subagents[]` declares **delegate agents** the parent agent may invoke by name. A Subagent is a top-level Config primitive alongside `tools` and `skills` — the supervisor declares the full set up front (no mid-run reach-in); the parent agent picks one to delegate to at runtime. The shape mirrors `Config` itself: each Subagent carries its own `system_prompt`, `model`, `tools`, `skills`, `verifiers`, `boundary`, `output_schema` — the environment slice the subagent runs inside.
+
+Field-level definitions live in [`config.schema.json#/$defs/Subagent`](./config.schema.json) (auto-generated). v0.1 specifies the wire and lifecycle; richer dispatch (tools-inside-subagents, recursion, verifier cascade) is specified but not required to be exercised by the prototype runners.
+
+**Wire flow.**
+
+1. Model invokes a tool whose name matches a `Config.subagents[].name`. Runner emits `aep.subagent_invoked` (NOT `aep.tool_invoked`). The event's `data.span_id` is the **frame span** for this invocation.
+2. Runner runs the subagent within the declared environment slice. Any nested events the subagent emits (model turns, tool calls, text) MUST set `data.parent_span_id` to the frame span (or descend from it transitively). The trajectory reconstructs as one tree.
+3. Runner emits `aep.subagent_returned` carrying `data.aep.subagent.result.text` plus a `RunStateSnapshot` rollup at `data.aep.subagent.usage`. The `data.span_id` MUST equal the matching `subagent_invoked.data.span_id` so consumers pair them.
+4. If invocation fails (no driver wired, exception, or driver reported error), runner emits `aep.subagent_failed` with `data.aep.subagent.error` instead of `subagent_returned`. The model receives an `Error: …` tool_result for symmetry with §8 step 4.
+5. The subagent's spend (cost, tokens) MUST be rolled into the parent run's cumulative `RunStateSnapshot`. Per-subagent attribution is preserved on `subagent_returned.data.aep.subagent.usage`.
+
+**Two observability modes.** Runners MAY expose subagent internals at different fidelity:
+
+- **Transparent.** The runner owns the sub-loop (driver pattern) and emits `model_turn_*` / `tool_*` / `text_emitted` for the subagent, parented under the frame span. Consumers see the full nested span tree.
+- **Opaque.** The runner delegates to an SDK that doesn't surface subagent internals (translator pattern). Only `subagent_invoked` and `subagent_returned` are emitted; the wire shape is "thin" but well-formed. Consumers MUST NOT assume the absence of nested events implies the subagent ran trivially — only that this runner cannot observe the internals.
+
+Both modes produce the same outer wire shape; the second is a strict subset of the first.
+
+**Subagent ↔ tool collision.** Subagent names MUST NOT collide with `Config.tools[].name` or runner built-in tool names. A collision is a configuration conflict — the runner MUST detect this at startup, emit `error_occurred`, and stop with `reason: "error"` before any model turn runs. (Same wire shape as the §8.1 allowed-tools coherence check.)
+
+**`allowed_tools` applies to subagents.** When `Config.allowed_tools` is set, every name in `Config.subagents[]` MUST also appear there, by the same rule that applies to `Config.tools[]`. The model-facing surface is one allowlist over both kinds.
+
+**`agent_started.data.subagents`.** When `Config.subagents` is non-empty, the runner MUST surface the model-facing subagent declaration on `agent_started.data.subagents[]` (parallel to `data.tools[]` and `data.skills[]`). Each entry carries `name`, `description`, and optional `inputSchema` (MCP-shaped). Consumers can read this without parsing the Config a second time.
+
+---
+
 ## 9. The runner loop (normative)
 
 A conforming runner MUST behave as if executing the following algorithm. (The runner MAY reorder operations that are not externally observable, provided the emitted event sequence is indistinguishable.)
@@ -390,6 +419,9 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 | `aep.tool_invoked` | `aep://runner` | Model invoked a tool. |
 | `aep.tool_returned` | `aep://runner` | Tool produced a result (or was rejected). |
 | `aep.tool_failed` | `aep://runner` | Tool raised an execution error. |
+| `aep.subagent_invoked` | `aep://runner` | Parent agent delegated to a declared subagent (see §8.5). Frame span opens. |
+| `aep.subagent_returned` | `aep://runner` | Subagent returned to its parent. Frame span closes; pairs with `subagent_invoked` by `span_id`. |
+| `aep.subagent_failed` | `aep://runner` | Subagent invocation errored; the model receives an `Error: …` tool_result. |
 | `aep.text_emitted` | `aep://runner` | Assistant text content. |
 | `aep.cost_recorded` | `aep://runner` | Cumulative `RunStateSnapshot` snapshot. |
 | `aep.skill_loaded` | `aep://runner` | SKILL.md loaded into context. |

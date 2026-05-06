@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from aep.conformance.matcher import matches_partial
 from aep.runner.mock import (
+    ScriptedSubagentDriver,
     ScriptedSupervisor,
     ScriptedTools,
     parse_scripted_model,
@@ -175,12 +176,19 @@ def _build_runner(case: dict[str, Any]) -> AEPRunner:
     tools = ScriptedTools(case.get("scripted_tools") or {})
     supervisor = ScriptedSupervisor(case.get("scripted_supervisor") or [])
     builtin_tools = case.get("runner_builtin_tools") or None
+    # `scripted_subagents` maps subagent name → canned outcome (text, reason,
+    # duration_ms, usage). When a case declares Config.subagents AND wants
+    # a successful invocation, supply this; omit it to exercise the
+    # missing-driver path that emits subagent_failed.
+    scripted_sa = case.get("scripted_subagents")
+    sa_driver = ScriptedSubagentDriver(scripted_sa) if scripted_sa else None
     return AEPRunner(
         config=config,
         model=model,
         tools=tools,
         supervisor=supervisor,
         runner_builtin_tools=builtin_tools,
+        subagent_driver=sa_driver,
     )
 
 

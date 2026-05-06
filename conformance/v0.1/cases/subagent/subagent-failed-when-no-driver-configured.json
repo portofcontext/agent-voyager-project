@@ -1,0 +1,83 @@
+{
+  "id": "subagent-failed-when-no-driver-configured",
+  "title": "Calling a declared subagent without a SubagentDriver wired in emits subagent_failed (not silent skip)",
+  "description": "When Config.subagents is non-empty but the runner has no SubagentDriver configured (the prototype default), a parent invocation MUST surface as subagent_invoked → subagent_failed. The model receives an `Error: ...` tool_result so it can react; the wire shape stays well-formed. Pinning this avoids the failure mode where a misconfigured runner silently swallows subagent calls.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#subagents"
+  ],
+  "applies_to": [
+    "runner"
+  ],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "subagent-no-driver",
+    "model": "test/mock",
+    "subagents": [
+      {
+        "name": "helper",
+        "description": "Won't actually be reachable in this case."
+      }
+    ]
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 30,
+      "tokens_output": 5,
+      "cost_usd": 0.0005,
+      "duration_ms": 1,
+      "tool_calls": [
+        {
+          "call_id": "c1",
+          "tool": "helper",
+          "input": {
+            "prompt": "do something"
+          }
+        }
+      ],
+      "converged": false
+    },
+    {
+      "tokens_input": 15,
+      "tokens_output": 5,
+      "cost_usd": 0.0005,
+      "duration_ms": 1,
+      "text": "proceeding without it",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "aep.subagent_invoked",
+          "data": {
+            "gen_ai.agent.name": "helper"
+          }
+        },
+        "label": "subagent_invoked is still emitted — the parent did call the subagent"
+      },
+      {
+        "match": {
+          "type": "aep.subagent_failed",
+          "data": {
+            "gen_ai.agent.name": "helper",
+            "aep.subagent.error.code": "not_configured"
+          }
+        },
+        "label": "subagent_failed names the missing-driver failure with a stable error code"
+      }
+    ],
+    "forbidden_events": [
+      {
+        "match": {
+          "type": "aep.subagent_returned",
+          "data": {
+            "gen_ai.agent.name": "helper"
+          }
+        },
+        "label": "no subagent_returned when the subagent failed"
+      }
+    ]
+  }
+}

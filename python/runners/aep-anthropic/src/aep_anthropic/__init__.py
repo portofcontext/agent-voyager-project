@@ -9,6 +9,7 @@ from aep_anthropic.driver import (
     DEFAULT_PRICES,
     AnthropicModelDriver,
     PriceTable,
+    build_anthropic_tools,
 )
 
 __version__ = "0.1.0"
@@ -18,4 +19,5 @@ __all__ = [
     "AnthropicModelDriver",
     "PriceTable",
     "__version__",
+    "build_anthropic_tools",
 ]

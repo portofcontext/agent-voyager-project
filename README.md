@@ -88,7 +88,8 @@ Three message classes:
 | Plane | Field | Purpose |
 |---|---|---|
 | Environment | `tools` | RPC tools the agent can call. Routed through the `tool_exec_*` lifecycle. |
-| Environment | `allowed_tools` | Optional allowlist. When present, the runner exposes ONLY these names — both `Config.tools` and runner built-ins are filtered through it. |
+| Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `tools` / `skills` / `verifiers` / `boundary`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
+| Environment | `allowed_tools` | Optional allowlist over the model-facing surface (tools AND subagents). When present, the runner exposes ONLY these names. |
 | Environment | `verifiers` | Deterministic Boolean checks the agent runs at declared triggers. Reactions (`halt` / `inject_correction` / `continue`) declared per verifier. |
 | Environment | `boundary` | Hard limits the agent enforces on itself. Strict-greater; runs may overshoot cost/tokens by one final turn, but `max_steps: N` runs EXACTLY N turns. |
 | Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |

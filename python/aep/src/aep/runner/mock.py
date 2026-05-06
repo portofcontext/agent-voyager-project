@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
 
+from aep.enums import StopReason
 from aep.runner.drivers import (
     ModelDriver,
     ModelResponse,
     ScriptedToolCall,
+    SubagentDriver,
+    SubagentOutcome,
     ToolDriver,
     ToolOutcome,
 )
+from aep.types import RunStateSnapshot, Subagent
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -223,9 +228,72 @@ class ScriptedSupervisor:
         return self._wait_for(self._tool_responses, request_id, timeout_ms)
 
 
+# ── Subagent (scripted outcomes for the conformance harness) ─────────────────
+
+
+class ScriptedSubagentDriver(SubagentDriver):
+    """SubagentDriver that returns canned outcomes by subagent name.
+
+    `outcomes` maps subagent name → outcome dict, where the dict carries
+    fields parallel to `SubagentOutcome` plus an optional `usage` block
+    describing the subagent's RunStateSnapshot rollup. Used by conformance
+    cases to exercise the subagent lifecycle deterministically without an
+    LLM in the loop.
+
+    Example:
+        ScriptedSubagentDriver({
+            "researcher": {
+                "text": "found 3 handlers",
+                "reason": "converged",
+                "duration_ms": 50,
+                "usage": {"total_cost_usd": 0.001, "total_tokens": 80, "total_turns": 1},
+            }
+        })
+    """
+
+    def __init__(self, outcomes: dict[str, dict[str, Any]] | None = None) -> None:
+        self._outcomes = outcomes or {}
+        self._invocations: list[tuple[str, dict[str, Any]]] = []
+
+    def invoke(
+        self,
+        subagent: Subagent,
+        invocation_input: dict[str, Any],
+        *,
+        parent_trace_id: str,
+        parent_frame_span_id: str,
+        parent_observer: Callable[[BaseModel], None],
+    ) -> SubagentOutcome:
+        # Record for assertion-by-inspection in tests.
+        self._invocations.append((subagent.name, dict(invocation_input)))
+
+        spec = self._outcomes.get(subagent.name) or {}
+        usage_spec = spec.get("usage") or {}
+        usage = RunStateSnapshot(
+            total_cost_usd=float(usage_spec.get("total_cost_usd", 0.0)),
+            total_tokens=int(usage_spec.get("total_tokens", 0)),
+            total_turns=int(usage_spec.get("total_turns", 0)),
+            tokens_input_total=usage_spec.get("tokens_input_total"),
+            tokens_output_total=usage_spec.get("tokens_output_total"),
+        )
+        reason = spec.get("reason", StopReason.converged)
+        if isinstance(reason, str):
+            reason = StopReason(reason)
+        return SubagentOutcome(
+            text=str(spec.get("text", "")),
+            structured=spec.get("structured"),
+            reason=reason,
+            duration_ms=int(spec.get("duration_ms", 1)),
+            usage=usage,
+            error=spec.get("error"),
+            error_code=spec.get("error_code"),
+        )
+
+
 __all__ = [
     "ModelExhausted",
     "ScriptedModel",
+    "ScriptedSubagentDriver",
     "ScriptedSupervisor",
     "ScriptedTools",
     "parse_scripted_model",

@@ -59,6 +59,11 @@ from aep import (
     RunStateSnapshot,
     Source,
     StopReason,
+    Subagent,
+    SubagentInvokedData,
+    SubagentInvokedEvent,
+    SubagentReturnedData,
+    SubagentReturnedEvent,
     TextEmittedData,
     TextEmittedEvent,
     ToolInvokedData,
@@ -158,10 +163,12 @@ class ClaudeAgentTranslator:
         sdk_client_cls: Callable[..., Any] | None = None,
         sdk_options_cls: type | None = None,
         sdk_hook_matcher_cls: type | None = None,
+        sdk_agent_definition_cls: type | None = None,
     ) -> None:
         self.config = config
         self.on_event = on_event
         self._call_seq = itertools.count(1)
+        self._sa_seq = itertools.count(1)
         self._step = 0
         self._started_at = now_iso()
         self._started_monotonic_ms = _monotonic_ms()
@@ -171,6 +178,18 @@ class ClaudeAgentTranslator:
         self._agent_span_id = new_span_id()
         self._current_turn_span_id: str | None = None
         self._tool_span_by_call_id: dict[str, str] = {}
+        # Subagent lifecycle bookkeeping. The Claude Agent SDK surfaces a
+        # subagent invocation as a parent-side `Agent` tool_use with
+        # `input.subagent_type` naming the declared subagent. When PreToolUse
+        # detects this we emit `subagent_invoked` (not `tool_invoked`) and
+        # stash the frame span_id keyed by tool_use_id; PostToolUse pops it
+        # and emits `subagent_returned`.
+        self._subagents_by_name: dict[str, Subagent] = {
+            sa.name: sa for sa in (config.subagents or [])
+        }
+        self._subagent_invocations: dict[
+            str, dict[str, Any]
+        ] = {}  # tool_use_id → {frame_span_id, sa_name, t0, invocation_id}
         self._total_turns = 0
         self._total_cost_usd = 0.0
         self._total_tokens = 0
@@ -198,6 +217,7 @@ class ClaudeAgentTranslator:
         self._sdk_client_cls = sdk_client_cls
         self._sdk_options_cls = sdk_options_cls
         self._sdk_hook_matcher_cls = sdk_hook_matcher_cls
+        self._sdk_agent_definition_cls = sdk_agent_definition_cls
 
     # ── Snapshot ────────────────────────────────────────────────────────────
 
@@ -320,6 +340,7 @@ class ClaudeAgentTranslator:
         """
         if self._sdk_client_cls is None:
             from claude_agent_sdk import (
+                AgentDefinition,
                 ClaudeAgentOptions,
                 ClaudeSDKClient,
                 HookMatcher,
@@ -328,6 +349,7 @@ class ClaudeAgentTranslator:
             self._sdk_client_cls = ClaudeSDKClient
             self._sdk_options_cls = ClaudeAgentOptions
             self._sdk_hook_matcher_cls = HookMatcher
+            self._sdk_agent_definition_cls = AgentDefinition
 
         options = self._build_sdk_options()
         prompt = self.config.prompt or ""
@@ -355,7 +377,11 @@ class ClaudeAgentTranslator:
           - Config.boundary.max_steps    → options.max_turns
           - Config.boundary.max_cost_usd → options.max_budget_usd
           - Config.model          → options.model
+          - Config.subagents      → options.agents = {name: AgentDefinition(...)}
           - hooks={PreToolUse, PostToolUse} → translator-emitted tool_invoked / tool_returned
+                                              OR subagent_invoked / subagent_returned when
+                                              the tool_use is the SDK's `Agent` tool with
+                                              a subagent_type matching a declared subagent
         """
         cfg = self.config
         assert self._sdk_options_cls is not None
@@ -373,6 +399,8 @@ class ClaudeAgentTranslator:
                 kwargs["max_turns"] = cfg.boundary.max_steps
             if cfg.boundary.max_cost_usd is not None:
                 kwargs["max_budget_usd"] = cfg.boundary.max_cost_usd
+        if cfg.subagents:
+            kwargs["agents"] = self._build_sdk_agents()
 
         kwargs["hooks"] = {
             "PreToolUse": [
@@ -416,6 +444,41 @@ class ClaudeAgentTranslator:
         kwargs.setdefault("stderr", _forward_stderr)
 
         return self._sdk_options_cls(**kwargs)
+
+    def _build_sdk_agents(self) -> dict[str, Any]:
+        """Translate Config.subagents → ClaudeAgentOptions.agents.
+
+        Maps the AEP Subagent shape onto Claude Agent SDK's `AgentDefinition`:
+
+          AEP Subagent.name           → key in the agents dict
+          AEP Subagent.description    → AgentDefinition.description
+          AEP Subagent.system_prompt  → AgentDefinition.prompt
+          AEP Subagent.model          → AgentDefinition.model
+          AEP Subagent.allowed_tools  → AgentDefinition.tools (allowlist)
+
+        v0.1 prototype: subagent.tools / verifiers / skills / inherit_tools /
+        nested subagents are not yet wired into the SDK side. The Subagent
+        type accepts them; this runner ignores them (with a warning would be
+        louder, but the prototype's job is to demonstrate the wire shape, not
+        ship full v1 mapping).
+
+        Falls back to constructing a plain dict when AgentDefinition isn't
+        injected — the SDK accepts dicts in some versions; tests rely on this.
+        """
+        agents: dict[str, Any] = {}
+        for sa in self.config.subagents or []:
+            payload: dict[str, Any] = {"description": sa.description}
+            if sa.system_prompt:
+                payload["prompt"] = sa.system_prompt
+            if sa.model:
+                payload["model"] = sa.model
+            if sa.allowed_tools is not None:
+                payload["tools"] = list(sa.allowed_tools)
+            if self._sdk_agent_definition_cls is not None:
+                agents[sa.name] = self._sdk_agent_definition_cls(**payload)
+            else:
+                agents[sa.name] = payload
+        return agents
 
     def _on_sdk_message(self, message: Any) -> None:
         """Route a single SDK Message instance to translator emitters.
@@ -611,12 +674,32 @@ class ClaudeAgentTranslator:
     async def _on_pre_tool_use_hook(
         self, input_data: dict[str, Any], tool_use_id: str | None, _context: Any
     ) -> dict[str, Any]:
-        """SDK hook fired before each tool invocation. Emits tool_invoked.
+        """SDK hook fired before each tool invocation. Emits tool_invoked —
+        OR `subagent_invoked` if the tool_use is the SDK's `Agent` tool with
+        a `subagent_type` matching a declared Config.subagent.
 
         Returns `{}` (no override) — the translator observes; it does not gate."""
         call_id = str(input_data.get("tool_use_id") or tool_use_id or f"sdk-{next(self._call_seq)}")
         tool = str(input_data.get("tool_name", "unknown"))
         tool_input = input_data.get("tool_input", {}) or {}
+
+        # Subagent dispatch: Claude Agent SDK exposes the parent's invocation
+        # of a declared subagent as a `tool_use` whose name is `Agent` and
+        # whose input includes `subagent_type`. The actual subagent run is
+        # opaque to the parent's observer surface (per CASDK research) — the
+        # parent only sees this one tool_use → tool_result pair. AEP surfaces
+        # it as `subagent_invoked` / `subagent_returned` so consumers don't
+        # have to special-case the `Agent` tool at every layer.
+        sa_name: str | None = None
+        if tool == "Agent":
+            candidate = tool_input.get("subagent_type")
+            if isinstance(candidate, str) and candidate in self._subagents_by_name:
+                sa_name = candidate
+
+        if sa_name is not None:
+            self._handle_subagent_pre(call_id=call_id, sa_name=sa_name, tool_input=tool_input)
+            return {}
+
         tool_span_id = new_span_id()
         self._tool_span_by_call_id[call_id] = tool_span_id
         parent = self._current_turn_span_id or self._agent_span_id
@@ -641,11 +724,21 @@ class ClaudeAgentTranslator:
     async def _on_post_tool_use_hook(
         self, input_data: dict[str, Any], tool_use_id: str | None, _context: Any
     ) -> dict[str, Any]:
-        """SDK hook fired after each tool invocation. Emits tool_returned and
-        fires `on_tool:<tool_name>` verifiers."""
+        """SDK hook fired after each tool invocation. Emits tool_returned —
+        OR `subagent_returned` if the matching pre-hook had diverted to the
+        subagent lifecycle. Fires `on_tool:<tool_name>` verifiers in both
+        cases (the model still saw a tool result; downstream verifiers can
+        match on the SDK's `Agent` tool name if they want subagent-call
+        semantics)."""
         call_id = str(input_data.get("tool_use_id") or tool_use_id or "unknown")
         tool = str(input_data.get("tool_name", "unknown"))
         response = input_data.get("tool_response", "")
+
+        if call_id in self._subagent_invocations:
+            self._handle_subagent_post(call_id=call_id, response=response)
+            self._run_verifiers_for_trigger(f"on_tool:{tool}")
+            return {}
+
         output: str
         output_structured: Any | None
         if not isinstance(response, str):
@@ -686,6 +779,109 @@ class ClaudeAgentTranslator:
         # by run().
         self._run_verifiers_for_trigger(f"on_tool:{tool}")
         return {}
+
+    def _handle_subagent_pre(
+        self, *, call_id: str, sa_name: str, tool_input: dict[str, Any]
+    ) -> None:
+        """Emit `subagent_invoked` and stash the frame state for the matching
+        post-hook. Strips the SDK's `subagent_type` discriminator from the
+        recorded input so the AEP wire shows just what the parent actually
+        passed to the subagent (matches the AnthropicSubagentDriver shape)."""
+        sa = self._subagents_by_name[sa_name]
+        invocation_id = f"sa-{next(self._sa_seq)}"
+        frame_span_id = new_span_id()
+        self._tool_span_by_call_id[call_id] = frame_span_id  # for verifier subject_call_ids
+        self._tools_invoked[sa_name] = self._tools_invoked.get(sa_name, 0) + 1
+        # Record bookkeeping so the post-hook can pair to this frame.
+        self._subagent_invocations[call_id] = {
+            "frame_span_id": frame_span_id,
+            "sa_name": sa_name,
+            "invocation_id": invocation_id,
+            "t0_monotonic_ms": _monotonic_ms(),
+        }
+        # Sanitize the input — drop SDK-internal `subagent_type`. What's left
+        # is what the parent agent actually intended to pass.
+        sanitized_input = {k: v for k, v in tool_input.items() if k != "subagent_type"}
+        parent = self._current_turn_span_id or self._agent_span_id
+        invoked_data: dict[str, Any] = {
+            "step": self._step,
+            "gen_ai.agent.name": sa.name,
+            "aep.subagent.invocation_id": invocation_id,
+            "aep.subagent.input": sanitized_input,
+        }
+        if sa.description:
+            invoked_data["gen_ai.agent.description"] = sa.description
+        self._emit(
+            SubagentInvokedEvent(
+                subject=self.config.run_id,
+                data=SubagentInvokedData(
+                    **self._shared_span(frame_span_id, parent),
+                    **invoked_data,
+                ),
+            )
+        )
+
+    def _handle_subagent_post(self, *, call_id: str, response: Any) -> None:
+        """Emit `subagent_returned` paired with the matching `subagent_invoked`.
+
+        The Claude Agent SDK does not surface the subagent's internal turns
+        or per-subagent usage breakdown to the parent's observer surface —
+        the wire shape from this runner is "thin": invoked + returned with
+        no nested model_turn events and a zeroed-out `aep.subagent.usage`
+        rollup. The subagent's actual spend is rolled into the parent's
+        cumulative state via the SDK's own usage accounting (it counts as
+        part of the parent run's tokens/cost), so the parent's
+        RunStateSnapshot is correct; only the per-subagent attribution is
+        unavailable here. Future versions may use the SDK's SubagentStart
+        hook to recover some breakdown.
+        """
+        frame = self._subagent_invocations.pop(call_id)
+        frame_span_id: str = frame["frame_span_id"]
+        sa_name: str = frame["sa_name"]
+        invocation_id: str = frame["invocation_id"]
+        duration_ms = max(0, _monotonic_ms() - frame["t0_monotonic_ms"])
+
+        # Coerce the SDK's tool_response (string or structured) into the AEP
+        # text + structured pair, same convention tool_returned uses.
+        if isinstance(response, str):
+            result_text = response
+            result_structured: Any | None = None
+        else:
+            try:
+                import json
+
+                result_text = json.dumps(response)
+                result_structured = response
+            except (TypeError, ValueError):
+                result_text = str(response)
+                result_structured = None
+
+        # Per-subagent usage isn't surfaced by the SDK — emit a zero rollup.
+        # The parent's cumulative RunStateSnapshot still includes the spend.
+        zero_usage = RunStateSnapshot(total_cost_usd=0.0, total_tokens=0, total_turns=0)
+
+        returned_data: dict[str, Any] = {
+            "step": self._step,
+            "gen_ai.agent.name": sa_name,
+            "aep.subagent.invocation_id": invocation_id,
+            "duration_ms": duration_ms,
+            "aep.subagent.result.text": result_text,
+            "aep.subagent.reason": StopReason.converged,
+            "aep.subagent.usage": zero_usage,
+        }
+        if result_structured is not None:
+            returned_data["aep.subagent.result.structured"] = result_structured
+
+        parent = self._current_turn_span_id or self._agent_span_id
+        self._emit(
+            SubagentReturnedEvent(
+                subject=self.config.run_id,
+                data=SubagentReturnedData(
+                    **self._shared_span(frame_span_id, parent),
+                    **returned_data,
+                ),
+            )
+        )
 
     async def _on_user_prompt_submit_hook(
         self, _input_data: dict[str, Any], _tool_use_id: str | None, _context: Any
@@ -859,6 +1055,16 @@ class ClaudeAgentTranslator:
                 }
                 for t in cfg.tools
             ]
+        subagents_meta = None
+        if cfg.subagents:
+            subagents_meta = [
+                {
+                    "name": sa.name,
+                    "description": sa.description,
+                    **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
+                }
+                for sa in cfg.subagents
+            ]
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
             "span_id": self._agent_span_id,
@@ -867,6 +1073,7 @@ class ClaudeAgentTranslator:
             "system_prompt": cfg.system_prompt,
             "tools": tools_meta,
             "skills": [s.name for s in (cfg.skills or [])] or None,
+            "subagents": subagents_meta,
         }
         if cfg.model:
             data_kwargs["gen_ai.request.model"] = cfg.model
