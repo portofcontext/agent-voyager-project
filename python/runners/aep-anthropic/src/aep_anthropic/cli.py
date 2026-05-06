@@ -22,6 +22,7 @@ from aep.runner import AEPRunner
 from aep.runner.drivers import SupervisorDriver
 from aep_anthropic.driver import AnthropicModelDriver
 from aep_anthropic.shell_tools import SHELL_TOOL_SCHEMAS, ShellTools
+from aep_anthropic.subagent import AnthropicSubagentDriver
 
 
 class StdinSupervisor(SupervisorDriver):
@@ -188,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     # Build the tools[] surface we expose to the LLM:
     #  1. Runner built-ins (bash / read_file / write_file)
     #  2. Supervisor-declared RPC tools (Config.tools)
+    #  3. Supervisor-declared subagents (Config.subagents) — the model sees
+    #     them as MCP-shaped tools; the runner routes them through the
+    #     subagent lifecycle on dispatch.
     # Then filter by Config.allowed_tools if it's set.
     tools_param: list[dict] = list(SHELL_TOOL_SCHEMAS)
     if config.tools:
@@ -196,6 +200,28 @@ def main(argv: list[str] | None = None) -> int:
         tools_param.extend(
             {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
             for t in config.tools
+        )
+    if config.subagents:
+        # Default subagent inputSchema is `{prompt: string}` — matches the
+        # Claude Agent SDK and DeepAgents `task` shape so prompts authored
+        # against either convention port over.
+        default_input_schema = {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Task description for the subagent.",
+                }
+            },
+            "required": ["prompt"],
+        }
+        tools_param.extend(
+            {
+                "name": sa.name,
+                "description": sa.description,
+                "input_schema": sa.inputSchema or default_input_schema,
+            }
+            for sa in config.subagents
         )
     if config.allowed_tools is not None:
         allowed = set(config.allowed_tools)
@@ -208,12 +234,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     supervisor = StdinSupervisor(sys.stdin, sink=sys.stdout)
 
+    subagent_driver = AnthropicSubagentDriver(default_model=model) if config.subagents else None
+
     runner = AEPRunner(
         config=config,
         model=driver,
         tools=ShellTools(),
         supervisor=supervisor,
         runner_builtin_tools=list(SHELL_TOOL_SCHEMAS),
+        subagent_driver=subagent_driver,
     )
     runner.run()
     return 0

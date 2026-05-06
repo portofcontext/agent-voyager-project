@@ -215,6 +215,118 @@ def test_cli_bad_schema_version_emits_error_occurred_then_agent_stopped(
     assert err["subject"] == "bad-version"
 
 
+def test_cli_subagent_invocation_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end: parent agent's tool_use targets a declared subagent. The CLI
+    routes through the subagent dispatch path (NOT tool_invoked / tool_returned),
+    AnthropicSubagentDriver runs a sub-loop using the same mocked client, and
+    the trajectory shows: agent_started → parent turn(s) → subagent_invoked →
+    nested model_turn pair → subagent_returned → parent's converging turn →
+    agent_stopped(converged). Frame span_id pairs across invoked/returned.
+
+    Crosses CLI ↔ runner ↔ subagent_driver — the seam most likely to drift,
+    since the subagent driver instantiates a fresh AnthropicModelDriver from
+    `aep_anthropic.subagent` (not the same import path as cli.py)."""
+
+    # Three responses: parent calls subagent → subagent's one turn → parent converges.
+    client = _SequencedClient(
+        [
+            _resp(
+                tool_use={
+                    "id": "tu1",
+                    "name": "researcher",
+                    "input": {"prompt": "summarize the file system"},
+                },
+                stop_reason="tool_use",
+                input_tokens=30,
+                output_tokens=12,
+            ),
+            _resp(
+                text="The file system has src/, tests/, and docs/.",
+                stop_reason="end_turn",
+                input_tokens=15,
+                output_tokens=12,
+            ),
+            _resp(
+                text="Got it — research complete.",
+                stop_reason="end_turn",
+                input_tokens=80,
+                output_tokens=8,
+            ),
+        ]
+    )
+
+    config = {
+        "schema_version": "0.1",
+        "run_id": "cli-subagent",
+        "model": "claude-sonnet-4-6",
+        "prompt": "delegate to the researcher",
+        "subagents": [
+            {
+                "name": "researcher",
+                "description": "Looks up info and reports back briefly.",
+                "system_prompt": "You are a precise research assistant.",
+                "model": "claude-haiku-4-5-20251001",
+                "boundary": {"max_steps": 3},
+            }
+        ],
+    }
+
+    # The subagent driver instantiates its own AnthropicModelDriver from
+    # `aep_anthropic.subagent` — patch THAT import so the same mock client is
+    # injected into the sub-loop too.
+    from aep_anthropic import subagent as subagent_module
+
+    real_subagent_driver_cls = subagent_module.AnthropicModelDriver
+
+    def make_subagent_inner_driver(**kwargs: Any):
+        kwargs["client"] = client
+        return real_subagent_driver_cls(**kwargs)
+
+    monkeypatch.setattr(subagent_module, "AnthropicModelDriver", make_subagent_inner_driver)
+
+    code, events = _drive_cli(monkeypatch, config_dict=config, client=client)
+    assert code == 0
+
+    types = [e["type"] for e in events]
+    assert "aep.subagent_invoked" in types
+    assert "aep.subagent_returned" in types
+    # No tool_invoked for the subagent — it routes through its own lifecycle.
+    tool_invokes_for_researcher = [
+        e
+        for e in events
+        if e["type"] == "aep.tool_invoked" and e["data"]["gen_ai.tool.name"] == "researcher"
+    ]
+    assert not tool_invokes_for_researcher, "subagent calls MUST NOT surface as tool_invoked"
+
+    invoked = next(e for e in events if e["type"] == "aep.subagent_invoked")
+    returned = next(e for e in events if e["type"] == "aep.subagent_returned")
+    assert invoked["data"]["gen_ai.agent.name"] == "researcher"
+    assert invoked["data"]["gen_ai.operation.name"] == "invoke_agent"
+    assert invoked["data"]["aep.subagent.input"] == {"prompt": "summarize the file system"}
+    # Frame span MUST pair across the two events.
+    assert invoked["data"]["span_id"] == returned["data"]["span_id"]
+
+    # The subagent driver emitted at least one nested model_turn pair under the frame.
+    frame_id = invoked["data"]["span_id"]
+    nested_turns_started = [
+        e
+        for e in events
+        if e["type"] == "aep.model_turn_started" and e["data"]["parent_span_id"] == frame_id
+    ]
+    assert len(nested_turns_started) >= 1, "subagent's internal model_turn chains under frame"
+
+    # The subagent's result text is what the parent saw and the run converged.
+    assert "file system" in returned["data"]["aep.subagent.result.text"]
+    assert returned["data"]["aep.subagent.reason"] == "converged"
+    assert types[-1] == "aep.agent_stopped"
+    assert events[-1]["data"]["aep.reason"] == "converged"
+
+    # The agent_started event surfaces the subagent on the wire (model-facing surface).
+    started = next(e for e in events if e["type"] == "aep.agent_started")
+    sa_decls = started["data"].get("subagents") or []
+    assert len(sa_decls) == 1 and sa_decls[0]["name"] == "researcher"
+
+
 def test_cli_allowed_tools_filter_blocks_unlisted(monkeypatch: pytest.MonkeyPatch) -> None:
     """If allowed_tools is set, the runner MUST surface tool_failed when the
     model calls something not in the list."""

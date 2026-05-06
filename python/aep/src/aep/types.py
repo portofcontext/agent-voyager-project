@@ -104,6 +104,9 @@ T_TOOL_EXEC_TIMED_OUT = "aep.tool_exec_timed_out"
 T_VERIFIER_EVALUATED = "aep.verifier_evaluated"
 T_MCP_SERVER_CONNECTED = "aep.mcp_server_connected"
 T_MCP_SERVER_DISCONNECTED = "aep.mcp_server_disconnected"
+T_SUBAGENT_INVOKED = "aep.subagent_invoked"
+T_SUBAGENT_RETURNED = "aep.subagent_returned"
+T_SUBAGENT_FAILED = "aep.subagent_failed"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept
@@ -238,6 +241,46 @@ class McpServer(BaseModel):
         return self
 
 
+class Subagent(BaseModel):
+    """Declares a sub-agent the parent can delegate to.
+
+    Sits alongside `tools` and `skills` as a top-level Config primitive: the
+    supervisor declares the full set of subagents up front, the parent agent
+    invokes one by name at runtime. The model surface is MCP-shaped (`name`,
+    `description`, `inputSchema`) so the model sees a subagent the same way
+    it sees a tool. The wire surface is its own lifecycle —
+    `subagent_invoked` / `subagent_returned` / `subagent_failed` — so
+    nested turns and tool calls observe as their own span tree rather than
+    flatten into a single tool call.
+
+    A Subagent carries an environment slice that mirrors Config (its own
+    `system_prompt`, `model`, `tools`, `skills`, `verifiers`, `boundary`,
+    `output_schema`). The subagent runs in a fresh conversation —
+    `inherit_tools=False` by default (matches Google ADK; safer than the
+    Claude Agent SDK default of inheriting). Skills and prompt context are
+    never inherited.
+    """
+
+    model_config = _STRICT
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_-]+$")
+    description: str = Field(min_length=1)
+    inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
+
+    system_prompt: str | None = None
+    model: str | None = None
+
+    inherit_tools: bool = False
+    allowed_tools: list[str] | None = None
+    tools: list[Tool] | None = None
+    mcp_servers: list[McpServer] | None = None
+    skills: list[Skill] | None = None
+    verifiers: list[Verifier] | None = None
+    boundary: Boundary | None = None
+    output_schema: dict[str, Any] | None = None
+
+    subagents: list[Subagent] | None = None
+
+
 class RunStateSnapshot(BaseModel):
     """Cumulative run-state used in cost_recorded and agent_stopped data.
     Open model — supervisor SDKs can carry implementation-specific fields."""
@@ -273,6 +316,7 @@ class Config(BaseModel):
     verifiers: list[Verifier] | None = None
     boundary: Boundary | None = None
     output_schema: dict[str, Any] | None = None
+    subagents: list[Subagent] | None = None
 
     # Runner plane (what the agent runs)
     prompt: str | None = None
@@ -321,6 +365,18 @@ class _ToolDecl(BaseModel):
     aep_mcp_server_id: str | None = Field(default=None, alias="aep.mcp_server_id")
 
 
+class _SubagentDecl(BaseModel):
+    """Subagent descriptor in `agent_started.data.subagents` — what the
+    parent model sees when deciding whether to delegate. Same MCP-shaped
+    triple (`name`, `description`, `inputSchema`) tools use, so adapters
+    can render subagents to the model's tool list with no translation."""
+
+    model_config = _OPEN
+    name: str
+    description: str
+    inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
+
+
 class AgentStartedData(_SpanData):
     """Payload of aep.agent_started events."""
 
@@ -333,6 +389,7 @@ class AgentStartedData(_SpanData):
     system_prompt: str | None = None
     tools: list[_ToolDecl] | None = None
     skills: list[str] | None = None
+    subagents: list[_SubagentDecl] | None = None
     aep_thread_id: str | None = Field(default=None, alias="aep.thread_id")
     aep_session_id: str | None = Field(default=None, alias="aep.session_id")
     aep_tags: list[str] | None = Field(default=None, alias="aep.tags")
@@ -410,6 +467,60 @@ class ToolFailedData(_SpanData):
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     aep_tool_error: str = Field(alias="aep.tool.error")
     aep_tool_error_code: int | None = Field(default=None, alias="aep.tool.error.code")
+
+
+class SubagentInvokedData(_SpanData):
+    """Parent agent delegates to a declared subagent.
+
+    The event's `span_id` IS the subagent's frame span. Events emitted by
+    the subagent's sub-loop set `parent_span_id` to this frame (or chain
+    through descendants of it), so the trajectory reconstructs as a nested
+    tree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is
+    `invoke_agent` and `gen_ai.agent.name` carries the subagent's declared
+    name.
+    """
+
+    step: int = Field(ge=0)
+    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
+    gen_ai_agent_description: str | None = Field(default=None, alias="gen_ai.agent.description")
+    gen_ai_operation_name: Literal["invoke_agent"] = Field(
+        default="invoke_agent", alias="gen_ai.operation.name"
+    )
+    aep_subagent_invocation_id: str = Field(min_length=1, alias="aep.subagent.invocation_id")
+    aep_subagent_input: dict[str, Any] = Field(alias="aep.subagent.input")
+
+
+class SubagentReturnedData(_SpanData):
+    """Closes the subagent's frame. `span_id` matches the corresponding
+    `subagent_invoked` event so consumers can pair them. `aep.subagent.usage`
+    rolls up the subagent's own consumption (cost, tokens, turns) — this
+    rollup is also reflected in the parent run's cumulative state, but the
+    breakdown is preserved here so consumers can attribute spend to the
+    subagent that incurred it."""
+
+    step: int = Field(ge=0)
+    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
+    aep_subagent_invocation_id: str = Field(min_length=1, alias="aep.subagent.invocation_id")
+    duration_ms: int = Field(ge=0)
+    aep_subagent_result_text: str = Field(alias="aep.subagent.result.text")
+    aep_subagent_result_structured: Any | None = Field(
+        default=None, alias="aep.subagent.result.structured"
+    )
+    aep_subagent_reason: StopReason = Field(alias="aep.subagent.reason")
+    aep_subagent_usage: RunStateSnapshot = Field(alias="aep.subagent.usage")
+
+
+class SubagentFailedData(_SpanData):
+    """Subagent invocation errored. The parent treats the error as a
+    tool-call failure: the model receives an `Error: ...` string in place
+    of the result and may retry or proceed."""
+
+    step: int = Field(ge=0)
+    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
+    aep_subagent_invocation_id: str = Field(min_length=1, alias="aep.subagent.invocation_id")
+    duration_ms: int = Field(ge=0)
+    aep_subagent_error: str = Field(alias="aep.subagent.error")
+    aep_subagent_error_code: str | None = Field(default=None, alias="aep.subagent.error.code")
 
 
 class TextEmittedData(_SpanData):
@@ -628,6 +739,24 @@ class ToolFailedEvent(_CloudEventBase):
     data: ToolFailedData
 
 
+class SubagentInvokedEvent(_CloudEventBase):
+    type: Literal["aep.subagent_invoked"] = T_SUBAGENT_INVOKED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: SubagentInvokedData
+
+
+class SubagentReturnedEvent(_CloudEventBase):
+    type: Literal["aep.subagent_returned"] = T_SUBAGENT_RETURNED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: SubagentReturnedData
+
+
+class SubagentFailedEvent(_CloudEventBase):
+    type: Literal["aep.subagent_failed"] = T_SUBAGENT_FAILED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: SubagentFailedData
+
+
 class TextEmittedEvent(_CloudEventBase):
     type: Literal["aep.text_emitted"] = T_TEXT_EMITTED
     source: Literal["aep://runner"] = SOURCE_RUNNER
@@ -724,6 +853,9 @@ _RUNNER_EVENT_TYPES = (
     ToolInvokedEvent,
     ToolReturnedEvent,
     ToolFailedEvent,
+    SubagentInvokedEvent,
+    SubagentReturnedEvent,
+    SubagentFailedEvent,
     TextEmittedEvent,
     CostRecordedEvent,
     SkillLoadedEvent,
@@ -747,6 +879,9 @@ Event = Annotated[
     | ToolInvokedEvent
     | ToolReturnedEvent
     | ToolFailedEvent
+    | SubagentInvokedEvent
+    | SubagentReturnedEvent
+    | SubagentFailedEvent
     | TextEmittedEvent
     | CostRecordedEvent
     | SkillLoadedEvent

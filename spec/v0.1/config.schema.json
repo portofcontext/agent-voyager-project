@@ -193,7 +193,7 @@
     },
     "Skill": {
       "additionalProperties": false,
-      "description": "Reference to a SKILL.md following the agentskills.io specification.\n\n`name` MUST follow agentskills.io rules (1–64 chars, lowercase a-z digits\nhyphens, no leading/trailing hyphen, no consecutive hyphens). The\n`aep_source` and `aep_config` fields are AEP extensions — agentskills.io\ndoesn't define a remote-load scheme.",
+      "description": "Reference to a SKILL.md following the agentskills.io specification.\n\n`name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits\nhyphens, no leading/trailing hyphen, no consecutive hyphens). The\n`aep_source` and `aep_config` fields are AEP extensions; agentskills.io\ndoesn't define a remote-load scheme.",
       "properties": {
         "name": {
           "maxLength": 64,
@@ -226,6 +226,186 @@
         "aep.source"
       ],
       "title": "Skill",
+      "type": "object"
+    },
+    "Subagent": {
+      "additionalProperties": false,
+      "description": "Declares a sub-agent the parent can delegate to.\n\nSits alongside `tools` and `skills` as a top-level Config primitive: the\nsupervisor declares the full set of subagents up front, the parent agent\ninvokes one by name at runtime. The model surface is MCP-shaped (`name`,\n`description`, `inputSchema`) so the model sees a subagent the same way\nit sees a tool. The wire surface is its own lifecycle —\n`subagent_invoked` / `subagent_returned` / `subagent_failed` — so\nnested turns and tool calls observe as their own span tree rather than\nflatten into a single tool call.\n\nA Subagent carries an environment slice that mirrors Config (its own\n`system_prompt`, `model`, `tools`, `skills`, `verifiers`, `boundary`,\n`output_schema`). The subagent runs in a fresh conversation —\n`inherit_tools=False` by default (matches Google ADK; safer than the\nClaude Agent SDK default of inheriting). Skills and prompt context are\nnever inherited.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Prompt"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "inherit_tools": {
+          "default": false,
+          "title": "Inherit Tools",
+          "type": "boolean"
+        },
+        "allowed_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Tools"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skills"
+        },
+        "verifiers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Verifier"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verifiers"
+        },
+        "boundary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Boundary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subagents"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Subagent",
       "type": "object"
     },
     "Tool": {
@@ -458,6 +638,21 @@
       ],
       "default": null,
       "title": "Output Schema"
+    },
+    "subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Subagent"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subagents"
     },
     "prompt": {
       "anyOf": [
