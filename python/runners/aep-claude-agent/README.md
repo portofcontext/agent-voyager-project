@@ -30,9 +30,22 @@ The TODOs marked `# TODO(claude-agent-sdk):` in `translator.py` are SDK-version-
 
 ## Install
 
+This package is part of the AEP uv workspace; bootstrap from the repo root:
+
 ```bash
-pip install aep-claude-agent
+uv sync
 ```
+
+You also need the Claude Code CLI (the `claude_agent_sdk` Python package shells
+out to it; not pure Python):
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude /login
+```
+
+Once published, the standalone install will be `pip install aep-claude-agent`.
+Until then, work from a checkout of the workspace.
 
 ## Pattern
 

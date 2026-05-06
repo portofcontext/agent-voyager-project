@@ -41,8 +41,17 @@ tests/
 
 ## Running the invariants directly
 
+From the repo root:
+
 ```bash
-cd examples/04_ddd_domain
+uv run pytest python/supervisors/simple-supervisor-example/examples/04_ddd_domain/tests/invariants/ -q
+```
+
+Or from inside this directory (the verifier itself uses this exact form,
+because it runs in the runner's CWD which is staged from a copy of this dir):
+
+```bash
+cd python/supervisors/simple-supervisor-example/examples/04_ddd_domain
 python -m pytest tests/invariants/ -q
 ```
 

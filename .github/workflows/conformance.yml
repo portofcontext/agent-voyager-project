@@ -78,7 +78,7 @@ jobs:
           pytest -v
 
   real-llm-smoke:
-    name: Real-LLM smoke tests (Anthropic) — manual only
+    name: Real-LLM smoke tests — manual only
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Manual-trigger only: never auto-fires on push/PR. Burns API credits and exposes

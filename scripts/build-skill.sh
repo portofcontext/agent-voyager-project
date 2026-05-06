@@ -16,6 +16,11 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${1:-$REPO/dist}"
+# Absolutize OUT_DIR. The packager runs from $CREATOR (different cwd), so a
+# relative arg like `dist` resolves to the wrong path. Create the dir first
+# so we can `cd` into it for the absolute resolution.
+mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 STAGE="$(mktemp -d)/aep"
 
 cleanup() { /bin/rm -rf "$(dirname "$STAGE")"; }
@@ -35,8 +40,6 @@ find "$STAGE" \( -name __pycache__ -o -name .pytest_cache -o -name '*.egg-info' 
   -type d -exec /bin/rm -rf {} + 2>/dev/null || true
 find "$STAGE" -name '*.pyc' -delete 2>/dev/null || true
 find "$STAGE" -name '.DS_Store' -delete 2>/dev/null || true
-
-mkdir -p "$OUT_DIR"
 
 # package_skill.py lives inside the anthropics/skills repo. Two lookup paths:
 #   1. Pre-vendored at SKILL_CREATOR_DIR (set by CI when it clones the repo)

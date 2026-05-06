@@ -34,7 +34,8 @@ examples/
 
 ## Quickstart
 
-The repo is a uv workspace — one sync from the root installs all four AEP packages editably and resolves cross-package deps to local sources (avoiding a PyPI name collision with an unrelated `aep` package).
+The repo is a uv workspace — `uv sync` from the root installs all four AEP
+packages editably and resolves cross-package deps to local sources. Use `uv` for everything:
 
 ```bash
 cd /path/to/agent-execution-protocol
@@ -45,15 +46,9 @@ uv run simple-supervisor list-profiles
 
 # Render a Config without running anything
 uv run simple-supervisor show-config --profile ddd-strict --prompt "Explain main.py"
-```
 
-If you'd rather not use uv, you can still install each package individually with pip — but you'll hit the PyPI collision unless you install the local `aep` first:
-
-```bash
-pip install -e python/aep \
-            -e python/runners/aep-anthropic \
-            -e python/runners/aep-claude-agent \
-            -e python/supervisors/simple-supervisor-example
+# Run all four examples end-to-end (uses ~/.anthropic-key or $ANTHROPIC_API_KEY)
+uv run simple-supervisor examples
 ```
 
 ## What each example demonstrates
@@ -90,13 +85,13 @@ The most complete example: a real `DDD_STRICT` profile compiling Domain-Driven D
 
 The profile ships three verifiers, each compiling one DDD concern:
 
-1. `domain-layer-purity` (on_tool:write_file, halt) — `grep` `domain/` for infrastructure imports. Domain MUST stay pure.
-2. `aggregate-invariants` (after_each_turn, halt) — `python -m pytest tests/invariants/`. Invariants MUST hold on every state.
-3. `no-anemic-suffixes-in-domain` (on_tool:write_file, inject_correction) — flags `*Manager.py` / `*Helper.py` / `*Util.py` in domain. Names MUST reflect business concepts.
+1. `domain-layer-purity` (on_tool:write_file, **halt**) — `grep` `domain/` for infrastructure imports. Domain MUST stay pure; importing SQLAlchemy isn't recoverable inside one run.
+2. `aggregate-invariants` (after_each_turn, **inject_correction**) — `python -m pytest tests/invariants/`. If invariants regress, the supervisor injects a DDD principle into the conversation: "don't loosen the invariant to fit the feature; the feature has to fit the invariant." The agent gets to redesign.
+3. `no-anemic-suffixes-in-domain` (on_tool:write_file, **inject_correction**) — flags `*Manager.py` / `*Helper.py` / `*Util.py` in `domain/`. Names MUST reflect business concepts.
 
-The agent's task: extend `Order` with `apply_discount`, preserving the `total == sum(line subtotals)` invariant and adding a test. The naive way is to write an `OrderDiscountManager.py` — verifier 3 catches that and tells the agent to put the method on `Order` itself. If the math is wrong, verifier 2 catches the broken invariant and halts.
+The agent's task: extend `Order` with `apply_discount`. The prompt deliberately asks for a NEGATIVE unit_price on a synthetic discount line, but the existing `OrderLine` value object validates `unit_price >= 0`. The naive resolution is to weaken the value object — which breaks the existing invariant test. Verifier 2 catches it and injects a correction telling the agent to find a different shape (a separate `discount` field on Order, a new value object, etc).
 
-Read the toy domain first to see what DDD-correct code looks like, then read the profile to see how each concept maps to a verifier. That's the supervisor framework pattern compressed into one example.
+Read the toy domain first to see what DDD-correct code looks like, then read the profile to see how each concept maps to a verifier. For a turn-by-turn walkthrough of an actual run including the recovery arc, see [`WALKTHROUGH.md`](WALKTHROUGH.md).
 
 ## The supervisor's value-add (what AEP gives you "for free")
 
