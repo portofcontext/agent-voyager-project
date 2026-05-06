@@ -54,6 +54,11 @@ _EXAMPLES: dict[str, tuple[str, str, dict[str, str]]] = {
         "audited Claude Code session (observer pattern, ~$0.10)",
         {"USE_REAL_SDK": "1"},
     ),
+    "04": (
+        "04_ddd_supervisor.py",
+        "DDD-strict supervisor over a toy domain (driver pattern, ~$0.05)",
+        {},
+    ),
 }
 
 
@@ -70,7 +75,7 @@ def _resolve_api_key() -> str | None:
 def run_examples(selected: list[str] | None = None) -> int:
     """Run the requested examples (or all three if `selected` is None/empty)."""
     if not selected:
-        selected = ["01", "02", "03"]
+        selected = ["01", "02", "03", "04"]
 
     # Validate before doing any work.
     for n in selected:
@@ -94,6 +99,8 @@ def run_examples(selected: list[str] | None = None) -> int:
     env = os.environ.copy()
     env["ANTHROPIC_API_KEY"] = api_key
 
+    results: list[tuple[str, int]] = []  # (example_id, exit_code)
+
     for n in selected:
         file_name, label, extra_env = _EXAMPLES[n]
         print()
@@ -108,8 +115,18 @@ def run_examples(selected: list[str] | None = None) -> int:
             [sys.executable, str(examples_dir / file_name)],
             env=run_env,
         ).returncode
-        if rc != 0:
-            print(f"\nexample {n} exited with code {rc}", file=sys.stderr)
-            return rc
+        results.append((n, rc))
 
-    return 0
+    # Aggregate report — each example self-validated (`_validate_outcome`)
+    # and exited 0 on PASS, non-zero on FAIL.
+    print()
+    print("════════════════════════════════════════════════════════════════════")
+    print("  Summary")
+    print("════════════════════════════════════════════════════════════════════")
+    passed = sum(1 for _, rc in results if rc == 0)
+    total = len(results)
+    for n, rc in results:
+        status = "PASS" if rc == 0 else f"FAIL (exit {rc})"
+        print(f"  example {n}: {status}")
+    print(f"\n{passed} / {total} examples passed")
+    return 0 if passed == total else 1

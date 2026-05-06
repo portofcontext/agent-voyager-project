@@ -1,22 +1,24 @@
 """Translator tests for ClaudeAgentTranslator.
 
-The SDK is fully decoupled via injection (sdk_query / sdk_options_cls /
+The SDK is fully decoupled via injection (sdk_client_cls / sdk_options_cls /
 sdk_hook_matcher_cls), so these tests run without claude_agent_sdk installed
 and without an API key. They exercise:
 
   - Config → ClaudeAgentOptions translation (_build_sdk_options)
   - AssistantMessage / ResultMessage handling (the message-stream path)
   - PreToolUse / PostToolUse hook callbacks (the hook path)
-  - Full run() lifecycle with a fake query() that yields canned messages
+  - Full run() lifecycle with a fake ClaudeSDKClient that yields canned messages
   - Verifier dispatch at all four trigger points (before_first_turn,
     after_each_turn, on_tool:<name>, at_end)
   - on_failure: halt aborts with reason=verifier_failed
-  - on_failure: inject_correction is rejected at startup (SPEC §13.1.18)
+  - on_failure: inject_correction queues the correction message and submits it
+    via ClaudeSDKClient.query() between turns
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,13 +73,79 @@ class TextBlock:
         self.text = text
 
 
+class _FakeClient:
+    """Stand-in for `claude_agent_sdk.ClaudeSDKClient`.
+
+    Configured with a list of "rounds": each round is a list of messages
+    yielded by the next `receive_response()` call. Rounds advance one per
+    `connect()` (the first) and one per `query()` (each subsequent), so
+    inject_correction tests can assert the correction got handed to the
+    SDK as a follow-up user prompt before the next round of messages.
+    """
+
+    _raise_on_invoke: BaseException | None = None
+
+    def __init__(
+        self,
+        *,
+        rounds: list[list[Any]] | None = None,
+        raise_on_invoke: BaseException | None = None,
+        options: Any = None,
+    ) -> None:
+        self.options = options
+        self._rounds = list(rounds or [])
+        self._round_idx = 0
+        self.queries: list[str] = []  # follow-up prompts captured for assertions
+        self.connect_prompt: str | None = None
+        self._raise_on_invoke = raise_on_invoke
+
+    async def __aenter__(self) -> _FakeClient:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+    async def connect(self, prompt: str | None = None) -> None:
+        self.connect_prompt = prompt
+
+    async def query(self, prompt: str, session_id: str = "default") -> None:
+        self.queries.append(prompt)
+
+    async def receive_response(self) -> Any:
+        if self._raise_on_invoke is not None:
+            raise self._raise_on_invoke
+        if self._round_idx >= len(self._rounds):
+            return
+        for msg in self._rounds[self._round_idx]:
+            yield msg
+        self._round_idx += 1
+
+
+def _client_factory(
+    *,
+    rounds: list[list[Any]] | None = None,
+    raise_on_invoke: BaseException | None = None,
+) -> Callable[..., _FakeClient]:
+    """Return a callable suitable for `sdk_client_cls=`.
+
+    The translator instantiates whatever you pass to sdk_client_cls with
+    `(options=...)`. We close over the rounds + error to give per-test
+    canned responses.
+    """
+
+    def _make(options: Any = None) -> _FakeClient:
+        return _FakeClient(rounds=rounds, raise_on_invoke=raise_on_invoke, options=options)
+
+    return _make
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def _new_translator(
     cfg: Config | None = None,
     *,
-    sdk_query: Any = None,
+    sdk_client_cls: Callable[..., Any] | None = None,
 ) -> tuple[ClaudeAgentTranslator, list]:
     cfg = cfg or Config(
         schema_version="0.1",
@@ -91,7 +159,7 @@ def _new_translator(
     t = ClaudeAgentTranslator(
         cfg,
         on_event=out.append,
-        sdk_query=sdk_query,
+        sdk_client_cls=sdk_client_cls,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
     )
@@ -231,15 +299,16 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
 def test_run_with_fake_query_emits_full_lifecycle() -> None:
     """End-to-end happy path: agent_started → assistant turn → result → agent_stopped."""
 
-    async def fake_query(*, prompt: str, options: Any):
-        # Mimics async generator over Message instances.
-        yield AssistantMessage(
-            content=[TextBlock("done")],
-            usage={"input_tokens": 50, "output_tokens": 12},
-        )
-        yield ResultMessage(total_cost_usd=0.0042)
-
-    t, out = _new_translator(sdk_query=fake_query)
+    rounds = [
+        [
+            AssistantMessage(
+                content=[TextBlock("done")],
+                usage={"input_tokens": 50, "output_tokens": 12},
+            ),
+            ResultMessage(total_cost_usd=0.0042),
+        ]
+    ]
+    t, out = _new_translator(sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
     assert isinstance(stop, AgentStoppedEvent)
@@ -368,14 +437,8 @@ def test_baseline_reset_hook_handles_legitimate_compaction_gracefully() -> None:
 
 
 def test_run_propagates_sdk_error_to_agent_stopped_error() -> None:
-    """A query() that raises is wrapped: error_occurred + agent_stopped reason='error'."""
-
-    async def bad_query(*, prompt: str, options: Any):
-        if False:
-            yield None  # make this an async generator
-        raise RuntimeError("boom")
-
-    t, out = _new_translator(sdk_query=bad_query)
+    """An SDK call that raises is wrapped: error_occurred + agent_stopped reason='error'."""
+    t, out = _new_translator(sdk_client_cls=_client_factory(raise_on_invoke=RuntimeError("boom")))
     stop = t.run()
     assert stop.reason == StopReason.error
     types = [type(ev).__name__ for ev in out]
@@ -398,60 +461,147 @@ def _cfg_with_verifiers(verifiers: list[dict[str, Any]]) -> Config:
     )
 
 
-def test_inject_correction_verifier_rejected_at_startup() -> None:
-    """SPEC §13.1.18: the translator pattern cannot honor inject_correction
-    (the SDK owns the prompt-input channel). Such Configs MUST be refused
-    at startup with error_occurred + agent_stopped(reason=error), not
-    silently accepted with the action dropped at runtime."""
+def test_inject_correction_splices_followup_user_prompt() -> None:
+    """A verifier with on_failure=inject_correction queues its
+    correction_message; the translator submits it as a follow-up user prompt
+    via ClaudeSDKClient.query() between turns. The agent then sees the
+    correction in its next model call.
 
-    async def fake_query(*, prompt: str, options: Any):
-        # Should never be reached — startup validation aborts first.
-        if False:
-            yield None
-        raise AssertionError("SDK should not have been invoked")
+    Mirrors the AEPRunner driver-pattern semantics — driver appends user-role
+    to history, translator hands the same content to the SDK as a follow-up
+    user prompt.
+    """
+    rounds = [
+        # Turn 1: assistant emits something the verifier will catch.
+        [
+            AssistantMessage(
+                content=[TextBlock("offending content")],
+                usage={"input_tokens": 10, "output_tokens": 5},
+            ),
+        ],
+        # Turn 2 (after correction is injected): assistant complies.
+        [
+            AssistantMessage(
+                content=[TextBlock("corrected response")],
+                usage={"input_tokens": 30, "output_tokens": 8},
+            ),
+            ResultMessage(total_cost_usd=0.001),
+        ],
+    ]
+    factory = _client_factory(rounds=rounds)
+    cfg = _cfg_with_verifiers(
+        [
+            {
+                "name": "always-fail",
+                "trigger": "after_each_turn",
+                # `false` for the FIRST run only — second call passes via the
+                # shell trick: write a state file then check it. Simpler: keep
+                # always-failing; halt by max_steps after a small bound. Or
+                # use a verifier that fails twice — rounds yields ResultMessage
+                # at the end so the SDK loop terminates either way.
+                "source": {"shell": "false"},  # always exits 1
+                "on_failure": "inject_correction",
+                "correction_message": "STOP. Remove the offending content.",
+            }
+        ]
+    )
+    t, out = _new_translator(cfg, sdk_client_cls=factory)
+    stop = t.run()
+
+    # The assertions that matter:
+    # 1. The translator submitted the correction as a follow-up prompt.
+    captured_clients: list[_FakeClient] = []
+    # We can't get the client back through the factory directly, but we can
+    # confirm the correction was queued and drained by checking the trajectory.
+
+    # 2. Trajectory contains verifier_evaluated(passed=False) followed by a
+    #    second turn — proof that the splice worked and the SDK got more
+    #    messages to dispatch.
+    assert stop.reason == StopReason.converged
+    types = [type(ev).__name__ for ev in out]
+    evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
+    assert len(evals) >= 1
+    assert evals[0].passed is False
+    assert evals[0].name == "always-fail"
+
+    turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
+    assert len(turn_ended) == 2, (
+        "expected 2 turns (initial + post-correction); got "
+        f"{len(turn_ended)}. Inject_correction must produce a follow-up turn."
+    )
+
+    # No error_occurred: inject_correction is a SUPPORTED action on this runner.
+    assert "ErrorOccurredEvent" not in types, (
+        "inject_correction must not raise error_occurred — it's supported."
+    )
+    _ = captured_clients  # silence unused
+
+
+def test_inject_correction_passes_correction_message_to_client_query() -> None:
+    """Stronger assertion: the correction_message text is the literal prompt
+    handed to ClaudeSDKClient.query()."""
+    rounds = [
+        [
+            AssistantMessage(
+                content=[TextBlock("first")], usage={"input_tokens": 5, "output_tokens": 2}
+            )
+        ],
+        [
+            AssistantMessage(
+                content=[TextBlock("second")], usage={"input_tokens": 8, "output_tokens": 2}
+            ),
+            ResultMessage(total_cost_usd=0.0001),
+        ],
+    ]
+    captured_client: list[_FakeClient] = []
+
+    def factory(options: Any = None) -> _FakeClient:
+        c = _FakeClient(rounds=rounds, options=options)
+        captured_client.append(c)
+        return c
 
     cfg = _cfg_with_verifiers(
         [
             {
-                "name": "no-secrets",
+                "name": "redirect",
                 "trigger": "after_each_turn",
-                "source": {"shell": "true"},
+                "source": {"shell": "false"},
                 "on_failure": "inject_correction",
-                "correction_message": "Don't leak secrets.",
+                "correction_message": "Try a different approach.",
             }
         ]
     )
-    t, out = _new_translator(cfg, sdk_query=fake_query)
-    stop = t.run()
+    t, _ = _new_translator(cfg, sdk_client_cls=factory)
+    t.run()
 
-    assert stop.reason == StopReason.error
-    types = [type(ev).__name__ for ev in out]
-    assert types[0] == "AgentStartedEvent"
-    assert "ErrorOccurredEvent" in types
-    err = next(ev for ev in out if type(ev).__name__ == "ErrorOccurredEvent")
-    assert "inject_correction" in err.message
-    assert "no-secrets" in err.message
-    assert types[-1] == "AgentStoppedEvent"
-    # No turns ran: no model_turn_started, no verifier_evaluated.
-    assert "ModelTurnStartedEvent" not in types
-    assert "VerifierEvaluatedEvent" not in types
+    assert len(captured_client) == 1
+    client = captured_client[0]
+    assert client.connect_prompt == "hello"
+    # Every follow-up query MUST be the correction message (the verifier fails
+    # every turn, so the correction is re-submitted after each turn — that's
+    # exactly the behavior we want to pin: the splice routes through query()).
+    assert client.queries, "expected at least one follow-up query carrying the correction"
+    assert all(q == "Try a different approach." for q in client.queries), (
+        f"every follow-up query must equal the correction_message verbatim; got {client.queries}"
+    )
 
 
 def test_after_each_turn_verifier_fires_and_emits_evaluated() -> None:
     """A passing verifier with trigger=after_each_turn fires after every
     model_turn_ended and emits verifier_evaluated(passed=True)."""
-
-    async def fake_query(*, prompt: str, options: Any):
-        yield AssistantMessage(
-            content=[TextBlock("a")],
-            usage={"input_tokens": 10, "output_tokens": 5},
-        )
-        yield AssistantMessage(
-            content=[TextBlock("b")],
-            usage={"input_tokens": 30, "output_tokens": 10},
-        )
-        yield ResultMessage(total_cost_usd=0.001)
-
+    rounds = [
+        [
+            AssistantMessage(
+                content=[TextBlock("a")],
+                usage={"input_tokens": 10, "output_tokens": 5},
+            ),
+            AssistantMessage(
+                content=[TextBlock("b")],
+                usage={"input_tokens": 30, "output_tokens": 10},
+            ),
+            ResultMessage(total_cost_usd=0.001),
+        ]
+    ]
     cfg = _cfg_with_verifiers(
         [
             {
@@ -462,7 +612,7 @@ def test_after_each_turn_verifier_fires_and_emits_evaluated() -> None:
             }
         ]
     )
-    t, out = _new_translator(cfg, sdk_query=fake_query)
+    t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
     assert stop.reason == StopReason.converged
@@ -547,13 +697,14 @@ def test_on_tool_verifier_does_not_fire_for_other_tools() -> None:
 
 def test_at_end_verifier_fires_before_agent_stopped() -> None:
     """SPEC §7.2: at_end fires once after the final turn, before agent_stopped."""
-
-    async def fake_query(*, prompt: str, options: Any):
-        yield AssistantMessage(
-            content=[TextBlock("done")], usage={"input_tokens": 10, "output_tokens": 3}
-        )
-        yield ResultMessage(total_cost_usd=0.0001)
-
+    rounds = [
+        [
+            AssistantMessage(
+                content=[TextBlock("done")], usage={"input_tokens": 10, "output_tokens": 3}
+            ),
+            ResultMessage(total_cost_usd=0.0001),
+        ]
+    ]
     cfg = _cfg_with_verifiers(
         [
             {
@@ -564,7 +715,7 @@ def test_at_end_verifier_fires_before_agent_stopped() -> None:
             }
         ]
     )
-    t, out = _new_translator(cfg, sdk_query=fake_query)
+    t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
     assert stop.reason == StopReason.converged
@@ -580,19 +731,21 @@ def test_at_end_verifier_fires_before_agent_stopped() -> None:
 def test_halt_verifier_terminates_with_verifier_failed() -> None:
     """A failing verifier with on_failure=halt aborts the SDK iteration and
     produces agent_stopped(reason=verifier_failed)."""
-
-    async def fake_query(*, prompt: str, options: Any):
-        # Yield one turn, then the after_each_turn verifier fails-halt.
-        yield AssistantMessage(
-            content=[TextBlock("doomed")], usage={"input_tokens": 10, "output_tokens": 3}
-        )
-        # If halt didn't actually abort, we'd see this turn too.
-        yield AssistantMessage(
-            content=[TextBlock("should-not-emit")],
-            usage={"input_tokens": 25, "output_tokens": 5},
-        )
-        yield ResultMessage(total_cost_usd=0.001)
-
+    rounds = [
+        [
+            AssistantMessage(
+                content=[TextBlock("doomed")], usage={"input_tokens": 10, "output_tokens": 3}
+            ),
+            # If halt didn't actually abort, we'd see this message too —
+            # halt raises _VerifierHalt mid-iteration which propagates out
+            # of receive_response.
+            AssistantMessage(
+                content=[TextBlock("should-not-emit")],
+                usage={"input_tokens": 25, "output_tokens": 5},
+            ),
+            ResultMessage(total_cost_usd=0.001),
+        ]
+    ]
     cfg = _cfg_with_verifiers(
         [
             {
@@ -603,7 +756,7 @@ def test_halt_verifier_terminates_with_verifier_failed() -> None:
             }
         ]
     )
-    t, out = _new_translator(cfg, sdk_query=fake_query)
+    t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
     assert stop.reason == StopReason.verifier_failed

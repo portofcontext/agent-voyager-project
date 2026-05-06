@@ -6,6 +6,11 @@ the workspace for newly-introduced TODOs after every write; on_failure is
 'inject_correction', so the agent receives a user-role message in its history
 when it leaves a TODO and self-corrects on the next turn.
 
+Profile: `quality-guards` — a generic code-quality profile that exists to
+demonstrate the inject_correction lifecycle without committing to a specific
+architectural style. For a real DDD profile that compiles bounded-context
+concerns to verifiers, see example 04.
+
 What you'll see:
   - At least one verifier_evaluated event with passed=false
   - Followed by a fresh model_turn_started where the agent reads the correction
@@ -63,17 +68,10 @@ def main() -> int:
             "`safe_divide(a, b)` that returns a/b but returns 0.0 if b == 0. "
             "Include a one-line docstring. Then converge by saying DONE."
         ),
-        profile="ddd-strict",
+        profile="quality-guards",
         model="claude-haiku-4-5-20251001",
-        # Override the placeholder 'tests-pass' verifier with a no-op for this demo
-        # (we don't have a real test suite in the tempdir).
         boundary_overrides={"max_steps": 8, "max_cost_usd": 0.10},
     )
-    # Strip the placeholder tests-pass verifier; keep no-todos-in-writes.
-    if config.verifiers:
-        config = config.model_copy(
-            update={"verifiers": [v for v in config.verifiers if v.name == "no-todos-in-writes"]}
-        )
 
     print(f"== Workspace: {workspace} ==")
     print()
@@ -114,7 +112,57 @@ def main() -> int:
         print()
         print(f"== {target_file.name} (final contents) ==")
         print(target_file.read_text())
+
+    issues = _validate_outcome(events, target_file)
+    print()
+    if issues:
+        print("== ✗ FAIL — example 02 ==")
+        for msg in issues:
+            print(f"  - {msg}")
+        return 1
+    print("== ✓ PASS — example 02 ==")
     return 0
+
+
+def _validate_outcome(events: list, target_file: Path) -> list[str]:
+    """Post-conditions for example 02. LLM trajectory varies; outcomes don't.
+
+    PASS criteria:
+      - Run converged
+      - Target file exists, parses as Python, defines `safe_divide`
+      - Target file contains NO 'TODO' (the verifier's job)
+      - At least one verifier_evaluated event fired
+      - All verifier_evaluated events are passed=True (the file shipped clean)
+    """
+    issues: list[str] = []
+    types = [type(ev).__name__ for ev in events]
+
+    stop = next((ev for ev in events if type(ev).__name__ == "AgentStoppedEvent"), None)
+    if stop is None:
+        issues.append("no agent_stopped event — runner exited mid-trajectory")
+        return issues
+    if str(stop.reason) != "converged":
+        issues.append(f"expected stop reason 'converged'; got {stop.reason!r}")
+
+    if not target_file.exists():
+        issues.append(f"target file not written: {target_file}")
+        return issues
+
+    contents = target_file.read_text()
+    if "TODO" in contents:
+        issues.append("target file contains 'TODO' — verifier should have caught + corrected")
+    if "def safe_divide" not in contents:
+        issues.append("target file does not define safe_divide()")
+
+    try:
+        compile(contents, str(target_file), "exec")
+    except SyntaxError as e:
+        issues.append(f"target file is not valid Python: {e}")
+
+    if "VerifierEvaluatedEvent" not in types:
+        issues.append("no verifier_evaluated events — verifier never ran")
+
+    return issues
 
 
 if __name__ == "__main__":

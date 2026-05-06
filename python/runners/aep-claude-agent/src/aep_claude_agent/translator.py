@@ -20,11 +20,11 @@ the translator at the SDK lifecycle hooks that map to AEP triggers
 (UserPromptSubmit → before_first_turn, AssistantMessage post-emit →
 after_each_turn, PostToolUse → on_tool:<name>, run() finalizer → at_end).
 on_failure=halt aborts the SDK iteration with reason=verifier_failed;
-on_failure=continue is a no-op. on_failure=inject_correction is NOT
-supported under the translator pattern because the SDK owns the prompt-input
-channel — Configs that declare it are rejected at startup with
-error_occurred + agent_stopped(error). Use aep-anthropic's driver pattern
-when inject_correction is required.
+on_failure=continue is a no-op; on_failure=inject_correction queues the
+correction message and submits it as a follow-up user prompt via
+`ClaudeSDKClient.query()` between turns — the same semantic as the driver
+runner appending to history, just plumbed through the SDK's multi-turn
+control surface.
 """
 
 from __future__ import annotations
@@ -130,9 +130,11 @@ class ClaudeAgentTranslator:
     emitted AEP event (Pydantic model). Call .run() to start the SDK; events
     fire as the SDK progresses.
 
-    Optional `sdk_query` / `sdk_options_cls` / `sdk_hook_matcher_cls` injection
-    points let tests (and the supervisor's mock-SDK example) substitute fakes
-    without installing claude_agent_sdk.
+    Optional `sdk_client_cls` / `sdk_options_cls` / `sdk_hook_matcher_cls`
+    injection points let tests (and the supervisor's mock-SDK example) substitute
+    fakes without installing claude_agent_sdk. `sdk_client_cls` is a callable
+    that returns an object with the ClaudeSDKClient surface
+    (`async with`-able, `connect()`, `query()`, `receive_response()`).
     """
 
     def __init__(
@@ -140,7 +142,7 @@ class ClaudeAgentTranslator:
         config: Config,
         on_event: Callable[[BaseModel], None],
         *,
-        sdk_query: Callable[..., Any] | None = None,
+        sdk_client_cls: Callable[..., Any] | None = None,
         sdk_options_cls: type | None = None,
         sdk_hook_matcher_cls: type | None = None,
     ) -> None:
@@ -171,7 +173,10 @@ class ClaudeAgentTranslator:
         # Stop hook may fire per-turn; the run() finalizer runs at_end exactly
         # once, so this flag is informational only.
         self._stop_seen = False
-        self._sdk_query = sdk_query
+        # inject_correction queues correction messages here; the
+        # ClaudeSDKClient.query() loop drains them between turns.
+        self._pending_corrections: list[str] = []
+        self._sdk_client_cls = sdk_client_cls
         self._sdk_options_cls = sdk_options_cls
         self._sdk_hook_matcher_cls = sdk_hook_matcher_cls
 
@@ -197,13 +202,6 @@ class ClaudeAgentTranslator:
 
         Returns the terminal AgentStoppedEvent."""
         self._emit_agent_started()
-
-        # SPEC.md §13.1 item 18: a runner that cannot honor a declared verifier
-        # MUST fail loud at startup, not silently degrade at runtime. The
-        # translator pattern can't honor inject_correction (no mid-stream
-        # prompt-injection on the SDK-owned conversation channel).
-        if not self._validate_verifier_compatibility():
-            return self._emit_agent_stopped(StopReason.error)
 
         reason: StopReason
         error_msg: str | None = None
@@ -257,22 +255,47 @@ class ClaudeAgentTranslator:
     # ── SDK integration ────────────────────────────────────────────────────
 
     async def _async_invoke_sdk(self) -> None:
-        """Drive the Claude Agent SDK and route its lifecycle events to translator handlers."""
-        if self._sdk_query is None:
+        """Drive the Claude Agent SDK with multi-turn control via ClaudeSDKClient.
+
+        The outer loop alternates between (a) draining the SDK's response stream
+        for the current turn (`receive_response()`) and (b) submitting any
+        correction messages queued by inject_correction verifiers as a follow-up
+        user prompt (`client.query(...)`). When no correction is pending after
+        a response stream completes, the conversation is over and we return.
+
+        Mirrors the AEPRunner driver-pattern semantics for inject_correction:
+        the driver appends a user-role message to its in-memory history before
+        the next turn; the translator hands that same content to the SDK as a
+        new user prompt and lets the SDK route it through its own loop. The
+        agent sees a user-role correction either way.
+        """
+        if self._sdk_client_cls is None:
             from claude_agent_sdk import (
                 ClaudeAgentOptions,
+                ClaudeSDKClient,
                 HookMatcher,
-                query,
             )
 
-            self._sdk_query = query
+            self._sdk_client_cls = ClaudeSDKClient
             self._sdk_options_cls = ClaudeAgentOptions
             self._sdk_hook_matcher_cls = HookMatcher
 
         options = self._build_sdk_options()
         prompt = self.config.prompt or ""
-        async for message in self._sdk_query(prompt=prompt, options=options):
-            self._on_sdk_message(message)
+
+        async with self._sdk_client_cls(options=options) as client:
+            await client.connect(prompt)
+            while True:
+                async for message in client.receive_response():
+                    self._on_sdk_message(message)
+                # The current response stream is exhausted. If a verifier
+                # queued an inject_correction during this turn, hand it to
+                # the SDK as a follow-up user prompt and re-enter the
+                # response loop. Otherwise the conversation is over.
+                correction = self._drain_pending_correction()
+                if correction is None:
+                    break
+                await client.query(correction)
 
     def _build_sdk_options(self) -> Any:
         """Translate Config → ClaudeAgentOptions.
@@ -576,41 +599,13 @@ class ClaudeAgentTranslator:
 
     # ── Verifier dispatch (mirrors AEPRunner._run_verifier semantics) ──────
 
-    def _validate_verifier_compatibility(self) -> bool:
-        """SPEC.md §13.1 item 18: a runner that cannot honor a declared
-        verifier MUST emit error_occurred and stop at startup.
-
-        The translator pattern can't honor `inject_correction` because the
-        Claude Agent SDK owns the prompt-input channel; the runner has no
-        clean way to splice a user-role correction message between turns
-        of an SDK-driven conversation. Driver-pattern runners (aep-anthropic)
-        own the loop and can do this directly.
-
-        Returns True if the Config is compatible, False after emitting
-        error_occurred for any incompatible verifier."""
-        cfg = self.config
-        if not cfg.verifiers:
-            return True
-        incompatible = [
-            v.name for v in cfg.verifiers if v.on_failure == OnFailure.inject_correction
-        ]
-        if incompatible:
-            self._emit(
-                ErrorOccurredEvent(
-                    run_id=cfg.run_id,
-                    code=ErrorCode.unknown,
-                    message=(
-                        "aep-claude-agent (translator pattern) cannot honor "
-                        "verifier on_failure='inject_correction' — the Claude "
-                        "Agent SDK owns the conversation loop, leaving no "
-                        "mid-stream prompt-injection channel. Use the driver-"
-                        "pattern runner (aep-anthropic) for inject_correction "
-                        f"verifiers. Incompatible verifiers: {incompatible}"
-                    ),
-                )
-            )
-            return False
-        return True
+    def _drain_pending_correction(self) -> str | None:
+        """Pop one queued inject_correction message, or None if the queue is
+        empty. The translator submits drained corrections as follow-up user
+        prompts via `ClaudeSDKClient.query()` between turns."""
+        if not self._pending_corrections:
+            return None
+        return self._pending_corrections.pop(0)
 
     def _run_verifiers_for_trigger(self, trigger: str) -> None:
         """Execute every Config verifier whose trigger matches.
@@ -702,13 +697,16 @@ class ClaudeAgentTranslator:
             return
         if verifier.on_failure == OnFailure.halt:
             raise _VerifierHalt()
-        # inject_correction was rejected at startup by
-        # _validate_verifier_compatibility; reaching here means a Config
-        # validation gap.
-        raise ValueError(
-            f"unsupported on_failure {verifier.on_failure!r} reached _apply_on_failure; "
-            "should have been rejected at startup"
-        )
+        if verifier.on_failure == OnFailure.inject_correction:
+            assert verifier.correction_message is not None
+            # Queue the correction for submission via ClaudeSDKClient.query()
+            # after the current response stream completes. The driver runner's
+            # equivalent is appending a user-role message to its in-memory
+            # history; here we hand the same content to the SDK as a follow-up
+            # user prompt and let the SDK route it through its own loop.
+            self._pending_corrections.append(verifier.correction_message)
+            return
+        raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
 
     # ── AEP emission helpers ───────────────────────────────────────────────
 

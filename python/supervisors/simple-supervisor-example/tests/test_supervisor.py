@@ -15,6 +15,7 @@ from simple_supervisor import (
     COST_BOUNDED,
     DDD_STRICT,
     DEV_LOOSE,
+    QUALITY_GUARDS,
     Summary,
     build_config,
     render,
@@ -36,13 +37,40 @@ from aep import (
 # ── Profile / Config compilation ──────────────────────────────────────────────
 
 
-def test_build_config_inherits_profile_allowed_tools_and_boundary() -> None:
-    cfg = build_config(run_id="r1", prompt="x", profile="ddd-strict")
+def test_build_config_inherits_quality_guards_profile() -> None:
+    """quality-guards is a generic code-quality profile (the no-todos verifier)."""
+    cfg = build_config(run_id="r1", prompt="x", profile="quality-guards")
     assert "bash" in cfg.allowed_tools
     assert cfg.boundary.max_cost_usd == 0.50
     assert cfg.boundary.max_steps == 10
-    # Verifier names from profile show up
-    assert {v.name for v in cfg.verifiers} == {"no-todos-in-writes", "tests-pass"}
+    assert {v.name for v in cfg.verifiers} == {"no-todos-in-writes"}
+
+
+def test_build_config_inherits_ddd_strict_profile() -> None:
+    """ddd-strict compiles real DDD concerns: layer purity, aggregate
+    invariants (pytest-driven), and ubiquitous language enforcement."""
+    cfg = build_config(run_id="r1", prompt="x", profile="ddd-strict")
+    assert "bash" in cfg.allowed_tools
+    assert cfg.boundary.max_cost_usd == 0.75
+    assert cfg.boundary.max_steps == 12
+    names = {v.name for v in cfg.verifiers}
+    assert names == {
+        "domain-layer-purity",
+        "aggregate-invariants",
+        "no-anemic-suffixes-in-domain",
+    }
+    # Each verifier maps to a DDD concept with the right on_failure semantics.
+    # domain-layer-purity halts (architectural contract violation).
+    # aggregate-invariants and no-anemic-suffixes inject_correction so the
+    # agent can self-recover — invariants get a stronger nudge that says
+    # "don't loosen the invariant; restructure the feature."
+    by_name = {v.name: v for v in cfg.verifiers}
+    assert by_name["domain-layer-purity"].on_failure.value == "halt"
+    assert by_name["aggregate-invariants"].on_failure.value == "inject_correction"
+    assert by_name["no-anemic-suffixes-in-domain"].on_failure.value == "inject_correction"
+    # The aggregate-invariants correction encodes the DDD principle.
+    assert "loosen" in by_name["aggregate-invariants"].correction_message
+    assert "invariant" in by_name["aggregate-invariants"].correction_message
 
 
 def test_build_config_extra_tools_extend_allowed_tools() -> None:
@@ -79,6 +107,11 @@ def test_build_config_boundary_overrides_win() -> None:
 def test_profiles_are_distinct() -> None:
     assert COST_BOUNDED.allowed_tools != DDD_STRICT.allowed_tools
     assert DEV_LOOSE.boundary != COST_BOUNDED.boundary
+    # DDD_STRICT and QUALITY_GUARDS share allowed_tools but have different
+    # verifiers and different system_prompts (DDD_STRICT carries one).
+    assert DDD_STRICT.verifiers != QUALITY_GUARDS.verifiers
+    assert DDD_STRICT.system_prompt is not None
+    assert QUALITY_GUARDS.system_prompt is None
 
 
 # ── Trajectory summarization ──────────────────────────────────────────────────

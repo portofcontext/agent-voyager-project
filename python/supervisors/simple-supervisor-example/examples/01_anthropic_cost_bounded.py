@@ -80,7 +80,53 @@ def main() -> int:
 
     print()
     print(render(summarize(events)))
+
+    issues = _validate_outcome(events)
+    print()
+    if issues:
+        print("== ✗ FAIL — example 01 ==")
+        for msg in issues:
+            print(f"  - {msg}")
+        return 1
+    print("== ✓ PASS — example 01 ==")
     return 0
+
+
+def _validate_outcome(events: list) -> list[str]:
+    """Post-conditions for example 01. LLM trajectory varies; outcomes don't.
+
+    PASS criteria:
+      - Run terminated with one of: converged / budget_exhausted / turn_limit
+        (any of these means the boundary worked)
+      - At least one tool call was made (and it was read_file, the only
+        allowed tool)
+      - No error_occurred events
+    """
+    issues: list[str] = []
+    types = [type(ev).__name__ for ev in events]
+
+    if "AgentStoppedEvent" not in types:
+        issues.append("no agent_stopped event — runner exited mid-trajectory")
+        return issues
+
+    stop = next(ev for ev in events if type(ev).__name__ == "AgentStoppedEvent")
+    accepted_reasons = {"converged", "budget_exhausted", "turn_limit"}
+    if str(stop.reason) not in accepted_reasons:
+        issues.append(f"unexpected stop reason {stop.reason!r}; expected one of {accepted_reasons}")
+
+    tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
+    if not tool_invokes:
+        issues.append("no tool calls — agent should have used read_file")
+    else:
+        wrong = [ev.tool for ev in tool_invokes if ev.tool != "read_file"]
+        if wrong:
+            issues.append(f"agent called disallowed tools (allowed_tools=[read_file]): {wrong}")
+
+    if "ErrorOccurredEvent" in types:
+        errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
+        issues.append(f"error_occurred events present: {[e.message for e in errs]}")
+
+    return issues
 
 
 if __name__ == "__main__":

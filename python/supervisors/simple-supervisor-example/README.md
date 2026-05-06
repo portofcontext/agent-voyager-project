@@ -19,15 +19,17 @@ This is **not a production framework**. It's a stepping stone — proof that the
 
 ```
 src/simple_supervisor/
-  profiles.py       # Profile dataclass + DEV_LOOSE / DDD_STRICT / COST_BOUNDED presets
+  profiles.py       # Profile dataclass + DEV_LOOSE / QUALITY_GUARDS / DDD_STRICT / COST_BOUNDED
   builder.py        # build_config(profile, overrides) -> Config
   runner.py         # run_subprocess(cmd, config) — pipes Config in, reads NDJSON out
   observability.py  # summarize(events) -> Summary;  render(summary) -> str
-  cli.py            # `simple-supervisor list-profiles` / `show-config`
+  cli.py            # `simple-supervisor list-profiles` / `show-config` / `examples`
 examples/
   01_anthropic_cost_bounded.py
   02_anthropic_self_correcting.py
   03_claude_code_audited.py
+  04_ddd_supervisor.py            # full DDD profile applied to a real toy domain
+  04_ddd_domain/                  # the toy domain — Order, Customer, invariants
 ```
 
 ## Quickstart
@@ -67,7 +69,7 @@ What you'll see in the post-run summary:
 
 ### 02 — Self-correcting verifier (driver pattern)
 
-Wires the `ddd-strict` profile, which includes a `no-todos-in-writes` verifier on `on_tool:write_file` with `on_failure=inject_correction`. When the agent writes a file containing a `TODO`, the verifier fails, and the supervisor's correction message is injected as a user-role message before the next turn — the agent sees its own output failed a rule and self-corrects.
+Wires the `quality-guards` profile, which ships a `no-todos-in-writes` verifier on `on_tool:write_file` with `on_failure=inject_correction`. When the agent writes a file containing a `TODO`, the verifier fails, and the supervisor's correction message is injected as a user-role message before the next turn — the agent sees its own output failed a rule and self-corrects.
 
 What you'll see:
 - `verifier_evaluated` events with `passed: false`
@@ -81,6 +83,20 @@ Wraps the Claude Agent SDK (Claude Code as an SDK) via `aep-claude-agent`'s tran
 The point: the SDK owns the agent loop, but the supervisor still gates the surface (`allowed_tools`), monitors the trajectory, and runs verifiers. **No mid-run reach-in** — the hooks observe, the verifiers run before/after fixed lifecycle points, and the supervisor reads the trajectory from the bus.
 
 This example uses a mock SDK by default (so it runs without `claude-agent-sdk` installed and without an API key). Set `USE_REAL_SDK=1` and install the SDK to drive against the real thing.
+
+### 04 — DDD-strict supervisor over a toy domain (driver pattern)
+
+The most complete example: a real `DDD_STRICT` profile compiling Domain-Driven Design concerns into AEP verifiers, applied to a hand-written DDD codebase at `examples/04_ddd_domain/` (Order aggregate, Customer aggregate, OrderLine + EmailAddress value objects, 20+ invariant tests).
+
+The profile ships three verifiers, each compiling one DDD concern:
+
+1. `domain-layer-purity` (on_tool:write_file, halt) — `grep` `domain/` for infrastructure imports. Domain MUST stay pure.
+2. `aggregate-invariants` (after_each_turn, halt) — `python -m pytest tests/invariants/`. Invariants MUST hold on every state.
+3. `no-anemic-suffixes-in-domain` (on_tool:write_file, inject_correction) — flags `*Manager.py` / `*Helper.py` / `*Util.py` in domain. Names MUST reflect business concepts.
+
+The agent's task: extend `Order` with `apply_discount`, preserving the `total == sum(line subtotals)` invariant and adding a test. The naive way is to write an `OrderDiscountManager.py` — verifier 3 catches that and tells the agent to put the method on `Order` itself. If the math is wrong, verifier 2 catches the broken invariant and halts.
+
+Read the toy domain first to see what DDD-correct code looks like, then read the profile to see how each concept maps to a verifier. That's the supervisor framework pattern compressed into one example.
 
 ## The supervisor's value-add (what AEP gives you "for free")
 
@@ -96,9 +112,9 @@ When you read the examples, notice how little supervisor code there is. AEP does
 The fastest path — uses `~/.anthropic-key` if it exists, otherwise `$ANTHROPIC_API_KEY`:
 
 ```bash
-uv run simple-supervisor examples            # all three (~$0.10 total)
+uv run simple-supervisor examples            # all four (~$0.15 total)
 uv run simple-supervisor examples 01         # just example 01
-uv run simple-supervisor examples 01 02      # any subset
+uv run simple-supervisor examples 01 02 04   # any subset
 ```
 
 Or invoke them directly:

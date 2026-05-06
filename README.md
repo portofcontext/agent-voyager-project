@@ -104,8 +104,8 @@ Three message classes:
 | Package | Purpose |
 |---|---|
 | [`python/aep/`](python/aep/) | Wire types, reference runner, conformance harness. Every other AEP package depends on this. |
-| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Honors all verifier `on_failure` actions including `inject_correction`. |
-| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Honors all verifier triggers (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) with `on_failure: halt` and `continue`. **Refuses Configs declaring `on_failure: inject_correction` at startup** (per SPEC §13.1.18) — the translator pattern can't splice messages into the SDK-owned conversation loop. Use `aep-anthropic` for `inject_correction`. |
+| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Fully compliant under v0.1. |
+| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under v0.1: every verifier trigger (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) and every `on_failure` action (`halt`, `continue`, `inject_correction`). Corrections are spliced into the SDK-owned conversation via `ClaudeSDKClient.query()` between turns. |
 
 ---
 
