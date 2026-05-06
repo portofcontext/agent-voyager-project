@@ -1,7 +1,3498 @@
 {
+  "$defs": {
+    "AgentStartedData": {
+      "additionalProperties": true,
+      "description": "Payload of aep.agent_started events.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "gen_ai.provider.name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Provider.Name"
+        },
+        "gen_ai.operation.name": {
+          "anyOf": [
+            {
+              "enum": [
+                "invoke_agent",
+                "chat"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Operation.Name"
+        },
+        "gen_ai.request.model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Request.Model"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_ToolDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skills"
+        },
+        "aep.thread_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Thread Id"
+        },
+        "aep.session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Session Id"
+        },
+        "aep.tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tags"
+        },
+        "aep.meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Meta"
+        },
+        "aep.schema_version": {
+          "const": "0.1",
+          "default": "0.1",
+          "title": "Aep.Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id"
+      ],
+      "title": "AgentStartedData",
+      "type": "object"
+    },
+    "AgentStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.agent_started",
+          "default": "aep.agent_started",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentStartedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AgentStartedEvent",
+      "type": "object"
+    },
+    "AgentStoppedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.reason": {
+          "$ref": "#/$defs/StopReason"
+        },
+        "aep.state": {
+          "$ref": "#/$defs/RunStateSnapshot"
+        },
+        "aep.total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Total Tokens"
+        },
+        "aep.total_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Total Cost Usd"
+        },
+        "aep.total_turns": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Total Turns"
+        },
+        "aep.duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Duration Ms"
+        },
+        "aep.output": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Output"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.reason",
+        "aep.state"
+      ],
+      "title": "AgentStoppedData",
+      "type": "object"
+    },
+    "AgentStoppedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.agent_stopped",
+          "default": "aep.agent_stopped",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentStoppedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AgentStoppedEvent",
+      "type": "object"
+    },
+    "CostRecordedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.state": {
+          "$ref": "#/$defs/RunStateSnapshot"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.state"
+      ],
+      "title": "CostRecordedData",
+      "type": "object"
+    },
+    "CostRecordedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.cost_recorded",
+          "default": "aep.cost_recorded",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/CostRecordedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "CostRecordedEvent",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "rate_limit",
+        "context_limit",
+        "auth_error",
+        "runner_crash",
+        "accounting_reset",
+        "unknown"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "ErrorOccurredData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.error.code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "aep.error.message": {
+          "title": "Aep.Error.Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.error.code",
+        "aep.error.message"
+      ],
+      "title": "ErrorOccurredData",
+      "type": "object"
+    },
+    "ErrorOccurredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.error_occurred",
+          "default": "aep.error_occurred",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ErrorOccurredData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ErrorOccurredEvent",
+      "type": "object"
+    },
+    "JsonRpcError": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "integer"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "data": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "JsonRpcError",
+      "type": "object"
+    },
+    "JsonRpcRequestPayload": {
+      "additionalProperties": true,
+      "description": "JSON-RPC 2.0 request payload — what tool_exec_request.data carries.\n\nPer MCP convention, `method` is `\"tools/call\"` and `params` is\n`{name, arguments}`.",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Jsonrpc",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Id"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "JsonRpcRequestPayload",
+      "type": "object"
+    },
+    "JsonRpcResponsePayload": {
+      "additionalProperties": true,
+      "description": "JSON-RPC 2.0 response payload — what tool_exec_resolved.data carries.\n\nExactly one of `result` or `error` MUST be present per the JSON-RPC spec.",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Jsonrpc",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "result": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonRpcError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "JsonRpcResponsePayload",
+      "type": "object"
+    },
+    "McpServerConnectedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.mcp.server_id": {
+          "minLength": 1,
+          "title": "Aep.Mcp.Server Id",
+          "type": "string"
+        },
+        "aep.mcp.protocol_version": {
+          "title": "Aep.Mcp.Protocol Version",
+          "type": "string"
+        },
+        "aep.mcp.tool_count": {
+          "minimum": 0,
+          "title": "Aep.Mcp.Tool Count",
+          "type": "integer"
+        },
+        "aep.mcp.server_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Server Name"
+        },
+        "aep.mcp.server_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Server Version"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.mcp.server_id",
+        "aep.mcp.protocol_version",
+        "aep.mcp.tool_count"
+      ],
+      "title": "McpServerConnectedData",
+      "type": "object"
+    },
+    "McpServerConnectedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.mcp_server_connected",
+          "default": "aep.mcp_server_connected",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/McpServerConnectedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "McpServerConnectedEvent",
+      "type": "object"
+    },
+    "McpServerDisconnectedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.mcp.server_id": {
+          "minLength": 1,
+          "title": "Aep.Mcp.Server Id",
+          "type": "string"
+        },
+        "aep.mcp.disconnect_reason": {
+          "enum": [
+            "clean",
+            "error"
+          ],
+          "title": "Aep.Mcp.Disconnect Reason",
+          "type": "string"
+        },
+        "aep.mcp.disconnect_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Disconnect Message"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.mcp.server_id",
+        "aep.mcp.disconnect_reason"
+      ],
+      "title": "McpServerDisconnectedData",
+      "type": "object"
+    },
+    "McpServerDisconnectedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.mcp_server_disconnected",
+          "default": "aep.mcp_server_disconnected",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/McpServerDisconnectedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "McpServerDisconnectedEvent",
+      "type": "object"
+    },
+    "ModelTurnEndedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "gen_ai.provider.name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Provider.Name"
+        },
+        "gen_ai.request.model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Request.Model"
+        },
+        "gen_ai.response.model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Model"
+        },
+        "gen_ai.response.finish_reasons": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Finish Reasons"
+        },
+        "gen_ai.response.time_to_first_chunk": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Time To First Chunk"
+        },
+        "gen_ai.usage.input_tokens": {
+          "minimum": 0,
+          "title": "Gen Ai.Usage.Input Tokens",
+          "type": "integer"
+        },
+        "gen_ai.usage.output_tokens": {
+          "minimum": 0,
+          "title": "Gen Ai.Usage.Output Tokens",
+          "type": "integer"
+        },
+        "gen_ai.usage.cache_read.input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Cache Read.Input Tokens"
+        },
+        "gen_ai.usage.cache_creation.input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Cache Creation.Input Tokens"
+        },
+        "gen_ai.usage.reasoning.output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Reasoning.Output Tokens"
+        },
+        "aep.cost_usd": {
+          "minimum": 0,
+          "title": "Aep.Cost Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "duration_ms",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "aep.cost_usd"
+      ],
+      "title": "ModelTurnEndedData",
+      "type": "object"
+    },
+    "ModelTurnEndedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.model_turn_ended",
+          "default": "aep.model_turn_ended",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ModelTurnEndedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ModelTurnEndedEvent",
+      "type": "object"
+    },
+    "ModelTurnStartedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.context_messages": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Context Messages"
+        },
+        "gen_ai.request.stream": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Request.Stream"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step"
+      ],
+      "title": "ModelTurnStartedData",
+      "type": "object"
+    },
+    "ModelTurnStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.model_turn_started",
+          "default": "aep.model_turn_started",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ModelTurnStartedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ModelTurnStartedEvent",
+      "type": "object"
+    },
+    "RunStateSnapshot": {
+      "additionalProperties": true,
+      "description": "Cumulative run-state used in cost_recorded and agent_stopped data.\nOpen model — supervisor SDKs can carry implementation-specific fields.",
+      "properties": {
+        "total_cost_usd": {
+          "minimum": 0,
+          "title": "Total Cost Usd",
+          "type": "number"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        },
+        "total_turns": {
+          "minimum": 0,
+          "title": "Total Turns",
+          "type": "integer"
+        },
+        "tokens_input_total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Input Total"
+        },
+        "tokens_output_total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Output Total"
+        },
+        "tokens_cache_read_total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Cache Read Total"
+        },
+        "tokens_cache_write_total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Cache Write Total"
+        },
+        "tools_invoked": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tools Invoked"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
+        }
+      },
+      "required": [
+        "total_cost_usd",
+        "total_tokens",
+        "total_turns"
+      ],
+      "title": "RunStateSnapshot",
+      "type": "object"
+    },
+    "SkillExecutedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.skill.name": {
+          "title": "Aep.Skill.Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.skill.name"
+      ],
+      "title": "SkillExecutedData",
+      "type": "object"
+    },
+    "SkillExecutedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.skill_executed",
+          "default": "aep.skill_executed",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SkillExecutedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "SkillExecutedEvent",
+      "type": "object"
+    },
+    "SkillLoadedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.skill.name": {
+          "title": "Aep.Skill.Name",
+          "type": "string"
+        },
+        "aep.skill.source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Skill.Source"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.skill.name"
+      ],
+      "title": "SkillLoadedData",
+      "type": "object"
+    },
+    "SkillLoadedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.skill_loaded",
+          "default": "aep.skill_loaded",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SkillLoadedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "SkillLoadedEvent",
+      "type": "object"
+    },
+    "StopReason": {
+      "enum": [
+        "converged",
+        "budget_exhausted",
+        "token_limit",
+        "turn_limit",
+        "error",
+        "interrupted",
+        "verifier_failed"
+      ],
+      "title": "StopReason",
+      "type": "string"
+    },
+    "TextEmittedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.text": {
+          "title": "Aep.Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.text"
+      ],
+      "title": "TextEmittedData",
+      "type": "object"
+    },
+    "TextEmittedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.text_emitted",
+          "default": "aep.text_emitted",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/TextEmittedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "TextEmittedEvent",
+      "type": "object"
+    },
+    "ToolExecRequestData": {
+      "additionalProperties": true,
+      "description": "Wraps the JSON-RPC request alongside AEP-side bookkeeping.\n\n`gen_ai.tool.name` is duplicated at the top of `data` (OTel convention)\neven though it's also inside `rpc.params.name` per MCP — this keeps tool\nfiltering on the trajectory uniform across `tool_invoked` /\n`tool_exec_request` / `tool_returned`.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.request_id": {
+          "minLength": 1,
+          "title": "Aep.Request Id",
+          "type": "string"
+        },
+        "gen_ai.tool.call.id": {
+          "minLength": 1,
+          "title": "Gen Ai.Tool.Call.Id",
+          "type": "string"
+        },
+        "aep.timeout_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Aep.Timeout Ms",
+          "type": "integer"
+        },
+        "aep.tool.dispatch_target": {
+          "enum": [
+            "supervisor_rpc",
+            "mcp_server"
+          ],
+          "title": "Aep.Tool.Dispatch Target",
+          "type": "string"
+        },
+        "aep.mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp Server Id"
+        },
+        "gen_ai.tool.name": {
+          "title": "Gen Ai.Tool.Name",
+          "type": "string"
+        },
+        "rpc": {
+          "$ref": "#/$defs/JsonRpcRequestPayload"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.request_id",
+        "gen_ai.tool.call.id",
+        "aep.timeout_ms",
+        "aep.tool.dispatch_target",
+        "gen_ai.tool.name",
+        "rpc"
+      ],
+      "title": "ToolExecRequestData",
+      "type": "object"
+    },
+    "ToolExecRequestEvent": {
+      "additionalProperties": false,
+      "description": "Agent calls into an external service (supervisor RPC or MCP server).\n\n`source` is `aep://runner` because the runner emits this event when the\nagent decides to call a tool whose implementation is external.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_exec_request",
+          "default": "aep.tool_exec_request",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolExecRequestData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolExecRequestEvent",
+      "type": "object"
+    },
+    "ToolExecResolvedData": {
+      "additionalProperties": true,
+      "description": "Wraps the JSON-RPC response. `source` URI on the envelope identifies\nwho answered (supervisor or mcp/<server_id>).\n\n`gen_ai.tool.name` echoes the request's tool name for observability —\nconsumers shouldn't need to cross-reference the request to filter replies.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.request_id": {
+          "minLength": 1,
+          "title": "Aep.Request Id",
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Tool.Name"
+        },
+        "rpc": {
+          "$ref": "#/$defs/JsonRpcResponsePayload"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.request_id",
+        "rpc"
+      ],
+      "title": "ToolExecResolvedData",
+      "type": "object"
+    },
+    "ToolExecResolvedEvent": {
+      "additionalProperties": false,
+      "description": "RPC reply recorded into the trajectory verbatim. `source` is the URI\nof the responding service: `aep://supervisor` or `aep://mcp/<server_id>`.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_exec_resolved",
+          "default": "aep.tool_exec_resolved",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolExecResolvedData"
+        }
+      },
+      "required": [
+        "source",
+        "data"
+      ],
+      "title": "ToolExecResolvedEvent",
+      "type": "object"
+    },
+    "ToolExecTimedOutData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.request_id": {
+          "minLength": 1,
+          "title": "Aep.Request Id",
+          "type": "string"
+        },
+        "gen_ai.tool.call.id": {
+          "minLength": 1,
+          "title": "Gen Ai.Tool.Call.Id",
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "title": "Gen Ai.Tool.Name",
+          "type": "string"
+        },
+        "aep.timeout_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Aep.Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.request_id",
+        "gen_ai.tool.call.id",
+        "gen_ai.tool.name",
+        "aep.timeout_ms"
+      ],
+      "title": "ToolExecTimedOutData",
+      "type": "object"
+    },
+    "ToolExecTimedOutEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_exec_timed_out",
+          "default": "aep.tool_exec_timed_out",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolExecTimedOutData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolExecTimedOutEvent",
+      "type": "object"
+    },
+    "ToolFailedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.tool.call.id": {
+          "minLength": 1,
+          "title": "Gen Ai.Tool.Call.Id",
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "title": "Gen Ai.Tool.Name",
+          "type": "string"
+        },
+        "aep.tool.error": {
+          "title": "Aep.Tool.Error",
+          "type": "string"
+        },
+        "aep.tool.error.code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Error.Code"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.tool.call.id",
+        "gen_ai.tool.name",
+        "aep.tool.error"
+      ],
+      "title": "ToolFailedData",
+      "type": "object"
+    },
+    "ToolFailedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_failed",
+          "default": "aep.tool_failed",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolFailedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolFailedEvent",
+      "type": "object"
+    },
+    "ToolInvokedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.tool.call.id": {
+          "minLength": 1,
+          "title": "Gen Ai.Tool.Call.Id",
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "title": "Gen Ai.Tool.Name",
+          "type": "string"
+        },
+        "gen_ai.tool.call.arguments": {
+          "additionalProperties": true,
+          "title": "Gen Ai.Tool.Call.Arguments",
+          "type": "object"
+        },
+        "aep.tool.dispatch_target": {
+          "anyOf": [
+            {
+              "enum": [
+                "supervisor_rpc",
+                "mcp_server",
+                "local"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Dispatch Target"
+        },
+        "aep.tool.subtype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Subtype"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.tool.call.id",
+        "gen_ai.tool.name",
+        "gen_ai.tool.call.arguments"
+      ],
+      "title": "ToolInvokedData",
+      "type": "object"
+    },
+    "ToolInvokedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_invoked",
+          "default": "aep.tool_invoked",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolInvokedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolInvokedEvent",
+      "type": "object"
+    },
+    "ToolReturnedData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "gen_ai.tool.call.id": {
+          "minLength": 1,
+          "title": "Gen Ai.Tool.Call.Id",
+          "type": "string"
+        },
+        "gen_ai.tool.name": {
+          "title": "Gen Ai.Tool.Name",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "aep.tool.result.text": {
+          "title": "Aep.Tool.Result.Text",
+          "type": "string"
+        },
+        "aep.tool.result.structured": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Result.Structured"
+        },
+        "aep.tool.rejected": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Rejected"
+        },
+        "aep.tool.rejection_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Tool.Rejection Reason"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "gen_ai.tool.call.id",
+        "gen_ai.tool.name",
+        "duration_ms",
+        "aep.tool.result.text"
+      ],
+      "title": "ToolReturnedData",
+      "type": "object"
+    },
+    "ToolReturnedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.tool_returned",
+          "default": "aep.tool_returned",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolReturnedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolReturnedEvent",
+      "type": "object"
+    },
+    "VerifierError": {
+      "description": "Why a verifier failed for non-logic reasons. Distinguishes\n'environment broken' (script missing, timed out, crashed) from\n'rule legitimately failed' (passed=false with no error).",
+      "enum": [
+        "source_unavailable",
+        "source_timed_out",
+        "source_crashed"
+      ],
+      "title": "VerifierError",
+      "type": "string"
+    },
+    "VerifierEvaluatedData": {
+      "additionalProperties": true,
+      "description": "The result of a deterministic Boolean check.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.verifier.name": {
+          "minLength": 1,
+          "title": "Aep.Verifier.Name",
+          "type": "string"
+        },
+        "aep.verifier.passed": {
+          "title": "Aep.Verifier.Passed",
+          "type": "boolean"
+        },
+        "aep.verifier.duration_ms": {
+          "minimum": 0,
+          "title": "Aep.Verifier.Duration Ms",
+          "type": "integer"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "aep.verifier.error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerifierError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "aep.verifier.subject_call_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Verifier.Subject Call Ids"
+        },
+        "aep.verifier.subject_request_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Verifier.Subject Request Ids"
+        },
+        "aep.verifier.data": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Verifier.Data"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.verifier.name",
+        "aep.verifier.passed",
+        "aep.verifier.duration_ms"
+      ],
+      "title": "VerifierEvaluatedData",
+      "type": "object"
+    },
+    "VerifierEvaluatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.verifier_evaluated",
+          "default": "aep.verifier_evaluated",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/VerifierEvaluatedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "VerifierEvaluatedEvent",
+      "type": "object"
+    },
+    "_ToolDecl": {
+      "additionalProperties": true,
+      "description": "Tool descriptor in `agent_started.data.tools` — MCP-shaped + AEP fields.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        },
+        "aep.dispatch_target": {
+          "anyOf": [
+            {
+              "enum": [
+                "supervisor_rpc",
+                "mcp_server",
+                "local"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Dispatch Target"
+        },
+        "aep.mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp Server Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "_ToolDecl",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "aep.agent_started": "#/$defs/AgentStartedEvent",
+      "aep.agent_stopped": "#/$defs/AgentStoppedEvent",
+      "aep.cost_recorded": "#/$defs/CostRecordedEvent",
+      "aep.error_occurred": "#/$defs/ErrorOccurredEvent",
+      "aep.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
+      "aep.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
+      "aep.model_turn_ended": "#/$defs/ModelTurnEndedEvent",
+      "aep.model_turn_started": "#/$defs/ModelTurnStartedEvent",
+      "aep.skill_executed": "#/$defs/SkillExecutedEvent",
+      "aep.skill_loaded": "#/$defs/SkillLoadedEvent",
+      "aep.text_emitted": "#/$defs/TextEmittedEvent",
+      "aep.tool_exec_request": "#/$defs/ToolExecRequestEvent",
+      "aep.tool_exec_resolved": "#/$defs/ToolExecResolvedEvent",
+      "aep.tool_exec_timed_out": "#/$defs/ToolExecTimedOutEvent",
+      "aep.tool_failed": "#/$defs/ToolFailedEvent",
+      "aep.tool_invoked": "#/$defs/ToolInvokedEvent",
+      "aep.tool_returned": "#/$defs/ToolReturnedEvent",
+      "aep.verifier_evaluated": "#/$defs/VerifierEvaluatedEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AgentStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentStoppedEvent"
+    },
+    {
+      "$ref": "#/$defs/ModelTurnStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/ModelTurnEndedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolInvokedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolReturnedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/TextEmittedEvent"
+    },
+    {
+      "$ref": "#/$defs/CostRecordedEvent"
+    },
+    {
+      "$ref": "#/$defs/SkillLoadedEvent"
+    },
+    {
+      "$ref": "#/$defs/SkillExecutedEvent"
+    },
+    {
+      "$ref": "#/$defs/ErrorOccurredEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolExecRequestEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolExecResolvedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolExecTimedOutEvent"
+    },
+    {
+      "$ref": "#/$defs/VerifierEvaluatedEvent"
+    },
+    {
+      "$ref": "#/$defs/McpServerConnectedEvent"
+    },
+    {
+      "$ref": "#/$defs/McpServerDisconnectedEvent"
+    }
+  ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aep.dev/schema/v0.1/event.schema.json",
-  "title": "AEP Event (v0.1)",
-  "description": "Entry-point schema for one event in the canonical trajectory. Validates a single NDJSON line on the runner's stdout (or one SSE 'data:' frame on HTTP/SSE transport). Accepts events from either source ('runner' or 'supervisor').",
-  "$ref": "https://aep.dev/schema/v0.1/aep.schema.json#/$defs/Event"
+  "title": "AEP v0.1 Event",
+  "description": "Runner → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `aep.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AEP-specific attributes are namespaced `aep.*`."
 }

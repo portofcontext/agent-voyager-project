@@ -82,7 +82,7 @@ def test_build_config_extra_tools_extend_allowed_tools() -> None:
             {
                 "name": "lookup_user",
                 "description": "demo RPC",
-                "input_schema": {"type": "object"},
+                "inputSchema": {"type": "object"},
             },
         ],
     )
@@ -128,37 +128,118 @@ def _make_state(*, cost: float, tokens: int, turns: int) -> dict:
 
 
 def test_summarize_classifies_three_fact_classes() -> None:
-    cfg = Config(schema_version="0.1", run_id="r-summary", model="m")
+    from aep.types import (
+        ZERO_SPAN_ID,
+        AgentStartedData,
+        AgentStoppedData,
+        CostRecordedData,
+        ModelTurnEndedData,
+        ToolInvokedData,
+        ToolReturnedData,
+        VerifierEvaluatedData,
+        new_span_id,
+        new_trace_id,
+    )
+
+    Config(schema_version="0.1", run_id="r-summary", model="m")
+    trace = new_trace_id()
+    agent_span = new_span_id()
+    turn_span = new_span_id()
+    tool_span = new_span_id()
+
+    def span(span_id: str, parent: str) -> dict:
+        return {"trace_id": trace, "span_id": span_id, "parent_span_id": parent}
+
     events = [
-        AgentStartedEvent(run_id="r-summary", model="m"),
+        AgentStartedEvent(
+            subject="r-summary",
+            data=AgentStartedData(
+                **span(agent_span, ZERO_SPAN_ID),
+                **{"gen_ai.request.model": "m"},
+            ),
+        ),
         ModelTurnEndedEvent(
-            run_id="r-summary",
-            step=1,
-            tokens_input=10,
-            tokens_output=5,
-            cost_usd=0.001,
-            duration_ms=10,
+            subject="r-summary",
+            data=ModelTurnEndedData(
+                **span(turn_span, agent_span),
+                step=1,
+                duration_ms=10,
+                **{
+                    "gen_ai.usage.input_tokens": 10,
+                    "gen_ai.usage.output_tokens": 5,
+                    "aep.cost_usd": 0.001,
+                },
+            ),
         ),
-        ToolInvokedEvent(run_id="r-summary", step=1, call_id="c1", tool="bash", input={"x": 1}),
+        ToolInvokedEvent(
+            subject="r-summary",
+            data=ToolInvokedData(
+                **span(tool_span, turn_span),
+                step=1,
+                **{
+                    "gen_ai.tool.call.id": "c1",
+                    "gen_ai.tool.name": "bash",
+                    "gen_ai.tool.call.arguments": {"x": 1},
+                },
+            ),
+        ),
         ToolReturnedEvent(
-            run_id="r-summary",
-            step=1,
-            call_id="c1",
-            tool="bash",
-            output="ok",
-            duration_ms=1,
+            subject="r-summary",
+            data=ToolReturnedData(
+                **span(tool_span, turn_span),
+                step=1,
+                duration_ms=1,
+                **{
+                    "gen_ai.tool.call.id": "c1",
+                    "gen_ai.tool.name": "bash",
+                    "aep.tool.result.text": "ok",
+                },
+            ),
         ),
-        VerifierEvaluatedEvent(run_id="r-summary", name="rule-A", passed=True, step=1),
-        VerifierEvaluatedEvent(run_id="r-summary", name="rule-B", passed=False, step=1),
-        CostRecordedEvent(run_id="r-summary", state=_make_state(cost=0.001, tokens=15, turns=1)),
+        VerifierEvaluatedEvent(
+            subject="r-summary",
+            data=VerifierEvaluatedData(
+                **span(new_span_id(), turn_span),
+                step=1,
+                **{
+                    "aep.verifier.name": "rule-A",
+                    "aep.verifier.passed": True,
+                    "aep.verifier.duration_ms": 1,
+                },
+            ),
+        ),
+        VerifierEvaluatedEvent(
+            subject="r-summary",
+            data=VerifierEvaluatedData(
+                **span(new_span_id(), turn_span),
+                step=1,
+                **{
+                    "aep.verifier.name": "rule-B",
+                    "aep.verifier.passed": False,
+                    "aep.verifier.duration_ms": 1,
+                },
+            ),
+        ),
+        CostRecordedEvent(
+            subject="r-summary",
+            data=CostRecordedData(
+                **span(new_span_id(), turn_span),
+                **{"aep.state": _make_state(cost=0.001, tokens=15, turns=1)},
+            ),
+        ),
         AgentStoppedEvent(
-            run_id="r-summary",
-            reason=StopReason.converged,
-            state=_make_state(cost=0.001, tokens=15, turns=1),
-            total_tokens=15,
-            total_cost_usd=0.001,
-            total_turns=1,
-            duration_ms=1234,
+            subject="r-summary",
+            data=AgentStoppedData(
+                **span(agent_span, ZERO_SPAN_ID),
+                **{
+                    "aep.reason": StopReason.converged,
+                    "aep.state": _make_state(cost=0.001, tokens=15, turns=1),
+                    "aep.total_tokens": 15,
+                    "aep.total_cost_usd": 0.001,
+                    "aep.total_turns": 1,
+                    "aep.duration_ms": 1234,
+                },
+            ),
         ),
     ]
     s = summarize(events)
@@ -248,11 +329,11 @@ def test_run_subprocess_drives_a_real_runner_end_to_end(tmp_path) -> None:
     )
 
     types = [getattr(ev, "type", None) for ev in events if hasattr(ev, "type")]
-    assert "agent_started" in types
-    assert "model_turn_started" in types
-    assert "tool_invoked" in types
-    assert "tool_returned" in types
-    assert "agent_stopped" in types
+    assert "aep.agent_started" in types
+    assert "aep.model_turn_started" in types
+    assert "aep.tool_invoked" in types
+    assert "aep.tool_returned" in types
+    assert "aep.agent_stopped" in types
 
     s = summarize(events)
     assert s.stop_reason == "converged"

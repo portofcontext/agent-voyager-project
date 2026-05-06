@@ -2,8 +2,12 @@
   "id": "verifier-on-tool-trigger-fires-after-tool-returned",
   "title": "Verifier with trigger 'on_tool:<name>' fires AFTER the matching tool_returned (not before)",
   "description": "Verifier triggers extend to per-tool dispatch. A verifier declared with trigger='on_tool:write_file' MUST run after each tool_returned for write_file. Proves the trigger taxonomy from §7.2 works in the dispatcher.",
-  "spec_refs": ["spec/v0.1/SPEC.md#72-triggers"],
-  "applies_to": ["runner"],
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#72-triggers"
+  ],
+  "applies_to": [
+    "runner"
+  ],
   "config": {
     "schema_version": "0.1",
     "run_id": "verifier-on-tool",
@@ -11,7 +15,9 @@
       {
         "name": "post-write-check",
         "trigger": "on_tool:write_file",
-        "source": { "shell": "true" },
+        "source": {
+          "shell": "true"
+        },
         "on_failure": "continue"
       }
     ],
@@ -19,22 +25,76 @@
   },
   "scripted_model": [
     {
-      "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "writing",
-      "tool_calls": [{ "call_id": "c1", "tool": "write_file", "input": { "path": "/tmp/x.txt", "content": "hi" } }],
+      "tokens_input": 50,
+      "tokens_output": 10,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "writing",
+      "tool_calls": [
+        {
+          "call_id": "c1",
+          "tool": "write_file",
+          "input": {
+            "path": "/tmp/x.txt",
+            "content": "hi"
+          }
+        }
+      ],
       "converged": false
     },
-    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "done",
+      "converged": true
+    }
   ],
   "scripted_tools": {
-    "write_file": { "output": "written", "duration_ms": 1 }
+    "write_file": {
+      "output": "written",
+      "duration_ms": 1
+    }
   },
   "expectations": {
     "ordering": "in_order_subsequence",
     "events": [
-      { "match": { "type": "tool_invoked", "call_id": "c1", "tool": "write_file" } },
-      { "match": { "type": "tool_returned", "call_id": "c1", "tool": "write_file" } },
-      { "match": { "type": "verifier_evaluated", "name": "post-write-check", "passed": true } },
-      { "match": { "type": "agent_stopped", "reason": "converged" } }
+      {
+        "match": {
+          "type": "aep.tool_invoked",
+          "data": {
+            "gen_ai.tool.call.id": "c1",
+            "gen_ai.tool.name": "write_file"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.tool_returned",
+          "data": {
+            "gen_ai.tool.call.id": "c1",
+            "gen_ai.tool.name": "write_file"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.verifier_evaluated",
+          "data": {
+            "aep.verifier.name": "post-write-check",
+            "aep.verifier.passed": true
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "converged"
+          }
+        }
+      }
     ]
   }
 }

@@ -44,7 +44,9 @@ def _trajectory_to_dicts(traj: list[BaseModel | dict]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for ev in traj:
         if isinstance(ev, BaseModel):
-            out.append(ev.model_dump(mode="json", exclude_none=True))
+            # by_alias=True emits dotted wire keys (e.g. gen_ai.usage.input_tokens,
+            # aep.cost_usd) so case expectations can match the on-the-wire shape.
+            out.append(ev.model_dump(mode="json", by_alias=True, exclude_none=True))
         else:
             out.append(dict(ev))
     return out
@@ -114,7 +116,7 @@ _ORDERING_FNS = {
 
 def _final_state(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     for ev in reversed(events):
-        if ev.get("type") == "agent_stopped":
+        if ev.get("type") == "aep.agent_stopped":
             return ev
     return None
 
@@ -122,17 +124,19 @@ def _final_state(events: list[dict[str, Any]]) -> dict[str, Any] | None:
 def _check_final_state(expected: dict[str, Any], events: list[dict[str, Any]]) -> tuple[bool, str]:
     stop = _final_state(events)
     if stop is None:
-        return False, "agent_stopped not found in trajectory"
+        return False, "aep.agent_stopped not found in trajectory"
 
-    snap = stop.get("state") or {}
+    data = stop.get("data") or {}
+    snap = data.get("aep.state") or {}
     failures: list[str] = []
 
-    if "stop_reason" in expected and stop.get("reason") != expected["stop_reason"]:
+    if "stop_reason" in expected and data.get("aep.reason") != expected["stop_reason"]:
         failures.append(
-            f"final_state.stop_reason: expected {expected['stop_reason']!r}, got {stop.get('reason')!r}"
+            f"final_state.stop_reason: expected {expected['stop_reason']!r}, "
+            f"got {data.get('aep.reason')!r}"
         )
     if "total_turns" in expected:
-        actual = snap.get("total_turns", stop.get("total_turns"))
+        actual = snap.get("total_turns", data.get("aep.total_turns"))
         if actual != expected["total_turns"]:
             failures.append(
                 f"final_state.total_turns: expected {expected['total_turns']}, got {actual}"
@@ -145,14 +149,16 @@ def _check_final_state(expected: dict[str, Any], events: list[dict[str, Any]]) -
     ):
         if k not in expected:
             continue
-        actual_key = "total_cost_usd" if "cost" in k else "total_tokens"
-        actual = snap.get(actual_key, stop.get(actual_key))
+        is_cost = "cost" in k
+        snap_key = "total_cost_usd" if is_cost else "total_tokens"
+        env_key = "aep.total_cost_usd" if is_cost else "aep.total_tokens"
+        actual = snap.get(snap_key, data.get(env_key))
         if actual is None:
-            failures.append(f"final_state.{k}: missing {actual_key} in agent_stopped.state")
+            failures.append(f"final_state.{k}: missing {snap_key} in agent_stopped.data.aep.state")
             continue
         if op(actual, expected[k]):
             failures.append(
-                f"final_state.{k}: bound {expected[k]} violated by actual {actual_key}={actual}"
+                f"final_state.{k}: bound {expected[k]} violated by actual {snap_key}={actual}"
             )
 
     if failures:

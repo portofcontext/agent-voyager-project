@@ -70,7 +70,7 @@ class StdinSupervisor(SupervisorDriver):
         from aep import ToolExecResolvedEvent
 
         if isinstance(msg, ToolExecResolvedEvent):
-            self._tool[msg.request_id] = msg
+            self._tool[msg.data.aep_request_id] = msg
 
     def observe(self, event: object) -> None:
         if self._sink is None:
@@ -123,46 +123,63 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = Config.model_validate(json.loads(config_blob))
     except Exception as e:
-        # SPEC.md §14: a runner that receives a Config with an unsupported
-        # schema_version (or any other invalid Config) MUST emit error_occurred
-        # with code='unknown' and a descriptive message, then emit agent_stopped
-        # with reason='error'. We can't construct a fully-valid Config here
-        # (that's what failed) so we emit minimal hand-rolled NDJSON that still
-        # validates against EventBase: type, source, run_id, ts.
+        # SPEC.md §14: a runner that receives an invalid Config MUST emit
+        # error_occurred + agent_stopped(reason="error"). The Config didn't
+        # validate, so we emit hand-rolled NDJSON envelopes that satisfy the
+        # CloudEvents 1.0 envelope shape directly.
         import contextlib
+        import uuid as _uuid
         from datetime import UTC as _UTC
         from datetime import datetime as _dt
+
+        from aep.types import ZERO_SPAN_ID, new_span_id, new_trace_id
 
         run_id = "unknown"
         with contextlib.suppress(Exception):
             run_id = str(json.loads(config_blob).get("run_id", "unknown"))
         ts = _dt.now(_UTC).isoformat().replace("+00:00", "Z")
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "type": "error_occurred",
-                    "source": "runner",
-                    "run_id": run_id,
-                    "ts": ts,
-                    "code": "unknown",
-                    "message": f"invalid Config: {e}",
-                }
-            )
-            + "\n"
-        )
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "type": "agent_stopped",
-                    "source": "runner",
-                    "run_id": run_id,
-                    "ts": ts,
-                    "reason": "error",
-                    "state": {"total_cost_usd": 0.0, "total_tokens": 0, "total_turns": 0},
-                }
-            )
-            + "\n"
-        )
+        trace_id = new_trace_id()
+        agent_span = new_span_id()
+
+        for envelope in (
+            {
+                "specversion": "1.0",
+                "id": str(_uuid.uuid4()),
+                "source": "aep://runner",
+                "type": "aep.error_occurred",
+                "subject": run_id,
+                "time": ts,
+                "datacontenttype": "application/json",
+                "data": {
+                    "trace_id": trace_id,
+                    "span_id": new_span_id(),
+                    "parent_span_id": agent_span,
+                    "aep.error.code": "unknown",
+                    "aep.error.message": f"invalid Config: {e}",
+                },
+            },
+            {
+                "specversion": "1.0",
+                "id": str(_uuid.uuid4()),
+                "source": "aep://runner",
+                "type": "aep.agent_stopped",
+                "subject": run_id,
+                "time": ts,
+                "datacontenttype": "application/json",
+                "data": {
+                    "trace_id": trace_id,
+                    "span_id": agent_span,
+                    "parent_span_id": ZERO_SPAN_ID,
+                    "aep.reason": "error",
+                    "aep.state": {
+                        "total_cost_usd": 0.0,
+                        "total_tokens": 0,
+                        "total_turns": 0,
+                    },
+                },
+            },
+        ):
+            sys.stdout.write(json.dumps(envelope) + "\n")
         sys.stdout.flush()
         return 2
 
@@ -174,8 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     # Then filter by Config.allowed_tools if it's set.
     tools_param: list[dict] = list(SHELL_TOOL_SCHEMAS)
     if config.tools:
+        # Anthropic API expects `input_schema` (snake_case); MCP / AEP wire is
+        # `inputSchema` (camelCase). Translate at the boundary.
         tools_param.extend(
-            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+            {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
             for t in config.tools
         )
     if config.allowed_tools is not None:

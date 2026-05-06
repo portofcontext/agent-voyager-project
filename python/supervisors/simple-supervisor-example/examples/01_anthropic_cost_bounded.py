@@ -67,16 +67,18 @@ def main() -> int:
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
         if type_name == "model_turn_ended":
             print(
-                f"  [turn {ev.step}] tokens_in={ev.tokens_input} tokens_out={ev.tokens_output} "
-                f"cost=${ev.cost_usd:.5f}"
+                f"  [turn {ev.data.step}] tokens_in={ev.data.gen_ai_usage_input_tokens} tokens_out={ev.data.gen_ai_usage_output_tokens} "
+                f"cost=${ev.data.aep_cost_usd:.5f}"
             )
         elif type_name == "tool_invoked":
-            print(f"  [turn {ev.step}] -> {ev.tool}({list(ev.input.keys())})")
+            print(
+                f"  [turn {ev.data.step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+            )
         elif type_name == "tool_returned":
-            head = ev.output.replace("\n", " ")[:60]
-            print(f"  [turn {ev.step}] <- {ev.tool}: {head!r}...")
+            head = ev.data.aep_tool_result_text.replace("\n", " ")[:60]
+            print(f"  [turn {ev.data.step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
         elif type_name == "agent_stopped":
-            print(f"  STOPPED reason={ev.reason}")
+            print(f"  STOPPED reason={ev.data.aep_reason}")
 
     print()
     print(render(summarize(events)))
@@ -111,20 +113,26 @@ def _validate_outcome(events: list) -> list[str]:
 
     stop = next(ev for ev in events if type(ev).__name__ == "AgentStoppedEvent")
     accepted_reasons = {"converged", "budget_exhausted", "turn_limit"}
-    if str(stop.reason) not in accepted_reasons:
-        issues.append(f"unexpected stop reason {stop.reason!r}; expected one of {accepted_reasons}")
+    if str(stop.data.aep_reason) not in accepted_reasons:
+        issues.append(
+            f"unexpected stop reason {stop.data.aep_reason!r}; expected one of {accepted_reasons}"
+        )
 
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:
         issues.append("no tool calls — agent should have used read_file")
     else:
-        wrong = [ev.tool for ev in tool_invokes if ev.tool != "read_file"]
+        wrong = [
+            ev.data.gen_ai_tool_name
+            for ev in tool_invokes
+            if ev.data.gen_ai_tool_name != "read_file"
+        ]
         if wrong:
             issues.append(f"agent called disallowed tools (allowed_tools=[read_file]): {wrong}")
 
     if "ErrorOccurredEvent" in types:
         errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
-        issues.append(f"error_occurred events present: {[e.message for e in errs]}")
+        issues.append(f"error_occurred events present: {[e.data.aep_error_message for e in errs]}")
 
     return issues
 

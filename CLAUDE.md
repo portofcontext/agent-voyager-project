@@ -3,6 +3,35 @@
 > Read this before adding code. Claude Code (and the user) will load it
 > automatically; the rules below are how AEP stays correct over time.
 
+## What AEP is built on (read before changing the wire)
+
+AEP specializes existing industry specs — it doesn't reinvent them. Every wire
+change MUST stay compatible with the upstream spec it's anchored to:
+
+- **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`,
+  `type`, `subject`, `time`, `data`)
+- **OpenTelemetry GenAI semantic conventions** for token / cost / model / tool
+  attribute names inside `data` (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`)
+- **OTel span identification** — `trace_id` / `span_id` / `parent_span_id` on
+  every event's `data`
+- **JSON-RPC 2.0** for `tool_exec_request.data.rpc` and `tool_exec_resolved.data.rpc`
+- **MCP 2025-11-25** for `Config.tools[]` descriptors (camelCase `inputSchema`)
+  and `Config.mcp_servers[]` transport declarations
+- **Agent Skills** (agentskills.io) for SKILL.md format
+
+AEP-specific concepts (verifier, boundary, no-mid-run-reach-in, trajectory
+contract) live under the `aep.*` attribute namespace. See `FOUNDATIONS.md`
+for the full mapping.
+
+When you touch the wire, regenerate the schemas:
+
+```bash
+uv run python scripts/generate-schemas.py
+```
+
+The Pydantic models in `python/aep/src/aep/types.py` are the source of truth;
+the JSON Schema files under `spec/v0.1/` are derived from them.
+
 ## The seams principle
 
 **When you add a feature, add a test that crosses at least one seam.**
@@ -75,10 +104,14 @@ matching conformance case fails the command. Wire it into CI when you have one.
 
 ## Project shape
 
-- `spec/v0.1/` — normative spec + JSON Schema bundle
+- `spec/v0.1/` — normative spec + JSON Schema bundle (auto-generated)
 - `conformance/v0.1/cases/` — language-agnostic test cases
-- `python/aep/` — wire types + reference runner + conformance harness
+- `python/aep/` — wire types (Pydantic) + reference runner + conformance harness
+  + cross-validation interop tests (gated on the `[interop]` extras group)
 - `python/runners/aep-anthropic/` — driver-pattern runner over Anthropic API
 - `python/runners/aep-claude-agent/` — observer-pattern runner over Claude Agent SDK
 - `python/supervisors/simple-supervisor-example/` — worked supervisor example
-- `scripts/` — `run-examples.sh`, `check-conformance-coverage.py`, `build-skill.sh`
+- `scripts/` — `generate-schemas.py`, `migrate-conformance-cases.py`,
+  `run-examples.sh`, `build-skill.sh`
+- `FOUNDATIONS.md` — what AEP is built on (CloudEvents, OTel GenAI, OTel spans,
+  JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes

@@ -174,9 +174,9 @@ def test_agent_started_emitted_with_config_metadata() -> None:
     t._emit_agent_started()
     ev = out[0]
     assert isinstance(ev, AgentStartedEvent)
-    assert ev.run_id == "t1"
-    assert ev.model == "claude-sonnet-4-6"
-    assert ev.prompt == "hello"
+    assert ev.subject == "t1"
+    assert ev.data.gen_ai_request_model == "claude-sonnet-4-6"
+    assert ev.data.prompt == "hello"
 
 
 def test_build_sdk_options_maps_config_fields() -> None:
@@ -207,13 +207,13 @@ def test_assistant_message_emits_turn_started_text_ended_cost() -> None:
         "CostRecordedEvent",
     ]
     assert isinstance(out[0], ModelTurnStartedEvent)
-    assert isinstance(out[1], TextEmittedEvent) and out[1].text == "hi there"
+    assert isinstance(out[1], TextEmittedEvent) and out[1].data.aep_text == "hi there"
     assert isinstance(out[2], ModelTurnEndedEvent)
-    assert out[2].tokens_input == 100
-    assert out[2].tokens_output == 25
-    assert out[2].cost_usd > 0
+    assert out[2].data.gen_ai_usage_input_tokens == 100
+    assert out[2].data.gen_ai_usage_output_tokens == 25
+    assert out[2].data.aep_cost_usd > 0
     assert isinstance(out[3], CostRecordedEvent)
-    assert out[3].state.total_turns == 1
+    assert out[3].data.aep_state.total_turns == 1
 
 
 def test_cumulative_usage_yields_per_turn_deltas() -> None:
@@ -248,26 +248,26 @@ def test_cumulative_usage_yields_per_turn_deltas() -> None:
     assert len(turn_ended) == 2
 
     # Turn 1 = its own cumulative (no prior context)
-    assert turn_ended[0].tokens_input == 100
-    assert turn_ended[0].tokens_output == 20
+    assert turn_ended[0].data.gen_ai_usage_input_tokens == 100
+    assert turn_ended[0].data.gen_ai_usage_output_tokens == 20
 
     # Turn 2 = delta, NOT cumulative. This is the load-bearing assertion.
-    assert turn_ended[1].tokens_input == 150, (
-        f"expected delta 150 (cumulative 250 - prior 100), got {turn_ended[1].tokens_input} — "
+    assert turn_ended[1].data.gen_ai_usage_input_tokens == 150, (
+        f"expected delta 150 (cumulative 250 - prior 100), got {turn_ended[1].data.gen_ai_usage_input_tokens} — "
         f"translator likely treating cumulative usage as per-turn"
     )
-    assert turn_ended[1].tokens_output == 30, (
-        f"expected delta 30, got {turn_ended[1].tokens_output} — "
+    assert turn_ended[1].data.gen_ai_usage_output_tokens == 30, (
+        f"expected delta 30, got {turn_ended[1].data.gen_ai_usage_output_tokens} — "
         f"output token cumulative-vs-delta bug"
     )
 
     # Cost deltas: turn 1 cost should be smaller than turn 2 cost (more tokens).
-    assert turn_ended[0].cost_usd > 0
-    assert turn_ended[1].cost_usd > turn_ended[0].cost_usd
+    assert turn_ended[0].data.aep_cost_usd > 0
+    assert turn_ended[1].data.aep_cost_usd > turn_ended[0].data.aep_cost_usd
 
     # State after both turns: cumulative totals should reconcile with the SDK.
     cost_recorded = [ev for ev in out if type(ev).__name__ == "CostRecordedEvent"]
-    final_state = cost_recorded[-1].state
+    final_state = cost_recorded[-1].data.aep_state
     assert final_state.total_turns == 2
     assert final_state.total_tokens == 300  # 100 + 20 + 150 + 30 = 300
 
@@ -289,11 +289,11 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
     asyncio.run(t._on_post_tool_use_hook(post_input, "c1", None))
 
     assert isinstance(out[0], ToolInvokedEvent)
-    assert out[0].call_id == "c1"
-    assert out[0].tool == "bash"
-    assert out[0].input == {"command": "ls"}
+    assert out[0].data.gen_ai_tool_call_id == "c1"
+    assert out[0].data.gen_ai_tool_name == "bash"
+    assert out[0].data.gen_ai_tool_call_arguments == {"command": "ls"}
     assert isinstance(out[1], ToolReturnedEvent)
-    assert out[1].output == "file1\nfile2"
+    assert out[1].data.aep_tool_result_text == "file1\nfile2"
 
 
 def test_run_with_fake_query_emits_full_lifecycle() -> None:
@@ -312,7 +312,7 @@ def test_run_with_fake_query_emits_full_lifecycle() -> None:
     stop = t.run()
 
     assert isinstance(stop, AgentStoppedEvent)
-    assert stop.reason == StopReason.converged
+    assert stop.data.aep_reason == StopReason.converged
     # Start, turn, ResultMessage cost reconciliation, agent_stopped
     types = [type(ev).__name__ for ev in out]
     assert types[0] == "AgentStartedEvent"
@@ -321,7 +321,7 @@ def test_run_with_fake_query_emits_full_lifecycle() -> None:
     assert types.count("CostRecordedEvent") >= 1
     assert types[-1] == "AgentStoppedEvent"
     # SDK-reported cost wins
-    assert abs(stop.total_cost_usd - 0.0042) < 1e-9
+    assert abs(stop.data.aep_total_cost_usd - 0.0042) < 1e-9
 
 
 def test_assistant_message_with_no_new_output_or_content_is_not_a_turn() -> None:
@@ -361,8 +361,8 @@ def test_assistant_message_with_no_new_output_or_content_is_not_a_turn() -> None
 
     turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
     assert len(turn_ended) == 2, "expected exactly 2 turns (the empty restatement should NOT count)"
-    assert turn_ended[0].step == 1
-    assert turn_ended[1].step == 2
+    assert turn_ended[0].data.step == 1
+    assert turn_ended[1].data.step == 2
 
 
 def test_unannounced_cumulative_reset_emits_error_occurred() -> None:
@@ -394,7 +394,7 @@ def test_unannounced_cumulative_reset_emits_error_occurred() -> None:
     types = [type(ev).__name__ for ev in out]
     assert "ErrorOccurredEvent" in types
     err = next(ev for ev in out if type(ev).__name__ == "ErrorOccurredEvent")
-    assert err.code.value == "accounting_reset"
+    assert err.data.aep_error_code.value == "accounting_reset"
 
 
 def test_baseline_reset_hook_handles_legitimate_compaction_gracefully() -> None:
@@ -440,7 +440,7 @@ def test_run_propagates_sdk_error_to_agent_stopped_error() -> None:
     """An SDK call that raises is wrapped: error_occurred + agent_stopped reason='error'."""
     t, out = _new_translator(sdk_client_cls=_client_factory(raise_on_invoke=RuntimeError("boom")))
     stop = t.run()
-    assert stop.reason == StopReason.error
+    assert stop.data.aep_reason == StopReason.error
     types = [type(ev).__name__ for ev in out]
     assert "ErrorOccurredEvent" in types
     assert types[-1] == "AgentStoppedEvent"
@@ -517,12 +517,12 @@ def test_inject_correction_splices_followup_user_prompt() -> None:
     # 2. Trajectory contains verifier_evaluated(passed=False) followed by a
     #    second turn — proof that the splice worked and the SDK got more
     #    messages to dispatch.
-    assert stop.reason == StopReason.converged
+    assert stop.data.aep_reason == StopReason.converged
     types = [type(ev).__name__ for ev in out]
     evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
     assert len(evals) >= 1
-    assert evals[0].passed is False
-    assert evals[0].name == "always-fail"
+    assert evals[0].data.aep_verifier_passed is False
+    assert evals[0].data.aep_verifier_name == "always-fail"
 
     turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
     assert len(turn_ended) == 2, (
@@ -615,13 +615,13 @@ def test_after_each_turn_verifier_fires_and_emits_evaluated() -> None:
     t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
-    assert stop.reason == StopReason.converged
+    assert stop.data.aep_reason == StopReason.converged
     evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
     assert len(evals) == 2, "expected one verifier_evaluated per turn (2 turns ran)"
     for ev in evals:
-        assert ev.name == "always-pass"
-        assert ev.passed is True
-        assert ev.error is None
+        assert ev.data.aep_verifier_name == "always-pass"
+        assert ev.data.aep_verifier_passed is True
+        assert ev.data.aep_verifier_error is None
 
 
 def test_on_tool_verifier_fires_after_post_tool_use() -> None:
@@ -657,8 +657,8 @@ def test_on_tool_verifier_fires_after_post_tool_use() -> None:
     types = [type(ev).__name__ for ev in out]
     # tool_invoked → tool_returned → verifier_evaluated
     assert types == ["ToolInvokedEvent", "ToolReturnedEvent", "VerifierEvaluatedEvent"]
-    assert out[2].name == "post-bash-check"
-    assert out[2].passed is True
+    assert out[2].data.aep_verifier_name == "post-bash-check"
+    assert out[2].data.aep_verifier_passed is True
 
 
 def test_on_tool_verifier_does_not_fire_for_other_tools() -> None:
@@ -718,14 +718,14 @@ def test_at_end_verifier_fires_before_agent_stopped() -> None:
     t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
-    assert stop.reason == StopReason.converged
+    assert stop.data.aep_reason == StopReason.converged
     types = [type(ev).__name__ for ev in out]
     # The last verifier_evaluated must precede agent_stopped.
     last_eval_idx = max(i for i, n in enumerate(types) if n == "VerifierEvaluatedEvent")
     last_stop_idx = types.index("AgentStoppedEvent")
     assert last_eval_idx < last_stop_idx
     final_eval = out[last_eval_idx]
-    assert final_eval.name == "final-check"
+    assert final_eval.data.aep_verifier_name == "final-check"
 
 
 def test_halt_verifier_terminates_with_verifier_failed() -> None:
@@ -759,12 +759,12 @@ def test_halt_verifier_terminates_with_verifier_failed() -> None:
     t, out = _new_translator(cfg, sdk_client_cls=_client_factory(rounds=rounds))
     stop = t.run()
 
-    assert stop.reason == StopReason.verifier_failed
+    assert stop.data.aep_reason == StopReason.verifier_failed
     # Exactly one verifier_evaluated — the halting one.
     evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
     assert len(evals) == 1
-    assert evals[0].name == "always-fail"
-    assert evals[0].passed is False
+    assert evals[0].data.aep_verifier_name == "always-fail"
+    assert evals[0].data.aep_verifier_passed is False
     # Only one model turn observed — the second was aborted by halt.
     turn_ended = [ev for ev in out if isinstance(ev, ModelTurnEndedEvent)]
     assert len(turn_ended) == 1, "halt should have aborted before turn 2"
@@ -790,7 +790,7 @@ def test_before_first_turn_verifier_fires_on_first_user_prompt_submit() -> None:
 
     evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
     assert len(evals) == 1, "before_first_turn should fire exactly once"
-    assert evals[0].name == "preflight"
+    assert evals[0].data.aep_verifier_name == "preflight"
 
 
 def test_verifier_source_unavailable_marks_error_distinguisher() -> None:
@@ -813,6 +813,6 @@ def test_verifier_source_unavailable_marks_error_distinguisher() -> None:
 
     evals = [ev for ev in out if isinstance(ev, VerifierEvaluatedEvent)]
     assert len(evals) == 1
-    assert evals[0].passed is False
-    assert evals[0].error is not None
-    assert evals[0].error.value == "source_unavailable"
+    assert evals[0].data.aep_verifier_passed is False
+    assert evals[0].data.aep_verifier_error is not None
+    assert evals[0].data.aep_verifier_error.value == "source_unavailable"
