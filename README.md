@@ -9,6 +9,18 @@ AEP draws one line, between two roles, and ships a wire format across that line.
 
 **Two unidirectional flows.** Control flows down at setup; observation flows up during the run. No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front.
 
+**Built on existing standards** AEP specializes
+[CloudEvents 1.0](https://cloudevents.io/), [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
+OTel spans, [JSON-RPC 2.0](https://www.jsonrpc.org/specification),
+[MCP](https://modelcontextprotocol.io/), [Agent Skills](https://agentskills.io/specification),
+and JSON Schema 2020-12 — the way MCP specialized JSON-RPC for LLM tools.
+Every event is a CloudEvent. Every model turn carries OTel GenAI attributes.
+Every tool call's RPC payload is JSON-RPC 2.0. Every tool descriptor is
+MCP-compatible. AEP's own contribution is small and focused: verifiers,
+boundary semantics, the no-mid-run-reach-in topology, and the
+trajectory-as-source-of-truth contract. Read [`FOUNDATIONS.md`](FOUNDATIONS.md)
+for the full mapping.
+
 ---
 
 ## How it works
@@ -91,6 +103,7 @@ Three message classes:
 
 | | |
 |---|---|
+| Foundations | [`FOUNDATIONS.md`](FOUNDATIONS.md) — what AEP is built on (CloudEvents, OTel GenAI, OTel spans, JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes |
 | Normative spec | [`spec/v0.1/SPEC.md`](spec/v0.1/SPEC.md) — RFC 2119 keywords, reference algorithm, conformance criteria |
 | JSON Schemas | [`spec/v0.1/`](spec/v0.1/) — Draft 2020-12 |
 | Conformance suite | [`conformance/v0.1/`](conformance/v0.1/) — language-agnostic test cases every SDK MUST pass |

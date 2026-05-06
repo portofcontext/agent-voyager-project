@@ -6,6 +6,22 @@
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
+## 0. Built on
+
+AEP specializes — it does not reinvent — the following industry specs:
+
+- **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
+- **OpenTelemetry GenAI semantic conventions** for token / cost / model / tool attribute names inside `data` (e.g., `gen_ai.usage.input_tokens`, `gen_ai.tool.name`).
+- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree.
+- **JSON-RPC 2.0** for the RPC payload inside `tool_exec_request.data.rpc` and `tool_exec_resolved.data.rpc`.
+- **MCP 2025-11-25** tool descriptors (`Config.tools[]` uses `inputSchema`, `outputSchema`, `_meta` per the MCP shape).
+- **Agent Skills** (agentskills.io) for `SKILL.md` files referenced by `Config.skills[]`.
+- **JSON Schema Draft 2020-12** for this specification's machine-readable form.
+
+AEP-specific concepts — **verifiers**, **boundary semantics**, the **no-mid-run-reach-in topology**, and the **trajectory-as-source-of-truth contract** — live under the `aep.*` attribute namespace.
+
+See [`FOUNDATIONS.md`](../../FOUNDATIONS.md) for the full mapping rationale.
+
 ---
 
 ## 1. The seam
@@ -49,12 +65,15 @@ The one apparent exception is **environmental services**: when the agent calls a
 
 ## 3. The trajectory
 
-The runner's stdout is the **canonical trajectory**. Every event line MUST contain a `source` field of either `"runner"` or `"supervisor"`.
+The runner's stdout is the **canonical trajectory**. Every event is a CloudEvents 1.0 envelope (per §0). The `source` attribute is a URI that identifies the producer:
 
-- **`source: "runner"`** is the overwhelming majority of events — the agent emitting facts about what it did.
-- **`source: "supervisor"`** appears only on `tool_exec_resolved` RPC replies. The runner records these verbatim. The supervisor's voice in the record documents who computed the value, not who decided anything.
+- **`source: "aep://runner"`** is the overwhelming majority of events — the agent emitting facts about what it did.
+- **`source: "aep://supervisor"`** appears only on `aep.tool_exec_resolved` RPC replies routed through the supervisor channel. The runner records these verbatim.
+- **`source: "aep://mcp/<server_id>"`** appears on `aep.tool_exec_resolved` replies that came from a Config-declared MCP server (see `Config.mcp_servers`).
 
-Implementations MUST NOT strip or rewrite supervisor-recorded events when writing the trajectory.
+The supervisor's voice in the record documents who computed the value, not who decided anything. Implementations MUST NOT strip or rewrite supervisor-recorded events when writing the trajectory.
+
+Every event's `data` payload carries an OpenTelemetry **span triple** — `trace_id` (16 random bytes, 32 lowercase hex chars), `span_id` (8 random bytes, 16 hex chars), and `parent_span_id` (or 16 zeros for the root). The agent span is the run; turn / tool / RPC spans nest inside it. Consumers reconstruct the trajectory as a span tree.
 
 ---
 
@@ -91,7 +110,9 @@ An **environmental service** is an out-of-process implementation the supervisor 
 
 | Service kind | Triggered by | Opening event | Closing events |
 |---|---|---|---|
-| **Tool execution** | The model calls a `Config.tools` declared tool whose implementation is not local | `tool_exec_request` | `tool_exec_resolved` ∣ `tool_exec_timed_out` |
+| **Tool execution** | The model calls a `Config.tools` declared tool whose implementation is not local | `aep.tool_exec_request` | `aep.tool_exec_resolved` ∣ `aep.tool_exec_timed_out` |
+
+The opening event's `data.rpc` is a [JSON-RPC 2.0](https://www.jsonrpc.org/specification) request: `{jsonrpc: "2.0", id, method, params}`. By MCP convention, `method` is `"tools/call"` and `params` is `{name, arguments}`. The closing event's `data.rpc` is a JSON-RPC 2.0 response: `{jsonrpc: "2.0", id, result}` on success, `{jsonrpc: "2.0", id, error: {code, message, data?}}` on failure.
 
 Lifecycle:
 
@@ -201,13 +222,13 @@ The Config declares `tools[]` the supervisor wants exposed to the model. From th
 
 Wire flow:
 
-1. Model calls a tool. Runner emits `tool_invoked`.
-2. **Local impl:** runner executes the tool, emits `tool_returned` (or `tool_failed`).
-3. **RPC impl** (declared in `Config.tools`, implementation not local to the runner): runner emits `tool_exec_request`, suspends, awaits `tool_exec_resolved` or times out, then emits `tool_returned`.
-4. If `tool_exec_resolved.error` is set, the runner MUST prefix `Error: ` before returning to the model.
-5. If `tool_exec_resolved.output_json` is set, the runner MUST also set `output` to a string representation that the model receives.
+1. Model calls a tool. Runner emits `aep.tool_invoked`.
+2. **Local impl:** runner executes the tool, emits `aep.tool_returned` (or `aep.tool_failed`).
+3. **RPC impl** (declared in `Config.tools`, implementation not local to the runner): runner emits `aep.tool_exec_request`, suspends, awaits `aep.tool_exec_resolved` or times out, then emits `aep.tool_returned`.
+4. If `tool_exec_resolved.data.rpc.error` is set (JSON-RPC error reply), the runner MUST prefix `Error: ` before returning to the model.
+5. If `tool_exec_resolved.data.rpc.result` is a structured value (object/array, not a string), the runner MUST surface it on `tool_returned.data["aep.tool.result.structured"]` and ALSO produce a string serialization on `tool_returned.data["aep.tool.result.text"]` for the model.
 
-`Config.tools` is the schema-typed declaration of RPC tools. Locally-implemented tools (the runner's built-ins like `bash`, file I/O, etc.) are runner-specific and not declared in Config.
+`Config.tools` is the schema-typed declaration of RPC tools (MCP-shaped: `name`, `description`, `inputSchema`). Locally-implemented tools (the runner's built-ins like `bash`, file I/O, etc.) are runner-specific and not declared in Config.
 
 ### 8.1 Restricting the exposed tool set: `Config.allowed_tools`
 
@@ -358,41 +379,43 @@ Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected
 
 ## 11. Event reference
 
-All non-RPC-request event types are past-tense facts. `*_request` events keep imperative form because they ARE pending RPCs.
+All non-RPC-request event types are past-tense facts. `*_request` events keep imperative form because they ARE pending RPCs. Event `type` values are reverse-DNS, namespaced under `aep.*`.
 
 | Type | Source(s) | One-line semantics |
 |---|---|---|
-| `agent_started` | runner | Run has begun; first event of the trajectory. |
-| `agent_stopped` | runner | Run has ended; last event of the trajectory. |
-| `model_turn_started` | runner | About to call the model. |
-| `model_turn_ended` | runner | Model response received. |
-| `tool_invoked` | runner | Model invoked a tool. |
-| `tool_returned` | runner | Tool produced a result (or was rejected). |
-| `tool_failed` | runner | Tool raised an execution error. |
-| `text_emitted` | runner | Assistant text content. |
-| `cost_recorded` | runner | Cumulative `RunStateSnapshot` snapshot. |
-| `skill_loaded` | runner | SKILL.md loaded into context. |
-| `skill_executed` | runner | Skill activated. |
-| `error_occurred` | runner | Non-tool error. |
-| `tool_exec_request` | runner | Agent calling an RPC tool service. |
-| `tool_exec_resolved` | supervisor | Service's reply to a tool_exec_request. |
-| `tool_exec_timed_out` | runner | No reply received in time. |
-| `verifier_evaluated` | runner | Deterministic pass/fail check (see §7). |
+| `aep.agent_started` | `aep://runner` | Run has begun; first event of the trajectory. |
+| `aep.agent_stopped` | `aep://runner` | Run has ended; last event of the trajectory. |
+| `aep.model_turn_started` | `aep://runner` | About to call the model. |
+| `aep.model_turn_ended` | `aep://runner` | Model response received. Carries OTel `gen_ai.usage.*`. |
+| `aep.tool_invoked` | `aep://runner` | Model invoked a tool. |
+| `aep.tool_returned` | `aep://runner` | Tool produced a result (or was rejected). |
+| `aep.tool_failed` | `aep://runner` | Tool raised an execution error. |
+| `aep.text_emitted` | `aep://runner` | Assistant text content. |
+| `aep.cost_recorded` | `aep://runner` | Cumulative `RunStateSnapshot` snapshot. |
+| `aep.skill_loaded` | `aep://runner` | SKILL.md loaded into context. |
+| `aep.skill_executed` | `aep://runner` | Skill activated. |
+| `aep.error_occurred` | `aep://runner` | Non-tool error. |
+| `aep.tool_exec_request` | `aep://runner` | Agent calling an RPC tool service (carries JSON-RPC request). |
+| `aep.tool_exec_resolved` | `aep://supervisor` ∣ `aep://mcp/<server_id>` | Service's reply to a tool_exec_request (carries JSON-RPC response). |
+| `aep.tool_exec_timed_out` | `aep://runner` | No reply received in time. |
+| `aep.verifier_evaluated` | `aep://runner` | Deterministic pass/fail check (see §7). |
+| `aep.mcp_server_connected` | `aep://runner` | Connection established to a Config-declared MCP server. |
+| `aep.mcp_server_disconnected` | `aep://runner` | Connection to an MCP server closed. |
 
-Field-level definitions are in [`aep.schema.json`](./aep.schema.json).
+Field-level definitions are in [`aep.schema.json`](./aep.schema.json) and [`event.schema.json`](./event.schema.json) (auto-generated from the Pydantic models in `python/aep/src/aep/types.py`).
 
 ---
 
-## 12. Custom event types
+## 12. Custom event types and vendor extensions
 
-Any `type` value not enumerated in §11 is a custom event. Implementations MAY emit custom events. Consumers MUST:
+Any `type` value not in the `aep.*` namespace is a custom event. Implementations MAY emit custom events. Consumers MUST:
 
-- Validate them against `EventBase` (the `type`, `source`, `run_id`, `ts` fields).
+- Validate them against the CloudEvents 1.0 envelope shape — `specversion`, `id`, `source`, `type`, `time`, `data` MUST be present.
 - Pass them through without error if they do not recognize the `type`.
 
-Implementers SHOULD use dot-namespaced `type` values (`myframework.verifier_result`) to avoid future conflicts. Names listed in §11 are reserved.
+Implementers SHOULD use reverse-DNS `type` values (e.g. `com.example.verifier_result`) to avoid future conflicts. The `aep.*` namespace is reserved.
 
-For non-spec FIELDS within a known event type, implementers MUST use the `extensions` envelope (an optional object on every event) with dot-namespaced keys.
+For **non-spec fields within a known event type**: place them inside `data` under a vendor-namespaced key (e.g., `vendor.priority`, `acme.region`). The reference parser allows extra keys to round-trip through `data` verbatim, so vendor extensions don't require a separate envelope.
 
 ---
 
@@ -403,42 +426,49 @@ For non-spec FIELDS within a known event type, implementers MUST use the `extens
 A runner is conforming if and only if all of the following hold:
 
 1. It reads exactly one valid `Config` (per `config.schema.json`) before emitting any events.
-2. The first event it emits MUST be `agent_started` (source=runner). It MUST include `prompt` when available. The `tools` field MUST list the EFFECTIVE tool surface — the union of `Config.tools` entries and the runner's built-in tools, filtered by `Config.allowed_tools` if set. Consumers rely on this to determine what the model could actually call. Each tool entry MUST include `name` and `description`.
-3. Every event it emits MUST include a `source` field. Runner-authored events MUST set `source: "runner"`. Supervisor-authored `tool_exec_resolved` RPC replies received over the input channel MUST be recorded into the trajectory verbatim, retaining `source: "supervisor"`.
-4. For every model inference, it MUST emit `model_turn_started` immediately before the request and `model_turn_ended` immediately after the response.
-5. For every tool call, it MUST emit `tool_invoked` before invocation and either `tool_returned` (success or boundary rejection) or `tool_failed` (execution error) afterward.
-6. It MUST emit `cost_recorded` at least once per turn. The `state` field MUST validate against `RunStateSnapshot`.
-7. The last event it emits MUST be `agent_stopped` (source=runner). After emitting `agent_stopped`, the runner MUST NOT emit additional events.
+2. The first event it emits MUST be `aep.agent_started` (source=`aep://runner`). It MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface — the union of `Config.tools` entries and the runner's built-in tools, filtered by `Config.allowed_tools` if set. Consumers rely on this to determine what the model could actually call. Each tool entry MUST include `name`.
+3. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`). Runner-authored events MUST set `source: "aep://runner"`. `aep.tool_exec_resolved` RPC replies received over the input channel MUST be recorded into the trajectory verbatim, retaining their original `source` (`aep://supervisor` or `aep://mcp/<server_id>`).
+4. For every model inference, it MUST emit `aep.model_turn_started` immediately before the request and `aep.model_turn_ended` immediately after the response.
+5. For every tool call, it MUST emit `aep.tool_invoked` before invocation and either `aep.tool_returned` (success or boundary rejection) or `aep.tool_failed` (execution error) afterward.
+6. It MUST emit `aep.cost_recorded` at least once per turn. The `data["aep.state"]` field MUST validate against `RunStateSnapshot`.
+7. The last event it emits MUST be `aep.agent_stopped` (source=`aep://runner`). After emitting `agent_stopped`, the runner MUST NOT emit additional events.
 8. All emitted events MUST validate against `event.schema.json`.
 9. It MUST enforce `Config.boundary` per §9.2 and §9.4. Two conforming runners with identical inputs MUST agree on whether one more turn is permitted.
 
 If `Config.tools` declares any RPC-implementation tool, the runner additionally MUST:
 
-10. Register each declared tool with the LLM using `name`, `description`, `input_schema`.
-11. When the model calls a declared tool, emit `tool_exec_request`, suspend, and either: (a) receive a `tool_exec_resolved` with matching `request_id`, record it verbatim, and return its `output` to the model; or (b) emit `tool_exec_timed_out` and return `"Error: tool execution timed out after Nms"` (where N is the declared `timeout_ms`).
-12. If `tool_exec_resolved.error` is set, prefix `Error: ` before returning to the model.
+10. Register each declared tool with the LLM using its `name`, `description`, and `inputSchema` (MCP-shaped, camelCase).
+11. When the model calls a declared tool, emit `aep.tool_exec_request` with a fresh `data["aep.request_id"]` and a JSON-RPC 2.0 request payload at `data.rpc`, suspend, and either: (a) receive an `aep.tool_exec_resolved` with matching request id, record it verbatim, and return its result to the model; or (b) emit `aep.tool_exec_timed_out` and return `"Error: tool execution timed out after Nms"` (where N is the declared `timeout_ms`).
+12. If `tool_exec_resolved.data.rpc.error` is set, prefix `Error: ` before returning to the model.
+
+If `Config.mcp_servers` is non-empty, the runner additionally MUST:
+
+M1. Emit `aep.mcp_server_connected` for each declared MCP server before the first turn.
+M2. Emit `aep.mcp_server_disconnected` for each connected MCP server before `aep.agent_stopped`.
+M3. Route `tools/call` JSON-RPC requests for MCP-server-hosted tools through that server; the response's `tool_exec_resolved.source` MUST be `aep://mcp/<server_id>`.
 
 If `Config.allowed_tools` is set, the runner additionally MUST:
 
-A1. Verify that every `Config.tools` entry's `name` appears in `Config.allowed_tools`. If any does not, emit `error_occurred` and `agent_stopped` with `reason: "error"` before running any model turn (§8.1).
-A2. Reject any tool call whose `tool` name is not in `Config.allowed_tools` by emitting `tool_failed` (after `tool_invoked`) and not executing the tool.
+A1. Verify that every `Config.tools` entry's `name` appears in `Config.allowed_tools`. If any does not, emit `aep.error_occurred` and `aep.agent_stopped` with `data["aep.reason"]: "error"` before running any model turn (§8.1).
+A2. Reject any tool call whose `tool` name is not in `Config.allowed_tools` by emitting `aep.tool_failed` (after `aep.tool_invoked`) and not executing the tool.
 
 If `Config.verifiers` is non-empty, the runner additionally MUST:
 
 13. Evaluate each `Verifier`'s trigger at the appropriate lifecycle point (per §7.2).
 14. Execute the verifier's source (e.g., shell command). The verifier passes iff the source exits 0 (or returns a passed result for non-shell sources).
-15. Emit `verifier_evaluated` (source=runner) with `name`, `passed`, and optional `data`/`subject_*` fields.
-16. On `passed: false`, take the verifier's declared `on_failure` action: `continue` (no-op), `halt` (emit `agent_stopped` with `reason: "verifier_failed"`), or `inject_correction` (insert `correction_message` as user-role into history before the next turn).
+15. Emit `aep.verifier_evaluated` (source=`aep://runner`) with `data["aep.verifier.name"]`, `data["aep.verifier.passed"]`, `data["aep.verifier.duration_ms"]`, and optional `data["aep.verifier.data"]` / `data["aep.verifier.subject_*"]` fields.
+16. On `passed: false`, take the verifier's declared `on_failure` action: `continue` (no-op), `halt` (emit `aep.agent_stopped` with `reason: "verifier_failed"`), or `inject_correction` (insert `correction_message` as user-role into history before the next turn).
 17. Verifier failure MUST NOT alter accounting in `state`; the agent did the work, the verifier just reports on it.
-18. If the runner cannot honor a declared `Config.verifiers` entry under its execution model — it cannot reliably hit the trigger, cannot execute the source, or cannot apply the declared `on_failure` action — it MUST emit `error_occurred` and `agent_stopped` with `reason: "error"` at startup, before any model turn runs. Silent acceptance with runtime degradation (the verifier is in Config but `verifier_evaluated` is never emitted, or `on_failure: halt` is downgraded to `continue` because the runner cannot abort) is a violation: supervisors that depend on `halt` or `inject_correction` for safety would have no way to detect the gap. This rule mirrors A1 — declared environment features the runner cannot enforce MUST fail loud at startup.
+18. If the runner cannot honor a declared `Config.verifiers` entry under its execution model, it MUST emit `aep.error_occurred` and `aep.agent_stopped` with `reason: "error"` at startup, before any model turn runs. Silent acceptance with runtime degradation (the verifier is in Config but `verifier_evaluated` is never emitted, or `on_failure: halt` is downgraded to `continue` because the runner cannot abort) is a violation. This rule mirrors A1 — declared environment features the runner cannot enforce MUST fail loud at startup.
 
 ### 13.2 Supervisor
 
 A supervisor is conforming if and only if all of the following hold:
 
 1. The `Config` it sends validates against `config.schema.json`.
-2. Every `SupervisorMessage` it sends validates against `supervisor-message.schema.json` (only `tool_exec_resolved` is valid in v0.1).
-3. Every `tool_exec_resolved.request_id` corresponds to a `tool_exec_request.request_id` previously emitted by the runner in the same run.
+2. Every `SupervisorMessage` it sends validates against `supervisor-message.schema.json` (only `aep.tool_exec_resolved` is valid in v0.1).
+3. Every `tool_exec_resolved.data["aep.request_id"]` corresponds to a `tool_exec_request.data["aep.request_id"]` previously emitted by the runner in the same run.
+4. The reply's `data.rpc` MUST be a valid JSON-RPC 2.0 response object with exactly one of `result` or `error` set.
 
 Supervisors MUST NOT send unsolicited messages. Runners MAY ignore unsolicited messages.
 
@@ -470,8 +500,8 @@ This section names the lines so readers don't trip on them. A complete productio
 ## 15. Versioning
 
 - `Config.schema_version` MUST equal `"0.1"`.
-- `agent_started.schema_version` MUST equal `"0.1"`.
+- `agent_started.data["aep.schema_version"]` MUST equal `"0.1"`.
 - Future minor versions MAY add new event types, fields, or enum values. They MUST NOT remove or repurpose existing ones.
-- Future major versions MAY introduce breaking changes — including tightening event subtypes to forbid unknown top-level fields (use the `extensions` envelope today to avoid breakage).
+- Future major versions MAY introduce breaking changes. Vendor-namespaced keys (`vendor.*`, `com.example.*`) inside `data` round-trip verbatim today (per §12), insulating extensions from spec drift.
 
-A runner that receives a `Config` with an unsupported `schema_version` MUST emit `error_occurred` with `code: "unknown"` and a descriptive message, then emit `agent_stopped` with `reason: "error"`.
+A runner that receives a `Config` with an unsupported `schema_version` MUST emit `aep.error_occurred` with `data["aep.error.code"]: "unknown"` and a descriptive message, then emit `aep.agent_stopped` with `data["aep.reason"]: "error"`.

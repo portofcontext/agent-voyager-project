@@ -16,8 +16,9 @@ def write_event(event: BaseModel | dict[str, Any], file: IO | None = None) -> No
     """Serialize one event to NDJSON. Flushes after the line per SPEC.md §5.1."""
     out = file if file is not None else sys.stdout
     if isinstance(event, BaseModel):
-        # exclude_none drops optional fields the runner did not set; matches the wire shape.
-        line = event.model_dump_json(exclude_none=True)
+        # by_alias emits the dotted wire form (e.g. `gen_ai.usage.input_tokens`);
+        # exclude_none drops optional fields the runner did not set.
+        line = event.model_dump_json(by_alias=True, exclude_none=True)
     else:
         line = json.dumps(event, separators=(",", ":"))
     out.write(line + "\n")

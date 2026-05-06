@@ -70,19 +70,21 @@ def main() -> int:
         type_name = type(ev).__name__
         if type_name == "ModelTurnEndedEvent":
             print(
-                f"  [turn {ev.step}] cost=${ev.cost_usd:.5f}  "
-                f"tokens={ev.tokens_input}+{ev.tokens_output}"
+                f"  [turn {ev.data.step}] cost=${ev.data.aep_cost_usd:.5f}  "
+                f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
             )
         elif type_name == "TextEmittedEvent":
-            preview = ev.text.replace("\n", " ")[:80]
-            print(f"  [turn {ev.step}] text: {preview!r}")
+            preview = ev.data.aep_text.replace("\n", " ")[:80]
+            print(f"  [turn {ev.data.step}] text: {preview!r}")
         elif type_name == "ToolInvokedEvent":
-            print(f"  [turn {ev.step}] -> {ev.tool}({list(ev.input.keys())})")
+            print(
+                f"  [turn {ev.data.step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+            )
         elif type_name == "ToolReturnedEvent":
-            head = ev.output.replace("\n", " ")[:60]
-            print(f"  [turn {ev.step}] <- {ev.tool}: {head!r}...")
+            head = ev.data.aep_tool_result_text.replace("\n", " ")[:60]
+            print(f"  [turn {ev.data.step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
         elif type_name == "AgentStoppedEvent":
-            print(f"  STOPPED reason={ev.reason}")
+            print(f"  STOPPED reason={ev.data.aep_reason}")
 
     print()
     print(render(summarize(events)))
@@ -121,8 +123,10 @@ def _validate_outcome(events: list) -> list[str]:
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:
         issues.append("no tool calls — agent should have used Read")
-    elif not any(ev.tool == "Read" for ev in tool_invokes):
-        issues.append(f"agent never called Read; called: {[ev.tool for ev in tool_invokes]}")
+    elif not any(ev.data.gen_ai_tool_name == "Read" for ev in tool_invokes):
+        issues.append(
+            f"agent never called Read; called: {[ev.data.gen_ai_tool_name for ev in tool_invokes]}"
+        )
 
     if "TextEmittedEvent" not in types:
         issues.append("no text_emitted events — agent didn't produce a response")
@@ -130,11 +134,11 @@ def _validate_outcome(events: list) -> list[str]:
     # accounting_reset is a known SDK quirk (see aep-claude-agent README).
     # Any OTHER error_occurred is a real failure.
     errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
-    unexpected = [ev for ev in errs if ev.code.value != "accounting_reset"]
+    unexpected = [ev for ev in errs if ev.data.aep_error_code.value != "accounting_reset"]
     if unexpected:
         issues.append(
             f"unexpected error_occurred (not accounting_reset): "
-            f"{[(e.code.value, e.message[:80]) for e in unexpected]}"
+            f"{[(e.data.aep_error_code.value, e.data.aep_error_message[:80]) for e in unexpected]}"
         )
 
     return issues

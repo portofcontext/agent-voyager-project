@@ -2,8 +2,13 @@
   "id": "correlation-id-on-tool-exec-resolved-records-verbatim",
   "title": "correlation_id on a supervisor RPC reply is recorded verbatim into the trajectory",
   "description": "SPEC.md §3 + EventBase: correlation_id is an optional opaque grouping key that either side MAY set. When the supervisor stamps a tool_exec_resolved with correlation_id, the runner MUST record it into the trajectory verbatim — supervisors and analyzers rely on the value being preserved so they can group related events. Implementations MUST treat correlation_id as opaque (no parsing, just grouping).",
-  "spec_refs": ["spec/v0.1/SPEC.md#3-the-trajectory", "spec/v0.1/aep.schema.json#/$defs/CorrelationId"],
-  "applies_to": ["runner"],
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#3-the-trajectory",
+    "spec/v0.1/aep.schema.json#/$defs/CorrelationId"
+  ],
+  "applies_to": [
+    "runner"
+  ],
   "config": {
     "schema_version": "0.1",
     "run_id": "correlation-id-passthrough",
@@ -11,31 +16,75 @@
       {
         "name": "lookup_user",
         "description": "Demo RPC tool.",
-        "input_schema": { "type": "object", "properties": {}, "additionalProperties": true },
-        "timeout_ms": 1000
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": true
+        },
+        "_meta": {
+          "aep": {
+            "timeout_ms": 1000
+          }
+        }
       }
     ],
     "model": "test/mock"
   },
   "scripted_model": [
     {
-      "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1, "text": "calling",
-      "tool_calls": [{ "call_id": "c1", "tool": "lookup_user", "input": {} }],
+      "tokens_input": 50,
+      "tokens_output": 10,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "calling",
+      "tool_calls": [
+        {
+          "call_id": "c1",
+          "tool": "lookup_user",
+          "input": {}
+        }
+      ],
       "converged": false
     },
-    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "done",
+      "converged": true
+    }
   ],
   "scripted_supervisor": [
     {
-      "on": { "match": { "type": "tool_exec_request", "tool": "lookup_user" } },
+      "on": {
+        "match": {
+          "type": "aep.tool_exec_request",
+          "data": {
+            "gen_ai.tool.name": "lookup_user"
+          }
+        }
+      },
       "send": {
-        "type": "tool_exec_resolved",
-        "source": "supervisor",
-        "run_id": "correlation-id-passthrough",
-        "ts": "2026-05-04T18:00:00Z",
-        "request_id": "{{event.request_id}}",
-        "correlation_id": "user-onboarding-flow-42",
-        "output": "{}"
+        "specversion": "1.0",
+        "id": "9a4ef3f9-667a-4dfb-896a-b6d90737d3ac",
+        "source": "aep://supervisor",
+        "type": "aep.tool_exec_resolved",
+        "subject": "correlation-id-passthrough",
+        "time": "2026-05-04T18:00:00Z",
+        "datacontenttype": "application/json",
+        "data": {
+          "trace_id": "00000000000000000000000000000000",
+          "span_id": "0000000000000000",
+          "parent_span_id": "0000000000000000",
+          "aep.request_id": "{{event.data.aep.request_id}}",
+          "rpc": {
+            "jsonrpc": "2.0",
+            "id": "{{event.data.aep.request_id}}",
+            "result": "{}"
+          }
+        },
+        "aep.correlation_id": "user-onboarding-flow-42"
       }
     }
   ],
@@ -44,9 +93,9 @@
     "events": [
       {
         "match": {
-          "type": "tool_exec_resolved",
-          "source": "supervisor",
-          "correlation_id": "user-onboarding-flow-42"
+          "type": "aep.tool_exec_resolved",
+          "source": "aep://supervisor",
+          "aep.correlation_id": "user-onboarding-flow-42"
         }
       }
     ]

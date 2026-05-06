@@ -24,7 +24,9 @@ AEP is a wire format between two roles, with two unidirectional flows:
 
 The supervisor declares a complete environment in a Config. The runner runs the agent inside it. The runner emits a stream of source-tagged events. **No mid-run reach-in.** The agent's bounded context is intact because its environment was fully specified at setup.
 
-The one runtime exception is **environmental services**: if a Config-declared tool's implementation is out-of-process, the agent issues an RPC (`tool_exec_request`) and the supervisor's service replies (`tool_exec_resolved`). This is an agent-initiated call into a service the supervisor stood up at Config time — not a supervisor decision made during the run.
+The one runtime exception is **environmental services**: if a Config-declared tool's implementation is out-of-process, the agent issues an RPC (`aep.tool_exec_request`) and the supervisor's service replies (`aep.tool_exec_resolved`). This is an agent-initiated call into a service the supervisor stood up at Config time — not a supervisor decision made during the run.
+
+**AEP is built on existing standards** Every event is a [CloudEvents 1.0](https://cloudevents.io/) envelope; the `data` payload uses [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`, …) and OTel span identification (`trace_id`, `span_id`, `parent_span_id`). RPC payloads are [JSON-RPC 2.0](https://www.jsonrpc.org/specification). Tool descriptors are [MCP](https://modelcontextprotocol.io/)-shaped. AEP-specific concepts live under the `aep.*` namespace. See `FOUNDATIONS.md` for the full mapping.
 
 ## When to do what
 
@@ -40,7 +42,7 @@ The reference is `python/aep/src/aep/runner/runner.py` (the canonical loop) plus
 
 1. Read a `Config` from input. Validate against `aep.types.Config`.
 2. Construct an `AEPRunner` with `model: ModelDriver`, `tools: ToolDriver`, `supervisor: SupervisorDriver`.
-3. The runner emits the full lifecycle: `agent_started`, `model_turn_started/ended`, `tool_invoked/returned`, `cost_recorded`, `verifier_evaluated`, `agent_stopped`.
+3. The runner emits the full lifecycle: `aep.agent_started`, `aep.model_turn_started/ended`, `aep.tool_invoked/returned`, `aep.cost_recorded`, `aep.verifier_evaluated`, `aep.agent_stopped`. Every event is a CloudEvents 1.0 envelope.
 4. The driver's only job is translating one model turn — implement `ModelDriver.step(history) -> ModelResponse`.
 
 See `examples/driver-runner-template.py` for a starting skeleton. See `python/runners/aep-anthropic/src/aep_anthropic/driver.py` for a complete implementation against the Anthropic SDK including cache-token math, cost computation, and tool-call translation.
@@ -70,7 +72,8 @@ The pattern: build a `Config` (`aep.types.Config`) with the supervisor primitive
 
 | Concern | Field | Notes |
 |---|---|---|
-| What the agent can do | `tools` | Each `Tool` has `name`, `description`, `input_schema`. RPC-impl tools route through the `tool_exec_*` lifecycle (the runner emits requests; the supervisor's service replies). Local-impl tools the runner has built in are NOT declared here. |
+| What the agent can do | `tools` | Each `Tool` has `name`, `description`, `inputSchema` (camelCase per MCP). RPC-impl tools route through the `aep.tool_exec_*` lifecycle (the runner emits requests; the supervisor's service replies with JSON-RPC 2.0 payloads). Local-impl tools the runner has built in are NOT declared here. |
+| External MCP servers | `mcp_servers` | Optional list of MCP server endpoints (HTTP or stdio). The runner connects at startup, emits `aep.mcp_server_connected` lifecycle events, and routes tool calls for MCP-hosted tools through them with `tool_exec_resolved.source = aep://mcp/<server_id>`. |
 | Which tools to expose | `allowed_tools` | Optional allowlist of names exposed to the model. When present, both runner built-ins AND `Config.tools` entries are filtered through it; every `Config.tools` name MUST appear in `allowed_tools` or the runner errors at startup. When absent, the runner exposes its full default set. Use this to compose category-based profiles ("DDD-strict", "Compliance") without enumerating runner internals. |
 | What rules it must respect | `verifiers` | Each `Verifier` has `name`, `trigger`, `source.shell`, and `on_failure: halt \| inject_correction \| continue`. The agent runs the verifier at the trigger and acts on `passed: false` per declaration. This is how DDD invariants compile to runtime checks. Shell paths resolve relative to the runner's CWD = the agent's workspace; the supervisor's deployment layer is responsible for putting referenced files there before the run starts. |
 | What limits it must respect | `boundary` | `max_cost_usd`, `max_steps`, `max_tokens`. Strict-greater algorithm; cost/tokens may overshoot by one final turn; steps cannot. |
@@ -85,11 +88,11 @@ Whatever you build, the trajectory carries three distinct kinds of facts. Surfac
 
 | Class | Event types | Semantics |
 |---|---|---|
-| What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted` | Mechanical actions |
-| What the rules said | `verifier_evaluated` | Deterministic Boolean checks |
-| What the run cost | `cost_recorded`, `model_turn_ended.usage` | Resource accounting |
+| What the agent did | `aep.model_turn_*`, `aep.tool_invoked`, `aep.tool_returned`, `aep.tool_failed`, `aep.text_emitted` | Mechanical actions |
+| What the rules said | `aep.verifier_evaluated` | Deterministic Boolean checks |
+| What the run cost | `aep.cost_recorded`, `aep.model_turn_ended.data.gen_ai.usage.*` | Resource accounting (OTel-shaped) |
 
-A non-technical reviewer should be able to answer "did this run respect the contract?" by filtering on `verifier_evaluated.passed=false`. That's the design.
+A non-technical reviewer should be able to answer "did this run respect the contract?" by filtering on `aep.verifier_evaluated` events with `data["aep.verifier.passed"] = false`. That's the design.
 
 ## Boundary semantics — pin these exactly
 
@@ -114,7 +117,7 @@ For verifiers whose code shouldn't ship to the workspace, expose them as RPC too
 Common temptations to push back on:
 
 - **No mid-run hooks.** The supervisor cannot pause the agent and decide based on what just happened. If the user wants this, redirect them: declare it as a `Verifier` with the appropriate trigger and `on_failure` action, OR build it as an environmental service the agent calls. The rule lives in Config, not in a callback.
-- **No supervisor-emitted runtime events** other than `tool_exec_resolved` RPC replies. Domain interpretations / annotations are post-hoc, not on the runtime wire.
+- **No supervisor-emitted runtime events** other than `aep.tool_exec_resolved` RPC replies. Domain interpretations / annotations are post-hoc, not on the runtime wire.
 - **No verifier that auto-halts** without `on_failure: halt`. Verifier results are facts; the response is declared per-verifier. A `passed: false` with `on_failure: continue` is a valid pattern (monitoring without gating).
 
 ## When in doubt, read these — in this order
@@ -131,12 +134,12 @@ Common temptations to push back on:
 
 When reviewing AEP code or generating it, watch for:
 
-- Emitting `agent_started` with `source: "supervisor"`. **Wrong** — runner emits, source MUST be `runner`.
-- Emitting `tool_exec_resolved` with `source: "runner"`. **Wrong** — that event is the supervisor's reply; source MUST be `supervisor`.
-- Subtracting cache-read tokens from `tokens_input`. **Wrong** — per §10.4, cache reads ARE input tokens.
+- Emitting `aep.agent_started` with `source: "aep://supervisor"`. **Wrong** — runner emits, source MUST be `aep://runner`.
+- Emitting `aep.tool_exec_resolved` with `source: "aep://runner"`. **Wrong** — that event is the supervisor's reply; source MUST be `aep://supervisor` or `aep://mcp/<server_id>`.
+- Subtracting cache-read tokens from `gen_ai.usage.input_tokens`. **Wrong** — per §9.4, cache reads ARE input tokens.
 - Using `>=` for boundary checks. **Wrong** — strict `>` per the normative algorithm.
-- Computing `total_cost_usd` from `tokens_input * rate` without accounting for cache discounts. **Wrong** — `cost_usd` per turn is the BILLABLE cost (post-cache-discount); `total_cost_usd` is the sum of those.
-- Halting on a `verifier_evaluated.passed=false` without checking the verifier's `on_failure`. **Wrong** — the action is declared per-verifier; halt only when `on_failure: halt`.
+- Computing `total_cost_usd` from `tokens * rate` without accounting for cache discounts. **Wrong** — `aep.cost_usd` per turn is the BILLABLE cost (post-cache-discount); `state.total_cost_usd` is the sum of those.
+- Halting on `aep.verifier_evaluated.data["aep.verifier.passed"] = false` without checking the verifier's `on_failure`. **Wrong** — the action is declared per-verifier; halt only when `on_failure: halt`.
 - Adding hooks. **Wrong** — there are no hooks in v0.1. Use verifiers + `on_failure` instead.
 - Adding a `supervisor_event` type to record domain interpretations. **Wrong** — that's a removed concept; domain annotation is post-hoc, not on the runtime wire.
 - Reaching the spec via the `agent-execution-protocol` repo's `python/agent-execution-protocol/` — that path doesn't exist. The Python reference is at `python/aep/`.

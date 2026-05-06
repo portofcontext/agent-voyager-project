@@ -5,12 +5,28 @@ verifiers all come from Config. The supervisor does not reach in mid-run; the
 agent enforces declared rules and emits facts. The only mid-run wire interaction
 is tool_exec, an agent-initiated RPC into a service the supervisor stood up at
 Config time.
+
+Each emitted event is a CloudEvent 1.0 envelope carrying typed `data`. Span
+identification (`trace_id`, `span_id`, `parent_span_id`) follows OpenTelemetry
+conventions so the trajectory reconstructs as a span tree:
+
+    agent span (root)                                       agent_started/stopped
+    ├── skill span                                          skill_loaded/executed
+    ├── verifier span                                       verifier_evaluated (run-level triggers)
+    ├── error span                                          error_occurred (run-level)
+    ├── model_turn span (per turn)                          model_turn_started/ended
+    │   ├── text span                                       text_emitted
+    │   ├── cost span                                       cost_recorded
+    │   ├── verifier span                                   verifier_evaluated (per-turn triggers)
+    │   └── tool span (per tool call)                       tool_invoked/returned/failed
+    │       └── rpc span (per agent-initiated RPC)          tool_exec_request/resolved/timed_out
 """
 
 from __future__ import annotations
 
 import itertools
 import subprocess
+import time as _time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -29,27 +45,53 @@ from aep.runner.drivers import (
     ToolOutcome,
 )
 from aep.types import (
+    SOURCE_RUNNER,
+    ZERO_SPAN_ID,
+    AgentStartedData,
     AgentStartedEvent,
+    AgentStoppedData,
     AgentStoppedEvent,
     Config,
+    CostRecordedData,
     CostRecordedEvent,
+    ErrorOccurredData,
     ErrorOccurredEvent,
+    JsonRpcRequestPayload,
+    McpServer,
+    McpServerConnectedData,
+    McpServerConnectedEvent,
+    McpServerDisconnectedData,
+    McpServerDisconnectedEvent,
+    ModelTurnEndedData,
     ModelTurnEndedEvent,
+    ModelTurnStartedData,
     ModelTurnStartedEvent,
     RunStateSnapshot,
+    SkillLoadedData,
     SkillLoadedEvent,
+    TextEmittedData,
     TextEmittedEvent,
     Tool,
+    ToolExecRequestData,
     ToolExecRequestEvent,
     ToolExecResolvedEvent,
+    ToolExecTimedOutData,
     ToolExecTimedOutEvent,
+    ToolFailedData,
     ToolFailedEvent,
+    ToolInvokedData,
     ToolInvokedEvent,
+    ToolReturnedData,
     ToolReturnedEvent,
     Verifier,
+    VerifierEvaluatedData,
     VerifierEvaluatedEvent,
+    new_span_id,
+    new_trace_id,
     now_iso,
 )
+
+MCP_PROTOCOL_VERSION = "2025-11-25"
 
 # ── Local mutable state ──────────────────────────────────────────────────────
 
@@ -104,12 +146,9 @@ class AEPRunner:
         supervisor: SupervisorDriver,
         runner_builtin_tools: list[dict[str, Any]] | None = None,
     ) -> None:
-        """`runner_builtin_tools` declares the runner's built-in tool catalog
-        (bash, read_file, etc. for shell runners; Read/Bash/Edit for the Claude
-        Agent SDK). Each entry is `{name, description, input_schema}`. Used to
-        compute the effective tool surface for `agent_started.tools` so the
-        trajectory reflects what the model could actually call, not just the
-        Config-declared RPC tools."""
+        """`runner_builtin_tools` declares the runner's built-in tool catalog.
+        Each entry is `{name, description, input_schema}` (snake_case, internal).
+        Used to compute the effective tool surface for `agent_started.data.tools`."""
         self.config = config
         self.model = model
         self.tools = tools
@@ -123,6 +162,39 @@ class AEPRunner:
         )
         self._req_seq = itertools.count(1)
         self._next_request_id = lambda: f"req-{next(self._req_seq)}"
+
+        # Span tree state. trace_id is allocated per run; agent_span_id is the
+        # root span (lifetime = the run); turn / tool / rpc spans are nested.
+        self._trace_id: str = new_trace_id()
+        self._agent_span_id: str = new_span_id()
+        self._current_turn_span_id: str | None = None
+        self._tool_span_by_call_id: dict[str, str] = {}
+        self._rpc_span_by_request_id: dict[str, str] = {}
+
+    # ── Span helpers ───────────────────────────────────────────────────────
+
+    def _own_span(self, parent_span_id: str) -> dict[str, str]:
+        """Triple for an event that owns its own span (atomic observation).
+        The span has no paired open/close; the event itself records the moment."""
+        return {
+            "trace_id": self._trace_id,
+            "span_id": new_span_id(),
+            "parent_span_id": parent_span_id,
+        }
+
+    def _shared_span(self, span_id: str, parent_span_id: str) -> dict[str, str]:
+        """Triple for an event that participates in a multi-event span (e.g.,
+        tool_invoked + tool_returned share one span describing one tool call)."""
+        return {
+            "trace_id": self._trace_id,
+            "span_id": span_id,
+            "parent_span_id": parent_span_id,
+        }
+
+    def _current_parent_for_run_event(self) -> str:
+        """Parent for events that pair with a turn when one is active, else
+        with the agent span (e.g., verifier_evaluated, error_occurred)."""
+        return self._current_turn_span_id or self._agent_span_id
 
     # ── Emission ────────────────────────────────────────────────────────────
 
@@ -141,6 +213,7 @@ class AEPRunner:
 
         self._emit_agent_started()
         self._emit_skills_loaded()
+        self._emit_mcp_connections()
 
         if not self._validate_allowed_tools():
             return self._emit_agent_stopped(StopReason.error)
@@ -151,6 +224,8 @@ class AEPRunner:
         except _VerifierHalt:
             return self._emit_agent_stopped(StopReason.verifier_failed)
 
+        # Normal exit (loop returned) — close MCP connections cleanly before
+        # the agent_stopped this path emits.
         for ev in reversed(self.trajectory):
             if isinstance(ev, AgentStoppedEvent):
                 return ev
@@ -170,24 +245,42 @@ class AEPRunner:
                 return
 
             state.total_turns += 1
+            self._current_turn_span_id = new_span_id()
+            turn_started_kwargs: dict[str, Any] = {"aep.context_messages": len(self._history)}
             self._emit(
                 ModelTurnStartedEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    context_messages=len(self._history),
+                    subject=cfg.run_id,
+                    data=ModelTurnStartedData(
+                        **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                        step=state.total_turns,
+                        **turn_started_kwargs,
+                    ),
                 )
             )
             response = self.model.step(self._history)
+            ended_kwargs: dict[str, Any] = {
+                "gen_ai.usage.input_tokens": response.tokens_input,
+                "gen_ai.usage.output_tokens": response.tokens_output,
+                "gen_ai.usage.cache_read.input_tokens": response.tokens_cache_read,
+                "gen_ai.usage.cache_creation.input_tokens": response.tokens_cache_write,
+                "gen_ai.usage.reasoning.output_tokens": response.tokens_reasoning_output,
+                "aep.cost_usd": response.cost_usd,
+            }
+            if response.response_model is not None:
+                ended_kwargs["gen_ai.response.model"] = response.response_model
+            if response.finish_reasons:
+                ended_kwargs["gen_ai.response.finish_reasons"] = response.finish_reasons
+            if response.time_to_first_chunk_s is not None:
+                ended_kwargs["gen_ai.response.time_to_first_chunk"] = response.time_to_first_chunk_s
             self._emit(
                 ModelTurnEndedEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    tokens_input=response.tokens_input,
-                    tokens_output=response.tokens_output,
-                    cost_usd=response.cost_usd,
-                    duration_ms=response.duration_ms,
-                    tokens_cache_read=response.tokens_cache_read,
-                    tokens_cache_write=response.tokens_cache_write,
+                    subject=cfg.run_id,
+                    data=ModelTurnEndedData(
+                        **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                        step=state.total_turns,
+                        duration_ms=response.duration_ms,
+                        **ended_kwargs,
+                    ),
                 )
             )
 
@@ -202,8 +295,11 @@ class AEPRunner:
 
             self._emit(
                 CostRecordedEvent(
-                    run_id=cfg.run_id,
-                    state=state.snapshot(_monotonic_ms()),
+                    subject=cfg.run_id,
+                    data=CostRecordedData(
+                        **self._own_span(self._current_turn_span_id),
+                        **{"aep.state": state.snapshot(_monotonic_ms())},
+                    ),
                 )
             )
 
@@ -216,9 +312,12 @@ class AEPRunner:
             if response.text:
                 self._emit(
                     TextEmittedEvent(
-                        run_id=cfg.run_id,
-                        step=state.total_turns,
-                        text=response.text,
+                        subject=cfg.run_id,
+                        data=TextEmittedData(
+                            **self._own_span(self._current_turn_span_id),
+                            step=state.total_turns,
+                            **{"aep.text": response.text},
+                        ),
                     )
                 )
 
@@ -260,17 +359,7 @@ class AEPRunner:
     # ── Tool handling ────────────────────────────────────────────────────────
 
     def _validate_allowed_tools(self) -> bool:
-        """Cross-field check: every Config.tools name MUST be in allowed_tools (when set).
-
-        A Config.tools entry that's not in allowed_tools is a configuration conflict —
-        the supervisor declared an RPC tool but also forbade its exposure. Emit
-        error_occurred and let the caller stop the run with reason='error'.
-
-        Names in allowed_tools that match neither Config.tools nor a runner built-in
-        are not flagged here — runner built-ins are not enumerated through this
-        protocol; the runtime check in _handle_tool_call surfaces unrecognized names
-        as tool_failed when (and only when) the model actually calls them.
-        """
+        """Cross-field check: every Config.tools name MUST be in allowed_tools (when set)."""
         if self._allowed_tools is None:
             return True
         cfg = self.config
@@ -279,11 +368,16 @@ class AEPRunner:
         if excluded:
             self._emit(
                 ErrorOccurredEvent(
-                    run_id=cfg.run_id,
-                    code=ErrorCode.unknown,
-                    message=(
-                        "Config.allowed_tools must include every name in Config.tools; "
-                        f"missing: {excluded}"
+                    subject=cfg.run_id,
+                    data=ErrorOccurredData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "aep.error.code": ErrorCode.unknown,
+                            "aep.error.message": (
+                                "Config.allowed_tools must include every name in "
+                                f"Config.tools; missing: {excluded}"
+                            ),
+                        },
                     ),
                 )
             )
@@ -296,20 +390,22 @@ class AEPRunner:
         Anthropic-style APIs require every `tool_use` block in an assistant
         turn to be answered with a matching `tool_result` block in the next
         message — even when the tool failed. Without history.append here, the
-        next model call sends an unmatched `tool_use` and the API rejects:
-        'tool_use ids were found without tool_result blocks immediately after'.
-
-        The error string becomes the user-visible content of the tool_result;
-        the model can read it and decide whether to retry or give up.
+        next model call sends an unmatched `tool_use` and the API rejects.
         """
         cfg = self.config
+        tool_span_id = self._tool_span_by_call_id.get(tc.call_id) or new_span_id()
         self._emit(
             ToolFailedEvent(
-                run_id=cfg.run_id,
-                step=state.total_turns,
-                call_id=tc.call_id,
-                tool=tc.tool,
-                error=error,
+                subject=cfg.run_id,
+                data=ToolFailedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    step=state.total_turns,
+                    **{
+                        "gen_ai.tool.call.id": tc.call_id,
+                        "gen_ai.tool.name": tc.tool,
+                        "aep.tool.error": error,
+                    },
+                ),
             )
         )
         self._history.append(
@@ -323,13 +419,36 @@ class AEPRunner:
 
     def _handle_tool_call(self, tc, state: _MutableState) -> None:
         cfg = self.config
+        tool_span_id = new_span_id()
+        self._tool_span_by_call_id[tc.call_id] = tool_span_id
+
+        is_rpc = tc.tool in self._supervisor_tools_by_name
+        is_local = self.tools.is_local(tc.tool)
+        if is_rpc:
+            dispatch_target = "supervisor_rpc"
+        elif is_local:
+            dispatch_target = "local"
+        else:
+            dispatch_target = None
+
+        invoked_data_kwargs: dict[str, Any] = {
+            "step": state.total_turns,
+            **{
+                "gen_ai.tool.call.id": tc.call_id,
+                "gen_ai.tool.name": tc.tool,
+                "gen_ai.tool.call.arguments": tc.input,
+            },
+        }
+        if dispatch_target is not None:
+            invoked_data_kwargs["aep.tool.dispatch_target"] = dispatch_target
+
         self._emit(
             ToolInvokedEvent(
-                run_id=cfg.run_id,
-                step=state.total_turns,
-                call_id=tc.call_id,
-                tool=tc.tool,
-                input=tc.input,
+                subject=cfg.run_id,
+                data=ToolInvokedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    **invoked_data_kwargs,
+                ),
             )
         )
         state.tools_invoked[tc.tool] = state.tools_invoked.get(tc.tool, 0) + 1
@@ -338,11 +457,11 @@ class AEPRunner:
             self._emit_tool_failed(tc, state, f"tool {tc.tool!r} not in Config.allowed_tools")
             return
 
-        if tc.tool in self._supervisor_tools_by_name:
+        if is_rpc:
             self._handle_rpc_tool(tc, state)
             return
 
-        if not self.tools.is_local(tc.tool):
+        if not is_local:
             self._emit_tool_failed(tc, state, f"unknown tool {tc.tool!r}")
             return
 
@@ -352,17 +471,29 @@ class AEPRunner:
             return
 
         out_str = outcome.output if outcome.output is not None else ""
+        returned_kwargs: dict[str, Any] = {
+            "step": state.total_turns,
+            "duration_ms": outcome.duration_ms,
+            **{
+                "gen_ai.tool.call.id": tc.call_id,
+                "gen_ai.tool.name": tc.tool,
+                "aep.tool.result.text": out_str,
+            },
+        }
+        if outcome.output_json is not None:
+            returned_kwargs["aep.tool.result.structured"] = outcome.output_json
+        if outcome.rejected:
+            returned_kwargs["aep.tool.rejected"] = True
+        if outcome.rejection_reason:
+            returned_kwargs["aep.tool.rejection_reason"] = outcome.rejection_reason
+
         self._emit(
             ToolReturnedEvent(
-                run_id=cfg.run_id,
-                step=state.total_turns,
-                call_id=tc.call_id,
-                tool=tc.tool,
-                output=out_str,
-                output_json=outcome.output_json,
-                duration_ms=outcome.duration_ms,
-                rejected=outcome.rejected if outcome.rejected else None,
-                rejection_reason=outcome.rejection_reason,
+                subject=cfg.run_id,
+                data=ToolReturnedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    **returned_kwargs,
+                ),
             )
         )
         self._history.append(
@@ -377,54 +508,117 @@ class AEPRunner:
     def _handle_rpc_tool(self, tc, state: _MutableState) -> None:
         cfg = self.config
         tool_decl = self._supervisor_tools_by_name[tc.tool]
+        tool_span_id = self._tool_span_by_call_id[tc.call_id]
         request_id = self._next_request_id()
+        rpc_span_id = new_span_id()
+        self._rpc_span_by_request_id[request_id] = rpc_span_id
+
+        # MCP / JSON-RPC payload: method `tools/call`, params {name, arguments}.
+        rpc_request = JsonRpcRequestPayload(
+            id=request_id,
+            method="tools/call",
+            params={"name": tc.tool, "arguments": tc.input},
+        )
+        timeout_ms = (tool_decl.meta or {}).get("aep", {}).get("timeout_ms")
+        if not isinstance(timeout_ms, int) or timeout_ms <= 0:
+            timeout_ms = 30000  # SPEC default
+
         self._emit(
             ToolExecRequestEvent(
-                run_id=cfg.run_id,
-                step=state.total_turns,
-                request_id=request_id,
-                call_id=tc.call_id,
-                tool=tc.tool,
-                input=tc.input,
-                timeout_ms=tool_decl.timeout_ms,
+                subject=cfg.run_id,
+                data=ToolExecRequestData(
+                    **self._shared_span(rpc_span_id, tool_span_id),
+                    step=state.total_turns,
+                    rpc=rpc_request,
+                    **{
+                        "aep.request_id": request_id,
+                        "gen_ai.tool.call.id": tc.call_id,
+                        "aep.timeout_ms": timeout_ms,
+                        "aep.tool.dispatch_target": "supervisor_rpc",
+                        "gen_ai.tool.name": tc.tool,
+                    },
+                ),
             )
         )
 
-        msg = self.supervisor.get_tool_exec_response(request_id, tool_decl.timeout_ms)
+        msg = self.supervisor.get_tool_exec_response(request_id, timeout_ms)
         if msg is None:
             self._emit(
                 ToolExecTimedOutEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    request_id=request_id,
-                    call_id=tc.call_id,
-                    tool=tc.tool,
+                    subject=cfg.run_id,
+                    data=ToolExecTimedOutData(
+                        **self._shared_span(rpc_span_id, tool_span_id),
+                        step=state.total_turns,
+                        **{
+                            "aep.request_id": request_id,
+                            "gen_ai.tool.call.id": tc.call_id,
+                            "gen_ai.tool.name": tc.tool,
+                            "aep.timeout_ms": timeout_ms,
+                        },
+                    ),
                 )
             )
-            # SPEC.md §9.3: model-visible output on timeout is an Error: -prefixed
+            # SPEC.md §9.3: model-visible output on timeout is an "Error: "-prefixed
             # string for symmetry with §8 step-4 (the same prefix on
             # tool_exec_resolved.error). Models can therefore use a single
-            # convention to detect 'this tool didn't return useful data, consider
-            # retrying' regardless of whether the cause was an explicit error or
-            # a timeout.
-            output = f"Error: tool execution timed out after {tool_decl.timeout_ms}ms"
+            # convention to detect 'tool didn't return useful data, consider retry'.
+            output = f"Error: tool execution timed out after {timeout_ms}ms"
+            output_structured: Any | None = None
         else:
             assert isinstance(msg, ToolExecResolvedEvent)
+            # Stamp the runner's trace context onto the supervisor's reply so
+            # the span tree is consistent. Also echo the tool name (which the
+            # supervisor may not have known to set). The supervisor produced
+            # the reply but didn't know our trace IDs.
+            new_data = msg.data.model_copy(
+                update={
+                    "trace_id": self._trace_id,
+                    "span_id": rpc_span_id,
+                    "parent_span_id": tool_span_id,
+                    "gen_ai_tool_name": tc.tool,
+                }
+            )
+            msg = msg.model_copy(update={"data": new_data})
             self._emit(msg)
-            if msg.error:
-                output = f"Error: {msg.output}" if msg.output else f"Error: {msg.error}"
+            err = msg.data.rpc.error
+            result = msg.data.rpc.result
+            if err is not None:
+                # JSON-RPC error: present an "Error: " string to the model.
+                msg_text = err.message
+                output = f"Error: {msg_text}"
+                output_structured = None
             else:
-                output = msg.output
+                # Successful result. If it's a string, it's the model-visible text;
+                # if a dict, fold it into the structured slot AND a JSON serialization
+                # for the model.
+                if isinstance(result, str):
+                    output = result
+                    output_structured = None
+                else:
+                    import json
+
+                    output = json.dumps(result, separators=(",", ":"))
+                    output_structured = result
+
+        returned_kwargs: dict[str, Any] = {
+            "step": state.total_turns,
+            "duration_ms": 1,
+            **{
+                "gen_ai.tool.call.id": tc.call_id,
+                "gen_ai.tool.name": tc.tool,
+                "aep.tool.result.text": output,
+            },
+        }
+        if output_structured is not None:
+            returned_kwargs["aep.tool.result.structured"] = output_structured
 
         self._emit(
             ToolReturnedEvent(
-                run_id=cfg.run_id,
-                step=state.total_turns,
-                call_id=tc.call_id,
-                tool=tc.tool,
-                output=output,
-                output_json=msg.output_json if isinstance(msg, ToolExecResolvedEvent) else None,
-                duration_ms=1,
+                subject=cfg.run_id,
+                data=ToolReturnedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    **returned_kwargs,
+                ),
             )
         )
         self._history.append(
@@ -448,16 +642,31 @@ class AEPRunner:
             self._run_verifier(verifier)
 
     def _run_verifier(self, verifier: Verifier) -> None:
+        t0 = _time.monotonic()
         passed, error, data = self._execute_verifier(verifier)
+        duration_ms = int((_time.monotonic() - t0) * 1000)
         cfg = self.config
+        kwargs: dict[str, Any] = {
+            **{
+                "aep.verifier.name": verifier.name,
+                "aep.verifier.passed": passed,
+                "aep.verifier.duration_ms": duration_ms,
+            },
+        }
+        if self._state.total_turns:
+            kwargs["step"] = self._state.total_turns
+        if error is not None:
+            kwargs["aep.verifier.error"] = error
+        if data:
+            kwargs["aep.verifier.data"] = data
+
         self._emit(
             VerifierEvaluatedEvent(
-                run_id=cfg.run_id,
-                name=verifier.name,
-                passed=passed,
-                step=self._state.total_turns or None,
-                error=error,
-                data=data,
+                subject=cfg.run_id,
+                data=VerifierEvaluatedData(
+                    **self._own_span(self._current_parent_for_run_event()),
+                    **kwargs,
+                ),
             )
         )
         if passed:
@@ -476,7 +685,6 @@ class AEPRunner:
           - None: the script ran to completion; exit 0 is pass, non-0 is rule fail
         """
         src = verifier.source
-        # v0.1 only ships shell-source verifiers
         try:
             result = subprocess.run(
                 ["sh", "-c", src.shell],
@@ -489,25 +697,16 @@ class AEPRunner:
             return (
                 False,
                 VerifierError.source_timed_out,
-                {
-                    "command": src.shell,
-                    "timeout_ms": verifier.timeout_ms,
-                },
+                {"command": src.shell, "timeout_ms": verifier.timeout_ms},
             )
         except OSError as e:
             return (
                 False,
                 VerifierError.source_crashed,
-                {
-                    "command": src.shell,
-                    "stderr": str(e)[:2000],
-                },
+                {"command": src.shell, "stderr": str(e)[:2000]},
             )
 
-        data: dict[str, Any] = {
-            "command": src.shell,
-            "exit_code": result.returncode,
-        }
+        data: dict[str, Any] = {"command": src.shell, "exit_code": result.returncode}
         if result.stdout:
             data["stdout"] = result.stdout[:2000]
         if result.stderr:
@@ -541,36 +740,61 @@ class AEPRunner:
 
     # ── First / last events ─────────────────────────────────────────────────
 
+    def _build_tool_decls(self) -> list[dict[str, Any]] | None:
+        """Effective tool surface for `agent_started.data.tools` — what the model
+        can actually call. = (Config.tools RPC ∪ runner built-ins) filtered by
+        Config.allowed_tools when set. MCP-shaped (camelCase `inputSchema`)."""
+        cfg = self.config
+        candidates: list[dict[str, Any]] = []
+        if cfg.tools:
+            for t in cfg.tools:
+                entry: dict[str, Any] = {"name": t.name}
+                if t.description is not None:
+                    entry["description"] = t.description
+                if t.inputSchema is not None:
+                    entry["inputSchema"] = t.inputSchema
+                entry["aep.dispatch_target"] = "supervisor_rpc"
+                candidates.append(entry)
+        for bt in self._runner_builtin_tools:
+            entry = {"name": bt["name"]}
+            if "description" in bt and bt["description"] is not None:
+                entry["description"] = bt["description"]
+            schema = bt.get("inputSchema") or bt.get("input_schema")
+            if schema is not None:
+                entry["inputSchema"] = schema
+            entry["aep.dispatch_target"] = "local"
+            candidates.append(entry)
+        if self._allowed_tools is not None:
+            candidates = [c for c in candidates if c["name"] in self._allowed_tools]
+        return candidates or None
+
     def _emit_agent_started(self) -> None:
         cfg = self.config
-        # SPEC.md §13.1.2: agent_started.tools MUST reflect the EFFECTIVE tool
-        # surface — what the model can actually call — not just Config.tools.
-        # Effective = (Config.tools RPC entries ∪ runner built-ins) filtered
-        # by Config.allowed_tools when set. Consumers reading the trajectory
-        # rely on this for "was the agent allowed to write files?" type
-        # questions; un-filtered Config.tools alone gives the wrong answer.
-        candidate_tools: list[dict[str, Any]] = []
-        if cfg.tools:
-            candidate_tools.extend(
-                {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-                for t in cfg.tools
-            )
-        candidate_tools.extend(self._runner_builtin_tools)
-        if self._allowed_tools is not None:
-            candidate_tools = [t for t in candidate_tools if t["name"] in self._allowed_tools]
-        tools_meta = candidate_tools or None
+        tools_meta = self._build_tool_decls()
         skills_meta = [s.name for s in (cfg.skills or [])] or None
+
+        data_kwargs: dict[str, Any] = {
+            "trace_id": self._trace_id,
+            "span_id": self._agent_span_id,
+            "parent_span_id": ZERO_SPAN_ID,
+            "prompt": cfg.prompt,
+            "system_prompt": cfg.system_prompt,
+            "tools": tools_meta,
+            "skills": skills_meta,
+        }
+        if cfg.model:
+            data_kwargs["gen_ai.request.model"] = cfg.model
+        if cfg.thread_id:
+            data_kwargs["aep.thread_id"] = cfg.thread_id
+        if cfg.tags:
+            data_kwargs["aep.tags"] = cfg.tags
+        if cfg.meta:
+            data_kwargs["aep.meta"] = cfg.meta
+
         self._emit(
             AgentStartedEvent(
-                run_id=cfg.run_id,
-                model=cfg.model or "unspecified",
-                prompt=cfg.prompt,
-                system_prompt=cfg.system_prompt,
-                tools=tools_meta,
-                skills=skills_meta,
-                thread_id=cfg.thread_id,
-                tags=cfg.tags,
-                meta=cfg.meta,
+                subject=cfg.run_id,
+                data=AgentStartedData(**data_kwargs),
             )
         )
         if cfg.system_prompt:
@@ -585,24 +809,87 @@ class AEPRunner:
         for skill in cfg.skills:
             self._emit(
                 SkillLoadedEvent(
-                    run_id=cfg.run_id,
-                    step=0,
-                    name=skill.name,
-                    skill_source=skill.source,
+                    subject=cfg.run_id,
+                    data=SkillLoadedData(
+                        **self._own_span(self._agent_span_id),
+                        step=0,
+                        **{
+                            "aep.skill.name": skill.name,
+                            "aep.skill.source": skill.aep_source,
+                        },
+                    ),
+                )
+            )
+
+    def _emit_mcp_connections(self) -> None:
+        """v0.1: emit `mcp_server_connected` for each declared MCP server. The
+        wire format ships now; the live transport (real `initialize` /
+        `tools/list` over HTTP or stdio) is deferred to a future minor — the
+        reference runner emits a stub event so supervisors can pin the
+        lifecycle in tests today."""
+        cfg = self.config
+        if not cfg.mcp_servers:
+            return
+        for server in cfg.mcp_servers:
+            self._emit_mcp_connected(server)
+
+    def _emit_mcp_connected(self, server: McpServer) -> None:
+        cfg = self.config
+        self._emit(
+            McpServerConnectedEvent(
+                subject=cfg.run_id,
+                data=McpServerConnectedData(
+                    **self._own_span(self._agent_span_id),
+                    **{
+                        "aep.mcp.server_id": server.id,
+                        "aep.mcp.protocol_version": MCP_PROTOCOL_VERSION,
+                        "aep.mcp.tool_count": 0,
+                    },
+                ),
+            )
+        )
+
+    def _emit_mcp_disconnections(self, reason: str) -> None:
+        cfg = self.config
+        if not cfg.mcp_servers:
+            return
+        for server in cfg.mcp_servers:
+            self._emit(
+                McpServerDisconnectedEvent(
+                    subject=cfg.run_id,
+                    data=McpServerDisconnectedData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "aep.mcp.server_id": server.id,
+                            "aep.mcp.disconnect_reason": reason,
+                        },
+                    ),
                 )
             )
 
     def _emit_agent_stopped(self, reason: StopReason) -> AgentStoppedEvent:
         cfg = self.config
+        # Emit MCP disconnect events idempotently — _emit_mcp_disconnections
+        # already returns when mcp_servers is empty. Callers that knew they
+        # had to disconnect early (validation failure, _VerifierHalt) call it
+        # before this; the normal exit path relies on this finalizer.
+        self._emit_mcp_disconnections("clean")
         snap = self._state.snapshot(_monotonic_ms())
         ev = AgentStoppedEvent(
-            run_id=cfg.run_id,
-            reason=reason,
-            state=snap,
-            total_tokens=snap.total_tokens,
-            total_cost_usd=snap.total_cost_usd,
-            total_turns=snap.total_turns,
-            duration_ms=snap.duration_ms,
+            subject=cfg.run_id,
+            data=AgentStoppedData(
+                trace_id=self._trace_id,
+                span_id=self._agent_span_id,
+                parent_span_id=ZERO_SPAN_ID,
+                **{
+                    "aep.reason": reason,
+                    "aep.state": snap,
+                    "aep.total_tokens": snap.total_tokens,
+                    "aep.total_cost_usd": snap.total_cost_usd,
+                    "aep.total_turns": snap.total_turns,
+                    "aep.duration_ms": snap.duration_ms,
+                },
+            ),
         )
         self._emit(ev)
         return ev

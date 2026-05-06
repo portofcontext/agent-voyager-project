@@ -142,22 +142,35 @@ class ScriptedSupervisor:
 
         from aep.types import now_iso
 
+        def _navigate(cur: Any, parts: list[str]) -> Any:
+            """Walk parts as nested dict keys. When a part doesn't resolve at
+            the current level, try joining successive parts with dots to find
+            a single dotted key (e.g. `data` then `aep.request_id`)."""
+            i = 0
+            while i < len(parts):
+                if not isinstance(cur, dict):
+                    raise KeyError(f"cannot navigate into non-dict at part {parts[i]!r}")
+                # Greedy: try the longest dotted-key match first.
+                for end in range(len(parts), i, -1):
+                    candidate = ".".join(parts[i:end])
+                    if candidate in cur:
+                        cur = cur[candidate]
+                        i = end
+                        break
+                else:
+                    raise KeyError(f"no key resolving at part {parts[i]!r}")
+            return cur
+
         def repl(m: re.Match[str]) -> str:
             expr = m.group(1).strip()
             if expr == "now":
                 return now_iso()
             if expr == "run_id":
-                return str(event.get("run_id", ""))
+                # CloudEvents envelope carries run_id as `subject`.
+                return str(event.get("subject", event.get("run_id", "")))
             if expr.startswith("event."):
                 path = expr[len("event.") :].split(".")
-                cur: Any = event
-                for part in path:
-                    if not isinstance(cur, dict) or part not in cur:
-                        raise KeyError(
-                            f"placeholder {{{{{expr}}}}} cannot resolve at part {part!r}"
-                        )
-                    cur = cur[part]
-                return str(cur)
+                return str(_navigate(event, path))
             raise KeyError(f"unknown placeholder {{{{{expr}}}}}")
 
         return re.sub(r"\{\{([^}]+)\}\}", repl, s)
@@ -169,7 +182,7 @@ class ScriptedSupervisor:
         if isinstance(event, ToolExecResolvedEvent):
             return
 
-        ev_dict = event.model_dump(mode="json", exclude_none=True)
+        ev_dict = event.model_dump(mode="json", by_alias=True, exclude_none=True)
 
         for step in self._steps:
             if not self._matches(step.on_match, ev_dict):
@@ -177,8 +190,10 @@ class ScriptedSupervisor:
             if step.delay_ms:
                 time.sleep(step.delay_ms / 1000.0)
             if step.skip or step.send is None:
-                req_id = ev_dict.get("request_id")
-                if isinstance(req_id, str) and ev_dict.get("type") == "tool_exec_request":
+                # tool_exec_request carries `aep.request_id` inside `data`.
+                data = ev_dict.get("data") or {}
+                req_id = data.get("aep.request_id")
+                if isinstance(req_id, str) and ev_dict.get("type") == "aep.tool_exec_request":
                     self._tool_responses[req_id] = None
                 continue
             payload = self._substitute(step.send, event=ev_dict)
@@ -189,7 +204,7 @@ class ScriptedSupervisor:
         from aep.types import ToolExecResolvedEvent
 
         if isinstance(msg, ToolExecResolvedEvent):
-            self._tool_responses[msg.request_id] = msg
+            self._tool_responses[msg.data.aep_request_id] = msg
         else:
             raise TypeError(f"unexpected SupervisorMessage subtype: {type(msg).__name__}")
 

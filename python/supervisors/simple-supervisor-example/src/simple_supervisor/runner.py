@@ -69,7 +69,7 @@ def run_subprocess(
 
     threading.Thread(target=_drain_stderr, daemon=True).start()
 
-    proc.stdin.write(config.model_dump_json(exclude_none=True) + "\n")
+    proc.stdin.write(config.model_dump_json(by_alias=True, exclude_none=True) + "\n")
     proc.stdin.flush()
 
     events: list[BaseModel | dict[str, Any]] = []
@@ -82,13 +82,13 @@ def run_subprocess(
             ev = parse_event(payload)
             events.append(ev)
 
-            if rpc_responder is not None and payload.get("type") == "tool_exec_request":
+            if rpc_responder is not None and payload.get("type") == "aep.tool_exec_request":
                 reply = rpc_responder(payload)
                 if reply is not None:
                     proc.stdin.write(json.dumps(reply) + "\n")
                     proc.stdin.flush()
 
-            if payload.get("type") == "agent_stopped":
+            if payload.get("type") == "aep.agent_stopped":
                 break
 
         proc.stdin.close()
@@ -137,7 +137,7 @@ def stream_subprocess(
 
     threading.Thread(target=_drain_stderr, daemon=True).start()
 
-    proc.stdin.write(config.model_dump_json(exclude_none=True) + "\n")
+    proc.stdin.write(config.model_dump_json(by_alias=True, exclude_none=True) + "\n")
     proc.stdin.flush()
 
     try:
@@ -147,7 +147,7 @@ def stream_subprocess(
                 continue
             payload = json.loads(line)
             yield parse_event(payload)
-            if payload.get("type") == "agent_stopped":
+            if payload.get("type") == "aep.agent_stopped":
                 break
     finally:
         proc.stdin.close()

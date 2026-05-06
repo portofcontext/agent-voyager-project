@@ -1,7 +1,562 @@
 {
+  "$defs": {
+    "Boundary": {
+      "additionalProperties": false,
+      "description": "Hard limits the agent enforces. Strict-greater per SPEC §9.2.",
+      "properties": {
+        "max_cost_usd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cost Usd"
+        },
+        "max_steps": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Steps"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        }
+      },
+      "title": "Boundary",
+      "type": "object"
+    },
+    "McpHttpAuth": {
+      "additionalProperties": false,
+      "description": "Auth for an MCP server reachable via HTTP.",
+      "properties": {
+        "type": {
+          "const": "bearer",
+          "default": "bearer",
+          "title": "Type",
+          "type": "string"
+        },
+        "token_env": {
+          "minLength": 1,
+          "title": "Token Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token_env"
+      ],
+      "title": "McpHttpAuth",
+      "type": "object"
+    },
+    "McpServer": {
+      "additionalProperties": false,
+      "description": "External MCP server endpoint. The runner connects, runs initialize +\ntools/list, and merges returned tools into the effective surface.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "transport": {
+          "enum": [
+            "http",
+            "stdio"
+          ],
+          "title": "Transport",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpHttpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "command": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Args"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Env"
+        },
+        "init_timeout_ms": {
+          "default": 30000,
+          "exclusiveMinimum": 0,
+          "title": "Init Timeout Ms",
+          "type": "integer"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "id",
+        "transport"
+      ],
+      "title": "McpServer",
+      "type": "object"
+    },
+    "OnFailure": {
+      "enum": [
+        "halt",
+        "inject_correction",
+        "continue"
+      ],
+      "title": "OnFailure",
+      "type": "string"
+    },
+    "Skill": {
+      "additionalProperties": false,
+      "description": "Reference to a SKILL.md following the agentskills.io specification.\n\n`name` MUST follow agentskills.io rules (1–64 chars, lowercase a-z digits\nhyphens, no leading/trailing hyphen, no consecutive hyphens). The\n`aep_source` and `aep_config` fields are AEP extensions — agentskills.io\ndoesn't define a remote-load scheme.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "aep.source": {
+          "minLength": 1,
+          "title": "Aep.Source",
+          "type": "string"
+        },
+        "aep.config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Config"
+        }
+      },
+      "required": [
+        "name",
+        "aep.source"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "Tool": {
+      "additionalProperties": false,
+      "description": "MCP-shaped tool descriptor. Per the MCP 2025-11-25 spec.\n\n`inputSchema` and `outputSchema` are camelCase per MCP. The optional\n`_meta.aep.timeout_ms` is AEP's extension (MCP defines `_meta` as the\nextension slot).",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "inputSchema": {
+          "additionalProperties": true,
+          "title": "Inputschema",
+          "type": "object"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outputschema"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "name",
+        "inputSchema"
+      ],
+      "title": "Tool",
+      "type": "object"
+    },
+    "Verifier": {
+      "additionalProperties": false,
+      "description": "Declarative deterministic check. AEP-specific (no upstream).",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "trigger": {
+          "title": "Trigger",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/VerifierSourceShell"
+        },
+        "on_failure": {
+          "$ref": "#/$defs/OnFailure",
+          "default": "continue"
+        },
+        "correction_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correction Message"
+        },
+        "timeout_ms": {
+          "default": 30000,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "trigger",
+        "source"
+      ],
+      "title": "Verifier",
+      "type": "object"
+    },
+    "VerifierSourceShell": {
+      "additionalProperties": false,
+      "properties": {
+        "shell": {
+          "title": "Shell",
+          "type": "string"
+        }
+      },
+      "required": [
+        "shell"
+      ],
+      "title": "VerifierSourceShell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Supervisor → runner setup message. Declares the agent's complete environment (boundary, tools, mcp_servers, skills, verifiers, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "tools": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Tool"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tools"
+    },
+    "mcp_servers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/McpServer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mcp Servers"
+    },
+    "allowed_tools": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Allowed Tools"
+    },
+    "verifiers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Verifier"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verifiers"
+    },
+    "boundary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Boundary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "output_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Schema"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prompt"
+    },
+    "system_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "System Prompt"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skills"
+    },
+    "thread_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thread Id"
+    },
+    "tags": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tags"
+    },
+    "meta": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Meta"
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id"
+  ],
+  "title": "AEP v0.1 Config",
+  "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aep.dev/schema/v0.1/config.schema.json",
-  "title": "AEP Config (v0.1)",
-  "description": "Entry-point schema for the supervisor → runner Config. Validates the single JSON document the supervisor writes to the runner's stdin (or POSTs to the runner's HTTP endpoint) at startup.",
-  "$ref": "https://aep.dev/schema/v0.1/aep.schema.json#/$defs/Config"
+  "$id": "https://aep.dev/schema/v0.1/config.schema.json"
 }

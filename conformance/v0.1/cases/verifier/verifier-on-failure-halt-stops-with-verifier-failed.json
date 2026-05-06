@@ -2,8 +2,13 @@
   "id": "verifier-on-failure-halt-stops-with-verifier-failed",
   "title": "Verifier with on_failure='halt' and passed=false: agent emits agent_stopped reason='verifier_failed' (not 'error', not 'converged')",
   "description": "A shell verifier exits non-zero (passed=false) and on_failure='halt'. The agent MUST emit verifier_evaluated then agent_stopped with reason='verifier_failed'. No subsequent turns.",
-  "spec_refs": ["spec/v0.1/SPEC.md#73-on_failure-actions", "spec/v0.1/aep.schema.json#/$defs/StopReason"],
-  "applies_to": ["runner"],
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#73-on_failure-actions",
+    "spec/v0.1/aep.schema.json#/$defs/StopReason"
+  ],
+  "applies_to": [
+    "runner"
+  ],
   "config": {
     "schema_version": "0.1",
     "run_id": "verifier-halt",
@@ -11,28 +16,102 @@
       {
         "name": "tests-pass",
         "trigger": "after_each_turn",
-        "source": { "shell": "false" },
+        "source": {
+          "shell": "false"
+        },
         "on_failure": "halt"
       }
     ],
     "model": "test/mock"
   },
   "scripted_model": [
-    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "t1", "converged": false },
-    { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "should not run", "converged": true }
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "t1",
+      "converged": false
+    },
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "should not run",
+      "converged": true
+    }
   ],
   "expectations": {
     "events": [
-      { "match": { "type": "model_turn_ended", "step": 1 } },
-      { "match": { "type": "verifier_evaluated", "name": "tests-pass", "passed": false } },
-      { "match": { "type": "agent_stopped", "reason": "verifier_failed", "total_turns": 1 } }
+      {
+        "match": {
+          "type": "aep.model_turn_ended",
+          "data": {
+            "step": 1
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.verifier_evaluated",
+          "data": {
+            "aep.verifier.name": "tests-pass",
+            "aep.verifier.passed": false
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "verifier_failed",
+            "aep.total_turns": 1
+          }
+        }
+      }
     ],
     "forbidden_events": [
-      { "label": "no second turn after verifier-driven halt", "match": { "type": "model_turn_started", "step": 2 } },
-      { "label": "verifier-driven halt MUST NOT yield reason='converged'", "match": { "type": "agent_stopped", "reason": "converged" } },
-      { "label": "verifier-driven halt MUST NOT yield reason='error'", "match": { "type": "agent_stopped", "reason": "error" } },
-      { "label": "supervisor_stopped is not a valid stop reason", "match": { "type": "agent_stopped", "reason": "supervisor_stopped" } }
+      {
+        "label": "no second turn after verifier-driven halt",
+        "match": {
+          "type": "aep.model_turn_started",
+          "data": {
+            "step": 2
+          }
+        }
+      },
+      {
+        "label": "verifier-driven halt MUST NOT yield reason='converged'",
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "converged"
+          }
+        }
+      },
+      {
+        "label": "verifier-driven halt MUST NOT yield reason='error'",
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "error"
+          }
+        }
+      },
+      {
+        "label": "supervisor_stopped is not a valid stop reason",
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "supervisor_stopped"
+          }
+        }
+      }
     ],
-    "final_state": { "stop_reason": "verifier_failed", "total_turns": 1 }
+    "final_state": {
+      "stop_reason": "verifier_failed",
+      "total_turns": 1
+    }
   }
 }

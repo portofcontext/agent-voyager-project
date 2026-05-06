@@ -34,7 +34,15 @@ class ModelResponse:
     tool_calls: list[ScriptedToolCall] = field(default_factory=list)
     tokens_cache_read: int | None = None
     tokens_cache_write: int | None = None
+    tokens_reasoning_output: int | None = None
     converged: bool = False
+    # Streaming observability (OpenTelemetry GenAI conventions). Drivers SHOULD
+    # populate these when the underlying API call streamed tokens; non-streaming
+    # drivers leave them at None.
+    streamed: bool | None = None
+    time_to_first_chunk_s: float | None = None
+    response_model: str | None = None
+    finish_reasons: list[str] | None = None
 
 
 class ModelDriver(Protocol):

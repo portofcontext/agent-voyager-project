@@ -42,21 +42,34 @@ from typing import Any
 from pydantic import BaseModel
 
 from aep import (
+    ZERO_SPAN_ID,
+    AgentStartedData,
     AgentStartedEvent,
+    AgentStoppedData,
     AgentStoppedEvent,
     Config,
+    CostRecordedData,
     CostRecordedEvent,
+    ErrorOccurredData,
     ErrorOccurredEvent,
+    ModelTurnEndedData,
     ModelTurnEndedEvent,
+    ModelTurnStartedData,
     ModelTurnStartedEvent,
     RunStateSnapshot,
     Source,
     StopReason,
+    TextEmittedData,
     TextEmittedEvent,
+    ToolInvokedData,
     ToolInvokedEvent,
+    ToolReturnedData,
     ToolReturnedEvent,
     Verifier,
+    VerifierEvaluatedData,
     VerifierEvaluatedEvent,
+    new_span_id,
+    new_trace_id,
 )
 from aep.enums import ErrorCode, OnFailure, VerifierError
 from aep.types import now_iso
@@ -152,6 +165,12 @@ class ClaudeAgentTranslator:
         self._step = 0
         self._started_at = now_iso()
         self._started_monotonic_ms = _monotonic_ms()
+        # Span tree state. trace_id is allocated per run; agent_span is the
+        # root; turn / tool spans nest under it.
+        self._trace_id = new_trace_id()
+        self._agent_span_id = new_span_id()
+        self._current_turn_span_id: str | None = None
+        self._tool_span_by_call_id: dict[str, str] = {}
         self._total_turns = 0
         self._total_cost_usd = 0.0
         self._total_tokens = 0
@@ -195,6 +214,25 @@ class ClaudeAgentTranslator:
     def _emit(self, event: BaseModel) -> None:
         self.on_event(event)
 
+    # ── Span helpers ────────────────────────────────────────────────────────
+
+    def _own_span(self, parent_span_id: str) -> dict[str, str]:
+        return {
+            "trace_id": self._trace_id,
+            "span_id": new_span_id(),
+            "parent_span_id": parent_span_id,
+        }
+
+    def _shared_span(self, span_id: str, parent_span_id: str) -> dict[str, str]:
+        return {
+            "trace_id": self._trace_id,
+            "span_id": span_id,
+            "parent_span_id": parent_span_id,
+        }
+
+    def _current_parent_for_run_event(self) -> str:
+        return self._current_turn_span_id or self._agent_span_id
+
     # ── Public lifecycle ────────────────────────────────────────────────────
 
     def run(self) -> AgentStoppedEvent:
@@ -216,9 +254,14 @@ class ClaudeAgentTranslator:
             logger.exception("aep-claude-agent: SDK error")
             self._emit(
                 ErrorOccurredEvent(
-                    run_id=self.config.run_id,
-                    code=ErrorCode.runner_crash,
-                    message=str(e),
+                    subject=self.config.run_id,
+                    data=ErrorOccurredData(
+                        **self._own_span(self._current_parent_for_run_event()),
+                        **{
+                            "aep.error.code": ErrorCode.runner_crash,
+                            "aep.error.message": str(e),
+                        },
+                    ),
                 )
             )
             reason = StopReason.error
@@ -227,14 +270,20 @@ class ClaudeAgentTranslator:
             if self._turn_open:
                 # Model was mid-turn when we exited — close the turn so the
                 # trajectory is well-formed.
+                assert self._current_turn_span_id is not None
                 self._emit(
                     ModelTurnEndedEvent(
-                        run_id=self.config.run_id,
-                        step=self._step,
-                        tokens_input=0,
-                        tokens_output=0,
-                        cost_usd=0.0,
-                        duration_ms=0,
+                        subject=self.config.run_id,
+                        data=ModelTurnEndedData(
+                            **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                            step=self._step,
+                            duration_ms=0,
+                            **{
+                                "gen_ai.usage.input_tokens": 0,
+                                "gen_ai.usage.output_tokens": 0,
+                                "aep.cost_usd": 0.0,
+                            },
+                        ),
                     )
                 )
                 self._turn_open = False
@@ -407,12 +456,17 @@ class ClaudeAgentTranslator:
         if unexpected_reset:
             self._emit(
                 ErrorOccurredEvent(
-                    run_id=cfg.run_id,
-                    code=ErrorCode.accounting_reset,
-                    message=(
-                        "SDK cumulative usage dropped without a PreCompact / "
-                        "SubagentStart signal. Per-turn deltas may be unreliable; "
-                        "treat state.total_tokens / total_cost_usd as a lower bound."
+                    subject=cfg.run_id,
+                    data=ErrorOccurredData(
+                        **self._own_span(self._current_parent_for_run_event()),
+                        **{
+                            "aep.error.code": ErrorCode.accounting_reset,
+                            "aep.error.message": (
+                                "SDK cumulative usage dropped without a PreCompact / "
+                                "SubagentStart signal. Per-turn deltas may be unreliable; "
+                                "treat state.total_tokens / total_cost_usd as a lower bound."
+                            ),
+                        },
                     ),
                 )
             )
@@ -458,7 +512,16 @@ class ClaudeAgentTranslator:
             return
 
         self._step += 1
-        self._emit(ModelTurnStartedEvent(run_id=cfg.run_id, step=self._step))
+        self._current_turn_span_id = new_span_id()
+        self._emit(
+            ModelTurnStartedEvent(
+                subject=cfg.run_id,
+                data=ModelTurnStartedData(
+                    **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                    step=self._step,
+                ),
+            )
+        )
         self._turn_open = True
 
         for block in getattr(message, "content", []) or []:
@@ -466,7 +529,16 @@ class ClaudeAgentTranslator:
             if btype == "TextBlock":
                 text = getattr(block, "text", None)
                 if text:
-                    self._emit(TextEmittedEvent(run_id=cfg.run_id, step=self._step, text=text))
+                    self._emit(
+                        TextEmittedEvent(
+                            subject=cfg.run_id,
+                            data=TextEmittedData(
+                                **self._own_span(self._current_turn_span_id),
+                                step=self._step,
+                                **{"aep.text": text},
+                            ),
+                        )
+                    )
             # ToolUseBlock content is observed via the PreToolUse hook (which
             # fires in step with the SDK's actual tool dispatch).
 
@@ -476,16 +548,26 @@ class ClaudeAgentTranslator:
         self._prev_cumulative_cache_write = cum_cw
         self._prev_cumulative_cost_usd = cum_cost
 
+        ended_kwargs: dict[str, Any] = {
+            "gen_ai.usage.input_tokens": delta_ti,
+            "gen_ai.usage.output_tokens": delta_to,
+            "aep.cost_usd": delta_cost,
+            "gen_ai.response.model": model_id,
+        }
+        if delta_cr:
+            ended_kwargs["gen_ai.usage.cache_read.input_tokens"] = delta_cr
+        if delta_cw:
+            ended_kwargs["gen_ai.usage.cache_creation.input_tokens"] = delta_cw
+
         self._emit(
             ModelTurnEndedEvent(
-                run_id=cfg.run_id,
-                step=self._step,
-                tokens_input=delta_ti,
-                tokens_output=delta_to,
-                cost_usd=delta_cost,
-                duration_ms=0,  # the SDK message doesn't carry per-turn duration
-                tokens_cache_read=delta_cr or None,
-                tokens_cache_write=delta_cw or None,
+                subject=cfg.run_id,
+                data=ModelTurnEndedData(
+                    **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                    step=self._step,
+                    duration_ms=0,  # the SDK message doesn't carry per-turn duration
+                    **ended_kwargs,
+                ),
             )
         )
         self._turn_open = False
@@ -493,7 +575,15 @@ class ClaudeAgentTranslator:
         self._total_turns += 1
         self._total_cost_usd += delta_cost
         self._total_tokens += delta_ti + delta_to
-        self._emit(CostRecordedEvent(run_id=cfg.run_id, state=self._snapshot()))
+        self._emit(
+            CostRecordedEvent(
+                subject=cfg.run_id,
+                data=CostRecordedData(
+                    **self._own_span(self._current_turn_span_id),
+                    **{"aep.state": self._snapshot()},
+                ),
+            )
+        )
 
         # SPEC.md §7.2: after_each_turn fires after model_turn_ended.
         # _VerifierHalt raised here propagates through the SDK's async-for
@@ -506,7 +596,15 @@ class ClaudeAgentTranslator:
         sdk_cost = getattr(message, "total_cost_usd", None)
         if sdk_cost is not None:
             self._total_cost_usd = float(sdk_cost)
-            self._emit(CostRecordedEvent(run_id=self.config.run_id, state=self._snapshot()))
+            self._emit(
+                CostRecordedEvent(
+                    subject=self.config.run_id,
+                    data=CostRecordedData(
+                        **self._own_span(self._current_parent_for_run_event()),
+                        **{"aep.state": self._snapshot()},
+                    ),
+                )
+            )
 
     # ── Hook callbacks (Claude Code hooks) ─────────────────────────────────
 
@@ -516,16 +614,25 @@ class ClaudeAgentTranslator:
         """SDK hook fired before each tool invocation. Emits tool_invoked.
 
         Returns `{}` (no override) — the translator observes; it does not gate."""
-        call_id = input_data.get("tool_use_id") or tool_use_id or f"sdk-{next(self._call_seq)}"
-        tool = input_data.get("tool_name", "unknown")
+        call_id = str(input_data.get("tool_use_id") or tool_use_id or f"sdk-{next(self._call_seq)}")
+        tool = str(input_data.get("tool_name", "unknown"))
         tool_input = input_data.get("tool_input", {}) or {}
+        tool_span_id = new_span_id()
+        self._tool_span_by_call_id[call_id] = tool_span_id
+        parent = self._current_turn_span_id or self._agent_span_id
         self._emit(
             ToolInvokedEvent(
-                run_id=self.config.run_id,
-                step=self._step,
-                call_id=str(call_id),
-                tool=str(tool),
-                input=dict(tool_input),
+                subject=self.config.run_id,
+                data=ToolInvokedData(
+                    **self._shared_span(tool_span_id, parent),
+                    step=self._step,
+                    **{
+                        "gen_ai.tool.call.id": call_id,
+                        "gen_ai.tool.name": tool,
+                        "gen_ai.tool.call.arguments": dict(tool_input),
+                        "aep.tool.dispatch_target": "local",
+                    },
+                ),
             )
         )
         self._tools_invoked[tool] = self._tools_invoked.get(tool, 0) + 1
@@ -536,26 +643,41 @@ class ClaudeAgentTranslator:
     ) -> dict[str, Any]:
         """SDK hook fired after each tool invocation. Emits tool_returned and
         fires `on_tool:<tool_name>` verifiers."""
-        call_id = input_data.get("tool_use_id") or tool_use_id or "unknown"
-        tool = input_data.get("tool_name", "unknown")
+        call_id = str(input_data.get("tool_use_id") or tool_use_id or "unknown")
+        tool = str(input_data.get("tool_name", "unknown"))
         response = input_data.get("tool_response", "")
+        output: str
+        output_structured: Any | None
         if not isinstance(response, str):
             try:
                 import json
 
                 output = json.dumps(response)
+                output_structured = response
             except (TypeError, ValueError):
                 output = str(response)
+                output_structured = None
         else:
             output = response
+            output_structured = None
+        tool_span_id = self._tool_span_by_call_id.get(call_id, new_span_id())
+        parent = self._current_turn_span_id or self._agent_span_id
+        returned_kwargs: dict[str, Any] = {
+            "gen_ai.tool.call.id": call_id,
+            "gen_ai.tool.name": tool,
+            "aep.tool.result.text": output,
+        }
+        if output_structured is not None:
+            returned_kwargs["aep.tool.result.structured"] = output_structured
         self._emit(
             ToolReturnedEvent(
-                run_id=self.config.run_id,
-                step=self._step,
-                call_id=str(call_id),
-                tool=str(tool),
-                output=output,
-                duration_ms=0,
+                subject=self.config.run_id,
+                data=ToolReturnedData(
+                    **self._shared_span(tool_span_id, parent),
+                    step=self._step,
+                    duration_ms=0,
+                    **returned_kwargs,
+                ),
             )
         )
         # SPEC.md §7.2: on_tool:<name> fires after tool_returned for the named
@@ -621,15 +743,29 @@ class ClaudeAgentTranslator:
             self._run_verifier(verifier)
 
     def _run_verifier(self, verifier: Verifier) -> None:
+        import time as _time
+
+        t0 = _time.monotonic()
         passed, error, data = self._execute_verifier(verifier)
+        duration_ms = int((_time.monotonic() - t0) * 1000)
+        kwargs: dict[str, Any] = {
+            "aep.verifier.name": verifier.name,
+            "aep.verifier.passed": passed,
+            "aep.verifier.duration_ms": duration_ms,
+        }
+        if self._step:
+            kwargs["step"] = self._step
+        if error is not None:
+            kwargs["aep.verifier.error"] = error
+        if data:
+            kwargs["aep.verifier.data"] = data
         self._emit(
             VerifierEvaluatedEvent(
-                run_id=self.config.run_id,
-                name=verifier.name,
-                passed=passed,
-                step=self._step or None,
-                error=error,
-                data=data,
+                subject=self.config.run_id,
+                data=VerifierEvaluatedData(
+                    **self._own_span(self._current_parent_for_run_event()),
+                    **kwargs,
+                ),
             )
         )
         if passed:
@@ -715,20 +851,35 @@ class ClaudeAgentTranslator:
         tools_meta = None
         if cfg.tools:
             tools_meta = [
-                {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "inputSchema": t.inputSchema,
+                    "aep.dispatch_target": "supervisor_rpc",
+                }
                 for t in cfg.tools
             ]
+        data_kwargs: dict[str, Any] = {
+            "trace_id": self._trace_id,
+            "span_id": self._agent_span_id,
+            "parent_span_id": ZERO_SPAN_ID,
+            "prompt": cfg.prompt,
+            "system_prompt": cfg.system_prompt,
+            "tools": tools_meta,
+            "skills": [s.name for s in (cfg.skills or [])] or None,
+        }
+        if cfg.model:
+            data_kwargs["gen_ai.request.model"] = cfg.model
+        if cfg.thread_id:
+            data_kwargs["aep.thread_id"] = cfg.thread_id
+        if cfg.tags:
+            data_kwargs["aep.tags"] = cfg.tags
+        if cfg.meta:
+            data_kwargs["aep.meta"] = cfg.meta
         self._emit(
             AgentStartedEvent(
-                run_id=cfg.run_id,
-                model=cfg.model or "unspecified",
-                prompt=cfg.prompt,
-                system_prompt=cfg.system_prompt,
-                tools=tools_meta,
-                skills=[s.name for s in (cfg.skills or [])] or None,
-                thread_id=cfg.thread_id,
-                tags=cfg.tags,
-                meta=cfg.meta,
+                subject=cfg.run_id,
+                data=AgentStartedData(**data_kwargs),
             )
         )
 
@@ -737,13 +888,20 @@ class ClaudeAgentTranslator:
     ) -> AgentStoppedEvent:
         snap = self._snapshot()
         ev = AgentStoppedEvent(
-            run_id=self.config.run_id,
-            reason=reason,
-            state=snap,
-            total_tokens=snap.total_tokens,
-            total_cost_usd=snap.total_cost_usd,
-            total_turns=snap.total_turns,
-            duration_ms=snap.duration_ms,
+            subject=self.config.run_id,
+            data=AgentStoppedData(
+                trace_id=self._trace_id,
+                span_id=self._agent_span_id,
+                parent_span_id=ZERO_SPAN_ID,
+                **{
+                    "aep.reason": reason,
+                    "aep.state": snap,
+                    "aep.total_tokens": snap.total_tokens,
+                    "aep.total_cost_usd": snap.total_cost_usd,
+                    "aep.total_turns": snap.total_turns,
+                    "aep.duration_ms": snap.duration_ms,
+                },
+            ),
         )
         self._emit(ev)
         return ev

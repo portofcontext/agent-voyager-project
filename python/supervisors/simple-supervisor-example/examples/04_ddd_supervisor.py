@@ -135,23 +135,27 @@ def main() -> int:
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
         if type_name == "model_turn_ended":
             print(
-                f"  [turn {ev.step}] cost=${ev.cost_usd:.5f}  "
-                f"tokens={ev.tokens_input}+{ev.tokens_output}"
+                f"  [turn {ev.data.step}] cost=${ev.data.aep_cost_usd:.5f}  "
+                f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
             )
         elif type_name == "tool_invoked":
-            keys = list(ev.input.keys())
+            keys = list(ev.data.gen_ai_tool_call_arguments.keys())
             preview = ""
-            if "path" in ev.input:
-                preview = f" path={ev.input['path']}"
-            print(f"  [turn {ev.step}] -> {ev.tool}({keys}){preview}")
+            if "path" in ev.data.gen_ai_tool_call_arguments:
+                preview = f" path={ev.data.gen_ai_tool_call_arguments['path']}"
+            print(f"  [turn {ev.data.step}] -> {ev.data.gen_ai_tool_name}({keys}){preview}")
         elif type_name == "tool_returned":
-            head = ev.output.replace("\n", " ")[:80] if ev.output else ""
-            print(f"  [turn {ev.step}] <- {ev.tool}: {head!r}")
+            head = (
+                ev.data.aep_tool_result_text.replace("\n", " ")[:80]
+                if ev.data.aep_tool_result_text
+                else ""
+            )
+            print(f"  [turn {ev.data.step}] <- {ev.data.gen_ai_tool_name}: {head!r}")
         elif type_name == "verifier_evaluated":
-            mark = "PASS" if ev.passed else "FAIL"
-            err = f" error={ev.error}" if ev.error else ""
-            print(f"  [turn {ev.step}] verifier '{ev.name}': {mark}{err}")
-            if not ev.passed and ev.data:
+            mark = "PASS" if ev.data.aep_verifier_passed else "FAIL"
+            err = f" error={ev.data.aep_verifier_error}" if ev.data.aep_verifier_error else ""
+            print(f"  [turn {ev.data.step}] verifier '{ev.name}': {mark}{err}")
+            if not ev.data.aep_verifier_passed and ev.data.aep_verifier_data:
                 stdout = (ev.data.get("stdout") or "").strip()
                 stderr = (ev.data.get("stderr") or "").strip()
                 if stdout:
@@ -159,7 +163,7 @@ def main() -> int:
                 if stderr:
                     print(f"      stderr: {stderr[:200]}")
         elif type_name == "agent_stopped":
-            print(f"  STOPPED reason={ev.reason}")
+            print(f"  STOPPED reason={ev.data.aep_reason}")
 
     print()
     print(render(summarize(events)))

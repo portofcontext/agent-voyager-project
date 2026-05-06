@@ -209,19 +209,23 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
     assert "ToolReturnedEvent" in types
     assert "TextEmittedEvent" in types
     assert types[-1] == "AgentStoppedEvent"
-    assert stop.reason == StopReason.converged
+    assert stop.data.aep_reason == StopReason.converged
 
-    # Specific shape checks
+    # Specific shape checks — fields live in `data` with OTel/AEP attribute names.
     assert any(
-        isinstance(ev, ToolInvokedEvent) and ev.tool == "read_file" and ev.call_id == "toolu_abc"
+        isinstance(ev, ToolInvokedEvent)
+        and ev.data.gen_ai_tool_name == "read_file"
+        and ev.data.gen_ai_tool_call_id == "toolu_abc"
         for ev in runner.trajectory
     )
     assert any(
-        isinstance(ev, ToolReturnedEvent) and ev.tool == "read_file" and ev.output == "hello"
+        isinstance(ev, ToolReturnedEvent)
+        and ev.data.gen_ai_tool_name == "read_file"
+        and ev.data.aep_tool_result_text == "hello"
         for ev in runner.trajectory
     )
     assert any(
-        isinstance(ev, TextEmittedEvent) and "EXPLANATION DONE" in ev.text
+        isinstance(ev, TextEmittedEvent) and "EXPLANATION DONE" in ev.data.aep_text
         for ev in runner.trajectory
     )
 

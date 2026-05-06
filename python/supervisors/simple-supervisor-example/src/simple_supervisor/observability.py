@@ -90,34 +90,42 @@ def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
         if isinstance(ev, ModelTurnEndedEvent):
             s.total_turns += 1
         elif isinstance(ev, ToolInvokedEvent):
-            usage = s.tools.setdefault(ev.tool, ToolUsage(name=ev.tool))
+            tool = ev.data.gen_ai_tool_name
+            usage = s.tools.setdefault(tool, ToolUsage(name=tool))
             usage.invocations += 1
         elif isinstance(ev, ToolFailedEvent):
-            usage = s.tools.setdefault(ev.tool, ToolUsage(name=ev.tool))
+            tool = ev.data.gen_ai_tool_name
+            usage = s.tools.setdefault(tool, ToolUsage(name=tool))
             usage.failures += 1
         elif isinstance(ev, ToolReturnedEvent):
             pass  # invocation already counted on ToolInvoked
         elif isinstance(ev, VerifierEvaluatedEvent):
             s.verifier_results.append(
-                VerifierResult(name=ev.name, passed=ev.passed, step=ev.step, data=ev.data)
+                VerifierResult(
+                    name=ev.data.aep_verifier_name,
+                    passed=ev.data.aep_verifier_passed,
+                    step=ev.data.step,
+                    data=ev.data.aep_verifier_data,
+                )
             )
         elif isinstance(ev, CostRecordedEvent):
             # Snapshot wins — last-write semantics
-            s.total_cost_usd = ev.state.total_cost_usd
-            s.total_tokens = ev.state.total_tokens
-            if ev.state.duration_ms is not None:
-                s.duration_ms = ev.state.duration_ms
+            snap = ev.data.aep_state
+            s.total_cost_usd = snap.total_cost_usd
+            s.total_tokens = snap.total_tokens
+            if snap.duration_ms is not None:
+                s.duration_ms = snap.duration_ms
         elif isinstance(ev, AgentStoppedEvent):
-            s.run_id = ev.run_id
-            s.stop_reason = str(ev.reason)
-            if ev.total_cost_usd is not None:
-                s.total_cost_usd = ev.total_cost_usd
-            if ev.total_tokens is not None:
-                s.total_tokens = ev.total_tokens
-            if ev.duration_ms is not None:
-                s.duration_ms = ev.duration_ms
+            s.run_id = ev.subject or "(unknown)"
+            s.stop_reason = str(ev.data.aep_reason)
+            if ev.data.aep_total_cost_usd is not None:
+                s.total_cost_usd = ev.data.aep_total_cost_usd
+            if ev.data.aep_total_tokens is not None:
+                s.total_tokens = ev.data.aep_total_tokens
+            if ev.data.aep_duration_ms is not None:
+                s.duration_ms = ev.data.aep_duration_ms
         elif isinstance(ev, ErrorOccurredEvent):
-            s.errors.append(f"{ev.code}: {ev.message}")
+            s.errors.append(f"{ev.data.aep_error_code}: {ev.data.aep_error_message}")
 
     return s
 
