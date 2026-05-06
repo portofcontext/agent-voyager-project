@@ -15,8 +15,16 @@ into the SDK's two natural observation surfaces:
 
 Config → SDK options mapping is in `_build_sdk_options`. The supervisor's
 `allowed_tools` is enforced natively by the SDK via ClaudeAgentOptions; the
-boundary becomes max_turns + max_budget_usd; verifiers are NOT enforced by
-the SDK and would need an outer wrapper (out of scope for the translator).
+boundary becomes max_turns + max_budget_usd. Verifiers are dispatched by
+the translator at the SDK lifecycle hooks that map to AEP triggers
+(UserPromptSubmit → before_first_turn, AssistantMessage post-emit →
+after_each_turn, PostToolUse → on_tool:<name>, run() finalizer → at_end).
+on_failure=halt aborts the SDK iteration with reason=verifier_failed;
+on_failure=continue is a no-op; on_failure=inject_correction queues the
+correction message and submits it as a follow-up user prompt via
+`ClaudeSDKClient.query()` between turns — the same semantic as the driver
+runner appending to history, just plumbed through the SDK's multi-turn
+control surface.
 """
 
 from __future__ import annotations
@@ -24,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import subprocess
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -46,8 +55,10 @@ from aep import (
     TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
+    Verifier,
+    VerifierEvaluatedEvent,
 )
-from aep.enums import ErrorCode
+from aep.enums import ErrorCode, OnFailure, VerifierError
 from aep.types import now_iso
 
 logger = logging.getLogger(__name__)
@@ -106,6 +117,12 @@ def _monotonic_ms() -> int:
     return int(datetime.now(UTC).timestamp() * 1000)
 
 
+class _VerifierHalt(Exception):
+    """Raised by _apply_on_failure when on_failure=halt fires. Caught at run()
+    top-level (and around the at_end finalizer) to terminate the SDK iteration
+    with reason=verifier_failed."""
+
+
 class ClaudeAgentTranslator:
     """Translates a Claude Agent SDK run into AEP v0.1 events.
 
@@ -113,9 +130,11 @@ class ClaudeAgentTranslator:
     emitted AEP event (Pydantic model). Call .run() to start the SDK; events
     fire as the SDK progresses.
 
-    Optional `sdk_query` / `sdk_options_cls` / `sdk_hook_matcher_cls` injection
-    points let tests (and the supervisor's mock-SDK example) substitute fakes
-    without installing claude_agent_sdk.
+    Optional `sdk_client_cls` / `sdk_options_cls` / `sdk_hook_matcher_cls`
+    injection points let tests (and the supervisor's mock-SDK example) substitute
+    fakes without installing claude_agent_sdk. `sdk_client_cls` is a callable
+    that returns an object with the ClaudeSDKClient surface
+    (`async with`-able, `connect()`, `query()`, `receive_response()`).
     """
 
     def __init__(
@@ -123,7 +142,7 @@ class ClaudeAgentTranslator:
         config: Config,
         on_event: Callable[[BaseModel], None],
         *,
-        sdk_query: Callable[..., Any] | None = None,
+        sdk_client_cls: Callable[..., Any] | None = None,
         sdk_options_cls: type | None = None,
         sdk_hook_matcher_cls: type | None = None,
     ) -> None:
@@ -151,10 +170,13 @@ class ClaudeAgentTranslator:
         self._baseline_reset_pending = False
         # First UserPromptSubmit fires before_first_turn verifiers exactly once.
         self._before_first_turn_fired = False
-        # Stop hook may fire per-turn; we collapse to a single at_end run
-        # in the finalizer.
+        # Stop hook may fire per-turn; the run() finalizer runs at_end exactly
+        # once, so this flag is informational only.
         self._stop_seen = False
-        self._sdk_query = sdk_query
+        # inject_correction queues correction messages here; the
+        # ClaudeSDKClient.query() loop drains them between turns.
+        self._pending_corrections: list[str] = []
+        self._sdk_client_cls = sdk_client_cls
         self._sdk_options_cls = sdk_options_cls
         self._sdk_hook_matcher_cls = sdk_hook_matcher_cls
 
@@ -186,6 +208,8 @@ class ClaudeAgentTranslator:
         try:
             asyncio.run(self._async_invoke_sdk())
             reason = StopReason.converged
+        except _VerifierHalt:
+            reason = StopReason.verifier_failed
         except KeyboardInterrupt:
             reason = StopReason.interrupted
         except Exception as e:
@@ -215,33 +239,63 @@ class ClaudeAgentTranslator:
                 )
                 self._turn_open = False
 
-        # at_end verifiers fire here, exactly once before agent_stopped.
-        # Stop hook firings during the run set _stop_seen but don't run
-        # verifiers themselves (Stop can fire mid-run in some configurations).
-        # The session-end is the run() returning, which is here.
-        self._run_verifiers_for_trigger("at_end")
+        # at_end verifiers fire exactly once before agent_stopped. They can
+        # also halt — handle that by overriding `reason` to verifier_failed
+        # if no earlier non-converged reason has been set.
+        try:
+            self._run_verifiers_for_trigger("at_end")
+        except _VerifierHalt:
+            # If the run already failed for a different reason, preserve it;
+            # otherwise mark verifier_failed.
+            if reason == StopReason.converged:
+                reason = StopReason.verifier_failed
 
         return self._emit_agent_stopped(reason, error_msg=error_msg)
 
     # ── SDK integration ────────────────────────────────────────────────────
 
     async def _async_invoke_sdk(self) -> None:
-        """Drive the Claude Agent SDK and route its lifecycle events to translator handlers."""
-        if self._sdk_query is None:
+        """Drive the Claude Agent SDK with multi-turn control via ClaudeSDKClient.
+
+        The outer loop alternates between (a) draining the SDK's response stream
+        for the current turn (`receive_response()`) and (b) submitting any
+        correction messages queued by inject_correction verifiers as a follow-up
+        user prompt (`client.query(...)`). When no correction is pending after
+        a response stream completes, the conversation is over and we return.
+
+        Mirrors the AEPRunner driver-pattern semantics for inject_correction:
+        the driver appends a user-role message to its in-memory history before
+        the next turn; the translator hands that same content to the SDK as a
+        new user prompt and lets the SDK route it through its own loop. The
+        agent sees a user-role correction either way.
+        """
+        if self._sdk_client_cls is None:
             from claude_agent_sdk import (
                 ClaudeAgentOptions,
+                ClaudeSDKClient,
                 HookMatcher,
-                query,
             )
 
-            self._sdk_query = query
+            self._sdk_client_cls = ClaudeSDKClient
             self._sdk_options_cls = ClaudeAgentOptions
             self._sdk_hook_matcher_cls = HookMatcher
 
         options = self._build_sdk_options()
         prompt = self.config.prompt or ""
-        async for message in self._sdk_query(prompt=prompt, options=options):
-            self._on_sdk_message(message)
+
+        async with self._sdk_client_cls(options=options) as client:
+            await client.connect(prompt)
+            while True:
+                async for message in client.receive_response():
+                    self._on_sdk_message(message)
+                # The current response stream is exhausted. If a verifier
+                # queued an inject_correction during this turn, hand it to
+                # the SDK as a follow-up user prompt and re-enter the
+                # response loop. Otherwise the conversation is over.
+                correction = self._drain_pending_correction()
+                if correction is None:
+                    break
+                await client.query(correction)
 
     def _build_sdk_options(self) -> Any:
         """Translate Config → ClaudeAgentOptions.
@@ -278,16 +332,14 @@ class ClaudeAgentTranslator:
             "PostToolUse": [
                 self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_post_tool_use_hook]),
             ],
-            # before_first_turn verifiers fire here (initial user prompt). The
-            # hook can also rewrite the prompt for inject_correction, though we
-            # don't activate that path automatically — supervisors that want
-            # injection use Config.verifiers with on_failure=inject_correction.
+            # before_first_turn verifiers fire on the first UserPromptSubmit.
+            # The Claude SDK has no standalone session-start hook with prompt
+            # visibility, so this is the closest equivalent.
             "UserPromptSubmit": [
                 self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_user_prompt_submit_hook]),
             ],
-            # at_end verifiers fire here. Stop can fire per-turn in some SDK
-            # configurations; we run at_end verifiers exactly once when the
-            # session genuinely concludes (handled in run() top-level).
+            # at_end verifiers fire from the run() finalizer. Stop can fire
+            # per-turn in some configurations; we just record the signal.
             "Stop": [
                 self._sdk_hook_matcher_cls(matcher=None, hooks=[self._on_stop_hook]),
             ],
@@ -443,6 +495,11 @@ class ClaudeAgentTranslator:
         self._total_tokens += delta_ti + delta_to
         self._emit(CostRecordedEvent(run_id=cfg.run_id, state=self._snapshot()))
 
+        # SPEC.md §7.2: after_each_turn fires after model_turn_ended.
+        # _VerifierHalt raised here propagates through the SDK's async-for
+        # iteration into asyncio.run() and is caught by run().
+        self._run_verifiers_for_trigger("after_each_turn")
+
     def _handle_result_message(self, message: Any) -> None:
         """ResultMessage closes the run with authoritative cost. Reconcile if it
         differs from our per-turn sum (the SDK's number wins)."""
@@ -477,7 +534,8 @@ class ClaudeAgentTranslator:
     async def _on_post_tool_use_hook(
         self, input_data: dict[str, Any], tool_use_id: str | None, _context: Any
     ) -> dict[str, Any]:
-        """SDK hook fired after each tool invocation. Emits tool_returned."""
+        """SDK hook fired after each tool invocation. Emits tool_returned and
+        fires `on_tool:<tool_name>` verifiers."""
         call_id = input_data.get("tool_use_id") or tool_use_id or "unknown"
         tool = input_data.get("tool_name", "unknown")
         response = input_data.get("tool_response", "")
@@ -500,6 +558,11 @@ class ClaudeAgentTranslator:
                 duration_ms=0,
             )
         )
+        # SPEC.md §7.2: on_tool:<name> fires after tool_returned for the named
+        # tool. _VerifierHalt raised here propagates through the SDK's hook
+        # protocol back into the async-for in _async_invoke_sdk and is caught
+        # by run().
+        self._run_verifiers_for_trigger(f"on_tool:{tool}")
         return {}
 
     async def _on_user_prompt_submit_hook(
@@ -517,11 +580,9 @@ class ClaudeAgentTranslator:
     async def _on_stop_hook(
         self, _input_data: dict[str, Any], _tool_use_id: str | None, _context: Any
     ) -> dict[str, Any]:
-        """SDK Stop hook. In Claude Code this fires when the agent reaches a
-        natural stopping point. We use the LAST fire to run `at_end` verifiers,
-        but Stop can fire per-turn in some configurations — so we mark and
-        re-run; the run() finalizer ensures at_end fires exactly once before
-        agent_stopped."""
+        """SDK Stop hook. Records the signal but does not run at_end verifiers
+        directly — Stop can fire per-turn in some configurations. The run()
+        finalizer runs at_end exactly once before agent_stopped."""
         self._stop_seen = True
         return {}
 
@@ -536,18 +597,116 @@ class ClaudeAgentTranslator:
         self._baseline_reset_pending = True
         return {}
 
-    def _run_verifiers_for_trigger(self, trigger: str) -> None:
-        """Stub for translator-side verifier dispatch. Translator runners
-        that fully honor verifiers will populate this; the reference v0.1
-        translator records the trigger fire but defers verifier execution
-        to the supervisor framework reading the trajectory.
+    # ── Verifier dispatch (mirrors AEPRunner._run_verifier semantics) ──────
 
-        TODO: implement shell-source verifier execution mirroring AEPRunner._run_verifier.
-        Until then, on_failure=halt and inject_correction declared on Configs
-        sent to this runner are no-ops (the verifier_evaluated event is never
-        emitted, so consumers see them as 'never ran' rather than 'passed')."""
-        # Intentionally a no-op for v0.1; see TODO above.
-        _ = trigger
+    def _drain_pending_correction(self) -> str | None:
+        """Pop one queued inject_correction message, or None if the queue is
+        empty. The translator submits drained corrections as follow-up user
+        prompts via `ClaudeSDKClient.query()` between turns."""
+        if not self._pending_corrections:
+            return None
+        return self._pending_corrections.pop(0)
+
+    def _run_verifiers_for_trigger(self, trigger: str) -> None:
+        """Execute every Config verifier whose trigger matches.
+
+        Raises _VerifierHalt if any verifier with on_failure=halt fails;
+        otherwise emits verifier_evaluated and returns normally."""
+        cfg = self.config
+        if not cfg.verifiers:
+            return
+        for verifier in cfg.verifiers:
+            if verifier.trigger != trigger:
+                continue
+            self._run_verifier(verifier)
+
+    def _run_verifier(self, verifier: Verifier) -> None:
+        passed, error, data = self._execute_verifier(verifier)
+        self._emit(
+            VerifierEvaluatedEvent(
+                run_id=self.config.run_id,
+                name=verifier.name,
+                passed=passed,
+                step=self._step or None,
+                error=error,
+                data=data,
+            )
+        )
+        if passed:
+            return
+        self._apply_on_failure(verifier)
+
+    def _execute_verifier(
+        self, verifier: Verifier
+    ) -> tuple[bool, VerifierError | None, dict[str, Any] | None]:
+        """Execute a verifier source. Returns (passed, error, optional data dict).
+
+        `error` distinguishes environment failures from rule failures:
+          - source_timed_out: subprocess.TimeoutExpired
+          - source_unavailable: shell exit 127 ("command not found")
+          - source_crashed: any other unexpected subprocess error
+          - None: the script ran to completion; exit 0 is pass, non-0 is rule fail
+
+        Mirrors AEPRunner._execute_verifier so trajectories from both runners
+        produce identical verifier_evaluated events for the same Config.
+        """
+        src = verifier.source
+        try:
+            result = subprocess.run(
+                ["sh", "-c", src.shell],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=verifier.timeout_ms / 1000.0,
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                False,
+                VerifierError.source_timed_out,
+                {
+                    "command": src.shell,
+                    "timeout_ms": verifier.timeout_ms,
+                },
+            )
+        except OSError as e:
+            return (
+                False,
+                VerifierError.source_crashed,
+                {
+                    "command": src.shell,
+                    "stderr": str(e)[:2000],
+                },
+            )
+
+        data: dict[str, Any] = {
+            "command": src.shell,
+            "exit_code": result.returncode,
+        }
+        if result.stdout:
+            data["stdout"] = result.stdout[:2000]
+        if result.stderr:
+            data["stderr"] = result.stderr[:2000]
+
+        if result.returncode == 127:
+            return False, VerifierError.source_unavailable, data
+        passed = result.returncode == 0
+        return passed, None, data
+
+    def _apply_on_failure(self, verifier: Verifier) -> None:
+        if verifier.on_failure == OnFailure.continue_:
+            return
+        if verifier.on_failure == OnFailure.halt:
+            raise _VerifierHalt()
+        if verifier.on_failure == OnFailure.inject_correction:
+            assert verifier.correction_message is not None
+            # Queue the correction for submission via ClaudeSDKClient.query()
+            # after the current response stream completes. The driver runner's
+            # equivalent is appending a user-role message to its in-memory
+            # history; here we hand the same content to the SDK as a follow-up
+            # user prompt and let the SDK route it through its own loop.
+            self._pending_corrections.append(verifier.correction_message)
+            return
+        raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
 
     # ── AEP emission helpers ───────────────────────────────────────────────
 

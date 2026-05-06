@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# pytest is invoked from this directory by the DDD supervisor's
+# `aggregate-invariants` verifier. Add the workspace root to sys.path so
+# `from domain.order import ...` resolves without needing an editable install.
+pythonpath = ["."]
+testpaths = ["tests"]

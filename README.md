@@ -104,8 +104,8 @@ Three message classes:
 | Package | Purpose |
 |---|---|
 | [`python/aep/`](python/aep/) | Wire types, reference runner, conformance harness. Every other AEP package depends on this. |
-| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. |
-| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under the v0.1 model. |
+| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Fully compliant under v0.1. |
+| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under v0.1: every verifier trigger (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) and every `on_failure` action (`halt`, `continue`, `inject_correction`). Corrections are spliced into the SDK-owned conversation via `ClaudeSDKClient.query()` between turns. |
 
 ---
 

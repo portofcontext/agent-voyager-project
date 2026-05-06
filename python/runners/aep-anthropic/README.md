@@ -6,10 +6,15 @@ This package wraps the [Anthropic Python SDK](https://github.com/anthropics/anth
 
 ## Install
 
+This package is part of the AEP uv workspace; bootstrap from the repo root:
+
 ```bash
-pip install aep-anthropic
-export ANTHROPIC_API_KEY=...
+uv sync
+export ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)"   # or set the env var directly
 ```
+
+Once published, the standalone install will be `pip install aep-anthropic`. Until
+then, work from a checkout of the workspace.
 
 ## Quick start (programmatic)
 
@@ -78,12 +83,15 @@ Unknown models fall back to `0.0` and emit a warning. Override via `AnthropicMod
 
 ## Tests
 
-```bash
-# Driver-translation tests (mock Anthropic client, free)
-pytest -m "not real_llm"
+Run from the repo root (where `uv sync` was bootstrapped). Both forms work — pick whichever reads cleaner:
 
-# Real-LLM smoke tests (hit the live API, cost ~$0.001 per run)
-ANTHROPIC_API_KEY=sk-... pytest -m real_llm
+```bash
+# Driver-translation + CLI smoke + multi-turn tests (mock Anthropic client, free)
+uv run pytest python/runners/aep-anthropic -m "not real_llm"
+
+# Real-LLM smoke tests (hit the live API)
+ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)" \
+  uv run pytest python/runners/aep-anthropic -m real_llm
 ```
 
 The mock-client tests assert wire-format correctness — what AEP events the driver emits given specific Anthropic responses. The real-LLM smoke tests assert end-to-end integration against actual Claude responses, including cost/token accounting, boundary enforcement, and cache-token math (per SPEC.md §10.4). They use `claude-haiku-4-5-20251001` (cheapest current model) and tight boundaries.

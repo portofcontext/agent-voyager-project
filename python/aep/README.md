@@ -8,16 +8,26 @@ This package ships:
 - **Wire types** (`aep.types`) — Pydantic v2 models for every Config / Event / SupervisorMessage variant in v0.1, with discriminated unions on `type`.
 - **NDJSON IO** (`aep.io`) — line-buffered stdio readers and writers for trajectories and supervisor messages.
 - **Reference runner** (`aep.runner`) — implements the normative loop in [`SPEC.md` §9.3](../../spec/v0.1/SPEC.md#93-the-loop): strict-greater boundary, supervisor-tool RPC lifecycle, verifier lifecycle. Pluggable model and tool drivers (mock drivers ship with the package for testing).
-- **Conformance harness** (`aep.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference runner with scripted model / tools / supervisor, asserts captured trajectory against the expectations. CLI: `aep-conformance --suite path/to/cases`.
+- **Conformance harness** (`aep.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference runner with scripted model / tools / supervisor, asserts captured trajectory against the expectations. CLI: `aep-conformance run` (subcommands `run` / `validate` / `check-coverage`).
 
 The reference runner is the gate for AEP v0.1 correctness. All conformance cases MUST pass before any other AEP-compliant runner (e.g. a closed-source Rust supervisor talking to a real-LLM runner) is wired up against it.
 
 ## Quickstart
 
+The repo is a uv workspace; bootstrap once from the repo root:
+
 ```bash
-pip install -e .[dev]
-pytest                                      # runs the conformance suite as tests
-aep-conformance --suite ../../conformance/v0.1/cases   # standalone CLI
+cd /path/to/agent-execution-protocol
+uv sync
+```
+
+Then:
+
+```bash
+uv run pytest python/aep                  # runs every test in this package
+uv run aep-conformance run                # runs the conformance suite (26 cases today)
+uv run aep-conformance validate           # schema-checks the case files
+uv run aep-conformance check-coverage     # every event type has at least 1 case
 ```
 
 ## Package layout

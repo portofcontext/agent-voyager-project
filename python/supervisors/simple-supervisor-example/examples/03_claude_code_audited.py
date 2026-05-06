@@ -86,7 +86,58 @@ def main() -> int:
 
     print()
     print(render(summarize(events)))
+
+    issues = _validate_outcome(events)
+    print()
+    if issues:
+        print("== ✗ FAIL — example 03 ==")
+        for msg in issues:
+            print(f"  - {msg}")
+        return 1
+    print("== ✓ PASS — example 03 ==")
     return 0
+
+
+def _validate_outcome(events: list) -> list[str]:
+    """Post-conditions for example 03. LLM trajectory varies; outcomes don't.
+
+    PASS criteria:
+      - Run converged
+      - At least one Read tool call fired (the only allowed_tool)
+      - Some text was emitted (the agent actually answered)
+      - Errors limited to the documented accounting_reset SDK quirk
+        (any OTHER error_occurred is a real failure)
+    """
+    issues: list[str] = []
+    types = [type(ev).__name__ for ev in events]
+
+    stop = next((ev for ev in events if type(ev).__name__ == "AgentStoppedEvent"), None)
+    if stop is None:
+        issues.append("no agent_stopped event — translator exited mid-trajectory")
+        return issues
+    if str(stop.reason) != "converged":
+        issues.append(f"expected stop reason 'converged'; got {stop.reason!r}")
+
+    tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
+    if not tool_invokes:
+        issues.append("no tool calls — agent should have used Read")
+    elif not any(ev.tool == "Read" for ev in tool_invokes):
+        issues.append(f"agent never called Read; called: {[ev.tool for ev in tool_invokes]}")
+
+    if "TextEmittedEvent" not in types:
+        issues.append("no text_emitted events — agent didn't produce a response")
+
+    # accounting_reset is a known SDK quirk (see aep-claude-agent README).
+    # Any OTHER error_occurred is a real failure.
+    errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
+    unexpected = [ev for ev in errs if ev.code.value != "accounting_reset"]
+    if unexpected:
+        issues.append(
+            f"unexpected error_occurred (not accounting_reset): "
+            f"{[(e.code.value, e.message[:80]) for e in unexpected]}"
+        )
+
+    return issues
 
 
 if __name__ == "__main__":

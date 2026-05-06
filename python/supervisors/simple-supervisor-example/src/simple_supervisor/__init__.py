@@ -19,6 +19,7 @@ from simple_supervisor.profiles import (
     DDD_STRICT,
     DEV_LOOSE,
     PRESETS,
+    QUALITY_GUARDS,
     Profile,
     get_profile,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "DDD_STRICT",
     "DEV_LOOSE",
     "PRESETS",
+    "QUALITY_GUARDS",
     "Profile",
     "Summary",
     "ToolUsage",

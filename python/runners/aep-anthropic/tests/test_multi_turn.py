@@ -70,6 +70,22 @@ class _DictTools(ToolDriver):
         return ToolOutcome(output=self.mapping[tool], duration_ms=1)
 
 
+class _ErroringTools(ToolDriver):
+    """ToolDriver where invoke() always fails. Used to pin the tool_failed
+    history-shape fix: failures MUST still record a tool_result so the next
+    model call has a matching tool_use ↔ tool_result pair."""
+
+    def __init__(self, locals_: set[str], error: str) -> None:
+        self.locals = locals_
+        self.error = error
+
+    def is_local(self, tool: str) -> bool:
+        return tool in self.locals
+
+    def invoke(self, tool: str, input: dict[str, Any]) -> ToolOutcome:
+        return ToolOutcome(error=self.error, duration_ms=1)
+
+
 # ── The pinning test ──────────────────────────────────────────────────────────
 
 
@@ -310,6 +326,85 @@ def test_pure_text_turn_history_unchanged_for_string_content() -> None:
     # Assistant on turn 1 had both text AND tool_use → must render as blocks
     asst = next(m for m in client.calls[1]["messages"] if m["role"] == "assistant")
     assert isinstance(asst["content"], list)
+
+
+def test_tool_failure_records_tool_result_in_history_so_next_turn_validates() -> None:
+    """When a tool fails (ToolDriver returns ToolOutcome(error=...)), the runner
+    MUST still append a tool-role entry to history carrying the error as the
+    `tool_result.content`. Without this, the next model call sends an
+    assistant tool_use with no matching tool_result, and the API rejects:
+    'tool_use ids were found without tool_result blocks immediately after'.
+
+    Pre-fix: the runner emitted tool_failed and `return`ed without history
+    update — exactly the bug we hit running example 04 (read_file on a
+    directory path returned IsADirectoryError → tool_failed → next turn
+    400'd at the API).
+    """
+    # Turn 1: assistant calls a tool that will fail. Turn 2: assistant
+    # acknowledges and converges. The interesting check is on the SECOND
+    # API call's `messages` parameter — the tool_result for the failed call
+    # MUST be present.
+    turn1 = _mock_response(
+        content=[
+            {
+                "type": "tool_use",
+                "id": "toolu_fail",
+                "name": "read_file",
+                "input": {"path": "/some/dir"},
+            },
+        ],
+        usage={"input_tokens": 30, "output_tokens": 10},
+        stop_reason="tool_use",
+    )
+    turn2 = _mock_response(
+        content=[{"type": "text", "text": "I see, that path is a dir. Stopping."}],
+        usage={"input_tokens": 80, "output_tokens": 12},
+        stop_reason="end_turn",
+    )
+    client = _SequencedClient([turn1, turn2])
+
+    config = Config(
+        schema_version="0.1",
+        run_id="tool-fail-history",
+        model="claude-sonnet-4-6",
+        prompt="Read /some/dir",
+        boundary={"max_steps": 5},
+    )
+    driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
+    runner = AEPRunner(
+        config=config,
+        model=driver,
+        tools=_ErroringTools(locals_={"read_file"}, error="IsADirectoryError: /some/dir"),
+        supervisor=ScriptedSupervisor([]),
+    )
+    runner.run()
+
+    # The API was called twice (turn 1 + turn 2). If the bug were live, the
+    # second call would have raised before reaching the test assertions.
+    assert len(client.calls) == 2
+
+    # Inspect turn 2's messages for the tool_result corresponding to toolu_fail.
+    turn2_messages = client.calls[1]["messages"]
+    tool_result_blocks = [
+        b
+        for m in turn2_messages
+        if m["role"] == "user" and isinstance(m.get("content"), list)
+        for b in m["content"]
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    ]
+    matching = [b for b in tool_result_blocks if b.get("tool_use_id") == "toolu_fail"]
+    assert matching, (
+        "expected a tool_result block with tool_use_id='toolu_fail' in turn 2's "
+        "messages — failed tools MUST still produce a tool_result so the "
+        "tool_use/tool_result pairing isn't broken"
+    )
+    # The error string should be the user-visible content of that tool_result.
+    assert "IsADirectoryError" in matching[0]["content"]
+
+    # Trajectory: tool_failed event was emitted (not tool_returned).
+    types = [type(ev).__name__ for ev in runner.trajectory]
+    assert "ToolFailedEvent" in types
+    assert "ToolReturnedEvent" not in types
 
 
 def test_unused_imports_silenced() -> None:

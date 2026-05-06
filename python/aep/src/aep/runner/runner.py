@@ -290,6 +290,37 @@ class AEPRunner:
             return False
         return True
 
+    def _emit_tool_failed(self, tc, state: _MutableState, error: str) -> None:
+        """Emit `tool_failed` AND record an error tool_result in history.
+
+        Anthropic-style APIs require every `tool_use` block in an assistant
+        turn to be answered with a matching `tool_result` block in the next
+        message — even when the tool failed. Without history.append here, the
+        next model call sends an unmatched `tool_use` and the API rejects:
+        'tool_use ids were found without tool_result blocks immediately after'.
+
+        The error string becomes the user-visible content of the tool_result;
+        the model can read it and decide whether to retry or give up.
+        """
+        cfg = self.config
+        self._emit(
+            ToolFailedEvent(
+                run_id=cfg.run_id,
+                step=state.total_turns,
+                call_id=tc.call_id,
+                tool=tc.tool,
+                error=error,
+            )
+        )
+        self._history.append(
+            {
+                "role": "tool",
+                "tool": tc.tool,
+                "call_id": tc.call_id,
+                "output": f"Error: {error}",
+            }
+        )
+
     def _handle_tool_call(self, tc, state: _MutableState) -> None:
         cfg = self.config
         self._emit(
@@ -304,15 +335,7 @@ class AEPRunner:
         state.tools_invoked[tc.tool] = state.tools_invoked.get(tc.tool, 0) + 1
 
         if self._allowed_tools is not None and tc.tool not in self._allowed_tools:
-            self._emit(
-                ToolFailedEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    call_id=tc.call_id,
-                    tool=tc.tool,
-                    error=f"tool {tc.tool!r} not in Config.allowed_tools",
-                )
-            )
+            self._emit_tool_failed(tc, state, f"tool {tc.tool!r} not in Config.allowed_tools")
             return
 
         if tc.tool in self._supervisor_tools_by_name:
@@ -320,28 +343,12 @@ class AEPRunner:
             return
 
         if not self.tools.is_local(tc.tool):
-            self._emit(
-                ToolFailedEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    call_id=tc.call_id,
-                    tool=tc.tool,
-                    error=f"unknown tool {tc.tool!r}",
-                )
-            )
+            self._emit_tool_failed(tc, state, f"unknown tool {tc.tool!r}")
             return
 
         outcome: ToolOutcome = self.tools.invoke(tc.tool, tc.input)
         if outcome.error is not None and not outcome.rejected:
-            self._emit(
-                ToolFailedEvent(
-                    run_id=cfg.run_id,
-                    step=state.total_turns,
-                    call_id=tc.call_id,
-                    tool=tc.tool,
-                    error=outcome.error,
-                )
-            )
+            self._emit_tool_failed(tc, state, outcome.error)
             return
 
         out_str = outcome.output if outcome.output is not None else ""
