@@ -39,7 +39,6 @@ from aep.enums import (
     BUILT_IN_VERIFIER_TRIGGERS,
     ErrorCode,
     OnFailure,
-    Source,
     StopReason,
     VerifierError,
     is_on_tool_trigger,
@@ -129,9 +128,9 @@ class Boundary(BaseModel):
 class Skill(BaseModel):
     """Reference to a SKILL.md following the agentskills.io specification.
 
-    `name` MUST follow agentskills.io rules (1–64 chars, lowercase a-z digits
+    `name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits
     hyphens, no leading/trailing hyphen, no consecutive hyphens). The
-    `aep_source` and `aep_config` fields are AEP extensions — agentskills.io
+    `aep_source` and `aep_config` fields are AEP extensions; agentskills.io
     doesn't define a remote-load scheme.
     """
 

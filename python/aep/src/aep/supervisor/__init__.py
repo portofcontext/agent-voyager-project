@@ -11,12 +11,12 @@ from typing import Any
 
 from aep.types import (
     SOURCE_SUPERVISOR,
+    ZERO_SPAN_ID,
     JsonRpcError,
     JsonRpcResponsePayload,
     ToolExecRequestEvent,
     ToolExecResolvedData,
     ToolExecResolvedEvent,
-    ZERO_SPAN_ID,
     new_span_id,
     new_trace_id,
     source_for_mcp,

@@ -182,7 +182,7 @@ def test_mcp_tool_descriptor_meta_is_underscore_meta_per_mcp_spec() -> None:
     t = Tool(
         name="t1",
         inputSchema={"type": "object"},
-        **{"_meta": {"aep": {"timeout_ms": 5000}}},  # alias key on construction
+        _meta={"aep": {"timeout_ms": 5000}},  # alias key on construction
     )
     wire = t.model_dump(by_alias=True, exclude_none=True, mode="json")
     assert "_meta" in wire

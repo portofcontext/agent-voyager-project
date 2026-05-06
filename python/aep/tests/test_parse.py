@@ -160,7 +160,7 @@ def test_supervisor_message_invalid_source_rejected() -> None:
             "rpc": {"jsonrpc": "2.0", "id": "req-1", "result": "ok"},
         },
     )
-    with pytest.raises(ValueError, match="tool_exec_resolved.source"):
+    with pytest.raises(ValueError, match=r"tool_exec_resolved\.source"):
         parse_supervisor_message(payload)
 
 

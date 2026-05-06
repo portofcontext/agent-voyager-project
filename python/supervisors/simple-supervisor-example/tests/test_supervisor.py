@@ -129,6 +129,7 @@ def _make_state(*, cost: float, tokens: int, turns: int) -> dict:
 
 def test_summarize_classifies_three_fact_classes() -> None:
     from aep.types import (
+        ZERO_SPAN_ID,
         AgentStartedData,
         AgentStoppedData,
         CostRecordedData,
@@ -136,7 +137,6 @@ def test_summarize_classifies_three_fact_classes() -> None:
         ToolInvokedData,
         ToolReturnedData,
         VerifierEvaluatedData,
-        ZERO_SPAN_ID,
         new_span_id,
         new_trace_id,
     )

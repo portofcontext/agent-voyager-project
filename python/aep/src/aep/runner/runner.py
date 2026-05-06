@@ -45,7 +45,6 @@ from aep.runner.drivers import (
     ToolOutcome,
 )
 from aep.types import (
-    SOURCE_RUNNER,
     ZERO_SPAN_ID,
     AgentStartedData,
     AgentStartedEvent,
@@ -433,11 +432,9 @@ class AEPRunner:
 
         invoked_data_kwargs: dict[str, Any] = {
             "step": state.total_turns,
-            **{
-                "gen_ai.tool.call.id": tc.call_id,
-                "gen_ai.tool.name": tc.tool,
-                "gen_ai.tool.call.arguments": tc.input,
-            },
+            "gen_ai.tool.call.id": tc.call_id,
+            "gen_ai.tool.name": tc.tool,
+            "gen_ai.tool.call.arguments": tc.input,
         }
         if dispatch_target is not None:
             invoked_data_kwargs["aep.tool.dispatch_target"] = dispatch_target
@@ -474,11 +471,9 @@ class AEPRunner:
         returned_kwargs: dict[str, Any] = {
             "step": state.total_turns,
             "duration_ms": outcome.duration_ms,
-            **{
-                "gen_ai.tool.call.id": tc.call_id,
-                "gen_ai.tool.name": tc.tool,
-                "aep.tool.result.text": out_str,
-            },
+            "gen_ai.tool.call.id": tc.call_id,
+            "gen_ai.tool.name": tc.tool,
+            "aep.tool.result.text": out_str,
         }
         if outcome.output_json is not None:
             returned_kwargs["aep.tool.result.structured"] = outcome.output_json
@@ -603,11 +598,9 @@ class AEPRunner:
         returned_kwargs: dict[str, Any] = {
             "step": state.total_turns,
             "duration_ms": 1,
-            **{
-                "gen_ai.tool.call.id": tc.call_id,
-                "gen_ai.tool.name": tc.tool,
-                "aep.tool.result.text": output,
-            },
+            "gen_ai.tool.call.id": tc.call_id,
+            "gen_ai.tool.name": tc.tool,
+            "aep.tool.result.text": output,
         }
         if output_structured is not None:
             returned_kwargs["aep.tool.result.structured"] = output_structured
@@ -647,11 +640,9 @@ class AEPRunner:
         duration_ms = int((_time.monotonic() - t0) * 1000)
         cfg = self.config
         kwargs: dict[str, Any] = {
-            **{
-                "aep.verifier.name": verifier.name,
-                "aep.verifier.passed": passed,
-                "aep.verifier.duration_ms": duration_ms,
-            },
+            "aep.verifier.name": verifier.name,
+            "aep.verifier.passed": passed,
+            "aep.verifier.duration_ms": duration_ms,
         }
         if self._state.total_turns:
             kwargs["step"] = self._state.total_turns
@@ -741,8 +732,8 @@ class AEPRunner:
     # ── First / last events ─────────────────────────────────────────────────
 
     def _build_tool_decls(self) -> list[dict[str, Any]] | None:
-        """Effective tool surface for `agent_started.data.tools` — what the model
-        can actually call. = (Config.tools RPC ∪ runner built-ins) filtered by
+        """Effective tool surface for `agent_started.data.tools` -- what the model
+        can actually call. = (Config.tools RPC + runner built-ins) filtered by
         Config.allowed_tools when set. MCP-shaped (camelCase `inputSchema`)."""
         cfg = self.config
         candidates: list[dict[str, Any]] = []
