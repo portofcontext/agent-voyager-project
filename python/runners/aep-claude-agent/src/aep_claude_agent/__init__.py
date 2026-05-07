@@ -4,6 +4,7 @@ Observer pattern: the SDK owns its loop; this package translates its lifecycle
 events into AEP v0.1 events.
 """
 
+from aep_claude_agent.local_tools_bridge import to_sdk_mcp_server
 from aep_claude_agent.traced_client import TracedClaudeSDKClient, traced_claude_sdk_client
 from aep_claude_agent.translator import ClaudeAgentTranslator
 
@@ -13,5 +14,6 @@ __all__ = [
     "ClaudeAgentTranslator",
     "TracedClaudeSDKClient",
     "__version__",
+    "to_sdk_mcp_server",
     "traced_claude_sdk_client",
 ]

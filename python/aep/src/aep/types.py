@@ -95,6 +95,8 @@ T_TOOL_INVOKED = "aep.tool_invoked"
 T_TOOL_RETURNED = "aep.tool_returned"
 T_TOOL_FAILED = "aep.tool_failed"
 T_TEXT_EMITTED = "aep.text_emitted"
+T_REASONING_EMITTED = "aep.reasoning_emitted"
+T_REFUSAL_RECORDED = "aep.refusal_recorded"
 T_COST_RECORDED = "aep.cost_recorded"
 T_SKILL_LOADED = "aep.skill_loaded"
 T_SKILL_EXECUTED = "aep.skill_executed"
@@ -500,6 +502,9 @@ class ModelTurnEndedData(_SpanData):
         default=None, ge=0, alias="gen_ai.usage.reasoning.output_tokens"
     )
     aep_cost_usd: float = Field(ge=0, alias="aep.cost_usd")
+    aep_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
+        default=None, alias="aep.cost.source"
+    )
 
 
 class ToolInvokedData(_SpanData):
@@ -591,8 +596,75 @@ class TextEmittedData(_SpanData):
     aep_text: str = Field(alias="aep.text")
 
 
+class RefusalRecordedData(_SpanData):
+    """The model declined to generate a response or had its output filtered.
+
+    Common across providers but each exposes a different slice:
+      - Anthropic:  `stop_reason="refusal"` (or `"sensitive"`), no
+                    structured category, sometimes a refusal-flavored
+                    text block.
+      - OpenAI:     `finish_reason="content_filter"` plus a dedicated
+                    `refusal` field on the assistant message containing
+                    the model's refusal text.
+      - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,
+                    `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus
+                    per-category `safetyRatings`.
+
+    AEP normalizes to a provider-agnostic shape: `reason` is the
+    provider's raw code (verbatim, so audit pipelines can match exact
+    upstream strings), `message` is the model's refusal text when given,
+    `category` is the provider's safety category (free-form because
+    every provider names them differently), `provider` lets downstream
+    consumers normalize the reason code without context-guessing.
+
+    A refusal terminates the turn — the model produced no useful text or
+    tool call. Whether the *run* terminates is a runner decision (the
+    reference runner stops with `StopReason.refused`); a higher-level
+    supervisor may choose to reset history and retry.
+    """
+
+    step: int = Field(ge=0)
+    aep_refusal_reason: str = Field(min_length=1, alias="aep.refusal.reason")
+    aep_refusal_message: str | None = Field(default=None, alias="aep.refusal.message")
+    aep_refusal_category: str | None = Field(default=None, alias="aep.refusal.category")
+    aep_refusal_provider: str | None = Field(default=None, alias="aep.refusal.provider")
+
+
+class ReasoningEmittedData(_SpanData):
+    """The model produced a reasoning / thinking block during this turn.
+
+    Distinct from `text_emitted` — reasoning is not user-facing output;
+    it's the model's internal chain-of-thought that some providers
+    expose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,
+    etc.). Consumers can filter on this event type to redact / collapse
+    chain-of-thought from displays without losing it from the audit log.
+
+    `aep.reasoning.signature` rides along when the provider returns a
+    cryptographic signature on the thinking block (Anthropic does this
+    for redacted_thinking blocks); empty when the provider doesn't.
+    `aep.reasoning.redacted` flags blocks the provider has returned in
+    encrypted-only form (no plaintext) — the wire still records the
+    occurrence so audit consumers can count thinking turns.
+    """
+
+    step: int = Field(ge=0)
+    aep_reasoning_text: str = Field(alias="aep.reasoning.text")
+    aep_reasoning_signature: str | None = Field(default=None, alias="aep.reasoning.signature")
+    aep_reasoning_redacted: bool | None = Field(default=None, alias="aep.reasoning.redacted")
+
+
 class CostRecordedData(_SpanData):
     aep_state: RunStateSnapshot = Field(alias="aep.state")
+    # Provenance of the snapshot's running cost total. Set to `reported`
+    # on the reconciliation event a runner emits after the API/SDK hands
+    # back an authoritative total (Claude Agent SDK's
+    # ResultMessage.total_cost_usd, etc.). Per-turn cost_recorded events
+    # leave it unset because the running total is a mix of per-turn
+    # numbers — `aep.cost.source` on each `model_turn_ended` event is
+    # the authoritative tag for individual turn costs.
+    aep_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
+        default=None, alias="aep.cost.source"
+    )
 
 
 class SkillLoadedData(_SpanData):
@@ -866,6 +938,18 @@ class TextEmittedEvent(_CloudEventBase):
     data: TextEmittedData
 
 
+class ReasoningEmittedEvent(_CloudEventBase):
+    type: Literal["aep.reasoning_emitted"] = T_REASONING_EMITTED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: ReasoningEmittedData
+
+
+class RefusalRecordedEvent(_CloudEventBase):
+    type: Literal["aep.refusal_recorded"] = T_REFUSAL_RECORDED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: RefusalRecordedData
+
+
 class CostRecordedEvent(_CloudEventBase):
     type: Literal["aep.cost_recorded"] = T_COST_RECORDED
     source: Literal["aep://runner"] = SOURCE_RUNNER
@@ -986,6 +1070,8 @@ _RUNNER_EVENT_TYPES = (
     SubagentReturnedEvent,
     SubagentFailedEvent,
     TextEmittedEvent,
+    ReasoningEmittedEvent,
+    RefusalRecordedEvent,
     CostRecordedEvent,
     SkillLoadedEvent,
     SkillExecutedEvent,
@@ -1015,6 +1101,8 @@ Event = Annotated[
     | SubagentReturnedEvent
     | SubagentFailedEvent
     | TextEmittedEvent
+    | ReasoningEmittedEvent
+    | RefusalRecordedEvent
     | CostRecordedEvent
     | SkillLoadedEvent
     | SkillExecutedEvent

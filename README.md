@@ -109,8 +109,6 @@ Three message classes:
 | JSON Schemas | [`spec/v0.1/`](spec/v0.1/) — Draft 2020-12 |
 | Conformance suite | [`conformance/v0.1/`](conformance/v0.1/) — language-agnostic test cases every SDK MUST pass |
 | Contributor guide | [`CLAUDE.md`](CLAUDE.md) — the seams principle, test layers, decision tree |
-| Visual manifesto | [`index.html`](index.html) |
-
 ---
 
 ## Python implementation

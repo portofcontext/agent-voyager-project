@@ -45,9 +45,10 @@ from aep import (
     BoundaryExhausted,
     SubagentScope,
     ToolCallRecorder,
+    compute_cost,
     current_tracer,
 )
-from aep_anthropic.driver import DEFAULT_PRICES, PriceTable, _compute_cost
+from aep_anthropic.driver import DEFAULT_PRICES, PriceTable
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -87,8 +88,8 @@ def _record_anthropic_response(
 
     # AEP §9.4: tokens_input INCLUDES cache reads. SDK reports fresh-only.
     aep_input = input_tokens + cache_read + cache_write
-    cost = _compute_cost(
-        model=model,
+    cost, cost_source = compute_cost(
+        model,
         input_tokens=aep_input,
         output_tokens=output_tokens,
         cache_read=cache_read,
@@ -103,6 +104,7 @@ def _record_anthropic_response(
         tokens_input=aep_input,
         tokens_output=output_tokens,
         cost_usd=cost,
+        cost_source=cost_source,
         text=text,
         cache_read=cache_read or None,
         cache_write=cache_write or None,

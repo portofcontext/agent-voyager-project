@@ -69,6 +69,10 @@ from aep.types import (
     ModelTurnEndedEvent,
     ModelTurnStartedData,
     ModelTurnStartedEvent,
+    ReasoningEmittedData,
+    ReasoningEmittedEvent,
+    RefusalRecordedData,
+    RefusalRecordedEvent,
     RunStateSnapshot,
     SkillLoadedData,
     SkillLoadedEvent,
@@ -305,6 +309,7 @@ class AEPRunner:
                 "gen_ai.usage.cache_creation.input_tokens": response.tokens_cache_write,
                 "gen_ai.usage.reasoning.output_tokens": response.tokens_reasoning_output,
                 "aep.cost_usd": response.cost_usd,
+                "aep.cost.source": response.cost_source,
             }
             if response.response_model is not None:
                 ended_kwargs["gen_ai.response.model"] = response.response_model
@@ -349,6 +354,27 @@ class AEPRunner:
                 self._emit_agent_stopped(decision.reason or StopReason.budget_exhausted)
                 return
 
+            # Reasoning / thinking blocks land BEFORE text and tool calls —
+            # the wire reconstructs the turn as "thought, then spoke / acted".
+            # Each block becomes its own event so consumers can collapse
+            # chain-of-thought from displays without losing it from the audit.
+            for rb in response.reasoning_blocks:
+                reasoning_kwargs: dict[str, Any] = {"aep.reasoning.text": rb.text}
+                if rb.signature:
+                    reasoning_kwargs["aep.reasoning.signature"] = rb.signature
+                if rb.redacted:
+                    reasoning_kwargs["aep.reasoning.redacted"] = rb.redacted
+                self._emit(
+                    ReasoningEmittedEvent(
+                        subject=cfg.run_id,
+                        data=ReasoningEmittedData(
+                            **self._own_span(self._current_turn_span_id),
+                            step=state.total_turns,
+                            **reasoning_kwargs,
+                        ),
+                    )
+                )
+
             if response.text:
                 self._emit(
                     TextEmittedEvent(
@@ -360,6 +386,46 @@ class AEPRunner:
                         ),
                     )
                 )
+
+            # Refusal handling. If the driver detected a refusal-flavored
+            # signal (Anthropic stop_reason="refusal"|"sensitive", OpenAI
+            # content_filter, Gemini SAFETY/BLOCKLIST/etc.), emit
+            # `refusal_recorded` and terminate with StopReason.refused.
+            # The refused turn produced no useful content — we don't
+            # append it to history, so a higher-level supervisor can
+            # reset and retry without re-feeding the refused turn.
+            if response.refusal is not None:
+                refusal_kwargs: dict[str, Any] = {
+                    "aep.refusal.reason": response.refusal.reason,
+                }
+                if response.refusal.message:
+                    refusal_kwargs["aep.refusal.message"] = response.refusal.message
+                if response.refusal.category:
+                    refusal_kwargs["aep.refusal.category"] = response.refusal.category
+                if response.refusal.provider:
+                    refusal_kwargs["aep.refusal.provider"] = response.refusal.provider
+                self._emit(
+                    RefusalRecordedEvent(
+                        subject=cfg.run_id,
+                        data=RefusalRecordedData(
+                            **self._own_span(self._current_turn_span_id),
+                            step=state.total_turns,
+                            **refusal_kwargs,
+                        ),
+                    )
+                )
+                self._run_verifiers_for("at_end")
+                self._emit_agent_stopped(StopReason.refused)
+                return
+
+            # Server-side tool calls (e.g. Anthropic's MCP connector running
+            # `mcp_tool_use` blocks inline during the request, or hosted
+            # `web_search_tool_use` blocks). These ALREADY happened — no
+            # runner dispatch — so we emit synthetic tool_invoked /
+            # tool_returned events for per-call wire fidelity, parented to
+            # the turn span so the trajectory tree stays consistent.
+            for stc in response.server_tool_calls:
+                self._emit_server_tool_call(stc, state)
 
             # Always record the assistant turn (text + tool_calls if any) before
             # dispatching tools. Without the assistant message, the next model
@@ -449,6 +515,74 @@ class AEPRunner:
             )
             return False
         return True
+
+    def _emit_server_tool_call(self, stc, state: _MutableState) -> None:
+        """Emit synthetic tool_invoked + tool_returned (or tool_failed) for a
+        tool the API/SDK ran server-side during this turn.
+
+        These events are observational — no runner dispatch happens. We
+        share one span across the pair so consumers can correlate them
+        the same way they correlate runner-dispatched tools.
+        Parent span is the current turn (the call happened inline during
+        that model request). Tags `aep.tool.dispatch_target` and, when
+        present, `aep.mcp_server_id` come from the driver.
+        """
+        cfg = self.config
+        tool_span_id = new_span_id()
+        invoked_kwargs: dict[str, Any] = {
+            "gen_ai.tool.call.id": stc.call_id,
+            "gen_ai.tool.name": stc.tool,
+            "gen_ai.tool.call.arguments": dict(stc.input),
+            "aep.tool.dispatch_target": stc.dispatch_target,
+        }
+        if stc.server_id:
+            invoked_kwargs["aep.mcp_server_id"] = stc.server_id
+        if stc.subtype:
+            invoked_kwargs["aep.tool.subtype"] = stc.subtype
+        self._emit(
+            ToolInvokedEvent(
+                subject=cfg.run_id,
+                data=ToolInvokedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    step=state.total_turns,
+                    **invoked_kwargs,
+                ),
+            )
+        )
+        if stc.is_error:
+            self._emit(
+                ToolFailedEvent(
+                    subject=cfg.run_id,
+                    data=ToolFailedData(
+                        **self._shared_span(tool_span_id, self._current_turn_span_id),
+                        step=state.total_turns,
+                        **{
+                            "gen_ai.tool.call.id": stc.call_id,
+                            "gen_ai.tool.name": stc.tool,
+                            "aep.tool.error": stc.output_text or "server-side tool reported error",
+                        },
+                    ),
+                )
+            )
+            return
+        returned_kwargs: dict[str, Any] = {
+            "gen_ai.tool.call.id": stc.call_id,
+            "gen_ai.tool.name": stc.tool,
+            "aep.tool.result.text": stc.output_text,
+        }
+        if stc.output_structured is not None:
+            returned_kwargs["aep.tool.result.structured"] = stc.output_structured
+        self._emit(
+            ToolReturnedEvent(
+                subject=cfg.run_id,
+                data=ToolReturnedData(
+                    **self._shared_span(tool_span_id, self._current_turn_span_id),
+                    step=state.total_turns,
+                    duration_ms=stc.duration_ms,
+                    **returned_kwargs,
+                ),
+            )
+        )
 
     def _emit_tool_failed(self, tc, state: _MutableState, error: str) -> None:
         """Emit `tool_failed` AND record an error tool_result in history.

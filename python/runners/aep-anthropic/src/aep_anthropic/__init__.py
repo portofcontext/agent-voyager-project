@@ -9,6 +9,7 @@ from aep_anthropic.driver import (
     DEFAULT_PRICES,
     AnthropicModelDriver,
     PriceTable,
+    build_anthropic_mcp_servers,
     build_anthropic_tools,
 )
 from aep_anthropic.traced_client import AnthropicTracedClient, wrap_anthropic
@@ -21,6 +22,7 @@ __all__ = [
     "AnthropicTracedClient",
     "PriceTable",
     "__version__",
+    "build_anthropic_mcp_servers",
     "build_anthropic_tools",
     "wrap_anthropic",
 ]

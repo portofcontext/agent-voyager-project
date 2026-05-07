@@ -12,10 +12,12 @@ from aep.runner.drivers import (
     ToolDriver,
     ToolOutcome,
 )
+from aep.runner.local_tools import LocalTools
 from aep.runner.runner import AEPRunner
 
 __all__ = [
     "AEPRunner",
+    "LocalTools",
     "ModelDriver",
     "ModelResponse",
     "ScriptedToolCall",

@@ -35,7 +35,6 @@ import logging
 import subprocess
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -52,10 +51,14 @@ from aep import (
     CostRecordedEvent,
     ErrorOccurredData,
     ErrorOccurredEvent,
+    McpServerConnectedData,
+    McpServerConnectedEvent,
     ModelTurnEndedData,
     ModelTurnEndedEvent,
     ModelTurnStartedData,
     ModelTurnStartedEvent,
+    ReasoningEmittedData,
+    ReasoningEmittedEvent,
     RunStateSnapshot,
     Source,
     StopReason,
@@ -79,56 +82,66 @@ from aep import (
 from aep.enums import ErrorCode, OnFailure, VerifierError
 from aep.types import now_iso
 
+# MCP protocol version we declare on `mcp_server_connected` events. Same
+# value the AEP reference runner uses; tracks the upstream MCP spec.
+MCP_PROTOCOL_VERSION = "2025-11-25"
+
 logger = logging.getLogger(__name__)
 
 
-# ── Pricing (mirrors aep-anthropic's table; cost not surfaced by the SDK per turn) ──
+# ── Pricing ───────────────────────────────────────────────────────────────────
+#
+# Loads from `aep.pricing` (shared across runner packages) so a single
+# table change covers both. `cost_source` rides alongside the cost number
+# on the wire under `aep.cost.source`.
 
 
-@dataclass(frozen=True)
-class _ModelPrice:
-    input: float
-    output: float
-    cache_read: float = 0.0
-    cache_write: float = 0.0
+_DEFAULT_PRICES_CACHE: dict[str, Any] | None = None
 
 
-_DEFAULT_PRICES: dict[str, _ModelPrice] = {
-    "claude-opus-4-7": _ModelPrice(input=15.0, output=75.0, cache_read=1.50, cache_write=18.75),
-    "claude-sonnet-4-6": _ModelPrice(input=3.0, output=15.0, cache_read=0.30, cache_write=3.75),
-    "claude-haiku-4-5-20251001": _ModelPrice(
-        input=1.0, output=5.0, cache_read=0.10, cache_write=1.25
-    ),
-}
+def _default_prices() -> dict[str, Any]:
+    global _DEFAULT_PRICES_CACHE
+    if _DEFAULT_PRICES_CACHE is None:
+        from aep import load_default_prices
+
+        _DEFAULT_PRICES_CACHE = load_default_prices()
+    return _DEFAULT_PRICES_CACHE
 
 
-def _compute_cost(model: str, usage: dict[str, Any] | None) -> tuple[int, int, int, int, float]:
-    """Return (tokens_input, tokens_output, cache_read, cache_write, cost_usd) for one turn.
+def _compute_cost(
+    model: str, usage: dict[str, Any] | None
+) -> tuple[int, int, int, int, float, str]:
+    """Return (tokens_input, tokens_output, cache_read, cache_write, cost_usd, cost_source).
 
     AEP convention: tokens_input INCLUDES cache reads. Anthropic reports the
-    fresh-only number, so we add cache reads/writes back."""
+    fresh-only number, so we add cache reads/writes back. `cost_source` is
+    "computed" when we got it from the price table, "unknown" when the
+    model is missing — caller stamps it on `aep.cost.source` so audit
+    consumers can tell trusted numbers from gap-fills."""
     if not usage:
-        return 0, 0, 0, 0, 0.0
+        return 0, 0, 0, 0, 0.0, "computed"
     input_t = int(usage.get("input_tokens", 0) or 0)
     output_t = int(usage.get("output_tokens", 0) or 0)
     cache_r = int(usage.get("cache_read_input_tokens", 0) or 0)
     cache_w = int(usage.get("cache_creation_input_tokens", 0) or 0)
     aep_input = input_t + cache_r + cache_w
 
-    p = _DEFAULT_PRICES.get(model)
-    if p is None:
+    from aep import COST_SOURCE_UNKNOWN
+    from aep import compute_cost as _shared_compute
+
+    cost, source = _shared_compute(
+        model,
+        input_tokens=aep_input,
+        output_tokens=output_t,
+        cache_read=cache_r,
+        cache_write=cache_w,
+        prices=_default_prices(),
+    )
+    if source == COST_SOURCE_UNKNOWN:
         warnings.warn(
             f"aep-claude-agent: no price for model {model!r}; cost reported as 0.0", stacklevel=2
         )
-        return aep_input, output_t, cache_r, cache_w, 0.0
-    fresh = max(0, aep_input - cache_r - cache_w)
-    cost = (
-        fresh * p.input / 1_000_000
-        + cache_r * p.cache_read / 1_000_000
-        + cache_w * p.cache_write / 1_000_000
-        + output_t * p.output / 1_000_000
-    )
-    return aep_input, output_t, cache_r, cache_w, cost
+    return aep_input, output_t, cache_r, cache_w, cost, source
 
 
 def _monotonic_ms() -> int:
@@ -170,6 +183,8 @@ class ClaudeAgentTranslator:
         config: Config,
         on_event: Callable[[BaseModel], None],
         *,
+        local_tools: Any | None = None,
+        local_tools_server_name: str = "local",
         sdk_client_cls: Callable[..., Any] | None = None,
         sdk_options_cls: type | None = None,
         sdk_hook_matcher_cls: type | None = None,
@@ -192,6 +207,8 @@ class ClaudeAgentTranslator:
         """
         self.config = config
         self.on_event = on_event
+        self._local_tools = local_tools
+        self._local_tools_server_name = local_tools_server_name
         self._call_seq = itertools.count(1)
         self._sa_seq = itertools.count(1)
         self._step = 0
@@ -418,6 +435,12 @@ class ClaudeAgentTranslator:
           - Config.boundary.max_cost_usd → options.max_budget_usd
           - Config.model          → options.model
           - Config.subagents      → options.agents = {name: AgentDefinition(...)}
+          - Config.mcp_servers    → options.mcp_servers — the SDK owns the
+                                    connection lifecycle, tools/list discovery,
+                                    and dispatch. Tools the SDK exposes from
+                                    these servers surface to PreToolUse with
+                                    the `mcp__<server>__<tool>` naming
+                                    convention; we tag them on the AEP wire.
           - hooks={PreToolUse, PostToolUse} → translator-emitted tool_invoked / tool_returned
                                               OR subagent_invoked / subagent_returned when
                                               the tool_use is the SDK's `Agent` tool with
@@ -441,6 +464,21 @@ class ClaudeAgentTranslator:
                 kwargs["max_budget_usd"] = cfg.boundary.max_cost_usd
         if cfg.subagents:
             kwargs["agents"] = self._build_sdk_agents()
+        if cfg.mcp_servers:
+            kwargs["mcp_servers"] = self._build_sdk_mcp_servers()
+        # Bridge any user-provided LocalTools into the SDK's in-process
+        # MCP server slot so a single AEP-LocalTools registration works
+        # across runners. Tools land on the wire as `mcp__<name>__<tool>`
+        # and — because the bridged server is NOT in Config.mcp_servers —
+        # the existing tag-MCP-by-Config logic correctly tags them as
+        # `dispatch_target=local`.
+        if self._local_tools is not None and self._local_tools.entries():
+            from aep_claude_agent.local_tools_bridge import to_sdk_mcp_server
+
+            kwargs.setdefault("mcp_servers", {})
+            kwargs["mcp_servers"][self._local_tools_server_name] = to_sdk_mcp_server(
+                self._local_tools, name=self._local_tools_server_name
+            )
 
         kwargs["hooks"] = {
             "PreToolUse": [
@@ -520,6 +558,60 @@ class ClaudeAgentTranslator:
                 agents[sa.name] = payload
         return agents
 
+    def _build_sdk_mcp_servers(self) -> dict[str, dict[str, Any]]:
+        """Translate Config.mcp_servers → ClaudeAgentOptions.mcp_servers.
+
+        The Claude Agent SDK accepts a dict keyed by server id; each entry
+        is a transport-shape dict ({type: stdio, command, args, env} or
+        {type: http, url, headers}). The SDK owns connect / tools/list /
+        dispatch from there.
+
+        AEP's `aep://mcp/<id>` URI scheme uses the same `id` as the SDK's
+        dict key — that's what links a `tool_exec_resolved` reply back to
+        the originating server.
+        """
+        servers: dict[str, dict[str, Any]] = {}
+        for s in self.config.mcp_servers or []:
+            entry: dict[str, Any] = {"type": s.transport}
+            if s.transport == "stdio":
+                if s.command:
+                    entry["command"] = list(s.command)
+                if s.args:
+                    entry["args"] = list(s.args)
+                if s.env:
+                    entry["env"] = dict(s.env)
+            else:  # http
+                if s.url:
+                    entry["url"] = s.url
+                if s.auth is not None:
+                    # AEP's McpHttpAuth uses {type: bearer, token_env: ENV_VAR}.
+                    # The SDK's HTTP transport expects an Authorization header;
+                    # resolve the env var here so the secret never lands on
+                    # the wire (Config / events).
+                    import os as _os
+
+                    token = _os.environ.get(s.auth.token_env, "")
+                    if token:
+                        entry["headers"] = {"Authorization": f"Bearer {token}"}
+            servers[s.id] = entry
+        return servers
+
+    @staticmethod
+    def _mcp_server_id_from_tool_name(tool_name: str) -> str | None:
+        """Claude Code's MCP tools follow the `mcp__<server_id>__<tool>`
+        naming convention. Extract the server id, or None if this isn't
+        an MCP-routed tool."""
+        if not tool_name.startswith("mcp__"):
+            return None
+        rest = tool_name[len("mcp__") :]
+        # Server ids may contain underscores; the separator between server
+        # and tool name is exactly `__`. Split on the FIRST `__` after the
+        # prefix; everything before is the server id, after is the tool.
+        idx = rest.find("__")
+        if idx <= 0:
+            return None
+        return rest[:idx]
+
     def _on_sdk_message(self, message: Any) -> None:
         """Route a single SDK Message instance to translator emitters.
 
@@ -548,7 +640,7 @@ class ClaudeAgentTranslator:
         cfg = self.config
         usage = getattr(message, "usage", None)
         model_id = getattr(message, "model", cfg.model or "unspecified")
-        cum_ti, cum_to, cum_cr, cum_cw, cum_cost = _compute_cost(model_id, usage)
+        cum_ti, cum_to, cum_cr, cum_cw, cum_cost, cost_source = _compute_cost(model_id, usage)
 
         # Detect unexpected cumulative-reset BEFORE computing deltas.
         unexpected_reset = (
@@ -642,6 +734,49 @@ class ClaudeAgentTranslator:
                             ),
                         )
                     )
+            elif btype == "ThinkingBlock":
+                # Extended-thinking block: chain-of-thought the model
+                # exposed for this turn. Emit reasoning_emitted so audit
+                # consumers can collapse / redact thinking from displays
+                # without losing it from the trajectory. Anthropic also
+                # returns a `signature` for replay across turns.
+                rkwargs: dict[str, Any] = {
+                    "aep.reasoning.text": getattr(block, "thinking", "") or "",
+                }
+                sig = getattr(block, "signature", None)
+                if sig:
+                    rkwargs["aep.reasoning.signature"] = sig
+                self._emit(
+                    ReasoningEmittedEvent(
+                        subject=cfg.run_id,
+                        data=ReasoningEmittedData(
+                            **self._own_span(self._current_turn_span_id),
+                            step=self._step,
+                            **rkwargs,
+                        ),
+                    )
+                )
+            elif btype == "RedactedThinkingBlock":
+                # Encrypted-only thinking: no plaintext, but record the
+                # occurrence + signature so audit consumers can count
+                # thinking turns even when the SDK doesn't expose content.
+                rkwargs = {
+                    "aep.reasoning.text": "",
+                    "aep.reasoning.redacted": True,
+                }
+                sig = getattr(block, "data", None) or getattr(block, "signature", None)
+                if sig:
+                    rkwargs["aep.reasoning.signature"] = sig
+                self._emit(
+                    ReasoningEmittedEvent(
+                        subject=cfg.run_id,
+                        data=ReasoningEmittedData(
+                            **self._own_span(self._current_turn_span_id),
+                            step=self._step,
+                            **rkwargs,
+                        ),
+                    )
+                )
             # ToolUseBlock content is observed via the PreToolUse hook (which
             # fires in step with the SDK's actual tool dispatch).
 
@@ -655,6 +790,7 @@ class ClaudeAgentTranslator:
             "gen_ai.usage.input_tokens": delta_ti,
             "gen_ai.usage.output_tokens": delta_to,
             "aep.cost_usd": delta_cost,
+            "aep.cost.source": cost_source,
             "gen_ai.response.model": model_id,
         }
         if delta_cr:
@@ -711,8 +847,19 @@ class ClaudeAgentTranslator:
             self._run_verifiers_for_trigger("after_each_turn")
 
     def _handle_result_message(self, message: Any) -> None:
-        """ResultMessage closes the run with authoritative cost. Reconcile if it
-        differs from our per-turn sum (the SDK's number wins)."""
+        """ResultMessage closes the run with the SDK's authoritative cost
+        total. We:
+
+          1. Replace the running total with the SDK's number (their math
+             beats ours — they have per-API-call truth we don't).
+          2. Emit a final `cost_recorded` tagged `aep.cost.source=reported`
+             so audit consumers can see the moment we switched from
+             locally-computed estimates to provider-truth.
+
+        Per-turn `model_turn_ended` events stay tagged as `computed`; the
+        SDK doesn't expose per-turn cost on AssistantMessage. The
+        reconciliation event surfaces the delta if anyone wants to
+        cross-check our running estimate against the SDK total."""
         sdk_cost = getattr(message, "total_cost_usd", None)
         if sdk_cost is not None:
             self._total_cost_usd = float(sdk_cost)
@@ -721,7 +868,10 @@ class ClaudeAgentTranslator:
                     subject=self.config.run_id,
                     data=CostRecordedData(
                         **self._own_span(self._current_parent_for_run_event()),
-                        **{"aep.state": self._snapshot()},
+                        **{
+                            "aep.state": self._snapshot(),
+                            "aep.cost.source": "reported",
+                        },
                     ),
                 )
             )
@@ -760,23 +910,43 @@ class ClaudeAgentTranslator:
         tool_span_id = new_span_id()
         self._tool_span_by_call_id[call_id] = tool_span_id
         parent = self._current_turn_span_id or self._agent_span_id
+
+        # MCP-routed tools: SDK names them `mcp__<server>__<tool>`. Tag the
+        # event so consumers can filter / correlate with mcp_server_connected.
+        # Anything else dispatched by the SDK is a built-in (Read/Write/Bash/etc.)
+        # — `local` from AEP's perspective.
+        invoked_kwargs: dict[str, Any] = {
+            "gen_ai.tool.call.id": call_id,
+            "gen_ai.tool.name": tool,
+            "gen_ai.tool.call.arguments": dict(tool_input),
+        }
+        mcp_server_id = self._mcp_server_id_from_tool_name(tool)
+        if mcp_server_id and self._is_declared_mcp_server(mcp_server_id):
+            invoked_kwargs["aep.tool.dispatch_target"] = "mcp_server"
+            invoked_kwargs["aep.mcp_server_id"] = mcp_server_id
+        else:
+            invoked_kwargs["aep.tool.dispatch_target"] = "local"
+
         self._emit(
             ToolInvokedEvent(
                 subject=self.config.run_id,
                 data=ToolInvokedData(
                     **self._shared_span(tool_span_id, parent),
                     step=self._step,
-                    **{
-                        "gen_ai.tool.call.id": call_id,
-                        "gen_ai.tool.name": tool,
-                        "gen_ai.tool.call.arguments": dict(tool_input),
-                        "aep.tool.dispatch_target": "local",
-                    },
+                    **invoked_kwargs,
                 ),
             )
         )
         self._tools_invoked[tool] = self._tools_invoked.get(tool, 0) + 1
         return {}
+
+    def _is_declared_mcp_server(self, server_id: str) -> bool:
+        """True iff `server_id` matches a `Config.mcp_servers[].id`. Guards
+        the dispatch_target tag — we only mark as MCP-routed when the
+        server is explicitly declared, so a tool that happens to start
+        with `mcp__` but came from elsewhere (filesystem-loaded MCP, SDK
+        defaults) doesn't get mis-tagged."""
+        return any(s.id == server_id for s in (self.config.mcp_servers or []))
 
     async def _on_post_tool_use_hook(
         self, input_data: dict[str, Any], tool_use_id: str | None, _context: Any
@@ -1153,6 +1323,39 @@ class ClaudeAgentTranslator:
                 data=AgentStartedData(**data_kwargs),
             )
         )
+        self._emit_mcp_connections()
+
+    def _emit_mcp_connections(self) -> None:
+        """Emit `mcp_server_connected` for each declared MCP server.
+
+        The Claude Agent SDK owns the actual transport (stdio/http
+        connection, `tools/list` discovery) and doesn't surface a
+        per-server connect callback to us — so the emission here is
+        positional, not event-driven: we mark the lifecycle at
+        agent_started and trust the SDK to have handled the actual
+        connect by the time we reach the first turn. `tool_count` stays
+        0 in this v0.1 path because the SDK doesn't expose a per-server
+        tool-count API to hooks; consumers can derive it post-hoc by
+        counting `tool_invoked` events whose `aep.tool.dispatch_target`
+        is `mcp_server` and whose `aep.mcp_server_id` matches.
+        """
+        cfg = self.config
+        if not cfg.mcp_servers:
+            return
+        for server in cfg.mcp_servers:
+            self._emit(
+                McpServerConnectedEvent(
+                    subject=cfg.run_id,
+                    data=McpServerConnectedData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "aep.mcp.server_id": server.id,
+                            "aep.mcp.protocol_version": MCP_PROTOCOL_VERSION,
+                            "aep.mcp.tool_count": 0,
+                        },
+                    ),
+                )
+            )
 
     def _emit_agent_stopped(
         self, reason: StopReason, *, error_msg: str | None = None

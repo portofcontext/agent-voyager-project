@@ -196,6 +196,7 @@ class TurnRecorder:
         self._tokens_input = 0
         self._tokens_output = 0
         self._cost_usd = 0.0
+        self._cost_source: str = "computed"
         self._cache_read: int | None = None
         self._cache_write: int | None = None
         self._reasoning_output: int | None = None
@@ -211,6 +212,7 @@ class TurnRecorder:
         tokens_input: int,
         tokens_output: int,
         cost_usd: float,
+        cost_source: str = "computed",
         text: str | None = None,
         cache_read: int | None = None,
         cache_write: int | None = None,
@@ -219,13 +221,20 @@ class TurnRecorder:
         finish_reasons: list[str] | None = None,
         duration_ms: int | None = None,
     ) -> None:
-        """Record the model's response for this turn. Single call per turn."""
+        """Record the model's response for this turn. Single call per turn.
+
+        `cost_source` tags the provenance of `cost_usd` on the wire under
+        `aep.cost.source` (one of: "computed", "reported", "unknown").
+        Defaults to "computed" — most callers compute cost from a local
+        price table; pass "reported" if you're forwarding a number the
+        API gave you back."""
         if self._recorded:
             raise RuntimeError("TurnRecorder.record() called twice for one turn")
         self._recorded = True
         self._tokens_input = tokens_input
         self._tokens_output = tokens_output
         self._cost_usd = cost_usd
+        self._cost_source = cost_source
         self._cache_read = cache_read
         self._cache_write = cache_write
         self._reasoning_output = reasoning_output
@@ -698,6 +707,7 @@ class AEPTracer:
             "gen_ai.usage.input_tokens": recorder._tokens_input,
             "gen_ai.usage.output_tokens": recorder._tokens_output,
             "aep.cost_usd": recorder._cost_usd,
+            "aep.cost.source": recorder._cost_source,
         }
         if recorder._cache_read is not None:
             ended_kwargs["gen_ai.usage.cache_read.input_tokens"] = recorder._cache_read

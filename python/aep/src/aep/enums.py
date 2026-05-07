@@ -20,6 +20,7 @@ class StopReason(StrEnum):
     error = "error"
     interrupted = "interrupted"
     verifier_failed = "verifier_failed"
+    refused = "refused"
 
 
 class ErrorCode(StrEnum):

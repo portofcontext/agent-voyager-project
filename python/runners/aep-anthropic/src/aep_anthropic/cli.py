@@ -20,7 +20,11 @@ from typing import IO
 from aep import Config, parse_supervisor_message, write_event
 from aep.runner import AEPRunner
 from aep.runner.drivers import SupervisorDriver
-from aep_anthropic.driver import AnthropicModelDriver, build_anthropic_tools
+from aep_anthropic.driver import (
+    AnthropicModelDriver,
+    build_anthropic_mcp_servers,
+    build_anthropic_tools,
+)
 from aep_anthropic.shell_tools import SHELL_TOOL_SCHEMAS, ShellTools
 from aep_anthropic.subagent import AnthropicSubagentDriver
 
@@ -197,9 +201,19 @@ def main(argv: list[str] | None = None) -> int:
     # (tests, custom supervisors) and the CLI agree on what's exposed.
     tools_param: list[dict] = build_anthropic_tools(config, builtins=list(SHELL_TOOL_SCHEMAS))
 
+    # MCP servers declared in Config flow into Anthropic's API connector.
+    # HTTP-only — stdio servers in the Config are warned about and skipped
+    # by the helper. The API runs the MCP loop inside the request and
+    # returns mcp_tool_use / mcp_tool_result blocks alongside the model's
+    # text output; this v0.1 prototype forwards the connector but does
+    # NOT yet emit per-MCP-tool events on the AEP wire (the trajectory
+    # shows the model_turn_ended cost rolled up; per-call detail TBD).
+    mcp_servers_param: list[dict] = build_anthropic_mcp_servers(config)
+
     driver = AnthropicModelDriver(
         model=model,
         tools_param=tools_param or None,
+        mcp_servers_param=mcp_servers_param or None,
         max_tokens=args.max_tokens,
     )
     supervisor = StdinSupervisor(sys.stdin, sink=sys.stdout)
