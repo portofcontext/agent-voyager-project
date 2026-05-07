@@ -1,0 +1,52 @@
+{
+  "id": "refusal-recorded-stops-with-refused",
+  "title": "Refusal in a turn emits aep.refusal_recorded and terminates the run with StopReason.refused",
+  "description": "When the driver detects a refusal-flavored signal (Anthropic stop_reason=refusal, OpenAI content_filter, Gemini SAFETY/BLOCKLIST/etc.), the runner MUST emit one aep.refusal_recorded event carrying aep.refusal.reason (provider's verbatim code), optional aep.refusal.message, optional aep.refusal.category, and optional aep.refusal.provider — then terminate with aep.agent_stopped where aep.reason='refused'. The refused turn MUST NOT be appended to history (so a higher-level supervisor can choose to reset and retry without re-feeding the refusal). This is the wire signal a supervisor relies on to count refusals and distinguish them from converged or budget-exhausted runs.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#11-event-reference",
+    "spec/v0.1/aep.schema.json#/$defs/RefusalRecordedEvent"
+  ],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "refusal-flow",
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 0,
+      "cost_usd": 0.0001,
+      "duration_ms": 1,
+      "refusal": {
+        "reason": "refusal",
+        "message": "I can't help with that.",
+        "provider": "anthropic"
+      },
+      "converged": false
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "aep.refusal_recorded",
+          "data": {
+            "aep.refusal.reason": "refusal",
+            "aep.refusal.message": "I can't help with that.",
+            "aep.refusal.provider": "anthropic"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "refused"
+          }
+        }
+      }
+    ]
+  }
+}

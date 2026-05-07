@@ -68,11 +68,16 @@ Three message classes:
       "timeout_ms": 15000
     }
   ],
+  "mcp_servers": [
+    { "id": "github",  "transport": "http",  "url": "https://mcp.github.com/", "auth": { "type": "bearer", "token_env": "GH_MCP_TOKEN" } },
+    { "id": "weather", "transport": "stdio", "command": ["npx"], "args": ["-y", "@example/weather-mcp"] }
+  ],
   "allowed_tools": ["lookup_user", "bash"],
   "verifiers": [
-    { "name": "tests-pass", "trigger": "after_each_turn", "source": { "shell": "cargo test --quiet" }, "on_failure": "halt" }
+    { "name": "tests-pass",       "trigger": "after_each_turn",  "source": { "shell": "cargo test --quiet" },   "on_failure": "halt" },
+    { "name": "ask-before-deploy", "trigger": "pre_tool:deploy", "source": { "approval": { "prompt": "Deploy to prod?" } }, "on_failure": "halt", "timeout_ms": 60000 }
   ],
-  "boundary":      { "max_cost_usd": 2.0, "max_steps": 30, "max_tokens": 150000 },
+  "boundary":      { "max_cost_usd": 2.0, "max_steps": 30, "max_tokens": 150000, "max_duration_seconds": 600 },
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
@@ -88,10 +93,11 @@ Three message classes:
 | Plane | Field | Purpose |
 |---|---|---|
 | Environment | `tools` | RPC tools the agent can call. Routed through the `tool_exec_*` lifecycle. |
+| Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the runner connects to natively. Their tools are dispatched by the MCP layer and tagged on the wire with `aep.tool.dispatch_target=mcp_server` + `aep.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
 | Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `tools` / `skills` / `verifiers` / `boundary`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
 | Environment | `allowed_tools` | Optional allowlist over the model-facing surface (tools AND subagents). When present, the runner exposes ONLY these names. |
-| Environment | `verifiers` | Deterministic Boolean checks the agent runs at declared triggers. Reactions (`halt` / `inject_correction` / `continue`) declared per verifier. |
-| Environment | `boundary` | Hard limits the agent enforces on itself. Strict-greater; runs may overshoot cost/tokens by one final turn, but `max_steps: N` runs EXACTLY N turns. |
+| Environment | `verifiers` | Deterministic Boolean checks the agent runs at declared triggers (`before_first_turn`, `after_each_turn`, `pre_tool:<name>`, `on_tool:<name>`, `at_end`). Both polarities (`on_failure` / `on_success`) take `halt` / `inject_correction` / `continue`. Sources can be `shell` (deterministic) or `approval` (human-in-the-loop via the `aep.approval_*` RPC pair). |
+| Environment | `boundary` | Hard limits the agent enforces on itself. Strict-greater; runs may overshoot cost/tokens by one final turn, but `max_steps: N` runs EXACTLY N turns. `max_duration_seconds` caps wall-clock. |
 | Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |
 | Runner | `prompt` / `system_prompt` / `model` / `skills` | What the agent runs and how. |
 | Metadata | `thread_id` / `tags` / `meta` | For correlation, filtering, ad-hoc context. |
@@ -115,9 +121,9 @@ Three message classes:
 
 | Package | Purpose |
 |---|---|
-| [`python/aep/`](python/aep/) | Wire types, conformance harness, and the two reference implementations: `AEPRunner` (owns the loop, for greenfield agents) and `AEPTracer` (instruments a loop the caller controls — `from aep import AEPTracer`, or `aep.tracer` for module-level helpers). Every other AEP package depends on this. |
-| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Fully compliant under v0.1. Also ships `AnthropicTracedClient` and `wrap_anthropic` — drop-in instrumentation for an Anthropic SDK loop you already have (no rewrite through `AEPRunner`). |
-| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under v0.1: every verifier trigger (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) and every `on_failure` action (`halt`, `continue`, `inject_correction`). Corrections are spliced into the SDK-owned conversation via `ClaudeSDKClient.query()` between turns. Subagents declared in `Config.subagents` translate to the SDK's `agents={...}` map; the parent's `Agent` tool_use is diverted into AEP's `subagent_*` lifecycle. Also ships `TracedClaudeSDKClient` and `traced_claude_sdk_client` — drop-in instrumentation for an existing `ClaudeSDKClient` loop (no rewrite through the runner CLI). |
+| [`python/aep/`](python/aep/) | Wire types, conformance harness, and the two reference implementations: `AEPRunner` (owns the loop, for greenfield agents) and `AEPTracer` (instruments a loop the caller controls — `from aep import AEPTracer`, or `aep.tracer` for module-level helpers). Also ships `aep.runner.LocalTools` — a generic `ToolDriver` for in-process Python callables (`@tools.tool` decorator, return-value coercion, composition with a fallback driver). Cost/pricing lives in `aep.pricing`: a single bundled price table both runners load, with `aep.cost.source` (`computed` / `reported` / `unknown`) tagging provenance on the wire. Every other AEP package depends on this. |
+| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Native MCP via the API's HTTP connector (`build_anthropic_mcp_servers`); native parsing of Anthropic's `mcp_tool_use` / `web_search_tool_use` / `code_execution_tool_use` / `thinking` / `redacted_thinking` content blocks into AEP events. Also ships `AnthropicTracedClient` and `wrap_anthropic` — drop-in instrumentation for an Anthropic SDK loop you already have. |
+| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Native MCP via the SDK's `mcp_servers` slot (HTTP and stdio). Bridge `to_sdk_mcp_server(local_tools)` lets one `LocalTools` registration work against either runner — pass `local_tools=...` to `ClaudeAgentTranslator` and the SDK dispatches the same callables. `cost.source="reported"` fires on the reconciliation event from `ResultMessage.total_cost_usd` (per-turn costs stay `computed`). Also ships `TracedClaudeSDKClient` and `traced_claude_sdk_client` — drop-in instrumentation for an existing `ClaudeSDKClient` loop. |
 
 ---
 

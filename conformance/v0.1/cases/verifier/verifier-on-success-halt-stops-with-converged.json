@@ -1,0 +1,72 @@
+{
+  "id": "verifier-on-success-halt-stops-with-converged",
+  "title": "on_success: halt → declarative convergence; run terminates with reason='converged'",
+  "description": "Verifiers carry both `on_failure` and `on_success` action slots. Setting `on_success: halt` is declarative convergence — the verifier expresses 'when this passes, the goal is achieved'. The runner MUST emit verifier_evaluated with passed=true, then emit agent_stopped with aep.reason='converged' (NOT 'verifier_failed', that's reserved for on_failure: halt). This is the primitive a supervisor uses to express 'stop when the invariant the user cares about holds' — distinct from the model deciding it's done via natural stop-reason.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#7-verifiers",
+    "spec/v0.1/SPEC.md#73-on_failure-and-on_success-actions"
+  ],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "verifier-on-success-halt",
+    "model": "test/mock",
+    "verifiers": [
+      {
+        "name": "tests-pass",
+        "trigger": "after_each_turn",
+        "source": { "shell": "true" },
+        "on_failure": "continue",
+        "on_success": "halt"
+      }
+    ]
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.0001,
+      "duration_ms": 1,
+      "text": "working on it",
+      "converged": false
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "aep.model_turn_ended"
+        }
+      },
+      {
+        "match": {
+          "type": "aep.verifier_evaluated",
+          "data": {
+            "aep.verifier.name": "tests-pass",
+            "aep.verifier.passed": true
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "on_success halt MUST NOT terminate as verifier_failed — that's the on_failure path",
+        "match": {
+          "type": "aep.agent_stopped",
+          "data": {
+            "aep.reason": "verifier_failed"
+          }
+        }
+      }
+    ]
+  }
+}

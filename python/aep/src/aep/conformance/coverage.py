@@ -18,7 +18,7 @@ from typing import Any
 # carries a reason; remove from this set when a runner starts emitting the
 # event AND a conformance case is added.
 DEFERRED_COVERAGE: dict[str, str] = {
-    "skill_executed": (
+    "aep.skill_executed": (
         "schema-only: no v0.1 runner emits skill_executed yet. The reference "
         "runner emits skill_loaded; skill activation is runner-specific and "
         "not exercised by ScriptedModel-based conformance harness."
@@ -39,15 +39,33 @@ class CoverageReport:
 
 
 def event_types_from_schema(schema_path: Path) -> set[str]:
-    """Collect every event-type literal in the schema's $defs.
+    """Collect every event-type literal declared in the schema's $defs.
 
     Each event def has properties.type.const = '<event_type>'. We walk $defs
     and collect those, filtering by the def name suffix 'Event' so non-event
     consts ('runner', 'supervisor', schema_version values) don't bleed in.
+
+    Accepts either:
+      - the per-shape schema (event.schema.json) — has `$defs` directly
+      - the bundle (aep.schema.json) — uses `oneOf` of `$ref` to siblings;
+        we resolve to the sibling `event.schema.json` and read its `$defs`
+
+    Raises FileNotFoundError if pointed at a bundle whose sibling event
+    schema is missing — that's a build/regen issue, not a silent gap.
     """
     bundle = json.loads(schema_path.read_text())
+    defs = bundle.get("$defs") or {}
+    if not defs:
+        # Likely a bundle — find the sibling event schema and read from it.
+        sibling = schema_path.parent / "event.schema.json"
+        if not sibling.exists():
+            raise FileNotFoundError(
+                f"{schema_path.name} has no $defs and no sibling event.schema.json "
+                f"at {sibling}; regenerate schemas with scripts/generate-schemas.py."
+            )
+        defs = json.loads(sibling.read_text()).get("$defs") or {}
     out: set[str] = set()
-    for name, definition in (bundle.get("$defs") or {}).items():
+    for name, definition in defs.items():
         if not name.endswith("Event"):
             continue
         type_prop = (definition.get("properties") or {}).get("type") or {}

@@ -44,12 +44,33 @@ class ScriptedModel(ModelDriver):
 
 
 def parse_scripted_model(case_responses: list[dict[str, Any]]) -> ScriptedModel:
+    from aep.runner.drivers import ReasoningBlock, Refusal
+
     out: list[ModelResponse] = []
     for r in case_responses:
         tool_calls = [
             ScriptedToolCall(call_id=tc["call_id"], tool=tc["tool"], input=tc.get("input", {}))
             for tc in r.get("tool_calls", []) or []
         ]
+        reasoning_blocks = [
+            ReasoningBlock(
+                text=rb.get("text", ""),
+                signature=rb.get("signature"),
+                redacted=bool(rb.get("redacted", False)),
+            )
+            for rb in r.get("reasoning_blocks", []) or []
+        ]
+        refusal_dict = r.get("refusal")
+        refusal = (
+            Refusal(
+                reason=refusal_dict["reason"],
+                message=refusal_dict.get("message"),
+                category=refusal_dict.get("category"),
+                provider=refusal_dict.get("provider"),
+            )
+            if refusal_dict
+            else None
+        )
         out.append(
             ModelResponse(
                 tokens_input=r["tokens_input"],
@@ -58,6 +79,8 @@ def parse_scripted_model(case_responses: list[dict[str, Any]]) -> ScriptedModel:
                 duration_ms=r["duration_ms"],
                 text=r.get("text"),
                 tool_calls=tool_calls,
+                reasoning_blocks=reasoning_blocks,
+                refusal=refusal,
                 tokens_cache_read=r.get("tokens_cache_read"),
                 tokens_cache_write=r.get("tokens_cache_write"),
                 converged=bool(r.get("converged", False)),

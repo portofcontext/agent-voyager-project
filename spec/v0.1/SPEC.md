@@ -187,18 +187,33 @@ The supervisor declares the rule upfront in Config; the agent enforces it determ
 |---|---|
 | `before_first_turn` | once, after `agent_started`, before turn 1 |
 | `after_each_turn` | after every `model_turn_ended` |
+| `pre_tool:<name>` | BEFORE the runner dispatches the named tool. The verifier outcome decides whether the tool runs. Used for human-in-the-loop gates (with `source.approval`) and for shell pre-checks ("verify the migration is safe before running it"). |
 | `on_tool:<name>` | after `tool_returned` for the named tool |
 | `at_end` | once, after the final turn, before `agent_stopped` |
 
-### 7.3 `on_failure` actions
+### 7.3 `on_failure` and `on_success` actions
 
-| Value | Behavior on `passed: false` |
+Verifiers are bidirectional: `on_failure` fires when `passed: false`, `on_success` when `passed: true`. Both take the same action vocabulary (default `continue`). This lets a single trigger express both "halt if invariant breaks" (`on_failure: halt`) and declarative convergence — "halt with success if goal achieved" (`on_success: halt`). The latter terminates the run with `agent_stopped.aep.reason="converged"` rather than `verifier_failed`.
+
+| Value | Behavior |
 |---|---|
 | `continue` | Emit `verifier_evaluated`; proceed normally. |
-| `halt` | Emit `verifier_evaluated`; emit `agent_stopped` with `reason: "verifier_failed"`. |
+| `halt` | Emit `verifier_evaluated`; emit `agent_stopped`. Reason = `verifier_failed` (on_failure) or `converged` (on_success). |
 | `inject_correction` | Emit `verifier_evaluated`; insert `correction_message` as a user-role message into conversation history before the next turn. |
 
-`correction_message` is REQUIRED when `on_failure` is `inject_correction`.
+`correction_message` is REQUIRED when either action is `inject_correction`.
+
+**Approval-source verifiers** (used at `pre_tool:<name>` triggers) defer the pass/fail decision to the supervisor via the `aep.approval_requested` / `aep.approval_resolved` RPC pair. The supervisor's reply (`aep.approval.approved: true|false`) drives `on_success` / `on_failure`. A timeout (no reply within `timeout_ms`) is treated as a denial with `aep.verifier.error="source_timed_out"`. Wire shape:
+
+```jsonc
+{
+  "name": "ask-before-deploy",
+  "trigger": "pre_tool:deploy",
+  "source": { "approval": { "prompt": "Deploy to prod?" } },
+  "on_failure": "halt",
+  "timeout_ms": 5000
+}
+```
 
 ### 7.4 Wire flow
 
@@ -229,6 +244,16 @@ Wire flow:
 5. If `tool_exec_resolved.data.rpc.result` is a structured value (object/array, not a string), the runner MUST surface it on `tool_returned.data["aep.tool.result.structured"]` and ALSO produce a string serialization on `tool_returned.data["aep.tool.result.text"]` for the model.
 
 `Config.tools` is the schema-typed declaration of RPC tools (MCP-shaped: `name`, `description`, `inputSchema`). Locally-implemented tools (the runner's built-ins like `bash`, file I/O, etc.) are runner-specific and not declared in Config.
+
+**`aep.tool.dispatch_target`.** Every `tool_invoked` event MAY carry `aep.tool.dispatch_target` discriminating the implementation that handled the call:
+
+| Value | Meaning |
+|---|---|
+| `supervisor_rpc` | Tool went out via `tool_exec_request` to the supervisor (a `Config.tools` entry, no MCP server tag). |
+| `mcp_server` | Tool was dispatched by an MCP server. The event also carries `aep.mcp_server_id` matching a `Config.mcp_servers[].id`. |
+| `local` | Tool ran in-process (a runner built-in or a registered local callable). Inline server-side tools the API ran during a single `messages.create()` (e.g. Anthropic's hosted `web_search`, `code_execution`) also use `local` and carry `aep.tool.subtype` naming the hosted-tool kind. |
+
+Supervisors building dashboards / audits filter on `dispatch_target` to count tool calls by implementation route, and on `aep.mcp_server_id` / `aep.tool.subtype` to break down further.
 
 ### 8.1 Restricting the exposed tool set: `Config.allowed_tools`
 
@@ -423,7 +448,11 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 | `aep.subagent_returned` | `aep://runner` | Subagent returned to its parent. Frame span closes; pairs with `subagent_invoked` by `span_id`. |
 | `aep.subagent_failed` | `aep://runner` | Subagent invocation errored; the model receives an `Error: …` tool_result. |
 | `aep.text_emitted` | `aep://runner` | Assistant text content. |
-| `aep.cost_recorded` | `aep://runner` | Cumulative `RunStateSnapshot` snapshot. |
+| `aep.reasoning_emitted` | `aep://runner` | Reasoning / thinking block (extended thinking, o-series reasoning). Distinct from text so consumers can filter chain-of-thought. |
+| `aep.refusal_recorded` | `aep://runner` | Model declined the turn. Run terminates with `aep.agent_stopped.aep.reason="refused"`. |
+| `aep.cost_recorded` | `aep://runner` | Cumulative `RunStateSnapshot` snapshot. May carry `aep.cost.source="reported"` on the reconciliation event when the API/SDK hands back an authoritative cost total. |
+| `aep.approval_requested` | `aep://runner` | Pre-tool approval gate (verifier with `source.approval`) is awaiting a human decision. |
+| `aep.approval_resolved` | `aep://supervisor` | Supervisor's grant/deny reply, paired by `aep.approval.id`; runner re-stamps with its own trace context. |
 | `aep.skill_loaded` | `aep://runner` | SKILL.md loaded into context. |
 | `aep.skill_executed` | `aep://runner` | Skill activated. |
 | `aep.error_occurred` | `aep://runner` | Non-tool error. |

@@ -1,0 +1,59 @@
+{
+  "id": "reasoning-emitted-from-thinking-blocks",
+  "title": "Reasoning blocks in a turn emit aep.reasoning_emitted with text + signature, ordered before text_emitted",
+  "description": "When a model turn contains reasoning/thinking blocks (Anthropic extended thinking, OpenAI o-series reasoning, etc.), the runner MUST emit one aep.reasoning_emitted event per block carrying aep.reasoning.text and (if the provider gives one) aep.reasoning.signature. The events MUST come AFTER aep.model_turn_ended and BEFORE aep.text_emitted — the wire reconstructs as 'thought, then spoke'. Distinct from text_emitted so consumers can collapse / redact chain-of-thought from displays without losing it from the audit log.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#11-event-reference",
+    "spec/v0.1/aep.schema.json#/$defs/ReasoningEmittedEvent"
+  ],
+  "applies_to": ["runner"],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "reasoning-pair",
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 20,
+      "cost_usd": 0.0001,
+      "duration_ms": 1,
+      "text": "the answer is 4",
+      "reasoning_blocks": [
+        {
+          "text": "let me add 2 + 2 carefully",
+          "signature": "sig-abc",
+          "redacted": false
+        }
+      ],
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "aep.model_turn_ended"
+        }
+      },
+      {
+        "match": {
+          "type": "aep.reasoning_emitted",
+          "data": {
+            "aep.reasoning.text": "let me add 2 + 2 carefully",
+            "aep.reasoning.signature": "sig-abc"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "aep.text_emitted",
+          "data": {
+            "aep.text": "the answer is 4"
+          }
+        }
+      }
+    ]
+  }
+}

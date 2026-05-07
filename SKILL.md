@@ -45,7 +45,7 @@ The reference is `python/aep/src/aep/runner/runner.py` (the canonical loop) plus
 3. The runner emits the full lifecycle: `aep.agent_started`, `aep.model_turn_started/ended`, `aep.tool_invoked/returned`, `aep.cost_recorded`, `aep.verifier_evaluated`, `aep.agent_stopped`. Every event is a CloudEvents 1.0 envelope.
 4. The driver's only job is translating one model turn — implement `ModelDriver.step(history) -> ModelResponse`.
 
-See `examples/driver-runner-template.py` for a starting skeleton. See `python/runners/aep-anthropic/src/aep_anthropic/driver.py` for a complete implementation against the Anthropic SDK including cache-token math, cost computation, and tool-call translation.
+See `python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py` for a minimal end-to-end run, or `06_anthropic_traced_client.py` if the user already has an Anthropic SDK loop and wants drop-in instrumentation. See `python/runners/aep-anthropic/src/aep_anthropic/driver.py` for the complete driver: cache-token math, cost computation, refusal/reasoning/MCP/hosted-tool block parsing, tool-call translation.
 
 ### Task B — Build a runner (observer pattern)
 
@@ -60,7 +60,7 @@ The reference is `python/runners/aep-claude-agent/src/aep_claude_agent/translato
 3. Emit via `aep.io.write_event` (NDJSON to stdout) or a callback.
 4. Maintain a local `RunStateSnapshot` for cost/token accounting per AEP §10.4.
 
-See `examples/observer-runner-template.py` for the shape. The tricky parts (cost accounting, the `source` field discipline, tool-call translation) are documented inline.
+See `python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py` (audited Claude Code session) and `07_claude_agent_traced_client.py` (drop-in instrumentation over an existing `ClaudeSDKClient`). The translator at `python/runners/aep-claude-agent/src/aep_claude_agent/translator.py` is the worked-out reference; the tricky parts (cost accounting via per-turn deltas + ResultMessage reconciliation, `source` discipline, tool-call translation through SDK hooks) are documented inline.
 
 ### Task C — Compose a supervisor Config
 
@@ -75,12 +75,12 @@ The pattern: build a `Config` (`aep.types.Config`) with the supervisor primitive
 | What the agent can do | `tools` | Each `Tool` has `name`, `description`, `inputSchema` (camelCase per MCP). RPC-impl tools route through the `aep.tool_exec_*` lifecycle (the runner emits requests; the supervisor's service replies with JSON-RPC 2.0 payloads). Local-impl tools the runner has built in are NOT declared here. |
 | External MCP servers | `mcp_servers` | Optional list of MCP server endpoints (HTTP or stdio). The runner connects at startup, emits `aep.mcp_server_connected` lifecycle events, and routes tool calls for MCP-hosted tools through them with `tool_exec_resolved.source = aep://mcp/<server_id>`. |
 | Which tools to expose | `allowed_tools` | Optional allowlist of names exposed to the model. When present, both runner built-ins AND `Config.tools` entries are filtered through it; every `Config.tools` name MUST appear in `allowed_tools` or the runner errors at startup. When absent, the runner exposes its full default set. Use this to compose category-based profiles ("DDD-strict", "Compliance") without enumerating runner internals. |
-| What rules it must respect | `verifiers` | Each `Verifier` has `name`, `trigger`, `source.shell`, and `on_failure: halt \| inject_correction \| continue`. The agent runs the verifier at the trigger and acts on `passed: false` per declaration. This is how DDD invariants compile to runtime checks. Shell paths resolve relative to the runner's CWD = the agent's workspace; the supervisor's deployment layer is responsible for putting referenced files there before the run starts. |
-| What limits it must respect | `boundary` | `max_cost_usd`, `max_steps`, `max_tokens`. Strict-greater algorithm; cost/tokens may overshoot by one final turn; steps cannot. |
+| What rules it must respect | `verifiers` | Each `Verifier` has `name`, `trigger`, `source`, and BOTH polarities (`on_failure` / `on_success`) — same action vocabulary on each (`halt`, `inject_correction`, `continue`, default `continue`). Triggers: `before_first_turn`, `after_each_turn`, `pre_tool:<name>` (gates dispatch BEFORE the tool runs), `on_tool:<name>`, `at_end`. Sources: `shell` (deterministic local check) or `approval` (human-in-the-loop via the `aep.approval_*` RPC pair, used at `pre_tool:` triggers). `on_success: halt` is declarative convergence — terminates with `reason="converged"` rather than `verifier_failed`. Shell paths resolve relative to runner CWD; the supervisor's deployment layer is responsible for putting referenced files there before the run starts. |
+| What limits it must respect | `boundary` | `max_cost_usd`, `max_steps`, `max_tokens`, `max_duration_seconds`. Strict-greater algorithm; cost/tokens/duration may overshoot by one final turn; steps cannot. |
 | What it produces | `output_schema` | JSON schema validated against `agent_stopped.output`. |
 | What it runs | `prompt`, `system_prompt`, `model`, `skills` | Standard runner-plane fields. |
 
-See `examples/supervisor-config-template.py` for a full Config that exercises every primitive. See `spec/v0.1/examples/config.json` for a wire-format equivalent.
+See `python/supervisors/simple-supervisor-example/examples/04_ddd_supervisor.py` for a real domain-driven Config that exercises tools, verifiers, allowed_tools, and boundary together. See `python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py` for subagents. See `spec/v0.1/examples/config.json` for a wire-format equivalent.
 
 ## Three classes of trajectory facts
 
@@ -147,7 +147,7 @@ When reviewing AEP code or generating it, watch for:
 ## How to operate when the user describes a need
 
 1. Identify which of Tasks A / B / C they're asking about (or which combination).
-2. Read the relevant template in `examples/` first to ground yourself in current shape.
+2. Read the closest match in `python/supervisors/simple-supervisor-example/examples/` (numbered 01–07, narrative format) first to ground yourself in current shape.
 3. Cross-reference with `spec/v0.1/SPEC.md` §6 (interactions), §7 (verifiers), §8 (tools), §9 (the loop).
 4. For runtime correctness questions, the conformance cases under `conformance/v0.1/cases/` are precedent — find the case that matches the situation.
 5. Generate code that imports from `aep.types`, `aep.runner`, `aep.io`. Do NOT inline-redefine the wire types.

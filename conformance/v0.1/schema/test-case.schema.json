@@ -119,6 +119,31 @@
             }
           }
         },
+        "reasoning_blocks": {
+          "type": "array",
+          "description": "Reasoning / thinking blocks the model produced this turn. Each becomes one aep.reasoning_emitted event.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": { "type": "string" },
+              "signature": { "type": "string" },
+              "redacted": { "type": "boolean", "default": false }
+            }
+          }
+        },
+        "refusal": {
+          "type": "object",
+          "description": "When set, the runner emits aep.refusal_recorded and terminates with StopReason.refused. Universal across providers — `reason` is the provider's verbatim code (anthropic 'refusal'/'sensitive', openai 'content_filter', gemini 'SAFETY'/'BLOCKLIST'/etc.).",
+          "required": ["reason"],
+          "additionalProperties": false,
+          "properties": {
+            "reason": { "type": "string", "minLength": 1 },
+            "message": { "type": "string" },
+            "category": { "type": "string" },
+            "provider": { "type": "string" }
+          }
+        },
         "converged": {
           "type": "boolean",
           "default": false,
