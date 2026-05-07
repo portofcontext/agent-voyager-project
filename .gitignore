@@ -43,3 +43,13 @@ aep-workspace/
 .claude/
 
 .ruff_cache
+
+# Rust
+rust/aep/target/
+Cargo.lock
+
+# TypeScript
+typescript/aep/node_modules/
+typescript/aep/dist/
+typescript/aep/dist-test/
+typescript/aep/package-lock.json

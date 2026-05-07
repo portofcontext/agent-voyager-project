@@ -117,6 +117,20 @@ Three message classes:
 | Contributor guide | [`CLAUDE.md`](CLAUDE.md) — the seams principle, test layers, decision tree |
 ---
 
+## Language bindings
+
+Wire-type bindings for non-Python consumers, generated from the same JSON Schemas the Python types come from. Single chain: `python/aep/types.py` (Pydantic) → `spec/v0.1/*.schema.json` → bindings.
+
+| Language | Path | Generator | Notes |
+|---|---|---|---|
+| Python | [`python/aep/`](python/aep/) | hand-written Pydantic (source) | The canonical surface; everything else derives from this. |
+| Rust | [`rust/aep/`](rust/aep/) | [`cargo-typify`](https://github.com/oxidecomputer/typify) | `cargo build` clean; serde-derived types; `Event` discriminated union. |
+| TypeScript | [`typescript/aep/`](typescript/aep/) | [`json-schema-to-typescript`](https://github.com/bcherny/json-schema-to-typescript) | Pure type-only package; discriminator-narrowing on `event.type`. |
+
+`make bindings` regenerates Rust + TypeScript from the current schemas. `make check` includes a drift detector that fails CI if a schema changed and bindings weren't regenerated. Neither is published to a registry yet — vendor by git path until v0.1 stabilizes.
+
+---
+
 ## Python implementation
 
 | Package | Purpose |

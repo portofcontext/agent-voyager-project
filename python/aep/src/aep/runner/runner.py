@@ -27,6 +27,7 @@ from __future__ import annotations
 import itertools
 import subprocess
 import time as _time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -175,6 +176,8 @@ class AEPRunner:
         supervisor: SupervisorDriver,
         runner_builtin_tools: list[dict[str, Any]] | None = None,
         subagent_driver: SubagentDriver | None = None,
+        *,
+        on_event: Callable[[BaseModel], None] | None = None,
     ) -> None:
         """`runner_builtin_tools` declares the runner's built-in tool catalog.
         Each entry is `{name, description, input_schema}` (snake_case, internal).
@@ -182,11 +185,23 @@ class AEPRunner:
 
         `subagent_driver` is required iff `config.subagents` is non-empty.
         Without one declared, subagent invocations fail with a clear error
-        rather than silently degrading."""
+        rather than silently degrading.
+
+        `on_event` is an optional callback invoked synchronously as each event
+        is emitted, BEFORE it lands in `self.trajectory`. The runner still
+        accumulates the trajectory in memory for in-process consumers (tests,
+        the CLI's post-run summary); the callback is for streaming consumers
+        (workers writing events to durable storage as they happen, multi-host
+        supervisors observing the run live, etc.). Mirrors `AEPTracer`'s
+        `on_event` shape so the embedded-runner and drop-in-tracer paths feel
+        identical to consumers. The callback MUST NOT mutate the event; it
+        runs on the runner's thread and any exception propagates out.
+        """
         self.config = config
         self.model = model
         self.tools = tools
         self.supervisor = supervisor
+        self._on_event = on_event
         self.trajectory: list[BaseModel | dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
         self._supervisor_tools_by_name: dict[str, Tool] = {t.name: t for t in (config.tools or [])}
@@ -242,6 +257,14 @@ class AEPRunner:
     # ── Emission ────────────────────────────────────────────────────────────
 
     def _emit(self, event: BaseModel) -> None:
+        # Callback fires BEFORE trajectory append so a worker writing to
+        # durable storage sees the event in the same order an in-process
+        # consumer reading `trajectory` will. If the callback raises, the
+        # event isn't appended either — the run aborts with the exception
+        # propagated out of run(), matching the "runner errors are loud"
+        # principle (no silent dropped events).
+        if self._on_event is not None:
+            self._on_event(event)
         self.trajectory.append(event)
         self.supervisor.observe(event)
 

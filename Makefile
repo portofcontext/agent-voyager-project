@@ -40,17 +40,20 @@ help:
 	@echo ""
 	@echo "  Free targets (no API calls):"
 	@echo "    make test            — pytest across every package, real-LLM excluded"
-	@echo "    make conformance     — aep-conformance run + validate (28 cases)"
+	@echo "    make conformance     — aep-conformance run + validate + check-coverage"
 	@echo "    make lint            — ruff check"
 	@echo "    make format          — ruff format (writes)"
 	@echo "    make format-check    — ruff format --check (read-only)"
 	@echo "    make schemas         — regenerate JSON schemas from Pydantic models"
-	@echo "    make check           — format-check + lint + test + conformance"
+	@echo "    make bindings        — regenerate Rust + TS bindings from schemas"
+	@echo "    make bindings-check  — drift detector (regen + git-diff against tracked)"
+	@echo "    make bindings-test   — cargo test (rust/aep) + npm test (typescript/aep)"
+	@echo "    make check           — format-check + lint + test + conformance + bindings-check"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make test-real-llm   — real-LLM smoke tests for both runners"
 	@echo "    make examples        — all 7 examples (03 / 07 self-skip without \`claude\` CLI)"
-	@echo "    make smoke           — check + test-real-llm + examples (full sanity)"
+	@echo "    make smoke           — check + bindings-test + test-real-llm + examples (full sanity)"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            — uv sync the workspace"
@@ -99,8 +102,35 @@ schemas:
 	@uv run python scripts/generate-schemas.py
 
 
+.PHONY: bindings
+bindings:
+	@bash scripts/generate-bindings.sh
+
+
+.PHONY: bindings-check
+bindings-check:
+	@# Drift check: regenerate Rust + TS bindings; fail if any tracked file
+	@# has changed. Catches the case where types.py / schemas changed but
+	@# generated code wasn't regen'd. Untracked files (e.g. brand-new
+	@# binding files awaiting their first commit) DON'T count as drift —
+	@# they need to be `git add`'d and committed normally.
+	@bash scripts/generate-bindings.sh > /dev/null
+	@if ! git diff --quiet -- rust/aep/src typescript/aep/src 2>/dev/null; then \
+		echo "error: Rust/TS bindings drifted from schemas. Run 'make bindings' and commit." >&2; \
+		git diff --stat -- rust/aep/src typescript/aep/src >&2; \
+		exit 1; \
+	fi
+	@echo "✓ Bindings in sync with schemas."
+
+
+.PHONY: bindings-test
+bindings-test:
+	@cd rust/aep && cargo test --quiet
+	@cd typescript/aep && npm test --silent
+
+
 .PHONY: check
-check: format-check lint test conformance
+check: format-check lint test conformance bindings-check
 	@echo ""; echo "✓ All free checks passed."
 
 
@@ -153,8 +183,8 @@ examples:
 
 
 .PHONY: smoke
-smoke: check test-real-llm examples
-	@echo ""; echo "✓ smoke complete — free checks + real-LLM tests + all examples passed."
+smoke: check bindings-test test-real-llm examples
+	@echo ""; echo "✓ smoke complete — free checks + bindings tests + real-LLM tests + all examples passed."
 
 
 # ── Other ─────────────────────────────────────────────────────────────────────

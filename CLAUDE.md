@@ -84,12 +84,17 @@ matching conformance case fails the command. Wire it into CI when you have one.
 
 ## End-to-end sanity: `make smoke`
 
-`make check` (format + lint + tests + conformance) is the **free pre-commit
-floor** — run it on every change.
+`make check` (format + lint + tests + conformance + bindings drift
+detection) is the **free pre-commit floor** — run it on every change.
+Drift detection catches the case where `types.py` or schemas changed but
+the generated Rust / TypeScript bindings under `rust/aep/` and
+`typescript/aep/` weren't regenerated.
 
 `make smoke` is the **paid pre-merge ceiling** — runs `check`, then the
-real-LLM test matrix for both runners, then every example end-to-end
-against real Anthropic models. Costs ~$0.10–0.20 on Haiku.
+Rust + TS bindings test suites (`cargo test` + `npm test` against the
+generated types), then the real-LLM test matrix for both runners, then
+every example end-to-end against real Anthropic models. Costs ~$0.10–0.20
+on Haiku.
 
 Run `make smoke` whenever you've changed something that could pass unit /
 seam tests but break real-model integration. Concretely, that's any of:
