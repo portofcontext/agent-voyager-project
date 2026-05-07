@@ -223,6 +223,27 @@ Verifiers are bidirectional: `on_failure` fires when `passed: false`, `on_succes
 
 The supervisor is not involved at runtime. The verifier was declared in Config; the agent enforces it.
 
+**Source-specific `aep.verifier.data` conventions.** The `aep.verifier.data` field is a free-form dict the runner uses to surface source-specific diagnostics. Consumers debugging eval regressions need this data to be present in a stable shape. The reference runner emits these conventions; other AEP runners SHOULD follow them.
+
+Shell-source verifiers (`source.shell`) MUST populate:
+
+| Key | Type | Notes |
+|---|---|---|
+| `command` | string | The shell string the runner executed (`src.shell`). |
+| `exit_code` | integer | Process exit code. 0 = pass; non-zero = fail. |
+| `stdout` | string | Captured stdout, truncated to a runner-defined limit (reference: 2000 chars). |
+| `stderr` | string | Captured stderr, same truncation rule. |
+
+Approval-source verifiers (`source.approval`) MUST populate:
+
+| Key | Type | Notes |
+|---|---|---|
+| `approval_id` | string | The `aep.approval.id` correlating to the approval RPC pair. |
+| `approved` | boolean | The supervisor's decision (matches `aep.approval.approved` on the resolved event). |
+| `reason` | string | Free-form rationale from the supervisor when given. Optional. |
+
+Other source types: if a future source kind ships, it MUST document its `aep.verifier.data` keys in this table. Consumers reading `aep.verifier.data` SHOULD tolerate unknown keys (extras=allow).
+
 ### 7.5 Path resolution
 
 Shell verifier paths (e.g., `scripts/scan_secrets.sh`) resolve relative to the **runner's current working directory** — by convention, the agent's workspace. A verifier whose source is `cargo test` requires `Cargo.toml` to be in the workspace; one whose source is `scripts/scan_secrets.sh` requires that file to exist there.

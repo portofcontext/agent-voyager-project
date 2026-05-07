@@ -469,10 +469,24 @@ class AEPRunner:
                     }
                 )
 
-            for tc in response.tool_calls:
+            for idx, tc in enumerate(response.tool_calls):
                 self._handle_tool_call(tc, state)
                 decision = check_consumption(state.snapshot(_monotonic_ms()), cfg.boundary)
                 if decision.stop:
+                    # Emit tool_failed for each remaining tool the model wanted
+                    # to dispatch in this assistant turn but the boundary
+                    # pre-empted. Without this, the trajectory shows only the
+                    # tool that pushed us over budget and consumers querying
+                    # "what did the agent want to do but couldn't" would have
+                    # to diff the assistant message against the events list.
+                    # That breaks the trajectory-as-source-of-truth contract.
+                    reason_str = (decision.reason or StopReason.budget_exhausted).value
+                    for skipped in response.tool_calls[idx + 1 :]:
+                        self._emit_tool_failed(
+                            skipped,
+                            state,
+                            f"boundary preempted: {reason_str}",
+                        )
                     self._run_verifiers_for("at_end")
                     self._emit_agent_stopped(decision.reason or StopReason.budget_exhausted)
                     return
