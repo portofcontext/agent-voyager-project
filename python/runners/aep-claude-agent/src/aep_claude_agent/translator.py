@@ -164,7 +164,22 @@ class ClaudeAgentTranslator:
         sdk_options_cls: type | None = None,
         sdk_hook_matcher_cls: type | None = None,
         sdk_agent_definition_cls: type | None = None,
+        parent_trace_id: str | None = None,
+        parent_agent_span_id: str | None = None,
+        suppress_lifecycle: bool = False,
+        parent_tracer: Any | None = None,
     ) -> None:
+        """Translates Claude Agent SDK events to AEP wire events.
+
+        `parent_trace_id` / `parent_agent_span_id` / `suppress_lifecycle`
+        opt this translator into "delegated" mode — used by
+        `traced_claude_sdk_client()` when an outer `AEPTracer` is already
+        managing the run. In delegated mode the translator emits
+        per-message events under the parent's trace_id/agent_span (so the
+        wire is one tree) and skips its own `agent_started` / `at_end` /
+        `agent_stopped` emission (the parent emits those on its own
+        lifecycle bookends).
+        """
         self.config = config
         self.on_event = on_event
         self._call_seq = itertools.count(1)
@@ -172,10 +187,17 @@ class ClaudeAgentTranslator:
         self._step = 0
         self._started_at = now_iso()
         self._started_monotonic_ms = _monotonic_ms()
-        # Span tree state. trace_id is allocated per run; agent_span is the
-        # root; turn / tool spans nest under it.
-        self._trace_id = new_trace_id()
-        self._agent_span_id = new_span_id()
+        # Span tree state. trace_id is allocated per run unless the
+        # caller hands us a parent's IDs (delegated mode).
+        self._trace_id = parent_trace_id or new_trace_id()
+        self._agent_span_id = parent_agent_span_id or new_span_id()
+        self._suppress_lifecycle = suppress_lifecycle
+        # In delegated mode, push per-turn deltas into the parent tracer
+        # so its cumulative state (boundary, agent_stopped totals)
+        # reflects this translator's spend. Without this, the wire shows
+        # real per-turn cost but agent_stopped reports zeros — see
+        # `_handle_assistant_message` for the per-turn push.
+        self._parent_tracer = parent_tracer
         self._current_turn_span_id: str | None = None
         self._tool_span_by_call_id: dict[str, str] = {}
         # Subagent lifecycle bookkeeping. The Claude Agent SDK surfaces a
@@ -208,6 +230,15 @@ class ClaudeAgentTranslator:
         self._baseline_reset_pending = False
         # First UserPromptSubmit fires before_first_turn verifiers exactly once.
         self._before_first_turn_fired = False
+        # When True (default), `after_each_turn` verifiers run inline at the
+        # end of `_handle_assistant_message` — matches AEPRunner / the runner
+        # CLI semantics. The traced-client wrapper sets this False and runs
+        # the trigger itself AFTER yielding the message to the user, so the
+        # user's async-for body sees every message that completed
+        # translation before a halting verifier can terminate the iterator.
+        # That mirrors AEPTracer's `with tracer.turn():` semantic, where the
+        # verifier fires when the with-block exits — not before.
+        self._run_inline_after_each_turn = True
         # Stop hook may fire per-turn; the run() finalizer runs at_end exactly
         # once, so this flag is informational only.
         self._stop_seen = False
@@ -638,6 +669,19 @@ class ClaudeAgentTranslator:
         self._total_turns += 1
         self._total_cost_usd += delta_cost
         self._total_tokens += delta_ti + delta_to
+        # Delegated mode: also push the delta into the parent tracer's
+        # cumulative state. Without this push, the parent's
+        # `agent_stopped.aep_state` shows zeros and parent-side
+        # boundary checks (max_steps / max_cost_usd / max_tokens) miss
+        # all CASDK-driven turns.
+        if self._parent_tracer is not None:
+            self._parent_tracer.accumulate_external(
+                tokens_input=delta_ti,
+                tokens_output=delta_to,
+                cost_usd=delta_cost,
+                cache_read=delta_cr,
+                cache_write=delta_cw,
+            )
         self._emit(
             CostRecordedEvent(
                 subject=cfg.run_id,
@@ -650,8 +694,12 @@ class ClaudeAgentTranslator:
 
         # SPEC.md §7.2: after_each_turn fires after model_turn_ended.
         # _VerifierHalt raised here propagates through the SDK's async-for
-        # iteration into asyncio.run() and is caught by run().
-        self._run_verifiers_for_trigger("after_each_turn")
+        # iteration into asyncio.run() and is caught by run(). The traced
+        # client opts out (sets `_run_inline_after_each_turn=False`) and
+        # dispatches the trigger itself after yielding the message, so the
+        # user's loop body always sees a message that completed translation.
+        if self._run_inline_after_each_turn:
+            self._run_verifiers_for_trigger("after_each_turn")
 
     def _handle_result_message(self, message: Any) -> None:
         """ResultMessage closes the run with authoritative cost. Reconcile if it
@@ -1043,6 +1091,12 @@ class ClaudeAgentTranslator:
     # ── AEP emission helpers ───────────────────────────────────────────────
 
     def _emit_agent_started(self) -> None:
+        # In delegated mode (running under an outer AEPTracer), the parent
+        # already emitted agent_started — emitting again would put two
+        # agent_started events on the wire under the same trace_id, which
+        # consumers can't reconcile.
+        if self._suppress_lifecycle:
+            return
         cfg = self.config
         tools_meta = None
         if cfg.tools:
@@ -1092,7 +1146,11 @@ class ClaudeAgentTranslator:
 
     def _emit_agent_stopped(
         self, reason: StopReason, *, error_msg: str | None = None
-    ) -> AgentStoppedEvent:
+    ) -> AgentStoppedEvent | None:
+        # In delegated mode the parent's __exit__ emits agent_stopped with
+        # the parent's run state. Suppress here to avoid duplicates.
+        if self._suppress_lifecycle:
+            return None
         snap = self._snapshot()
         ev = AgentStoppedEvent(
             subject=self.config.run_id,

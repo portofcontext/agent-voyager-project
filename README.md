@@ -117,9 +117,25 @@ Three message classes:
 
 | Package | Purpose |
 |---|---|
-| [`python/aep/`](python/aep/) | Wire types, reference runner, conformance harness. Every other AEP package depends on this. |
-| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Fully compliant under v0.1. |
-| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under v0.1: every verifier trigger (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) and every `on_failure` action (`halt`, `continue`, `inject_correction`). Corrections are spliced into the SDK-owned conversation via `ClaudeSDKClient.query()` between turns. |
+| [`python/aep/`](python/aep/) | Wire types, conformance harness, and the two reference implementations: `AEPRunner` (owns the loop, for greenfield agents) and `AEPTracer` (instruments a loop the caller controls — `from aep import AEPTracer`, or `aep.tracer` for module-level helpers). Every other AEP package depends on this. |
+| [`python/runners/aep-anthropic/`](python/runners/aep-anthropic/) | Driver-pattern runner over the Anthropic Messages API. Owns its loop. Fully compliant under v0.1. Also ships `AnthropicTracedClient` and `wrap_anthropic` — drop-in instrumentation for an Anthropic SDK loop you already have (no rewrite through `AEPRunner`). |
+| [`python/runners/aep-claude-agent/`](python/runners/aep-claude-agent/) | Observer-pattern runner over the Claude Agent SDK. Translates the SDK's lifecycle to AEP. Fully compliant under v0.1: every verifier trigger (`before_first_turn`, `after_each_turn`, `on_tool:<name>`, `at_end`) and every `on_failure` action (`halt`, `continue`, `inject_correction`). Corrections are spliced into the SDK-owned conversation via `ClaudeSDKClient.query()` between turns. Subagents declared in `Config.subagents` translate to the SDK's `agents={...}` map; the parent's `Agent` tool_use is diverted into AEP's `subagent_*` lifecycle. Also ships `TracedClaudeSDKClient` and `traced_claude_sdk_client` — drop-in instrumentation for an existing `ClaudeSDKClient` loop (no rewrite through the runner CLI). |
+
+---
+
+## Working in the repo
+
+A `Makefile` exposes the orchestration commands:
+
+```
+make help            # list targets
+make check           # format-check + lint + test + conformance (free, fast)
+make smoke           # check + real-LLM tests + all 7 examples (real $$, ~$0.10–0.20)
+make test-real-llm   # gated real-LLM tests for both runners
+make examples        # all 7 examples; 03/07 self-skip without the `claude` CLI
+```
+
+`make smoke` is the pre-tag sanity check — runs the entire matrix end-to-end against real Anthropic models and the Claude Code CLI.
 
 ---
 

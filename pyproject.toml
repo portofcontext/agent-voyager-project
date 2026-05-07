@@ -11,7 +11,7 @@ name = "aep-workspace"
 version = "0.0.0"
 description = "Workspace root for the AEP repo. Not published."
 requires-python = ">=3.11"
-# Listing the four members here is what makes `uv sync` install them.
+# Listing the members here is what makes `uv sync` install them.
 # Workspace membership alone makes them resolvable but not installed.
 dependencies = [
     "aep",
@@ -34,8 +34,8 @@ members = [
     "python/supervisors/simple-supervisor-example",
 ]
 
-# When any workspace member declares `aep`, `aep-anthropic`, or `aep-claude-agent`
-# as a dependency, resolve it from the workspace rather than PyPI. Critical:
+# When any workspace member declares `aep`, `aep-anthropic`, etc. as a
+# dependency, resolve it from the workspace rather than PyPI. Critical:
 # there's an unrelated package on PyPI named `aep` (security tooling), and
 # without this override `pip install` would pull it down on a fresh machine.
 [tool.uv.sources]

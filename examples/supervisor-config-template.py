@@ -62,7 +62,7 @@ def build_config(*, run_id: str = "demo-supervisor-config") -> Config:
                 "name": "tests-pass",
                 "trigger": "after_each_turn",
                 "source": {"shell": "cargo test --quiet"},
-                "on_failure": "halt",  # DDD-invariant pattern: agent_stopped reason='verifier_failed'
+                "on_failure": "halt",  # agent_stopped reason='verifier_failed'
             },
             {
                 "name": "no-secrets-leaked",
