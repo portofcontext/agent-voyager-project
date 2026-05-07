@@ -43,6 +43,7 @@ class StdinSupervisor(SupervisorDriver):
         self._source = source
         self._sink = sink
         self._tool: dict[str, object] = {}
+        self._approval: dict[str, object] = {}
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
         self._stopped = False
@@ -68,10 +69,12 @@ class StdinSupervisor(SupervisorDriver):
             self._cv.notify_all()
 
     def _dispatch(self, msg: object) -> None:
-        from aep import ToolExecResolvedEvent
+        from aep import ApprovalResolvedEvent, ToolExecResolvedEvent
 
         if isinstance(msg, ToolExecResolvedEvent):
             self._tool[msg.data.aep_request_id] = msg
+        elif isinstance(msg, ApprovalResolvedEvent):
+            self._approval[msg.data.aep_approval_id] = msg
 
     def observe(self, event: object) -> None:
         if self._sink is None:
@@ -104,6 +107,9 @@ class StdinSupervisor(SupervisorDriver):
 
     def get_tool_exec_response(self, request_id: str, timeout_ms: int) -> object | None:
         return self._wait_for(self._tool, request_id, timeout_ms)
+
+    def get_approval_response(self, approval_id: str, timeout_ms: int) -> object | None:
+        return self._wait_for(self._approval, approval_id, timeout_ms)
 
 
 def main(argv: list[str] | None = None) -> int:

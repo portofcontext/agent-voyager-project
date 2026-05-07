@@ -51,6 +51,9 @@ from aep.types import (
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
+    ApprovalRequestedData,
+    ApprovalRequestedEvent,
+    ApprovalResolvedEvent,
     Config,
     CostRecordedData,
     CostRecordedEvent,
@@ -93,6 +96,7 @@ from aep.types import (
     Verifier,
     VerifierEvaluatedData,
     VerifierEvaluatedEvent,
+    VerifierSourceApproval,
     new_span_id,
     new_trace_id,
     now_iso,
@@ -139,7 +143,21 @@ def _monotonic_ms() -> int:
 
 
 class _VerifierHalt(Exception):
-    """Raised internally when a verifier with on_failure=halt fails."""
+    """Raised internally when a verifier with halt action fires.
+
+    `success` distinguishes halt-on-success (treated as `converged`,
+    semantically "the agent achieved the declared goal") from
+    halt-on-failure (treated as `verifier_failed`, semantically "the
+    agent broke an invariant"). Caught at run() top-level and
+    translated to the corresponding `StopReason`.
+    """
+
+    def __init__(self, *, success: bool = False) -> None:
+        self.success = success
+        super().__init__(
+            "verifier halted run "
+            + ("on success (declarative convergence)" if success else "on failure")
+        )
 
 
 class AEPRunner:
@@ -180,6 +198,9 @@ class AEPRunner:
         self._next_request_id = lambda: f"req-{next(self._req_seq)}"
         self._sa_seq = itertools.count(1)
         self._next_subagent_invocation_id = lambda: f"sa-{next(self._sa_seq)}"
+        self._approval_seq = itertools.count(1)
+        self._next_approval_id = lambda: f"ap-{next(self._approval_seq)}"
+        self._approval_span_by_id: dict[str, str] = {}
 
         # Span tree state. trace_id is allocated per run; agent_span_id is the
         # root span (lifetime = the run); turn / tool / rpc spans are nested.
@@ -239,8 +260,9 @@ class AEPRunner:
         try:
             self._run_verifiers_for("before_first_turn")
             self._main_loop()
-        except _VerifierHalt:
-            return self._emit_agent_stopped(StopReason.verifier_failed)
+        except _VerifierHalt as halt:
+            reason = StopReason.converged if halt.success else StopReason.verifier_failed
+            return self._emit_agent_stopped(reason)
 
         # Normal exit (loop returned) — close MCP connections cleanly before
         # the agent_stopped this path emits.
@@ -463,6 +485,15 @@ class AEPRunner:
 
     def _handle_tool_call(self, tc, state: _MutableState) -> None:
         cfg = self.config
+
+        # pre_tool:<name> verifiers gate dispatch. They run BEFORE the
+        # tool fires; their outcome decides whether the tool runs at
+        # all. on_failure=halt → run terminates with verifier_failed;
+        # on_failure=inject_correction → tool skipped, correction
+        # injected (agent retries next turn); on_failure=continue →
+        # tool skipped, surfaces to the model as tool_failed.
+        if not self._run_pre_tool_verifiers(tc, state):
+            return
 
         # Subagent invocations route through their own lifecycle
         # (subagent_invoked / subagent_returned / subagent_failed) — they do
@@ -898,6 +929,100 @@ class AEPRunner:
                 continue
             self._run_verifier(verifier)
 
+    def _run_pre_tool_verifiers(self, tc, state: _MutableState) -> bool:
+        """Run all `pre_tool:<tc.tool>` verifiers in declaration order
+        before the tool dispatches. Returns True if dispatch should
+        proceed, False if the tool was skipped (or run halted).
+
+        - Verifier passes (or has no `pre_tool:<name>` verifier):
+          dispatch proceeds. True.
+        - Verifier fails with `on_failure: halt`: raises `_VerifierHalt`,
+          caught at run() and translated to `verifier_failed`. (Doesn't
+          return.)
+        - Verifier fails with `on_failure: inject_correction`: the
+          correction is queued; the tool is treated as a soft rejection
+          so the model has a matching tool_result on the wire and the
+          next turn picks up the correction. False.
+        - Verifier fails with `on_failure: continue`: the tool is also
+          treated as soft-rejected; the model gets `tool_failed` with
+          the verifier's reason. False.
+        """
+        cfg = self.config
+        if not cfg.verifiers:
+            return True
+        trigger = f"pre_tool:{tc.tool}"
+        for verifier in cfg.verifiers:
+            if verifier.trigger != trigger:
+                continue
+            t0 = _time.monotonic()
+            passed, error, data = self._execute_verifier(verifier, tc=tc)
+            duration_ms = int((_time.monotonic() - t0) * 1000)
+            kwargs: dict[str, Any] = {
+                "aep.verifier.name": verifier.name,
+                "aep.verifier.passed": passed,
+                "aep.verifier.duration_ms": duration_ms,
+                "aep.verifier.subject_call_ids": [tc.call_id],
+            }
+            if self._state.total_turns:
+                kwargs["step"] = self._state.total_turns
+            if error is not None:
+                kwargs["aep.verifier.error"] = error
+            if data:
+                kwargs["aep.verifier.data"] = data
+            self._emit(
+                VerifierEvaluatedEvent(
+                    subject=cfg.run_id,
+                    data=VerifierEvaluatedData(
+                        **self._own_span(self._current_parent_for_run_event()),
+                        **kwargs,
+                    ),
+                )
+            )
+            if passed:
+                # on_success may halt (declarative convergence) or no-op.
+                self._apply_verifier_action(verifier, verifier.on_success, success=True)
+                continue  # check next pre_tool verifier
+            # Failed → tool MUST NOT dispatch. Apply on_failure, then
+            # surface to the model as a tool failure if we didn't halt.
+            if verifier.on_failure == OnFailure.halt:
+                raise _VerifierHalt(success=False)
+            # Emit tool_invoked so the trajectory is faithful (agent
+            # attempted the call), then tool_failed so the model has a
+            # matching tool_result on the wire.
+            tool_span_id = new_span_id()
+            self._tool_span_by_call_id[tc.call_id] = tool_span_id
+            self._emit(
+                ToolInvokedEvent(
+                    subject=cfg.run_id,
+                    data=ToolInvokedData(
+                        **self._shared_span(tool_span_id, self._current_turn_span_id),
+                        step=state.total_turns,
+                        **{
+                            "gen_ai.tool.call.id": tc.call_id,
+                            "gen_ai.tool.name": tc.tool,
+                            "gen_ai.tool.call.arguments": tc.input,
+                        },
+                    ),
+                )
+            )
+            error_msg = f"pre_tool verifier {verifier.name!r} failed"
+            self._emit_tool_failed(tc, state, error_msg)
+            # If inject_correction, the correction is appended after
+            # tool_failed; the model sees the rejected tool_result this
+            # turn and the correction message next turn.
+            if verifier.on_failure == OnFailure.inject_correction:
+                assert verifier.correction_message is not None
+                self._history.append(
+                    {
+                        "role": "user",
+                        "content": verifier.correction_message,
+                        "kind": "correction",
+                        "verifier_name": verifier.name,
+                    }
+                )
+            return False
+        return True
+
     def _run_verifier(self, verifier: Verifier) -> None:
         t0 = _time.monotonic()
         passed, error, data = self._execute_verifier(verifier)
@@ -924,22 +1049,28 @@ class AEPRunner:
                 ),
             )
         )
-        if passed:
-            return
-        self._apply_on_failure(verifier)
+        action = verifier.on_success if passed else verifier.on_failure
+        self._apply_verifier_action(verifier, action, success=passed)
 
     def _execute_verifier(
-        self, verifier: Verifier
+        self, verifier: Verifier, *, tc: Any | None = None
     ) -> tuple[bool, VerifierError | None, dict[str, Any] | None]:
         """Execute a verifier source. Returns (passed, error, optional data dict).
 
         `error` distinguishes environment failures from rule failures:
-          - source_timed_out: subprocess.TimeoutExpired
+          - source_timed_out: subprocess.TimeoutExpired or approval RPC timed out
           - source_unavailable: shell exit 127 ("command not found")
           - source_crashed: any other unexpected subprocess error
-          - None: the script ran to completion; exit 0 is pass, non-0 is rule fail
+          - None: the source ran to completion (exit 0 = pass / approved;
+            non-0 = rule fail / denied)
+
+        For approval-source verifiers, `tc` carries the tool-call context
+        for the gate so the supervisor sees what's being approved.
         """
         src = verifier.source
+        if isinstance(src, VerifierSourceApproval):
+            return self._execute_approval_verifier(verifier, tc=tc)
+        # Shell source (existing path)
         try:
             result = subprocess.run(
                 ["sh", "-c", src.shell],
@@ -975,12 +1106,96 @@ class AEPRunner:
         passed = result.returncode == 0
         return passed, None, data
 
-    def _apply_on_failure(self, verifier: Verifier) -> None:
-        if verifier.on_failure == OnFailure.continue_:
+    def _execute_approval_verifier(
+        self, verifier: Verifier, *, tc: Any | None
+    ) -> tuple[bool, VerifierError | None, dict[str, Any] | None]:
+        """Run an approval-source verifier: emit `approval_requested`,
+        suspend until the supervisor replies with `approval_resolved`,
+        record the reply, and return passed=approved.
+
+        Timeout is treated as a denial — same effect as
+        `aep.approval.approved=false`. The trajectory shows
+        `aep.verifier.error = source_timed_out` so consumers can
+        distinguish "supervisor said no" from "supervisor went away."
+        """
+        cfg = self.config
+        assert isinstance(verifier.source, VerifierSourceApproval)
+        approval_id = self._next_approval_id()
+        rpc_span_id = new_span_id()
+        self._approval_span_by_id[approval_id] = rpc_span_id
+
+        request_data: dict[str, Any] = {
+            "step": self._state.total_turns,
+            "aep.approval.id": approval_id,
+            "aep.timeout_ms": verifier.timeout_ms,
+            "aep.verifier.name": verifier.name,
+        }
+        if verifier.source.approval.prompt:
+            request_data["aep.approval.prompt"] = verifier.source.approval.prompt
+        if tc is not None:
+            request_data["gen_ai.tool.name"] = tc.tool
+            request_data["gen_ai.tool.call.id"] = tc.call_id
+            request_data["gen_ai.tool.call.arguments"] = dict(tc.input or {})
+
+        self._emit(
+            ApprovalRequestedEvent(
+                subject=cfg.run_id,
+                data=ApprovalRequestedData(
+                    **self._shared_span(rpc_span_id, self._current_parent_for_run_event()),
+                    **request_data,
+                ),
+            )
+        )
+
+        msg = self.supervisor.get_approval_response(approval_id, verifier.timeout_ms)
+        if msg is None:
+            # Timeout — treat as denial.
+            return (
+                False,
+                VerifierError.source_timed_out,
+                {
+                    "approval_id": approval_id,
+                    "timeout_ms": verifier.timeout_ms,
+                    "reason": "supervisor did not respond within timeout",
+                },
+            )
+
+        assert isinstance(msg, ApprovalResolvedEvent)
+        # Re-stamp the supervisor's reply with our trace context so the
+        # span tree is consistent (same pattern as tool_exec_resolved).
+        new_data = msg.data.model_copy(
+            update={
+                "trace_id": self._trace_id,
+                "span_id": rpc_span_id,
+                "parent_span_id": self._current_parent_for_run_event(),
+            }
+        )
+        msg = msg.model_copy(update={"data": new_data})
+        self._emit(msg)
+
+        approved = msg.data.aep_approval_approved
+        data: dict[str, Any] = {"approval_id": approval_id, "approved": approved}
+        if msg.data.aep_approval_reason:
+            data["reason"] = msg.data.aep_approval_reason
+        return approved, None, data
+
+    def _apply_verifier_action(
+        self, verifier: Verifier, action: OnFailure, *, success: bool
+    ) -> None:
+        """Take the configured action after a verifier completes.
+
+        `action` is `verifier.on_success` when the check passed,
+        `verifier.on_failure` when it failed. `success` is recorded on
+        `_VerifierHalt` so run() can map halt-on-success to
+        `StopReason.converged` (declarative convergence) and
+        halt-on-failure to `StopReason.verifier_failed` (invariant
+        broken).
+        """
+        if action == OnFailure.continue_:
             return
-        if verifier.on_failure == OnFailure.halt:
-            raise _VerifierHalt()
-        if verifier.on_failure == OnFailure.inject_correction:
+        if action == OnFailure.halt:
+            raise _VerifierHalt(success=success)
+        if action == OnFailure.inject_correction:
             assert verifier.correction_message is not None
             self._history.append(
                 {
@@ -991,7 +1206,7 @@ class AEPRunner:
                 }
             )
             return
-        raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
+        raise ValueError(f"unknown verifier action {action!r}")
 
     # ── First / last events ─────────────────────────────────────────────────
 

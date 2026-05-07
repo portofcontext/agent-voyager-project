@@ -77,9 +77,16 @@ class ToolDriver(Protocol):
 
 
 class SupervisorDriver(Protocol):
-    """Handles tool_exec RPC replies for the runner.
+    """Handles agent-initiated RPC replies for the runner.
 
-    v0.1: only one RPC kind (tool_exec). No unsolicited messages, no hook responses.
+    v0.1 has two RPC kinds, both initiated by the agent (the supervisor
+    only speaks in response):
+      - `tool_exec` — a tool whose implementation lives in the supervisor's
+        process or behind an MCP server.
+      - `approval` — an approval-source verifier asking the supervisor for
+        a human or policy decision.
+
+    No unsolicited messages, no hook responses.
     """
 
     def observe(self, event: BaseModel) -> None:
@@ -87,6 +94,14 @@ class SupervisorDriver(Protocol):
         ...
 
     def get_tool_exec_response(self, request_id: str, timeout_ms: int) -> BaseModel | None: ...
+
+    def get_approval_response(self, approval_id: str, timeout_ms: int) -> BaseModel | None:
+        """Wait for an `approval_resolved` keyed by `approval_id`. Returns
+        None on timeout (treated as a denial by the runner). Default
+        implementation in the protocol returns None so older supervisor
+        drivers that predate approval still satisfy the type without
+        crashing — they just never approve anything."""
+        return None
 
 
 # ── Subagent driver ──────────────────────────────────────────────────────────

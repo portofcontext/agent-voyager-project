@@ -408,6 +408,7 @@ class AEPTracer:
         self._before_first_turn_fired = False
         self._stop_reason: StopReason | None = None
         self._halt_pending = False
+        self._halt_success_pending = False
         self._pending_corrections: list[str] = []
         self._entered = False
         self._exited = False
@@ -438,16 +439,25 @@ class AEPTracer:
         try:
             # at_end verifiers fire exactly once before agent_stopped,
             # mirroring AEPRunner. A halting verifier here can override
-            # the reason.
+            # the reason — halt-on-success becomes converged, halt-on-failure
+            # becomes verifier_failed.
             try:
                 self._run_verifiers_for("at_end")
-            except _VerifierHalt:
+            except _VerifierHalt as halt:
                 self._halt_pending = True
+                if halt.success:
+                    self._halt_success_pending = True
 
             if exc_type is not None and self._stop_reason is None:
                 self._stop_reason = StopReason.error
             elif self._halt_pending and self._stop_reason is None:
-                self._stop_reason = StopReason.verifier_failed
+                # Polarity comes from whichever halt fired (at_end here, OR
+                # any earlier turn/tool dispatch through _run_verifiers_for_safe).
+                self._stop_reason = (
+                    StopReason.converged
+                    if self._halt_success_pending
+                    else StopReason.verifier_failed
+                )
             elif self._stop_reason is None:
                 # The caller exited the loop without calling converged() /
                 # boundary_exhausted(). Default to converged.
@@ -1020,11 +1030,19 @@ class AEPTracer:
     def _run_verifiers_for_safe(self, trigger: str) -> None:
         """Run verifiers without propagating _VerifierHalt — instead set
         the halt flag so the caller's `should_stop()` returns True. This
-        keeps the user's loop in control even when a verifier halts."""
+        keeps the user's loop in control even when a verifier halts.
+
+        Halt-on-success cases (declarative convergence via
+        `on_success: halt`) set `_halt_success_pending` so `__exit__`
+        knows to emit `agent_stopped(reason=converged)` rather than
+        the default `verifier_failed`.
+        """
         try:
             self._run_verifiers_for(trigger)
-        except _VerifierHalt:
+        except _VerifierHalt as halt:
             self._halt_pending = True
+            if halt.success:
+                self._halt_success_pending = True
 
     def _run_verifiers_for(self, trigger: str) -> None:
         cfg = self.config
@@ -1059,9 +1077,8 @@ class AEPTracer:
                 ),
             )
         )
-        if passed:
-            return
-        self._apply_on_failure(verifier)
+        action = verifier.on_success if passed else verifier.on_failure
+        self._apply_verifier_action(verifier, action, success=passed)
 
     def _execute_verifier(
         self, verifier: Verifier
@@ -1099,16 +1116,18 @@ class AEPTracer:
         passed = result.returncode == 0
         return passed, None, data
 
-    def _apply_on_failure(self, verifier: Verifier) -> None:
-        if verifier.on_failure == OnFailure.continue_:
+    def _apply_verifier_action(
+        self, verifier: Verifier, action: OnFailure, *, success: bool
+    ) -> None:
+        if action == OnFailure.continue_:
             return
-        if verifier.on_failure == OnFailure.halt:
-            raise _VerifierHalt()
-        if verifier.on_failure == OnFailure.inject_correction:
+        if action == OnFailure.halt:
+            raise _VerifierHalt(success=success)
+        if action == OnFailure.inject_correction:
             assert verifier.correction_message is not None
             self._pending_corrections.append(verifier.correction_message)
             return
-        raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
+        raise ValueError(f"unknown verifier action {action!r}")
 
     # ── Error events (rare; called explicitly by callers) ──────────────────
 
@@ -1130,8 +1149,20 @@ class AEPTracer:
 
 
 class _VerifierHalt(Exception):
-    """Raised by _apply_on_failure when a halt verifier fails. Caught by
-    _run_verifiers_for_safe so the caller's loop stays in control."""
+    """Raised by `_apply_verifier_action` when a halt action fires.
+
+    `success` distinguishes halt-on-success (declarative convergence,
+    maps to `StopReason.converged`) from halt-on-failure (invariant
+    broken, maps to `StopReason.verifier_failed`). Caught by
+    `_run_verifiers_for_safe` and `__exit__`.
+    """
+
+    def __init__(self, *, success: bool = False) -> None:
+        self.success = success
+        super().__init__(
+            "verifier halted run "
+            + ("on success (declarative convergence)" if success else "on failure")
+        )
 
 
 class BoundaryExhausted(Exception):

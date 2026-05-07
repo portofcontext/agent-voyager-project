@@ -31,6 +31,12 @@ def check_consumption(state: RunStateSnapshot, boundary: Boundary | None) -> Bou
         return BoundaryDecision(stop=True, reason=StopReason.budget_exhausted)
     if boundary.max_tokens is not None and state.total_tokens > boundary.max_tokens:
         return BoundaryDecision(stop=True, reason=StopReason.token_limit)
+    if (
+        boundary.max_duration_seconds is not None
+        and state.duration_ms is not None
+        and state.duration_ms > boundary.max_duration_seconds * 1000
+    ):
+        return BoundaryDecision(stop=True, reason=StopReason.duration_limit)
     return BoundaryDecision(stop=False)
 
 

@@ -484,6 +484,352 @@
       "title": "AgentStoppedEvent",
       "type": "object"
     },
+    "ApprovalRequestedData": {
+      "additionalProperties": true,
+      "description": "Runner emits this when an approval-source verifier fires.\n\nCarries the context the supervisor needs to decide: which verifier\nrequested it, the optional prompt, and (for `pre_tool:<name>`\ngates) the tool call this approval covers. The supervisor MUST\nreply with an `approval_resolved` referencing the same\n`aep.approval.id` within `aep.timeout_ms`; missing replies are\ntreated as denials.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "aep.approval.id": {
+          "minLength": 1,
+          "title": "Aep.Approval.Id",
+          "type": "string"
+        },
+        "aep.timeout_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Aep.Timeout Ms",
+          "type": "integer"
+        },
+        "aep.verifier.name": {
+          "minLength": 1,
+          "title": "Aep.Verifier.Name",
+          "type": "string"
+        },
+        "aep.approval.prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Approval.Prompt"
+        },
+        "gen_ai.tool.name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Tool.Name"
+        },
+        "gen_ai.tool.call.id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Tool.Call.Id"
+        },
+        "gen_ai.tool.call.arguments": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Tool.Call.Arguments"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "step",
+        "aep.approval.id",
+        "aep.timeout_ms",
+        "aep.verifier.name"
+      ],
+      "title": "ApprovalRequestedData",
+      "type": "object"
+    },
+    "ApprovalRequestedEvent": {
+      "additionalProperties": false,
+      "description": "Runner asks the supervisor to approve (or deny) something —\ntypically a tool dispatch gated by a pre_tool: + approval-source\nverifier. The supervisor MUST reply with `approval_resolved`.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.approval_requested",
+          "default": "aep.approval_requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "aep://runner",
+          "default": "aep://runner",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ApprovalRequestedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ApprovalRequestedEvent",
+      "type": "object"
+    },
+    "ApprovalResolvedData": {
+      "additionalProperties": true,
+      "description": "Supervisor's decision for a pending `approval_requested`.\n\n`approved` is the load-bearing field. `reason` is free-text\nintended for the trajectory consumer (and for surfacing to the\nmodel on `pre_tool:` denials via the resulting `tool_failed.error`).",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "aep.approval.id": {
+          "minLength": 1,
+          "title": "Aep.Approval.Id",
+          "type": "string"
+        },
+        "aep.approval.approved": {
+          "title": "Aep.Approval.Approved",
+          "type": "boolean"
+        },
+        "aep.approval.reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Approval.Reason"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "aep.approval.id",
+        "aep.approval.approved"
+      ],
+      "title": "ApprovalResolvedData",
+      "type": "object"
+    },
+    "ApprovalResolvedEvent": {
+      "additionalProperties": false,
+      "description": "Supervisor's decision recorded into the trajectory verbatim.\n`source` is `aep://supervisor`.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "aep.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Correlation Id"
+        },
+        "type": {
+          "const": "aep.approval_resolved",
+          "default": "aep.approval_resolved",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ApprovalResolvedData"
+        }
+      },
+      "required": [
+        "source",
+        "data"
+      ],
+      "title": "ApprovalResolvedEvent",
+      "type": "object"
+    },
     "CostRecordedData": {
       "additionalProperties": true,
       "properties": {
@@ -2003,6 +2349,7 @@
         "budget_exhausted",
         "token_limit",
         "turn_limit",
+        "duration_limit",
         "error",
         "interrupted",
         "verifier_failed"
@@ -3963,6 +4310,8 @@
     "mapping": {
       "aep.agent_started": "#/$defs/AgentStartedEvent",
       "aep.agent_stopped": "#/$defs/AgentStoppedEvent",
+      "aep.approval_requested": "#/$defs/ApprovalRequestedEvent",
+      "aep.approval_resolved": "#/$defs/ApprovalResolvedEvent",
       "aep.cost_recorded": "#/$defs/CostRecordedEvent",
       "aep.error_occurred": "#/$defs/ErrorOccurredEvent",
       "aep.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
@@ -4039,6 +4388,12 @@
     },
     {
       "$ref": "#/$defs/ToolExecTimedOutEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalRequestedEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalResolvedEvent"
     },
     {
       "$ref": "#/$defs/VerifierEvaluatedEvent"

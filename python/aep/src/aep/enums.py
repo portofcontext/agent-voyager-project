@@ -16,6 +16,7 @@ class StopReason(StrEnum):
     budget_exhausted = "budget_exhausted"
     token_limit = "token_limit"
     turn_limit = "turn_limit"
+    duration_limit = "duration_limit"
     error = "error"
     interrupted = "interrupted"
     verifier_failed = "verifier_failed"
@@ -53,5 +54,26 @@ BUILT_IN_VERIFIER_TRIGGERS: Final[frozenset[str]] = frozenset(
 
 
 def is_on_tool_trigger(trigger: str) -> bool:
-    """True if trigger matches the on_tool:<name> pattern (used by Verifier triggers)."""
+    """True if trigger matches the `on_tool:<name>` pattern — fires AFTER
+    the named tool returns. Used to assert post-conditions ("the test
+    suite still passes after every write_file")."""
     return trigger.startswith("on_tool:") and len(trigger) > len("on_tool:")
+
+
+def is_pre_tool_trigger(trigger: str) -> bool:
+    """True if trigger matches the `pre_tool:<name>` pattern — fires
+    BEFORE the named tool dispatches. Used to gate dispatch ("run the
+    test suite before deploy", or with an approval source: "ask a human
+    before deploy"). The verifier's outcome decides whether the tool
+    runs at all."""
+    return trigger.startswith("pre_tool:") and len(trigger) > len("pre_tool:")
+
+
+def tool_name_from_trigger(trigger: str) -> str | None:
+    """Extract the tool name from `on_tool:<name>` or `pre_tool:<name>`,
+    or None if the trigger isn't a tool-scoped trigger."""
+    if is_on_tool_trigger(trigger):
+        return trigger[len("on_tool:") :]
+    if is_pre_tool_trigger(trigger):
+        return trigger[len("pre_tool:") :]
+    return None

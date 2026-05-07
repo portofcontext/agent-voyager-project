@@ -2,7 +2,7 @@
   "$defs": {
     "Boundary": {
       "additionalProperties": false,
-      "description": "Hard limits the agent enforces. Strict-greater per SPEC §9.2.",
+      "description": "Hard limits the agent enforces. Strict-greater per SPEC §9.2.\n\nCost / tokens / duration are CONSUMPTION boundaries — checked after\neach turn and tool, and may overshoot a max by one final event because\nthe cost/token spend of the next call can't be projected pre-call.\nStep is a PROJECTION boundary — checked before starting the next turn,\nso `max_steps: N` runs EXACTLY N turns.",
       "properties": {
         "max_cost_usd": {
           "anyOf": [
@@ -42,6 +42,19 @@
           ],
           "default": null,
           "title": "Max Tokens"
+        },
+        "max_duration_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Duration Seconds"
         }
       },
       "title": "Boundary",
@@ -482,7 +495,7 @@
     },
     "Verifier": {
       "additionalProperties": false,
-      "description": "Declarative deterministic check. AEP-specific (no upstream).",
+      "description": "Declarative check at a trigger point. AEP-specific (no upstream).\n\nTwo reaction polarities:\n  - `on_failure` (default `continue`): action when the check FAILS.\n    The common case — invariants that fail trigger correction or halt.\n  - `on_success` (default `continue`): action when the check PASSES.\n    Use `on_success: halt` for declarative convergence — \"stop when\n    this condition is met\". Halt-on-success terminates with\n    `reason=converged`; halt-on-failure terminates with\n    `reason=verifier_failed`.\n\nSources:\n  - `{shell: \"...\"}` — deterministic subprocess; exit 0 = pass.\n  - `{approval: {prompt?: \"...\"}}` — pings the supervisor for a\n    human or policy decision via the `approval_requested` /\n    `approval_resolved` RPC pair. Approved = pass; denied or timed\n    out = fail. Use with `pre_tool:<name>` triggers for human-in-\n    the-loop gates on destructive actions.\n\nA check can set both: e.g. `on_success: halt` + `on_failure: continue`\nmeans \"halt when this passes, otherwise keep going\". Setting both to\n`halt` is allowed but unusual (halts no matter what — useful for\nforced checkpoints).",
       "properties": {
         "name": {
           "minLength": 1,
@@ -494,9 +507,21 @@
           "type": "string"
         },
         "source": {
-          "$ref": "#/$defs/VerifierSourceShell"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerifierSourceShell"
+            },
+            {
+              "$ref": "#/$defs/VerifierSourceApproval"
+            }
+          ],
+          "title": "Source"
         },
         "on_failure": {
+          "$ref": "#/$defs/OnFailure",
+          "default": "continue"
+        },
+        "on_success": {
           "$ref": "#/$defs/OnFailure",
           "default": "continue"
         },
@@ -527,8 +552,23 @@
       "title": "Verifier",
       "type": "object"
     },
+    "VerifierSourceApproval": {
+      "additionalProperties": false,
+      "description": "Approval-source verifier: pass/fail comes from the supervisor's\nresponse to an `aep.approval_requested` RPC. Used at gate triggers\n(typically `pre_tool:<name>`) where a human or policy decides\nwhether the agent proceeds. Approved → pass; denied or timed-out →\nfail. Distinct from shell sources because the decision is non-\ndeterministic and originates outside the runner.",
+      "properties": {
+        "approval": {
+          "$ref": "#/$defs/_ApprovalSpec"
+        }
+      },
+      "required": [
+        "approval"
+      ],
+      "title": "VerifierSourceApproval",
+      "type": "object"
+    },
     "VerifierSourceShell": {
       "additionalProperties": false,
+      "description": "Shell-source verifier: pass/fail comes from the exit code of a\nsubprocess. Deterministic; runs in-process on the runner's host.",
       "properties": {
         "shell": {
           "title": "Shell",
@@ -539,6 +579,26 @@
         "shell"
       ],
       "title": "VerifierSourceShell",
+      "type": "object"
+    },
+    "_ApprovalSpec": {
+      "additionalProperties": false,
+      "description": "The body of `{approval: {...}}` — the prompt and any future\nknobs that describe what the supervisor is being asked to approve.",
+      "properties": {
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        }
+      },
+      "title": "_ApprovalSpec",
       "type": "object"
     }
   },

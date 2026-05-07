@@ -42,6 +42,7 @@ from aep.enums import (
     StopReason,
     VerifierError,
     is_on_tool_trigger,
+    is_pre_tool_trigger,
 )
 
 # ── Common helpers ───────────────────────────────────────────────────────────
@@ -107,6 +108,8 @@ T_MCP_SERVER_DISCONNECTED = "aep.mcp_server_disconnected"
 T_SUBAGENT_INVOKED = "aep.subagent_invoked"
 T_SUBAGENT_RETURNED = "aep.subagent_returned"
 T_SUBAGENT_FAILED = "aep.subagent_failed"
+T_APPROVAL_REQUESTED = "aep.approval_requested"
+T_APPROVAL_RESOLVED = "aep.approval_resolved"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept
@@ -120,12 +123,20 @@ _OPEN = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class Boundary(BaseModel):
-    """Hard limits the agent enforces. Strict-greater per SPEC §9.2."""
+    """Hard limits the agent enforces. Strict-greater per SPEC §9.2.
+
+    Cost / tokens / duration are CONSUMPTION boundaries — checked after
+    each turn and tool, and may overshoot a max by one final event because
+    the cost/token spend of the next call can't be projected pre-call.
+    Step is a PROJECTION boundary — checked before starting the next turn,
+    so `max_steps: N` runs EXACTLY N turns.
+    """
 
     model_config = _STRICT
     max_cost_usd: float | None = Field(default=None, gt=0)
     max_steps: int | None = Field(default=None, gt=0)
     max_tokens: int | None = Field(default=None, gt=0)
+    max_duration_seconds: float | None = Field(default=None, gt=0)
 
 
 class Skill(BaseModel):
@@ -161,41 +172,93 @@ class Tool(BaseModel):
 
 
 class VerifierSourceShell(BaseModel):
+    """Shell-source verifier: pass/fail comes from the exit code of a
+    subprocess. Deterministic; runs in-process on the runner's host."""
+
     model_config = _STRICT
     shell: str
 
 
-# v0.1 ships only shell-source verifiers; future versions may add other variants
-# and at that point `source` becomes a discriminated union.
-VerifierSource = VerifierSourceShell
+class _ApprovalSpec(BaseModel):
+    """The body of `{approval: {...}}` — the prompt and any future
+    knobs that describe what the supervisor is being asked to approve."""
+
+    model_config = _STRICT
+    prompt: str | None = None
+
+
+class VerifierSourceApproval(BaseModel):
+    """Approval-source verifier: pass/fail comes from the supervisor's
+    response to an `aep.approval_requested` RPC. Used at gate triggers
+    (typically `pre_tool:<name>`) where a human or policy decides
+    whether the agent proceeds. Approved → pass; denied or timed-out →
+    fail. Distinct from shell sources because the decision is non-
+    deterministic and originates outside the runner."""
+
+    model_config = _STRICT
+    approval: _ApprovalSpec
+
+
+# Untagged discriminated union: each variant has a distinct top-level
+# field (`shell` vs `approval`) so Pydantic resolves it unambiguously.
+VerifierSource = VerifierSourceShell | VerifierSourceApproval
 
 
 class Verifier(BaseModel):
-    """Declarative deterministic check. AEP-specific (no upstream)."""
+    """Declarative check at a trigger point. AEP-specific (no upstream).
+
+    Two reaction polarities:
+      - `on_failure` (default `continue`): action when the check FAILS.
+        The common case — invariants that fail trigger correction or halt.
+      - `on_success` (default `continue`): action when the check PASSES.
+        Use `on_success: halt` for declarative convergence — "stop when
+        this condition is met". Halt-on-success terminates with
+        `reason=converged`; halt-on-failure terminates with
+        `reason=verifier_failed`.
+
+    Sources:
+      - `{shell: "..."}` — deterministic subprocess; exit 0 = pass.
+      - `{approval: {prompt?: "..."}}` — pings the supervisor for a
+        human or policy decision via the `approval_requested` /
+        `approval_resolved` RPC pair. Approved = pass; denied or timed
+        out = fail. Use with `pre_tool:<name>` triggers for human-in-
+        the-loop gates on destructive actions.
+
+    A check can set both: e.g. `on_success: halt` + `on_failure: continue`
+    means "halt when this passes, otherwise keep going". Setting both to
+    `halt` is allowed but unusual (halts no matter what — useful for
+    forced checkpoints).
+    """
 
     model_config = _STRICT
     name: str = Field(min_length=1)
     trigger: str
-    source: VerifierSourceShell
+    source: VerifierSource
     on_failure: OnFailure = OnFailure.continue_
+    on_success: OnFailure = OnFailure.continue_
     correction_message: str | None = None
     timeout_ms: int = Field(default=30000, gt=0)
 
     @field_validator("trigger")
     @classmethod
     def _validate_trigger(cls, v: str) -> str:
-        if v in BUILT_IN_VERIFIER_TRIGGERS or is_on_tool_trigger(v):
+        if v in BUILT_IN_VERIFIER_TRIGGERS or is_on_tool_trigger(v) or is_pre_tool_trigger(v):
             return v
         raise ValueError(
             f"verifier trigger {v!r} must be one of "
-            f"{sorted(BUILT_IN_VERIFIER_TRIGGERS)} or 'on_tool:<name>'"
+            f"{sorted(BUILT_IN_VERIFIER_TRIGGERS)}, 'on_tool:<name>', "
+            f"or 'pre_tool:<name>'"
         )
 
     @model_validator(mode="after")
     def _inject_correction_requires_message(self) -> Verifier:
-        if self.on_failure == OnFailure.inject_correction and not self.correction_message:
+        if (
+            self.on_failure == OnFailure.inject_correction
+            or self.on_success == OnFailure.inject_correction
+        ) and not self.correction_message:
             raise ValueError(
-                "Verifier.correction_message is required when on_failure='inject_correction'"
+                "Verifier.correction_message is required when "
+                "on_failure or on_success is 'inject_correction'"
             )
         return self
 
@@ -632,6 +695,46 @@ class ToolExecTimedOutData(_SpanData):
     aep_timeout_ms: int = Field(gt=0, alias="aep.timeout_ms")
 
 
+# ── Approval RPC (used by approval-source verifiers; see Verifier) ───────────
+
+
+class ApprovalRequestedData(_SpanData):
+    """Runner emits this when an approval-source verifier fires.
+
+    Carries the context the supervisor needs to decide: which verifier
+    requested it, the optional prompt, and (for `pre_tool:<name>`
+    gates) the tool call this approval covers. The supervisor MUST
+    reply with an `approval_resolved` referencing the same
+    `aep.approval.id` within `aep.timeout_ms`; missing replies are
+    treated as denials.
+    """
+
+    step: int = Field(ge=0)
+    aep_approval_id: str = Field(min_length=1, alias="aep.approval.id")
+    aep_timeout_ms: int = Field(gt=0, alias="aep.timeout_ms")
+    aep_verifier_name: str = Field(min_length=1, alias="aep.verifier.name")
+    aep_approval_prompt: str | None = Field(default=None, alias="aep.approval.prompt")
+    # Tool context — populated when the verifier's trigger is `pre_tool:<name>`.
+    gen_ai_tool_name: str | None = Field(default=None, alias="gen_ai.tool.name")
+    gen_ai_tool_call_id: str | None = Field(default=None, alias="gen_ai.tool.call.id")
+    gen_ai_tool_call_arguments: dict[str, Any] | None = Field(
+        default=None, alias="gen_ai.tool.call.arguments"
+    )
+
+
+class ApprovalResolvedData(_SpanData):
+    """Supervisor's decision for a pending `approval_requested`.
+
+    `approved` is the load-bearing field. `reason` is free-text
+    intended for the trajectory consumer (and for surfacing to the
+    model on `pre_tool:` denials via the resulting `tool_failed.error`).
+    """
+
+    aep_approval_id: str = Field(min_length=1, alias="aep.approval.id")
+    aep_approval_approved: bool = Field(alias="aep.approval.approved")
+    aep_approval_reason: str | None = Field(default=None, alias="aep.approval.reason")
+
+
 class VerifierEvaluatedData(_SpanData):
     """The result of a deterministic Boolean check."""
 
@@ -824,6 +927,32 @@ class ToolExecTimedOutEvent(_CloudEventBase):
     data: ToolExecTimedOutData
 
 
+class ApprovalRequestedEvent(_CloudEventBase):
+    """Runner asks the supervisor to approve (or deny) something —
+    typically a tool dispatch gated by a pre_tool: + approval-source
+    verifier. The supervisor MUST reply with `approval_resolved`."""
+
+    type: Literal["aep.approval_requested"] = T_APPROVAL_REQUESTED
+    source: Literal["aep://runner"] = SOURCE_RUNNER
+    data: ApprovalRequestedData
+
+
+class ApprovalResolvedEvent(_CloudEventBase):
+    """Supervisor's decision recorded into the trajectory verbatim.
+    `source` is `aep://supervisor`."""
+
+    type: Literal["aep.approval_resolved"] = T_APPROVAL_RESOLVED
+    source: str = Field(min_length=1)
+    data: ApprovalResolvedData
+
+    @field_validator("source")
+    @classmethod
+    def _source_must_be_supervisor(cls, v: str) -> str:
+        if v != SOURCE_SUPERVISOR:
+            raise ValueError(f"approval_resolved.source must be {SOURCE_SUPERVISOR!r}; got {v!r}")
+        return v
+
+
 class VerifierEvaluatedEvent(_CloudEventBase):
     type: Literal["aep.verifier_evaluated"] = T_VERIFIER_EVALUATED
     source: Literal["aep://runner"] = SOURCE_RUNNER
@@ -863,13 +992,16 @@ _RUNNER_EVENT_TYPES = (
     ErrorOccurredEvent,
     ToolExecRequestEvent,
     ToolExecTimedOutEvent,
+    ApprovalRequestedEvent,
     VerifierEvaluatedEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
 )
 
-# v0.1: only RPC replies cross the supervisor/MCP-server channel.
-_SUPERVISOR_EVENT_TYPES = (ToolExecResolvedEvent,)
+# v0.1: the supervisor channel carries RPC replies for two protocols —
+# tool_exec and approval. Both are agent-initiated; the supervisor only
+# speaks in response.
+_SUPERVISOR_EVENT_TYPES = (ToolExecResolvedEvent, ApprovalResolvedEvent)
 
 Event = Annotated[
     AgentStartedEvent
@@ -890,13 +1022,15 @@ Event = Annotated[
     | ToolExecRequestEvent
     | ToolExecResolvedEvent
     | ToolExecTimedOutEvent
+    | ApprovalRequestedEvent
+    | ApprovalResolvedEvent
     | VerifierEvaluatedEvent
     | McpServerConnectedEvent
     | McpServerDisconnectedEvent,
     Field(discriminator="type"),
 ]
 
-SupervisorMessage = ToolExecResolvedEvent
+SupervisorMessage = ToolExecResolvedEvent | ApprovalResolvedEvent
 
 _TYPE_TO_MODEL: dict[str, type[BaseModel]] = {}
 for _cls in _RUNNER_EVENT_TYPES + _SUPERVISOR_EVENT_TYPES:

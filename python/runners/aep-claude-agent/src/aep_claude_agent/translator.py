@@ -136,9 +136,19 @@ def _monotonic_ms() -> int:
 
 
 class _VerifierHalt(Exception):
-    """Raised by _apply_on_failure when on_failure=halt fires. Caught at run()
-    top-level (and around the at_end finalizer) to terminate the SDK iteration
-    with reason=verifier_failed."""
+    """Raised by the verifier-action dispatcher when a halt action fires.
+
+    `success` distinguishes halt-on-success (declarative convergence,
+    maps to `StopReason.converged`) from halt-on-failure (invariant
+    broken, maps to `StopReason.verifier_failed`).
+    """
+
+    def __init__(self, *, success: bool = False) -> None:
+        self.success = success
+        super().__init__(
+            "verifier halted run "
+            + ("on success (declarative convergence)" if success else "on failure")
+        )
 
 
 class ClaudeAgentTranslator:
@@ -297,8 +307,8 @@ class ClaudeAgentTranslator:
         try:
             asyncio.run(self._async_invoke_sdk())
             reason = StopReason.converged
-        except _VerifierHalt:
-            reason = StopReason.verifier_failed
+        except _VerifierHalt as halt:
+            reason = StopReason.converged if halt.success else StopReason.verifier_failed
         except KeyboardInterrupt:
             reason = StopReason.interrupted
         except Exception as e:
@@ -340,15 +350,14 @@ class ClaudeAgentTranslator:
                 self._turn_open = False
 
         # at_end verifiers fire exactly once before agent_stopped. They can
-        # also halt — handle that by overriding `reason` to verifier_failed
-        # if no earlier non-converged reason has been set.
+        # also halt — halt-on-success keeps reason=converged; halt-on-failure
+        # overrides to verifier_failed (unless a more-specific failure was
+        # already set during the run, in which case we preserve it).
         try:
             self._run_verifiers_for_trigger("at_end")
-        except _VerifierHalt:
-            # If the run already failed for a different reason, preserve it;
-            # otherwise mark verifier_failed.
+        except _VerifierHalt as halt:
             if reason == StopReason.converged:
-                reason = StopReason.verifier_failed
+                reason = StopReason.converged if halt.success else StopReason.verifier_failed
 
         return self._emit_agent_stopped(reason, error_msg=error_msg)
 
@@ -1012,9 +1021,8 @@ class ClaudeAgentTranslator:
                 ),
             )
         )
-        if passed:
-            return
-        self._apply_on_failure(verifier)
+        action = verifier.on_success if passed else verifier.on_failure
+        self._apply_verifier_action(verifier, action, success=passed)
 
     def _execute_verifier(
         self, verifier: Verifier
@@ -1072,12 +1080,14 @@ class ClaudeAgentTranslator:
         passed = result.returncode == 0
         return passed, None, data
 
-    def _apply_on_failure(self, verifier: Verifier) -> None:
-        if verifier.on_failure == OnFailure.continue_:
+    def _apply_verifier_action(
+        self, verifier: Verifier, action: OnFailure, *, success: bool
+    ) -> None:
+        if action == OnFailure.continue_:
             return
-        if verifier.on_failure == OnFailure.halt:
-            raise _VerifierHalt()
-        if verifier.on_failure == OnFailure.inject_correction:
+        if action == OnFailure.halt:
+            raise _VerifierHalt(success=success)
+        if action == OnFailure.inject_correction:
             assert verifier.correction_message is not None
             # Queue the correction for submission via ClaudeSDKClient.query()
             # after the current response stream completes. The driver runner's
@@ -1086,7 +1096,7 @@ class ClaudeAgentTranslator:
             # user prompt and let the SDK route it through its own loop.
             self._pending_corrections.append(verifier.correction_message)
             return
-        raise ValueError(f"unknown on_failure {verifier.on_failure!r}")
+        raise ValueError(f"unknown verifier action {action!r}")
 
     # ── AEP emission helpers ───────────────────────────────────────────────
 

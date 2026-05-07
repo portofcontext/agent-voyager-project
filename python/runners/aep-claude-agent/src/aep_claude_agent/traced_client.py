@@ -166,9 +166,9 @@ class TracedClaudeSDKClient:
             reason = StopReason.error
         try:
             self._translator._run_verifiers_for_trigger("at_end")
-        except _VerifierHalt:
+        except _VerifierHalt as halt:
             if reason is None or reason == StopReason.converged:
-                reason = StopReason.verifier_failed
+                reason = StopReason.converged if halt.success else StopReason.verifier_failed
         if reason is None:
             reason = StopReason.converged
         self._translator._emit_agent_stopped(reason)
@@ -229,13 +229,15 @@ class TracedClaudeSDKClient:
                 # to swallow our own _VerifierHalt.
                 try:
                     self._translator._run_verifiers_for_trigger("after_each_turn")
-                except _VerifierHalt:
-                    self._stop_reason = StopReason.verifier_failed
+                except _VerifierHalt as halt:
+                    self._stop_reason = (
+                        StopReason.converged if halt.success else StopReason.verifier_failed
+                    )
                     halt_after_yield = True
-        except _VerifierHalt:
+        except _VerifierHalt as halt:
             # Halts originating from inside the SDK's tool dispatch
             # (on_tool:* verifiers in PostToolUse) propagate here.
-            self._stop_reason = StopReason.verifier_failed
+            self._stop_reason = StopReason.converged if halt.success else StopReason.verifier_failed
             return
 
     # ── User-driven control signals ─────────────────────────────────────────
