@@ -266,6 +266,58 @@ def test_subagent_delegation_round_trip_against_real_model() -> None:
     assert stop.data.aep_reason in (StopReason.converged, StopReason.turn_limit)
 
 
+def test_traced_client_drop_in_round_trip_against_real_model() -> None:
+    """End-to-end: an existing-shape Anthropic SDK loop that uses
+    AnthropicTracedClient instead of AEPRunner. The wire events MUST
+    match what AEPRunner would have emitted for the same response —
+    same lifecycle, real cost, real tokens.
+
+    This is the test that proves the drop-in story works against the
+    actual API: the loop body is a vanilla Anthropic loop (no
+    `should_stop()` guard, no separate tracer); AEP events appear on
+    the wire."""
+    import anthropic
+
+    from aep_anthropic import AnthropicTracedClient
+
+    config = Config(
+        schema_version="0.1",
+        run_id="smoke-traced-client",
+        model=SMOKE_MODEL,
+        prompt="Reply with exactly the single word 'pong' and nothing else.",
+        boundary={"max_steps": 2, "max_cost_usd": 0.10},
+    )
+
+    out: list = []
+    real_client = anthropic.Anthropic()
+
+    with AnthropicTracedClient(real_client, config=config, on_event=out.append) as client:
+        msgs = [{"role": "user", "content": config.prompt}]
+        while True:
+            resp = client.messages.create(model=SMOKE_MODEL, messages=msgs, max_tokens=20)
+            if resp.stop_reason == "end_turn":
+                client.converged()
+                break
+            # No tools in this test — tool dispatch path is exercised by
+            # the subagent test above and the existing AEPRunner tests.
+            break  # safety net
+
+    types = [type(ev).__name__ for ev in out]
+    assert types[0] == "AgentStartedEvent"
+    assert types[-1] == "AgentStoppedEvent"
+    assert "ModelTurnStartedEvent" in types
+    assert "ModelTurnEndedEvent" in types
+    assert "TextEmittedEvent" in types
+    assert "CostRecordedEvent" in types
+
+    stopped = next(ev for ev in out if isinstance(ev, AgentStoppedEvent))
+    assert stopped.data.aep_reason == StopReason.converged
+    snap = stopped.data.aep_state
+    assert snap.total_cost_usd > 0, "real call should accrue cost"
+    assert snap.total_tokens > 0
+    assert snap.total_turns >= 1
+
+
 def test_token_input_includes_cache_reads_when_present() -> None:
     """If the API reports cache_read_input_tokens, the AEP wire's
     gen_ai.usage.input_tokens MUST include them (per SPEC.md §9.4). On a

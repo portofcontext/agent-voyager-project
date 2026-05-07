@@ -82,6 +82,39 @@ uv run aep-conformance check-coverage  # every event type declared in the schema
 `check-coverage` is the deterministic floor: a new event type without a
 matching conformance case fails the command. Wire it into CI when you have one.
 
+## End-to-end sanity: `make smoke`
+
+`make check` (format + lint + tests + conformance) is the **free pre-commit
+floor** — run it on every change.
+
+`make smoke` is the **paid pre-merge ceiling** — runs `check`, then the
+real-LLM test matrix for both runners, then every example end-to-end
+against real Anthropic models. Costs ~$0.10–0.20 on Haiku.
+
+Run `make smoke` whenever you've changed something that could pass unit /
+seam tests but break real-model integration. Concretely, that's any of:
+
+- **Wire format** — `python/aep/src/aep/types.py`, the JSON Schemas, any new
+  event type or Config field.
+- **Runner loop** — `python/aep/src/aep/runner/runner.py` (boundary,
+  verifier dispatch, tool/subagent dispatch, history shape).
+- **Provider drivers / translators** —
+  `python/runners/aep-anthropic/src/aep_anthropic/driver.py` (token / cost
+  extraction), `python/runners/aep-claude-agent/src/aep_claude_agent/translator.py`
+  (SDK message handling, hook installation).
+- **Tracer or traced clients** — `aep.tracer` (AEPTracer, format_event,
+  module-level helpers), `aep_anthropic.AnthropicTracedClient` /
+  `wrap_anthropic`, `aep_claude_agent.TracedClaudeSDKClient` /
+  `traced_claude_sdk_client`.
+- **`build_anthropic_tools` and similar Config → SDK translators** — they
+  affect what the model actually sees.
+
+Skip `make smoke` only for doc-only changes, internal refactors with no
+observable wire impact, or test-only changes. When in doubt, run it —
+the real-LLM tests have caught silent bugs that no mock could surface
+(model-side flakiness, SDK-version drift, cost-calculation arithmetic
+that compiled fine but undercounted by 30%).
+
 ## Things you should not do
 
 - Do NOT add prose docs that duplicate `SPEC.md`. Two sources of truth
@@ -106,12 +139,20 @@ matching conformance case fails the command. Wire it into CI when you have one.
 
 - `spec/v0.1/` — normative spec + JSON Schema bundle (auto-generated)
 - `conformance/v0.1/cases/` — language-agnostic test cases
-- `python/aep/` — wire types (Pydantic) + reference runner + conformance harness
-  + cross-validation interop tests (gated on the `[interop]` extras group)
-- `python/runners/aep-anthropic/` — driver-pattern runner over Anthropic API
-- `python/runners/aep-claude-agent/` — observer-pattern runner over Claude Agent SDK
+- `python/aep/` — wire types (Pydantic) + reference runner (`AEPRunner`) +
+  reference tracer (`AEPTracer` in `aep.tracer` for instrumenting an existing
+  loop) + conformance harness + cross-validation interop tests (gated on the
+  `[interop]` extras group)
+- `python/runners/aep-anthropic/` — driver-pattern runner over Anthropic API,
+  plus `AnthropicTracedClient` and `wrap_anthropic` (drop-in over an existing
+  Anthropic SDK loop)
+- `python/runners/aep-claude-agent/` — observer-pattern runner over Claude Agent SDK,
+  plus `TracedClaudeSDKClient` and `traced_claude_sdk_client` (drop-in over an
+  existing `ClaudeSDKClient` loop)
 - `python/supervisors/simple-supervisor-example/` — worked supervisor example
-- `scripts/` — `generate-schemas.py`, `migrate-conformance-cases.py`,
-  `run-examples.sh`, `build-skill.sh`
+  + the runnable real-LLM examples (`examples/01_*` through `examples/07_*`)
+- `scripts/` — `generate-schemas.py`, `build-skill.sh`
+- `Makefile` — `make help` lists all targets; `make smoke` is the pre-merge
+  full-matrix sanity check (see above)
 - `FOUNDATIONS.md` — what AEP is built on (CloudEvents, OTel GenAI, OTel spans,
   JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes

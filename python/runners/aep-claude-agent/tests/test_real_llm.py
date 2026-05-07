@@ -140,6 +140,67 @@ def test_text_emitted_carries_assistant_content() -> None:
         assert "hello" in joined, f"expected 'hello' in emitted text, got {joined!r}"
 
 
+def test_traced_client_drop_in_round_trip_against_real_sdk() -> None:
+    """End-to-end: an existing-shape Claude Agent SDK loop using
+    `TracedClaudeSDKClient` instead of `ClaudeSDKClient` directly. The
+    user keeps their `async for message in client.receive_response()`
+    pattern; AEP events flow on the wire automatically.
+
+    Proves the drop-in story works against the actual SDK:
+      - agent_started / agent_stopped emitted on context manager open/close
+      - At least one ModelTurnEnded with non-zero usage (real model call)
+      - The user's iterator received SDK Message instances unmodified
+      - Run accrues real cost and converges
+    """
+    import asyncio
+
+    from aep_claude_agent import TracedClaudeSDKClient
+
+    config = Config(
+        schema_version="0.1",
+        run_id="traced-client-smoke",
+        model=SMOKE_MODEL,
+        prompt="Reply with exactly the single word 'pong'.",
+        boundary=TIGHT_BOUNDARY,
+    )
+    captured: list = []
+    received_messages: list = []
+
+    async def _run() -> None:
+        async with TracedClaudeSDKClient(config=config, on_event=captured.append) as client:
+            await client.connect(config.prompt)
+            async for message in client.receive_response():
+                received_messages.append(message)
+            client.converged()
+
+    asyncio.run(_run())
+
+    types = [type(ev).__name__ for ev in captured]
+    assert types[0] == "AgentStartedEvent"
+    assert types[-1] == "AgentStoppedEvent"
+    assert "ModelTurnStartedEvent" in types
+    assert "ModelTurnEndedEvent" in types
+
+    # Real call → at least one turn with non-zero usage.
+    turn_ends = [ev for ev in captured if isinstance(ev, ModelTurnEndedEvent)]
+    assert turn_ends
+    total_in = sum(ev.data.gen_ai_usage_input_tokens for ev in turn_ends)
+    total_out = sum(ev.data.gen_ai_usage_output_tokens for ev in turn_ends)
+    assert total_in > 0 and total_out > 0, "real SDK call must report token usage"
+
+    # The user's iterator saw SDK Message instances unmodified.
+    assert received_messages, "user's async-for body MUST receive at least one message"
+    # The SDK class names that end up in `received_messages` are SDK-defined
+    # (AssistantMessage, ResultMessage, SystemMessage, etc.). We don't pin
+    # the exact set — just assert SOMETHING came through with content.
+    has_content = any(getattr(m, "content", None) for m in received_messages)
+    assert has_content, "expected at least one message with .content"
+
+    stopped = next(ev for ev in captured if isinstance(ev, AgentStoppedEvent))
+    assert stopped.data.aep_reason in (StopReason.converged, StopReason.turn_limit)
+    assert stopped.data.aep_state.total_cost_usd > 0
+
+
 def test_model_turn_ended_carries_otel_genai_usage() -> None:
     """Per the OTel GenAI conventions, model_turn_ended.data MUST surface
     `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`. If the SDK

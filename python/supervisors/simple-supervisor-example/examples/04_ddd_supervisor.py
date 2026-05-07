@@ -111,7 +111,17 @@ def main() -> int:
             "covering the happy path and one rejection case. End by saying DONE."
         ),
         profile="ddd-strict",
-        model="claude-haiku-4-5-20251001",
+        # Sonnet rather than Haiku here because this example is the most
+        # adversarial in the repo — the task is intentionally a tension
+        # against an existing aggregate invariant (OrderLine.unit_price >= 0
+        # vs. the requested NEGATIVE discount-line price). Haiku reliably
+        # hits the turn limit fighting the invariant test; Sonnet finds
+        # the right shape (typically a separate `discount: Decimal` field
+        # on Order or a non-OrderLine discount value object) within budget.
+        # The verifier mechanism works either way — this is just choosing
+        # a model strong enough to demonstrate the resolution rather than
+        # the standoff.
+        model="claude-sonnet-4-6",
         # Generous boundary because pytest runs after each turn (slow vs
         # mock); domain layer is small but multi-turn is normal here.
         boundary_overrides={"max_cost_usd": 1.50, "max_steps": 15, "max_tokens": 200_000},
