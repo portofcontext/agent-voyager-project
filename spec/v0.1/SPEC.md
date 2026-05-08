@@ -25,7 +25,7 @@ See [`FOUNDATIONS.md`](../../FOUNDATIONS.md) for the full mapping rationale.
 
 ## 1. The seam
 
-AVP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
+AVP defines exactly one seam, between two roles, with **two unidirectional flows** crossing it:
 
 - **Supervisor** — declares the agent's complete environment in a Commission sent at startup. MCP servers (the supervisor-side tool dispatch path). Skills. Subagents. The prompt. Once the Commission is sent, the supervisor observes the trajectory; it does not reach in.
 - **Agent** — runs the agent inside the supervisor's environment. Emits a stream of facts (events) that the supervisor observes.
@@ -82,7 +82,7 @@ Every conforming trajectory opens with three events, in this exact order:
 
 These are distinct facts the wire records before the agent runs:
 
-- **`avp.run_requested`** anchors the run. The agent emits it from `Commission.supervisor` with `source: avp://supervisor` — agent-relayed; the agent stamps the source URI to attribute the run to the originating supervisor build. `data.avp.config` carries the full Commission snapshot the supervisor handed in, so an auditor reading the trajectory can re-derive the run's input surface without an external Commission registry. `data.avp.supervisor.name` and the optional `data.avp.supervisor.version` complete the attribution.
+- **`avp.run_requested`** anchors the run. The agent emits it from `Commission.supervisor` with `source: avp://supervisor` — agent-relayed; the agent stamps the source URI to attribute the run to the originating supervisor build. `data.avp.commission` carries the full Commission snapshot the supervisor handed in, so an auditor reading the trajectory can re-derive the run's input surface without an external Commission registry. `data.avp.supervisor.name` and the optional `data.avp.supervisor.version` complete the attribution.
 
 - **`avp.agent_described`** is the agent's "whoami" — its self-published manifest of everything triggerable without supervisor configuration: SDK preset tools, runtime-bundled subagents, runtime-bundled skills, plus the agent's name, version, and supported AVP spec version. The payload (`data.avp.agent`) MUST equal what `<agent> describe` prints to stdout for the same agent build. This makes the audit trail and pre-flight introspection two views of the same fact.
 
@@ -311,7 +311,7 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 
 | Type | Source(s) | One-line semantics |
 |---|---|---|
-| `avp.run_requested` | `avp://supervisor` | First event. Agent-relayed; supervisor-attributed. Anchors the run with `avp.config` (full Commission snapshot) + `avp.supervisor.name`. See §3.1. |
+| `avp.run_requested` | `avp://supervisor` | First event. Agent-relayed; supervisor-attributed. Anchors the run with `avp.commission` (full Commission snapshot) + `avp.supervisor.name`. See §3.1. |
 | `avp.agent_described` | `avp://agent` | Second event. The agent's self-published manifest (`avp.agent`) — same payload `<agent> describe` prints. See §3.1. |
 | `avp.agent_started` | `avp://agent` | Third event. Merged view: what the model will actually see, after Commission × SDK enrichment. |
 | `avp.agent_stopped` | `avp://agent` | Run has ended; last event of the trajectory. |
@@ -348,7 +348,7 @@ Any `type` value not in the `avp.*` namespace is a custom event. Implementations
 - Validate them against the CloudEvents 1.0 envelope shape — `specversion`, `id`, `source`, `type`, `time`, `data` MUST be present.
 - Pass them through without error if they do not recognize the `type`.
 
-Implementers SHOULD use reverse-DNS `type` values (e.g. `com.example.verifier_result`) to avoid future conflicts. The `avp.*` namespace is reserved.
+Implementers SHOULD use reverse-DNS `type` values (e.g. `com.example.deploy_completed`) to avoid future conflicts. The `avp.*` namespace is reserved.
 
 For **non-spec fields within a known event type**: place them inside `data` under a vendor-namespaced key (e.g., `vendor.priority`, `acme.region`). The reference parser allows extra keys to round-trip through `data` verbatim, so vendor extensions don't require a separate envelope.
 
@@ -361,7 +361,7 @@ For **non-spec fields within a known event type**: place them inside `data` unde
 A agent is conforming if and only if all of the following hold:
 
 1. It reads exactly one valid `Commission` (per `commission.schema.json`) before emitting any events.
-2. The trajectory MUST open with the prelude defined in §3.1: `avp.run_requested` (source=`avp://supervisor`), then `avp.agent_described` (source=`avp://agent`), then `avp.agent_started` (source=`avp://agent`), in that exact order. `avp.run_requested.data.avp.config` MUST carry a faithful snapshot of the Commission the supervisor handed in. `avp.agent_described.data.avp.agent` MUST equal the manifest payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface — the agent's built-in tools, filtered by `Commission.allowed_tools` if set, plus any MCP-server tools surfaced post-`mcp_server_connected`. Each tool entry MUST include `name`.
+2. The trajectory MUST open with the prelude defined in §3.1: `avp.run_requested` (source=`avp://supervisor`), then `avp.agent_described` (source=`avp://agent`), then `avp.agent_started` (source=`avp://agent`), in that exact order. `avp.run_requested.data.avp.commission` MUST carry a faithful snapshot of the Commission the supervisor handed in. `avp.agent_described.data.avp.agent` MUST equal the manifest payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface — the agent's built-in tools, filtered by `Commission.allowed_tools` if set, plus any MCP-server tools surfaced post-`mcp_server_connected`. Each tool entry MUST include `name`.
 3. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`). All v0.1 events EXCEPT `avp.run_requested` MUST set `source: "avp://agent"`. `avp.run_requested` is the only event with `source: "avp://supervisor"` — agent-relayed; the agent stamps the source URI from `Commission.supervisor`.
 4. For every model inference, it MUST emit `avp.model_turn_started` immediately before the request and `avp.model_turn_ended` immediately after the response.
 5. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.

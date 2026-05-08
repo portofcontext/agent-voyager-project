@@ -2,7 +2,7 @@
 
 Language-agnostic test cases that pin down behavior the spec mandates. Every AVP-compliant SDK MUST pass every case in this directory.
 
-This is the operational answer to spec drift. Without a shared core implementation (AVP follows OpenTelemetry's pattern: native idiomatic SDKs per language, not a single Rust core with bindings), the conformance suite is what keeps Python, TypeScript, Go, Rust, and future SDKs from disagreeing about what the spec actually means at the timeout boundary, the cost edge, the source-field discipline, and the verifier lifecycle.
+This is the operational answer to spec drift. Without a shared core implementation (AVP follows OpenTelemetry's pattern: native idiomatic SDKs per language, not a single Rust core with bindings), the conformance suite is what keeps Python, TypeScript, Go, Rust, and future SDKs from disagreeing about what the spec actually means at the prelude shape, source-field discipline, MCP lifecycle, and tool-dispatch wire shape.
 
 ## Layout
 
@@ -14,10 +14,15 @@ conformance/v0.1/
 │   └── test-case.schema.json   (JSON Schema for case files)
 ├── validate.py        (validates all cases against test-case.schema.json)
 └── cases/
-    ├── boundary/                (cost / steps / tokens edges)
-    ├── hook-lifecycle/          (fired → resolved | timed_out)
+    ├── allowed-tools/           (Commission.allowed_tools filters the surface)
+    ├── mcp/                     (mcp_server_connected lifecycle, dispatch_target tagging)
+    ├── prelude/                 (run_requested → agent_described → agent_started ordering)
+    ├── reasoning/               (avp.reasoning.* attributes on model_turn_ended)
+    ├── refusal/                 (refusal_recorded provenance)
+    ├── skills/                  (skill_loaded payload)
     ├── source-field/            (source=agent vs supervisor discipline)
-    └── timeout/                 (default verdicts, empty-string fallback)
+    ├── subagent/                (subagent_invoked / subagent_returned bracketing)
+    └── text/                    (text_emitted shape)
 ```
 
 ## How an SDK uses the suite

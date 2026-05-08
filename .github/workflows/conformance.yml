@@ -7,7 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# All AEP-compliant SDKs must pass the language-agnostic conformance suite.
+# All avp-compliant SDKs must pass the language-agnostic conformance suite.
 # This workflow gates that contract on every push and PR.
 
 jobs:
@@ -44,12 +44,12 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install AEP packages (editable)
+      - name: Install avp packages (editable)
         run: |
           python -m pip install --upgrade pip
-          pip install -e python/aep[dev]
-          pip install -e python/runners/aep-anthropic[dev] --no-deps
-          pip install -e python/runners/aep-claude-agent[dev] --no-deps
+          pip install -e python/avp[dev]
+          pip install -e python/runners/avp-anthropic[dev] --no-deps
+          pip install -e python/runners/avp-claude-agent[dev] --no-deps
           # Real upstream SDKs are pulled separately so the runner installs don't
           # block on Anthropic / Claude Agent SDK availability:
           pip install "anthropic>=0.40,<1" || echo "anthropic SDK install skipped"
@@ -57,24 +57,24 @@ jobs:
           pip install "claude-agent-sdk>=0.1" || echo "claude-agent-sdk install skipped (translator tests will still run)"
 
       - name: Validate conformance case files against test-case schema
-        run: aep-conformance validate
+        run: avp-conformance validate
 
       - name: Check every event type has conformance coverage
-        run: aep-conformance check-coverage
+        run: avp-conformance check-coverage
 
-      - name: Run aep package tests (full conformance suite)
+      - name: Run avp package tests (full conformance suite)
         run: |
-          cd python/aep
+          cd python/avp
           pytest -v
 
-      - name: Run aep-anthropic driver tests (mock client only)
+      - name: Run avp-anthropic driver tests (mock client only)
         run: |
-          cd python/runners/aep-anthropic
+          cd python/runners/avp-anthropic
           pytest -v -m "not real_llm"
 
-      - name: Run aep-claude-agent translator tests
+      - name: Run avp-claude-agent translator tests
         run: |
-          cd python/runners/aep-claude-agent
+          cd python/runners/avp-claude-agent
           pytest -v
 
   real-llm-smoke:
@@ -97,11 +97,11 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install aep + aep-anthropic
+      - name: Install avp + avp-anthropic
         run: |
           python -m pip install --upgrade pip
-          pip install -e python/aep[dev]
-          pip install -e python/runners/aep-anthropic[dev]
+          pip install -e python/avp[dev]
+          pip install -e python/runners/avp-anthropic[dev]
 
       - name: Run real-LLM smoke tests
         env:
@@ -111,5 +111,5 @@ jobs:
             echo "ANTHROPIC_API_KEY secret not set; configure it in repo Settings → Secrets and variables → Actions."
             exit 1
           fi
-          cd python/runners/aep-anthropic
+          cd python/runners/avp-anthropic
           pytest -v -m real_llm

@@ -327,7 +327,7 @@ _BLOCK_HANDLERS: dict[str, _BlockHandler] = {
 }
 
 
-def _anthropic_response_to_aep(
+def _anthropic_response_to_avp(
     response: Any, model: str, prices: PriceTable, duration_ms: int
 ) -> ModelResponse:
     """Translate an anthropic.types.Message → AVP ModelResponse.
@@ -643,7 +643,7 @@ class AnthropicModelDriver(ModelDriver):
         t0 = time.monotonic()
         response = self.client.messages.create(**kwargs)
         duration_ms = int((time.monotonic() - t0) * 1000)
-        return _anthropic_response_to_aep(response, self.model, self.prices, duration_ms)
+        return _anthropic_response_to_avp(response, self.model, self.prices, duration_ms)
 
 
 # ── Commission → Anthropic tools[] translation ────────────────────────────────────

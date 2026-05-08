@@ -32,7 +32,7 @@ The harness is invoked once per case file. Its inputs are:
 - Mutate the case file or config.
 - Interpret event types not enumerated in the v0.1 spec — custom events MUST be passed through as opaque objects.
 - Modify event order or field values during capture.
-- Time out the run independently. Boundary and hook timeouts in cases are exercised by the SDK's own timeout machinery; the harness has no clock of its own besides `delay_ms` for supervisor scripting.
+- Time out the run independently. The harness has no clock of its own besides `delay_ms` for supervisor scripting.
 
 ## Placeholder substitution
 
@@ -70,10 +70,10 @@ A captured event matches the matcher if every constraint in `match` holds. The c
 The harness prints (and optionally writes JUnit XML) per case:
 
 ```
-PASS  boundary-cost-strict-less-than-runs       (12ms)
-FAIL  hook-verdict-stop-yields-supervisor-stopped
-        expected event matching {type: "agent_stopped", reason: "supervisor_stopped"}
-        captured: agent_stopped { reason: "converged", ... }
+PASS  prelude-emits-run-requested-then-agent-described       (12ms)
+FAIL  source-field-agent-stopped-must-be-agent-source
+        expected event matching {type: "agent_stopped", source: "avp://agent"}
+        captured: agent_stopped { source: "avp://supervisor", ... }
         full trajectory: <last 20 events>
 ```
 

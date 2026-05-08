@@ -27,8 +27,7 @@
       }
     ],
     "capabilities": [
-      "mcp",
-      "verifiers"
+      "mcp"
     ]
   },
   "config": {
@@ -80,8 +79,7 @@
                 }
               ],
               "capabilities": [
-                "mcp",
-                "verifiers"
+                "mcp"
               ]
             }
           }

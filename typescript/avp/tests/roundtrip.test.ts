@@ -39,7 +39,6 @@ test("agent_started parses + matches the discriminator", () => {
         "run_id": "r1",
         "model": "test/mock"
       },
-      "avp.boundary": {},
       "started_at": "2026-05-08T00:00:00+00:00"
     }
   }`;

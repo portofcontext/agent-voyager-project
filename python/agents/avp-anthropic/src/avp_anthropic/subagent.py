@@ -108,10 +108,10 @@ class AnthropicSubagentDriver:
             history.append({"role": "system", "content": subagent.system_prompt})
         history.append({"role": "user", "content": prompt_text})
 
-        # Subagent runs unbounded until the model converges or returns a
-        # tool call (the v0.1 prototype has no subagent tools). The hardcoded
-        # cap below is a runaway-protection safety net, not a spec-mandated
-        # boundary — keeps a stuck subagent from looping forever.
+        # Subagent runs until the model converges or returns a tool call
+        # (the v0.1 prototype has no subagent tools). The hardcoded cap
+        # below is a runaway-protection safety net only — keeps a stuck
+        # subagent from looping forever; v0.1 has no spec mechanism for caps.
         max_steps = _SUBAGENT_DEFAULT_MAX_STEPS
 
         model_id = subagent.model or self._default_model

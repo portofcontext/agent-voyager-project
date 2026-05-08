@@ -26,7 +26,7 @@ match event {
 }
 ```
 
-Use `avp::config`, `avp::event`, `avp::supervisor_message` for the helper data types (the per-event `*Data` structs, `JsonRpcRequestPayload`, `Verifier`, etc.).
+Use `avp::commission`, `avp::event`, `avp::supervisor_message` for the helper data types (the per-event `*Data` structs, `JsonRpcRequestPayload`, etc.).
 
 ## Source of truth
 
@@ -34,7 +34,7 @@ Use `avp::config`, `avp::event`, `avp::supervisor_message` for the helper data t
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `rust/avp/src/*.rs` (generated here, via `cargo-typify`)
 
-Don't edit `src/{config,event,supervisor_message}.rs` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event,supervisor_message}.rs` by hand — they're regenerated. Edit `types.py` upstream.
 
 ## Regenerating
 
@@ -46,6 +46,6 @@ make bindings-test      # smoke tests for both Rust and TS
 
 ## Known shape quirks
 
-- **Newtype wrappers everywhere.** typify generates `pub struct AepApprovalId(String)` and similar one-line wrappers per nullable string. Use `.0` or `Deref` to get the inner value. Verbose but type-safe.
+- **Newtype wrappers everywhere.** typify generates `pub struct AvpApprovalId(String)` and similar one-line wrappers per nullable string. Use `.0` or `Deref` to get the inner value. Verbose but type-safe.
 - **`Subject`, `Id`, etc. are duplicated per event variant.** typify can't deduplicate identical types across schema definitions. They're equivalent on the wire; the duplication is a code-size wart, not a correctness problem.
 - **Helper types repeat across modules.** `JsonRpcRequestPayload` exists in both `event` and `supervisor_message` because typify can't follow `$ref` across schema files. Pick the module-scoped one matching what you're deserializing.

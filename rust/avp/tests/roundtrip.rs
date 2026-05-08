@@ -31,7 +31,6 @@ fn agent_started_roundtrips() {
                 "run_id": "r1",
                 "model": "test/mock"
             },
-            "avp.boundary": {},
             "started_at": "2026-05-08T00:00:00+00:00"
         }
     }"#;

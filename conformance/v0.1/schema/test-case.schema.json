@@ -220,7 +220,7 @@
           "description": "Optional structured result (any JSON value). Surfaces on subagent_returned.data.avp.subagent.result.structured."
         },
         "reason": {
-          "enum": ["converged", "budget_exhausted", "token_limit", "turn_limit", "error", "interrupted", "verifier_failed"],
+          "enum": ["converged", "error", "interrupted", "refused"],
           "default": "converged",
           "description": "How the subagent terminated; mirrors AVP StopReason."
         },
@@ -232,7 +232,7 @@
         "usage": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Subagent's RunStateSnapshot rollup. Reflected on subagent_returned.data.avp.subagent.usage AND added to the parent's cumulative state for boundary checks.",
+          "description": "Subagent's RunStateSnapshot rollup. Reflected on subagent_returned.data.avp.subagent.usage AND added to the parent's cumulative state.",
           "properties": {
             "total_cost_usd": { "type": "number", "minimum": 0 },
             "total_tokens":   { "type": "integer", "minimum": 0 },

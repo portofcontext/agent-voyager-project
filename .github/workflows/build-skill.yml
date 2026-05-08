@@ -1,6 +1,6 @@
 name: Build skill artifact
 
-# Re-package aep.skill whenever the skill bundle's contents change. Path filter
+# Re-package avp.skill whenever the skill bundle's contents change. Path filter
 # scopes this to files that actually end up inside the .skill — code-only changes
 # under python/runners/ or root README.md don't trigger a rebuild.
 
@@ -12,7 +12,7 @@ on:
       - "examples/**"
       - "spec/v0.1/**"
       - "conformance/v0.1/**"
-      - "python/aep/**"
+      - "python/avp/**"
       - "scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
     tags: ["v*"]
@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   build:
-    name: Package aep.skill
+    name: Package avp.skill
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -49,7 +49,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/anthropics/skills.git /tmp/anthropics-skills
 
-      - name: Build aep.skill
+      - name: Build avp.skill
         env:
           # Locate the skill-creator subdir inside the cloned anthropics/skills repo.
           SKILL_CREATOR_DIR: /tmp/anthropics-skills/skills/skill-creator
@@ -60,17 +60,17 @@ jobs:
         run: |
           python -c "
           import zipfile, sys
-          with zipfile.ZipFile('dist/aep.skill') as z:
+          with zipfile.ZipFile('dist/avp.skill') as z:
               names = z.namelist()
-              assert any(n == 'aep/SKILL.md' for n in names), f'aep/SKILL.md missing from .skill; saw {names[:5]}...'
-              print(f'✓ aep.skill OK — {len(names)} files')
+              assert any(n == 'avp/SKILL.md' for n in names), f'avp/SKILL.md missing from .skill; saw {names[:5]}...'
+              print(f'✓ avp.skill OK — {len(names)} files')
           "
 
-      - name: Upload aep.skill as workflow artifact
+      - name: Upload avp.skill as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aep-skill
-          path: dist/aep.skill
+          name: avp-skill
+          path: dist/avp.skill
           if-no-files-found: error
           retention-days: 30
 
@@ -79,6 +79,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/aep.skill
+          files: dist/avp.skill
           fail_on_unmatched_files: true
           generate_release_notes: true

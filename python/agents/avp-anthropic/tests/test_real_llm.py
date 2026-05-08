@@ -229,7 +229,7 @@ def test_subagent_delegation_round_trip_against_real_model() -> None:
     parent_snap = stop.data.avp_state
     assert parent_snap.total_cost_usd >= sa_usage.total_cost_usd, (
         "subagent usage MUST roll up into parent's RunStateSnapshot so "
-        "the parent's aep.state reflects the true total"
+        "the parent's avp.state reflects the true total"
     )
     assert stop.data.avp_reason == StopReason.converged
 

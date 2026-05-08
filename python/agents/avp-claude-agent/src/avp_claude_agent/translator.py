@@ -337,9 +337,9 @@ class ClaudeAgentTranslator:
         self._agent_span_id = parent_agent_span_id or new_span_id()
         self._suppress_lifecycle = suppress_lifecycle
         # In delegated mode, push per-turn deltas into the parent tracer
-        # so its cumulative state (boundary, agent_stopped totals)
-        # reflects this translator's spend. Without this, the wire shows
-        # real per-turn cost but agent_stopped reports zeros — see
+        # so its cumulative state (agent_stopped totals) reflects this
+        # translator's spend. Without this, the wire shows real per-turn
+        # cost but agent_stopped reports zeros — see
         # `_handle_assistant_message` for the per-turn push.
         self._parent_tracer = parent_tracer
         self._current_turn_span_id: str | None = None
@@ -383,8 +383,6 @@ class ClaudeAgentTranslator:
         # cumulative-drop is treated as a deliberate baseline reset (graceful)
         # rather than as an unexpected accounting reset (errored).
         self._baseline_reset_pending = False
-        # When True (default), `after_each_turn` verifiers run inline at the
-        # end of `_handle_assistant_message` — matches AVPAgent / the agent
         # Stop hook may fire per-turn; informational only post-cut.
         self._stop_seen = False
         self._sdk_client_cls = sdk_client_cls
@@ -667,11 +665,11 @@ class ClaudeAgentTranslator:
           AVP Subagent.model          → AgentDefinition.model
           AVP Subagent.allowed_tools  → AgentDefinition.tools (allowlist)
 
-        v0.1 prototype: subagent.tools / verifiers / skills / inherit_tools /
-        nested subagents are not yet wired into the SDK side. The Subagent
-        type accepts them; this agent ignores them (with a warning would be
-        louder, but the prototype's job is to demonstrate the wire shape, not
-        ship full v1 mapping).
+        v0.1 prototype: subagent.skills / inherit_tools / nested subagents
+        are not yet wired into the SDK side. The Subagent type accepts them;
+        this agent ignores them (with a warning would be louder, but the
+        prototype's job is to demonstrate the wire shape, not ship full v1
+        mapping).
 
         Falls back to constructing a plain dict when AgentDefinition isn't
         injected — the SDK accepts dicts in some versions; tests rely on this.
@@ -997,9 +995,8 @@ class ClaudeAgentTranslator:
         self._total_cache_write += delta_cw
         # Delegated mode: also push the delta into the parent tracer's
         # cumulative state. Without this push, the parent's
-        # `agent_stopped.avp_state` shows zeros and parent-side
-        # boundary checks (max_steps / max_cost_usd / max_tokens) miss
-        # all CASDK-driven turns.
+        # `agent_stopped.avp_state` shows zeros even though the wire
+        # carries real per-turn cost.
         if self._parent_tracer is not None:
             self._parent_tracer.accumulate_external(
                 tokens_input=delta_ti,
@@ -1135,10 +1132,7 @@ class ClaudeAgentTranslator:
     ) -> dict[str, Any]:
         """SDK hook fired after each tool invocation. Emits tool_returned —
         OR `subagent_returned` if the matching pre-hook had diverted to the
-        subagent lifecycle. Fires `on_tool:<tool_name>` verifiers in both
-        cases (the model still saw a tool result; downstream verifiers can
-        match on the SDK's `Agent` tool name if they want subagent-call
-        semantics)."""
+        subagent lifecycle."""
         call_id = str(input_data.get("tool_use_id") or tool_use_id or "unknown")
         tool = str(input_data.get("tool_name", "unknown"))
         response = input_data.get("tool_response", "")

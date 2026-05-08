@@ -36,7 +36,7 @@ switch (event.type) {
 Sub-path imports for the helper types:
 
 ```typescript
-import type { Verifier, McpServer } from "@avp/types/config";
+import type { Tool, McpServer } from "@avp/types/commission";
 import type { ModelTurnEndedEvent, AgentStartedData } from "@avp/types/event";
 import type { ToolExecResolvedEvent } from "@avp/types/supervisor-message";
 ```
@@ -47,7 +47,7 @@ import type { ToolExecResolvedEvent } from "@avp/types/supervisor-message";
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `typescript/avp/src/*.ts` (generated here, via `json-schema-to-typescript`)
 
-Don't edit `src/{config,event,supervisor-message}.ts` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event,supervisor-message}.ts` by hand — they're regenerated. Edit `types.py` upstream.
 
 ## Regenerating
 

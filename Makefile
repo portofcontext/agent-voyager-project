@@ -26,9 +26,7 @@ TEST_PKGS := \
 # only examples cleanly.
 EXAMPLES := \
 	python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
-	python/supervisors/simple-supervisor-example/examples/02_anthropic_self_correcting.py \
 	python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
-	python/supervisors/simple-supervisor-example/examples/04_ddd_supervisor.py \
 	python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
 	python/supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
 	python/supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
@@ -51,8 +49,8 @@ help:
 	@echo "    make check           — format-check + lint + test + conformance + bindings-check"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make test-real-llm   — real-LLM smoke tests for both runners"
-	@echo "    make examples        — all 7 examples (03 / 07 self-skip without \`claude\` CLI)"
+	@echo "    make test-real-llm   — real-LLM smoke tests for both agents"
+	@echo "    make examples        — all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
 	@echo "    make smoke           — check + bindings-test + test-real-llm + examples (full sanity)"
 	@echo ""
 	@echo "  Other:"
@@ -115,9 +113,9 @@ bindings-check:
 	@# binding files awaiting their first commit) DON'T count as drift —
 	@# they need to be `git add`'d and committed normally.
 	@bash scripts/generate-bindings.sh > /dev/null
-	@if ! git diff --quiet -- rust/avp/src typescript/avp/src 2>/dev/null; then \
+	@if ! git --no-pager diff --quiet -- rust/avp/src typescript/avp/src 2>/dev/null; then \
 		echo "error: Rust/TS bindings drifted from schemas. Run 'make bindings' and commit." >&2; \
-		git diff --stat -- rust/avp/src typescript/avp/src >&2; \
+		git --no-pager diff --stat -- rust/avp/src typescript/avp/src >&2; \
 		exit 1; \
 	fi
 	@echo "✓ Bindings in sync with schemas."

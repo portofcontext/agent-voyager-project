@@ -25,16 +25,16 @@ def _examples_dir() -> Path:
       1. Editable install from the workspace (most common): the package is
          under python/supervisors/simple-supervisor-example/src/, examples/
          lives at python/supervisors/simple-supervisor-example/examples/
-      2. Override via $AEP_EXAMPLES_DIR for unusual layouts
+      2. Override via $AVP_EXAMPLES_DIR for unusual layouts
     """
-    override = os.environ.get("AEP_EXAMPLES_DIR")
+    override = os.environ.get("AVP_EXAMPLES_DIR")
     if override:
         return Path(override).resolve()
     candidate = _REPO_ROOT_HINT / "examples"
     if candidate.is_dir():
         return candidate.resolve()
     raise FileNotFoundError(
-        f"could not find examples/ at {candidate}; set AEP_EXAMPLES_DIR to override"
+        f"could not find examples/ at {candidate}; set AVP_EXAMPLES_DIR to override"
     )
 
 

@@ -4,7 +4,7 @@
 
 AVP draws one line, between two roles, and ships a wire format across that line.
 
-- **Supervisor** — declares the agent's complete environment (boundary, tools, skills, verifiers, prompts) in a Commission sent at startup. Then observes the trajectory and replies to any agent-initiated RPC tool calls — never reaches in unilaterally.
+- **Supervisor** — declares the agent's complete environment (tools, MCP servers, subagents, skills, prompts) in a Commission sent at startup, then observes the trajectory the agent emits — never reaches in unilaterally.
 - **Agent** — runs the agent inside the declared environment and emits a stream of facts.
 
 **Two unidirectional flows.** Control flows down at setup; observation flows up during the run. No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front.
@@ -16,10 +16,10 @@ OTel spans, [JSON-RPC 2.0](https://www.jsonrpc.org/specification),
 and JSON Schema 2020-12 — the way MCP specialized JSON-RPC for LLM tools.
 Every event is a CloudEvent. Every model turn carries OTel GenAI attributes.
 Every tool call's RPC payload is JSON-RPC 2.0. Every tool descriptor is
-MCP-compatible. AVP's own contribution is small and focused: verifiers,
-boundary semantics, the no-mid-run-reach-in topology, and the
-trajectory-as-source-of-truth contract. Read [`FOUNDATIONS.md`](FOUNDATIONS.md)
-for the full mapping.
+MCP-compatible. AVP's own contribution is small and focused: the
+no-mid-run-reach-in topology, the agent self-description manifest, and
+the trajectory-as-source-of-truth contract. Read
+[`FOUNDATIONS.md`](FOUNDATIONS.md) for the full mapping.
 
 ---
 
@@ -27,7 +27,7 @@ for the full mapping.
 
 ```
                                       agent's environment
-                          (boundary, tools, skills, verifiers, prompt)
+                       (tools, mcp_servers, subagents, skills, prompt)
                                               │
                                               ▼
    supervisor ──── Commission (one-time, setup) ──▶ agent
@@ -73,11 +73,6 @@ Three message classes:
     { "id": "weather", "transport": "stdio", "command": ["npx"], "args": ["-y", "@example/weather-mcp"] }
   ],
   "allowed_tools": ["lookup_user", "bash"],
-  "verifiers": [
-    { "name": "tests-pass",       "trigger": "after_each_turn",  "source": { "shell": "cargo test --quiet" },   "on_failure": "halt" },
-    { "name": "ask-before-deploy", "trigger": "pre_tool:deploy", "source": { "approval": { "prompt": "Deploy to prod?" } }, "on_failure": "halt", "timeout_ms": 60000 }
-  ],
-  "boundary":      { "max_cost_usd": 2.0, "max_steps": 30, "max_tokens": 150000, "max_duration_seconds": 600 },
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
@@ -94,10 +89,8 @@ Three message classes:
 |---|---|---|
 | Environment | `tools` | RPC tools the agent can call. Routed through the `tool_exec_*` lifecycle. |
 | Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the agent connects to natively. Their tools are dispatched by the MCP layer and tagged on the wire with `avp.tool.dispatch_target=mcp_server` + `avp.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
-| Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `tools` / `skills` / `verifiers` / `boundary`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
+| Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `skills`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
 | Environment | `allowed_tools` | Optional allowlist over the model-facing surface (tools AND subagents). When present, the agent exposes ONLY these names. |
-| Environment | `verifiers` | Deterministic Boolean checks the agent runs at declared triggers (`before_first_turn`, `after_each_turn`, `pre_tool:<name>`, `on_tool:<name>`, `at_end`). Both polarities (`on_failure` / `on_success`) take `halt` / `inject_correction` / `continue`. Sources can be `shell` (deterministic) or `approval` (human-in-the-loop via the `avp.approval_*` RPC pair). |
-| Environment | `boundary` | Hard limits the agent enforces on itself. Strict-greater; runs may overshoot cost/tokens by one final turn, but `max_steps: N` runs EXACTLY N turns. `max_duration_seconds` caps wall-clock. |
 | Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |
 | Agent | `prompt` / `system_prompt` / `model` / `skills` | What the agent runs and how. |
 | Metadata | `thread_id` / `tags` / `meta` | For correlation, filtering, ad-hoc context. |

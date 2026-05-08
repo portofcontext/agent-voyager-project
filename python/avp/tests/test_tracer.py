@@ -82,7 +82,7 @@ def test_minimal_run_emits_full_lifecycle() -> None:
     assert stopped.data.avp_reason == "converged"
 
 
-def test_emitted_events_match_aeprunner_envelope_shape() -> None:
+def test_emitted_events_match_avprunner_envelope_shape() -> None:
     """CloudEvents 1.0 envelope invariants. Same as AVPAgent."""
     out: list = []
     with AVPTracer(_basic_config(), on_event=out.append) as tracer:

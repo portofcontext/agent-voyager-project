@@ -2,7 +2,7 @@
 
 This package wraps the [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python) so it speaks AVP v0.1.
 
-**Pattern: driver.** This agent owns the agent loop. The reference `AVPAgent` (from the [`avp`](../../avp/) package) drives the loop and calls `AnthropicModelDriver.step()` once per turn. The driver translates AVP history ↔ Anthropic messages, calls `client.messages.create(...)`, and translates the response ↔ AVP `ModelResponse`. The agent does the rest (events, supervisor-tools via RPC, verifiers, boundary).
+**Pattern: driver.** This agent owns the agent loop. The reference `AVPAgent` (from the [`avp`](../../avp/) package) drives the loop and calls `AnthropicModelDriver.step()` once per turn. The driver translates AVP history ↔ Anthropic messages, calls `client.messages.create(...)`, and translates the response ↔ AVP `ModelResponse`. The agent does the rest (events, MCP/tool dispatch, subagent lifecycle).
 
 ## Install
 
@@ -29,7 +29,6 @@ config = Commission(
     run_id="my-run",
     model="claude-sonnet-4-6",
     prompt="Refactor the auth module.",
-    boundary={"max_cost_usd": 2.0, "max_steps": 30},
 )
 
 agent = AVPAgent(
@@ -94,6 +93,6 @@ ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)" \
   uv run pytest python/agents/avp-anthropic -m real_llm
 ```
 
-The mock-client tests assert wire-format correctness — what AVP events the driver emits given specific Anthropic responses. The real-LLM smoke tests assert end-to-end integration against actual Claude responses, including cost/token accounting, boundary enforcement, and cache-token math (per SPEC.md §10.4). They use `claude-haiku-4-5-20251001` (cheapest current model) and tight boundaries.
+The mock-client tests assert wire-format correctness — what AVP events the driver emits given specific Anthropic responses. The real-LLM smoke tests assert end-to-end integration against actual Claude responses, including cost/token accounting and cache-token math (per SPEC.md §10.4). They use `claude-haiku-4-5-20251001` (cheapest current model).
 
 The conformance suite at [`conformance/v0.1/`](../../../conformance/v0.1/) tests AVP wire-level behavior using the [`avp` package's reference agent](../../avp/), not this one — passing it does not automatically certify `avp-anthropic`.

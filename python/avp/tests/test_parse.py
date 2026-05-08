@@ -73,15 +73,15 @@ def test_unknown_event_type_passes_through_as_dict() -> None:
     SHOULD use reverse-DNS types like 'com.example.something' to avoid
     future conflicts with `avp.*`. Consumers MUST NOT raise on unknown types."""
     payload = _envelope(
-        "com.example.verifier_result",
+        "com.example.deploy_completed",
         SOURCE_RUNNER,
         "r1",
-        {"rule_name": "no-secrets", "passed": False, "hits": 3},
+        {"environment": "staging", "build_id": "abc123", "duration_ms": 4200},
     )
     ev = parse_event(payload)
     assert isinstance(ev, dict)
-    assert ev["type"] == "com.example.verifier_result"
-    assert ev["data"] == {"rule_name": "no-secrets", "passed": False, "hits": 3}
+    assert ev["type"] == "com.example.deploy_completed"
+    assert ev["data"] == {"environment": "staging", "build_id": "abc123", "duration_ms": 4200}
 
 
 def test_unknown_event_missing_envelope_fields_raises() -> None:

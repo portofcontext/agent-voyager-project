@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 # Marker attribute set on wrapped clients so `wrap_anthropic` is idempotent —
 # re-wrapping a wrapped client returns it unchanged. Namespaced so other
 # instrumentation libraries that wrap the same SDK don't clobber each other.
-_AEP_TRACED = "__avp_traced__"
+_AVP_TRACED = "__avp_traced__"
 
 
 # ── Shared instrumentation: the model-call seam ──────────────────────────────
@@ -207,7 +207,7 @@ class _AnthropicProxy:
         self._messages = _TracedMessages(client.messages, get_tracer=get_tracer, prices=prices)
         self._beta: _TracedBeta | None = None
         # Mark the proxy itself so wrap_anthropic(proxy) is idempotent.
-        setattr(self, _AEP_TRACED, True)
+        setattr(self, _AVP_TRACED, True)
 
     @property
     def messages(self) -> _TracedMessages:
@@ -296,7 +296,7 @@ class _AsyncAnthropicProxy:
         self._prices = prices
         self._messages = _AsyncTracedMessages(client.messages, get_tracer=get_tracer, prices=prices)
         self._beta: _AsyncTracedBeta | None = None
-        setattr(self, _AEP_TRACED, True)
+        setattr(self, _AVP_TRACED, True)
 
     @property
     def messages(self) -> _AsyncTracedMessages:
@@ -337,7 +337,7 @@ def wrap_anthropic(client: Any, *, prices: PriceTable | None = None) -> Any:
     natural. The wrap form is best for long-lived clients reused across
     many traces; the constructor form is best for one-shot scripts.
     """
-    if getattr(client, _AEP_TRACED, False):
+    if getattr(client, _AVP_TRACED, False):
         return client
     type_name = type(client).__name__
     p = prices or DEFAULT_PRICES

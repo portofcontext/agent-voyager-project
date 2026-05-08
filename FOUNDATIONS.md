@@ -22,8 +22,8 @@ compose into a single trajectory.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                          AVP v0.1                                 │
-│  Wire format for agent execution observability + policy           │
+│                          AVP v0.1                               │
+│  Wire format for agent execution observability + policy         │
 └─────────────────────────────────────────────────────────────────┘
 
   Specializes existing specs (AVP wraps these for the agent case):
@@ -374,20 +374,19 @@ the spec saying "every AVP event is a CloudEvent; here's the mapping."
 
 What we don't get for free, we earn:
 
-- Verifier as a first-class on-wire concept, with the agent enforcing
-  declared rules and the supervisor reading outcomes from the same
-  trajectory. **Earned.** No upstream covers this.
-- Boundary semantics with the strict-greater rule, exact-N step promise,
-  cache-read math, and accounting-reset detection. **Earned.** Policy
-  on the wire is novel.
-- The trajectory contract — three classes of facts, supervisor RPC replies
-  recorded verbatim, agents MUST NOT strip. **Earned.** This is what
-  lets a non-technical reviewer answer "did this run respect the
-  contract?" without an LLM judge.
+- Agent self-description as a first-class on-wire concept (`agent_described`
+  + `Commission.allowed_tools`). The agent declares its capability surface
+  upfront so the supervisor and a non-technical reviewer can both read the
+  trajectory without an out-of-band manifest. **Earned.** No upstream covers
+  this.
+- The trajectory contract — supervisor declares environment in Commission,
+  agent emits the run, agent MUST NOT strip. **Earned.** This is what lets
+  a reviewer answer "did this run respect the contract?" without an LLM
+  judge.
 - No mid-run reach-in. **Earned.** The architectural constraint is the
   reason trajectories are meaningful.
 
-Adopting standards isn't a humility move. It's a leverage move. The four
+Adopting standards isn't a humility move. It's a leverage move. The
 AVP-specific concepts above are what the agent-execution case actually
 needs that nothing else provides. Everything else is plumbing, and we
 should use the plumbing the rest of the industry already uses.

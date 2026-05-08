@@ -6972,14 +6972,14 @@ impl<'de> ::serde::Deserialize<'de> for SpanId {
             })
     }
 }
-#[doc = "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, or operator interrupted. Cap-driven\nstop reasons (turn / token / cost / duration limits) and verifier\nhalts are not part of v0.1 — agents that need bounded execution\nwire it externally (subprocess timeouts, supervisor SIGKILL)."]
+#[doc = "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, or operator interrupted. Cap-driven\nstop reasons (turn / token / cost / duration limits) are not part of\nv0.1 — agents that need bounded execution wire it externally\n(subprocess timeouts, supervisor SIGKILL)."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"StopReason\","]
-#[doc = "  \"description\": \"Why a run terminated. v0.1 keeps the enum tight: model said done,\\nmodel declined, agent crashed, or operator interrupted. Cap-driven\\nstop reasons (turn / token / cost / duration limits) and verifier\\nhalts are not part of v0.1 — agents that need bounded execution\\nwire it externally (subprocess timeouts, supervisor SIGKILL).\","]
+#[doc = "  \"description\": \"Why a run terminated. v0.1 keeps the enum tight: model said done,\\nmodel declined, agent crashed, or operator interrupted. Cap-driven\\nstop reasons (turn / token / cost / duration limits) are not part of\\nv0.1 — agents that need bounded execution wire it externally\\n(subprocess timeouts, supervisor SIGKILL).\","]
 #[doc = "  \"type\": \"string\","]
 #[doc = "  \"enum\": ["]
 #[doc = "    \"converged\","]

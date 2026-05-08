@@ -9,7 +9,7 @@ This package wraps the [Claude Agent SDK](https://github.com/anthropics/claude-a
 Under the v0.1 model, AVP draws a clear line:
 
 - **Observability** — agent emits the event stream. Required.
-- **Environment** — supervisor declares Commission (boundary, tools, skills, verifiers). Optional but recommended.
+- **Environment** — supervisor declares Commission (tools, MCP servers, subagents, skills, prompts). Optional but recommended.
 
 There is **no mid-run bidirectional control** in v0.1 — no hooks reaching in, no synchronous supervisor decisions. The supervisor configures the environment; the agent operates within it; the agent emits.
 
@@ -22,9 +22,7 @@ This means observer-pattern integrations like `avp-claude-agent` are first-class
 | `tool_invoked` / `tool_returned` / `tool_failed` | ✅ translated from SDK tool messages |
 | `text_emitted` | ✅ translated |
 | `cost_recorded` | ✅ usage from each model message |
-| Boundary (cost / tokens / steps, strict-greater) | ✅ agent tallies post-turn and stops the iterator |
-| Verifiers (`verifier_evaluated`, on_failure: halt/inject_correction/continue) | ✅ agent runs declared shell verifiers; agent handles on_failure locally |
-| Tool exec RPC (supervisor-stood-up tool service) | ✅ register the RPC tool as a Python callable in the SDK; on call, route via `tool_exec_request`/`tool_exec_resolved` |
+| MCP servers (`Commission.mcp_servers`) | ✅ passed straight to the SDK's `mcp_servers` slot; HTTP and stdio transports |
 
 The TODOs marked `# TODO(claude-agent-sdk):` in `translator.py` are SDK-version-specific glue (which lifecycle events the SDK emits, what its tool-registration API looks like). Once filled in, this agent passes the conformance suite.
 
@@ -58,8 +56,6 @@ config = Commission(
     run_id="my-run",
     model="claude-sonnet-4-6",
     prompt="Refactor the auth module.",
-    verifiers=[{"name": "tests-pass", "trigger": "after_each_turn",
-                "source": {"shell": "cargo test"}, "on_failure": "halt"}],
 )
 
 translator = ClaudeAgentTranslator(config, on_event=lambda ev: print(ev))
@@ -116,6 +112,6 @@ safer default until the cause is confirmed.
 
 Claude Code's first turn loads a lot of context (CLAUDE.md files, skill
 definitions, system prompt) — typically $0.05–$0.10 even on Haiku before
-the first user-meaningful turn. Supervisors setting `Commission.boundary.max_cost_usd`
-against this agent should account for this baseline. The driver-pattern
-agents (`avp-anthropic`) don't have this overhead.
+the first user-meaningful turn. Supervisors monitoring cost on this agent
+should account for this baseline. The driver-pattern agents
+(`avp-anthropic`) don't have this overhead.

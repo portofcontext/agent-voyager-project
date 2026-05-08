@@ -122,9 +122,9 @@ export type ParentSpanId3 = string;
 /**
  * Why a run terminated. v0.1 keeps the enum tight: model said done,
  * model declined, agent crashed, or operator interrupted. Cap-driven
- * stop reasons (turn / token / cost / duration limits) and verifier
- * halts are not part of v0.1 — agents that need bounded execution
- * wire it externally (subprocess timeouts, supervisor SIGKILL).
+ * stop reasons (turn / token / cost / duration limits) are not part of
+ * v0.1 — agents that need bounded execution wire it externally
+ * (subprocess timeouts, supervisor SIGKILL).
  */
 export type StopReason = "converged" | "error" | "interrupted" | "refused";
 export type TotalCostUsd = number;

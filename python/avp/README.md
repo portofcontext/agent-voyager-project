@@ -7,7 +7,7 @@ This package ships:
 
 - **Wire types** (`avp.types`) — Pydantic v2 models for every Commission / Event / SupervisorMessage variant in v0.1, with discriminated unions on `type`.
 - **NDJSON IO** (`avp.io`) — line-buffered stdio readers and writers for trajectories and supervisor messages.
-- **Reference agent** (`avp.agent`) — implements the normative loop in [`SPEC.md` §9.3](../../spec/v0.1/SPEC.md#93-the-loop): strict-greater boundary, supervisor-tool RPC lifecycle, verifier lifecycle. Pluggable model and tool drivers (mock drivers ship with the package for testing).
+- **Reference agent** (`avp.agent`) — implements the normative loop in [`SPEC.md` §9.3](../../spec/v0.1/SPEC.md#93-the-loop). Pluggable model and tool drivers (mock drivers ship with the package for testing).
 - **Conformance harness** (`avp.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference agent with scripted model / tools / supervisor, asserts captured trajectory against the expectations. CLI: `avp-conformance run` (subcommands `run` / `validate` / `check-coverage`).
 
 The reference agent is the gate for AVP v0.1 correctness. All conformance cases MUST pass before any other AVP-compliant agent (e.g. a closed-source Rust supervisor talking to a real-LLM agent) is wired up against it.
@@ -35,15 +35,15 @@ uv run avp-conformance check-coverage     # every event type has at least 1 case
 ```
 src/avp/
   __init__.py           # public re-exports
-  enums.py              # Source, StopReason, ErrorCode, OnFailure, verifier-trigger helpers
+  enums.py              # Source, StopReason, ErrorCode helpers
   types.py              # Pydantic models for Commission / Event / SupervisorMessage
   io.py                 # NDJSON readers / writers
   agent/
-    __init__.py         # AVPAgent — the loop
-    boundary.py         # strict-greater check_consumption + check_step_projection
-    interactions.py     # supervisor interaction primitives (tool_exec)
-    drivers.py          # ModelDriver, ToolDriver, SupervisorDriver protocols
-    mock.py             # ScriptedModel, ScriptedTools, ScriptedSupervisor for tests
+    __init__.py         # public re-exports
+    agent.py            # AVPAgent — the loop
+    drivers.py          # ModelDriver, ToolDriver, SubagentDriver protocols
+    local_tools.py      # LocalTools — generic in-process tool driver
+    mock.py             # ScriptedModel, ScriptedTools for tests
   conformance/
     __init__.py
     matcher.py          # partial-match patterns + {{event.*}} substitution
