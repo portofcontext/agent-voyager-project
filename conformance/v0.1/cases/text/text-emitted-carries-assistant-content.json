@@ -28,7 +28,7 @@
     "events": [
       {
         "match": {
-          "type": "aep.model_turn_started",
+          "type": "avp.model_turn_started",
           "data": {
             "step": 1
           }
@@ -36,7 +36,7 @@
       },
       {
         "match": {
-          "type": "aep.model_turn_ended",
+          "type": "avp.model_turn_ended",
           "data": {
             "step": 1
           }
@@ -44,18 +44,18 @@
       },
       {
         "match": {
-          "type": "aep.text_emitted",
+          "type": "avp.text_emitted",
           "data": {
             "step": 1,
-            "aep.text": "the answer is 42. DONE."
+            "avp.text": "the answer is 42. DONE."
           }
         }
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "converged"
+            "avp.reason": "converged"
           }
         }
       }

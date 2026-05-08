@@ -1,0 +1,69 @@
+{
+  "id": "source-agent-events-tagged-agent",
+  "title": "Every runner-emitted event in a baseline run carries source='runner'",
+  "description": "Source-field discipline. Without supervisor messages, every event in the trajectory MUST be tagged source='runner'. No event MAY be missing the source field, and no runner-emitted event MAY be tagged source='supervisor'.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#3-the-bidirectional-trajectory",
+    "spec/v0.1/avp.schema.json#/$defs/EventBase"
+  ],
+  "applies_to": [
+    "runner"
+  ],
+  "config": {
+    "schema_version": "0.1",
+    "run_id": "source-runner-baseline",
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "done",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "events": [
+      {
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.model_turn_started",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.model_turn_ended",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.cost_recorded",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "source": "avp://agent"
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no runner-emitted event may carry source=supervisor in a baseline run",
+        "match": {
+          "source": "avp://supervisor"
+        }
+      }
+    ]
+  }
+}

@@ -1,30 +1,30 @@
-"""Example 05 — Subagent delegation (driver pattern, aep-anthropic).
+"""Example 05 — Subagent delegation (driver pattern, avp-anthropic).
 
 Story: a supervisor declares ONE subagent — a `summarizer` whose only job is to
 turn a passage into 2 crisp bullets. The parent agent's task is to call the
 summarizer once and report what it returned. Both agents run on Claude; the
-runner emits a nested span tree so the supervisor can see the subagent's
+agent emits a nested span tree so the supervisor can see the subagent's
 internal turns interleaved with the parent's.
 
 What you'll see on the wire:
   - `agent_started.data.subagents = [{name: 'summarizer', ...}]` — the model-
     facing subagent surface
-  - `aep.subagent_invoked` (parent calls the subagent)
-  - One or more `aep.model_turn_started` / `aep.model_turn_ended` whose
+  - `avp.subagent_invoked` (parent calls the subagent)
+  - One or more `avp.model_turn_started` / `avp.model_turn_ended` whose
     `parent_span_id` chains through the subagent's frame span — these are
     the subagent's internal turns, observable IN-LINE on the parent's stream
-  - `aep.text_emitted` from inside the subagent's frame
-  - `aep.subagent_returned` carrying the subagent's text + a usage rollup
+  - `avp.text_emitted` from inside the subagent's frame
+  - `avp.subagent_returned` carrying the subagent's text + a usage rollup
   - The parent's converging turn, `agent_stopped(reason=converged)`
 
 Why this matters: every other multi-agent SDK exposes subagent activity in a
 different shape (LangSmith nested runs, ADK dotted `branch`, Claude Agent SDK
-opaque tool result). AEP gives consumers ONE wire shape: a span tree on the
+opaque tool result). AVP gives consumers ONE wire shape: a span tree on the
 event stream. The supervisor doesn't need provider-specific glue to reconstruct
 who did what.
 
 Requires:
-  pip install -e python/aep -e python/runners/aep-anthropic \
+  pip install -e python/avp -e python/agents/avp-anthropic \
               -e python/supervisors/simple-supervisor-example
   export ANTHROPIC_API_KEY=...
 
@@ -41,7 +41,7 @@ from pathlib import Path
 
 from simple_supervisor import stream_subprocess
 
-from aep import Config, Subagent
+from avp import Commission, Subagent
 
 WORKSPACE = Path(__file__).resolve().parent
 
@@ -54,15 +54,15 @@ def main() -> int:
     run_id = f"subagent-delegation-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
     passage = (
-        "The Agent Execution Protocol (AEP) draws one line, between two roles, and "
+        "The Agent Voyage Protocol (AVP) draws one line, between two roles, and "
         "ships a wire format across that line. Supervisors declare the agent's complete "
-        "environment in a Config sent at startup; runners run the agent inside that "
+        "environment in a Commission sent at startup; agents run the agent inside that "
         "environment and emit a stream of facts."
     )
 
-    # Build the Config directly. We bypass the profile builder because subagents
-    # aren't yet a concern of the profile DSL — they're a Config primitive.
-    config = Config(
+    # Build the Commission directly. We bypass the profile builder because subagents
+    # aren't yet a concern of the profile DSL — they're a Commission primitive.
+    config = Commission(
         schema_version="0.1",
         run_id=run_id,
         model="claude-haiku-4-5-20251001",
@@ -85,38 +85,36 @@ def main() -> int:
                 model="claude-haiku-4-5-20251001",
                 # The subagent's own turn budget — tight, since the job is small.
                 # The parent's overall budget (set below) caps the whole run regardless.
-                boundary={"max_steps": 2},
             )
         ],
-        boundary={"max_steps": 4, "max_cost_usd": 0.05},
         allowed_tools=["summarizer"],  # parent agent can call ONLY the subagent
     )
 
-    print(f"== Workspace (runner CWD): {WORKSPACE} ==")
+    print(f"== Workspace (agent CWD): {WORKSPACE} ==")
     print()
-    print("== Config (subagent declared as a top-level primitive) ==")
+    print("== Commission (subagent declared as a top-level primitive) ==")
     print(config.model_dump_json(indent=2, exclude_none=True, by_alias=True))
     print()
     print("== Live trajectory ==")
 
     events = []
     frame_span_by_invoke: dict[str, str] = {}
-    for ev in stream_subprocess(["aep-anthropic"], config, cwd=str(WORKSPACE)):
+    for ev in stream_subprocess(["avp-anthropic"], config, cwd=str(WORKSPACE)):
         events.append(ev)
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
 
-        if type_name == "aep.agent_started":
+        if type_name == "avp.agent_started":
             sa_decls = ev.data.subagents or []
             names = [s.name for s in sa_decls]
             print(f"  agent_started — subagents on the wire: {names}")
-        elif type_name == "aep.subagent_invoked":
-            frame_span_by_invoke[ev.data.aep_subagent_invocation_id] = ev.data.span_id
+        elif type_name == "avp.subagent_invoked":
+            frame_span_by_invoke[ev.data.avp_subagent_invocation_id] = ev.data.span_id
             print(
                 f"  -> subagent_invoked '{ev.data.gen_ai_agent_name}' "
-                f"(invocation_id={ev.data.aep_subagent_invocation_id}, "
+                f"(invocation_id={ev.data.avp_subagent_invocation_id}, "
                 f"frame_span={ev.data.span_id[:8]}…)"
             )
-        elif type_name == "aep.model_turn_ended":
+        elif type_name == "avp.model_turn_ended":
             # Mark whether this turn belonged to the parent or to a subagent
             # frame (parent_span_id chains through the frame span).
             parent_span = ev.data.parent_span_id
@@ -126,27 +124,27 @@ def main() -> int:
                 f"     [{location} turn {ev.data.step}] "
                 f"in={ev.data.gen_ai_usage_input_tokens} "
                 f"out={ev.data.gen_ai_usage_output_tokens} "
-                f"cost=${ev.data.aep_cost_usd:.5f}"
+                f"cost=${ev.data.avp_cost_usd:.5f}"
             )
-        elif type_name == "aep.subagent_returned":
-            head = ev.data.aep_subagent_result_text.replace("\n", " ")[:80]
+        elif type_name == "avp.subagent_returned":
+            head = ev.data.avp_subagent_result_text.replace("\n", " ")[:80]
             print(
                 f"  <- subagent_returned '{ev.data.gen_ai_agent_name}' "
-                f"reason={ev.data.aep_subagent_reason} "
-                f"turns={ev.data.aep_subagent_usage.total_turns} "
-                f"cost=${ev.data.aep_subagent_usage.total_cost_usd:.5f}"
+                f"reason={ev.data.avp_subagent_reason} "
+                f"turns={ev.data.avp_subagent_usage.total_turns} "
+                f"cost=${ev.data.avp_subagent_usage.total_cost_usd:.5f}"
             )
             print(f"     result: {head!r}")
-        elif type_name == "aep.subagent_failed":
+        elif type_name == "avp.subagent_failed":
             print(
                 f"  ✗ subagent_failed '{ev.data.gen_ai_agent_name}' "
-                f"error={ev.data.aep_subagent_error!r}"
+                f"error={ev.data.avp_subagent_error!r}"
             )
-        elif type_name == "aep.agent_stopped":
+        elif type_name == "avp.agent_stopped":
             print(
-                f"  STOPPED reason={ev.data.aep_reason} "
-                f"cost=${ev.data.aep_state.total_cost_usd:.5f} "
-                f"tokens={ev.data.aep_state.total_tokens}"
+                f"  STOPPED reason={ev.data.avp_reason} "
+                f"cost=${ev.data.avp_state.total_cost_usd:.5f} "
+                f"tokens={ev.data.avp_state.total_tokens}"
             )
 
     print()
@@ -169,7 +167,7 @@ def _validate_outcome(events: list) -> list[str]:
     types = [type(ev).__name__ for ev in events]
 
     if "AgentStoppedEvent" not in types:
-        issues.append("no agent_stopped — runner exited mid-trajectory")
+        issues.append("no agent_stopped — agent exited mid-trajectory")
         return issues
 
     invoked = [ev for ev in events if type(ev).__name__ == "SubagentInvokedEvent"]
@@ -181,7 +179,7 @@ def _validate_outcome(events: list) -> list[str]:
         return issues
     if failed:
         issues.append(
-            f"subagent_failed events present: {[f.data.aep_subagent_error for f in failed]}"
+            f"subagent_failed events present: {[f.data.avp_subagent_error for f in failed]}"
         )
     if len(invoked) != len(returned):
         issues.append(
@@ -204,8 +202,8 @@ def _validate_outcome(events: list) -> list[str]:
             )
 
     stop = next(ev for ev in events if type(ev).__name__ == "AgentStoppedEvent")
-    if str(stop.data.aep_reason) not in {"converged", "budget_exhausted", "turn_limit"}:
-        issues.append(f"unexpected stop reason {stop.data.aep_reason!r}")
+    if str(stop.data.avp_reason) != "converged":
+        issues.append(f"unexpected stop reason {stop.data.avp_reason!r}")
 
     return issues
 

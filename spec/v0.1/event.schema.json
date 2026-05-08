@@ -1,8 +1,237 @@
 {
   "$defs": {
+    "AgentDescribedData": {
+      "additionalProperties": true,
+      "description": "Payload of avp.agent_described events.\n\nThe agent's published manifest, emitted between `run_requested` and\n`agent_started`. `avp.agent` MUST equal what `<agent> describe`\nprints to stdout for the same agent build.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "avp.agent": {
+          "$ref": "#/$defs/AgentManifest"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "avp.agent"
+      ],
+      "title": "AgentDescribedData",
+      "type": "object"
+    },
+    "AgentDescribedEvent": {
+      "additionalProperties": false,
+      "description": "Second event of the trajectory. The agent's \"whoami\" — its\nself-published manifest of everything triggerable without supervisor\nconfiguration. Carries the same JSON `<agent> describe` prints to\nstdout for this agent build.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "avp.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Correlation Id"
+        },
+        "type": {
+          "const": "avp.agent_described",
+          "default": "avp.agent_described",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "avp://agent",
+          "default": "avp://agent",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentDescribedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AgentDescribedEvent",
+      "type": "object"
+    },
+    "AgentManifest": {
+      "additionalProperties": false,
+      "description": "Self-description of an AVP agent — who it is, what it brings.\n\nEvery AVP-compliant agent MUST publish a manifest that enumerates\neverything triggerable without supervisor configuration: SDK preset\ntools, runtime-bundled subagents, runtime-bundled skills, plus the\nagent's name / version / supported AVP spec version. Consumers use\nthe manifest in two ways:\n\n  1. **Pre-flight** — `<agent> describe` prints the manifest as JSON\n     to stdout. A supervisor authoring a Commission can introspect what\n     the agent offers before invoking it (so `Commission.allowed_tools`,\n     `Commission.subagents`, etc. can be authored against ground truth).\n\n  2. **On the wire** — the agent emits a `agent_described` event\n     right after `run_requested` and right before `agent_started`.\n     The on-wire payload MUST equal what `describe` prints for the\n     same agent build, so the audit trail records exactly what the\n     consumer would have seen at pre-flight time.\n\nScope: SDK defaults only. The manifest does NOT include\nsupervisor-declared surfaces (`Commission.tools`, `Commission.subagents`,\n`Commission.skills`) and does NOT include environment-discovered\nsurfaces (filesystem skills under `~/.claude/skills/`, MCP servers\ndiscovered at startup, user-installed plugins). Those appear on\n`agent_started` (the merged-view event) and `mcp_server_connected`\nrespectively. The manifest is the agent's identity, not the run's.",
+      "properties": {
+        "agent_name": {
+          "minLength": 1,
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "agent_version": {
+          "minLength": 1,
+          "title": "Agent Version",
+          "type": "string"
+        },
+        "avp_spec_version": {
+          "const": "0.1",
+          "title": "Avp Spec Version",
+          "type": "string"
+        },
+        "default_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Model"
+        },
+        "built_in_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_ToolDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Built In Tools"
+        },
+        "built_in_subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_SubagentDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Built In Subagents"
+        },
+        "built_in_skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_SkillDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Built In Skills"
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capabilities"
+        }
+      },
+      "required": [
+        "agent_name",
+        "agent_version",
+        "avp_spec_version"
+      ],
+      "title": "AgentManifest",
+      "type": "object"
+    },
     "AgentStartedData": {
       "additionalProperties": true,
-      "description": "Payload of aep.agent_started events.",
+      "description": "Payload of avp.agent_started events.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -108,7 +337,7 @@
           "anyOf": [
             {
               "items": {
-                "type": "string"
+                "$ref": "#/$defs/_SkillDecl"
               },
               "type": "array"
             },
@@ -134,7 +363,7 @@
           "default": null,
           "title": "Subagents"
         },
-        "aep.thread_id": {
+        "avp.thread_id": {
           "anyOf": [
             {
               "type": "string"
@@ -144,9 +373,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Thread Id"
+          "title": "Avp.Thread Id"
         },
-        "aep.session_id": {
+        "avp.session_id": {
           "anyOf": [
             {
               "type": "string"
@@ -156,9 +385,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Session Id"
+          "title": "Avp.Session Id"
         },
-        "aep.tags": {
+        "avp.tags": {
           "anyOf": [
             {
               "items": {
@@ -171,9 +400,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tags"
+          "title": "Avp.Tags"
         },
-        "aep.meta": {
+        "avp.meta": {
           "anyOf": [
             {
               "additionalProperties": true,
@@ -184,12 +413,12 @@
             }
           ],
           "default": null,
-          "title": "Aep.Meta"
+          "title": "Avp.Meta"
         },
-        "aep.schema_version": {
+        "avp.schema_version": {
           "const": "0.1",
           "default": "0.1",
-          "title": "Aep.Schema Version",
+          "title": "Avp.Schema Version",
           "type": "string"
         }
       },
@@ -256,7 +485,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -267,17 +496,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.agent_started",
-          "default": "aep.agent_started",
+          "const": "avp.agent_started",
+          "default": "avp.agent_started",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -315,13 +544,13 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "aep.reason": {
+        "avp.reason": {
           "$ref": "#/$defs/StopReason"
         },
-        "aep.state": {
+        "avp.state": {
           "$ref": "#/$defs/RunStateSnapshot"
         },
-        "aep.total_tokens": {
+        "avp.total_tokens": {
           "anyOf": [
             {
               "minimum": 0,
@@ -332,9 +561,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Total Tokens"
+          "title": "Avp.Total Tokens"
         },
-        "aep.total_cost_usd": {
+        "avp.total_cost_usd": {
           "anyOf": [
             {
               "minimum": 0,
@@ -345,9 +574,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Total Cost Usd"
+          "title": "Avp.Total Cost Usd"
         },
-        "aep.total_turns": {
+        "avp.total_turns": {
           "anyOf": [
             {
               "minimum": 0,
@@ -358,9 +587,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Total Turns"
+          "title": "Avp.Total Turns"
         },
-        "aep.duration_ms": {
+        "avp.duration_ms": {
           "anyOf": [
             {
               "minimum": 0,
@@ -371,9 +600,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Duration Ms"
+          "title": "Avp.Duration Ms"
         },
-        "aep.output": {
+        "avp.output": {
           "anyOf": [
             {},
             {
@@ -381,15 +610,15 @@
             }
           ],
           "default": null,
-          "title": "Aep.Output"
+          "title": "Avp.Output"
         }
       },
       "required": [
         "trace_id",
         "span_id",
         "parent_span_id",
-        "aep.reason",
-        "aep.state"
+        "avp.reason",
+        "avp.state"
       ],
       "title": "AgentStoppedData",
       "type": "object"
@@ -449,7 +678,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -460,17 +689,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.agent_stopped",
-          "default": "aep.agent_stopped",
+          "const": "avp.agent_stopped",
+          "default": "avp.agent_stopped",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -482,352 +711,6 @@
         "data"
       ],
       "title": "AgentStoppedEvent",
-      "type": "object"
-    },
-    "ApprovalRequestedData": {
-      "additionalProperties": true,
-      "description": "Runner emits this when an approval-source verifier fires.\n\nCarries the context the supervisor needs to decide: which verifier\nrequested it, the optional prompt, and (for `pre_tool:<name>`\ngates) the tool call this approval covers. The supervisor MUST\nreply with an `approval_resolved` referencing the same\n`aep.approval.id` within `aep.timeout_ms`; missing replies are\ntreated as denials.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "step": {
-          "minimum": 0,
-          "title": "Step",
-          "type": "integer"
-        },
-        "aep.approval.id": {
-          "minLength": 1,
-          "title": "Aep.Approval.Id",
-          "type": "string"
-        },
-        "aep.timeout_ms": {
-          "exclusiveMinimum": 0,
-          "title": "Aep.Timeout Ms",
-          "type": "integer"
-        },
-        "aep.verifier.name": {
-          "minLength": 1,
-          "title": "Aep.Verifier.Name",
-          "type": "string"
-        },
-        "aep.approval.prompt": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Approval.Prompt"
-        },
-        "gen_ai.tool.name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Tool.Name"
-        },
-        "gen_ai.tool.call.id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Tool.Call.Id"
-        },
-        "gen_ai.tool.call.arguments": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Tool.Call.Arguments"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "step",
-        "aep.approval.id",
-        "aep.timeout_ms",
-        "aep.verifier.name"
-      ],
-      "title": "ApprovalRequestedData",
-      "type": "object"
-    },
-    "ApprovalRequestedEvent": {
-      "additionalProperties": false,
-      "description": "Runner asks the supervisor to approve (or deny) something —\ntypically a tool dispatch gated by a pre_tool: + approval-source\nverifier. The supervisor MUST reply with `approval_resolved`.",
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.approval_requested",
-          "default": "aep.approval_requested",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ApprovalRequestedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ApprovalRequestedEvent",
-      "type": "object"
-    },
-    "ApprovalResolvedData": {
-      "additionalProperties": true,
-      "description": "Supervisor's decision for a pending `approval_requested`.\n\n`approved` is the load-bearing field. `reason` is free-text\nintended for the trajectory consumer (and for surfacing to the\nmodel on `pre_tool:` denials via the resulting `tool_failed.error`).",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "aep.approval.id": {
-          "minLength": 1,
-          "title": "Aep.Approval.Id",
-          "type": "string"
-        },
-        "aep.approval.approved": {
-          "title": "Aep.Approval.Approved",
-          "type": "boolean"
-        },
-        "aep.approval.reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Approval.Reason"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "aep.approval.id",
-        "aep.approval.approved"
-      ],
-      "title": "ApprovalResolvedData",
-      "type": "object"
-    },
-    "ApprovalResolvedEvent": {
-      "additionalProperties": false,
-      "description": "Supervisor's decision recorded into the trajectory verbatim.\n`source` is `aep://supervisor`.",
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.approval_resolved",
-          "default": "aep.approval_resolved",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "minLength": 1,
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ApprovalResolvedData"
-        }
-      },
-      "required": [
-        "source",
-        "data"
-      ],
-      "title": "ApprovalResolvedEvent",
       "type": "object"
     },
     "CostRecordedData": {
@@ -854,10 +737,10 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "aep.state": {
+        "avp.state": {
           "$ref": "#/$defs/RunStateSnapshot"
         },
-        "aep.cost.source": {
+        "avp.cost.source": {
           "anyOf": [
             {
               "enum": [
@@ -872,14 +755,14 @@
             }
           ],
           "default": null,
-          "title": "Aep.Cost.Source"
+          "title": "Avp.Cost.Source"
         }
       },
       "required": [
         "trace_id",
         "span_id",
         "parent_span_id",
-        "aep.state"
+        "avp.state"
       ],
       "title": "CostRecordedData",
       "type": "object"
@@ -939,7 +822,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -950,17 +833,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.cost_recorded",
-          "default": "aep.cost_recorded",
+          "const": "avp.cost_recorded",
+          "default": "avp.cost_recorded",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -979,7 +862,7 @@
         "rate_limit",
         "context_limit",
         "auth_error",
-        "runner_crash",
+        "agent_crash",
         "accounting_reset",
         "unknown"
       ],
@@ -1010,11 +893,11 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "aep.error.code": {
+        "avp.error.code": {
           "$ref": "#/$defs/ErrorCode"
         },
-        "aep.error.message": {
-          "title": "Aep.Error.Message",
+        "avp.error.message": {
+          "title": "Avp.Error.Message",
           "type": "string"
         }
       },
@@ -1022,8 +905,8 @@
         "trace_id",
         "span_id",
         "parent_span_id",
-        "aep.error.code",
-        "aep.error.message"
+        "avp.error.code",
+        "avp.error.message"
       ],
       "title": "ErrorOccurredData",
       "type": "object"
@@ -1083,7 +966,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -1094,17 +977,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.error_occurred",
-          "default": "aep.error_occurred",
+          "const": "avp.error_occurred",
+          "default": "avp.error_occurred",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -1116,124 +999,6 @@
         "data"
       ],
       "title": "ErrorOccurredEvent",
-      "type": "object"
-    },
-    "JsonRpcError": {
-      "additionalProperties": true,
-      "properties": {
-        "code": {
-          "title": "Code",
-          "type": "integer"
-        },
-        "message": {
-          "title": "Message",
-          "type": "string"
-        },
-        "data": {
-          "anyOf": [
-            {},
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Data"
-        }
-      },
-      "required": [
-        "code",
-        "message"
-      ],
-      "title": "JsonRpcError",
-      "type": "object"
-    },
-    "JsonRpcRequestPayload": {
-      "additionalProperties": true,
-      "description": "JSON-RPC 2.0 request payload — what tool_exec_request.data carries.\n\nPer MCP convention, `method` is `\"tools/call\"` and `params` is\n`{name, arguments}`.",
-      "properties": {
-        "jsonrpc": {
-          "const": "2.0",
-          "default": "2.0",
-          "title": "Jsonrpc",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "integer"
-            }
-          ],
-          "title": "Id"
-        },
-        "method": {
-          "title": "Method",
-          "type": "string"
-        },
-        "params": {
-          "additionalProperties": true,
-          "title": "Params",
-          "type": "object"
-        }
-      },
-      "required": [
-        "id",
-        "method",
-        "params"
-      ],
-      "title": "JsonRpcRequestPayload",
-      "type": "object"
-    },
-    "JsonRpcResponsePayload": {
-      "additionalProperties": true,
-      "description": "JSON-RPC 2.0 response payload — what tool_exec_resolved.data carries.\n\nExactly one of `result` or `error` MUST be present per the JSON-RPC spec.",
-      "properties": {
-        "jsonrpc": {
-          "const": "2.0",
-          "default": "2.0",
-          "title": "Jsonrpc",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Id"
-        },
-        "result": {
-          "anyOf": [
-            {},
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Result"
-        },
-        "error": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/JsonRpcError"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "title": "JsonRpcResponsePayload",
       "type": "object"
     },
     "McpServerConnectedData": {
@@ -1260,21 +1025,21 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "aep.mcp.server_id": {
+        "avp.mcp.server_id": {
           "minLength": 1,
-          "title": "Aep.Mcp.Server Id",
+          "title": "Avp.Mcp.Server Id",
           "type": "string"
         },
-        "aep.mcp.protocol_version": {
-          "title": "Aep.Mcp.Protocol Version",
+        "avp.mcp.protocol_version": {
+          "title": "Avp.Mcp.Protocol Version",
           "type": "string"
         },
-        "aep.mcp.tool_count": {
+        "avp.mcp.tool_count": {
           "minimum": 0,
-          "title": "Aep.Mcp.Tool Count",
+          "title": "Avp.Mcp.Tool Count",
           "type": "integer"
         },
-        "aep.mcp.server_name": {
+        "avp.mcp.server_name": {
           "anyOf": [
             {
               "type": "string"
@@ -1284,9 +1049,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Server Name"
+          "title": "Avp.Mcp.Server Name"
         },
-        "aep.mcp.server_version": {
+        "avp.mcp.server_version": {
           "anyOf": [
             {
               "type": "string"
@@ -1296,9 +1061,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Server Version"
+          "title": "Avp.Mcp.Server Version"
         },
-        "aep.mcp.tools": {
+        "avp.mcp.tools": {
           "anyOf": [
             {
               "items": {
@@ -1311,9 +1076,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Tools"
+          "title": "Avp.Mcp.Tools"
         },
-        "aep.mcp.status": {
+        "avp.mcp.status": {
           "anyOf": [
             {
               "enum": [
@@ -1330,9 +1095,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Status"
+          "title": "Avp.Mcp.Status"
         },
-        "aep.mcp.error": {
+        "avp.mcp.error": {
           "anyOf": [
             {
               "type": "string"
@@ -1342,16 +1107,16 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Error"
+          "title": "Avp.Mcp.Error"
         }
       },
       "required": [
         "trace_id",
         "span_id",
         "parent_span_id",
-        "aep.mcp.server_id",
-        "aep.mcp.protocol_version",
-        "aep.mcp.tool_count"
+        "avp.mcp.server_id",
+        "avp.mcp.protocol_version",
+        "avp.mcp.tool_count"
       ],
       "title": "McpServerConnectedData",
       "type": "object"
@@ -1411,7 +1176,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -1422,17 +1187,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.mcp_server_connected",
-          "default": "aep.mcp_server_connected",
+          "const": "avp.mcp_server_connected",
+          "default": "avp.mcp_server_connected",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -1470,20 +1235,20 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "aep.mcp.server_id": {
+        "avp.mcp.server_id": {
           "minLength": 1,
-          "title": "Aep.Mcp.Server Id",
+          "title": "Avp.Mcp.Server Id",
           "type": "string"
         },
-        "aep.mcp.disconnect_reason": {
+        "avp.mcp.disconnect_reason": {
           "enum": [
             "clean",
             "error"
           ],
-          "title": "Aep.Mcp.Disconnect Reason",
+          "title": "Avp.Mcp.Disconnect Reason",
           "type": "string"
         },
-        "aep.mcp.disconnect_message": {
+        "avp.mcp.disconnect_message": {
           "anyOf": [
             {
               "type": "string"
@@ -1493,15 +1258,15 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp.Disconnect Message"
+          "title": "Avp.Mcp.Disconnect Message"
         }
       },
       "required": [
         "trace_id",
         "span_id",
         "parent_span_id",
-        "aep.mcp.server_id",
-        "aep.mcp.disconnect_reason"
+        "avp.mcp.server_id",
+        "avp.mcp.disconnect_reason"
       ],
       "title": "McpServerDisconnectedData",
       "type": "object"
@@ -1561,7 +1326,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -1572,17 +1337,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.mcp_server_disconnected",
-          "default": "aep.mcp_server_disconnected",
+          "const": "avp.mcp_server_disconnected",
+          "default": "avp.mcp_server_disconnected",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -1743,12 +1508,12 @@
           "default": null,
           "title": "Gen Ai.Usage.Reasoning.Output Tokens"
         },
-        "aep.cost_usd": {
+        "avp.cost_usd": {
           "minimum": 0,
-          "title": "Aep.Cost Usd",
+          "title": "Avp.Cost Usd",
           "type": "number"
         },
-        "aep.cost.source": {
+        "avp.cost.source": {
           "anyOf": [
             {
               "enum": [
@@ -1763,7 +1528,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Cost.Source"
+          "title": "Avp.Cost.Source"
         }
       },
       "required": [
@@ -1774,7 +1539,7 @@
         "duration_ms",
         "gen_ai.usage.input_tokens",
         "gen_ai.usage.output_tokens",
-        "aep.cost_usd"
+        "avp.cost_usd"
       ],
       "title": "ModelTurnEndedData",
       "type": "object"
@@ -1834,7 +1599,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -1845,17 +1610,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.model_turn_ended",
-          "default": "aep.model_turn_ended",
+          "const": "avp.model_turn_ended",
+          "default": "avp.model_turn_ended",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -1898,7 +1663,7 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.context_messages": {
+        "avp.context_messages": {
           "anyOf": [
             {
               "minimum": 0,
@@ -1909,7 +1674,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Context Messages"
+          "title": "Avp.Context Messages"
         },
         "gen_ai.request.stream": {
           "anyOf": [
@@ -1988,7 +1753,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -1999,17 +1764,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.model_turn_started",
-          "default": "aep.model_turn_started",
+          "const": "avp.model_turn_started",
+          "default": "avp.model_turn_started",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2025,7 +1790,7 @@
     },
     "ReasoningEmittedData": {
       "additionalProperties": true,
-      "description": "The model produced a reasoning / thinking block during this turn.\n\nDistinct from `text_emitted` — reasoning is not user-facing output;\nit's the model's internal chain-of-thought that some providers\nexpose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,\netc.). Consumers can filter on this event type to redact / collapse\nchain-of-thought from displays without losing it from the audit log.\n\n`aep.reasoning.signature` rides along when the provider returns a\ncryptographic signature on the thinking block (Anthropic does this\nfor redacted_thinking blocks); empty when the provider doesn't.\n`aep.reasoning.redacted` flags blocks the provider has returned in\nencrypted-only form (no plaintext) — the wire still records the\noccurrence so audit consumers can count thinking turns.",
+      "description": "The model produced a reasoning / thinking block during this turn.\n\nDistinct from `text_emitted` — reasoning is not user-facing output;\nit's the model's internal chain-of-thought that some providers\nexpose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,\netc.). Consumers can filter on this event type to redact / collapse\nchain-of-thought from displays without losing it from the audit log.\n\n`avp.reasoning.signature` rides along when the provider returns a\ncryptographic signature on the thinking block (Anthropic does this\nfor redacted_thinking blocks); empty when the provider doesn't.\n`avp.reasoning.redacted` flags blocks the provider has returned in\nencrypted-only form (no plaintext) — the wire still records the\noccurrence so audit consumers can count thinking turns.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2053,11 +1818,11 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.reasoning.text": {
-          "title": "Aep.Reasoning.Text",
+        "avp.reasoning.text": {
+          "title": "Avp.Reasoning.Text",
           "type": "string"
         },
-        "aep.reasoning.signature": {
+        "avp.reasoning.signature": {
           "anyOf": [
             {
               "type": "string"
@@ -2067,9 +1832,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Reasoning.Signature"
+          "title": "Avp.Reasoning.Signature"
         },
-        "aep.reasoning.redacted": {
+        "avp.reasoning.redacted": {
           "anyOf": [
             {
               "type": "boolean"
@@ -2079,7 +1844,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Reasoning.Redacted"
+          "title": "Avp.Reasoning.Redacted"
         }
       },
       "required": [
@@ -2087,7 +1852,7 @@
         "span_id",
         "parent_span_id",
         "step",
-        "aep.reasoning.text"
+        "avp.reasoning.text"
       ],
       "title": "ReasoningEmittedData",
       "type": "object"
@@ -2147,7 +1912,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -2158,17 +1923,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.reasoning_emitted",
-          "default": "aep.reasoning_emitted",
+          "const": "avp.reasoning_emitted",
+          "default": "avp.reasoning_emitted",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2184,7 +1949,7 @@
     },
     "RefusalRecordedData": {
       "additionalProperties": true,
-      "description": "The model declined to generate a response or had its output filtered.\n\nCommon across providers but each exposes a different slice:\n  - Anthropic:  `stop_reason=\"refusal\"` (or `\"sensitive\"`), no\n                structured category, sometimes a refusal-flavored\n                text block.\n  - OpenAI:     `finish_reason=\"content_filter\"` plus a dedicated\n                `refusal` field on the assistant message containing\n                the model's refusal text.\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\n                per-category `safetyRatings`.\n\nAEP normalizes to a provider-agnostic shape: `reason` is the\nprovider's raw code (verbatim, so audit pipelines can match exact\nupstream strings), `message` is the model's refusal text when given,\n`category` is the provider's safety category (free-form because\nevery provider names them differently), `provider` lets downstream\nconsumers normalize the reason code without context-guessing.\n\nA refusal terminates the turn — the model produced no useful text or\ntool call. Whether the *run* terminates is a runner decision (the\nreference runner stops with `StopReason.refused`); a higher-level\nsupervisor may choose to reset history and retry.",
+      "description": "The model declined to generate a response or had its output filtered.\n\nCommon across providers but each exposes a different slice:\n  - Anthropic:  `stop_reason=\"refusal\"` (or `\"sensitive\"`), no\n                structured category, sometimes a refusal-flavored\n                text block.\n  - OpenAI:     `finish_reason=\"content_filter\"` plus a dedicated\n                `refusal` field on the assistant message containing\n                the model's refusal text.\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\n                per-category `safetyRatings`.\n\nAVP normalizes to a provider-agnostic shape: `reason` is the\nprovider's raw code (verbatim, so audit pipelines can match exact\nupstream strings), `message` is the model's refusal text when given,\n`category` is the provider's safety category (free-form because\nevery provider names them differently), `provider` lets downstream\nconsumers normalize the reason code without context-guessing.\n\nA refusal terminates the turn — the model produced no useful text or\ntool call. Whether the *run* terminates is a agent decision (the\nreference agent stops with `StopReason.refused`); a higher-level\nsupervisor may choose to reset history and retry.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2212,12 +1977,12 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.refusal.reason": {
+        "avp.refusal.reason": {
           "minLength": 1,
-          "title": "Aep.Refusal.Reason",
+          "title": "Avp.Refusal.Reason",
           "type": "string"
         },
-        "aep.refusal.message": {
+        "avp.refusal.message": {
           "anyOf": [
             {
               "type": "string"
@@ -2227,9 +1992,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Refusal.Message"
+          "title": "Avp.Refusal.Message"
         },
-        "aep.refusal.category": {
+        "avp.refusal.category": {
           "anyOf": [
             {
               "type": "string"
@@ -2239,9 +2004,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Refusal.Category"
+          "title": "Avp.Refusal.Category"
         },
-        "aep.refusal.provider": {
+        "avp.refusal.provider": {
           "anyOf": [
             {
               "type": "string"
@@ -2251,7 +2016,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Refusal.Provider"
+          "title": "Avp.Refusal.Provider"
         }
       },
       "required": [
@@ -2259,7 +2024,7 @@
         "span_id",
         "parent_span_id",
         "step",
-        "aep.refusal.reason"
+        "avp.refusal.reason"
       ],
       "title": "RefusalRecordedData",
       "type": "object"
@@ -2319,7 +2084,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -2330,17 +2095,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.refusal_recorded",
-          "default": "aep.refusal_recorded",
+          "const": "avp.refusal_recorded",
+          "default": "avp.refusal_recorded",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2352,6 +2117,155 @@
         "data"
       ],
       "title": "RefusalRecordedEvent",
+      "type": "object"
+    },
+    "RunRequestedData": {
+      "additionalProperties": true,
+      "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory: the supervisor's assertion that this run was\nrequested with this Commission. Agent-relayed (the agent emits the\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\nso no I/O contract change beyond Commission — but attribution is the\nsupervisor's, not the agent's.\n\n`avp.config` is the full Commission snapshot the supervisor handed in.\nCarrying it on the wire makes the trajectory self-contained: an\nauditor can replay (or re-validate) the run from the trajectory\nalone, without an external Commission registry.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "avp.supervisor.name": {
+          "minLength": 1,
+          "title": "Avp.Supervisor.Name",
+          "type": "string"
+        },
+        "avp.supervisor.version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Supervisor.Version"
+        },
+        "avp.commission": {
+          "additionalProperties": true,
+          "title": "Avp.Commission",
+          "type": "object"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "avp.supervisor.name",
+        "avp.commission"
+      ],
+      "title": "RunRequestedData",
+      "type": "object"
+    },
+    "RunRequestedEvent": {
+      "additionalProperties": false,
+      "description": "First event of the trajectory. Agent-relayed but supervisor-attributed:\nthe agent emits it from `Commission.supervisor` with `source: avp://supervisor`,\nso a downstream consumer reading the wire sees the supervisor as the\nasserter of \"this run was requested with this Commission.\" Same relay\npattern as `tool_exec_resolved`.",
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "avp.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Correlation Id"
+        },
+        "type": {
+          "const": "avp.run_requested",
+          "default": "avp.run_requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "avp://supervisor",
+          "default": "avp://supervisor",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunRequestedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "RunRequestedEvent",
       "type": "object"
     },
     "RunStateSnapshot": {
@@ -2503,8 +2417,8 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.skill.name": {
-          "title": "Aep.Skill.Name",
+        "avp.skill.name": {
+          "title": "Avp.Skill.Name",
           "type": "string"
         }
       },
@@ -2513,7 +2427,7 @@
         "span_id",
         "parent_span_id",
         "step",
-        "aep.skill.name"
+        "avp.skill.name"
       ],
       "title": "SkillExecutedData",
       "type": "object"
@@ -2573,7 +2487,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -2584,17 +2498,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.skill_executed",
-          "default": "aep.skill_executed",
+          "const": "avp.skill_executed",
+          "default": "avp.skill_executed",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2637,11 +2551,11 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.skill.name": {
-          "title": "Aep.Skill.Name",
+        "avp.skill.name": {
+          "title": "Avp.Skill.Name",
           "type": "string"
         },
-        "aep.skill.source": {
+        "avp.skill.source": {
           "anyOf": [
             {
               "type": "string"
@@ -2651,7 +2565,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Skill.Source"
+          "title": "Avp.Skill.Source"
         }
       },
       "required": [
@@ -2659,7 +2573,7 @@
         "span_id",
         "parent_span_id",
         "step",
-        "aep.skill.name"
+        "avp.skill.name"
       ],
       "title": "SkillLoadedData",
       "type": "object"
@@ -2719,7 +2633,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -2730,17 +2644,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.skill_loaded",
-          "default": "aep.skill_loaded",
+          "const": "avp.skill_loaded",
+          "default": "avp.skill_loaded",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2755,15 +2669,11 @@
       "type": "object"
     },
     "StopReason": {
+      "description": "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, or operator interrupted. Cap-driven\nstop reasons (turn / token / cost / duration limits) and verifier\nhalts are not part of v0.1 — agents that need bounded execution\nwire it externally (subprocess timeouts, supervisor SIGKILL).",
       "enum": [
         "converged",
-        "budget_exhausted",
-        "token_limit",
-        "turn_limit",
-        "duration_limit",
         "error",
         "interrupted",
-        "verifier_failed",
         "refused"
       ],
       "title": "StopReason",
@@ -2803,9 +2713,9 @@
           "title": "Gen Ai.Agent.Name",
           "type": "string"
         },
-        "aep.subagent.invocation_id": {
+        "avp.subagent.invocation_id": {
           "minLength": 1,
-          "title": "Aep.Subagent.Invocation Id",
+          "title": "Avp.Subagent.Invocation Id",
           "type": "string"
         },
         "duration_ms": {
@@ -2813,11 +2723,11 @@
           "title": "Duration Ms",
           "type": "integer"
         },
-        "aep.subagent.error": {
-          "title": "Aep.Subagent.Error",
+        "avp.subagent.error": {
+          "title": "Avp.Subagent.Error",
           "type": "string"
         },
-        "aep.subagent.error.code": {
+        "avp.subagent.error.code": {
           "anyOf": [
             {
               "type": "string"
@@ -2827,7 +2737,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Subagent.Error.Code"
+          "title": "Avp.Subagent.Error.Code"
         }
       },
       "required": [
@@ -2836,9 +2746,9 @@
         "parent_span_id",
         "step",
         "gen_ai.agent.name",
-        "aep.subagent.invocation_id",
+        "avp.subagent.invocation_id",
         "duration_ms",
-        "aep.subagent.error"
+        "avp.subagent.error"
       ],
       "title": "SubagentFailedData",
       "type": "object"
@@ -2898,7 +2808,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -2909,17 +2819,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.subagent_failed",
-          "default": "aep.subagent_failed",
+          "const": "avp.subagent_failed",
+          "default": "avp.subagent_failed",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -2985,14 +2895,14 @@
           "title": "Gen Ai.Operation.Name",
           "type": "string"
         },
-        "aep.subagent.invocation_id": {
+        "avp.subagent.invocation_id": {
           "minLength": 1,
-          "title": "Aep.Subagent.Invocation Id",
+          "title": "Avp.Subagent.Invocation Id",
           "type": "string"
         },
-        "aep.subagent.input": {
+        "avp.subagent.input": {
           "additionalProperties": true,
-          "title": "Aep.Subagent.Input",
+          "title": "Avp.Subagent.Input",
           "type": "object"
         }
       },
@@ -3002,8 +2912,8 @@
         "parent_span_id",
         "step",
         "gen_ai.agent.name",
-        "aep.subagent.invocation_id",
-        "aep.subagent.input"
+        "avp.subagent.invocation_id",
+        "avp.subagent.input"
       ],
       "title": "SubagentInvokedData",
       "type": "object"
@@ -3063,7 +2973,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -3074,17 +2984,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.subagent_invoked",
-          "default": "aep.subagent_invoked",
+          "const": "avp.subagent_invoked",
+          "default": "avp.subagent_invoked",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -3100,7 +3010,7 @@
     },
     "SubagentReturnedData": {
       "additionalProperties": true,
-      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them. `aep.subagent.usage`\nrolls up the subagent's own consumption (cost, tokens, turns) — this\nrollup is also reflected in the parent run's cumulative state, but the\nbreakdown is preserved here so consumers can attribute spend to the\nsubagent that incurred it.",
+      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them. `avp.subagent.usage`\nrolls up the subagent's own consumption (cost, tokens, turns) — this\nrollup is also reflected in the parent run's cumulative state, but the\nbreakdown is preserved here so consumers can attribute spend to the\nsubagent that incurred it.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3132,9 +3042,9 @@
           "title": "Gen Ai.Agent.Name",
           "type": "string"
         },
-        "aep.subagent.invocation_id": {
+        "avp.subagent.invocation_id": {
           "minLength": 1,
-          "title": "Aep.Subagent.Invocation Id",
+          "title": "Avp.Subagent.Invocation Id",
           "type": "string"
         },
         "duration_ms": {
@@ -3142,11 +3052,11 @@
           "title": "Duration Ms",
           "type": "integer"
         },
-        "aep.subagent.result.text": {
-          "title": "Aep.Subagent.Result.Text",
+        "avp.subagent.result.text": {
+          "title": "Avp.Subagent.Result.Text",
           "type": "string"
         },
-        "aep.subagent.result.structured": {
+        "avp.subagent.result.structured": {
           "anyOf": [
             {},
             {
@@ -3154,12 +3064,12 @@
             }
           ],
           "default": null,
-          "title": "Aep.Subagent.Result.Structured"
+          "title": "Avp.Subagent.Result.Structured"
         },
-        "aep.subagent.reason": {
+        "avp.subagent.reason": {
           "$ref": "#/$defs/StopReason"
         },
-        "aep.subagent.usage": {
+        "avp.subagent.usage": {
           "$ref": "#/$defs/RunStateSnapshot"
         }
       },
@@ -3169,11 +3079,11 @@
         "parent_span_id",
         "step",
         "gen_ai.agent.name",
-        "aep.subagent.invocation_id",
+        "avp.subagent.invocation_id",
         "duration_ms",
-        "aep.subagent.result.text",
-        "aep.subagent.reason",
-        "aep.subagent.usage"
+        "avp.subagent.result.text",
+        "avp.subagent.reason",
+        "avp.subagent.usage"
       ],
       "title": "SubagentReturnedData",
       "type": "object"
@@ -3233,7 +3143,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -3244,17 +3154,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.subagent_returned",
-          "default": "aep.subagent_returned",
+          "const": "avp.subagent_returned",
+          "default": "avp.subagent_returned",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -3297,8 +3207,8 @@
           "title": "Step",
           "type": "integer"
         },
-        "aep.text": {
-          "title": "Aep.Text",
+        "avp.text": {
+          "title": "Avp.Text",
           "type": "string"
         }
       },
@@ -3307,7 +3217,7 @@
         "span_id",
         "parent_span_id",
         "step",
-        "aep.text"
+        "avp.text"
       ],
       "title": "TextEmittedData",
       "type": "object"
@@ -3367,7 +3277,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -3378,17 +3288,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.text_emitted",
-          "default": "aep.text_emitted",
+          "const": "avp.text_emitted",
+          "default": "avp.text_emitted",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -3400,484 +3310,6 @@
         "data"
       ],
       "title": "TextEmittedEvent",
-      "type": "object"
-    },
-    "ToolExecRequestData": {
-      "additionalProperties": true,
-      "description": "Wraps the JSON-RPC request alongside AEP-side bookkeeping.\n\n`gen_ai.tool.name` is duplicated at the top of `data` (OTel convention)\neven though it's also inside `rpc.params.name` per MCP — this keeps tool\nfiltering on the trajectory uniform across `tool_invoked` /\n`tool_exec_request` / `tool_returned`.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "step": {
-          "minimum": 0,
-          "title": "Step",
-          "type": "integer"
-        },
-        "aep.request_id": {
-          "minLength": 1,
-          "title": "Aep.Request Id",
-          "type": "string"
-        },
-        "gen_ai.tool.call.id": {
-          "minLength": 1,
-          "title": "Gen Ai.Tool.Call.Id",
-          "type": "string"
-        },
-        "aep.timeout_ms": {
-          "exclusiveMinimum": 0,
-          "title": "Aep.Timeout Ms",
-          "type": "integer"
-        },
-        "aep.tool.dispatch_target": {
-          "enum": [
-            "supervisor_rpc",
-            "mcp_server"
-          ],
-          "title": "Aep.Tool.Dispatch Target",
-          "type": "string"
-        },
-        "aep.mcp_server_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Mcp Server Id"
-        },
-        "gen_ai.tool.name": {
-          "title": "Gen Ai.Tool.Name",
-          "type": "string"
-        },
-        "rpc": {
-          "$ref": "#/$defs/JsonRpcRequestPayload"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "step",
-        "aep.request_id",
-        "gen_ai.tool.call.id",
-        "aep.timeout_ms",
-        "aep.tool.dispatch_target",
-        "gen_ai.tool.name",
-        "rpc"
-      ],
-      "title": "ToolExecRequestData",
-      "type": "object"
-    },
-    "ToolExecRequestEvent": {
-      "additionalProperties": false,
-      "description": "Agent calls into an external service (supervisor RPC or MCP server).\n\n`source` is `aep://runner` because the runner emits this event when the\nagent decides to call a tool whose implementation is external.",
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.tool_exec_request",
-          "default": "aep.tool_exec_request",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ToolExecRequestData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ToolExecRequestEvent",
-      "type": "object"
-    },
-    "ToolExecResolvedData": {
-      "additionalProperties": true,
-      "description": "Wraps the JSON-RPC response. `source` URI on the envelope identifies\nwho answered (supervisor or mcp/<server_id>).\n\n`gen_ai.tool.name` echoes the request's tool name for observability —\nconsumers shouldn't need to cross-reference the request to filter replies.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "aep.request_id": {
-          "minLength": 1,
-          "title": "Aep.Request Id",
-          "type": "string"
-        },
-        "gen_ai.tool.name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Tool.Name"
-        },
-        "rpc": {
-          "$ref": "#/$defs/JsonRpcResponsePayload"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "aep.request_id",
-        "rpc"
-      ],
-      "title": "ToolExecResolvedData",
-      "type": "object"
-    },
-    "ToolExecResolvedEvent": {
-      "additionalProperties": false,
-      "description": "RPC reply recorded into the trajectory verbatim. `source` is the URI\nof the responding service: `aep://supervisor` or `aep://mcp/<server_id>`.",
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.tool_exec_resolved",
-          "default": "aep.tool_exec_resolved",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "minLength": 1,
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ToolExecResolvedData"
-        }
-      },
-      "required": [
-        "source",
-        "data"
-      ],
-      "title": "ToolExecResolvedEvent",
-      "type": "object"
-    },
-    "ToolExecTimedOutData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "step": {
-          "minimum": 0,
-          "title": "Step",
-          "type": "integer"
-        },
-        "aep.request_id": {
-          "minLength": 1,
-          "title": "Aep.Request Id",
-          "type": "string"
-        },
-        "gen_ai.tool.call.id": {
-          "minLength": 1,
-          "title": "Gen Ai.Tool.Call.Id",
-          "type": "string"
-        },
-        "gen_ai.tool.name": {
-          "title": "Gen Ai.Tool.Name",
-          "type": "string"
-        },
-        "aep.timeout_ms": {
-          "exclusiveMinimum": 0,
-          "title": "Aep.Timeout Ms",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "step",
-        "aep.request_id",
-        "gen_ai.tool.call.id",
-        "gen_ai.tool.name",
-        "aep.timeout_ms"
-      ],
-      "title": "ToolExecTimedOutData",
-      "type": "object"
-    },
-    "ToolExecTimedOutEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.tool_exec_timed_out",
-          "default": "aep.tool_exec_timed_out",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ToolExecTimedOutData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ToolExecTimedOutEvent",
       "type": "object"
     },
     "ToolFailedData": {
@@ -3918,11 +3350,11 @@
           "title": "Gen Ai.Tool.Name",
           "type": "string"
         },
-        "aep.tool.error": {
-          "title": "Aep.Tool.Error",
+        "avp.tool.error": {
+          "title": "Avp.Tool.Error",
           "type": "string"
         },
-        "aep.tool.error.code": {
+        "avp.tool.error.code": {
           "anyOf": [
             {
               "type": "integer"
@@ -3932,7 +3364,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Error.Code"
+          "title": "Avp.Tool.Error.Code"
         }
       },
       "required": [
@@ -3942,7 +3374,7 @@
         "step",
         "gen_ai.tool.call.id",
         "gen_ai.tool.name",
-        "aep.tool.error"
+        "avp.tool.error"
       ],
       "title": "ToolFailedData",
       "type": "object"
@@ -4002,7 +3434,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -4013,17 +3445,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.tool_failed",
-          "default": "aep.tool_failed",
+          "const": "avp.tool_failed",
+          "default": "avp.tool_failed",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -4080,11 +3512,10 @@
           "title": "Gen Ai.Tool.Call.Arguments",
           "type": "object"
         },
-        "aep.tool.dispatch_target": {
+        "avp.tool.dispatch_target": {
           "anyOf": [
             {
               "enum": [
-                "supervisor_rpc",
                 "mcp_server",
                 "local"
               ],
@@ -4095,9 +3526,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Dispatch Target"
+          "title": "Avp.Tool.Dispatch Target"
         },
-        "aep.tool.subtype": {
+        "avp.tool.subtype": {
           "anyOf": [
             {
               "type": "string"
@@ -4107,7 +3538,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Subtype"
+          "title": "Avp.Tool.Subtype"
         }
       },
       "required": [
@@ -4177,7 +3608,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -4188,17 +3619,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.tool_invoked",
-          "default": "aep.tool_invoked",
+          "const": "avp.tool_invoked",
+          "default": "avp.tool_invoked",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -4255,11 +3686,11 @@
           "title": "Duration Ms",
           "type": "integer"
         },
-        "aep.tool.result.text": {
-          "title": "Aep.Tool.Result.Text",
+        "avp.tool.result.text": {
+          "title": "Avp.Tool.Result.Text",
           "type": "string"
         },
-        "aep.tool.result.structured": {
+        "avp.tool.result.structured": {
           "anyOf": [
             {},
             {
@@ -4267,9 +3698,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Result.Structured"
+          "title": "Avp.Tool.Result.Structured"
         },
-        "aep.tool.rejected": {
+        "avp.tool.rejected": {
           "anyOf": [
             {
               "type": "boolean"
@@ -4279,9 +3710,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Rejected"
+          "title": "Avp.Tool.Rejected"
         },
-        "aep.tool.rejection_reason": {
+        "avp.tool.rejection_reason": {
           "anyOf": [
             {
               "type": "string"
@@ -4291,7 +3722,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Tool.Rejection Reason"
+          "title": "Avp.Tool.Rejection Reason"
         }
       },
       "required": [
@@ -4302,7 +3733,7 @@
         "gen_ai.tool.call.id",
         "gen_ai.tool.name",
         "duration_ms",
-        "aep.tool.result.text"
+        "avp.tool.result.text"
       ],
       "title": "ToolReturnedData",
       "type": "object"
@@ -4362,7 +3793,7 @@
           "default": null,
           "title": "Dataschema"
         },
-        "aep.correlation_id": {
+        "avp.correlation_id": {
           "anyOf": [
             {
               "minLength": 1,
@@ -4373,17 +3804,17 @@
             }
           ],
           "default": null,
-          "title": "Aep.Correlation Id"
+          "title": "Avp.Correlation Id"
         },
         "type": {
-          "const": "aep.tool_returned",
-          "default": "aep.tool_returned",
+          "const": "avp.tool_returned",
+          "default": "avp.tool_returned",
           "title": "Type",
           "type": "string"
         },
         "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -4397,227 +3828,48 @@
       "title": "ToolReturnedEvent",
       "type": "object"
     },
-    "VerifierError": {
-      "description": "Why a verifier failed for non-logic reasons. Distinguishes\n'environment broken' (script missing, timed out, crashed) from\n'rule legitimately failed' (passed=false with no error).",
-      "enum": [
-        "source_unavailable",
-        "source_timed_out",
-        "source_crashed"
-      ],
-      "title": "VerifierError",
-      "type": "string"
-    },
-    "VerifierEvaluatedData": {
+    "_SkillDecl": {
       "additionalProperties": true,
-      "description": "The result of a deterministic Boolean check.",
+      "description": "Skill descriptor in `agent_started.data.skills` — name plus\noptional metadata about each skill loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `avp.source` is the\nSKILL.md path / URI when known.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
       "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
+        "name": {
+          "title": "Name",
           "type": "string"
         },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "aep.verifier.name": {
-          "minLength": 1,
-          "title": "Aep.Verifier.Name",
-          "type": "string"
-        },
-        "aep.verifier.passed": {
-          "title": "Aep.Verifier.Passed",
-          "type": "boolean"
-        },
-        "aep.verifier.duration_ms": {
-          "minimum": 0,
-          "title": "Aep.Verifier.Duration Ms",
-          "type": "integer"
-        },
-        "step": {
+        "description": {
           "anyOf": [
             {
-              "minimum": 0,
-              "type": "integer"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Step"
+          "title": "Description"
         },
-        "aep.verifier.error": {
+        "avp.source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/VerifierError"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "aep.verifier.subject_call_ids": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Aep.Verifier.Subject Call Ids"
-        },
-        "aep.verifier.subject_request_ids": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Verifier.Subject Request Ids"
-        },
-        "aep.verifier.data": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Verifier.Data"
+          "title": "Avp.Source"
         }
       },
       "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "aep.verifier.name",
-        "aep.verifier.passed",
-        "aep.verifier.duration_ms"
+        "name"
       ],
-      "title": "VerifierEvaluatedData",
-      "type": "object"
-    },
-    "VerifierEvaluatedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "aep.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Aep.Correlation Id"
-        },
-        "type": {
-          "const": "aep.verifier_evaluated",
-          "default": "aep.verifier_evaluated",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "aep://runner",
-          "default": "aep://runner",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/VerifierEvaluatedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "VerifierEvaluatedEvent",
+      "title": "_SkillDecl",
       "type": "object"
     },
     "_SubagentDecl": {
       "additionalProperties": true,
-      "description": "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nrunner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe runner has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
+      "description": "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
       "properties": {
         "name": {
           "title": "Name",
@@ -4647,6 +3899,18 @@
           ],
           "default": null,
           "title": "Inputschema"
+        },
+        "avp.agent_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Agent Type"
         }
       },
       "required": [
@@ -4657,7 +3921,7 @@
     },
     "_ToolDecl": {
       "additionalProperties": true,
-      "description": "Tool descriptor in `agent_started.data.tools` — MCP-shaped + AEP fields.",
+      "description": "Tool descriptor in `agent_started.data.tools` — MCP-shaped + AVP fields.",
       "properties": {
         "name": {
           "title": "Name",
@@ -4688,11 +3952,10 @@
           "default": null,
           "title": "Inputschema"
         },
-        "aep.dispatch_target": {
+        "avp.dispatch_target": {
           "anyOf": [
             {
               "enum": [
-                "supervisor_rpc",
                 "mcp_server",
                 "local"
               ],
@@ -4703,9 +3966,9 @@
             }
           ],
           "default": null,
-          "title": "Aep.Dispatch Target"
+          "title": "Avp.Dispatch Target"
         },
-        "aep.mcp_server_id": {
+        "avp.mcp_server_id": {
           "anyOf": [
             {
               "type": "string"
@@ -4715,7 +3978,7 @@
             }
           ],
           "default": null,
-          "title": "Aep.Mcp Server Id"
+          "title": "Avp.Mcp Server Id"
         }
       },
       "required": [
@@ -4727,35 +3990,37 @@
   },
   "discriminator": {
     "mapping": {
-      "aep.agent_started": "#/$defs/AgentStartedEvent",
-      "aep.agent_stopped": "#/$defs/AgentStoppedEvent",
-      "aep.approval_requested": "#/$defs/ApprovalRequestedEvent",
-      "aep.approval_resolved": "#/$defs/ApprovalResolvedEvent",
-      "aep.cost_recorded": "#/$defs/CostRecordedEvent",
-      "aep.error_occurred": "#/$defs/ErrorOccurredEvent",
-      "aep.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
-      "aep.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
-      "aep.model_turn_ended": "#/$defs/ModelTurnEndedEvent",
-      "aep.model_turn_started": "#/$defs/ModelTurnStartedEvent",
-      "aep.reasoning_emitted": "#/$defs/ReasoningEmittedEvent",
-      "aep.refusal_recorded": "#/$defs/RefusalRecordedEvent",
-      "aep.skill_executed": "#/$defs/SkillExecutedEvent",
-      "aep.skill_loaded": "#/$defs/SkillLoadedEvent",
-      "aep.subagent_failed": "#/$defs/SubagentFailedEvent",
-      "aep.subagent_invoked": "#/$defs/SubagentInvokedEvent",
-      "aep.subagent_returned": "#/$defs/SubagentReturnedEvent",
-      "aep.text_emitted": "#/$defs/TextEmittedEvent",
-      "aep.tool_exec_request": "#/$defs/ToolExecRequestEvent",
-      "aep.tool_exec_resolved": "#/$defs/ToolExecResolvedEvent",
-      "aep.tool_exec_timed_out": "#/$defs/ToolExecTimedOutEvent",
-      "aep.tool_failed": "#/$defs/ToolFailedEvent",
-      "aep.tool_invoked": "#/$defs/ToolInvokedEvent",
-      "aep.tool_returned": "#/$defs/ToolReturnedEvent",
-      "aep.verifier_evaluated": "#/$defs/VerifierEvaluatedEvent"
+      "avp.agent_described": "#/$defs/AgentDescribedEvent",
+      "avp.agent_started": "#/$defs/AgentStartedEvent",
+      "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
+      "avp.cost_recorded": "#/$defs/CostRecordedEvent",
+      "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
+      "avp.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
+      "avp.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
+      "avp.model_turn_ended": "#/$defs/ModelTurnEndedEvent",
+      "avp.model_turn_started": "#/$defs/ModelTurnStartedEvent",
+      "avp.reasoning_emitted": "#/$defs/ReasoningEmittedEvent",
+      "avp.refusal_recorded": "#/$defs/RefusalRecordedEvent",
+      "avp.run_requested": "#/$defs/RunRequestedEvent",
+      "avp.skill_executed": "#/$defs/SkillExecutedEvent",
+      "avp.skill_loaded": "#/$defs/SkillLoadedEvent",
+      "avp.subagent_failed": "#/$defs/SubagentFailedEvent",
+      "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
+      "avp.subagent_returned": "#/$defs/SubagentReturnedEvent",
+      "avp.text_emitted": "#/$defs/TextEmittedEvent",
+      "avp.tool_failed": "#/$defs/ToolFailedEvent",
+      "avp.tool_invoked": "#/$defs/ToolInvokedEvent",
+      "avp.tool_returned": "#/$defs/ToolReturnedEvent"
     },
     "propertyName": "type"
   },
   "oneOf": [
+    {
+      "$ref": "#/$defs/RunRequestedEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentDescribedEvent"
+    },
     {
       "$ref": "#/$defs/AgentStartedEvent"
     },
@@ -4808,24 +4073,6 @@
       "$ref": "#/$defs/ErrorOccurredEvent"
     },
     {
-      "$ref": "#/$defs/ToolExecRequestEvent"
-    },
-    {
-      "$ref": "#/$defs/ToolExecResolvedEvent"
-    },
-    {
-      "$ref": "#/$defs/ToolExecTimedOutEvent"
-    },
-    {
-      "$ref": "#/$defs/ApprovalRequestedEvent"
-    },
-    {
-      "$ref": "#/$defs/ApprovalResolvedEvent"
-    },
-    {
-      "$ref": "#/$defs/VerifierEvaluatedEvent"
-    },
-    {
       "$ref": "#/$defs/McpServerConnectedEvent"
     },
     {
@@ -4833,7 +4080,7 @@
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aep.dev/schema/v0.1/event.schema.json",
-  "title": "AEP v0.1 Event",
-  "description": "Runner → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `aep.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AEP-specific attributes are namespaced `aep.*`."
+  "$id": "https://avp.dev/schema/v0.1/event.schema.json",
+  "title": "AVP v0.1 Event",
+  "description": "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`."
 }

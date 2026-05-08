@@ -1,10 +1,10 @@
 {
   "id": "refusal-recorded-stops-with-refused",
-  "title": "Refusal in a turn emits aep.refusal_recorded and terminates the run with StopReason.refused",
-  "description": "When the driver detects a refusal-flavored signal (Anthropic stop_reason=refusal, OpenAI content_filter, Gemini SAFETY/BLOCKLIST/etc.), the runner MUST emit one aep.refusal_recorded event carrying aep.refusal.reason (provider's verbatim code), optional aep.refusal.message, optional aep.refusal.category, and optional aep.refusal.provider — then terminate with aep.agent_stopped where aep.reason='refused'. The refused turn MUST NOT be appended to history (so a higher-level supervisor can choose to reset and retry without re-feeding the refusal). This is the wire signal a supervisor relies on to count refusals and distinguish them from converged or budget-exhausted runs.",
+  "title": "Refusal in a turn emits avp.refusal_recorded and terminates the run with StopReason.refused",
+  "description": "When the driver detects a refusal-flavored signal (Anthropic stop_reason=refusal, OpenAI content_filter, Gemini SAFETY/BLOCKLIST/etc.), the runner MUST emit one avp.refusal_recorded event carrying avp.refusal.reason (provider's verbatim code), optional avp.refusal.message, optional avp.refusal.category, and optional avp.refusal.provider — then terminate with avp.agent_stopped where avp.reason='refused'. The refused turn MUST NOT be appended to history (so a higher-level supervisor can choose to reset and retry without re-feeding the refusal). This is the wire signal a supervisor relies on to count refusals and distinguish them from converged or budget-exhausted runs.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#11-event-reference",
-    "spec/v0.1/aep.schema.json#/$defs/RefusalRecordedEvent"
+    "spec/v0.1/avp.schema.json#/$defs/RefusalRecordedEvent"
   ],
   "applies_to": ["runner"],
   "config": {
@@ -31,19 +31,19 @@
     "events": [
       {
         "match": {
-          "type": "aep.refusal_recorded",
+          "type": "avp.refusal_recorded",
           "data": {
-            "aep.refusal.reason": "refusal",
-            "aep.refusal.message": "I can't help with that.",
-            "aep.refusal.provider": "anthropic"
+            "avp.refusal.reason": "refusal",
+            "avp.refusal.message": "I can't help with that.",
+            "avp.refusal.provider": "anthropic"
           }
         }
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "refused"
+            "avp.reason": "refused"
           }
         }
       }

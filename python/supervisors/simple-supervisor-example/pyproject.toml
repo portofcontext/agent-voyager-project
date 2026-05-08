@@ -5,17 +5,17 @@ build-backend = "hatchling.build"
 [project]
 name = "simple-supervisor-example"
 version = "0.1.0"
-description = "Worked example of an AEP v0.1 supervisor. Builds Configs from category profiles, spawns a runner subprocess, observes the trajectory, and surfaces the three classes of facts. Intended as a stepping stone before building a real (DDD) supervisor."
+description = "Worked example of an AVP v0.1 supervisor. Builds Configs from category profiles, spawns a runner subprocess, observes the trajectory, and surfaces the three classes of facts. Intended as a stepping stone before building a real (DDD) supervisor."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
-    "aep==0.1.0",
+    "avp==0.1.0",
 ]
 
 [project.optional-dependencies]
-anthropic = ["aep-anthropic==0.1.0"]
-claude-agent = ["aep-claude-agent==0.1.0"]
+anthropic = ["avp-anthropic==0.1.0"]
+claude-agent = ["avp-claude-agent==0.1.0"]
 dev = [
     "pytest>=7",
     "ruff>=0.6",

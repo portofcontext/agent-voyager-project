@@ -4,10 +4,10 @@ Companion to example 06 (which does the same thing for the Anthropic
 Messages SDK). The Claude Agent SDK runs tools internally via its hook
 protocol; user code just iterates `receive_response()`.
 
-The change to add AEP: wrap the loop in `with AEPTracer(...)` and use
+The change to add AVP: wrap the loop in `with AVPTracer(...)` and use
 `traced_claude_sdk_client()` (no args) instead of `ClaudeSDKClient(options=)`.
-The factory pulls Config from the active tracer; the SDK's hooks emit
-AEP events as turns and tools fire.
+The factory pulls Commission from the active tracer; the SDK's hooks emit
+AVP events as turns and tools fire.
 
 Run:
   ANTHROPIC_API_KEY=... python examples/07_claude_agent_traced_client.py
@@ -24,8 +24,8 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from aep import AEPTracer, Config, print_event
-from aep_claude_agent import traced_claude_sdk_client
+from avp import AVPTracer, Commission, print_event
+from avp_claude_agent import traced_claude_sdk_client
 
 
 def main() -> int:
@@ -39,10 +39,10 @@ def main() -> int:
         print("error: install the Claude Code CLI; `claude` must be on PATH", file=sys.stderr)
         return 2
 
-    workspace = Path(tempfile.mkdtemp(prefix="aep-traced-claude-"))
+    workspace = Path(tempfile.mkdtemp(prefix="avp-traced-claude-"))
     target = workspace / "hello.py"
 
-    config = Config(
+    config = Commission(
         schema_version="0.1",
         run_id=f"traced-claude-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
         model="claude-haiku-4-5-20251001",
@@ -52,7 +52,6 @@ def main() -> int:
             "a one-line docstring. Then say DONE."
         ),
         allowed_tools=["Write", "Read", "Bash"],
-        boundary={"max_steps": 8, "max_cost_usd": 0.10},
     )
 
     # Compare to a plain ClaudeSDKClient loop:
@@ -63,15 +62,15 @@ def main() -> int:
     #             handle(message)
     #
     # Two changes:
-    #   - wrap with `AEPTracer(config, on_event=...)` (sets the active tracer)
+    #   - wrap with `AVPTracer(config, on_event=...)` (sets the active tracer)
     #   - `traced_claude_sdk_client()` replaces `ClaudeSDKClient(options=)`;
-    #     Config flows from the active tracer
+    #     Commission flows from the active tracer
     async def _run() -> None:
-        with AEPTracer(config, on_event=print_event):
+        with AVPTracer(config, on_event=print_event):
             async with traced_claude_sdk_client() as client:
                 await client.connect(config.prompt)
                 async for _message in client.receive_response():
-                    # Your existing message-handling goes here. AEP events for
+                    # Your existing message-handling goes here. AVP events for
                     # this message are already on the wire by the time we get
                     # here. The user's body could render to a UI, route the
                     # message, log it, etc.

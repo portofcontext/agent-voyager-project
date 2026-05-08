@@ -1,14 +1,14 @@
 """Example 06 — drop-in instrumentation for an existing Anthropic SDK loop.
 
 Wrap your `anthropic.Anthropic()` in `AnthropicTracedClient(...)`, give it
-a Config and an on_event sink, and your existing loop emits AEP events.
+a Commission and an on_event sink, and your existing loop emits AVP events.
 The loop body is otherwise unchanged: `messages.create()` returns the same
 SDK object, you walk `.content` blocks the same way, you dispatch tools
 the same way.
 
-Boundary is enforced by exception: when the run hits its budget, the
-next `messages.create()` raises `BoundaryExhausted`, the wrapper's
-`__exit__` catches it, and `agent_stopped` reports the right reason.
+v0.1 leaves bounded execution to the caller — wire external safety
+(subprocess timeouts, supervisor SIGKILL, caller-side checks against
+`client.state`) as needed.
 
 Run:
   ANTHROPIC_API_KEY=... python examples/06_anthropic_traced_client.py
@@ -21,8 +21,8 @@ import sys
 
 import anthropic
 
-from aep import Config, print_event
-from aep_anthropic import AnthropicTracedClient
+from avp import Commission, print_event
+from avp_anthropic import AnthropicTracedClient
 
 
 def main() -> int:
@@ -30,7 +30,7 @@ def main() -> int:
         print("error: set ANTHROPIC_API_KEY before running this example", file=sys.stderr)
         return 2
 
-    config = Config(
+    config = Commission(
         schema_version="0.1",
         run_id="traced-client-example",
         model="claude-haiku-4-5-20251001",
@@ -38,7 +38,6 @@ def main() -> int:
             "Use the `add_two_numbers` tool to compute 17 + 25, then state "
             "the result and stop. Do not compute it yourself."
         ),
-        boundary={"max_steps": 4, "max_cost_usd": 0.05},
         allowed_tools=["add_two_numbers"],
     )
 
@@ -69,7 +68,7 @@ def main() -> int:
     #
     # Only changes:
     #   - wrap with `AnthropicTracedClient(real, config=, on_event=)`
-    #   - wrap tool dispatch with `client.tool(...)` so AEP can record it
+    #   - wrap tool dispatch with `client.tool(...)` so AVP can record it
     #   - call `client.converged()` to mark a clean exit
     with AnthropicTracedClient(
         anthropic.Anthropic(), config=config, on_event=print_event
@@ -100,7 +99,7 @@ def main() -> int:
             if assistant_blocks:
                 msgs.append({"role": "assistant", "content": assistant_blocks})
 
-            # Dispatch tools, wrapped with `client.tool(...)` so AEP records.
+            # Dispatch tools, wrapped with `client.tool(...)` so AVP records.
             for block in tool_uses:
                 with client.tool(call_id=block.id, name=block.name, input=dict(block.input)) as t:
                     output = add_two_numbers(dict(block.input))

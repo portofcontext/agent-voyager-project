@@ -1,10 +1,10 @@
-"""Surface the three classes of trajectory facts.
+"""Surface the two classes of trajectory facts.
 
-SPEC.md §10 splits trajectory events into three semantically distinct kinds:
+SPEC.md §10 splits trajectory events into two semantically distinct kinds
+in v0.1:
 
   1. What the agent did    — model_turn_*, tool_invoked/returned/failed, text_emitted
-  2. What the rules said   — verifier_evaluated
-  3. What the run cost     — cost_recorded, model_turn_ended.usage
+  2. What the run cost     — cost_recorded, model_turn_ended.usage
 
 A real supervisor framework will surface these on separate UI tracks. This
 module ships a `Summary` dataclass that holds them split, plus a renderer
@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from aep import (
+from avp import (
     AgentStoppedEvent,
     CostRecordedEvent,
     ErrorOccurredEvent,
@@ -26,7 +26,6 @@ from aep import (
     ToolFailedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
-    VerifierEvaluatedEvent,
 )
 
 
@@ -35,14 +34,6 @@ class ToolUsage:
     name: str
     invocations: int = 0
     failures: int = 0
-
-
-@dataclass
-class VerifierResult:
-    name: str
-    passed: bool
-    step: int | None
-    data: dict[str, Any] | None
 
 
 @dataclass
@@ -55,9 +46,6 @@ class Summary:
     tools: dict[str, ToolUsage] = field(default_factory=dict)
     text_chunks: int = 0
 
-    # What the rules said
-    verifier_results: list[VerifierResult] = field(default_factory=list)
-
     # What the run cost
     total_cost_usd: float = 0.0
     total_tokens: int = 0
@@ -65,14 +53,6 @@ class Summary:
 
     # Errors / RPC anomalies
     errors: list[str] = field(default_factory=list)
-
-    @property
-    def verifier_pass_count(self) -> int:
-        return sum(1 for v in self.verifier_results if v.passed)
-
-    @property
-    def verifier_fail_count(self) -> int:
-        return sum(1 for v in self.verifier_results if not v.passed)
 
     @property
     def tool_invocation_count(self) -> int:
@@ -99,33 +79,24 @@ def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
             usage.failures += 1
         elif isinstance(ev, ToolReturnedEvent):
             pass  # invocation already counted on ToolInvoked
-        elif isinstance(ev, VerifierEvaluatedEvent):
-            s.verifier_results.append(
-                VerifierResult(
-                    name=ev.data.aep_verifier_name,
-                    passed=ev.data.aep_verifier_passed,
-                    step=ev.data.step,
-                    data=ev.data.aep_verifier_data,
-                )
-            )
         elif isinstance(ev, CostRecordedEvent):
             # Snapshot wins — last-write semantics
-            snap = ev.data.aep_state
+            snap = ev.data.avp_state
             s.total_cost_usd = snap.total_cost_usd
             s.total_tokens = snap.total_tokens
             if snap.duration_ms is not None:
                 s.duration_ms = snap.duration_ms
         elif isinstance(ev, AgentStoppedEvent):
             s.run_id = ev.subject or "(unknown)"
-            s.stop_reason = str(ev.data.aep_reason)
-            if ev.data.aep_total_cost_usd is not None:
-                s.total_cost_usd = ev.data.aep_total_cost_usd
-            if ev.data.aep_total_tokens is not None:
-                s.total_tokens = ev.data.aep_total_tokens
-            if ev.data.aep_duration_ms is not None:
-                s.duration_ms = ev.data.aep_duration_ms
+            s.stop_reason = str(ev.data.avp_reason)
+            if ev.data.avp_total_cost_usd is not None:
+                s.total_cost_usd = ev.data.avp_total_cost_usd
+            if ev.data.avp_total_tokens is not None:
+                s.total_tokens = ev.data.avp_total_tokens
+            if ev.data.avp_duration_ms is not None:
+                s.duration_ms = ev.data.avp_duration_ms
         elif isinstance(ev, ErrorOccurredEvent):
-            s.errors.append(f"{ev.data.aep_error_code}: {ev.data.aep_error_message}")
+            s.errors.append(f"{ev.data.avp_error_code}: {ev.data.avp_error_message}")
 
     return s
 
@@ -146,20 +117,6 @@ def render(s: Summary) -> str:
         for name, u in sorted(s.tools.items()):
             fail = f" ({u.failures} failed)" if u.failures else ""
             lines.append(f"  {name}: {u.invocations} call(s){fail}")
-    lines.append("")
-    lines.append("What the rules said:")
-    if not s.verifier_results:
-        lines.append("  (no verifiers ran)")
-    else:
-        lines.append(f"  {s.verifier_pass_count} passed, {s.verifier_fail_count} failed")
-        for v in s.verifier_results:
-            mark = "PASS" if v.passed else "FAIL"
-            step = f"@step={v.step}" if v.step is not None else ""
-            lines.append(f"  [{mark}] {v.name} {step}")
-            if not v.passed and v.data:
-                cmd = v.data.get("command", "")
-                if cmd:
-                    lines.append(f"      cmd: {cmd}")
     if s.errors:
         lines.append("")
         lines.append("Errors:")

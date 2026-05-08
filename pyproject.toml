@@ -7,16 +7,16 @@
 # local sources rather than PyPI.
 
 [project]
-name = "aep-workspace"
+name = "avp-workspace"
 version = "0.0.0"
-description = "Workspace root for the AEP repo. Not published."
+description = "Workspace root for the AVP repo. Not published."
 requires-python = ">=3.11"
 # Listing the members here is what makes `uv sync` install them.
 # Workspace membership alone makes them resolvable but not installed.
 dependencies = [
-    "aep",
-    "aep-anthropic",
-    "aep-claude-agent",
+    "avp",
+    "avp-anthropic",
+    "avp-claude-agent",
     "simple-supervisor-example",
 ]
 
@@ -28,20 +28,20 @@ dev = [
 
 [tool.uv.workspace]
 members = [
-    "python/aep",
-    "python/runners/aep-anthropic",
-    "python/runners/aep-claude-agent",
+    "python/avp",
+    "python/agents/avp-anthropic",
+    "python/agents/avp-claude-agent",
     "python/supervisors/simple-supervisor-example",
 ]
 
-# When any workspace member declares `aep`, `aep-anthropic`, etc. as a
+# When any workspace member declares `avp`, `avp-anthropic`, etc. as a
 # dependency, resolve it from the workspace rather than PyPI. Critical:
-# there's an unrelated package on PyPI named `aep` (security tooling), and
+# there's an unrelated package on PyPI named `avp` (security tooling), and
 # without this override `pip install` would pull it down on a fresh machine.
 [tool.uv.sources]
-aep                       = { workspace = true }
-aep-anthropic             = { workspace = true }
-aep-claude-agent          = { workspace = true }
+avp                       = { workspace = true }
+avp-anthropic             = { workspace = true }
+avp-claude-agent          = { workspace = true }
 simple-supervisor-example = { workspace = true }
 
 [tool.uv]

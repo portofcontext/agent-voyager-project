@@ -1,10 +1,10 @@
 {
   "id": "skill-loaded-emitted-once-per-config-skill",
-  "title": "skill_loaded fires once per Config.skills entry, after agent_started, before any model turn",
-  "description": "SPEC.md §9.3 normative loop: 'emit skill_loaded for each loaded skill' between agent_started and the first model_turn_started. Pins (a) the count is exactly len(Config.skills), (b) ordering is preserved, (c) every event carries the skill name and source. Custom skill loaders that fail to fetch a SKILL.md MUST still emit skill_loaded for trajectory completeness (per Skill.source description in the schema).",
+  "title": "skill_loaded fires once per Commission.skills entry, after agent_started, before any model turn",
+  "description": "SPEC.md §9.3 normative loop: 'emit skill_loaded for each loaded skill' between agent_started and the first model_turn_started. Pins (a) the count is exactly len(Commission.skills), (b) ordering is preserved, (c) every event carries the skill name and source. Custom skill loaders that fail to fetch a SKILL.md MUST still emit skill_loaded for trajectory completeness (per Skill.source description in the schema).",
   "spec_refs": [
     "spec/v0.1/SPEC.md#9-the-runner-loop",
-    "spec/v0.1/aep.schema.json#/$defs/Skill"
+    "spec/v0.1/avp.schema.json#/$defs/Skill"
   ],
   "applies_to": [
     "runner"
@@ -16,15 +16,15 @@
     "skills": [
       {
         "name": "style-guide",
-        "aep.source": "./skills/style-guide"
+        "avp.source": "./skills/style-guide"
       },
       {
         "name": "domain-glossary",
-        "aep.source": "anthropic:domain-glossary@1.0"
+        "avp.source": "anthropic:domain-glossary@1.0"
       },
       {
         "name": "unknown-scheme",
-        "aep.source": "future-scheme:foo"
+        "avp.source": "future-scheme:foo"
       }
     ]
   },
@@ -43,39 +43,39 @@
     "events": [
       {
         "match": {
-          "type": "aep.agent_started"
+          "type": "avp.agent_started"
         }
       },
       {
         "match": {
-          "type": "aep.skill_loaded",
+          "type": "avp.skill_loaded",
           "data": {
-            "aep.skill.name": "style-guide",
-            "aep.skill.source": "./skills/style-guide"
+            "avp.skill.name": "style-guide",
+            "avp.skill.source": "./skills/style-guide"
           }
         }
       },
       {
         "match": {
-          "type": "aep.skill_loaded",
+          "type": "avp.skill_loaded",
           "data": {
-            "aep.skill.name": "domain-glossary",
-            "aep.skill.source": "anthropic:domain-glossary@1.0"
+            "avp.skill.name": "domain-glossary",
+            "avp.skill.source": "anthropic:domain-glossary@1.0"
           }
         }
       },
       {
         "match": {
-          "type": "aep.skill_loaded",
+          "type": "avp.skill_loaded",
           "data": {
-            "aep.skill.name": "unknown-scheme",
-            "aep.skill.source": "future-scheme:foo"
+            "avp.skill.name": "unknown-scheme",
+            "avp.skill.source": "future-scheme:foo"
           }
         }
       },
       {
         "match": {
-          "type": "aep.model_turn_started"
+          "type": "avp.model_turn_started"
         }
       }
     ]

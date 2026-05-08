@@ -1,4 +1,4 @@
-# Ruff config for the AEP repo.
+# Ruff config for the AVP repo.
 # Run from repo root:
 #   ruff check .                # lint
 #   ruff check --fix .          # autofix safe issues
@@ -9,7 +9,7 @@ line-length = 100
 extend-exclude = [
     ".venv",
     ".pytest_cache",
-    "spec/v0.1/aep.schema.json",
+    "spec/v0.1/avp.schema.json",
 ]
 
 [lint]
@@ -41,10 +41,10 @@ ignore = [
 # __init__.py files re-export; F401 is not unused there.
 "**/__init__.py" = ["F401"]
 # The conformance harness reaches into private attrs by design.
-"python/aep/src/aep/conformance/harness.py" = ["SLF001"]
+"python/avp/src/avp/conformance/harness.py" = ["SLF001"]
 
 [lint.isort]
-known-first-party = ["aep", "aep_anthropic", "aep_claude_agent"]
+known-first-party = ["avp", "avp_anthropic", "avp_claude_agent"]
 
 [format]
 quote-style = "double"

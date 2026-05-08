@@ -1,7 +1,7 @@
 {
   "id": "subagent-failed-when-no-driver-configured",
   "title": "Calling a declared subagent without a SubagentDriver wired in emits subagent_failed (not silent skip)",
-  "description": "When Config.subagents is non-empty but the runner has no SubagentDriver configured (the prototype default), a parent invocation MUST surface as subagent_invoked → subagent_failed. The model receives an `Error: ...` tool_result so it can react; the wire shape stays well-formed. Pinning this avoids the failure mode where a misconfigured runner silently swallows subagent calls.",
+  "description": "When Commission.subagents is non-empty but the runner has no SubagentDriver configured (the prototype default), a parent invocation MUST surface as subagent_invoked → subagent_failed. The model receives an `Error: ...` tool_result so it can react; the wire shape stays well-formed. Pinning this avoids the failure mode where a misconfigured runner silently swallows subagent calls.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#subagents"
   ],
@@ -50,7 +50,7 @@
     "events": [
       {
         "match": {
-          "type": "aep.subagent_invoked",
+          "type": "avp.subagent_invoked",
           "data": {
             "gen_ai.agent.name": "helper"
           }
@@ -59,10 +59,10 @@
       },
       {
         "match": {
-          "type": "aep.subagent_failed",
+          "type": "avp.subagent_failed",
           "data": {
             "gen_ai.agent.name": "helper",
-            "aep.subagent.error.code": "not_configured"
+            "avp.subagent.error.code": "not_configured"
           }
         },
         "label": "subagent_failed names the missing-driver failure with a stable error code"
@@ -71,7 +71,7 @@
     "forbidden_events": [
       {
         "match": {
-          "type": "aep.subagent_returned",
+          "type": "avp.subagent_returned",
           "data": {
             "gen_ai.agent.name": "helper"
           }

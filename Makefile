@@ -1,4 +1,4 @@
-# AEP — orchestration commands for the workspace.
+# AVP — orchestration commands for the workspace.
 #
 # Default target prints help. Use `make smoke` for the full $$ sanity check
 # you want before tagging a release.
@@ -14,9 +14,9 @@ SHELL := /usr/bin/env bash
 # importer collides if invoked at the repo root because every package
 # uses the same `tests` dirname, so we iterate per-package.
 TEST_PKGS := \
-	python/aep \
-	python/runners/aep-anthropic \
-	python/runners/aep-claude-agent \
+	python/avp \
+	python/agents/avp-anthropic \
+	python/agents/avp-claude-agent \
 	python/supervisors/simple-supervisor-example
 
 # All examples. Each script self-detects missing preflight (API key,
@@ -36,18 +36,18 @@ EXAMPLES := \
 
 .PHONY: help
 help:
-	@echo "AEP — orchestration commands"
+	@echo "AVP — orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
 	@echo "    make test            — pytest across every package, real-LLM excluded"
-	@echo "    make conformance     — aep-conformance run + validate + check-coverage"
+	@echo "    make conformance     — avp-conformance run + validate + check-coverage"
 	@echo "    make lint            — ruff check"
 	@echo "    make format          — ruff format (writes)"
 	@echo "    make format-check    — ruff format --check (read-only)"
 	@echo "    make schemas         — regenerate JSON schemas from Pydantic models"
 	@echo "    make bindings        — regenerate Rust + TS bindings from schemas"
 	@echo "    make bindings-check  — drift detector (regen + git-diff against tracked)"
-	@echo "    make bindings-test   — cargo test (rust/aep) + npm test (typescript/aep)"
+	@echo "    make bindings-test   — cargo test (rust/avp) + npm test (typescript/avp)"
 	@echo "    make check           — format-check + lint + test + conformance + bindings-check"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
@@ -75,9 +75,9 @@ test:
 
 .PHONY: conformance
 conformance:
-	@uv run aep-conformance validate
-	@uv run aep-conformance run
-	@uv run aep-conformance check-coverage
+	@uv run avp-conformance validate
+	@uv run avp-conformance run
+	@uv run avp-conformance check-coverage
 
 
 .PHONY: lint
@@ -115,9 +115,9 @@ bindings-check:
 	@# binding files awaiting their first commit) DON'T count as drift —
 	@# they need to be `git add`'d and committed normally.
 	@bash scripts/generate-bindings.sh > /dev/null
-	@if ! git diff --quiet -- rust/aep/src typescript/aep/src 2>/dev/null; then \
+	@if ! git diff --quiet -- rust/avp/src typescript/avp/src 2>/dev/null; then \
 		echo "error: Rust/TS bindings drifted from schemas. Run 'make bindings' and commit." >&2; \
-		git diff --stat -- rust/aep/src typescript/aep/src >&2; \
+		git diff --stat -- rust/avp/src typescript/avp/src >&2; \
 		exit 1; \
 	fi
 	@echo "✓ Bindings in sync with schemas."
@@ -125,8 +125,8 @@ bindings-check:
 
 .PHONY: bindings-test
 bindings-test:
-	@cd rust/aep && cargo test --quiet
-	@cd typescript/aep && npm test --silent
+	@cd rust/avp && cargo test --quiet
+	@cd typescript/avp && npm test --silent
 
 
 .PHONY: check
@@ -143,7 +143,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in python/runners/aep-anthropic python/runners/aep-claude-agent; do \
+	for pkg in python/agents/avp-anthropic python/agents/avp-claude-agent; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run pytest -m real_llm -q) || failed="$$failed $$pkg"; \
 	done; \

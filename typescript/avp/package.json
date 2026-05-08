@@ -1,0 +1,39 @@
+{
+  "name": "@avp/types",
+  "version": "0.1.0",
+  "description": "Agent Voyage Protocol — TypeScript types for the v0.1 wire format.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/portofcontext/agent-execution-protocol"
+  },
+  "keywords": ["avp", "agents", "llm", "wire-format", "cloudevents"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./commission": {
+      "types": "./dist/commission.d.ts",
+      "import": "./dist/commission.js"
+    },
+    "./event": {
+      "types": "./dist/event.d.ts",
+      "import": "./dist/event.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/roundtrip.test.js",
+    "clean": "rm -rf dist dist-test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

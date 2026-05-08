@@ -1,0 +1,525 @@
+{
+  "$defs": {
+    "McpHttpAuth": {
+      "additionalProperties": false,
+      "description": "Auth for an MCP server reachable via HTTP.",
+      "properties": {
+        "type": {
+          "const": "bearer",
+          "default": "bearer",
+          "title": "Type",
+          "type": "string"
+        },
+        "token_env": {
+          "minLength": 1,
+          "title": "Token Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token_env"
+      ],
+      "title": "McpHttpAuth",
+      "type": "object"
+    },
+    "McpServer": {
+      "additionalProperties": false,
+      "description": "External MCP server endpoint. The agent connects, runs initialize +\ntools/list, and merges returned tools into the effective surface.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "transport": {
+          "enum": [
+            "http",
+            "stdio"
+          ],
+          "title": "Transport",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpHttpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "command": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Args"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Env"
+        },
+        "init_timeout_ms": {
+          "default": 30000,
+          "exclusiveMinimum": 0,
+          "title": "Init Timeout Ms",
+          "type": "integer"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "id",
+        "transport"
+      ],
+      "title": "McpServer",
+      "type": "object"
+    },
+    "Skill": {
+      "additionalProperties": false,
+      "description": "Reference to a SKILL.md following the agentskills.io specification.\n\n`name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits\nhyphens, no leading/trailing hyphen, no consecutive hyphens). The\n`avp_source` and `avp_config` fields are AVP extensions; agentskills.io\ndoesn't define a remote-load scheme.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "avp.source": {
+          "minLength": 1,
+          "title": "Avp.Source",
+          "type": "string"
+        },
+        "avp.commission": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Commission"
+        }
+      },
+      "required": [
+        "name",
+        "avp.source"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "Subagent": {
+      "additionalProperties": false,
+      "description": "Declares a sub-agent the parent can delegate to.\n\nSits alongside `tools` and `skills` as a top-level Commission primitive: the\nsupervisor declares the full set of subagents up front, the parent agent\ninvokes one by name at runtime. The model surface is MCP-shaped (`name`,\n`description`, `inputSchema`) so the model sees a subagent the same way\nit sees a tool. The wire surface is its own lifecycle —\n`subagent_invoked` / `subagent_returned` / `subagent_failed` — so\nnested turns and tool calls observe as their own span tree rather than\nflatten into a single tool call.\n\nA Subagent carries an environment slice that mirrors Commission (its own\n`system_prompt`, `model`, `tools`, `skills`, `output_schema`). The subagent runs in a fresh conversation —\n`inherit_tools=False` by default (matches Google ADK; safer than the\nClaude Agent SDK default of inheriting). Skills and prompt context are\nnever inherited.",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Prompt"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "inherit_tools": {
+          "default": false,
+          "title": "Inherit Tools",
+          "type": "boolean"
+        },
+        "allowed_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skills"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subagents"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Subagent",
+      "type": "object"
+    },
+    "SupervisorPreamble": {
+      "additionalProperties": false,
+      "description": "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and stamped onto the\n`run_requested` event the agent emits as the first event of the\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\nconsumer attribute the run to the originating supervisor without an\nout-of-band lookup.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended — it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SupervisorPreamble",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Supervisor → agent setup message. Declares the agent's complete environment (mcp_servers, allowed_tools, skills, subagents, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run.",
+  "properties": {
+    "schema_version": {
+      "const": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "supervisor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SupervisorPreamble"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mcp_servers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/McpServer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mcp Servers"
+    },
+    "allowed_tools": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Allowed Tools"
+    },
+    "output_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Schema"
+    },
+    "subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Subagent"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subagents"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prompt"
+    },
+    "system_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "System Prompt"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skills"
+    },
+    "thread_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thread Id"
+    },
+    "tags": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tags"
+    },
+    "meta": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Meta"
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id"
+  ],
+  "title": "AVP v0.1 Commission",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avp.dev/schema/v0.1/commission.schema.json"
+}

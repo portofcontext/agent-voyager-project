@@ -1,7 +1,7 @@
 {
   "id": "subagent-invoked-and-returned-pair-frame-span",
   "title": "Parent agent's subagent invocation emits subagent_invoked → subagent_returned pair sharing one frame span_id",
-  "description": "Subagents are a Config primitive alongside tools and skills. When the parent agent calls a declared subagent by name, the runner MUST route the call through the subagent lifecycle (NOT the tool lifecycle): emit subagent_invoked at frame open, run the subagent, emit subagent_returned at frame close. The two events MUST share span_id so consumers can pair them and reconstruct the nested span tree.",
+  "description": "Subagents are a Commission primitive alongside tools and skills. When the parent agent calls a declared subagent by name, the runner MUST route the call through the subagent lifecycle (NOT the tool lifecycle): emit subagent_invoked at frame open, run the subagent, emit subagent_returned at frame close. The two events MUST share span_id so consumers can pair them and reconstruct the nested span tree.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#subagents"
   ],
@@ -66,12 +66,12 @@
     "events": [
       {
         "match": {
-          "type": "aep.subagent_invoked",
+          "type": "avp.subagent_invoked",
           "data": {
             "gen_ai.agent.name": "researcher",
             "gen_ai.agent.description": "Looks things up.",
             "gen_ai.operation.name": "invoke_agent",
-            "aep.subagent.input": {
+            "avp.subagent.input": {
               "prompt": "find auth handlers"
             }
           }
@@ -80,20 +80,20 @@
       },
       {
         "match": {
-          "type": "aep.subagent_returned",
+          "type": "avp.subagent_returned",
           "data": {
             "gen_ai.agent.name": "researcher",
-            "aep.subagent.result.text": "Found 3 handlers in src/auth/.",
-            "aep.subagent.reason": "converged"
+            "avp.subagent.result.text": "Found 3 handlers in src/auth/.",
+            "avp.subagent.reason": "converged"
           }
         },
         "label": "subagent_returned carries the result text and stop reason"
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "converged"
+            "avp.reason": "converged"
           }
         },
         "label": "parent run converges after subagent returns"
@@ -102,7 +102,7 @@
     "forbidden_events": [
       {
         "match": {
-          "type": "aep.tool_invoked",
+          "type": "avp.tool_invoked",
           "data": {
             "gen_ai.tool.name": "researcher"
           }
@@ -111,7 +111,7 @@
       },
       {
         "match": {
-          "type": "aep.tool_returned",
+          "type": "avp.tool_returned",
           "data": {
             "gen_ai.tool.name": "researcher"
           }

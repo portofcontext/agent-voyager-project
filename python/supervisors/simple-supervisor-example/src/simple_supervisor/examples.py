@@ -41,12 +41,7 @@ def _examples_dir() -> Path:
 _EXAMPLES: dict[str, tuple[str, str, dict[str, str]]] = {
     "01": (
         "01_anthropic_cost_bounded.py",
-        "cost-bounded inspection (driver pattern, ~$0.001)",
-        {},
-    ),
-    "02": (
-        "02_anthropic_self_correcting.py",
-        "self-correcting verifier (driver pattern, ~$0.005)",
+        "read-only inspection (driver pattern, ~$0.001)",
         {},
     ),
     "03": (
@@ -54,10 +49,20 @@ _EXAMPLES: dict[str, tuple[str, str, dict[str, str]]] = {
         "audited Claude Code session (observer pattern, ~$0.10)",
         {"USE_REAL_SDK": "1"},
     ),
-    "04": (
-        "04_ddd_supervisor.py",
-        "DDD-strict supervisor over a toy domain (driver pattern, ~$0.05)",
+    "05": (
+        "05_anthropic_subagent_delegation.py",
+        "subagent delegation (driver pattern, ~$0.01)",
         {},
+    ),
+    "06": (
+        "06_anthropic_traced_client.py",
+        "traced Anthropic client (drop-in instrumentation, ~$0.01)",
+        {},
+    ),
+    "07": (
+        "07_claude_agent_traced_client.py",
+        "traced Claude Agent SDK client (~$0.05)",
+        {"USE_REAL_SDK": "1"},
     ),
 }
 
@@ -75,7 +80,7 @@ def _resolve_api_key() -> str | None:
 def run_examples(selected: list[str] | None = None) -> int:
     """Run the requested examples (or all three if `selected` is None/empty)."""
     if not selected:
-        selected = ["01", "02", "03", "04"]
+        selected = ["01", "03", "05", "06", "07"]
 
     # Validate before doing any work.
     for n in selected:

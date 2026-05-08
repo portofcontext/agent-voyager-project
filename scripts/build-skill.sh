@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Build aep.skill — a distributable .skill archive of the AEP skill bundle.
+# Build avp.skill — a distributable .skill archive of the AVP skill bundle.
 #
 # Usage:
-#   scripts/build-skill.sh                # builds dist/aep.skill
-#   scripts/build-skill.sh /tmp/out       # builds /tmp/out/aep.skill
+#   scripts/build-skill.sh                # builds dist/avp.skill
+#   scripts/build-skill.sh /tmp/out       # builds /tmp/out/avp.skill
 #
 # What goes in the bundle:
-#   SKILL.md, spec/v0.1/, conformance/v0.1/, python/aep/,
+#   SKILL.md, spec/v0.1/, conformance/v0.1/, python/avp/,
 #   plus README.md and LICENSE for context.
 #
 # Worked example Configs live at python/supervisors/simple-supervisor-example/
@@ -27,18 +27,18 @@ OUT_DIR="${1:-$REPO/dist}"
 # so we can `cd` into it for the absolute resolution.
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
-STAGE="$(mktemp -d)/aep"
+STAGE="$(mktemp -d)/avp"
 
 cleanup() { /bin/rm -rf "$(dirname "$STAGE")"; }
 trap cleanup EXIT
 
-# Stage the bundle under a directory named "aep" so the .skill extracts into ~/.claude/skills/aep
+# Stage the bundle under a directory named "avp" so the .skill extracts into ~/.claude/skills/avp
 mkdir -p "$STAGE"
 cp "$REPO/SKILL.md" "$REPO/README.md" "$REPO/LICENSE" "$STAGE/"
 mkdir -p "$STAGE/spec" "$STAGE/conformance" "$STAGE/python"
 cp -r "$REPO/spec/v0.1" "$STAGE/spec/"
 cp -r "$REPO/conformance/v0.1" "$STAGE/conformance/"
-cp -r "$REPO/python/aep" "$STAGE/python/"
+cp -r "$REPO/python/avp" "$STAGE/python/"
 
 # Strip build artifacts
 find "$STAGE" \( -name __pycache__ -o -name .pytest_cache -o -name '*.egg-info' \) \
@@ -69,5 +69,5 @@ if [[ -z "$PYTHON" ]]; then
 fi
 PYTHONPATH=. "$PYTHON" -m scripts.package_skill "$STAGE" "$OUT_DIR"
 echo ""
-echo "Skill bundled: $OUT_DIR/aep.skill"
-ls -lh "$OUT_DIR/aep.skill"
+echo "Skill bundled: $OUT_DIR/avp.skill"
+ls -lh "$OUT_DIR/avp.skill"

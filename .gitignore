@@ -37,7 +37,7 @@ htmlcov/
 MANIFEST
 
 # Skill / eval workspaces
-aep-workspace/
+avp-workspace/
 .anthropic-key
 
 .claude/
@@ -45,11 +45,11 @@ aep-workspace/
 .ruff_cache
 
 # Rust
-rust/aep/target/
+rust/avp/target/
 Cargo.lock
 
 # TypeScript
-typescript/aep/node_modules/
-typescript/aep/dist/
-typescript/aep/dist-test/
-typescript/aep/package-lock.json
+typescript/avp/node_modules/
+typescript/avp/dist/
+typescript/avp/dist-test/
+typescript/avp/package-lock.json

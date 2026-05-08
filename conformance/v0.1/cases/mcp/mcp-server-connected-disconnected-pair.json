@@ -1,11 +1,11 @@
 {
   "id": "mcp-server-connected-disconnected-pair",
-  "title": "Each Config.mcp_servers entry MUST emit a connected event after agent_started and a disconnected event before agent_stopped",
-  "description": "When Config.mcp_servers declares one or more servers, the runner MUST emit one aep.mcp_server_connected event per server immediately after agent_started (before any model turns), and one aep.mcp_server_disconnected event per server immediately before agent_stopped. Both events carry aep.mcp.server_id matching the Config entry's id, plus the protocol version. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run — not just which were declared.",
+  "title": "Each Commission.mcp_servers entry MUST emit a connected event after agent_started and a disconnected event before agent_stopped",
+  "description": "When Commission.mcp_servers declares one or more servers, the runner MUST emit one avp.mcp_server_connected event per server immediately after agent_started (before any model turns), and one avp.mcp_server_disconnected event per server immediately before agent_stopped. Both events carry avp.mcp.server_id matching the Commission entry's id, plus the protocol version. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run — not just which were declared.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#6-mcp-integration",
-    "spec/v0.1/aep.schema.json#/$defs/McpServerConnectedEvent",
-    "spec/v0.1/aep.schema.json#/$defs/McpServerDisconnectedEvent"
+    "spec/v0.1/avp.schema.json#/$defs/McpServerConnectedEvent",
+    "spec/v0.1/avp.schema.json#/$defs/McpServerDisconnectedEvent"
   ],
   "applies_to": ["runner"],
   "config": {
@@ -40,50 +40,50 @@
     "events": [
       {
         "match": {
-          "type": "aep.agent_started",
+          "type": "avp.agent_started",
           "subject": "mcp-lifecycle"
         }
       },
       {
         "match": {
-          "type": "aep.mcp_server_connected",
+          "type": "avp.mcp_server_connected",
           "data": {
-            "aep.mcp.server_id": "github"
+            "avp.mcp.server_id": "github"
           }
         }
       },
       {
         "match": {
-          "type": "aep.mcp_server_connected",
+          "type": "avp.mcp_server_connected",
           "data": {
-            "aep.mcp.server_id": "weather"
+            "avp.mcp.server_id": "weather"
           }
         }
       },
       {
         "match": {
-          "type": "aep.model_turn_started"
+          "type": "avp.model_turn_started"
         }
       },
       {
         "match": {
-          "type": "aep.mcp_server_disconnected",
+          "type": "avp.mcp_server_disconnected",
           "data": {
-            "aep.mcp.server_id": "github"
+            "avp.mcp.server_id": "github"
           }
         }
       },
       {
         "match": {
-          "type": "aep.mcp_server_disconnected",
+          "type": "avp.mcp_server_disconnected",
           "data": {
-            "aep.mcp.server_id": "weather"
+            "avp.mcp.server_id": "weather"
           }
         }
       },
       {
         "match": {
-          "type": "aep.agent_stopped"
+          "type": "avp.agent_stopped"
         }
       }
     ]

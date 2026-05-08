@@ -1,0 +1,38 @@
+"""NDJSON I/O for AVP trajectories."""
+
+from __future__ import annotations
+
+import json
+import sys
+from collections.abc import Iterator
+from typing import IO, Any
+
+from pydantic import BaseModel
+
+from avp.types import parse_event
+
+
+def write_event(event: BaseModel | dict[str, Any], file: IO | None = None) -> None:
+    """Serialize one event to NDJSON. Flushes after the line per SPEC.md §5.1."""
+    out = file if file is not None else sys.stdout
+    if isinstance(event, BaseModel):
+        # by_alias emits the dotted wire form (e.g. `gen_ai.usage.input_tokens`);
+        # exclude_none drops optional fields the agent did not set.
+        line = event.model_dump_json(by_alias=True, exclude_none=True)
+    else:
+        line = json.dumps(event, separators=(",", ":"))
+    out.write(line + "\n")
+    out.flush()
+
+
+def iter_events(file: IO) -> Iterator[BaseModel | dict[str, Any]]:
+    """Iterate events from an NDJSON stream, parsing each line.
+
+    Custom event types are returned as raw dicts (per spec §13).
+    """
+    for raw in file:
+        line = raw.strip()
+        if not line:
+            continue
+        payload = json.loads(line)
+        yield parse_event(payload)

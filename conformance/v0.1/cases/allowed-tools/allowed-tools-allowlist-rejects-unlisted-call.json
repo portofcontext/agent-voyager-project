@@ -1,10 +1,10 @@
 {
   "id": "allowed-tools-allowlist-rejects-unlisted-call",
-  "title": "Tool call to a name not in Config.allowed_tools → tool_failed (the allowlist is enforced at dispatch)",
-  "description": "When Config.allowed_tools is set, the runner MUST reject any tool invocation whose name is not in the list. The rejection surfaces as tool_failed with an error message identifying the allowlist as the cause; the model may then react in the next turn. The first call ('bash') is allowed and returns normally; the second ('echo') is not in the allowlist and fails.",
+  "title": "Tool call to a name not in Commission.allowed_tools → tool_failed (the allowlist is enforced at dispatch)",
+  "description": "When Commission.allowed_tools is set, the runner MUST reject any tool invocation whose name is not in the list. The rejection surfaces as tool_failed with an error message identifying the allowlist as the cause; the model may then react in the next turn. The first call ('bash') is allowed and returns normally; the second ('echo') is not in the allowlist and fails.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
-    "spec/v0.1/aep.schema.json#/$defs/Config"
+    "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
     "runner"
@@ -66,7 +66,7 @@
     "events": [
       {
         "match": {
-          "type": "aep.tool_invoked",
+          "type": "avp.tool_invoked",
           "data": {
             "gen_ai.tool.call.id": "c1",
             "gen_ai.tool.name": "bash"
@@ -75,7 +75,7 @@
       },
       {
         "match": {
-          "type": "aep.tool_returned",
+          "type": "avp.tool_returned",
           "data": {
             "gen_ai.tool.call.id": "c1",
             "gen_ai.tool.name": "bash"
@@ -84,7 +84,7 @@
       },
       {
         "match": {
-          "type": "aep.tool_invoked",
+          "type": "avp.tool_invoked",
           "data": {
             "gen_ai.tool.call.id": "c2",
             "gen_ai.tool.name": "echo"
@@ -93,7 +93,7 @@
       },
       {
         "match": {
-          "type": "aep.tool_failed",
+          "type": "avp.tool_failed",
           "data": {
             "gen_ai.tool.call.id": "c2",
             "gen_ai.tool.name": "echo"
@@ -102,9 +102,9 @@
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "converged"
+            "avp.reason": "converged"
           }
         }
       }
@@ -113,7 +113,7 @@
       {
         "label": "disallowed tool MUST NOT produce tool_returned",
         "match": {
-          "type": "aep.tool_returned",
+          "type": "avp.tool_returned",
           "data": {
             "gen_ai.tool.call.id": "c2"
           }

@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from simple_supervisor.builder import build_config
+from simple_supervisor.builder import build_commission
 from simple_supervisor.examples import run_examples
 from simple_supervisor.profiles import PRESETS
 
@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list-profiles", help="List available profile presets")
 
-    p_show = sub.add_parser("show-config", help="Render a Config from a profile + prompt")
+    p_show = sub.add_parser("show-config", help="Render a Commission from a profile + prompt")
     p_show.add_argument("--profile", default="dev-loose", choices=sorted(PRESETS))
     p_show.add_argument("--prompt", required=True)
     p_show.add_argument("--run-id", default="demo-run")
@@ -47,13 +47,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{name}")
             print(f"  {p.description}")
             print(f"  allowed_tools: {p.allowed_tools}")
-            print(f"  boundary: {p.boundary}")
-            print(f"  verifiers: {[v['name'] for v in p.verifiers]}")
             print()
         return 0
 
     if args.cmd == "show-config":
-        cfg = build_config(
+        cfg = build_commission(
             run_id=args.run_id,
             prompt=args.prompt,
             profile=args.profile,

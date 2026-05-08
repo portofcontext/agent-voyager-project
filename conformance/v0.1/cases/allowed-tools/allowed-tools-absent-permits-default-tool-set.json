@@ -1,10 +1,10 @@
 {
   "id": "allowed-tools-absent-permits-default-tool-set",
-  "title": "Config.allowed_tools absent → runner exposes its default tool set (backwards-compatible)",
-  "description": "When Config.allowed_tools is omitted, the runner MUST exhibit pre-allowlist behavior: any tool the model calls dispatches normally. This pins backwards-compatibility — adding the field cannot have changed default semantics.",
+  "title": "Commission.allowed_tools absent → runner exposes its default tool set (backwards-compatible)",
+  "description": "When Commission.allowed_tools is omitted, the runner MUST exhibit pre-allowlist behavior: any tool the model calls dispatches normally. This pins backwards-compatibility — adding the field cannot have changed default semantics.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
-    "spec/v0.1/aep.schema.json#/$defs/Config"
+    "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
     "runner"
@@ -52,7 +52,7 @@
     "events": [
       {
         "match": {
-          "type": "aep.tool_invoked",
+          "type": "avp.tool_invoked",
           "data": {
             "gen_ai.tool.call.id": "c1",
             "gen_ai.tool.name": "echo"
@@ -61,7 +61,7 @@
       },
       {
         "match": {
-          "type": "aep.tool_returned",
+          "type": "avp.tool_returned",
           "data": {
             "gen_ai.tool.call.id": "c1",
             "gen_ai.tool.name": "echo"
@@ -70,9 +70,9 @@
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "converged"
+            "avp.reason": "converged"
           }
         }
       }
@@ -81,7 +81,7 @@
       {
         "label": "no tool may be rejected as not-in-allowlist when allowed_tools is absent",
         "match": {
-          "type": "aep.tool_failed"
+          "type": "avp.tool_failed"
         }
       }
     ]

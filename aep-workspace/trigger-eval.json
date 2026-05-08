@@ -1,0 +1,83 @@
+[
+  {
+    "query": "I'm wrapping the OpenAI Chat Completions API as an AVP runner. OpenAI returns prompt_tokens_details.cached_tokens — under AVP §10.4 do those count as input tokens or do I subtract them?",
+    "should_trigger": true
+  },
+  {
+    "query": "My Commission has a verifier with on_failure: 'inject_correction' and a correction_message but the agent's next turn doesn't seem to receive the correction. Where in the runner loop would I trace this to figure out what's wrong?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm reviewing a teammate's PR that adds a hook_request emission to our AVP runner. Should I approve it?",
+    "should_trigger": true
+  },
+  {
+    "query": "Our conformance suite is failing with 'verifier_evaluated MUST NOT carry source=supervisor' but I'm pretty sure I'm setting source=runner in the case. What am I missing?",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me how to write a conformance test case that asserts on_failure: 'halt' produces agent_stopped reason='verifier_failed'. Need this for our CI.",
+    "should_trigger": true
+  },
+  {
+    "query": "Building a Rust supervisor that consumes the AVP event stream over stdio. How do I correlate a tool_exec_request with the eventual tool_returned for the same call_id?",
+    "should_trigger": true
+  },
+  {
+    "query": "Adding re_observation with source: { supervisor: true } to a Commission. Our backing service isn't replying within timeout_ms. What does AVP say happens on timeout — does the agent see empty content or does the request just get skipped?",
+    "should_trigger": true
+  },
+  {
+    "query": "Boundary is set to max_cost_usd: 5.00 and we're seeing runs that report total_cost_usd: 5.23 on agent_stopped. Is this a bug in our runner or is overshoot intentional?",
+    "should_trigger": true
+  },
+  {
+    "query": "Writing an avp-langchain runner using the observer pattern. Which LangChain BaseCallbackHandler methods should map to model_turn_started vs tool_invoked?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to declare an invariant that Cargo.lock is never written by the agent. Should I add a verifier with on_tool:write_file that runs a shell check, or is there a better AVP primitive for this?",
+    "should_trigger": true
+  },
+
+  {
+    "query": "How do I add OpenTelemetry tracing to my FastAPI app? I want spans around each route handler.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write me a Python script that logs every OpenAI API call my service makes to a CSV file with timestamp, model, and token usage.",
+    "should_trigger": false
+  },
+  {
+    "query": "I'm building a multi-agent system with AutoGen where a planner agent delegates to two worker agents. How do I share state between them across turns?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best way to rate-limit my Claude API calls across multiple concurrent requests? I'm hitting tier-1 limits.",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up structured logging for a Python service using structlog. We want JSON logs with request_id correlation.",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I cache LLM responses on the client side to save cost? Looking for a Python pattern that hashes prompts and stores results in Redis.",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a JSON schema for a pet-store REST API. Need types for Pet, Owner, and Visit.",
+    "should_trigger": false
+  },
+  {
+    "query": "What are some good prompt engineering best practices when working with Claude? I'm getting inconsistent outputs.",
+    "should_trigger": false
+  },
+  {
+    "query": "Build me a Fibonacci function in Rust with memoization.",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to track all the LLM costs across my Anthropic and OpenAI projects in a single dashboard. What's a good architecture for that?",
+    "should_trigger": false
+  }
+]

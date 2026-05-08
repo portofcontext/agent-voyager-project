@@ -1,7 +1,7 @@
 # Anatomy of a DDD self-correcting run
 
 A trace of `examples/04_ddd_supervisor.py` against a live Claude Haiku, the day
-the inject_correction loop did its job. This is what AEP looks like when
+the inject_correction loop did its job. This is what AVP looks like when
 every piece works together.
 
 > The point of this walkthrough isn't "the agent wrote good code." It's that
@@ -183,19 +183,19 @@ Final converge.
 | Verifier fails | 3 (clustered on turns 4, 5, 6) |
 | Recovery | Turn 7 |
 
-## What this proves about AEP
+## What this proves about AVP
 
 Every piece of the protocol earned its place in this run.
 
-**`Config.allowed_tools`** restricted the agent to `bash` / `read_file` / `write_file`. The model couldn't reach for any other tool the SDK might have exposed.
+**`Commission.allowed_tools`** restricted the agent to `bash` / `read_file` / `write_file`. The model couldn't reach for any other tool the SDK might have exposed.
 
-**`Config.boundary`** capped the run at 15 turns. If the agent had stayed in the failure loop indefinitely, the boundary would have terminated it deterministically.
+**`Commission.boundary`** capped the run at 15 turns. If the agent had stayed in the failure loop indefinitely, the boundary would have terminated it deterministically.
 
-**`Config.verifiers` × `trigger`** put deterministic checks at the right lifecycle points:
+**`Commission.verifiers` × `trigger`** put deterministic checks at the right lifecycle points:
 - `on_tool:write_file` — instant write-time gates (purity + naming)
 - `after_each_turn` — heavier gate (full pytest)
 
-**`Config.verifiers` × `on_failure: inject_correction`** turned a failing rule into a teaching moment. The supervisor's text became the agent's next user-role message and changed the agent's strategy from "weaken the invariant" to "restructure the feature."
+**`Commission.verifiers` × `on_failure: inject_correction`** turned a failing rule into a teaching moment. The supervisor's text became the agent's next user-role message and changed the agent's strategy from "weaken the invariant" to "restructure the feature."
 
 **The trajectory** is a complete audit log. A reviewer reading 23 verifier_evaluated events plus the model_turn_started/ended sequence can reconstruct the entire arc — wrong move, correction, friction, recovery, DDD-correct convergence — without seeing a single LLM-generated word of explanation.
 
@@ -224,11 +224,11 @@ fires for any policy you can compile to a shell command.
 
 ## What didn't happen
 
-Worth noting what AEP did NOT have to do:
+Worth noting what AVP did NOT have to do:
 
-- **No mid-run reach-in.** The supervisor sent a Config and observed. The "intervention" in turn 4 was the runner-side verifier firing a declared rule, not the supervisor reaching in.
+- **No mid-run reach-in.** The supervisor sent a Commission and observed. The "intervention" in turn 4 was the agent-side verifier firing a declared rule, not the supervisor reaching in.
 - **No prompt engineering tricks.** The DDD principle lives in `correction_message` — a structured field, not a hidden system prompt.
 - **No custom event types.** Every event in the trajectory is a v0.1 standard event type.
-- **No bespoke runner work.** The same `aep-anthropic` runner that handles examples 01 and 02 handled this. The supervisor profile changed; the runner did not.
+- **No bespoke agent work.** The same `avp-anthropic` agent that handles examples 01 and 02 handled this. The supervisor profile changed; the agent did not.
 
-That's the test of a protocol: the more you can do with the standard primitives, the better the protocol. AEP v0.1 has 17 event types and 4 verifier triggers. They were enough.
+That's the test of a protocol: the more you can do with the standard primitives, the better the protocol. AVP v0.1 has 17 event types and 4 verifier triggers. They were enough.

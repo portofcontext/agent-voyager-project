@@ -1,10 +1,10 @@
 {
   "id": "allowed-tools-omits-config-tool-name-errors-at-startup",
-  "title": "Config.tools entry missing from Config.allowed_tools is a configuration conflict — error_occurred + agent_stopped reason='error'",
-  "description": "Cross-field coherence. If a Config.tools entry's name is not also in Config.allowed_tools, the supervisor has declared an RPC tool while simultaneously forbidding its exposure. The runner MUST detect this at startup, emit error_occurred, and stop with reason='error' before any model turn runs.",
+  "title": "Commission.subagents entry missing from Commission.allowed_tools is a configuration conflict — error_occurred + agent_stopped reason='error'",
+  "description": "Cross-field coherence. If a Commission.subagents entry's name is not also in Commission.allowed_tools, the supervisor has declared a subagent while simultaneously forbidding its exposure. The runner MUST detect this at startup, emit error_occurred, and stop with reason='error' before any model turn runs.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
-    "spec/v0.1/aep.schema.json#/$defs/Config"
+    "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
     "runner"
@@ -13,11 +13,10 @@
     "schema_version": "0.1",
     "run_id": "allowed-tools-config-conflict",
     "model": "test/mock",
-    "tools": [
+    "subagents": [
       {
-        "name": "lookup_user",
-        "description": "RPC tool",
-        "inputSchema": {}
+        "name": "researcher",
+        "description": "Subagent that the agent might call."
       }
     ],
     "allowed_tools": [
@@ -39,19 +38,19 @@
     "events": [
       {
         "match": {
-          "type": "aep.agent_started"
+          "type": "avp.agent_started"
         }
       },
       {
         "match": {
-          "type": "aep.error_occurred"
+          "type": "avp.error_occurred"
         }
       },
       {
         "match": {
-          "type": "aep.agent_stopped",
+          "type": "avp.agent_stopped",
           "data": {
-            "aep.reason": "error"
+            "avp.reason": "error"
           }
         }
       }
@@ -60,13 +59,13 @@
       {
         "label": "no model turn may run when startup validation fails",
         "match": {
-          "type": "aep.model_turn_started"
+          "type": "avp.model_turn_started"
         }
       },
       {
         "label": "no tool may be invoked when startup validation fails",
         "match": {
-          "type": "aep.tool_invoked"
+          "type": "avp.tool_invoked"
         }
       }
     ]

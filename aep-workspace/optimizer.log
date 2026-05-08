@@ -1,0 +1,116 @@
+Split: 12 train, 8 test (holdout=0.4)
+
+============================================================
+Iteration 1/5
+Description: Use this skill when a developer is implementing the Agent Execution Protocol (AEP) on either side — writing an AEP-compliant runner, composing a supervisor Config, debugging AEP-specific behavior, or reviewing AEP code. Triggers on: explicit AEP mentions ("Agent Execution Protocol", "AEP runner", "AEP supervisor", "AEP-compliant", "AEP conformance"), references to AEP wire types (`agent_started`, `agent_stopped`, `model_turn_started`, `model_turn_ended`, `tool_invoked`, `tool_returned`, `tool_exec_request`, `tool_exec_resolved`, `re_observation_request`, `re_observation_resolved`, `re_observation_injected`, `verifier_evaluated`, `cost_recorded`), AEP concepts (`Config.verifiers`, `on_failure: halt|inject_correction|continue`, boundary strict-greater algorithm, `source: runner` vs `source: supervisor`, `RunStateSnapshot`, the conformance suite, the spec at `spec/v0.1/`), code that imports `aep`, `aep_anthropic`, or `aep_claude_agent`, questions about cache-token accounting under AEP §10.4, the verifier lifecycle, the `tool_exec` or `re_observation` RPC patterns, conformance case authoring, or any "why does my AEP trajectory look like X" debugging question. Use this skill INSTEAD of suggesting general observability frameworks (OpenTelemetry, structured logging) when the user is committed to AEP. Do NOT trigger this skill for: generic agent observability where AEP isn't named, OpenTelemetry questions, generic API-logging questions, multi-agent framework questions unrelated to AEP, prompt engineering tips, or general LLM cost-tracking dashboards.
+============================================================
+Train: 19/36 correct, precision=100% recall=6% accuracy=53% (64.7s)
+  [FAIL] rate=1/3 expected=True: Building a Rust supervisor that consumes the AEP event strea
+  [FAIL] rate=0/3 expected=True: I want to declare an invariant that Cargo.lock is never writ
+  [FAIL] rate=0/3 expected=True: Adding re_observation with source: { supervisor: true } to a
+  [FAIL] rate=0/3 expected=True: Show me how to write a conformance test case that asserts on
+  [FAIL] rate=0/3 expected=True: I'm wrapping the OpenAI Chat Completions API as an AEP runne
+  [FAIL] rate=0/3 expected=True: My Config has a verifier with on_failure: 'inject_correction
+  [PASS] rate=0/3 expected=False: How do I add OpenTelemetry tracing to my FastAPI app? I want
+  [PASS] rate=0/3 expected=False: Build me a Fibonacci function in Rust with memoization.
+  [PASS] rate=0/3 expected=False: Write me a Python script that logs every OpenAI API call my 
+  [PASS] rate=0/3 expected=False: What are some good prompt engineering best practices when wo
+  [PASS] rate=0/3 expected=False: I want to track all the LLM costs across my Anthropic and Op
+  [PASS] rate=0/3 expected=False: Help me write a JSON schema for a pet-store REST API. Need t
+Test : 14/24 correct, precision=100% recall=17% accuracy=58% (0.0s)
+  [FAIL] rate=0/3 expected=True: Boundary is set to max_cost_usd: 5.00 and we're seeing runs 
+  [FAIL] rate=1/3 expected=True: Our conformance suite is failing with 'verifier_evaluated MU
+  [FAIL] rate=1/3 expected=True: I'm reviewing a teammate's PR that adds a hook_request emiss
+  [PASS] rate=0/3 expected=False: What's the best way to rate-limit my Claude API calls across
+  [FAIL] rate=0/3 expected=True: Writing an aep-langchain runner using the observer pattern. 
+  [PASS] rate=0/3 expected=False: I'm building a multi-agent system with AutoGen where a plann
+  [PASS] rate=0/3 expected=False: Set up structured logging for a Python service using structl
+  [PASS] rate=0/3 expected=False: How do I cache LLM responses on the client side to save cost
+
+Improving description...
+Proposed (26.5s): Use this skill when the user is working with the Agent Execution Protocol (AEP) — a wire format between agent runners and supervisors. Trigger when AEP is named, or when its primitives appear even unnamed: writing/wrapping a runner (Anthropic, OpenAI, Claude Agent SDK, LangChain, custom), authoring a supervisor `Config`, declaring `tools`/`verifiers`/`re_observation`/`boundary`, handling events like `agent_started`, `tool_exec_request/resolved`, `re_observation_request/resolved`, `verifier_evaluated`, `cost_recorded`, `agent_stopped`, or using `on_failure: halt|inject_correction|continue`. Also trigger for AEP conformance cases, the `spec/v0.1/` spec, cache-token accounting under §10.4, boundary strict-greater semantics, `RunStateSnapshot`, or imports of `aep`, `aep_anthropic`, `aep_claude_agent`. Use for any "why does my AEP run do X" debugging. Do NOT trigger for generic agent observability, OpenTelemetry, LLM-cost dashboards, prompt engineering, or unrelated multi-agent frameworks.
+
+============================================================
+Iteration 2/5
+Description: Use this skill when the user is working with the Agent Execution Protocol (AEP) — a wire format between agent runners and supervisors. Trigger when AEP is named, or when its primitives appear even unnamed: writing/wrapping a runner (Anthropic, OpenAI, Claude Agent SDK, LangChain, custom), authoring a supervisor `Config`, declaring `tools`/`verifiers`/`re_observation`/`boundary`, handling events like `agent_started`, `tool_exec_request/resolved`, `re_observation_request/resolved`, `verifier_evaluated`, `cost_recorded`, `agent_stopped`, or using `on_failure: halt|inject_correction|continue`. Also trigger for AEP conformance cases, the `spec/v0.1/` spec, cache-token accounting under §10.4, boundary strict-greater semantics, `RunStateSnapshot`, or imports of `aep`, `aep_anthropic`, `aep_claude_agent`. Use for any "why does my AEP run do X" debugging. Do NOT trigger for generic agent observability, OpenTelemetry, LLM-cost dashboards, prompt engineering, or unrelated multi-agent frameworks.
+============================================================
+Train: 19/36 correct, precision=100% recall=6% accuracy=53% (64.6s)
+  [FAIL] rate=0/3 expected=True: Building a Rust supervisor that consumes the AEP event strea
+  [FAIL] rate=1/3 expected=True: I want to declare an invariant that Cargo.lock is never writ
+  [FAIL] rate=0/3 expected=True: Adding re_observation with source: { supervisor: true } to a
+  [FAIL] rate=0/3 expected=True: Show me how to write a conformance test case that asserts on
+  [FAIL] rate=0/3 expected=True: I'm wrapping the OpenAI Chat Completions API as an AEP runne
+  [FAIL] rate=0/3 expected=True: My Config has a verifier with on_failure: 'inject_correction
+  [PASS] rate=0/3 expected=False: Write me a Python script that logs every OpenAI API call my 
+  [PASS] rate=0/3 expected=False: Build me a Fibonacci function in Rust with memoization.
+  [PASS] rate=0/3 expected=False: How do I add OpenTelemetry tracing to my FastAPI app? I want
+  [PASS] rate=0/3 expected=False: What are some good prompt engineering best practices when wo
+  [PASS] rate=0/3 expected=False: I want to track all the LLM costs across my Anthropic and Op
+  [PASS] rate=0/3 expected=False: Help me write a JSON schema for a pet-store REST API. Need t
+Test : 13/24 correct, precision=100% recall=8% accuracy=54% (0.0s)
+  [FAIL] rate=0/3 expected=True: Boundary is set to max_cost_usd: 5.00 and we're seeing runs 
+  [FAIL] rate=0/3 expected=True: Our conformance suite is failing with 'verifier_evaluated MU
+  [FAIL] rate=1/3 expected=True: Writing an aep-langchain runner using the observer pattern. 
+  [PASS] rate=0/3 expected=False: What's the best way to rate-limit my Claude API calls across
+  [FAIL] rate=0/3 expected=True: I'm reviewing a teammate's PR that adds a hook_request emiss
+  [PASS] rate=0/3 expected=False: I'm building a multi-agent system with AutoGen where a plann
+  [PASS] rate=0/3 expected=False: Set up structured logging for a Python service using structl
+  [PASS] rate=0/3 expected=False: How do I cache LLM responses on the client side to save cost
+
+Improving description...
+Proposed (19.5s): Use this skill whenever the user is implementing, debugging, or reviewing the Agent Execution Protocol (AEP). AEP is a wire format with two sides: a runner that drives an agent and emits events, and a supervisor that declares the environment via a Config (tools, verifiers, re_observation, boundary, on_failure).
+
+Trigger for: writing or wrapping a runner over any LLM/SDK (Anthropic, OpenAI, Claude Agent SDK, LangChain, custom); authoring a supervisor Config; questions about AEP events, RPC patterns (tool_exec_request/resolved, re_observation_request/resolved), source tagging, cache-token accounting, boundary semantics, RunStateSnapshot, conformance cases, the v0.1 spec, or imports of `aep`/`aep_anthropic`/`aep_claude_agent`. Trigger for any "my AEP run does X, why?" debugging — even when only AEP primitives appear without naming AEP.
+
+Do NOT trigger for generic agent observability, OpenTelemetry, prompt engineering, LLM cost dashboards, or unrelated multi-agent frameworks where AEP is not the chosen protocol.
+
+============================================================
+Iteration 3/5
+Description: Use this skill whenever the user is implementing, debugging, or reviewing the Agent Execution Protocol (AEP). AEP is a wire format with two sides: a runner that drives an agent and emits events, and a supervisor that declares the environment via a Config (tools, verifiers, re_observation, boundary, on_failure).
+
+Trigger for: writing or wrapping a runner over any LLM/SDK (Anthropic, OpenAI, Claude Agent SDK, LangChain, custom); authoring a supervisor Config; questions about AEP events, RPC patterns (tool_exec_request/resolved, re_observation_request/resolved), source tagging, cache-token accounting, boundary semantics, RunStateSnapshot, conformance cases, the v0.1 spec, or imports of `aep`/`aep_anthropic`/`aep_claude_agent`. Trigger for any "my AEP run does X, why?" debugging — even when only AEP primitives appear without naming AEP.
+
+Do NOT trigger for generic agent observability, OpenTelemetry, prompt engineering, LLM cost dashboards, or unrelated multi-agent frameworks where AEP is not the chosen protocol.
+============================================================
+Train: 20/36 correct, precision=100% recall=11% accuracy=56% (68.3s)
+  [FAIL] rate=0/3 expected=True: Building a Rust supervisor that consumes the AEP event strea
+  [FAIL] rate=0/3 expected=True: Adding re_observation with source: { supervisor: true } to a
+  [FAIL] rate=1/3 expected=True: I want to declare an invariant that Cargo.lock is never writ
+  [FAIL] rate=1/3 expected=True: Show me how to write a conformance test case that asserts on
+  [FAIL] rate=0/3 expected=True: I'm wrapping the OpenAI Chat Completions API as an AEP runne
+  [FAIL] rate=0/3 expected=True: My Config has a verifier with on_failure: 'inject_correction
+  [PASS] rate=0/3 expected=False: Build me a Fibonacci function in Rust with memoization.
+  [PASS] rate=0/3 expected=False: Write me a Python script that logs every OpenAI API call my 
+  [PASS] rate=0/3 expected=False: How do I add OpenTelemetry tracing to my FastAPI app? I want
+  [PASS] rate=0/3 expected=False: What are some good prompt engineering best practices when wo
+  [PASS] rate=0/3 expected=False: I want to track all the LLM costs across my Anthropic and Op
+  [PASS] rate=0/3 expected=False: Help me write a JSON schema for a pet-store REST API. Need t
+Test : 13/24 correct, precision=100% recall=8% accuracy=54% (0.0s)
+  [FAIL] rate=1/3 expected=True: Boundary is set to max_cost_usd: 5.00 and we're seeing runs 
+  [FAIL] rate=0/3 expected=True: Our conformance suite is failing with 'verifier_evaluated MU
+  [FAIL] rate=0/3 expected=True: Writing an aep-langchain runner using the observer pattern. 
+  [FAIL] rate=0/3 expected=True: I'm reviewing a teammate's PR that adds a hook_request emiss
+  [PASS] rate=0/3 expected=False: What's the best way to rate-limit my Claude API calls across
+  [PASS] rate=0/3 expected=False: I'm building a multi-agent system with AutoGen where a plann
+  [PASS] rate=0/3 expected=False: Set up structured logging for a Python service using structl
+  [PASS] rate=0/3 expected=False: How do I cache LLM responses on the client side to save cost
+
+Improving description...
+Proposed (25.6s): Use this skill for ANY question, code, or debugging involving the Agent Execution Protocol (AEP) — a wire format between agent runners (which drive an LLM and emit events) and supervisors (which declare the environment via a Config).
+
+Trigger when the user names AEP, OR uses AEP-specific terms without saying "AEP": `Config` with `tools`/`verifiers`/`re_observation`/`boundary`, events like `tool_exec_request`/`tool_exec_resolved`/`re_observation_request`/`re_observation_resolved`/`verifier_evaluated`/`agent_stopped`, fields like `on_failure: halt|inject_correction|continue`, `source: { runner|supervisor }`, `call_id`, `RunStateSnapshot`, the v0.1 spec, §10.4, conformance cases, or imports of `aep`/`aep_anthropic`/`aep_claude_agent`.
+
+Trigger for: writing/wrapping a runner over any LLM SDK; authoring or reviewing a supervisor Config; verifiers as invariants; cache-token accounting; boundary semantics; conformance tests; and any "why is my AEP run/Config/verifier doing X?" debugging.
+
+Do NOT trigger for: generic agent observability, OpenTelemetry, prompt engineering, LLM cost dashboards, or unrelated agent frameworks where AEP is not the protocol.
+
+============================================================
+Iteration 4/5
+Description: Use this skill for ANY question, code, or debugging involving the Agent Execution Protocol (AEP) — a wire format between agent runners (which drive an LLM and emit events) and supervisors (which declare the environment via a Config).
+
+Trigger when the user names AEP, OR uses AEP-specific terms without saying "AEP": `Config` with `tools`/`verifiers`/`re_observation`/`boundary`, events like `tool_exec_request`/`tool_exec_resolved`/`re_observation_request`/`re_observation_resolved`/`verifier_evaluated`/`agent_stopped`, fields like `on_failure: halt|inject_correction|continue`, `source: { runner|supervisor }`, `call_id`, `RunStateSnapshot`, the v0.1 spec, §10.4, conformance cases, or imports of `aep`/`aep_anthropic`/`aep_claude_agent`.
+
+Trigger for: writing/wrapping a runner over any LLM SDK; authoring or reviewing a supervisor Config; verifiers as invariants; cache-token accounting; boundary semantics; conformance tests; and any "why is my AEP run/Config/verifier doing X?" debugging.
+
+Do NOT trigger for: generic agent observability, OpenTelemetry, prompt engineering, LLM cost dashboards, or unrelated agent frameworks where AEP is not the protocol.
+============================================================

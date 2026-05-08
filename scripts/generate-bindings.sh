@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Regenerate the Rust + TypeScript bindings for AEP wire types from the
+# Regenerate the Rust + TypeScript bindings for AVP wire types from the
 # canonical JSON Schemas under `spec/v0.1/`.
 #
 # Single source of truth chain:
-#   python/aep/src/aep/types.py (Pydantic, hand-written)
+#   python/avp/src/avp/types.py (Pydantic, hand-written)
 #     -> spec/v0.1/*.schema.json (auto-generated; scripts/generate-schemas.py)
-#       -> rust/aep/src/*.rs       (generated here, via cargo-typify)
-#       -> typescript/aep/src/*.ts (generated here, via json-schema-to-typescript)
+#       -> rust/avp/src/*.rs       (generated here, via cargo-typify)
+#       -> typescript/avp/src/*.ts (generated here, via json-schema-to-typescript)
 #
 # Why we generate per-schema and not from the unified bundle:
-#   cargo-typify can't follow `$ref` across files. The bundle (aep.schema.json)
+#   cargo-typify can't follow `$ref` across files. The bundle (avp.schema.json)
 #   uses `oneOf` of refs to siblings; pointed at the bundle, typify errors out.
 #   We feed each per-shape schema in directly. That produces some duplicate
 #   helper types (JsonRpcRequestPayload exists in both event and supervisor
@@ -33,8 +33,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SPEC="$REPO/spec/v0.1"
-RUST_OUT="$REPO/rust/aep/src"
-TS_OUT="$REPO/typescript/aep/src"
+RUST_OUT="$REPO/rust/avp/src"
+TS_OUT="$REPO/typescript/avp/src"
 
 # Tools
 command -v cargo-typify >/dev/null 2>&1 || {
@@ -65,7 +65,7 @@ generate_rust() {
   local name="$1"      # output module name (no .rs)
   local schema="$2"    # path to schema file
   local tmp
-  tmp="$(mktemp -t "aep-${name}-XXXXXX.json")"
+  tmp="$(mktemp -t "avp-${name}-XXXXXX.json")"
   trap "rm -f '$tmp'" RETURN
 
   strip_null_defaults "$schema" > "$tmp"
@@ -77,7 +77,7 @@ generate_ts() {
   local name="$1"
   local schema="$2"
   local tmp
-  tmp="$(mktemp -t "aep-${name}-XXXXXX.json")"
+  tmp="$(mktemp -t "avp-${name}-XXXXXX.json")"
   trap "rm -f '$tmp'" RETURN
 
   strip_null_defaults "$schema" > "$tmp"
@@ -91,15 +91,17 @@ generate_ts() {
 }
 
 echo "Generating Rust bindings (cargo-typify)…"
-generate_rust "config" "$SPEC/config.schema.json"
+generate_rust "commission" "$SPEC/commission.schema.json"
 generate_rust "event" "$SPEC/event.schema.json"
-generate_rust "supervisor_message" "$SPEC/supervisor-message.schema.json"
+
+# v0.1 has no supervisor → runner channel; remove old generated files if they
+# linger from a previous run.
+rm -f "$RUST_OUT/supervisor_message.rs" "$TS_OUT/supervisor-message.ts"
 
 echo
 echo "Generating TypeScript bindings (json-schema-to-typescript)…"
-generate_ts "config" "$SPEC/config.schema.json"
+generate_ts "commission" "$SPEC/commission.schema.json"
 generate_ts "event" "$SPEC/event.schema.json"
-generate_ts "supervisor-message" "$SPEC/supervisor-message.schema.json"
 
 echo
 echo "Done."
