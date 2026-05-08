@@ -293,6 +293,24 @@ def _h_hosted_result(block: Any, acc: _BlockAcc) -> None:
 # Block-type → handler. Adding a new type is one line plus a small
 # named handler. Hosted tools register multiple block-type keys to
 # closures that carry the subtype.
+# Anthropic-API hosted server-side tools the runner KNOWS HOW to parse
+# when the user opts them in via the API's tool-use mechanisms. Public:
+# Config authors building `cfg.allowed_tools` import this to surface what
+# the runner can recognize on the wire if the API is configured to use
+# hosted tools.
+#
+# Authoritative source of names: `claude_agent_sdk.ServerToolName` Literal
+# (the SDK pins these as a typed enum of API-server-side tool names).
+# Snapshot reflects current AEP runner block-parser support; new hosted
+# tools the API ships need a matching `_BLOCK_HANDLERS` entry before they
+# show up here.
+ANTHROPIC_HOSTED_TOOL_KINDS: tuple[str, ...] = (
+    "web_search",
+    "code_execution",
+    "bash_code_execution",
+)
+
+
 _BLOCK_HANDLERS: dict[str, _BlockHandler] = {
     "text": _h_text,
     "tool_use": _h_tool_use,

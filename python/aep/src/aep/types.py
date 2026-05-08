@@ -434,11 +434,16 @@ class _SubagentDecl(BaseModel):
     """Subagent descriptor in `agent_started.data.subagents` — what the
     parent model sees when deciding whether to delegate. Same MCP-shaped
     triple (`name`, `description`, `inputSchema`) tools use, so adapters
-    can render subagents to the model's tool list with no translation."""
+    can render subagents to the model's tool list with no translation.
+
+    `description` is optional to match `_ToolDecl`: when surfacing a
+    runner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)
+    the runner has authoritative knowledge of the name but not the prose
+    description. Honest-null beats authored-prose-that-drifts."""
 
     model_config = _OPEN
     name: str
-    description: str
+    description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
 
 
@@ -465,11 +470,42 @@ class AgentStartedData(_SpanData):
 class AgentStoppedData(_SpanData):
     aep_reason: StopReason = Field(alias="aep.reason")
     aep_state: RunStateSnapshot = Field(alias="aep.state")
+    # Convenience aliases. When non-null these MUST equal the matching
+    # field on `aep.state` (validator below enforces). Existed historically
+    # as one-hop reads for consumers who only want the headline numbers
+    # from the terminator event. New consumers SHOULD read `aep.state.*`
+    # instead — it's the canonical surface and the same shape that ships
+    # on every `cost_recorded` event. Marked for removal in v0.2.
     aep_total_tokens: int | None = Field(default=None, ge=0, alias="aep.total_tokens")
     aep_total_cost_usd: float | None = Field(default=None, ge=0, alias="aep.total_cost_usd")
     aep_total_turns: int | None = Field(default=None, ge=0, alias="aep.total_turns")
     aep_duration_ms: int | None = Field(default=None, ge=0, alias="aep.duration_ms")
     aep_output: Any | None = Field(default=None, alias="aep.output")
+
+    @model_validator(mode="after")
+    def _convenience_aliases_match_state(self) -> AgentStoppedData:
+        """The top-level convenience fields MUST agree with `aep.state.*`
+        when populated. Catches drift at construction time (so a runner
+        that forgets to keep them in sync fails its own validation rather
+        than shipping inconsistent events the supervisor has to reconcile)."""
+        pairs = [
+            ("aep.total_tokens", self.aep_total_tokens, self.aep_state.total_tokens),
+            ("aep.total_cost_usd", self.aep_total_cost_usd, self.aep_state.total_cost_usd),
+            ("aep.total_turns", self.aep_total_turns, self.aep_state.total_turns),
+            ("aep.duration_ms", self.aep_duration_ms, self.aep_state.duration_ms),
+        ]
+        for alias, top, snap in pairs:
+            if top is None or snap is None:
+                continue
+            if top != snap:
+                raise ValueError(
+                    f"agent_stopped.{alias}={top!r} disagrees with "
+                    f"aep.state.{alias.removeprefix('aep.')}={snap!r}; "
+                    "the top-level field MUST equal the snapshot field "
+                    "(see SPEC §11.1). Either populate from the snapshot or "
+                    "leave the top-level None."
+                )
+        return self
 
 
 class ModelTurnStartedData(_SpanData):
@@ -839,6 +875,24 @@ class McpServerConnectedData(_SpanData):
     aep_mcp_tool_count: int = Field(ge=0, alias="aep.mcp.tool_count")
     aep_mcp_server_name: str | None = Field(default=None, alias="aep.mcp.server_name")
     aep_mcp_server_version: str | None = Field(default=None, alias="aep.mcp.server_version")
+    # Per-server tool list, populated by runners that actually drive the
+    # MCP handshake (e.g. aep-claude-agent calling
+    # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
+    # runner emits a stub event (e.g. the reference runner — its
+    # mcp_server_connected events are placeholders without live transport).
+    # Each entry is the same `_ToolDecl` shape used on
+    # `agent_started.data.tools`, with `aep.dispatch_target=mcp_server`
+    # and `aep.mcp_server_id` matching this event's server id.
+    aep_mcp_tools: list[_ToolDecl] | None = Field(default=None, alias="aep.mcp.tools")
+    # SDK-reported connection status, mirroring the Claude Agent SDK's
+    # McpServerStatus.status enum. Default null because pre-live-transport
+    # stub emitters didn't have this signal.
+    aep_mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = (
+        Field(default=None, alias="aep.mcp.status")
+    )
+    # Error message when status indicates failure (failed / needs-auth).
+    # Surfaces the SDK's `error` field verbatim. Null on healthy connects.
+    aep_mcp_error: str | None = Field(default=None, alias="aep.mcp.error")
 
 
 class McpServerDisconnectedData(_SpanData):

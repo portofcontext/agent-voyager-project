@@ -62,7 +62,7 @@ export type AepMcpServerId = string | null;
 export type Skills = string[] | null;
 export type Subagents = _SubagentDecl[] | null;
 export type Name1 = string;
-export type Description1 = string;
+export type Description1 = string | null;
 export type Inputschema1 = {
   [k: string]: unknown;
 } | null;
@@ -498,6 +498,9 @@ export type AepMcpProtocolVersion = string;
 export type AepMcpToolCount = number;
 export type AepMcpServerName = string | null;
 export type AepMcpServerVersion = string | null;
+export type AepMcpTools = _ToolDecl[] | null;
+export type AepMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
+export type AepMcpError = string | null;
 export type Specversion24 = "1.0";
 export type Id26 = string;
 export type Time24 = string;
@@ -564,10 +567,15 @@ export interface _ToolDecl {
  * parent model sees when deciding whether to delegate. Same MCP-shaped
  * triple (`name`, `description`, `inputSchema`) tools use, so adapters
  * can render subagents to the model's tool list with no translation.
+ *
+ * `description` is optional to match `_ToolDecl`: when surfacing a
+ * runner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)
+ * the runner has authoritative knowledge of the name but not the prose
+ * description. Honest-null beats authored-prose-that-drifts.
  */
 export interface _SubagentDecl {
   name: Name1;
-  description: Description1;
+  description?: Description1;
   inputSchema?: Inputschema1;
   [k: string]: unknown;
 }
@@ -1282,6 +1290,9 @@ export interface McpServerConnectedData {
   "aep.mcp.tool_count": AepMcpToolCount;
   "aep.mcp.server_name"?: AepMcpServerName;
   "aep.mcp.server_version"?: AepMcpServerVersion;
+  "aep.mcp.tools"?: AepMcpTools;
+  "aep.mcp.status"?: AepMcpStatus;
+  "aep.mcp.error"?: AepMcpError;
   [k: string]: unknown;
 }
 export interface McpServerDisconnectedEvent {

@@ -1297,6 +1297,52 @@
           ],
           "default": null,
           "title": "Aep.Mcp.Server Version"
+        },
+        "aep.mcp.tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_ToolDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Tools"
+        },
+        "aep.mcp.status": {
+          "anyOf": [
+            {
+              "enum": [
+                "connected",
+                "failed",
+                "needs-auth",
+                "pending",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Status"
+        },
+        "aep.mcp.error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aep.Mcp.Error"
         }
       },
       "required": [
@@ -4571,15 +4617,23 @@
     },
     "_SubagentDecl": {
       "additionalProperties": true,
-      "description": "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.",
+      "description": "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nrunner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe runner has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
       "properties": {
         "name": {
           "title": "Name",
           "type": "string"
         },
         "description": {
-          "title": "Description",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
         },
         "inputSchema": {
           "anyOf": [
@@ -4596,8 +4650,7 @@
         }
       },
       "required": [
-        "name",
-        "description"
+        "name"
       ],
       "title": "_SubagentDecl",
       "type": "object"

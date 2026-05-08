@@ -3738,6 +3738,17 @@ impl ::std::default::Default for JsonRpcResponsePayload {
 #[doc = "    \"trace_id\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"aep.mcp.error\": {"]
+#[doc = "      \"title\": \"Aep.Mcp.Error\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"aep.mcp.protocol_version\": {"]
 #[doc = "      \"title\": \"Aep.Mcp.Protocol Version\","]
 #[doc = "      \"type\": \"string\""]
@@ -3769,10 +3780,42 @@ impl ::std::default::Default for JsonRpcResponsePayload {
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
+#[doc = "    \"aep.mcp.status\": {"]
+#[doc = "      \"title\": \"Aep.Mcp.Status\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"enum\": ["]
+#[doc = "            \"connected\","]
+#[doc = "            \"failed\","]
+#[doc = "            \"needs-auth\","]
+#[doc = "            \"pending\","]
+#[doc = "            \"disabled\""]
+#[doc = "          ]"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"aep.mcp.tool_count\": {"]
 #[doc = "      \"title\": \"Aep.Mcp.Tool Count\","]
 #[doc = "      \"type\": \"integer\","]
 #[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"aep.mcp.tools\": {"]
+#[doc = "      \"title\": \"Aep.Mcp.Tools\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/_ToolDecl\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"parent_span_id\": {"]
 #[doc = "      \"title\": \"Parent Span Id\","]
@@ -3802,6 +3845,12 @@ impl ::std::default::Default for JsonRpcResponsePayload {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct McpServerConnectedData {
+    #[serde(
+        rename = "aep.mcp.error",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub aep_mcp_error: ::std::option::Option<::std::string::String>,
     #[serde(rename = "aep.mcp.protocol_version")]
     pub aep_mcp_protocol_version: ::std::string::String,
     #[serde(rename = "aep.mcp.server_id")]
@@ -3818,11 +3867,110 @@ pub struct McpServerConnectedData {
         skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub aep_mcp_server_version: ::std::option::Option<::std::string::String>,
+    #[serde(
+        rename = "aep.mcp.status",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub aep_mcp_status: ::std::option::Option<McpServerConnectedDataAepMcpStatus>,
     #[serde(rename = "aep.mcp.tool_count")]
     pub aep_mcp_tool_count: u64,
+    #[serde(
+        rename = "aep.mcp.tools",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub aep_mcp_tools: ::std::option::Option<::std::vec::Vec<ToolDecl>>,
     pub parent_span_id: ParentSpanId,
     pub span_id: SpanId,
     pub trace_id: TraceId,
+}
+#[doc = "`McpServerConnectedDataAepMcpStatus`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"connected\","]
+#[doc = "    \"failed\","]
+#[doc = "    \"needs-auth\","]
+#[doc = "    \"pending\","]
+#[doc = "    \"disabled\""]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum McpServerConnectedDataAepMcpStatus {
+    #[serde(rename = "connected")]
+    Connected,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "needs-auth")]
+    NeedsAuth,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+impl ::std::fmt::Display for McpServerConnectedDataAepMcpStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Connected => f.write_str("connected"),
+            Self::Failed => f.write_str("failed"),
+            Self::NeedsAuth => f.write_str("needs-auth"),
+            Self::Pending => f.write_str("pending"),
+            Self::Disabled => f.write_str("disabled"),
+        }
+    }
+}
+impl ::std::str::FromStr for McpServerConnectedDataAepMcpStatus {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "connected" => Ok(Self::Connected),
+            "failed" => Ok(Self::Failed),
+            "needs-auth" => Ok(Self::NeedsAuth),
+            "pending" => Ok(Self::Pending),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for McpServerConnectedDataAepMcpStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for McpServerConnectedDataAepMcpStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for McpServerConnectedDataAepMcpStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
 }
 #[doc = "`McpServerConnectedEvent`"]
 #[doc = r""]
@@ -7203,23 +7351,29 @@ impl ::std::convert::TryFrom<::std::string::String> for StopReason {
         value.parse()
     }
 }
-#[doc = "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation."]
+#[doc = "Subagent descriptor in `agent_started.data.subagents` — what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nrunner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe runner has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"_SubagentDecl\","]
-#[doc = "  \"description\": \"Subagent descriptor in `agent_started.data.subagents` — what the\\nparent model sees when deciding whether to delegate. Same MCP-shaped\\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\\ncan render subagents to the model's tool list with no translation.\","]
+#[doc = "  \"description\": \"Subagent descriptor in `agent_started.data.subagents` — what the\\nparent model sees when deciding whether to delegate. Same MCP-shaped\\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\\ncan render subagents to the model's tool list with no translation.\\n\\n`description` is optional to match `_ToolDecl`: when surfacing a\\nrunner-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\\nthe runner has authoritative knowledge of the name but not the prose\\ndescription. Honest-null beats authored-prose-that-drifts.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"description\","]
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
 #[doc = "    \"description\": {"]
 #[doc = "      \"title\": \"Description\","]
-#[doc = "      \"type\": \"string\""]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"inputSchema\": {"]
 #[doc = "      \"title\": \"Inputschema\","]
@@ -7244,7 +7398,8 @@ impl ::std::convert::TryFrom<::std::string::String> for StopReason {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct SubagentDecl {
-    pub description: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub description: ::std::option::Option<::std::string::String>,
     #[serde(
         rename = "inputSchema",
         default,

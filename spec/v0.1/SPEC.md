@@ -486,6 +486,10 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 
 Field-level definitions are in [`aep.schema.json`](./aep.schema.json) and [`event.schema.json`](./event.schema.json) (auto-generated from the Pydantic models in `python/aep/src/aep/types.py`).
 
+### 11.1 `agent_stopped` convenience aliases
+
+`agent_stopped.data` carries `aep.total_tokens`, `aep.total_cost_usd`, `aep.total_turns`, and `aep.duration_ms` at the top level **as convenience aliases**. When non-null they MUST equal the matching field inside `aep.state` (a [`RunStateSnapshot`](./aep.schema.json#/$defs/RunStateSnapshot)). New consumers SHOULD read `aep.state.*` — the same shape ships on every `cost_recorded` event, so analytics code that targets `aep.state` works uniformly across the run timeline rather than special-casing the terminator. The top-level fields are scheduled for removal in v0.2.
+
 ---
 
 ## 12. Custom event types and vendor extensions

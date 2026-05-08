@@ -148,6 +148,143 @@ def _monotonic_ms() -> int:
     return int(datetime.now(UTC).timestamp() * 1000)
 
 
+# Built-in subagents the Claude Agent SDK runtime always makes available
+# regardless of what the supervisor declares in `Config.subagents`. Per
+# the SDK subagents docs, `general-purpose` is the ONLY SDK-bundled
+# subagent — `Explore` and `Plan` (mentioned in the Claude Code permissions
+# docs) are filesystem-discovered from `.claude/agents/`, not runtime-bundled.
+# The Python SDK doesn't ship a programmatic catalog; we snapshot from the
+# documented surface.
+#
+# Source: https://code.claude.com/docs/en/agent-sdk/subagents
+#   "Built-in general-purpose: Claude can invoke the built-in
+#   `general-purpose` subagent at any time via the Agent tool without
+#   you defining anything"
+# Snapshot: 2026-05-08. Update if the SDK ships additional bundled subagents.
+#
+# Public: re-exported from `aep_claude_agent` so Config authors can
+# `from aep_claude_agent import CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS` and
+# include / exclude these names from their `Config.subagents` deliberately.
+CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS: tuple[str, ...] = ("general-purpose",)
+# Backwards-compat alias for the existing private callers in this module.
+_CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS = CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS
+
+# NOTE on skills: the Claude Agent SDK does NOT bundle skills programmatically.
+# Per https://code.claude.com/docs/en/agent-sdk/skills:
+#   "Unlike subagents (which can be defined programmatically), Skills must
+#   be created as filesystem artifacts. The SDK does not provide a
+#   programmatic API for registering Skills."
+# Skills are discovered from `~/.claude/skills/`, project `.claude/skills/`,
+# and plugin paths at runtime — that surface is environment-specific and
+# not enumerable from translation time. So `agent_started.data.skills`
+# stays `cfg.skills` only; we don't snapshot a "default skill list."
+# Bundled skills mentioned in Claude Code docs (`/simplify`, `/debug`, etc.)
+# are CLI features, not runtime-loaded artifacts the Python SDK exposes.
+
+
+# Canonical list of tools the Claude Agent SDK's `claude_code` preset
+# exposes when `ClaudeAgentOptions.tools` is left at default (None). The
+# SDK delegates to the Claude Code CLI binary which owns the actual list;
+# the Python SDK does NOT expose it programmatically. We snapshot from
+# the public Claude Code documentation so a worker that doesn't restrict
+# tools (the most common shape) still gets a usable
+# `agent_started.data.tools` audit on the wire.
+#
+# Sources:
+#   https://code.claude.com/docs/en/permissions
+#   https://code.claude.com/docs/en/settings
+# Snapshot: 2026-05-08. Update when Claude Code ships new built-ins.
+#
+# We omit `PowerShell` (gated behind CLAUDE_CODE_USE_POWERSHELL_TOOL=1)
+# and the `Agent` / `EnterWorktree` tools (subagent / worktree management
+# are surfaced via the dedicated subagent_invoked / worktree events).
+#
+# Public: re-exported from `aep_claude_agent` so Config authors can
+# `from aep_claude_agent import CLAUDE_CODE_PRESET_TOOLS` and pass or
+# filter the list when building `Config.allowed_tools`.
+CLAUDE_CODE_PRESET_TOOLS: tuple[str, ...] = (
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+    "Task",
+    "TodoWrite",
+    "NotebookEdit",
+)
+# Backwards-compat alias for existing private callers.
+_CLAUDE_CODE_PRESET_TOOLS = CLAUDE_CODE_PRESET_TOOLS
+
+
+def _make_builtin_tool_decl(name: str) -> dict[str, Any]:
+    """Build a `_ToolDecl`-shaped dict for one SDK-side tool name surfaced
+    on `agent_started.data.tools`.
+
+    The Claude Agent SDK does NOT expose its built-in tool catalog
+    (Read, Write, Bash, Edit, Glob, Grep, …) programmatically — the
+    canonical descriptions live in the Claude Code CLI binary and
+    Anthropic's docs, not in the Python SDK. Rather than ship a
+    hardcoded prose table that drifts the moment Anthropic ships a new
+    tool or renames an existing one, we emit just `name` +
+    `aep.dispatch_target` here and let consumers cross-reference Claude
+    Code's tool documentation when they need descriptions.
+
+    For `mcp__<server>__<tool>` names the SDK uses for MCP-routed tools,
+    tag `dispatch_target=mcp_server` + `aep.mcp_server_id` so consumers
+    can correlate with `mcp_server_connected` events. Everything else
+    is `local` (the SDK runs it in-process); those are inspected via
+    PreToolUse / PostToolUse hooks at dispatch time, where the SDK
+    surfaces real input/output we DO record on the wire.
+    """
+    if name.startswith("mcp__"):
+        rest = name[len("mcp__") :]
+        idx = rest.find("__")
+        if idx > 0:
+            return {
+                "name": name,
+                "aep.dispatch_target": "mcp_server",
+                "aep.mcp_server_id": rest[:idx],
+            }
+    return {"name": name, "aep.dispatch_target": "local"}
+
+
+def _provider_from_env() -> str:
+    """Resolve `gen_ai.provider.name` for the Claude Agent SDK runtime.
+
+    The SDK speaks the Anthropic API on the wire — that's what `gen_ai.provider.name`
+    reflects. The actual backend is selected at SDK invocation via these
+    environment variables (mutually exclusive with each other, all default
+    off):
+
+      - `CLAUDE_CODE_USE_BEDROCK=1`  → AWS Bedrock serves the request
+      - `CLAUDE_CODE_USE_VERTEX=1`   → Google Vertex AI serves the request
+      - `CLAUDE_CODE_USE_FOUNDRY=1`  → Microsoft Foundry / Azure AI serves the request
+
+    With none set, the SDK calls Anthropic directly. We tag accordingly so a
+    supervisor reading the trajectory can answer "which cloud actually served
+    this run" — the most useful provenance question for billing, latency, and
+    regional analysis.
+
+    What we do NOT do (and the previous version did): infer the provider from
+    the model name. That was wrong. The SDK is Claude-only natively; non-Claude
+    via LiteLLM proxy still speaks Anthropic on the wire and has nothing to do
+    with the model-name prefix. A model id like `bedrock-claude-sonnet-4` does
+    not imply Bedrock — the env var does.
+    """
+    import os
+
+    if os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1":
+        return "aws.bedrock"
+    if os.environ.get("CLAUDE_CODE_USE_VERTEX") == "1":
+        return "gcp.vertex_ai"
+    if os.environ.get("CLAUDE_CODE_USE_FOUNDRY") == "1":
+        return "azure.ai.inference"
+    return "anthropic"
+
+
 class _VerifierHalt(Exception):
     """Raised by the verifier-action dispatcher when a halt action fires.
 
@@ -242,7 +379,18 @@ class ClaudeAgentTranslator:
         self._total_turns = 0
         self._total_cost_usd = 0.0
         self._total_tokens = 0
+        # Per-category running totals so the wire-side `aep.state` snapshot
+        # can populate `tokens_input_total` etc. instead of leaving them
+        # null. Updated alongside `_total_tokens` in _handle_assistant_message.
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cache_read = 0
+        self._total_cache_write = 0
         self._tools_invoked: dict[str, int] = {}
+        # Wall-clock t0 for the in-flight turn / each in-flight tool call,
+        # used to compute `duration_ms` on model_turn_ended / tool_returned.
+        self._turn_t0_monotonic_ms: int | None = None
+        self._tool_t0_by_call_id: dict[str, int] = {}
         self._turn_open = False  # True between model_turn_started and model_turn_ended
         # Claude Agent SDK reports usage as cumulative-per-message, not per-turn delta.
         # We track the previous cumulative so we can compute this turn's actual cost.
@@ -284,6 +432,14 @@ class ClaudeAgentTranslator:
             total_cost_usd=self._total_cost_usd,
             total_tokens=self._total_tokens,
             total_turns=self._total_turns,
+            # Per-category running totals. Spec field; previously left null
+            # because the runner only tracked the combined total. Emit None
+            # when zero to avoid confusing consumers with "0 tokens used"
+            # before any turn runs.
+            tokens_input_total=self._total_input_tokens or None,
+            tokens_output_total=self._total_output_tokens or None,
+            tokens_cache_read_total=self._total_cache_read or None,
+            tokens_cache_write_total=self._total_cache_write or None,
             tools_invoked=dict(self._tools_invoked) or None,
             started_at=self._started_at,
             duration_ms=max(0, _monotonic_ms() - self._started_monotonic_ms),
@@ -413,6 +569,12 @@ class ClaudeAgentTranslator:
 
         async with self._sdk_client_cls(options=options) as client:
             await client.connect(prompt)
+            # MCP handshake is complete by the time connect() returns;
+            # emit mcp_server_connected with the SDK's authoritative view
+            # (server status, real tool list, server info). See
+            # `_emit_mcp_connections_after_connect` for the fallback
+            # path when the SDK doesn't expose get_mcp_status.
+            await self._emit_mcp_connections_after_connect(client)
             while True:
                 async for message in client.receive_response():
                     self._on_sdk_message(message)
@@ -451,8 +613,24 @@ class ClaudeAgentTranslator:
         assert self._sdk_hook_matcher_cls is not None
 
         kwargs: dict[str, Any] = {}
+        # AEP Config.allowed_tools per SPEC.md §8.1: "the runner exposes ONLY
+        # tools whose names are in this list" — that's exposure-filter
+        # semantics. The Claude Agent SDK has TWO parameters with different
+        # meanings (verified against `ClaudeAgentOptions` docstrings):
+        #
+        #   - `tools` — what the model CAN see. List restricts; `[]` disables
+        #     all built-ins; `None` falls back to the `claude_code` preset.
+        #   - `allowed_tools` — auto-execute without permission prompt. Does
+        #     NOT restrict visibility.
+        #
+        # AEP semantics maps to SDK `tools`, not SDK `allowed_tools`. Earlier
+        # versions mapped wrong — the model could see the full preset and
+        # only auto-approval was filtered, breaking AEP's "MUST expose ONLY"
+        # contract.
         if cfg.allowed_tools is not None:
-            kwargs["allowed_tools"] = list(cfg.allowed_tools)
+            # Includes the empty-list case: AEP Config.allowed_tools=[] means
+            # "no tools at all," which maps to SDK tools=[].
+            kwargs["tools"] = list(cfg.allowed_tools)
         if cfg.system_prompt:
             kwargs["system_prompt"] = cfg.system_prompt
         if cfg.model:
@@ -640,13 +818,37 @@ class ClaudeAgentTranslator:
         cfg = self.config
         usage = getattr(message, "usage", None)
         model_id = getattr(message, "model", cfg.model or "unspecified")
-        cum_ti, cum_to, cum_cr, cum_cw, cum_cost, cost_source = _compute_cost(model_id, usage)
+        cumulative_ti, cumulative_to, cumulative_cr, cumulative_cw, cumulative_cost, cost_source = (
+            _compute_cost(model_id, usage)
+        )
+
+        # Distinguish "this message carries no usage data" from "the SDK's
+        # cumulative actually dropped." The Claude Agent SDK emits
+        # AssistantMessages with `usage=None` or all-zero usage for
+        # follow-up / continuation messages around tool results — those
+        # aren't real turns and they're not accounting drops. A message
+        # whose computed cumulative is all-zero AND that has no fresh
+        # textual content is a non-turn carrier; skip both reset
+        # detection AND turn emission. Without this guard, every
+        # successful run that involves tool calls emits a spurious
+        # `error_occurred(accounting_reset)` event when the post-tool
+        # AssistantMessage arrives with no usage attached.
+        no_usage = cumulative_ti == 0 and cumulative_to == 0 and cumulative_cost == 0.0
+        has_text_content_now = any(
+            type(b).__name__ == "TextBlock" and getattr(b, "text", "")
+            for b in (getattr(message, "content", []) or [])
+        )
+        if no_usage and not has_text_content_now:
+            return
 
         # Detect unexpected cumulative-reset BEFORE computing deltas.
+        # `no_usage` runs here too — a sticky drop (cumulative dropped AND
+        # the message DOES have content suggesting a real turn) still
+        # triggers accounting_reset; that's the legitimate signal.
         unexpected_reset = (
-            cum_ti < self._prev_cumulative_input_tokens
-            or cum_to < self._prev_cumulative_output_tokens
-            or cum_cost < self._prev_cumulative_cost_usd
+            cumulative_ti < self._prev_cumulative_input_tokens
+            or cumulative_to < self._prev_cumulative_output_tokens
+            or cumulative_cost < self._prev_cumulative_cost_usd
         ) and not self._baseline_reset_pending
         if unexpected_reset:
             self._emit(
@@ -667,30 +869,30 @@ class ClaudeAgentTranslator:
             )
             # Reset our baseline to the new cumulative so subsequent messages
             # produce sane deltas rather than a cascade of negative-delta errors.
-            self._prev_cumulative_input_tokens = cum_ti
-            self._prev_cumulative_output_tokens = cum_to
-            self._prev_cumulative_cache_read = cum_cr
-            self._prev_cumulative_cache_write = cum_cw
-            self._prev_cumulative_cost_usd = cum_cost
+            self._prev_cumulative_input_tokens = cumulative_ti
+            self._prev_cumulative_output_tokens = cumulative_to
+            self._prev_cumulative_cache_read = cumulative_cr
+            self._prev_cumulative_cache_write = cumulative_cw
+            self._prev_cumulative_cost_usd = cumulative_cost
             return
 
         if self._baseline_reset_pending:
             # PreCompact / SubagentStart fired: the next cumulative is a
             # fresh-start total, not a delta from prior. Adopt it directly.
-            self._prev_cumulative_input_tokens = cum_ti
-            self._prev_cumulative_output_tokens = cum_to
-            self._prev_cumulative_cache_read = cum_cr
-            self._prev_cumulative_cache_write = cum_cw
-            self._prev_cumulative_cost_usd = cum_cost
+            self._prev_cumulative_input_tokens = cumulative_ti
+            self._prev_cumulative_output_tokens = cumulative_to
+            self._prev_cumulative_cache_read = cumulative_cr
+            self._prev_cumulative_cache_write = cumulative_cw
+            self._prev_cumulative_cost_usd = cumulative_cost
             self._baseline_reset_pending = False
             # The first post-reset message IS a real turn IFF it has new content;
             # fall through to the regular emission path with prev=cum (delta=0).
 
-        delta_ti = max(0, cum_ti - self._prev_cumulative_input_tokens)
-        delta_to = max(0, cum_to - self._prev_cumulative_output_tokens)
-        delta_cr = max(0, cum_cr - self._prev_cumulative_cache_read)
-        delta_cw = max(0, cum_cw - self._prev_cumulative_cache_write)
-        delta_cost = max(0.0, cum_cost - self._prev_cumulative_cost_usd)
+        delta_ti = max(0, cumulative_ti - self._prev_cumulative_input_tokens)
+        delta_to = max(0, cumulative_to - self._prev_cumulative_output_tokens)
+        delta_cr = max(0, cumulative_cr - self._prev_cumulative_cache_read)
+        delta_cw = max(0, cumulative_cw - self._prev_cumulative_cache_write)
+        delta_cost = max(0.0, cumulative_cost - self._prev_cumulative_cost_usd)
 
         # Determine whether this message represents a real AEP turn. Two
         # signals: (a) the SDK reported new output tokens, OR (b) the message
@@ -708,12 +910,15 @@ class ClaudeAgentTranslator:
 
         self._step += 1
         self._current_turn_span_id = new_span_id()
+        self._turn_t0_monotonic_ms = _monotonic_ms()
         self._emit(
             ModelTurnStartedEvent(
                 subject=cfg.run_id,
                 data=ModelTurnStartedData(
                     **self._shared_span(self._current_turn_span_id, self._agent_span_id),
                     step=self._step,
+                    # Claude Agent SDK is always streaming under the hood.
+                    **{"gen_ai.request.stream": True},
                 ),
             )
         )
@@ -780,23 +985,38 @@ class ClaudeAgentTranslator:
             # ToolUseBlock content is observed via the PreToolUse hook (which
             # fires in step with the SDK's actual tool dispatch).
 
-        self._prev_cumulative_input_tokens = cum_ti
-        self._prev_cumulative_output_tokens = cum_to
-        self._prev_cumulative_cache_read = cum_cr
-        self._prev_cumulative_cache_write = cum_cw
-        self._prev_cumulative_cost_usd = cum_cost
+        self._prev_cumulative_input_tokens = cumulative_ti
+        self._prev_cumulative_output_tokens = cumulative_to
+        self._prev_cumulative_cache_read = cumulative_cr
+        self._prev_cumulative_cache_write = cumulative_cw
+        self._prev_cumulative_cost_usd = cumulative_cost
 
         ended_kwargs: dict[str, Any] = {
             "gen_ai.usage.input_tokens": delta_ti,
             "gen_ai.usage.output_tokens": delta_to,
+            # Always emit cache fields, even when 0, for consistency across
+            # turns. Previously these were dropped on zero, so a turn-N event
+            # wouldn't have the field at all while turn-N-1 did.
+            "gen_ai.usage.cache_read.input_tokens": delta_cr,
+            "gen_ai.usage.cache_creation.input_tokens": delta_cw,
             "aep.cost_usd": delta_cost,
             "aep.cost.source": cost_source,
             "gen_ai.response.model": model_id,
         }
-        if delta_cr:
-            ended_kwargs["gen_ai.usage.cache_read.input_tokens"] = delta_cr
-        if delta_cw:
-            ended_kwargs["gen_ai.usage.cache_creation.input_tokens"] = delta_cw
+        # gen_ai.response.finish_reasons — Anthropic returns `stop_reason`
+        # ("end_turn", "tool_use", "max_tokens", "stop_sequence"). The OTel
+        # convention is a list, so wrap.
+        sdk_stop_reason = getattr(message, "stop_reason", None)
+        if sdk_stop_reason:
+            ended_kwargs["gen_ai.response.finish_reasons"] = [str(sdk_stop_reason)]
+
+        # Wall-clock duration of the turn. Falls back to 0 if a message
+        # arrived without a corresponding model_turn_started (shouldn't
+        # happen, but the schema requires an int).
+        turn_duration_ms = 0
+        if self._turn_t0_monotonic_ms is not None:
+            turn_duration_ms = max(0, _monotonic_ms() - self._turn_t0_monotonic_ms)
+            self._turn_t0_monotonic_ms = None
 
         self._emit(
             ModelTurnEndedEvent(
@@ -804,7 +1024,7 @@ class ClaudeAgentTranslator:
                 data=ModelTurnEndedData(
                     **self._shared_span(self._current_turn_span_id, self._agent_span_id),
                     step=self._step,
-                    duration_ms=0,  # the SDK message doesn't carry per-turn duration
+                    duration_ms=turn_duration_ms,
                     **ended_kwargs,
                 ),
             )
@@ -814,6 +1034,12 @@ class ClaudeAgentTranslator:
         self._total_turns += 1
         self._total_cost_usd += delta_cost
         self._total_tokens += delta_ti + delta_to
+        # Per-category running totals so `aep.state.tokens_*_total` is
+        # populated on every cost_recorded / agent_stopped snapshot.
+        self._total_input_tokens += delta_ti
+        self._total_output_tokens += delta_to
+        self._total_cache_read += delta_cr
+        self._total_cache_write += delta_cw
         # Delegated mode: also push the delta into the parent tracer's
         # cumulative state. Without this push, the parent's
         # `agent_stopped.aep_state` shows zeros and parent-side
@@ -832,7 +1058,15 @@ class ClaudeAgentTranslator:
                 subject=cfg.run_id,
                 data=CostRecordedData(
                     **self._own_span(self._current_turn_span_id),
-                    **{"aep.state": self._snapshot()},
+                    # Tag the source so consumers can join this event with
+                    # the sibling `model_turn_ended.aep.cost.source`. The
+                    # ResultMessage handler later emits a "reported"-tagged
+                    # cost_recorded once the SDK returns the authoritative
+                    # total.
+                    **{
+                        "aep.state": self._snapshot(),
+                        "aep.cost.source": "computed",
+                    },
                 ),
             )
         )
@@ -909,6 +1143,8 @@ class ClaudeAgentTranslator:
 
         tool_span_id = new_span_id()
         self._tool_span_by_call_id[call_id] = tool_span_id
+        # Stash wall-clock t0 so PostToolUse can compute duration_ms.
+        self._tool_t0_by_call_id[call_id] = _monotonic_ms()
         parent = self._current_turn_span_id or self._agent_span_id
 
         # MCP-routed tools: SDK names them `mcp__<server>__<tool>`. Tag the
@@ -982,6 +1218,11 @@ class ClaudeAgentTranslator:
             output_structured = None
         tool_span_id = self._tool_span_by_call_id.get(call_id, new_span_id())
         parent = self._current_turn_span_id or self._agent_span_id
+        # duration_ms = wall clock between the matching PreToolUse and now.
+        # Falls back to 0 if PreToolUse never recorded a t0 (race / hook
+        # ordering edge case) — the schema requires an int ≥ 0.
+        t0 = self._tool_t0_by_call_id.pop(call_id, None)
+        tool_duration_ms = max(0, _monotonic_ms() - t0) if t0 is not None else 0
         returned_kwargs: dict[str, Any] = {
             "gen_ai.tool.call.id": call_id,
             "gen_ai.tool.name": tool,
@@ -995,7 +1236,7 @@ class ClaudeAgentTranslator:
                 data=ToolReturnedData(
                     **self._shared_span(tool_span_id, parent),
                     step=self._step,
-                    duration_ms=0,
+                    duration_ms=tool_duration_ms,
                     **returned_kwargs,
                 ),
             )
@@ -1278,9 +1519,28 @@ class ClaudeAgentTranslator:
         if self._suppress_lifecycle:
             return
         cfg = self.config
-        tools_meta = None
+        # Build the effective tool surface the model sees, mirroring the
+        # reference runner's "Config.tools ∪ runner_builtin_tools, filtered
+        # by allowed_tools" pattern (SPEC.md §13.1.2). For the CASDK runner,
+        # the "runner builtins" are the Claude Agent SDK's own tools (Read,
+        # Write, Bash, …) plus any MCP-routed names.
+        #
+        # Three Config shapes drive different behaviors so the wire
+        # accurately reflects what the model can actually see:
+        #
+        #   - `cfg.allowed_tools = ["Read", ...]` → restricted: surface
+        #     exactly those names. SDK is told `tools=[...]` matching.
+        #   - `cfg.allowed_tools = []` → no tools: emit empty surface
+        #     (still distinguishes from "preset" — model sees nothing).
+        #     SDK is told `tools=[]`.
+        #   - `cfg.allowed_tools = None` (not set) → SDK uses the
+        #     `claude_code` preset; surface the documented preset names
+        #     so the audit trail isn't blank for the common
+        #     "let-the-SDK-handle-it" case.
+        rpc_names: set[str] = {t.name for t in (cfg.tools or [])}
+        tools_meta_list: list[dict[str, Any]] = []
         if cfg.tools:
-            tools_meta = [
+            tools_meta_list.extend(
                 {
                     "name": t.name,
                     "description": t.description,
@@ -1288,17 +1548,49 @@ class ClaudeAgentTranslator:
                     "aep.dispatch_target": "supervisor_rpc",
                 }
                 for t in cfg.tools
-            ]
-        subagents_meta = None
+            )
+
+        # Decide which built-in names to surface based on the three Config
+        # shapes above. `cfg.allowed_tools is None` means "use SDK preset";
+        # any list (including empty) means "exactly these."
+        if cfg.allowed_tools is None:
+            builtin_names = list(_CLAUDE_CODE_PRESET_TOOLS)
+        else:
+            builtin_names = list(cfg.allowed_tools)
+
+        for name in builtin_names:
+            if name in rpc_names:
+                # Already emitted via cfg.tools — that's the canonical
+                # entry (carries the supervisor's declared schema +
+                # dispatch_target).
+                continue
+            tools_meta_list.append(_make_builtin_tool_decl(name))
+        tools_meta = tools_meta_list or None
+        # Same three-shape pattern as `tools` (above): None → SDK built-ins
+        # surfaced; [] → empty surface (model has no subagents to delegate
+        # to from a Config-declared list, though SDK runtime may still
+        # expose general-purpose); list → those names exactly. Built-in
+        # subagents (currently just `general-purpose` per the Agent SDK
+        # docs) get a name-only decl since the SDK doesn't expose their
+        # description / system prompt / tools for us to authoritatively
+        # report.
+        subagents_meta_list: list[dict[str, Any]] = []
+        rpc_subagent_names: set[str] = {sa.name for sa in (cfg.subagents or [])}
         if cfg.subagents:
-            subagents_meta = [
+            subagents_meta_list.extend(
                 {
                     "name": sa.name,
                     "description": sa.description,
                     **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
                 }
                 for sa in cfg.subagents
-            ]
+            )
+        if cfg.subagents is None:
+            for name in _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS:
+                if name in rpc_subagent_names:
+                    continue
+                subagents_meta_list.append({"name": name})
+        subagents_meta = subagents_meta_list or None
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
             "span_id": self._agent_span_id,
@@ -1311,6 +1603,12 @@ class ClaudeAgentTranslator:
         }
         if cfg.model:
             data_kwargs["gen_ai.request.model"] = cfg.model
+        # OTel-shaped operation + provider tags. Always set on agent_started:
+        # the Claude Agent SDK is always an "invoke_agent" operation; the
+        # provider is "anthropic" unless one of the SDK's backend env vars
+        # selects Bedrock / Vertex / Foundry. See `_provider_from_env`.
+        data_kwargs["gen_ai.operation.name"] = "invoke_agent"
+        data_kwargs["gen_ai.provider.name"] = _provider_from_env()
         if cfg.thread_id:
             data_kwargs["aep.thread_id"] = cfg.thread_id
         if cfg.tags:
@@ -1323,23 +1621,49 @@ class ClaudeAgentTranslator:
                 data=AgentStartedData(**data_kwargs),
             )
         )
-        self._emit_mcp_connections()
+        # mcp_server_connected events are emitted later, AFTER the SDK
+        # client connects and the MCP handshake completes. See
+        # `_emit_mcp_connections_after_connect`. Pre-connect emission
+        # (the v0.1 stub path) gave us the lifecycle marker but no
+        # live tool data; post-connect gives both.
 
-    def _emit_mcp_connections(self) -> None:
-        """Emit `mcp_server_connected` for each declared MCP server.
+    async def _emit_mcp_connections_after_connect(self, client: Any) -> None:
+        """Emit `mcp_server_connected` for each MCP server the SDK has
+        actually connected to, using `ClaudeSDKClient.get_mcp_status()`.
 
-        The Claude Agent SDK owns the actual transport (stdio/http
-        connection, `tools/list` discovery) and doesn't surface a
-        per-server connect callback to us — so the emission here is
-        positional, not event-driven: we mark the lifecycle at
-        agent_started and trust the SDK to have handled the actual
-        connect by the time we reach the first turn. `tool_count` stays
-        0 in this v0.1 path because the SDK doesn't expose a per-server
-        tool-count API to hooks; consumers can derive it post-hoc by
-        counting `tool_invoked` events whose `aep.tool.dispatch_target`
-        is `mcp_server` and whose `aep.mcp_server_id` matches.
+        Why this is async + post-connect (not synchronous from
+        `_emit_agent_started`): the Claude Agent SDK runs the MCP
+        handshake (initialize + tools/list) AFTER `client.connect()`
+        completes. Calling `get_mcp_status()` before then returns
+        nothing useful. Emitting at this point gives us the SDK's
+        authoritative view: actual server status (connected /
+        failed / needs-auth / pending / disabled), real `serverInfo`
+        (name + version), AND the live `tools` list per server.
+
+        Fallback: if the SDK doesn't expose `get_mcp_status` (older
+        version, test stubs without the method) or the call raises,
+        fall back to the v0.1 stub behavior — emit a placeholder per
+        Config.mcp_servers entry with `tool_count=0` and no live
+        tools, so the wire still records the lifecycle moment.
         """
         cfg = self.config
+        get_status = getattr(client, "get_mcp_status", None)
+        statuses: list[Any] = []
+        if get_status is not None:
+            try:
+                response = await get_status()
+                statuses = list(response.get("mcpServers", []) if response else [])
+            except Exception as exc:
+                logger.debug("get_mcp_status failed; falling back to stub events: %s", exc)
+                statuses = []
+
+        if statuses:
+            for status in statuses:
+                self._emit_mcp_connected_from_status(status)
+            return
+
+        # Fallback path: no live data, emit Config-time stubs so the
+        # lifecycle marker is at least present on the wire.
         if not cfg.mcp_servers:
             return
         for server in cfg.mcp_servers:
@@ -1356,6 +1680,71 @@ class ClaudeAgentTranslator:
                     ),
                 )
             )
+
+    def _emit_mcp_connected_from_status(self, status: Any) -> None:
+        """Render one `McpServerStatus` (TypedDict / dict) into an
+        `mcp_server_connected` event.
+
+        `status` is the SDK's per-server snapshot — fields per the
+        SDK's `McpServerStatus` TypedDict: `name`, `status`,
+        `serverInfo` (NotRequired), `error` (NotRequired), `tools`
+        (NotRequired list of `McpToolInfo`)."""
+        cfg = self.config
+        # status keys are camelCase per the SDK's TypedDict.
+        server_id = str(status.get("name", ""))
+        if not server_id:
+            return
+        server_info = status.get("serverInfo") or {}
+        sdk_status = status.get("status")
+        sdk_error = status.get("error")
+        sdk_tools = status.get("tools") or []
+
+        # Convert each McpToolInfo into a `_ToolDecl`-shaped dict for
+        # the wire. `aep.dispatch_target=mcp_server` + `aep.mcp_server_id`
+        # mirror what `tool_invoked` events for these tools will carry,
+        # so consumers correlate connect → invoke uniformly.
+        tools_decl: list[dict[str, Any]] = []
+        for t in sdk_tools:
+            tool_name = t.get("name") if isinstance(t, dict) else getattr(t, "name", None)
+            if not tool_name:
+                continue
+            decl: dict[str, Any] = {
+                "name": tool_name,
+                "aep.dispatch_target": "mcp_server",
+                "aep.mcp_server_id": server_id,
+            }
+            tool_desc = (
+                t.get("description") if isinstance(t, dict) else getattr(t, "description", None)
+            )
+            if tool_desc:
+                decl["description"] = tool_desc
+            tools_decl.append(decl)
+
+        kwargs: dict[str, Any] = {
+            "aep.mcp.server_id": server_id,
+            "aep.mcp.protocol_version": MCP_PROTOCOL_VERSION,
+            "aep.mcp.tool_count": len(tools_decl),
+        }
+        if server_info.get("name"):
+            kwargs["aep.mcp.server_name"] = server_info["name"]
+        if server_info.get("version"):
+            kwargs["aep.mcp.server_version"] = server_info["version"]
+        if tools_decl:
+            kwargs["aep.mcp.tools"] = tools_decl
+        if sdk_status:
+            kwargs["aep.mcp.status"] = sdk_status
+        if sdk_error:
+            kwargs["aep.mcp.error"] = sdk_error
+
+        self._emit(
+            McpServerConnectedEvent(
+                subject=cfg.run_id,
+                data=McpServerConnectedData(
+                    **self._own_span(self._agent_span_id),
+                    **kwargs,
+                ),
+            )
+        )
 
     def _emit_agent_stopped(
         self, reason: StopReason, *, error_msg: str | None = None

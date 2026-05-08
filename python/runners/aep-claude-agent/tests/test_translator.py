@@ -180,10 +180,14 @@ def test_agent_started_emitted_with_config_metadata() -> None:
 
 
 def test_build_sdk_options_maps_config_fields() -> None:
+    """AEP Config.allowed_tools is the exposure filter (SPEC §8.1) — it
+    maps to SDK `tools`, not SDK `allowed_tools` (auto-approve list).
+    See test_agent_started_tool_surface for the deeper rationale."""
     t, _ = _new_translator()
     opts = t._build_sdk_options()
     kw = opts.kwargs
-    assert kw["allowed_tools"] == ["bash"]
+    assert kw["tools"] == ["bash"]
+    assert "allowed_tools" not in kw  # NOT mapped here — that's auto-approve
     assert kw["max_turns"] == 5
     assert kw["max_budget_usd"] == 0.50
     assert kw["model"] == "claude-sonnet-4-6"

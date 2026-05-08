@@ -159,6 +159,19 @@ def test_no_mcp_servers_omits_kwarg_entirely() -> None:
 
 
 def test_emits_mcp_server_connected_per_declared_server() -> None:
+    """mcp_server_connected events fire AFTER client.connect() now (so
+    the SDK has actually completed the MCP handshake and we can call
+    get_mcp_status). When the SDK doesn't expose get_mcp_status (test
+    stub doesn't implement it), the translator falls back to one stub
+    event per Config.mcp_servers entry — same pre-fix shape."""
+
+    class _ClientWithoutStatus:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
     cfg = Config(
         schema_version="0.1",
         run_id="mcp-connected",
@@ -169,17 +182,38 @@ def test_emits_mcp_server_connected_per_declared_server() -> None:
         ],
     )
     t, out = _make_translator(cfg)
-    t._emit_agent_started()
+
+    # Drive the post-connect emission with a stub client that doesn't
+    # have get_mcp_status — exercises the fallback path that emits one
+    # placeholder per Config.mcp_servers entry.
+    asyncio.run(t._emit_mcp_connections_after_connect(_ClientWithoutStatus()))
+
     connected = _by_type(out, McpServerConnectedEvent)
     assert len(connected) == 2
     ids = {e.data.aep_mcp_server_id for e in connected}
     assert ids == {"github", "weather"}
+    # Fallback path: tool_count=0, no live tools surfaced.
+    for ev in connected:
+        assert ev.data.aep_mcp_tool_count == 0
+        assert ev.data.aep_mcp_tools is None
 
 
 def test_no_mcp_servers_emits_no_connected_events() -> None:
+    """No Config.mcp_servers AND no SDK-discovered servers → no events.
+    Both _emit_agent_started AND _emit_mcp_connections_after_connect
+    should produce zero connected events."""
+
+    class _ClientWithoutStatus:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
     cfg = Config(schema_version="0.1", run_id="no-mcp-events", model="claude-sonnet-4-6")
     t, out = _make_translator(cfg)
     t._emit_agent_started()
+    asyncio.run(t._emit_mcp_connections_after_connect(_ClientWithoutStatus()))
     assert not _by_type(out, McpServerConnectedEvent)
 
 
