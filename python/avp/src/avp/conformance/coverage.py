@@ -15,13 +15,18 @@ from typing import Any
 
 # Event types declared in the schema but NOT emitted by any v0.1 agent.
 # Conformance cases here would have nothing to assert against. Each entry
-# carries a reason; remove from this set when a agent starts emitting the
+# carries a reason; remove from this set when an agent starts emitting the
 # event AND a conformance case is added.
 DEFERRED_COVERAGE: dict[str, str] = {
-    "avp.skill_executed": (
-        "schema-only: no v0.1 agent emits skill_executed yet. The reference "
-        "agent emits skill_loaded; skill activation is agent-specific and "
-        "not exercised by ScriptedModel-based conformance harness."
+    "avp.skill_loaded": (
+        "Positive-emission case (skill resolves → skill_loaded fires at "
+        "step=0) requires the harness to stage a real SKILL.md folder "
+        "into the agent's CWD before run, which v0.1's ScriptedModel "
+        "harness can't do. Resolution-failure case "
+        "(`skill-source-missing-stops-with-error`) pins the fail-fast "
+        "wire fact. Real-LLM smoke tests in `avp-anthropic` cover the "
+        "positive path end-to-end against a live model with a tmpdir "
+        "SKILL.md."
     ),
 }
 

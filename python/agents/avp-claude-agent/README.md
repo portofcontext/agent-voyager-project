@@ -68,6 +68,36 @@ translator.run()
 echo '<config json>' | avp-claude-agent
 ```
 
+## SDK options pass-through (`extra_sdk_options`)
+
+`ClaudeAgentTranslator` accepts an `extra_sdk_options: dict[str, Any]` kwarg that's merged into `ClaudeAgentOptions` before the SDK starts. This is the escape hatch for SDK-specific concerns AVP intentionally doesn't put on the wire (per SPEC.md §14: deployment-layer config is out of scope for the wire format).
+
+The most common knobs:
+
+```python
+translator = ClaudeAgentTranslator(
+    commission,
+    on_event=on_event,
+    extra_sdk_options={
+        # Non-interactive runs need this — without it, the CLI auto-rejects
+        # tool calls before execution. PreToolUse fires (model wanted to
+        # call), PostToolUse never does, and `tool_returned` won't appear
+        # on the AVP wire because the tool literally never ran.
+        "permission_mode": "bypassPermissions",
+        # Scopes the CLI's filesystem access. Required if you want the
+        # agent to read/write files outside its default cwd — which is
+        # typical when staging a workspace per run.
+        "cwd": "/path/to/workspace",
+        # Additional readable directories beyond cwd.
+        "add_dirs": ["/tmp/staging", "/etc/skills"],
+    },
+)
+```
+
+Commission-derived kwargs (`tools` / `system_prompt` / `model` / `agents` / `mcp_servers`) take precedence — `extra_sdk_options` cannot override the AVP wire shape. It's strictly a way to pass SDK behavior knobs (permissions, filesystem scope, retries, etc.) that don't belong on the trajectory.
+
+If you find yourself reaching for `extra_sdk_options` for something that *should* be portable across AVP agents (cost caps, output schemas, allowlists), that's a signal it belongs on Commission instead — file an issue.
+
 ## Known SDK quirks (observed empirically, not yet resolved)
 
 The translator wraps a moving target — the `claude_agent_sdk` Python package

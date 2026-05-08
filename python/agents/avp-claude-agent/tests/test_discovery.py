@@ -1,5 +1,5 @@
 """Discovery API: helps Commission authors see what's available before
-writing `cfg.allowed_tools` / `cfg.subagents` / `cfg.skills`.
+writing `commission.exposed` / `commission.subagents` / `commission.skills`.
 
 Two layers:
   - Public constants (CLAUDE_CODE_PRESET_TOOLS,
@@ -165,20 +165,20 @@ def test_environment_can_be_used_to_build_a_config(tmp_path, monkeypatch) -> Non
     (project_skills / "SKILL.md").write_text("---\nname: deploy\n---\nbody")
 
     env = discover_environment(cwd=tmp_path)
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="discovery-driven",
         model="claude-sonnet-4-6",
         prompt="ship it",
         # Restrict to only read tools + the deploy skill.
-        allowed_tools=["Read", "Grep", "Glob"],
+        exposed=["Read", "Grep", "Glob"],
         skills=[
             Skill.model_validate({"name": s.name, "avp.source": str(s.source_path.parent)})
             for s in env.filesystem_skills
         ],
     )
-    assert cfg.skills is not None
-    assert cfg.skills[0].name == "deploy"
+    assert commission.skills is not None
+    assert commission.skills[0].name == "deploy"
     # The env's full builtin list is also accessible if the author
     # wants to NOT restrict (just expose the SDK preset):
     assert "Read" in env.builtin_tools

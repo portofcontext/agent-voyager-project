@@ -1,14 +1,16 @@
 {
   "id": "mcp-server-connected-disconnected-pair",
   "title": "Each Commission.mcp_servers entry MUST emit a connected event after agent_started and a disconnected event before agent_stopped",
-  "description": "When Commission.mcp_servers declares one or more servers, the runner MUST emit one avp.mcp_server_connected event per server immediately after agent_started (before any model turns), and one avp.mcp_server_disconnected event per server immediately before agent_stopped. Both events carry avp.mcp.server_id matching the Commission entry's id, plus the protocol version. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run — not just which were declared.",
+  "description": "When Commission.mcp_servers declares one or more servers, the agent MUST emit one avp.mcp_server_connected event per server immediately after agent_started (before any model turns), and one avp.mcp_server_disconnected event per server immediately before agent_stopped. Both events carry avp.mcp.server_id matching the Commission entry's id, plus the protocol version. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run \u2014 not just which were declared.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#6-mcp-integration",
     "spec/v0.1/avp.schema.json#/$defs/McpServerConnectedEvent",
     "spec/v0.1/avp.schema.json#/$defs/McpServerDisconnectedEvent"
   ],
-  "applies_to": ["runner"],
-  "config": {
+  "applies_to": [
+    "agent"
+  ],
+  "commission": {
     "schema_version": "0.1",
     "run_id": "mcp-lifecycle",
     "model": "test/mock",
@@ -23,6 +25,9 @@
         "transport": "http",
         "url": "https://example.com/mcp/weather"
       }
+    ],
+    "exposed": [
+      "*"
     ]
   },
   "scripted_model": [

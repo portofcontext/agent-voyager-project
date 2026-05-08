@@ -45,7 +45,9 @@ def test_on_event_callback_streams_events_as_they_emit() -> None:
     that events arrive in the same order they would in `trajectory`."""
     streamed: list[BaseModel] = []
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="streamed", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="streamed", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -85,7 +87,9 @@ def test_on_event_fires_before_trajectory_append() -> None:
         seen_lengths.append(len(agent.trajectory))
 
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="ordering", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="ordering", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -113,7 +117,9 @@ def test_no_on_event_keeps_trajectory_path_unchanged() -> None:
     agent behaviour unchanged — events accumulate in `trajectory`, no
     callback is invoked."""
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="no-cb", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="no-cb", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -148,7 +154,9 @@ def test_on_event_exception_aborts_run_loudly() -> None:
         raise RuntimeError("durable store unavailable")
 
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="cb-fail", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="cb-fail", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(

@@ -34,7 +34,7 @@ from avp_anthropic.shell_tools import SHELL_TOOL_SCHEMAS
 #   supervisor's job.
 # - `thinking`: Anthropic extended-thinking blocks parsed and emitted
 #   as `reasoning_emitted` events.
-_CAPABILITIES = ("mcp", "subagents", "skills", "thinking")
+_CAPABILITIES = ("mcp", "subagents", "skills", "skills:eager", "thinking")
 
 
 def manifest() -> AgentManifest:
@@ -71,6 +71,12 @@ def manifest() -> AgentManifest:
             # `--model` flag selects. Leaving null is honest; downstream
             # auditors won't infer a fake default.
             "default_model": None,
+            # The driver speaks to the Anthropic Messages API only — no
+            # OpenAI / Gemini / etc. Glob covers all current and future
+            # Claude variants; supervisors authoring with a non-Claude model
+            # get error_occurred(unsupported_model) at startup before the
+            # first API call.
+            "supported_models": ["claude-*"],
             "built_in_tools": built_in_tools,
             # No runtime-bundled subagents or skills. The Anthropic driver only
             # surfaces what Commission declares.

@@ -1,22 +1,50 @@
 {
   "id": "allowed-tools-allowlist-rejects-unlisted-call",
-  "title": "Tool call to a name not in Commission.allowed_tools → tool_failed (the allowlist is enforced at dispatch)",
-  "description": "When Commission.allowed_tools is set, the runner MUST reject any tool invocation whose name is not in the list. The rejection surfaces as tool_failed with an error message identifying the allowlist as the cause; the model may then react in the next turn. The first call ('bash') is allowed and returns normally; the second ('echo') is not in the allowlist and fails.",
+  "title": "Tool call to a name not in Commission.exposed → tool_failed (the allowlist is enforced at dispatch)",
+  "description": "When Commission.exposed is set, the agent MUST reject any tool invocation whose name is not in the list. The rejection surfaces as tool_failed with an error message identifying the allowlist as the cause; the model may then react in the next turn. The first call ('bash') is allowed and returns normally; the second ('echo') is not in the allowlist and fails.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
     "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "allowed-tools-rejects",
     "model": "test/mock",
-    "allowed_tools": [
+    "exposed": [
       "bash"
     ]
   },
+  "agent_builtin_tools": [
+    {
+      "name": "bash",
+      "description": "Run a shell command.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cmd": {
+            "type": "string"
+          }
+        },
+        "required": ["cmd"]
+      }
+    },
+    {
+      "name": "echo",
+      "description": "Print a message.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "msg": {
+            "type": "string"
+          }
+        },
+        "required": ["msg"]
+      }
+    }
+  ],
   "scripted_model": [
     {
       "tokens_input": 20,

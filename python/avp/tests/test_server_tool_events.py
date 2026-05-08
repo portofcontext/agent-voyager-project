@@ -41,10 +41,12 @@ def _converged_with_server_calls(server_tool_calls: list[ServerToolCall]) -> Mod
     )
 
 
-def _runner(model: ScriptedModel) -> AVPAgent:
-    cfg = Commission(schema_version="0.1", run_id="server-tool", model="test/mock")
+def _agent(model: ScriptedModel) -> AVPAgent:
+    commission = Commission(
+        schema_version="0.1", run_id="server-tool", model="test/mock", exposed=["*"]
+    )
     return AVPAgent(
-        config=cfg,
+        commission=commission,
         model=model,
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),
@@ -55,7 +57,7 @@ def _runner(model: ScriptedModel) -> AVPAgent:
 
 
 def test_server_tool_call_emits_invoked_and_returned() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(
@@ -101,7 +103,7 @@ def test_server_tool_call_pairs_invoked_and_returned_on_same_span() -> None:
     """Per AVP wire convention, paired events for the same tool call MUST
     share a span_id (so consumers can correlate them) and trace_id (one
     run = one tree)."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(
@@ -129,7 +131,7 @@ def test_server_tool_call_parented_to_turn_span() -> None:
     """The inline call happened during the model's turn — parent_span_id
     MUST point to the model_turn_started span, not the agent root, so
     the trajectory tree reconstructs as turn → tool, not agent → tool."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(
@@ -153,7 +155,7 @@ def test_server_tool_call_parented_to_turn_span() -> None:
 
 
 def test_error_server_tool_call_emits_tool_failed_not_returned() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(
@@ -184,7 +186,7 @@ def test_no_server_tool_calls_emits_no_synthetic_events() -> None:
     """Backwards-compat: without server_tool_calls, agent behaviour
     is unchanged — no synthetic tool events for turns where the API
     didn't run any inline tools."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -207,7 +209,7 @@ def test_server_tool_calls_emitted_after_turn_ended() -> None:
     """Ordering: server-tool synthetic events MUST come AFTER the turn's
     model_turn_ended event so consumers reading the wire can trust the
     "turn closes before its inline tools are described" invariant."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(
@@ -234,7 +236,7 @@ def test_server_tool_calls_emitted_after_turn_ended() -> None:
 
 
 def test_multiple_server_tool_calls_in_one_turn_each_get_paired_events() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _converged_with_server_calls(

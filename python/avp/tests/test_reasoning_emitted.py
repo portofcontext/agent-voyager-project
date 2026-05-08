@@ -24,10 +24,12 @@ def _by_type(traj, type_):
     return [e for e in traj if isinstance(e, type_)]
 
 
-def _runner(model: ScriptedModel) -> AVPAgent:
-    cfg = Commission(schema_version="0.1", run_id="reasoning", model="test/mock")
+def _agent(model: ScriptedModel) -> AVPAgent:
+    commission = Commission(
+        schema_version="0.1", run_id="reasoning", model="test/mock", exposed=["*"]
+    )
     return AVPAgent(
-        config=cfg,
+        commission=commission,
         model=model,
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),
@@ -35,7 +37,7 @@ def _runner(model: ScriptedModel) -> AVPAgent:
 
 
 def test_plain_thinking_block_emits_reasoning_event() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -69,7 +71,7 @@ def test_redacted_thinking_records_occurrence_with_no_text() -> None:
     """When the provider returns thinking encrypted-only, we still emit
     the event — auditors need to count thinking turns even when the
     plaintext isn't available."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -94,7 +96,7 @@ def test_redacted_thinking_records_occurrence_with_no_text() -> None:
 def test_reasoning_emitted_parented_to_turn_span() -> None:
     """Reasoning belongs to a turn — parent_span_id is the turn span,
     not the agent root."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -119,7 +121,7 @@ def test_reasoning_emitted_before_text_emitted() -> None:
     """Wire ordering: thought before speech. The model thinks first,
     then speaks — the trajectory must reconstruct that ordering even
     when the agent emits both within one turn."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -146,7 +148,7 @@ def test_reasoning_emitted_before_text_emitted() -> None:
 
 def test_no_reasoning_blocks_emits_no_reasoning_events() -> None:
     """Backwards-compat: a turn without thinking emits no reasoning_emitted."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -170,7 +172,7 @@ def test_multiple_reasoning_blocks_each_emit_their_own_event() -> None:
     """Some providers return multiple thinking blocks per turn (the
     model paused and resumed). Each becomes its own event so the
     trajectory preserves the structure."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -197,7 +199,7 @@ def test_multiple_reasoning_blocks_each_emit_their_own_event() -> None:
 
 
 def test_reasoning_event_serializes_under_dotted_aliases() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(

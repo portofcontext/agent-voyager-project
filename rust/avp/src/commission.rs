@@ -109,23 +109,17 @@ impl<'de> ::serde::Deserialize<'de> for AvpSource {
 #[doc = "  \"description\": \"Supervisor → agent setup message. Declares the agent's complete environment (mcp_servers, allowed_tools, skills, subagents, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
+#[doc = "    \"exposed\","]
 #[doc = "    \"run_id\","]
 #[doc = "    \"schema_version\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"allowed_tools\": {"]
-#[doc = "      \"title\": \"Allowed Tools\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
+#[doc = "    \"exposed\": {"]
+#[doc = "      \"title\": \"Exposed\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
 #[doc = "    },"]
 #[doc = "    \"mcp_servers\": {"]
 #[doc = "      \"title\": \"Mcp Servers\","]
@@ -279,8 +273,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpSource {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct AvpV01Commission {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub allowed_tools: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub exposed: ::std::vec::Vec<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub mcp_servers: ::std::option::Option<::std::vec::Vec<McpServer>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -791,8 +784,8 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"avp.commission\": {"]
-#[doc = "      \"title\": \"Avp.Commission\","]
+#[doc = "    \"avp.config\": {"]
+#[doc = "      \"title\": \"Avp.Config\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
@@ -824,11 +817,11 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
 #[serde(deny_unknown_fields)]
 pub struct Skill {
     #[serde(
-        rename = "avp.commission",
+        rename = "avp.config",
         default,
         skip_serializing_if = "::std::option::Option::is_none"
     )]
-    pub avp_commission:
+    pub avp_config:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     #[serde(rename = "avp.source")]
     pub avp_source: AvpSource,
@@ -848,24 +841,17 @@ pub struct Skill {
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"allowed_tools\": {"]
-#[doc = "      \"title\": \"Allowed Tools\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
 #[doc = "    \"description\": {"]
 #[doc = "      \"title\": \"Description\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"exposed\": {"]
+#[doc = "      \"title\": \"Exposed\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
 #[doc = "    },"]
 #[doc = "    \"inherit_tools\": {"]
 #[doc = "      \"title\": \"Inherit Tools\","]
@@ -975,9 +961,9 @@ pub struct Skill {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Subagent {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub allowed_tools: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     pub description: Description,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub exposed: ::std::vec::Vec<::std::string::String>,
     #[serde(default)]
     pub inherit_tools: bool,
     #[serde(

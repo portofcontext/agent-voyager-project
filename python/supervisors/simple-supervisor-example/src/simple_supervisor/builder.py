@@ -20,7 +20,7 @@ def build_commission(
 ) -> Commission:
     """Compose a Commission from a profile plus task-specific overrides.
 
-    The profile contributes the *shape of the environment* (allowed_tools).
+    The profile contributes the *shape of the environment* (exposed).
     The caller fills in the *task* (prompt, run_id, model).
 
     Supervisor-side tools (when wanted) are exposed via Commission.mcp_servers
@@ -36,7 +36,7 @@ def build_commission(
         prompt=prompt,
         system_prompt=system_prompt or p.system_prompt,
         model=model,
-        allowed_tools=list(p.allowed_tools) or None,
+        exposed=list(p.exposed) if p.exposed else ["*"],
         tags=tags,
         meta=meta,
     )

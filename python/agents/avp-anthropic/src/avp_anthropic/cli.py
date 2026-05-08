@@ -83,9 +83,9 @@ def main(argv: list[str] | None = None) -> int:
         print("avp-anthropic: expected one Commission JSON line on stdin", file=sys.stderr)
         return 2
     try:
-        config = Commission.model_validate(json.loads(commission_blob))
+        commission = Commission.model_validate(json.loads(commission_blob))
     except Exception as e:
-        # SPEC.md §14: a agent that receives an invalid Commission MUST emit
+        # SPEC.md §14: an agent that receives an invalid Commission MUST emit
         # error_occurred + agent_stopped(reason="error"). The Commission didn't
         # validate, so we emit hand-rolled NDJSON envelopes that satisfy the
         # CloudEvents 1.0 envelope shape directly.
@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.flush()
         return 2
 
-    model = args.model or config.model or "claude-sonnet-4-6"
+    model = args.model or commission.model or "claude-sonnet-4-6"
 
     # MCP servers declared in Commission flow into Anthropic's API connector.
     # HTTP-only — stdio servers in the Commission are warned about and skipped
@@ -154,9 +154,9 @@ def main(argv: list[str] | None = None) -> int:
     # text output; this v0.1 prototype forwards the connector but does
     # NOT yet emit per-MCP-tool events on the AVP wire (the trajectory
     # shows the model_turn_ended cost rolled up; per-call detail TBD).
-    mcp_servers_param: list[dict] = build_anthropic_mcp_servers(config)
+    mcp_servers_param: list[dict] = build_anthropic_mcp_servers(commission)
 
-    tools_param: list[dict] = build_anthropic_tools(config, builtins=list(SHELL_TOOL_SCHEMAS))
+    tools_param: list[dict] = build_anthropic_tools(commission, builtins=list(SHELL_TOOL_SCHEMAS))
 
     driver = AnthropicModelDriver(
         model=model,
@@ -165,10 +165,10 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
     )
 
-    subagent_driver = AnthropicSubagentDriver(default_model=model) if config.subagents else None
+    subagent_driver = AnthropicSubagentDriver(default_model=model) if commission.subagents else None
 
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=driver,
         tools=ShellTools(),
         supervisor=StdoutSink(sys.stdout),

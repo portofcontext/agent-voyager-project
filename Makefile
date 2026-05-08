@@ -107,18 +107,24 @@ bindings:
 
 .PHONY: bindings-check
 bindings-check:
-	@# Drift check: regenerate Rust + TS bindings; fail if any tracked file
-	@# has changed. Catches the case where types.py / schemas changed but
-	@# generated code wasn't regen'd. Untracked files (e.g. brand-new
-	@# binding files awaiting their first commit) DON'T count as drift —
-	@# they need to be `git add`'d and committed normally.
-	@bash scripts/generate-bindings.sh > /dev/null
-	@if ! git --no-pager diff --quiet -- rust/avp/src typescript/avp/src 2>/dev/null; then \
-		echo "error: Rust/TS bindings drifted from schemas. Run 'make bindings' and commit." >&2; \
-		git --no-pager diff --stat -- rust/avp/src typescript/avp/src >&2; \
+	@# Drift check: snapshot current bindings, regenerate, diff against
+	@# the snapshot. Pure working-tree comparison — does NOT require the
+	@# bindings to be committed. If regeneration changes any byte, the
+	@# user's bindings are stale relative to types.py / schemas.
+	@snapshot=$$(mktemp -d); \
+	cp -R rust/avp/src "$$snapshot/rust-src"; \
+	cp -R typescript/avp/src "$$snapshot/ts-src"; \
+	bash scripts/generate-bindings.sh > /dev/null; \
+	if ! diff -rq "$$snapshot/rust-src" rust/avp/src > /dev/null 2>&1 \
+	   || ! diff -rq "$$snapshot/ts-src" typescript/avp/src > /dev/null 2>&1; then \
+		echo "error: Rust/TS bindings are stale relative to schemas. Run 'make bindings'." >&2; \
+		diff -rq "$$snapshot/rust-src" rust/avp/src 2>&1 | head -10 >&2 || true; \
+		diff -rq "$$snapshot/ts-src" typescript/avp/src 2>&1 | head -10 >&2 || true; \
+		rm -rf "$$snapshot"; \
 		exit 1; \
-	fi
-	@echo "✓ Bindings in sync with schemas."
+	fi; \
+	rm -rf "$$snapshot"; \
+	echo "✓ Bindings in sync with schemas."
 
 
 .PHONY: bindings-test

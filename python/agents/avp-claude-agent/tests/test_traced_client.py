@@ -124,13 +124,13 @@ def _client_factory(messages: list[Any] | None = None) -> Callable[..., _FakeCli
 
 
 def _make_traced(
-    cfg: Commission,
+    commission: Commission,
     *,
     messages: list[Any] | None = None,
 ) -> tuple[TracedClaudeSDKClient, list]:
     out: list = []
     traced = TracedClaudeSDKClient(
-        config=cfg,
+        commission=commission,
         on_event=out.append,
         sdk_client_cls=_client_factory(messages),
         sdk_options_cls=_FakeOptions,
@@ -148,7 +148,7 @@ def _basic_config(**overrides: Any) -> Commission:
         "prompt": "kick off",
     }
     base.update(overrides)
-    return Commission(**base)
+    return Commission(**base, exposed=["*"])
 
 
 def _by_type(events: list, type_: type) -> list:
@@ -163,8 +163,8 @@ def _types(events: list) -> list[str]:
 
 
 def test_enter_emits_agent_started_exit_emits_agent_stopped() -> None:
-    cfg = _basic_config()
-    traced, out = _make_traced(cfg)
+    commission = _basic_config()
+    traced, out = _make_traced(commission)
 
     async def _run() -> None:
         async with traced:
@@ -185,12 +185,12 @@ def test_receive_response_emits_per_message_avp_events_before_yield() -> None:
     """One AssistantMessage flowing through receive_response() MUST emit
     model_turn_started/ended + text_emitted + cost_recorded for that turn
     BEFORE the user's async-for body sees the message — causal ordering."""
-    cfg = _basic_config()
+    commission = _basic_config()
     msg = AssistantMessage(
         content=[TextBlock("hi there")],
         usage={"input_tokens": 50, "output_tokens": 10},
     )
-    traced, out = _make_traced(cfg, messages=[msg])
+    traced, out = _make_traced(commission, messages=[msg])
     seen_messages: list = []
 
     async def _run() -> None:
@@ -217,12 +217,12 @@ def test_receive_response_emits_per_message_avp_events_before_yield() -> None:
 def test_receive_response_yields_messages_unchanged() -> None:
     """The wrapper MUST yield the SDK's Message instances UNCHANGED — user
     code walking `.content` blocks etc. keeps working unmodified."""
-    cfg = _basic_config()
+    commission = _basic_config()
     msg = AssistantMessage(
         content=[TextBlock("preserved")],
         usage={"input_tokens": 10, "output_tokens": 5},
     )
-    traced, _out = _make_traced(cfg, messages=[msg])
+    traced, _out = _make_traced(commission, messages=[msg])
     received: list = []
 
     async def _run() -> None:
@@ -238,8 +238,8 @@ def test_receive_response_yields_messages_unchanged() -> None:
 
 
 def test_connect_and_query_forward_to_underlying_client() -> None:
-    cfg = _basic_config()
-    traced, _out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, _out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced as client:
@@ -255,8 +255,8 @@ def test_connect_and_query_forward_to_underlying_client() -> None:
 def test_attribute_access_passes_through_to_sdk_client() -> None:
     """SDK-specific helpers attached to ClaudeSDKClient should keep
     working without the wrapper shadowing them. __getattr__ forwards."""
-    cfg = _basic_config()
-    traced, _out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, _out = _make_traced(commission, messages=[])
 
     async def _run() -> tuple:
         async with traced as client:
@@ -276,8 +276,8 @@ def test_pre_post_tool_use_hooks_fire_emitting_tool_lifecycle() -> None:
     """The hooks the wrapper installs on SDK options are the same ones
     ClaudeAgentTranslator uses. Calling them produces tool_invoked /
     tool_returned just like the agent CLI does."""
-    cfg = _basic_config()
-    traced, out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced:
@@ -317,17 +317,18 @@ def test_agent_tool_with_declared_subagent_diverts_to_subagent_lifecycle() -> No
     """Same divert logic as ClaudeAgentTranslator: an `Agent` tool_use
     whose subagent_type matches a declared Commission.subagent emits
     subagent_invoked / subagent_returned (NOT tool_invoked / tool_returned)."""
-    cfg = _basic_config(
+    commission = _basic_config(
         subagents=[
             Subagent(
                 name="researcher",
                 description="Looks things up.",
                 system_prompt="You are a researcher.",
                 model="claude-haiku-4-5-20251001",
+                exposed=["*"],
             )
         ]
     )
-    traced, out = _make_traced(cfg, messages=[])
+    traced, out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced:
@@ -367,8 +368,8 @@ def test_converged_marks_stop_reason_converged() -> None:
     """When the user calls converged() and exits cleanly, the run reports
     reason=converged. (Default behavior — explicit signal honored over
     the implicit fallback.)"""
-    cfg = _basic_config()
-    traced, out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced as client:
@@ -382,8 +383,8 @@ def test_converged_marks_stop_reason_converged() -> None:
 def test_exception_inside_block_yields_reason_error() -> None:
     """An unhandled exception inside the `async with` block sets reason=error
     on the agent_stopped event (mirrors AVPAgent / translator behavior)."""
-    cfg = _basic_config()
-    traced, out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced:
@@ -398,8 +399,10 @@ def test_exception_inside_block_yields_reason_error() -> None:
 
 
 def test_subagents_appear_in_agent_started_data() -> None:
-    cfg = _basic_config(subagents=[Subagent(name="planner", description="Decomposes work.")])
-    traced, out = _make_traced(cfg, messages=[])
+    commission = _basic_config(
+        subagents=[Subagent(name="planner", description="Decomposes work.", exposed=["*"])]
+    )
+    traced, out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced:
@@ -414,8 +417,8 @@ def test_options_carry_avp_hooks_so_sdk_dispatches_through_us() -> None:
     """Build SDK options once on enter and verify our hooks are registered
     — without this the SDK would never invoke our PreToolUse / PostToolUse
     callbacks and the wire would be missing tool events."""
-    cfg = _basic_config()
-    traced, _out = _make_traced(cfg, messages=[])
+    commission = _basic_config()
+    traced, _out = _make_traced(commission, messages=[])
 
     async def _run() -> None:
         async with traced:
@@ -431,7 +434,7 @@ def test_options_carry_avp_hooks_so_sdk_dispatches_through_us() -> None:
 
 
 def test_two_assistant_messages_yield_two_turn_pairs() -> None:
-    cfg = _basic_config()
+    commission = _basic_config()
     msgs = [
         AssistantMessage(
             content=[TextBlock("first")],
@@ -442,7 +445,7 @@ def test_two_assistant_messages_yield_two_turn_pairs() -> None:
             usage={"input_tokens": 250, "output_tokens": 50},  # cumulative
         ),
     ]
-    traced, out = _make_traced(cfg, messages=msgs)
+    traced, out = _make_traced(commission, messages=msgs)
 
     async def _run() -> None:
         async with traced as client:
@@ -478,13 +481,13 @@ def test_factory_requires_active_tracer() -> None:
 
 
 def test_factory_pulls_config_and_on_event_from_active_tracer() -> None:
-    """Inside `with AVPTracer(config, on_event=publish):`, the factory
+    """Inside `with AVPTracer(commission, on_event=publish):`, the factory
     constructs a TracedClaudeSDKClient that emits events through the
-    same `publish` callback. No need to repeat config / on_event."""
+    same `publish` callback. No need to repeat commission / on_event."""
     from avp import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
-    cfg = _basic_config()
+    commission = _basic_config()
     out: list = []
 
     msg = AssistantMessage(
@@ -493,7 +496,7 @@ def test_factory_pulls_config_and_on_event_from_active_tracer() -> None:
     )
 
     async def _run() -> None:
-        with AVPTracer(cfg, on_event=out.append):
+        with AVPTracer(commission, on_event=out.append):
             client = traced_claude_sdk_client(
                 sdk_client_cls=_client_factory([msg]),
                 sdk_options_cls=_FakeOptions,
@@ -521,7 +524,7 @@ def test_factory_translator_shares_trace_id_with_active_tracer() -> None:
     from avp import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
-    cfg = _basic_config()
+    commission = _basic_config()
     out: list = []
     msg = AssistantMessage(
         content=[TextBlock("hi")],
@@ -529,7 +532,7 @@ def test_factory_translator_shares_trace_id_with_active_tracer() -> None:
     )
 
     async def _run() -> None:
-        with AVPTracer(cfg, on_event=out.append):
+        with AVPTracer(commission, on_event=out.append):
             client = traced_claude_sdk_client(
                 sdk_client_cls=_client_factory([msg]),
                 sdk_options_cls=_FakeOptions,
@@ -573,16 +576,16 @@ def test_factory_suppresses_translator_lifecycle_emission() -> None:
 
 
 def test_self_contained_form_still_works_unchanged() -> None:
-    """Backwards-compat: the existing `TracedClaudeSDKClient(config=,
+    """Backwards-compat: the existing `TracedClaudeSDKClient(commission=,
     on_event=)` form is untouched — it owns its own lifecycle and emits
     its own agent_started / agent_stopped. Nothing about the refactor
     should break it."""
-    cfg = _basic_config()
+    commission = _basic_config()
     msg = AssistantMessage(
         content=[TextBlock("hi")],
         usage={"input_tokens": 10, "output_tokens": 5},
     )
-    traced, out = _make_traced(cfg, messages=[msg])
+    traced, out = _make_traced(commission, messages=[msg])
 
     async def _run() -> None:
         async with traced as client:
@@ -610,7 +613,7 @@ def test_factory_pushes_per_turn_spend_into_parent_tracer_state() -> None:
     from avp import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
-    cfg = _basic_config()
+    commission = _basic_config()
     out: list = []
     msgs = [
         AssistantMessage(
@@ -624,7 +627,7 @@ def test_factory_pushes_per_turn_spend_into_parent_tracer_state() -> None:
     ]
 
     async def _run() -> None:
-        with AVPTracer(cfg, on_event=out.append):
+        with AVPTracer(commission, on_event=out.append):
             client = traced_claude_sdk_client(
                 sdk_client_cls=_client_factory(msgs),
                 sdk_options_cls=_FakeOptions,

@@ -2,7 +2,7 @@
 
 Two entry points; pick whichever fits how you wire the client.
 
-**`AnthropicTracedClient(client, *, config, on_event)`** — self-contained
+**`AnthropicTracedClient(client, *, commission, on_event)`** — self-contained
 context manager. Bundles the wrap with the tracer lifecycle in one
 object. Best for a typical agent run where there's exactly one
 `Commission` + `on_event` per run. This is what `examples/06_anthropic_traced_client.py`
@@ -154,7 +154,7 @@ class _TracedMessages:
         turn. Returns the SDK's `anthropic.Message` unmodified so existing
         tool-dispatch logic that walks `resp.content` blocks keeps working."""
         tracer = self._get_tracer()
-        model = kwargs.get("model") or tracer.config.model or "unspecified"
+        model = kwargs.get("model") or tracer.commission.model or "unspecified"
         with tracer.turn() as turn:
             t0 = time.monotonic()
             response = self._real.create(**kwargs)
@@ -251,7 +251,7 @@ class _AsyncTracedMessages:
 
     async def create(self, **kwargs: Any) -> Any:
         tracer = self._get_tracer()
-        model = kwargs.get("model") or tracer.config.model or "unspecified"
+        model = kwargs.get("model") or tracer.commission.model or "unspecified"
         with tracer.turn() as turn:
             t0 = time.monotonic()
             response = await self._real.create(**kwargs)
@@ -326,12 +326,12 @@ def wrap_anthropic(client: Any, *, prices: PriceTable | None = None) -> Any:
     `wrap_anthropic` twice on the same client returns it unchanged.
 
     Requires an active `AVPTracer` at call time. Inside a
-    `with AVPTracer(config, on_event=...):` block, the wrapped client emits
+    `with AVPTracer(commission, on_event=...):` block, the wrapped client emits
     events to that tracer. Outside one, instrumented methods raise
     `RuntimeError` with a message pointing at the missing context — better
     than silently dropping events.
 
-    Compare to `AnthropicTracedClient(client, config=..., on_event=...)`,
+    Compare to `AnthropicTracedClient(client, commission=..., on_event=...)`,
     which bundles the wrap with the tracer's lifecycle in one context
     manager. Both produce identical wire events; pick whichever feels
     natural. The wrap form is best for long-lived clients reused across
@@ -370,13 +370,13 @@ class AnthropicTracedClient:
         self,
         client: Any,
         *,
-        config: Commission,
+        commission: Commission,
         on_event: Callable[[BaseModel], None],
         prices: PriceTable | None = None,
         provider: str = "anthropic",
     ) -> None:
         self._client = client
-        self._config = config
+        self._config = commission
         self._on_event = on_event
         self._provider = provider
         self._prices = prices or DEFAULT_PRICES
@@ -467,7 +467,7 @@ class AnthropicTracedClient:
         return self._tracer.state
 
     @property
-    def config(self) -> Commission:
+    def commission(self) -> Commission:
         return self._config
 
 

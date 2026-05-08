@@ -9,7 +9,7 @@ Wraps `claude_agent_sdk.ClaudeSDKClient` so an existing user loop:
 
 becomes:
 
-    async with TracedClaudeSDKClient(config=config, on_event=publish) as client:
+    async with TracedClaudeSDKClient(commission=commission, on_event=publish) as client:
         await client.connect(prompt)
         async for message in client.receive_response():
             handle(message)            # AVP events flow automatically
@@ -70,7 +70,7 @@ class TracedClaudeSDKClient:
     def __init__(
         self,
         *,
-        config: Commission,
+        commission: Commission,
         on_event: Callable[[BaseModel], None],
         sdk_client_cls: Callable[..., Any] | None = None,
         sdk_options_cls: type | None = None,
@@ -78,7 +78,7 @@ class TracedClaudeSDKClient:
         sdk_agent_definition_cls: type | None = None,
         parent_tracer: AVPTracer | None = None,
     ) -> None:
-        """Standalone mode (default): pass `config` and `on_event`; the
+        """Standalone mode (default): pass `commission` and `on_event`; the
         translator emits its own agent_started / agent_stopped lifecycle.
 
         Delegated mode: pass `parent_tracer` (typically supplied by the
@@ -87,14 +87,14 @@ class TracedClaudeSDKClient:
         trace_id / agent_span_id, emits via the parent's on_event sink,
         and suppresses its own lifecycle bookends so the wire stays one
         coherent tree."""
-        self.config = config
+        self.commission = commission
         self._on_event = on_event
         self._parent_tracer = parent_tracer
         # The translator owns the wire — span tree, accounting, hook
         # callbacks, agent_started/stopped emission. We just orchestrate
         # its lifecycle around the user's async-for loop.
         self._translator = ClaudeAgentTranslator(
-            config,
+            commission,
             on_event,
             sdk_client_cls=sdk_client_cls,
             sdk_options_cls=sdk_options_cls,
@@ -224,14 +224,14 @@ def traced_claude_sdk_client(
     sdk_agent_definition_cls: type | None = None,
 ) -> TracedClaudeSDKClient:
     """Factory for the "wrap inside an active tracer" pattern. Requires an
-    enclosing `with AVPTracer(config, on_event=...)` block; the factory
+    enclosing `with AVPTracer(commission, on_event=...)` block; the factory
     pulls Commission + on_event from that tracer and constructs a
     TracedClaudeSDKClient in delegated mode (its translator shares the
     tracer's trace_id and skips its own lifecycle bookends).
 
     Usage:
 
-        with AVPTracer(config, on_event=publish):
+        with AVPTracer(commission, on_event=publish):
             async with traced_claude_sdk_client() as client:
                 await client.connect(prompt)
                 async for message in client.receive_response():
@@ -239,7 +239,7 @@ def traced_claude_sdk_client(
 
     Compare to the self-contained form:
 
-        async with TracedClaudeSDKClient(config=cfg, on_event=publish) as client:
+        async with TracedClaudeSDKClient(commission=commission, on_event=publish) as client:
             ...
 
     Both produce the same wire shape. Use this factory when you have
@@ -251,12 +251,12 @@ def traced_claude_sdk_client(
     if tracer is None:
         raise RuntimeError(
             "traced_claude_sdk_client() requires an active AVPTracer. Wrap your "
-            "code in `with AVPTracer(config, on_event=...):` before calling, OR "
-            "use TracedClaudeSDKClient(config=..., on_event=...) directly for "
+            "code in `with AVPTracer(commission, on_event=...):` before calling, OR "
+            "use TracedClaudeSDKClient(commission=..., on_event=...) directly for "
             "the self-contained form."
         )
     return TracedClaudeSDKClient(
-        config=tracer.config,
+        commission=tracer.commission,
         on_event=tracer.on_event,
         sdk_client_cls=sdk_client_cls,
         sdk_options_cls=sdk_options_cls,

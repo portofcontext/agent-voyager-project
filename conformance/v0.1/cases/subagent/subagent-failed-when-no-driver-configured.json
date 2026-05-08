@@ -1,14 +1,14 @@
 {
   "id": "subagent-failed-when-no-driver-configured",
   "title": "Calling a declared subagent without a SubagentDriver wired in emits subagent_failed (not silent skip)",
-  "description": "When Commission.subagents is non-empty but the runner has no SubagentDriver configured (the prototype default), a parent invocation MUST surface as subagent_invoked → subagent_failed. The model receives an `Error: ...` tool_result so it can react; the wire shape stays well-formed. Pinning this avoids the failure mode where a misconfigured runner silently swallows subagent calls.",
+  "description": "When Commission.subagents is non-empty but the agent has no SubagentDriver configured (the prototype default), a parent invocation MUST surface as subagent_invoked \u2192 subagent_failed. The model receives an `Error: ...` tool_result so it can react; the wire shape stays well-formed. Pinning this avoids the failure mode where a misconfigured agent silently swallows subagent calls.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#subagents"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "subagent-no-driver",
     "model": "test/mock",
@@ -17,6 +17,9 @@
         "name": "helper",
         "description": "Won't actually be reachable in this case."
       }
+    ],
+    "exposed": [
+      "*"
     ]
   },
   "scripted_model": [
@@ -55,7 +58,7 @@
             "gen_ai.agent.name": "helper"
           }
         },
-        "label": "subagent_invoked is still emitted — the parent did call the subagent"
+        "label": "subagent_invoked is still emitted \u2014 the parent did call the subagent"
       },
       {
         "match": {

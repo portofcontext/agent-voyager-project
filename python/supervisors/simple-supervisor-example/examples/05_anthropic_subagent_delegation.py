@@ -62,7 +62,7 @@ def main() -> int:
 
     # Build the Commission directly. We bypass the profile builder because subagents
     # aren't yet a concern of the profile DSL — they're a Commission primitive.
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id=run_id,
         model="claude-haiku-4-5-20251001",
@@ -84,22 +84,23 @@ def main() -> int:
                 ),
                 model="claude-haiku-4-5-20251001",
                 # The subagent's own turn budget — tight, since the job is small.
-                # The parent's overall budget (set below) caps the whole run regardless.
+                # The parent's overall budget (set below) caps the whole run regardless.,
+                exposed=["*"],
             )
         ],
-        allowed_tools=["summarizer"],  # parent agent can call ONLY the subagent
+        exposed=["summarizer"],  # parent agent can call ONLY the subagent
     )
 
     print(f"== Workspace (agent CWD): {WORKSPACE} ==")
     print()
     print("== Commission (subagent declared as a top-level primitive) ==")
-    print(config.model_dump_json(indent=2, exclude_none=True, by_alias=True))
+    print(commission.model_dump_json(indent=2, exclude_none=True, by_alias=True))
     print()
     print("== Live trajectory ==")
 
     events = []
     frame_span_by_invoke: dict[str, str] = {}
-    for ev in stream_subprocess(["avp-anthropic"], config, cwd=str(WORKSPACE)):
+    for ev in stream_subprocess(["avp-anthropic"], commission, cwd=str(WORKSPACE)):
         events.append(ev)
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
 

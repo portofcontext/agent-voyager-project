@@ -18,34 +18,36 @@ def _names(tools: list[dict]) -> list[str]:
 
 
 def test_returns_empty_when_config_has_no_subagents_and_no_builtins() -> None:
-    cfg = Commission(schema_version="0.1", run_id="r")
-    assert build_anthropic_tools(cfg) == []
+    commission = Commission(schema_version="0.1", run_id="r", exposed=["*"])
+    assert build_anthropic_tools(commission) == []
 
 
 def test_includes_builtins_first_then_subagents() -> None:
     """Merge order matters for the model's tool list — builtins (the
     agent's always-on capabilities) come first."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r",
-        subagents=[Subagent(name="planner", description="Decomposes work.")],
+        subagents=[Subagent(name="planner", description="Decomposes work.", exposed=["*"])],
+        exposed=["*"],
     )
     builtins = [
         {"name": "bash", "description": "Run a shell command.", "input_schema": {"type": "object"}}
     ]
-    out = build_anthropic_tools(cfg, builtins=builtins)
+    out = build_anthropic_tools(commission, builtins=builtins)
     assert _names(out) == ["bash", "planner"]
 
 
 def test_subagent_with_no_inputSchema_gets_prompt_default() -> None:
     """Default subagent inputSchema is `{prompt: string}` — matches
     Claude Agent SDK's `Agent` tool shape and DeepAgents' `task` tool."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r",
-        subagents=[Subagent(name="helper", description="Helps with stuff.")],
+        subagents=[Subagent(name="helper", description="Helps with stuff.", exposed=["*"])],
+        exposed=["*"],
     )
-    out = build_anthropic_tools(cfg)
+    out = build_anthropic_tools(commission)
     assert len(out) == 1
     schema = out[0]["input_schema"]
     assert schema["type"] == "object"
@@ -60,12 +62,17 @@ def test_subagent_with_explicit_inputSchema_uses_it() -> None:
         "properties": {"target": {"type": "string"}, "depth": {"type": "integer"}},
         "required": ["target"],
     }
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r",
-        subagents=[Subagent(name="explorer", description="Walks a tree.", inputSchema=custom)],
+        subagents=[
+            Subagent(
+                name="explorer", description="Walks a tree.", inputSchema=custom, exposed=["*"]
+            )
+        ],
+        exposed=["*"],
     )
-    out = build_anthropic_tools(cfg)
+    out = build_anthropic_tools(commission)
     assert out[0]["input_schema"] == custom
 
 
@@ -73,25 +80,26 @@ def test_allowed_tools_filters_after_merge() -> None:
     """Allowed_tools is the model-visible allowlist — applies to builtins
     and Commission.subagents uniformly. Anything not listed drops out,
     including builtins."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r",
         subagents=[
-            Subagent(name="planner", description="."),
-            Subagent(name="reviewer", description="."),
+            Subagent(name="planner", description=".", exposed=["*"]),
+            Subagent(name="reviewer", description=".", exposed=["*"]),
         ],
-        allowed_tools=["planner"],  # `bash` and `reviewer` should drop
+        exposed=["planner"],  # `bash` and `reviewer` should drop
     )
     builtins = [{"name": "bash", "input_schema": {"type": "object"}}]
-    out = build_anthropic_tools(cfg, builtins=builtins)
+    out = build_anthropic_tools(commission, builtins=builtins)
     assert _names(out) == ["planner"]
 
 
 def test_no_allowed_tools_means_no_filter() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r",
-        subagents=[Subagent(name="x", description=".")],
+        subagents=[Subagent(name="x", description=".", exposed=["*"])],
+        exposed=["*"],
     )
-    out = build_anthropic_tools(cfg, builtins=[{"name": "bash", "input_schema": {}}])
+    out = build_anthropic_tools(commission, builtins=[{"name": "bash", "input_schema": {}}])
     assert _names(out) == ["bash", "x"]

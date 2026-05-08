@@ -1,7 +1,7 @@
 """Environment discovery for Commission authoring.
 
-A Commission author building `cfg.allowed_tools`, `cfg.subagents`, and
-`cfg.skills` needs visibility into what's actually available before
+A Commission author building `commission.exposed`, `commission.subagents`, and
+`commission.skills` needs visibility into what's actually available before
 writing the Commission. Some surfaces are knowable programmatically (SDK
 constants we ship); others require walking the runtime environment
 (filesystem skills under `~/.claude/skills/`, custom subagents under
@@ -16,9 +16,9 @@ splat directly into Commission:
 
     env = discover_environment(cwd=".", setting_sources=["user", "project"])
 
-    cfg = Commission(
+    commission = Commission(
         # All built-in tools the SDK exposes by default:
-        allowed_tools=list(env.builtin_tools),
+        exposed=list(env.builtin_tools),
         # All filesystem-discovered skills, by name + source path:
         skills=[
             Skill.model_validate({"name": s.name, "avp.source": str(s.source_path)})

@@ -28,7 +28,7 @@ from avp import (
     parse_event,
 )
 from avp.types import (
-    SOURCE_RUNNER,
+    SOURCE_AGENT,
     ZERO_SPAN_ID,
     new_event_id,
     new_span_id,
@@ -40,7 +40,7 @@ def _envelope(type_: str, run_id: str, data: dict) -> dict:
     return {
         "specversion": "1.0",
         "id": new_event_id(),
-        "source": SOURCE_RUNNER,
+        "source": SOURCE_AGENT,
         "type": type_,
         "subject": run_id,
         "time": "2026-05-06T18:00:00Z",
@@ -60,7 +60,7 @@ def _span(parent: str = ZERO_SPAN_ID, span_id: str | None = None) -> dict:
 def test_config_accepts_subagents_with_full_environment_slice() -> None:
     """A Subagent carries an environment slice mirroring Commission — its own
     system_prompt, model, tools, skills."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-1",
         subagents=[
@@ -75,11 +75,13 @@ def test_config_accepts_subagents_with_full_environment_slice() -> None:
                     "required": ["prompt"],
                 },
                 skills=[Skill(name="search-tips", **{"avp.source": "./skills/search-tips"})],
+                exposed=["*"],
             )
         ],
+        exposed=["*"],
     )
-    assert cfg.subagents is not None
-    sa = cfg.subagents[0]
+    assert commission.subagents is not None
+    sa = commission.subagents[0]
     assert sa.name == "code-explorer"
     assert sa.inherit_tools is False  # default — matches Google ADK / safer than CASDK
     assert sa.skills and sa.skills[0].name == "search-tips"
@@ -90,18 +92,19 @@ def test_subagent_name_pattern_enforced() -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        Subagent(name="Bad Name", description="x")
+        Subagent(name="Bad Name", description="x", exposed=["*"])
     with pytest.raises(ValidationError):
-        Subagent(name="UPPERCASE", description="x")
+        Subagent(name="UPPERCASE", description="x", exposed=["*"])
 
 
 def test_subagent_recursion_declared_in_type() -> None:
-    """Subagents may declare their own subagents. Whether a agent enables
+    """Subagents may declare their own subagents. Whether an agent enables
     recursive dispatch is its own concern; the wire type allows it."""
     sa = Subagent(
         name="parent",
         description="delegates",
         subagents=[Subagent(name="child", description="leaf")],
+        exposed=["*"],
     )
     assert sa.subagents and sa.subagents[0].name == "child"
 

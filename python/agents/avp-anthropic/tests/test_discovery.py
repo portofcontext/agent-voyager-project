@@ -54,11 +54,11 @@ def test_environment_can_be_used_to_build_a_config() -> None:
     from avp import Commission
 
     env = discover_environment()
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="discovery-driven",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=list(env.shell_tools),
+        exposed=list(env.shell_tools),
     )
-    assert cfg.allowed_tools == ["bash", "read_file", "write_file"]
+    assert commission.exposed == ["bash", "read_file", "write_file"]

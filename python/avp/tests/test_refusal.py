@@ -25,10 +25,12 @@ def _by_type(traj, type_):
     return [e for e in traj if isinstance(e, type_)]
 
 
-def _runner(model: ScriptedModel) -> AVPAgent:
-    cfg = Commission(schema_version="0.1", run_id="refusal", model="test/mock")
+def _agent(model: ScriptedModel) -> AVPAgent:
+    commission = Commission(
+        schema_version="0.1", run_id="refusal", model="test/mock", exposed=["*"]
+    )
     return AVPAgent(
-        config=cfg,
+        commission=commission,
         model=model,
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),
@@ -54,7 +56,7 @@ def _refused_response(refusal: Refusal) -> ModelResponse:
 
 
 def test_refusal_emits_refusal_recorded_with_full_payload() -> None:
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _refused_response(
@@ -79,7 +81,7 @@ def test_refusal_emits_refusal_recorded_with_full_payload() -> None:
 
 
 def test_refusal_serializes_under_dotted_aliases() -> None:
-    agent = _runner(ScriptedModel([_refused_response(Refusal(reason="SAFETY", provider="gemini"))]))
+    agent = _agent(ScriptedModel([_refused_response(Refusal(reason="SAFETY", provider="gemini"))]))
     agent.run()
     r = _by_type(agent.trajectory, RefusalRecordedEvent)[0]
     wire = r.model_dump(mode="json", by_alias=True, exclude_none=True)
@@ -95,7 +97,7 @@ def test_refusal_terminates_run_with_stop_reason_refused() -> None:
     """The reference agent stops the run on first refusal — a higher-
     level supervisor can choose to reset history and retry, but v0.1
     treats refusal as a hard terminal state for the audit trail."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 _refused_response(Refusal(reason="refusal", provider="anthropic")),
@@ -125,7 +127,7 @@ def test_refusal_does_not_get_appended_to_history() -> None:
     would re-feed the refusal on the next call (if the supervisor
     retries) and pollute audit logs. The agent skips the
     history-append for refused turns."""
-    agent = _runner(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
+    agent = _agent(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
     agent.run()
     # No assistant turn in history (only the initial system/user turns
     # the agent seeds, which don't include "assistant" by default).
@@ -137,7 +139,7 @@ def test_no_refusal_field_means_no_refusal_event() -> None:
     """Backwards-compat: a turn without a refusal flag emits no
     refusal_recorded — agent behaviour is unchanged for normal
     completions."""
-    agent = _runner(
+    agent = _agent(
         ScriptedModel(
             [
                 ModelResponse(
@@ -162,7 +164,7 @@ def test_refusal_recorded_parented_to_turn_span() -> None:
     turn span, not the agent root."""
     from avp.types import ModelTurnStartedEvent
 
-    agent = _runner(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
+    agent = _agent(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
     agent.run()
     turn_started = _by_type(agent.trajectory, ModelTurnStartedEvent)[0]
     refusal = _by_type(agent.trajectory, RefusalRecordedEvent)[0]
@@ -173,7 +175,7 @@ def test_minimal_refusal_only_requires_reason() -> None:
     """`reason` is the only required field — message/category/provider
     are nullable for providers that don't expose them (Anthropic doesn't
     expose a category)."""
-    agent = _runner(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
+    agent = _agent(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
     agent.run()
     r = _by_type(agent.trajectory, RefusalRecordedEvent)[0]
     assert r.data.avp_refusal_reason == "refusal"

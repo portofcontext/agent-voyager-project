@@ -110,6 +110,7 @@ def test_cli_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch)
         "run_id": "cli-smoke-text",
         "model": "claude-sonnet-4-6",
         "prompt": "say something",
+        "exposed": ["*"],
     }
 
     code, events = _drive_cli(monkeypatch, config_dict=config, client=client)
@@ -129,8 +130,8 @@ def test_cli_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch)
     assert events[-1]["data"]["avp.reason"] == "converged"
     # Every event tagged source=avp://agent EXCEPT run_requested, which is
     # supervisor-attributed (agent-relayed) per SPEC.md.
-    runner_sources = [e["source"] for e in events if e["type"] != "avp.run_requested"]
-    assert all(src == "avp://agent" for src in runner_sources)
+    agent_sources = [e["source"] for e in events if e["type"] != "avp.run_requested"]
+    assert all(src == "avp://agent" for src in agent_sources)
     run_requested = next(e for e in events if e["type"] == "avp.run_requested")
     assert run_requested["source"] == "avp://supervisor"
 
@@ -141,7 +142,12 @@ def test_cli_streaming_writes_one_event_per_line(monkeypatch: pytest.MonkeyPatch
     client = _SequencedClient(
         [_resp(text="ok", stop_reason="end_turn", input_tokens=10, output_tokens=2)]
     )
-    config = {"schema_version": "0.1", "run_id": "cli-ndjson", "model": "claude-sonnet-4-6"}
+    config = {
+        "schema_version": "0.1",
+        "run_id": "cli-ndjson",
+        "model": "claude-sonnet-4-6",
+        "exposed": ["*"],
+    }
 
     code, events = _drive_cli(monkeypatch, config_dict=config, client=client)
     assert code == 0
@@ -160,7 +166,7 @@ def test_cli_streaming_writes_one_event_per_line(monkeypatch: pytest.MonkeyPatch
 
 
 def test_cli_tool_call_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
-    """End-to-end: assistant calls a agent-built-in tool, agent dispatches,
+    """End-to-end: assistant calls an agent-built-in tool, agent dispatches,
     text completes the turn. Verifies CLI's tools_param wiring + ShellTools
     dispatch + the multi-turn history we just fixed."""
     client = _SequencedClient(
@@ -179,7 +185,7 @@ def test_cli_tool_call_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
         "run_id": "cli-tool",
         "model": "claude-sonnet-4-6",
         "prompt": "run echo hi",
-        "allowed_tools": ["bash"],
+        "exposed": ["bash"],
     }
     code, events = _drive_cli(monkeypatch, config_dict=config, client=client)
     assert code == 0
@@ -276,6 +282,7 @@ def test_cli_subagent_invocation_emits_full_lifecycle(monkeypatch: pytest.Monkey
                 "model": "claude-haiku-4-5-20251001",
             }
         ],
+        "exposed": ["*"],
     }
 
     # The subagent driver instantiates its own AnthropicModelDriver from
@@ -356,13 +363,15 @@ def test_cli_allowed_tools_filter_blocks_unlisted(monkeypatch: pytest.MonkeyPatc
         "schema_version": "0.1",
         "run_id": "cli-allow",
         "model": "claude-sonnet-4-6",
-        "allowed_tools": ["read_file"],  # write_file NOT in list
+        "exposed": ["read_file"],  # write_file NOT in list
     }
     code, events = _drive_cli(monkeypatch, config_dict=config, client=client)
     assert code == 0
 
     types = [e["type"] for e in events]
-    assert "avp.tool_failed" in types, "calling a tool not in allowed_tools must emit tool_failed"
+    assert "avp.tool_failed" in types, (
+        "calling a tool not in Commission.exposed must emit tool_failed"
+    )
     failed = next(e for e in events if e["type"] == "avp.tool_failed")
     assert failed["data"]["gen_ai.tool.name"] == "write_file"
-    assert "allowed_tools" in failed["data"]["avp.tool.error"]
+    assert "exposed" in failed["data"]["avp.tool.error"]

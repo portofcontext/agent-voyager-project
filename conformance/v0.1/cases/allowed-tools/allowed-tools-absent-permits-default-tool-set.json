@@ -1,18 +1,21 @@
 {
   "id": "allowed-tools-absent-permits-default-tool-set",
-  "title": "Commission.allowed_tools absent → runner exposes its default tool set (backwards-compatible)",
-  "description": "When Commission.allowed_tools is omitted, the runner MUST exhibit pre-allowlist behavior: any tool the model calls dispatches normally. This pins backwards-compatibility — adding the field cannot have changed default semantics.",
+  "title": "Commission.exposed absent \u2192 agent exposes its default tool set (backwards-compatible)",
+  "description": "When Commission.exposed is omitted, the agent MUST exhibit pre-allowlist behavior: any tool the model calls dispatches normally. This pins backwards-compatibility \u2014 adding the field cannot have changed default semantics.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
     "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "allowed-tools-absent",
-    "model": "test/mock"
+    "model": "test/mock",
+    "exposed": [
+      "*"
+    ]
   },
   "scripted_model": [
     {

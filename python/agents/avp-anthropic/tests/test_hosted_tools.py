@@ -174,12 +174,14 @@ def test_mcp_and_hosted_tools_in_one_response_both_recorded() -> None:
 # ── Agent: subtype lands on the wire ─────────────────────────────────────
 
 
-def test_runner_stamps_avp_tool_subtype_on_invoked_event() -> None:
+def test_agent_stamps_avp_tool_subtype_on_invoked_event() -> None:
     """The agent's synthetic tool_invoked event MUST carry
     `avp.tool.subtype` so consumers can filter web_search calls
     without parsing the tool name."""
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="hosted", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="hosted", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(

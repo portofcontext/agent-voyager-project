@@ -213,15 +213,16 @@ def test_translator_with_local_tools_mounts_bridged_server(monkeypatch) -> None:
         input_schema={"type": "object"},
     )
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="lt-bridge",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         local_tools=tools,
         sdk_options_cls=_FakeOptions,
@@ -239,15 +240,16 @@ def test_translator_with_local_tools_mounts_bridged_server(monkeypatch) -> None:
 def test_translator_without_local_tools_does_not_set_mcp_servers(monkeypatch) -> None:
     """No `local_tools` arg → no in-process MCP server. Backwards-compat:
     existing CASDK setups that don't use LocalTools see no change."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="lt-bridge-none",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -271,10 +273,16 @@ def test_translator_local_tools_server_name_is_configurable(monkeypatch) -> None
     tools = LocalTools()
     tools.register("x", lambda i: "y", description="d", input_schema={})
 
-    cfg = Commission(schema_version="0.1", run_id="lt-name", model="claude-sonnet-4-6", prompt="hi")
+    commission = Commission(
+        schema_version="0.1",
+        run_id="lt-name",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        exposed=["*"],
+    )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         local_tools=tools,
         local_tools_server_name="my_app_tools",
@@ -296,15 +304,16 @@ def test_bridged_tool_invocation_tags_dispatch_target_local() -> None:
     the resulting `tool_invoked` event with
     `avp.tool.dispatch_target=local` — same wire shape `avp-anthropic`
     produces for the same callable."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="lt-tag",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,

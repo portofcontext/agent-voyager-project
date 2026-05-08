@@ -16,7 +16,7 @@
     }
   ],
 
-  "allowed_tools": ["lookup_user", "Read", "Edit", "Bash"],
+  "exposed": ["lookup_user", "Read", "Edit", "Bash"],
 
   "output_schema": null,
 

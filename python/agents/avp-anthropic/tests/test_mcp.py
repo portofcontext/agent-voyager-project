@@ -46,7 +46,7 @@ class _MockClient:
 
 
 def test_http_server_translates_to_api_url_shape() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="anthropic-mcp-http",
         model="claude-sonnet-4-6",
@@ -57,8 +57,9 @@ def test_http_server_translates_to_api_url_shape() -> None:
                 url="https://mcp.example.com/weather",
             )
         ],
+        exposed=["*"],
     )
-    out = build_anthropic_mcp_servers(cfg)
+    out = build_anthropic_mcp_servers(commission)
     assert out == [
         {
             "type": "url",
@@ -76,7 +77,7 @@ def test_http_server_with_bearer_auth_resolves_token_at_translation_time(
     wire (Commission / events) because the agent ships the resolved token
     straight to the API and not into any AVP event."""
     monkeypatch.setenv("MY_API_TOKEN", "secret-123")
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="anthropic-mcp-auth",
         model="claude-sonnet-4-6",
@@ -88,8 +89,9 @@ def test_http_server_with_bearer_auth_resolves_token_at_translation_time(
                 auth=McpHttpAuth(type="bearer", token_env="MY_API_TOKEN"),
             )
         ],
+        exposed=["*"],
     )
-    out = build_anthropic_mcp_servers(cfg)
+    out = build_anthropic_mcp_servers(commission)
     assert len(out) == 1
     entry = out[0]
     assert entry["type"] == "url"
@@ -105,7 +107,7 @@ def test_http_server_with_unset_token_env_omits_authorization_token(
     shipped — better to fail at the server than to send an empty token
     that looks like an authentication attempt."""
     monkeypatch.delenv("UNSET_TOKEN", raising=False)
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="anthropic-mcp-no-token",
         model="claude-sonnet-4-6",
@@ -117,8 +119,9 @@ def test_http_server_with_unset_token_env_omits_authorization_token(
                 auth=McpHttpAuth(type="bearer", token_env="UNSET_TOKEN"),
             )
         ],
+        exposed=["*"],
     )
-    out = build_anthropic_mcp_servers(cfg)
+    out = build_anthropic_mcp_servers(commission)
     assert "authorization_token" not in out[0]
 
 
@@ -126,7 +129,7 @@ def test_stdio_server_is_skipped_with_warning() -> None:
     """The Anthropic API MCP connector is HTTP-only. Stdio servers in
     Commission.mcp_servers[] are skipped with a warning so users notice
     rather than silently miss tools."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="anthropic-mcp-stdio-skip",
         model="claude-sonnet-4-6",
@@ -143,10 +146,11 @@ def test_stdio_server_is_skipped_with_warning() -> None:
                 url="https://mcp.example.com/weather",
             ),
         ],
+        exposed=["*"],
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        out = build_anthropic_mcp_servers(cfg)
+        out = build_anthropic_mcp_servers(commission)
     # Only the HTTP server made it through.
     assert len(out) == 1
     assert out[0]["name"] == "weather"
@@ -156,12 +160,13 @@ def test_stdio_server_is_skipped_with_warning() -> None:
 
 
 def test_no_mcp_servers_returns_empty_list() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="no-mcp",
         model="claude-sonnet-4-6",
+        exposed=["*"],
     )
-    assert build_anthropic_mcp_servers(cfg) == []
+    assert build_anthropic_mcp_servers(commission) == []
 
 
 # ── Driver.step: forwards mcp_servers to messages.create ────────────────────
@@ -239,7 +244,7 @@ def test_end_to_end_config_mcp_servers_to_api_call(monkeypatch) -> None:
     that the CLI relies on so a refactor of either side breaks the test
     instead of breaking real users."""
     monkeypatch.setenv("WEATHER_TOKEN", "tok-xyz")
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="end-to-end",
         model="claude-sonnet-4-6",
@@ -251,6 +256,7 @@ def test_end_to_end_config_mcp_servers_to_api_call(monkeypatch) -> None:
                 auth=McpHttpAuth(type="bearer", token_env="WEATHER_TOKEN"),
             )
         ],
+        exposed=["*"],
     )
 
     resp = _mock_response(
@@ -260,9 +266,9 @@ def test_end_to_end_config_mcp_servers_to_api_call(monkeypatch) -> None:
     )
     client = _MockClient(resp)
     driver = AnthropicModelDriver(
-        model=cfg.model,
+        model=commission.model,
         client=client,
-        mcp_servers_param=build_anthropic_mcp_servers(cfg) or None,
+        mcp_servers_param=build_anthropic_mcp_servers(commission) or None,
     )
     driver.step([{"role": "user", "content": "weather?"}])
 
@@ -417,7 +423,7 @@ def test_response_without_mcp_blocks_emits_no_server_tool_calls() -> None:
 
 
 def test_mcp_tool_use_alongside_regular_tool_use_routes_correctly() -> None:
-    """The model can request a agent-dispatched tool AND have an MCP
+    """The model can request an agent-dispatched tool AND have an MCP
     tool run inline in the SAME response. The driver MUST keep them
     separate: `tool_calls` for agent dispatch, `server_tool_calls`
     for inline."""

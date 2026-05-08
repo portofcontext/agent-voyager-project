@@ -42,7 +42,7 @@ compose into a single trajectory.
   Trajectory contract    Agent-emitted facts are canonical; supervisor
                          observes the NDJSON stream; nothing flows back
   No mid-run reach-in    Architectural constraint declared on the wire:
-                         the agent's environment is fully specified at setup
+                         the Commission specifies the full environment at setup
 ```
 
 ---
@@ -339,7 +339,7 @@ A Commission validates against:
 v0.1 has two paths for any tool the model can call:
 
 1. **Agent-built-in.** Compiled into the agent package; declared on the
-   agent's manifest (`agent_described.data.avp.agent.built_in_tools`).
+   agent's manifest (`agent_described.data.avp.manifest.built_in_tools`).
    The agent runs the implementation in-process. AVP events:
    `tool_invoked` with `avp.tool.dispatch_target = "local"` →
    `tool_returned`.
@@ -375,7 +375,7 @@ the spec saying "every AVP event is a CloudEvent; here's the mapping."
 What we don't get for free, we earn:
 
 - Agent self-description as a first-class on-wire concept (`agent_described`
-  + `Commission.allowed_tools`). The agent declares its capability surface
+  + `Commission.exposed`). The agent declares its capability surface
   upfront so the supervisor and a non-technical reviewer can both read the
   trajectory without an out-of-band manifest. **Earned.** No upstream covers
   this.

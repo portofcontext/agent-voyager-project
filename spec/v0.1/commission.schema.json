@@ -151,7 +151,7 @@
           "title": "Avp.Source",
           "type": "string"
         },
-        "avp.commission": {
+        "avp.config": {
           "anyOf": [
             {
               "additionalProperties": true,
@@ -162,7 +162,7 @@
             }
           ],
           "default": null,
-          "title": "Avp.Commission"
+          "title": "Avp.Config"
         }
       },
       "required": [
@@ -230,20 +230,12 @@
           "title": "Inherit Tools",
           "type": "boolean"
         },
-        "allowed_tools": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Allowed Tools"
+        "exposed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exposed",
+          "type": "array"
         },
         "mcp_servers": {
           "anyOf": [
@@ -379,21 +371,6 @@
       "default": null,
       "title": "Mcp Servers"
     },
-    "allowed_tools": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Allowed Tools"
-    },
     "output_schema": {
       "anyOf": [
         {
@@ -421,6 +398,13 @@
       ],
       "default": null,
       "title": "Subagents"
+    },
+    "exposed": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Exposed",
+      "type": "array"
     },
     "prompt": {
       "anyOf": [
@@ -516,7 +500,8 @@
   },
   "required": [
     "schema_version",
-    "run_id"
+    "run_id",
+    "exposed"
   ],
   "title": "AVP v0.1 Commission",
   "type": "object",

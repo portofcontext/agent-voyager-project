@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from avp.enums import StopReason
+    from avp.enums import ErrorCode, StopReason
     from avp.types import RunStateSnapshot, Subagent
 
 # ── Model driver ──────────────────────────────────────────────────────────────
@@ -141,6 +141,29 @@ class ModelResponse:
 
 class ModelDriver(Protocol):
     def step(self, history: list[dict[str, Any]]) -> ModelResponse: ...
+
+
+class ModelDriverError(Exception):
+    """Raised by ModelDriver.step() when a provider call fails.
+
+    Carries an `ErrorCode` hint so the agent can emit
+    `error_occurred(code=...)` with the right wire-level classification
+    instead of falling back to `unknown` for everything.
+
+    Drivers wrap provider-specific exceptions:
+
+      - 429 / RateLimitError       → ErrorCode.rate_limit
+      - 401 / AuthenticationError  → ErrorCode.auth_error
+      - 400 / context-window-msg   → ErrorCode.context_limit
+      - everything else            → ErrorCode.unknown
+
+    Untyped exceptions propagating past `step()` are caught by the agent
+    and treated as `agent_crash` (an unexpected internal failure).
+    """
+
+    def __init__(self, message: str, *, code: ErrorCode) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 # ── Tool driver ───────────────────────────────────────────────────────────────

@@ -1,10 +1,16 @@
-# Agent Voyage Protocol (AVP)
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/avp-white.png">
+    <img src="assets/avp.png" alt="AVP Logo" style="height: 128px">
+  </picture>
+  <h1>Agent Voyage Protocol (AVP)</h1>
+</div>
 
 > **Status:** Draft v0.1
 
 AVP draws one line, between two roles, and ships a wire format across that line.
 
-- **Supervisor** — declares the agent's complete environment (tools, MCP servers, subagents, skills, prompts) in a Commission sent at startup, then observes the trajectory the agent emits — never reaches in unilaterally.
+- **Supervisor** — issues a Commission at startup declaring the full environment for the run (prompt, model, MCP servers, subagents, skills, the exposed name surface), then observes the trajectory the agent emits — never reaches in unilaterally.
 - **Agent** — runs the agent inside the declared environment and emits a stream of facts.
 
 **Two unidirectional flows.** Control flows down at setup; observation flows up during the run. No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front.
@@ -26,18 +32,15 @@ the trajectory-as-source-of-truth contract. Read
 ## How it works
 
 ```
-                                      agent's environment
-                       (tools, mcp_servers, subagents, skills, prompt)
-                                              │
-                                              ▼
-   supervisor ──── Commission (one-time, setup) ──▶ agent
-                                              │
-                                              ▼
-                                        runs the agent
-                                              │
-                                              ▼
-   supervisor ◀────────── events (continuous, run-end) ────── agent
+   supervisor  ──────── Commission ─────────▶  agent
+                                                 │
+                                                 │  runs the run,
+                                                 │  emits events
+                                                 ▼
+   supervisor  ◀──────── trajectory ─────────  agent
 ```
+
+A **Commission** carries `prompt`, `model`, `mcp_servers`, `subagents`, `skills`, and `exposed` (the exhaustive model-facing name surface, with fnmatch globs allowed) — sent once at startup. The **trajectory** is the stream of CloudEvents the agent emits as it runs; it opens with `run_requested` → `agent_described` (which publishes the agent's **manifest** — built-in tools, capabilities, version) → `agent_started`, and closes with `agent_stopped`.
 
 The one runtime exception is **environmental services**: when the agent calls a Commission-declared tool whose implementation is out-of-process (or fetches an observation from a supervisor-stood-up service), the agent issues an RPC and awaits a reply. The agent records the reply into the trajectory verbatim. This is agent-initiated — the supervisor pre-deployed the service, but at runtime there's no decision-making.
 
@@ -72,7 +75,7 @@ Three message classes:
     { "id": "github",  "transport": "http",  "url": "https://mcp.github.com/", "auth": { "type": "bearer", "token_env": "GH_MCP_TOKEN" } },
     { "id": "weather", "transport": "stdio", "command": ["npx"], "args": ["-y", "@example/weather-mcp"] }
   ],
-  "allowed_tools": ["lookup_user", "bash"],
+  "exposed": ["lookup_user", "bash"],
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
@@ -90,7 +93,7 @@ Three message classes:
 | Environment | `tools` | RPC tools the agent can call. Routed through the `tool_exec_*` lifecycle. |
 | Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the agent connects to natively. Their tools are dispatched by the MCP layer and tagged on the wire with `avp.tool.dispatch_target=mcp_server` + `avp.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
 | Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `skills`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
-| Environment | `allowed_tools` | Optional allowlist over the model-facing surface (tools AND subagents). When present, the agent exposes ONLY these names. |
+| Environment | `exposed` | Required exhaustive list of names the model can invoke this run. Each entry resolves at startup against built-in tools, built-in subagents, Commission.subagents, and live MCP-server catalogs (post-handshake). Supports fnmatch globs (`mcp__github__*`); literals that resolve to nothing fail loud with `error_occurred(exposed_unresolved)`. |
 | Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |
 | Agent | `prompt` / `system_prompt` / `model` / `skills` | What the agent runs and how. |
 | Metadata | `thread_id` / `tags` / `meta` | For correlation, filtering, ad-hoc context. |
@@ -107,7 +110,6 @@ Three message classes:
 | Normative spec | [`spec/v0.1/SPEC.md`](spec/v0.1/SPEC.md) — RFC 2119 keywords, reference algorithm, conformance criteria |
 | JSON Schemas | [`spec/v0.1/`](spec/v0.1/) — Draft 2020-12 |
 | Conformance suite | [`conformance/v0.1/`](conformance/v0.1/) — language-agnostic test cases every SDK MUST pass |
-| Contributor guide | [`CLAUDE.md`](CLAUDE.md) — the seams principle, test layers, decision tree |
 ---
 
 ## Language bindings
@@ -147,9 +149,3 @@ make examples        # all 7 examples; 03/07 self-skip without the `claude` CLI
 ```
 
 `make smoke` is the pre-tag sanity check — runs the entire matrix end-to-end against real Anthropic models and the Claude Code CLI.
-
----
-
-## License
-
-MIT

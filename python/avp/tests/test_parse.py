@@ -18,7 +18,7 @@ import pytest
 
 from avp import parse_event
 from avp.types import (
-    SOURCE_RUNNER,
+    SOURCE_AGENT,
     ZERO_SPAN_ID,
     AgentStartedEvent,
     event_to_wire,
@@ -52,7 +52,7 @@ def _span() -> dict:
 def test_known_event_type_returns_pydantic_model() -> None:
     payload = _envelope(
         "avp.agent_started",
-        SOURCE_RUNNER,
+        SOURCE_AGENT,
         "r1",
         {
             **_span(),
@@ -74,7 +74,7 @@ def test_unknown_event_type_passes_through_as_dict() -> None:
     future conflicts with `avp.*`. Consumers MUST NOT raise on unknown types."""
     payload = _envelope(
         "com.example.deploy_completed",
-        SOURCE_RUNNER,
+        SOURCE_AGENT,
         "r1",
         {"environment": "staging", "build_id": "abc123", "duration_ms": 4200},
     )
@@ -90,7 +90,7 @@ def test_unknown_event_missing_envelope_fields_raises() -> None:
     consumers don't silently treat it as one."""
     payload = {
         "type": "com.example.something",
-        "source": SOURCE_RUNNER,
+        "source": SOURCE_AGENT,
         # missing specversion, id, time, data
     }
     with pytest.raises(ValueError, match="missing required CloudEvents field"):
@@ -103,7 +103,7 @@ def test_event_payload_missing_type_raises() -> None:
             {
                 "specversion": "1.0",
                 "id": "x",
-                "source": SOURCE_RUNNER,
+                "source": SOURCE_AGENT,
                 "time": "2026-05-04T18:00:00Z",
                 "data": {},
             }
@@ -115,7 +115,7 @@ def test_event_round_trips_to_wire_form_with_dotted_aliases() -> None:
     (the OTel/AVP wire form), not Python attribute names."""
     payload = _envelope(
         "avp.agent_started",
-        SOURCE_RUNNER,
+        SOURCE_AGENT,
         "r1",
         {
             **_span(),

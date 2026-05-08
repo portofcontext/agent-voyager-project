@@ -1,15 +1,15 @@
 {
-  "id": "allowed-tools-omits-config-tool-name-errors-at-startup",
-  "title": "Commission.subagents entry missing from Commission.allowed_tools is a configuration conflict — error_occurred + agent_stopped reason='error'",
-  "description": "Cross-field coherence. If a Commission.subagents entry's name is not also in Commission.allowed_tools, the supervisor has declared a subagent while simultaneously forbidding its exposure. The runner MUST detect this at startup, emit error_occurred, and stop with reason='error' before any model turn runs.",
+  "id": "allowed-tools-omits-commission-tool-name-errors-at-startup",
+  "title": "Commission.subagents entry missing from Commission.exposed is a configuration conflict — error_occurred + agent_stopped reason='error'",
+  "description": "Cross-field coherence. If a Commission.subagents entry's name is not also in Commission.exposed, the supervisor has declared a subagent while simultaneously forbidding its exposure. The agent MUST detect this at startup, emit error_occurred, and stop with reason='error' before any model turn runs.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#8-tools",
     "spec/v0.1/avp.schema.json#/$defs/Commission"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "allowed-tools-config-conflict",
     "model": "test/mock",
@@ -19,7 +19,7 @@
         "description": "Subagent that the agent might call."
       }
     ],
-    "allowed_tools": [
+    "exposed": [
       "bash"
     ]
   },

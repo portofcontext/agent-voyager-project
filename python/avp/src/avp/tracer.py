@@ -26,7 +26,7 @@ It does NOT:
 The wire events emitted MUST be byte-equivalent to what `AVPAgent` produces
 for the same Commission and the same set of (turn, tool, subagent) operations.
 That's the contract: consumers downstream of the wire can't tell whether the
-trajectory came from a agent or a traced loop.
+trajectory came from an agent or a traced loop.
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def current_tracer() -> AVPTracer:
     if t is None:
         raise RuntimeError(
             "No active AVPTracer. Wrap your code in "
-            "`with AVPTracer(config, on_event=...):` before calling "
+            "`with AVPTracer(commission, on_event=...):` before calling "
             "instrumented APIs."
         )
     return t
@@ -276,7 +276,7 @@ class ToolCallRecorder:
         `tool_returned.data["avp.tool.result.structured"]`."""
         self._outcome = ("ok", output, structured, None)
 
-    def fail(self, error: str, *, code: int | None = None) -> None:
+    def fail(self, error: str, *, code: str | None = None) -> None:
         """Record an execution error. Emits `tool_failed`."""
         self._outcome = ("error", error, None, code)
 
@@ -368,7 +368,7 @@ class AVPTracer:
 
     Usage outline:
 
-        with AVPTracer(config, on_event=publish) as tracer:
+        with AVPTracer(commission, on_event=publish) as tracer:
             while True:
                 with tracer.turn() as turn:
                     resp = client.messages.create(...)
@@ -388,12 +388,12 @@ class AVPTracer:
 
     def __init__(
         self,
-        config: Commission,
+        commission: Commission,
         on_event: Callable[[BaseModel], None],
         *,
         provider: str | None = None,
     ) -> None:
-        self.config = config
+        self.commission = commission
         self._on_event = on_event
         self._provider = provider
         self._trace_id = new_trace_id()
@@ -412,7 +412,7 @@ class AVPTracer:
         # For subagents declared in Commission — we look these up by name when
         # the caller uses tracer.subagent(name=...).
         self._declared_subagents: dict[str, Subagent] = {
-            sa.name: sa for sa in (config.subagents or [])
+            sa.name: sa for sa in (commission.subagents or [])
         }
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
@@ -508,46 +508,48 @@ class AVPTracer:
         self._on_event(event)
 
     def _emit_agent_started(self) -> None:
-        cfg = self.config
+        commission = self.commission
         # The tracer doesn't enumerate agent-built-in tools (it has no
         # agent_builtin_tools input). Tools surface only via MCP or via
         # whatever wrapper drives the loop. Honest-null when the wrapper
         # doesn't push them in.
         tools_meta = None
         subagents_meta = None
-        if cfg.subagents:
+        if commission.subagents:
             subagents_meta = [
                 {
                     "name": sa.name,
                     "description": sa.description,
                     **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
                 }
-                for sa in cfg.subagents
+                for sa in commission.subagents
             ]
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
             "span_id": self._agent_span_id,
             "parent_span_id": ZERO_SPAN_ID,
-            "prompt": cfg.prompt,
-            "system_prompt": cfg.system_prompt,
+            "prompt": commission.prompt,
+            "system_prompt": commission.system_prompt,
             "tools": tools_meta,
-            "skills": [{"name": s.name, "avp.source": s.avp_source} for s in (cfg.skills or [])]
+            "skills": [
+                {"name": s.name, "avp.source": s.avp_source} for s in (commission.skills or [])
+            ]
             or None,
             "subagents": subagents_meta,
         }
-        if cfg.model:
-            data_kwargs["gen_ai.request.model"] = cfg.model
+        if commission.model:
+            data_kwargs["gen_ai.request.model"] = commission.model
         if self._provider:
             data_kwargs["gen_ai.provider.name"] = self._provider
-        if cfg.thread_id:
-            data_kwargs["avp.thread_id"] = cfg.thread_id
-        if cfg.tags:
-            data_kwargs["avp.tags"] = cfg.tags
-        if cfg.meta:
-            data_kwargs["avp.meta"] = cfg.meta
+        if commission.thread_id:
+            data_kwargs["avp.thread_id"] = commission.thread_id
+        if commission.tags:
+            data_kwargs["avp.tags"] = commission.tags
+        if commission.meta:
+            data_kwargs["avp.meta"] = commission.meta
         self._emit(
             AgentStartedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=AgentStartedData(**data_kwargs),
             )
         )
@@ -555,7 +557,7 @@ class AVPTracer:
     def _emit_agent_stopped(self, reason: StopReason) -> AgentStoppedEvent:
         snap = self._state.snapshot()
         ev = AgentStoppedEvent(
-            subject=self.config.run_id,
+            subject=self.commission.run_id,
             data=AgentStoppedData(
                 trace_id=self._trace_id,
                 span_id=self._agent_span_id,
@@ -599,7 +601,7 @@ class AVPTracer:
         turn_span_id = new_span_id()
         self._emit(
             ModelTurnStartedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=ModelTurnStartedData(
                     **self._shared_span(turn_span_id, parent_span_id),
                     step=self._step,
@@ -613,7 +615,7 @@ class AVPTracer:
             self._close_turn(recorder, scope=scope)
 
     def _close_turn(self, recorder: TurnRecorder, *, scope: SubagentScope | None) -> None:
-        cfg = self.config
+        commission = self.commission
         duration_ms = (
             recorder._duration_ms
             if recorder._duration_ms is not None
@@ -637,7 +639,7 @@ class AVPTracer:
             ended_kwargs["gen_ai.response.finish_reasons"] = recorder._finish_reasons
         self._emit(
             ModelTurnEndedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=ModelTurnEndedData(
                     **self._shared_span(recorder._span_id, recorder._parent_span_id),
                     step=recorder._step,
@@ -662,7 +664,7 @@ class AVPTracer:
         if recorder._text:
             self._emit(
                 TextEmittedEvent(
-                    subject=cfg.run_id,
+                    subject=commission.run_id,
                     data=TextEmittedData(
                         **self._own_span(recorder._span_id),
                         step=recorder._step,
@@ -675,7 +677,7 @@ class AVPTracer:
         # scope) — same as AVPAgent.
         self._emit(
             CostRecordedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=CostRecordedData(
                     **self._own_span(recorder._span_id),
                     **{"avp.state": self._state.snapshot()},
@@ -767,12 +769,12 @@ class AVPTracer:
     def _open_tool(
         self, parent_span_id: str, *, call_id: str, name: str, input: dict[str, Any]
     ) -> Iterator[ToolCallRecorder]:
-        cfg = self.config
+        commission = self.commission
         tool_span_id = new_span_id()
         self._state.tools_invoked[name] = self._state.tools_invoked.get(name, 0) + 1
         self._emit(
             ToolInvokedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=ToolInvokedData(
                     **self._shared_span(tool_span_id, parent_span_id),
                     step=self._step,
@@ -793,7 +795,7 @@ class AVPTracer:
             self._close_tool(recorder)
 
     def _close_tool(self, recorder: ToolCallRecorder) -> None:
-        cfg = self.config
+        commission = self.commission
         outcome = recorder._outcome
         duration_ms = max(1, int((time.monotonic() - recorder._t0) * 1000))
         if outcome is None:
@@ -808,11 +810,11 @@ class AVPTracer:
                 "gen_ai.tool.name": recorder._name,
                 "avp.tool.error": payload,
             }
-            if isinstance(code_or_reason, int):
+            if code_or_reason is not None:
                 failed_kwargs["avp.tool.error.code"] = code_or_reason
             self._emit(
                 ToolFailedEvent(
-                    subject=cfg.run_id,
+                    subject=commission.run_id,
                     data=ToolFailedData(
                         **self._shared_span(recorder._span_id, recorder._parent_span_id),
                         **failed_kwargs,
@@ -836,7 +838,7 @@ class AVPTracer:
                 returned_kwargs["avp.tool.rejection_reason"] = code_or_reason
         self._emit(
             ToolReturnedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=ToolReturnedData(
                     **self._shared_span(recorder._span_id, recorder._parent_span_id),
                     **returned_kwargs,
@@ -880,7 +882,7 @@ class AVPTracer:
             invoked_data["gen_ai.agent.description"] = sa.description
         self._emit(
             SubagentInvokedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=SubagentInvokedData(
                     **self._shared_span(frame_span_id, parent_frame),
                     **invoked_data,
@@ -905,7 +907,7 @@ class AVPTracer:
             self._close_subagent(scope)
 
     def _close_subagent(self, scope: SubagentScope) -> None:
-        cfg = self.config
+        commission = self.commission
         duration_ms = max(0, int((time.monotonic() - scope._t0) * 1000))
         if scope._error is not None:
             failed_data: dict[str, Any] = {
@@ -919,7 +921,7 @@ class AVPTracer:
                 failed_data["avp.subagent.error.code"] = scope._error_code
             self._emit(
                 SubagentFailedEvent(
-                    subject=cfg.run_id,
+                    subject=commission.run_id,
                     data=SubagentFailedData(
                         **self._shared_span(scope._frame_span_id, scope._parent_frame_span_id),
                         **failed_data,
@@ -941,7 +943,7 @@ class AVPTracer:
             returned_data["avp.subagent.result.structured"] = scope._result_structured
         self._emit(
             SubagentReturnedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=SubagentReturnedData(
                     **self._shared_span(scope._frame_span_id, scope._parent_frame_span_id),
                     **returned_data,
@@ -959,7 +961,7 @@ class AVPTracer:
             code = ErrorCode(code)
         self._emit(
             ErrorOccurredEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=ErrorOccurredData(
                     **self._own_span(self._current_parent_span()),
                     **{"avp.error.code": code, "avp.error.message": message},
@@ -1008,7 +1010,7 @@ def format_event(event: BaseModel) -> str:
     `on_event=print_event` for live trajectory output, or filter through
     your own logger:
 
-        with AnthropicTracedClient(client, config=config, on_event=print_event):
+        with AnthropicTracedClient(client, commission=commission, on_event=print_event):
             ...
 
     For machine-readable output, dump the event directly:

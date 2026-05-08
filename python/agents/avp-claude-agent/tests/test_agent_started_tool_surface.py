@@ -1,7 +1,7 @@
 """`agent_started.data.tools` reflects the EFFECTIVE tool surface the
 model sees. Two distinct concerns the translator gets right:
 
-1. **Plumbing**: AVP `Commission.allowed_tools` (SPEC.md §8.1: exposure
+1. **Plumbing**: AVP `Commission.exposed` (SPEC.md §8.1: exposure
    filter) maps to SDK `ClaudeAgentOptions.tools`, NOT to SDK
    `allowed_tools` (which is the auto-approval list, doesn't restrict
    visibility). Earlier the translator mapped wrong; the AVP "MUST
@@ -33,10 +33,10 @@ from avp_claude_agent.translator import (
 from .test_translator import _FakeHookMatcher, _FakeOptions
 
 
-def _new_translator(cfg: Commission):
+def _new_translator(commission: Commission):
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -55,14 +55,14 @@ def test_config_allowed_tools_maps_to_sdk_tools_not_allowed_tools() -> None:
     """The plumbing bug: AVP allowed_tools means "exposure filter" per
     SPEC.md §8.1. SDK `allowed_tools` is the auto-approve list and does
     NOT restrict visibility. We must map AVP allowed_tools → SDK tools."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="plumbing",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=["Read", "Bash"],
+        exposed=["Read", "Bash"],
     )
-    t, _ = _new_translator(cfg)
+    t, _ = _new_translator(commission)
     options = t._build_sdk_options()
     # The exposure filter MUST land on SDK `tools`.
     assert options.kwargs["tools"] == ["Read", "Bash"]
@@ -72,31 +72,32 @@ def test_config_allowed_tools_maps_to_sdk_tools_not_allowed_tools() -> None:
 
 
 def test_empty_allowed_tools_passes_empty_list_to_sdk() -> None:
-    """`Commission.allowed_tools=[]` means "no tools" per AVP. SDK accepts
+    """`Commission.exposed=[]` means "no tools" per AVP. SDK accepts
     `tools=[]` to disable all built-ins. Verify the empty list flows
     through (Pydantic doesn't drop it as falsy)."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="empty",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=[],
+        exposed=[],
     )
-    t, _ = _new_translator(cfg)
+    t, _ = _new_translator(commission)
     options = t._build_sdk_options()
     assert options.kwargs["tools"] == []
 
 
 def test_unset_allowed_tools_omits_sdk_tools_kwarg() -> None:
-    """`Commission.allowed_tools=None` means "use SDK defaults" — pass nothing
+    """`Commission.exposed=None` means "use SDK defaults" — pass nothing
     to the SDK so it falls back to its claude_code preset."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="unset",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, _ = _new_translator(cfg)
+    t, _ = _new_translator(commission)
     options = t._build_sdk_options()
     assert "tools" not in options.kwargs
 
@@ -142,16 +143,16 @@ def test_preset_constant_includes_documented_claude_code_tools() -> None:
 
 
 def test_allowed_tools_explicit_list_emits_only_those_names() -> None:
-    """`Commission.allowed_tools=["Read","Write","Bash"]` → exactly those
+    """`Commission.exposed=["Read","Write","Bash"]` → exactly those
     three appear on agent_started. Model can ONLY see these."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="restricted",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=["Read", "Write", "Bash"],
+        exposed=["Read", "Write", "Bash"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     t._emit_agent_started()
     started = _agent_started(out)
     tools = started.data.tools
@@ -162,16 +163,16 @@ def test_allowed_tools_explicit_list_emits_only_those_names() -> None:
 
 
 def test_allowed_tools_empty_emits_empty_surface() -> None:
-    """`Commission.allowed_tools=[]` → no tools. Distinguishes from
+    """`Commission.exposed=[]` → no tools. Distinguishes from
     "preset" on the wire: model can see nothing."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="empty-surface",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=[],
+        exposed=[],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     t._emit_agent_started()
     started = _agent_started(out)
     # No RPC tools, no allowed builtins → tools is None (empty list
@@ -180,16 +181,17 @@ def test_allowed_tools_empty_emits_empty_surface() -> None:
 
 
 def test_allowed_tools_unset_emits_full_preset() -> None:
-    """`Commission.allowed_tools=None` → SDK uses the `claude_code` preset.
+    """`Commission.exposed=None` → SDK uses the `claude_code` preset.
     The translator surfaces the preset's documented tool names so the
     common "let-the-SDK-handle-it" case has a usable audit trail."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="preset",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     t._emit_agent_started()
     started = _agent_started(out)
     tools = started.data.tools
@@ -203,14 +205,14 @@ def test_allowed_tools_unset_emits_full_preset() -> None:
 
 
 def test_mcp_prefixed_name_in_allowed_tools_tagged_correctly() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="with-mcp",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=["Read", "mcp__weather__forecast"],
+        exposed=["Read", "mcp__weather__forecast"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     t._emit_agent_started()
     tools = _agent_started(out).data.tools
     assert tools is not None

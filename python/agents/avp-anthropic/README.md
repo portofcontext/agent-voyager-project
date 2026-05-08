@@ -68,6 +68,34 @@ your-supervisor ──stdin (Commission + SupervisorMessages)──▶ avp-anthr
 
 Tools declared on `Commission.tools` (supervisor-executed) become Anthropic `tools` parameter on each call. Tools the agent registers locally (via `ToolDriver.is_local`) also go into the same `tools` parameter; the agent dispatches the call to the local driver and returns the result via a follow-up `tool_result` content block.
 
+## SDK options pass-through
+
+`AnthropicModelDriver` accepts two escape-hatch dicts for SDK-specific concerns AVP intentionally doesn't put on the wire (per SPEC.md §14):
+
+```python
+driver = AnthropicModelDriver(
+    model="claude-sonnet-4-6",
+    extra_client_kwargs={
+        # Merged into anthropic.Anthropic(...) at lazy client construction.
+        # Use for client-level concerns: timeout, retries, base URL, custom
+        # HTTP headers. Ignored if you pass `client=` directly (you control
+        # construction in that case).
+        "timeout": 60.0,
+        "max_retries": 3,
+        # "base_url": "https://anthropic-proxy.internal/v1",
+        # "default_headers": {"X-Org-Id": "acme"},
+    },
+    extra_kwargs={
+        # Merged into each messages.create(...) call. Per-request knobs.
+        "temperature": 0.0,
+        "top_p": 0.95,
+        # "metadata": {"user_id": "u-123"},
+    },
+)
+```
+
+This is the analog of `avp-claude-agent`'s `extra_sdk_options` — same purpose (deployment-layer config that doesn't translate to a wire-format concept), different SDK surface. Commission-derived kwargs (`messages`, `system`, `tools`, `mcp_servers`) take precedence; the escape hatches can't override the AVP wire shape.
+
 ## Pricing table
 
 Hardcoded per-model rates (`USD per 1M tokens`) for the latest Claude family:

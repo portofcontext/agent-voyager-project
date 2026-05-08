@@ -13,7 +13,7 @@ Design points:
     callables at startup and pass the `LocalTools` instance to
     `AVPAgent(tools=...)`.
   - Composition over special-casing. LocalTools accepts a `fallback`
-    ToolDriver so users can mix their callables with a agent's
+    ToolDriver so users can mix their callables with an agent's
     built-ins (e.g. `ShellTools` from avp-anthropic): callables
     LocalTools knows about win, everything else falls through.
   - Schemas exported. `.schemas` returns the `{name, description,

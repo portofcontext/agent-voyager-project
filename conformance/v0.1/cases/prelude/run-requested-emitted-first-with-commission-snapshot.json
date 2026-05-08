@@ -1,26 +1,33 @@
 {
-  "id": "run-requested-emitted-first-with-config-snapshot",
+  "id": "run-requested-emitted-first-with-commission-snapshot",
   "title": "run_requested opens the trajectory, carries supervisor identity + full Commission snapshot",
-  "description": "The trajectory MUST open with a agent-relayed run_requested event tagged source=avp://supervisor. Its data carries avp.supervisor.name (from Commission.supervisor.name), the optional avp.supervisor.version, and avp.config — a faithful snapshot of the Commission the supervisor handed in. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone.",
+  "description": "The trajectory MUST open with a agent-relayed run_requested event tagged source=avp://supervisor. Its data carries avp.supervisor.name (from Commission.supervisor.name), the optional avp.supervisor.version, and avp.config \u2014 a faithful snapshot of the Commission the supervisor handed in. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#run-prelude",
     "spec/v0.1/event.schema.json#/$defs/RunRequestedEvent"
   ],
-  "applies_to": ["runner"],
+  "applies_to": [
+    "agent"
+  ],
   "agent_manifest": {
-    "agent_name": "avp-test-runner",
+    "agent_name": "avp-test-agent",
     "agent_version": "0.0.1",
     "avp_spec_version": "0.1",
-    "capabilities": ["mcp"]
+    "capabilities": [
+      "mcp"
+    ]
   },
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "prelude-run-requested",
     "model": "test/mock",
     "supervisor": {
       "name": "simple-supervisor-example",
       "version": "1.2.3"
-    }
+    },
+    "exposed": [
+      "*"
+    ]
   },
   "scripted_model": [
     {

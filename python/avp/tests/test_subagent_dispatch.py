@@ -9,7 +9,7 @@ emits the documented three-event lifecycle. The frame span_id from
 through that span.
 
 This is the layer most likely to drift. Unit tests on parsing won't
-catch a agent that emits the wrong span shape.
+catch an agent that emits the wrong span shape.
 """
 
 from __future__ import annotations
@@ -136,9 +136,9 @@ class _StubSubagentDriver(SubagentDriver):
         )
 
 
-def _run(config: Commission, *, scripted_model: list[ModelResponse], driver: SubagentDriver):
+def _run(commission: Commission, *, scripted_model: list[ModelResponse], driver: SubagentDriver):
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=ScriptedModel(scripted_model),
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),
@@ -157,11 +157,12 @@ def test_subagent_call_emits_invoked_and_returned_with_paired_span_id() -> None:
     subagent_returned. Consumers reconstruct nesting by following spans
     that descend from this one."""
     sa_driver = _StubSubagentDriver(text="all clear")
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-1",
         prompt="kick it off",
-        subagents=[Subagent(name="researcher", description="Looks things up.")],
+        subagents=[Subagent(name="researcher", description="Looks things up.", exposed=["*"])],
+        exposed=["*"],
     )
     scripted = [
         # Turn 1: parent calls subagent
@@ -183,7 +184,7 @@ def test_subagent_call_emits_invoked_and_returned_with_paired_span_id() -> None:
             converged=True,
         ),
     ]
-    agent = _run(cfg, scripted_model=scripted, driver=sa_driver)
+    agent = _run(commission, scripted_model=scripted, driver=sa_driver)
 
     invoked = _by_type(agent.trajectory, SubagentInvokedEvent)
     returned = _by_type(agent.trajectory, SubagentReturnedEvent)
@@ -202,11 +203,12 @@ def test_nested_events_chain_through_frame_span() -> None:
     frame span (parent_span_id == frame_span_id, transitively). The
     trajectory is one tree."""
     sa_driver = _StubSubagentDriver()
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-2",
         prompt="kick",
-        subagents=[Subagent(name="r", description="r.")],
+        subagents=[Subagent(name="r", description="r.", exposed=["*"])],
+        exposed=["*"],
     )
     scripted = [
         ModelResponse(
@@ -226,7 +228,7 @@ def test_nested_events_chain_through_frame_span() -> None:
             converged=True,
         ),
     ]
-    agent = _run(cfg, scripted_model=scripted, driver=sa_driver)
+    agent = _run(commission, scripted_model=scripted, driver=sa_driver)
 
     invoked = _by_type(agent.trajectory, SubagentInvokedEvent)[0]
     frame_id = invoked.data.span_id
@@ -261,11 +263,12 @@ def test_subagent_usage_rolls_up_into_parent_state() -> None:
     parent's cumulative state — observers reading the parent's
     avp.state want a true total."""
     sa_driver = _StubSubagentDriver()
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-3",
         prompt="kick",
-        subagents=[Subagent(name="r", description="r.")],
+        subagents=[Subagent(name="r", description="r.", exposed=["*"])],
+        exposed=["*"],
     )
     scripted = [
         ModelResponse(
@@ -285,7 +288,7 @@ def test_subagent_usage_rolls_up_into_parent_state() -> None:
             converged=True,
         ),
     ]
-    agent = _run(cfg, scripted_model=scripted, driver=sa_driver)
+    agent = _run(commission, scripted_model=scripted, driver=sa_driver)
     stopped = agent.trajectory[-1]
     snap = stopped.data.avp_state
     # Parent turns: 0.001 + 0.002 = 0.003. Subagent: 0.0001. Total: 0.0031.
@@ -298,11 +301,12 @@ def test_subagent_with_no_driver_emits_subagent_failed() -> None:
     """If subagents are declared but no SubagentDriver is wired in, a
     subagent invocation MUST surface as `subagent_failed` (not crash, not
     silently return). The model receives an `Error: ...` tool_result."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-4",
         prompt="kick",
-        subagents=[Subagent(name="r", description="r.")],
+        subagents=[Subagent(name="r", description="r.", exposed=["*"])],
+        exposed=["*"],
     )
     scripted = [
         ModelResponse(
@@ -322,7 +326,7 @@ def test_subagent_with_no_driver_emits_subagent_failed() -> None:
             converged=True,
         ),
     ]
-    agent = _run(cfg, scripted_model=scripted, driver=None)
+    agent = _run(commission, scripted_model=scripted, driver=None)
     failures = _by_type(agent.trajectory, SubagentFailedEvent)
     assert len(failures) == 1
     assert "no SubagentDriver" in failures[0].data.avp_subagent_error
@@ -333,18 +337,19 @@ def test_subagent_with_no_driver_emits_subagent_failed() -> None:
 
 def test_subagent_collision_with_tool_name_aborts_run() -> None:
     """The model sees a single name → one resource. A subagent named the
-    same as a agent built-in tool would create ambiguity; the agent
+    same as an agent built-in tool would create ambiguity; the agent
     refuses to start with `error_occurred` + `agent_stopped(reason=error)`."""
     from avp import AgentStoppedEvent, ErrorOccurredEvent
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-5",
-        subagents=[Subagent(name="lookup", description="collides with tool name")],
+        subagents=[Subagent(name="lookup", description="collides with tool name", exposed=["*"])],
         prompt="kick",
+        exposed=["*"],
     )
     agent = AVPAgent(
-        config=cfg,
+        commission=commission,
         model=ScriptedModel([]),  # never reached
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),
@@ -366,7 +371,7 @@ def test_subagent_appears_in_agent_started_subagents_field() -> None:
     a second time to see what was offered."""
     from avp import AgentStartedEvent
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-6",
         prompt="kick",
@@ -375,11 +380,13 @@ def test_subagent_appears_in_agent_started_subagents_field() -> None:
                 name="planner",
                 description="Decomposes work.",
                 inputSchema={"type": "object", "properties": {"prompt": {"type": "string"}}},
+                exposed=["*"],
             )
         ],
+        exposed=["*"],
     )
     agent = AVPAgent(
-        config=cfg,
+        commission=commission,
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -409,15 +416,15 @@ def test_allowed_tools_filters_subagent_names() -> None:
     just like an unlisted tool would be."""
     from avp import ErrorOccurredEvent
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-7",
         prompt="kick",
-        subagents=[Subagent(name="excluded", description="should not be reachable")],
-        allowed_tools=["bash"],  # no `excluded`
+        subagents=[Subagent(name="excluded", description="should not be reachable", exposed=["*"])],
+        exposed=["bash"],  # no `excluded`
     )
     agent = AVPAgent(
-        config=cfg,
+        commission=commission,
         model=ScriptedModel([]),
         tools=ScriptedTools(),
         supervisor=ScriptedSupervisor(),

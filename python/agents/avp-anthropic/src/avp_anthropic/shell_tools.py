@@ -71,7 +71,7 @@ SHELL_TOOL_SCHEMAS: list[dict[str, Any]] = [
 _LOCAL_NAMES = {schema["name"] for schema in SHELL_TOOL_SCHEMAS}
 
 # Public tuple of shell-tool names. Commission authors building
-# `cfg.allowed_tools` import this when they want to expose every
+# `commission.exposed` import this when they want to expose every
 # shell built-in (`list(SHELL_TOOL_NAMES) + my_rpc_tool_names`) without
 # duplicating the names by hand. Kept in sync with SHELL_TOOL_SCHEMAS.
 SHELL_TOOL_NAMES: tuple[str, ...] = tuple(schema["name"] for schema in SHELL_TOOL_SCHEMAS)

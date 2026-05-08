@@ -1,18 +1,18 @@
 {
   "id": "agent-started-tools-reflects-effective-surface",
-  "title": "agent_started.tools lists runner built-ins filtered by allowed_tools",
-  "description": "SPEC.md §13.1: agent_started.tools MUST list the EFFECTIVE tool surface. v0.1 has two paths for tools — runner-built-ins (compiled into the runner) and MCP-server tools (Commission.mcp_servers, surfaced on mcp_server_connected). This case exercises the built-in side: two runner built-ins (bash, read_file), an allowlist permitting only bash. agent_started.tools should therefore contain exactly one entry, bash. read_file is filtered out by the allowlist.",
+  "title": "agent_started.tools lists agent built-ins filtered by allowed_tools",
+  "description": "SPEC.md §13.1: agent_started.tools MUST list the EFFECTIVE tool surface. v0.1 has two paths for tools — agent-built-ins (compiled into the agent) and MCP-server tools (Commission.mcp_servers, surfaced on mcp_server_connected). This case exercises the built-in side: two agent built-ins (bash, read_file), an allowlist permitting only bash. agent_started.tools should therefore contain exactly one entry, bash. read_file is filtered out by the allowlist.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#13-conformance",
     "spec/v0.1/SPEC.md#8-tools"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "agent-started-effective-tools",
-    "allowed_tools": [
+    "exposed": [
       "bash"
     ],
     "model": "test/mock"

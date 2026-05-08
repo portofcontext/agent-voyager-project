@@ -1,14 +1,14 @@
 {
   "id": "subagent-invoked-and-returned-pair-frame-span",
-  "title": "Parent agent's subagent invocation emits subagent_invoked → subagent_returned pair sharing one frame span_id",
-  "description": "Subagents are a Commission primitive alongside tools and skills. When the parent agent calls a declared subagent by name, the runner MUST route the call through the subagent lifecycle (NOT the tool lifecycle): emit subagent_invoked at frame open, run the subagent, emit subagent_returned at frame close. The two events MUST share span_id so consumers can pair them and reconstruct the nested span tree.",
+  "title": "Parent agent's subagent invocation emits subagent_invoked \u2192 subagent_returned pair sharing one frame span_id",
+  "description": "Subagents are a Commission primitive alongside tools and skills. When the parent agent calls a declared subagent by name, the agent MUST route the call through the subagent lifecycle (NOT the tool lifecycle): emit subagent_invoked at frame open, run the subagent, emit subagent_returned at frame close. The two events MUST share span_id so consumers can pair them and reconstruct the nested span tree.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#subagents"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "subagent-pair",
     "model": "test/mock",
@@ -19,6 +19,9 @@
         "system_prompt": "You are a researcher.",
         "model": "test/mock"
       }
+    ],
+    "exposed": [
+      "*"
     ]
   },
   "scripted_model": [

@@ -4,7 +4,7 @@ The manifest the agent publishes lives in three places that MUST agree:
 
   1. `avp_anthropic.manifest()` — the in-process function.
   2. `avp-anthropic describe` — the CLI subcommand, prints JSON to stdout.
-  3. `agent_described.data.avp.agent` — the on-wire event the agent
+  3. `agent_described.data.avp.manifest` — the on-wire event the agent
      emits between run_requested and agent_started.
 
 If any of these diverged, a Commission author who introspected the agent
@@ -80,7 +80,7 @@ def test_agent_described_event_payload_equals_manifest_function(
     """The `agent_described` event the CLI emits MUST carry the same
     manifest payload the standalone `manifest()` function returns.
 
-    Without this seam, a agent could ship a `describe` JSON that says
+    Without this seam, an agent could ship a `describe` JSON that says
     one thing and a wire trajectory that says another — and the
     pre-flight introspection contract goes silent.
     """
@@ -98,6 +98,7 @@ def test_agent_described_event_payload_equals_manifest_function(
         "run_id": "manifest-seam",
         "model": "claude-sonnet-4-6",
         "supervisor": {"name": "test-supervisor"},
+        "exposed": ["*"],
     }
     stdin = io.StringIO(json.dumps(config) + "\n")
     stdout = io.StringIO()
@@ -109,6 +110,6 @@ def test_agent_described_event_payload_equals_manifest_function(
 
     events = [json.loads(line) for line in stdout.getvalue().splitlines() if line.strip()]
     described = next(e for e in events if e["type"] == "avp.agent_described")
-    on_wire = described["data"]["avp.agent"]
+    on_wire = described["data"]["avp.manifest"]
     expected = build_manifest().model_dump(by_alias=True, exclude_none=True)
     assert on_wire == expected

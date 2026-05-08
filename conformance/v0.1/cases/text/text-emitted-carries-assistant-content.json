@@ -1,17 +1,20 @@
 {
   "id": "text-emitted-carries-assistant-content",
   "title": "text_emitted records assistant text content with the turn it came from",
-  "description": "SPEC.md §11: text_emitted MUST appear for every text content block the model produced. It carries `step` matching the turn that emitted it and `text` carrying the verbatim content. Pre-fix the reference runner emitted text_emitted only when the model also produced text — verify the basic shape: one model turn, one text response, one text_emitted with the text body and the matching step.",
+  "description": "SPEC.md \u00a711: text_emitted MUST appear for every text content block the model produced. It carries `step` matching the turn that emitted it and `text` carrying the verbatim content. Pre-fix the reference agent emitted text_emitted only when the model also produced text \u2014 verify the basic shape: one model turn, one text response, one text_emitted with the text body and the matching step.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#11-event-reference"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
-  "config": {
+  "commission": {
     "schema_version": "0.1",
     "run_id": "text-emitted-basic",
-    "model": "test/mock"
+    "model": "test/mock",
+    "exposed": [
+      "*"
+    ]
   },
   "scripted_model": [
     {

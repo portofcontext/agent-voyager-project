@@ -42,7 +42,7 @@ def main() -> int:
     workspace = Path(tempfile.mkdtemp(prefix="avp-traced-claude-"))
     target = workspace / "hello.py"
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id=f"traced-claude-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
         model="claude-haiku-4-5-20251001",
@@ -51,7 +51,7 @@ def main() -> int:
             "`greet(name)` that returns 'hello, ' plus the name. Include "
             "a one-line docstring. Then say DONE."
         ),
-        allowed_tools=["Write", "Read", "Bash"],
+        exposed=["Write", "Read", "Bash"],
     )
 
     # Compare to a plain ClaudeSDKClient loop:
@@ -62,13 +62,13 @@ def main() -> int:
     #             handle(message)
     #
     # Two changes:
-    #   - wrap with `AVPTracer(config, on_event=...)` (sets the active tracer)
+    #   - wrap with `AVPTracer(commission, on_event=...)` (sets the active tracer)
     #   - `traced_claude_sdk_client()` replaces `ClaudeSDKClient(options=)`;
     #     Commission flows from the active tracer
     async def _run() -> None:
-        with AVPTracer(config, on_event=print_event):
+        with AVPTracer(commission, on_event=print_event):
             async with traced_claude_sdk_client() as client:
-                await client.connect(config.prompt)
+                await client.connect(commission.prompt)
                 async for _message in client.receive_response():
                     # Your existing message-handling goes here. AVP events for
                     # this message are already on the wire by the time we get

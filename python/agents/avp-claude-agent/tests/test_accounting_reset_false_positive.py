@@ -36,16 +36,16 @@ def _by_type(traj, type_):
 
 
 def _new_translator(*, sdk_client_cls):
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="acct-reset",
         model="claude-sonnet-4-6",
         prompt="hi",
-        allowed_tools=["bash"],
+        exposed=["bash"],
     )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_client_cls=sdk_client_cls,
         sdk_options_cls=_FakeOptions,

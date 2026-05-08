@@ -34,11 +34,12 @@ _HAS_CLOUDEVENTS = importlib.util.find_spec("cloudevents") is not None
 
 
 def _trivial_run() -> list[Any]:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="interop-trivial",
         prompt="hi",
         model="claude-sonnet-4-6",
+        exposed=["*"],
     )
     model = ScriptedModel(
         [
@@ -52,7 +53,7 @@ def _trivial_run() -> list[Any]:
             ),
         ]
     )
-    agent = AVPAgent(cfg, model, ScriptedTools(), ScriptedSupervisor())
+    agent = AVPAgent(commission, model, ScriptedTools(), ScriptedSupervisor())
     agent.run()
     return agent.trajectory
 

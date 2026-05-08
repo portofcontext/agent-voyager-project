@@ -35,18 +35,18 @@ from avp import (
 
 
 def test_build_commission_inherits_dev_loose_profile() -> None:
-    cfg = build_commission(run_id="r1", prompt="x", profile="dev-loose")
-    assert cfg.allowed_tools is not None
-    assert "bash" in cfg.allowed_tools
+    commission = build_commission(run_id="r1", prompt="x", profile="dev-loose")
+    assert commission.exposed is not None
+    assert "bash" in commission.exposed
 
 
 def test_build_commission_inherits_read_only_profile() -> None:
-    cfg = build_commission(run_id="r1", prompt="x", profile="read-only")
-    assert cfg.allowed_tools == ["read_file"]
+    commission = build_commission(run_id="r1", prompt="x", profile="read-only")
+    assert commission.exposed == ["read_file"]
 
 
 def test_profiles_are_distinct() -> None:
-    assert DEV_LOOSE.allowed_tools != READ_ONLY.allowed_tools
+    assert DEV_LOOSE.exposed != READ_ONLY.exposed
 
 
 # ── Trajectory summarization ──────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def test_summarize_classifies_fact_classes() -> None:
         new_trace_id,
     )
 
-    Commission(schema_version="0.1", run_id="r-summary", model="m")
+    Commission(schema_version="0.1", run_id="r-summary", model="m", exposed=["*"])
     trace = new_trace_id()
     agent_span = new_span_id()
     turn_span = new_span_id()
@@ -167,14 +167,14 @@ def test_summarize_classifies_fact_classes() -> None:
 # ── Subprocess wrapper end-to-end (uses no LLM — pipes to a tiny scripted agent) ──
 
 
-_INLINE_SCRIPTED_RUNNER = """\
+_INLINE_SCRIPTED_AGENT = """\
 import json, sys
 from avp import Commission, write_event
 from avp.agent import AVPAgent
 from avp.agent.mock import ScriptedTools, ScriptedSupervisor, parse_scripted_model
 
 cfg_line = sys.stdin.readline()
-cfg = Commission.model_validate(json.loads(cfg_line))
+commission = Commission.model_validate(json.loads(cfg_line))
 
 # Two-turn scripted run: turn 1 calls 'bash', turn 2 converges.
 model = parse_scripted_model([
@@ -197,33 +197,37 @@ class _StreamingSupervisor(ScriptedSupervisor):
         super().observe(event)
         write_event(event, file=sys.stdout)
 
-agent = AVPAgent(
-    config=cfg,
+agent = AVPAgent(commission=commission,
     model=model,
     tools=tools,
     supervisor=_StreamingSupervisor([]),
+    agent_builtin_tools=[
+        {"name": "bash"},
+        {"name": "read_file"},
+        {"name": "write_file"},
+    ],
 )
 agent.run()
 """
 
 
-def test_run_subprocess_drives_a_real_runner_end_to_end(tmp_path) -> None:
+def test_run_subprocess_drives_a_real_agent_end_to_end(tmp_path) -> None:
     """Spawn a tiny inline agent that uses ScriptedModel + ScriptedTools, pipe a
     Commission in, parse events out. Pins the wire-level supervisor flow."""
     from simple_supervisor import run_subprocess
 
-    runner_script = tmp_path / "tiny_runner.py"
-    runner_script.write_text(_INLINE_SCRIPTED_RUNNER)
+    agent_script = tmp_path / "tiny_agent.py"
+    agent_script.write_text(_INLINE_SCRIPTED_AGENT)
 
-    cfg = build_commission(
+    commission = build_commission(
         run_id="subprocess-smoke",
         prompt="anything",
         profile="dev-loose",
     )
 
     events = run_subprocess(
-        [sys.executable, str(runner_script)],
-        cfg,
+        [sys.executable, str(agent_script)],
+        commission,
         timeout_s=10.0,
     )
 

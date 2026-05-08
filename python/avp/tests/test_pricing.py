@@ -85,7 +85,9 @@ def test_model_turn_ended_emits_computed_when_driver_default() -> None:
     """The reference agent stamps `avp.cost.source` from
     `ModelResponse.cost_source`, defaulting to `computed`."""
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="cost-default", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="cost-default", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -111,7 +113,9 @@ def test_model_turn_ended_emits_reported_when_driver_says_so() -> None:
     `cost_source="reported"` and the agent forwards that
     verbatim — no recomputation, no override."""
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="cost-prov", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="cost-prov", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(
@@ -138,7 +142,9 @@ def test_model_turn_ended_serializes_cost_source_under_dotted_alias() -> None:
     """Wire spelling is `avp.cost.source` (dotted), matching the rest
     of the AVP attribute namespace. Pydantic field is `avp_cost_source`."""
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="cost-wire", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="cost-wire", model="test/mock", exposed=["*"]
+        ),
         model=ScriptedModel(
             [
                 ModelResponse(

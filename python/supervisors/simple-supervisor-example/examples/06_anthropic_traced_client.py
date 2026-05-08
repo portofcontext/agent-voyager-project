@@ -30,7 +30,7 @@ def main() -> int:
         print("error: set ANTHROPIC_API_KEY before running this example", file=sys.stderr)
         return 2
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="traced-client-example",
         model="claude-haiku-4-5-20251001",
@@ -38,7 +38,7 @@ def main() -> int:
             "Use the `add_two_numbers` tool to compute 17 + 25, then state "
             "the result and stop. Do not compute it yourself."
         ),
-        allowed_tools=["add_two_numbers"],
+        exposed=["add_two_numbers"],
     )
 
     # Local tool implementation. In a real agent this is your existing dispatch.
@@ -67,16 +67,16 @@ def main() -> int:
     #         for block in resp.content: ...
     #
     # Only changes:
-    #   - wrap with `AnthropicTracedClient(real, config=, on_event=)`
+    #   - wrap with `AnthropicTracedClient(real, commission=, on_event=)`
     #   - wrap tool dispatch with `client.tool(...)` so AVP can record it
     #   - call `client.converged()` to mark a clean exit
     with AnthropicTracedClient(
-        anthropic.Anthropic(), config=config, on_event=print_event
+        anthropic.Anthropic(), commission=commission, on_event=print_event
     ) as client:
-        msgs = [{"role": "user", "content": config.prompt}]
+        msgs = [{"role": "user", "content": commission.prompt}]
         while True:
             resp = client.messages.create(
-                model=config.model, max_tokens=300, messages=msgs, tools=tools
+                model=commission.model, max_tokens=300, messages=msgs, tools=tools
             )
 
             # Append the assistant turn (text + tool_use blocks) so the next

@@ -170,8 +170,8 @@ def _check_final_state(expected: dict[str, Any], events: list[dict[str, Any]]) -
 # ── Run one case ─────────────────────────────────────────────────────────────
 
 
-def _build_runner(case: dict[str, Any]) -> AVPAgent:
-    config = Commission.model_validate(case["config"])
+def _build_agent(case: dict[str, Any]) -> AVPAgent:
+    commission = Commission.model_validate(case["commission"])
     model = parse_scripted_model(case.get("scripted_model", []))
     tools = ScriptedTools(case.get("scripted_tools") or {})
     supervisor = ScriptedSupervisor(case.get("scripted_supervisor") or [])
@@ -189,7 +189,7 @@ def _build_runner(case: dict[str, Any]) -> AVPAgent:
     manifest_dict = case.get("agent_manifest")
     manifest = AgentManifest.model_validate(manifest_dict) if manifest_dict else None
     return AVPAgent(
-        config=config,
+        commission=commission,
         model=model,
         tools=tools,
         supervisor=supervisor,
@@ -210,7 +210,7 @@ def run_case(path: Path) -> CaseResult:
 
     t0 = _time.monotonic()
     try:
-        agent = _build_runner(case)
+        agent = _build_agent(case)
         agent.run()
         trajectory_dicts = _trajectory_to_dicts(agent.trajectory)
     except Exception as exc:

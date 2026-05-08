@@ -231,7 +231,7 @@ def _model_calling(tool: str, *, call_id: str = "c1") -> ScriptedModel:
     )
 
 
-def test_runner_dispatches_local_tool_and_emits_full_lifecycle() -> None:
+def test_agent_dispatches_local_tool_and_emits_full_lifecycle() -> None:
     """End-to-end: registered callable is invoked, tool_invoked +
     tool_returned both fire, the model sees the output via the
     next-turn history, run converges normally."""
@@ -239,7 +239,9 @@ def test_runner_dispatches_local_tool_and_emits_full_lifecycle() -> None:
     tools.register("greet", lambda inp: f"hi {inp['x']}", description="x", input_schema={})
 
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="lt-e2e", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="lt-e2e", model="test/mock", exposed=["*"]
+        ),
         model=_model_calling("greet"),
         tools=tools,
         supervisor=ScriptedSupervisor(),
@@ -255,7 +257,7 @@ def test_runner_dispatches_local_tool_and_emits_full_lifecycle() -> None:
     assert not _by_type(agent.trajectory, ToolFailedEvent)
 
 
-def test_runner_routes_local_tool_with_fallback_to_correct_handler() -> None:
+def test_agent_routes_local_tool_with_fallback_to_correct_handler() -> None:
     """LocalTools + ScriptedTools fallback: the model calls a LOCAL
     name → LocalTools handles it. The model could call a fallback
     name on the next turn → ScriptedTools handles it. Same wire shape;
@@ -265,7 +267,9 @@ def test_runner_routes_local_tool_with_fallback_to_correct_handler() -> None:
     tools.register("calc", lambda inp: {"r": 42}, description="x", input_schema={})
 
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="lt-mixed", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="lt-mixed", model="test/mock", exposed=["*"]
+        ),
         model=_model_calling("calc"),
         tools=tools,
         supervisor=ScriptedSupervisor(),
@@ -287,7 +291,9 @@ def test_local_tool_exception_emits_tool_failed_not_tool_returned() -> None:
     tools.register("explode", explode, description="x", input_schema={})
 
     agent = AVPAgent(
-        config=Commission(schema_version="0.1", run_id="lt-fail", model="test/mock"),
+        commission=Commission(
+            schema_version="0.1", run_id="lt-fail", model="test/mock", exposed=["*"]
+        ),
         model=_model_calling("explode"),
         tools=tools,
         supervisor=ScriptedSupervisor(),

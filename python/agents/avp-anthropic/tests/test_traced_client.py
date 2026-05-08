@@ -3,7 +3,7 @@
 The wrapper hides AVPTracer behind a context manager so user code looks
 like a vanilla Anthropic loop:
 
-    with AnthropicTracedClient(real, config=cfg, on_event=publish) as client:
+    with AnthropicTracedClient(real, commission=cfg, on_event=publish) as client:
         while True:
             resp = client.messages.create(...)
             if resp.stop_reason == "end_turn":
@@ -107,7 +107,7 @@ def _basic_config(**overrides) -> Commission:
         "prompt": "hi",
     }
     base.update(overrides)
-    return Commission(**base)
+    return Commission(**base, exposed=["*"])
 
 
 def _by_type(events: list, type_: type) -> list:
@@ -124,7 +124,7 @@ def _types(events: list) -> list[str]:
 def test_enter_exit_emit_full_lifecycle_around_a_single_create_call() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="hello", input_tokens=40, output_tokens=8)])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         resp = client.messages.create(model="claude-sonnet-4-6", messages=[])
         assert resp.stop_reason == "end_turn"
         client.converged()
@@ -139,7 +139,7 @@ def test_enter_exit_emit_full_lifecycle_around_a_single_create_call() -> None:
 def test_create_call_emits_one_turn_pair() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="hello", input_tokens=40, output_tokens=8)])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
 
@@ -155,7 +155,7 @@ def test_messages_returns_underlying_anthropic_message_unmodified() -> None:
     out: list = []
     msg = _resp(text="preserved", stop_reason="end_turn")
     fake = _FakeAnthropic([msg])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         resp = client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
     # Same object, same fields.
@@ -175,7 +175,7 @@ def test_token_extraction_matches_anthropic_model_driver_convention() -> None:
     fake = _FakeAnthropic(
         [_resp(text="x", input_tokens=100, output_tokens=20, cache_read=30, cache_write=10)]
     )
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
     ended = _by_type(out, ModelTurnEndedEvent)[0]
@@ -196,7 +196,7 @@ def test_cost_zero_for_unknown_model() -> None:
     fake = _FakeAnthropic([_resp(text="x", model="some-unknown-model")])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+        with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
             client.messages.create(model="some-unknown-model", messages=[])
             client.converged()
     ended = _by_type(out, ModelTurnEndedEvent)[0]
@@ -206,7 +206,7 @@ def test_cost_zero_for_unknown_model() -> None:
 def test_wrapper_records_finish_reason_from_stop_reason() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x", stop_reason="tool_use")])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
     ended = _by_type(out, ModelTurnEndedEvent)[0]
@@ -221,7 +221,7 @@ def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
             _resp(text="second", stop_reason="end_turn", input_tokens=40, output_tokens=15),
         ]
     )
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
@@ -240,7 +240,7 @@ def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
 def test_tool_context_manager_emits_tool_invoked_and_returned() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x")])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         with client.tool(call_id="c1", name="bash", input={"command": "ls"}) as t:
             t.record("file1\nfile2")
@@ -255,8 +255,10 @@ def test_tool_context_manager_emits_tool_invoked_and_returned() -> None:
 def test_subagent_context_manager_emits_subagent_invoked_and_returned() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x")])
-    cfg = _basic_config(subagents=[Subagent(name="researcher", description="Looks things up.")])
-    with AnthropicTracedClient(fake, config=cfg, on_event=out.append) as client:
+    cfg = _basic_config(
+        subagents=[Subagent(name="researcher", description="Looks things up.", exposed=["*"])]
+    )
+    with AnthropicTracedClient(fake, commission=cfg, on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         with client.subagent(name="researcher", input={"prompt": "go"}) as sa:
             with sa.turn() as turn:
@@ -275,7 +277,7 @@ def test_subagent_context_manager_emits_subagent_invoked_and_returned() -> None:
 def test_attribute_passthrough_to_underlying_client() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x")])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         # `beta` is on the underlying client, not wrapped explicitly.
         assert client.beta.some_resource == "here"
         assert client.real is fake
@@ -285,7 +287,7 @@ def test_attribute_passthrough_to_underlying_client() -> None:
 def test_messages_access_before_enter_raises() -> None:
     """Accessing `client.messages` before `with` raises a clear error."""
     fake = _FakeAnthropic([])
-    client = AnthropicTracedClient(fake, config=_basic_config(), on_event=lambda _: None)
+    client = AnthropicTracedClient(fake, commission=_basic_config(), on_event=lambda _: None)
     with pytest.raises(RuntimeError, match="must be used as `with`"):
         _ = client.messages
 
@@ -294,7 +296,7 @@ def test_reused_client_raises() -> None:
     """A new wrapper per run — same Commission can't be reused on a single
     instance."""
     fake = _FakeAnthropic([_resp(text="x")])
-    client = AnthropicTracedClient(fake, config=_basic_config(), on_event=lambda _: None)
+    client = AnthropicTracedClient(fake, commission=_basic_config(), on_event=lambda _: None)
     with client:
         pass
     with pytest.raises(RuntimeError, match="cannot be reused"):
@@ -308,8 +310,10 @@ def test_reused_client_raises() -> None:
 def test_agent_started_emits_subagents_when_declared() -> None:
     out: list = []
     fake = _FakeAnthropic([])
-    cfg = _basic_config(subagents=[Subagent(name="planner", description="Decomposes work.")])
-    with AnthropicTracedClient(fake, config=cfg, on_event=out.append):
+    cfg = _basic_config(
+        subagents=[Subagent(name="planner", description="Decomposes work.", exposed=["*"])]
+    )
+    with AnthropicTracedClient(fake, commission=cfg, on_event=out.append):
         pass
     started = _by_type(out, AgentStartedEvent)[0]
     assert started.data.subagents and started.data.subagents[0].name == "planner"
@@ -346,7 +350,7 @@ def test_beta_messages_create_is_instrumented() -> None:
     extended-cache-ttl headers, computer-use) silently bypass tracing."""
     out: list = []
     fake = _FakeAnthropicWithBeta(beta_responses=[_resp(text="from beta")])
-    with AnthropicTracedClient(fake, config=_basic_config(), on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         resp = client.beta.messages.create(model="claude-sonnet-4-6", messages=[])
         assert resp.content[0].text == "from beta"
         client.converged()

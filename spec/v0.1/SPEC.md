@@ -27,22 +27,19 @@ See [`FOUNDATIONS.md`](../../FOUNDATIONS.md) for the full mapping rationale.
 
 AVP defines exactly one seam, between two roles, with **two unidirectional flows** crossing it:
 
-- **Supervisor** — declares the agent's complete environment in a Commission sent at startup. MCP servers (the supervisor-side tool dispatch path). Skills. Subagents. The prompt. Once the Commission is sent, the supervisor observes the trajectory; it does not reach in.
-- **Agent** — runs the agent inside the supervisor's environment. Emits a stream of facts (events) that the supervisor observes.
+- **Supervisor** — declares a Commission at startup: prompt, model, MCP servers, subagents, skills, and the exhaustive `exposed` name surface. Once the Commission is sent, the supervisor observes the trajectory; it does not reach in.
+- **Agent** — runs inside the Commission. Emits a stream of facts (events) that the supervisor observes.
 
 ```
-                                  agent's environment
-                          (mcp_servers, skills, subagents, prompt)
-                                              │
-                                              ▼
-   supervisor ──── Commission (one-time, setup) ──▶ agent
-                                              │
-                                              ▼
-                                        runs the agent
-                                              │
-                                              ▼
-   supervisor ◀────────── events (continuous, run-end) ────── agent
+   supervisor  ──────── Commission ─────────▶  agent
+                                                 │
+                                                 │  runs the run,
+                                                 │  emits events
+                                                 ▼
+   supervisor  ◀──────── trajectory ─────────  agent
 ```
+
+A **Commission** carries `prompt`, `model`, `mcp_servers`, `subagents`, `skills`, `exposed` (the exhaustive model-facing name surface, with fnmatch globs), and `output_schema` — sent once at startup. The **trajectory** is the stream of CloudEvents the agent emits as it runs; it opens with `run_requested` → `agent_described` (which publishes the agent's **manifest** — built-in tools, capabilities, version) → `agent_started`, and closes with `agent_stopped`.
 
 This is the v0.1 architectural choice: **control flows down at setup; observation flows up during the run.** No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front.
 
@@ -84,19 +81,19 @@ These are distinct facts the wire records before the agent runs:
 
 - **`avp.run_requested`** anchors the run. The agent emits it from `Commission.supervisor` with `source: avp://supervisor` — agent-relayed; the agent stamps the source URI to attribute the run to the originating supervisor build. `data.avp.commission` carries the full Commission snapshot the supervisor handed in, so an auditor reading the trajectory can re-derive the run's input surface without an external Commission registry. `data.avp.supervisor.name` and the optional `data.avp.supervisor.version` complete the attribution.
 
-- **`avp.agent_described`** is the agent's "whoami" — its self-published manifest of everything triggerable without supervisor configuration: SDK preset tools, runtime-bundled subagents, runtime-bundled skills, plus the agent's name, version, and supported AVP spec version. The payload (`data.avp.agent`) MUST equal what `<agent> describe` prints to stdout for the same agent build. This makes the audit trail and pre-flight introspection two views of the same fact.
+- **`avp.agent_described`** is the agent's "whoami" — its self-published manifest of everything triggerable without supervisor configuration: SDK preset tools, runtime-bundled subagents, runtime-bundled skills, plus the agent's name, version, and supported AVP spec version. The payload (`data.avp.manifest`) MUST equal what `<agent> describe` prints to stdout for the same agent build. This makes the audit trail and pre-flight introspection two views of the same fact.
 
 - **`avp.agent_started`** is unchanged in role: the merged-view event, listing what the model will actually see for this specific run (Commission-declared tools/skills/subagents combined with SDK enrichment captured post-`client.connect()`).
 
 `run_requested` and `agent_described` are root-level in the span tree (`parent_span_id = ZERO`). They do NOT pair (each owns its own span); `agent_started` owns the agent span that all subsequent run events nest under.
 
-A agent that cannot identify itself (no manifest available) MUST NOT skip the prelude — instead, emit `agent_described` with the smallest valid manifest it can publish (its own package name, version, and `avp_spec_version`). A supervisor that omits `Commission.supervisor` MUST still see `run_requested` emitted, with `avp.supervisor.name="unknown"`.
+An agent that cannot identify itself (no manifest available) MUST NOT skip the prelude — instead, emit `agent_described` with the smallest valid manifest it can publish (its own package name, version, and `avp_spec_version`). A supervisor that omits `Commission.supervisor` MUST still see `run_requested` emitted, with `avp.supervisor.name="unknown"`.
 
 ---
 
 ## 4. Conformance — overview
 
-A **agent** is conforming if it reads exactly one valid `Commission` at startup, runs the agent inside the declared environment per §9, and emits the events required by §10–§11. See §13.1 for the full checklist.
+An **agent** is conforming if it reads exactly one valid `Commission` at startup, runs the agent inside the declared environment per §9, and emits the events required by §10–§11. See §13.1 for the full checklist.
 
 A **supervisor** is conforming if every `Commission` it sends validates against `commission.schema.json`. v0.1 has no supervisor → agent channel — there are no other messages a supervisor sends. See §13.2.
 
@@ -141,7 +138,7 @@ on connect, emit `avp.mcp_server_disconnected` on close, and tag each
 
 Tools the agent ships in-process (e.g. avp-anthropic's
 `bash`/`read_file`/`write_file`) are agent-package built-ins. They appear
-on the manifest (`agent_described.data.avp.agent.built_in_tools`) and on
+on the manifest (`agent_described.data.avp.manifest.built_in_tools`) and on
 `agent_started.data.tools` with `avp.tool.dispatch_target = "local"`. The
 agent runs them directly; no MCP layer involved.
 
@@ -167,7 +164,7 @@ tools, or by reviewing the trajectory after the fact.
 
 v0.1 has two paths for any tool the model can call:
 
-1. **Agent built-in.** Compiled into the agent package. Examples: avp-anthropic's `bash`/`read_file`/`write_file`, avp-claude-agent's `Read`/`Edit`/`Bash`/etc. Surfaced in the agent's manifest (`agent_described.data.avp.agent.built_in_tools`) and in `agent_started.data.tools[]` with `avp.tool.dispatch_target = "local"`. The agent runs them directly.
+1. **Agent built-in.** Compiled into the agent package. Examples: avp-anthropic's `bash`/`read_file`/`write_file`, avp-claude-agent's `Read`/`Edit`/`Bash`/etc. Surfaced in the agent's manifest (`agent_described.data.avp.manifest.built_in_tools`) and in `agent_started.data.tools[]` with `avp.tool.dispatch_target = "local"`. The agent runs them directly.
 2. **MCP server.** Declared by the supervisor in `Commission.mcp_servers[]`. The agent connects, runs MCP's `tools/list`, and dispatches calls via MCP's `tools/call`. Surfaced on `mcp_server_connected.data.avp.mcp.tools[]` (live tool catalog) and on `agent_started.data.tools[]` with `avp.tool.dispatch_target = "mcp_server"` and `avp.mcp_server_id` matching the Commission entry.
 
 Wire flow:
@@ -182,23 +179,39 @@ There is no AVP-flavored RPC channel. v0.1 does not define `Commission.tools`; s
 
 | Value | Meaning |
 |---|---|
+| `local` | Tool ran in the agent's own process — code compiled into the agent package (e.g. avp-anthropic's `bash`/`read_file`). |
 | `mcp_server` | Tool was dispatched by an MCP server. The event also carries `avp.mcp_server_id` matching a `Commission.mcp_servers[].id`. |
-| `local` | Tool ran in-process. Also used for inline server-side tools the API ran during a single `messages.create()` (e.g. Anthropic's hosted `web_search`, `code_execution`); those events carry `avp.tool.subtype` naming the hosted-tool kind. |
+| `hosted` | Tool ran on the model provider's infrastructure inside a single API call (e.g. Anthropic's `web_search`, `code_execution`). Distinct from `local` because the provider — not the agent — executed the tool; the agent only observed it. Events carry `avp.tool.subtype` naming the hosted-tool kind. |
 
 Supervisors building dashboards / audits filter on `dispatch_target` to count tool calls by implementation route, and on `avp.mcp_server_id` / `avp.tool.subtype` to break down further.
 
-### 8.1 Restricting the exposed tool set: `Commission.allowed_tools`
+### 8.2 The model-facing name surface: `Commission.exposed`
 
-`Commission.allowed_tools` is an **optional allowlist** of tool names the agent exposes to the model. It is the supervisor's lever for narrowing the agent's tool surface without enumerating the agent's internals.
+`Commission.exposed` is the **required exhaustive list of names the model can invoke for this run**. There are no implicit defaults — every name the supervisor wants exposed MUST appear (as a literal or matched by a glob). The list is uniform across origin: built-in tools, built-in subagents, Commission-declared subagents, post-handshake MCP tools, and provider-hosted tools all share one allowlist.
 
-Semantics:
+**Glob support.** Each entry MAY be a literal name OR an fnmatch glob (`*`, `?`, `[abc]`). Globs are how supervisors express trust at namespace granularity: `mcp__github__*` for "all tools from the github MCP server," `mcp__github__get_*` for read-shaped operations only, `["*"]` for "everything available."
 
-- **Absent.** The agent exposes all of its built-ins plus every MCP-server tool. This is the default, backwards-compatible behavior.
-- **Present.** The agent MUST expose ONLY tools whose names are in this list. Agent built-ins, MCP-server tools, and `Commission.subagents[]` entries are all filtered through it.
-- **Unrecognized names.** Names in `allowed_tools` that match neither a agent built-in nor an MCP-server tool nor a `Commission.subagents[]` entry are agent-specific. The agent MAY validate them at startup; failing that, the runtime check rejects any actual call to such a name as `tool_failed` (see below).
-- **Runtime rejection.** If the model nevertheless calls a tool whose name is not in `allowed_tools`, the agent MUST emit `tool_failed` with an error message identifying the allowlist as the cause, and MUST NOT execute the tool. (`tool_invoked` is still emitted first to keep the trajectory faithful — the agent attempted the call.)
+**Resolution at startup.** After `mcp_server_connected` events fire (so the live MCP catalogs are known), the agent MUST resolve each entry against the union of:
 
-Supervisors MAY maintain category-based profiles (e.g., "DDD-strict", "Compliance") at the framework layer that resolve to a specific `allowed_tools` per agent; AVP itself takes no opinion on profiles.
+  - `manifest.built_in_tools[].name`
+  - `manifest.built_in_subagents[].name`
+  - `Commission.subagents[].name`
+  - Each connected MCP server's `tools/list` catalog (post-handshake names, conventionally `mcp__<server-id>__<tool>`)
+
+**Resolution rules:**
+
+- **Literal entries that match nothing** → fail loud. Agent MUST emit `error_occurred` with `code: "exposed_unresolved"` and stop with `agent_stopped(reason: "error")` before any model turn. A Commission referencing a specific tool the agent no longer offers is a contract violation; supervisors find out at startup, not via silent surface degradation.
+- **Glob entries that match nothing** → permitted silently. Patterns describe sets, and an empty set is a legitimate set (e.g., a `mcp__github__*` glob against a github server with no tools yet is fine).
+- **Empty list (`exposed: []`)** → no invocables. Model has no tools, no subagents. Valid for text-only runs.
+
+**Subagent rule.** Every `Commission.subagents[].name` MUST be matched by some entry in `exposed` (literal or glob). A subagent declared but not exposed is a configuration error — same fail-loud as above.
+
+**Two-layer enforcement.** `exposed` controls *visibility* primarily and *runtime dispatch* as a backstop:
+
+- **Visibility (primary).** When the agent constructs the API call, `tools[]` is filtered to the names matched by `exposed`. The model literally doesn't see unlisted tools — they don't appear in its tool catalog.
+- **Runtime block (defense in depth).** If the model nevertheless attempts to invoke a name not matched by `exposed` (hallucination, prompt injection from tool output, prior-context leakage), the agent MUST emit `tool_failed` (after `tool_invoked`) and not execute the tool. The trajectory faithfully records the attempt.
+
+**Subagent.exposed** has the same semantics applied to the subagent's own model-facing surface. When `inherit_tools=True` it filters the parent's exposed surface; when `False` it resolves only against the subagent's own `mcp_servers` + nested `subagents`.
 
 ---
 
@@ -225,9 +238,43 @@ Both modes produce the same outer wire shape; the second is a strict subset of t
 
 **Subagent ↔ tool collision.** Subagent names MUST NOT collide with agent built-in tool names. A collision is a configuration conflict — the agent MUST detect this at startup, emit `error_occurred`, and stop with `reason: "error"` before any model turn runs.
 
-**`allowed_tools` applies to subagents.** When `Commission.allowed_tools` is set, every name in `Commission.subagents[]` MUST also appear there. The model-facing surface is one allowlist over agent built-ins, MCP-server tools, and subagents alike.
+**`exposed` applies to subagents.** Every name in `Commission.subagents[]` MUST be matched by some entry in `Commission.exposed` (literal or glob). The model-facing surface is one allowlist over agent built-ins, MCP-server tools, and subagents alike.
 
 **`agent_started.data.subagents`.** When `Commission.subagents` is non-empty, the agent MUST surface the model-facing subagent declaration on `agent_started.data.subagents[]` (parallel to `data.tools[]` and `data.skills[]`). Each entry carries `name`, `description`, and optional `inputSchema` (MCP-shaped). Consumers can read this without parsing the Commission a second time.
+
+---
+
+## 8.7 Skills
+
+`Commission.skills[]` declares [Agent Skills](https://agentskills.io/specification) the agent loads into the model's context for the run. Each entry is `{name, avp.source, avp.config?}` where `avp.source` is a URI pointing at the skill's content.
+
+### 8.7.1 Source URI schemes
+
+v0.1 defines two:
+
+- **Filesystem path** — `./skills/code-review` or `./skills/code-review/SKILL.md`. Resolved against the agent's CWD. If the path is a directory, `SKILL.md` at its root is the entry point. The supervisor's deployment layer (per §14) is responsible for materializing skill folders into the agent's workspace before the run starts (Docker volume mount, image bake, subprocess `cp`, lambda init download from S3, etc.).
+
+- **MCP-served** — `mcp://<server-id>/<resource-path>`. The `<server-id>` MUST match an entry in `Commission.mcp_servers[]`. The agent connects to that MCP server (existing §6 mechanism), then calls MCP's `resources/read` against `<resource-path>` to fetch the SKILL.md content. The live resource catalog SHOULD be surfaced on `mcp_server_connected.data.avp.mcp.resources[]` (parallel to `avp.mcp.tools[]`).
+
+Reusing MCP for remote skill delivery means a supervisor that wants to ship skills across machines stands up the same kind of MCP server they already use for tools — auth, transport, and content negotiation are all inherited from the MCP wire. A single MCP server can expose both tools (via `tools/list` + `tools/call`) and skills (via `resources/list` + `resources/read`).
+
+Future minor versions MAY define additional URI schemes (`https://`, `git://`, `registry://`); v0.1 implementations MUST treat unrecognized schemes as a resolution error (emit `error_occurred(code: "unknown")` + `agent_stopped(reason: "error")`).
+
+### 8.7.2 Loading semantics
+
+The `avp.skill_loaded` event means **the SKILL.md body content has been added to the model's active context window** — NOT a registration acknowledgment. (The registration view is `agent_started.data.skills[]`.)
+
+Two emission patterns differentiated by an agent's `manifest.capabilities`:
+
+- **`skills:eager`** — agent injects all declared SKILL.md bodies at startup (typically as a system_prompt suffix). Emit `skill_loaded` once per skill, `step=0`, after `agent_started` and before turn 1. The reference `AVPAgent` and `avp-anthropic` claim this capability.
+
+- **`skills:progressive`** — model decides per-turn which skill bodies to pull into context (Anthropic Skills, Claude Code progressive disclosure). Emit `skill_loaded` when the body actually enters context, with `step=N` matching the turn it loaded in. MAY fire multiple times for the same skill (e.g., re-load after compaction). `avp-claude-agent` claims this capability.
+
+Agents whose SDK does NOT expose progressive-disclosure load events SHOULD NOT emit `skill_loaded` at all — `agent_started.data.skills[]` still records the registration. Honest-silent beats fabricated events.
+
+### 8.7.3 Resolution failures
+
+If a skill's `avp.source` cannot be resolved (file not found, MCP server unreachable, malformed SKILL.md, unrecognized URI scheme), the agent MUST emit `error_occurred` and `agent_stopped` with `reason: "error"` BEFORE any model turn runs. Skill resolution is part of the run prelude, not a runtime concern — supervisors get fail-fast on configuration mistakes.
 
 ---
 
@@ -312,7 +359,7 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 | Type | Source(s) | One-line semantics |
 |---|---|---|
 | `avp.run_requested` | `avp://supervisor` | First event. Agent-relayed; supervisor-attributed. Anchors the run with `avp.commission` (full Commission snapshot) + `avp.supervisor.name`. See §3.1. |
-| `avp.agent_described` | `avp://agent` | Second event. The agent's self-published manifest (`avp.agent`) — same payload `<agent> describe` prints. See §3.1. |
+| `avp.agent_described` | `avp://agent` | Second event. The agent's self-published manifest (`avp.manifest`) — same payload `<agent> describe` prints. See §3.1. |
 | `avp.agent_started` | `avp://agent` | Third event. Merged view: what the model will actually see, after Commission × SDK enrichment. |
 | `avp.agent_stopped` | `avp://agent` | Run has ended; last event of the trajectory. |
 | `avp.model_turn_started` | `avp://agent` | About to call the model. |
@@ -328,7 +375,6 @@ All non-RPC-request event types are past-tense facts. `*_request` events keep im
 | `avp.refusal_recorded` | `avp://agent` | Model declined the turn. Run terminates with `avp.agent_stopped.avp.reason="refused"`. |
 | `avp.cost_recorded` | `avp://agent` | Cumulative `RunStateSnapshot` snapshot. May carry `avp.cost.source="reported"` on the reconciliation event when the API/SDK hands back an authoritative cost total. |
 | `avp.skill_loaded` | `avp://agent` | SKILL.md loaded into context. |
-| `avp.skill_executed` | `avp://agent` | Skill activated. |
 | `avp.error_occurred` | `avp://agent` | Non-tool error. |
 | `avp.mcp_server_connected` | `avp://agent` | Connection established to a Commission-declared MCP server. |
 | `avp.mcp_server_disconnected` | `avp://agent` | Connection to an MCP server closed. |
@@ -358,10 +404,10 @@ For **non-spec fields within a known event type**: place them inside `data` unde
 
 ### 13.1 Agent
 
-A agent is conforming if and only if all of the following hold:
+An agent is conforming if and only if all of the following hold:
 
 1. It reads exactly one valid `Commission` (per `commission.schema.json`) before emitting any events.
-2. The trajectory MUST open with the prelude defined in §3.1: `avp.run_requested` (source=`avp://supervisor`), then `avp.agent_described` (source=`avp://agent`), then `avp.agent_started` (source=`avp://agent`), in that exact order. `avp.run_requested.data.avp.commission` MUST carry a faithful snapshot of the Commission the supervisor handed in. `avp.agent_described.data.avp.agent` MUST equal the manifest payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface — the agent's built-in tools, filtered by `Commission.allowed_tools` if set, plus any MCP-server tools surfaced post-`mcp_server_connected`. Each tool entry MUST include `name`.
+2. The trajectory MUST open with the prelude defined in §3.1: `avp.run_requested` (source=`avp://supervisor`), then `avp.agent_described` (source=`avp://agent`), then `avp.agent_started` (source=`avp://agent`), in that exact order. `avp.run_requested.data.avp.commission` MUST carry a faithful snapshot of the Commission the supervisor handed in. `avp.agent_described.data.avp.manifest` MUST equal the manifest payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface — the agent's built-in tools, filtered by `Commission.exposed` if set, plus any MCP-server tools surfaced post-`mcp_server_connected`. Each tool entry MUST include `name`.
 3. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`). All v0.1 events EXCEPT `avp.run_requested` MUST set `source: "avp://agent"`. `avp.run_requested` is the only event with `source: "avp://supervisor"` — agent-relayed; the agent stamps the source URI from `Commission.supervisor`.
 4. For every model inference, it MUST emit `avp.model_turn_started` immediately before the request and `avp.model_turn_ended` immediately after the response.
 5. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.
@@ -375,10 +421,12 @@ M1. Emit `avp.mcp_server_connected` for each declared MCP server before the firs
 M2. Emit `avp.mcp_server_disconnected` for each connected MCP server before `avp.agent_stopped`.
 M3. Dispatch `tools/call` for any model-invoked tool whose name is hosted by an MCP server through that server, tagging `tool_invoked.data["avp.tool.dispatch_target"] = "mcp_server"` and `avp.mcp_server_id` matching the Commission entry.
 
-If `Commission.allowed_tools` is set, the agent additionally MUST:
+For `Commission.exposed` (which is required), the agent additionally MUST:
 
-A1. Verify that every `Commission.subagents[]` name appears in `Commission.allowed_tools`. If any does not, emit `avp.error_occurred` and `avp.agent_stopped` with `data["avp.reason"]: "error"` before running any model turn (§8.1).
-A2. Reject any tool call whose `tool` name is not in `Commission.allowed_tools` by emitting `avp.tool_failed` (after `avp.tool_invoked`) and not executing the tool.
+E1. Resolve each entry against the available surface (built-in tools/subagents from the manifest, Commission.subagents, post-handshake MCP catalogs). Literal entries that match nothing MUST emit `avp.error_occurred` with `data["avp.error.code"]: "exposed_unresolved"` and `avp.agent_stopped` with `data["avp.reason"]: "error"` before any model turn (§8.2). Glob entries that match nothing are permitted silently.
+E2. Verify that every `Commission.subagents[]` name is matched by some entry in `Commission.exposed` (literal or glob). If any is unmatched, emit `avp.error_occurred(code: "exposed_unresolved")` + `avp.agent_stopped(reason: "error")` before any model turn.
+E3. Filter the model-facing surface (`agent_started.data.tools[]`, `data.subagents[]`, the API call's `tools=` parameter) so the model only sees names matched by `exposed`.
+E4. Reject any tool call whose name is not matched by `Commission.exposed` (defense-in-depth) by emitting `avp.tool_failed` after `avp.tool_invoked`, and not executing the tool.
 
 ### 13.2 Supervisor
 
@@ -419,4 +467,4 @@ This section names the lines so readers don't trip on them. A complete productio
 - Future minor versions MAY add new event types, fields, or enum values. They MUST NOT remove or repurpose existing ones.
 - Future major versions MAY introduce breaking changes. Vendor-namespaced keys (`vendor.*`, `com.example.*`) inside `data` round-trip verbatim today (per §12), insulating extensions from spec drift.
 
-A agent that receives a `Commission` with an unsupported `schema_version` MUST emit `avp.error_occurred` with `data["avp.error.code"]: "unknown"` and a descriptive message, then emit `avp.agent_stopped` with `data["avp.reason"]: "error"`.
+An agent that receives a `Commission` with an unsupported `schema_version` MUST emit `avp.error_occurred` with `data["avp.error.code"]: "unknown"` and a descriptive message, then emit `avp.agent_stopped` with `data["avp.reason"]: "error"`.

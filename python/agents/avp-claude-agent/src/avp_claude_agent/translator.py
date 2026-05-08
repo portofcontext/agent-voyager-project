@@ -170,7 +170,7 @@ _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS = CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS
 # Skills are discovered from `~/.claude/skills/`, project `.claude/skills/`,
 # and plugin paths at runtime — that surface is environment-specific and
 # not enumerable from translation time. So `agent_started.data.skills`
-# stays `cfg.skills` only; we don't snapshot a "default skill list."
+# stays `commission.skills` only; we don't snapshot a "default skill list."
 # Bundled skills mentioned in Claude Code docs (`/simplify`, `/debug`, etc.)
 # are CLI features, not runtime-loaded artifacts the Python SDK exposes.
 
@@ -194,7 +194,7 @@ _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS = CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS
 #
 # Public: re-exported from `avp_claude_agent` so Commission authors can
 # `from avp_claude_agent import CLAUDE_CODE_PRESET_TOOLS` and pass or
-# filter the list when building `Commission.allowed_tools`.
+# filter the list when building `Commission.exposed`.
 CLAUDE_CODE_PRESET_TOOLS: tuple[str, ...] = (
     "Read",
     "Write",
@@ -242,6 +242,53 @@ def _make_builtin_tool_decl(name: str) -> dict[str, Any]:
                 "avp.mcp_server_id": rest[:idx],
             }
     return {"name": name, "avp.dispatch_target": "local"}
+
+
+def _classify_sdk_exception(e: Exception) -> ErrorCode:
+    """Map a Claude Agent SDK exception to an AVP ErrorCode.
+
+    The SDK shells out to the `claude` CLI and surfaces provider failures
+    through a small set of typed exceptions plus message text. We
+    pattern-match by class name and message substrings — class-name match
+    avoids importing claude_agent_sdk symbols at module top, which would
+    make the translator unimportable in environments where the SDK isn't
+    installed (mock-only tests, pre-flight `describe`).
+
+    Falls back to `agent_crash` for unrecognized failures — the SDK
+    surface is moving, so honest-unknown beats fabricated specificity.
+    """
+    type_name = type(e).__name__
+    msg_lower = str(e).lower()
+
+    # Provider-passthrough patterns. The SDK either re-raises Anthropic
+    # SDK exceptions verbatim (when running against the API) or wraps
+    # CLI stderr containing the same wording.
+    if type_name == "RateLimitError" or "rate limit" in msg_lower or "429" in msg_lower:
+        return ErrorCode.rate_limit
+    if type_name in ("AuthenticationError", "PermissionDeniedError"):
+        return ErrorCode.auth_error
+    if any(
+        phrase in msg_lower
+        for phrase in (
+            "invalid api key",
+            "authentication failed",
+            "unauthorized",
+            "401",
+            "403",
+        )
+    ):
+        return ErrorCode.auth_error
+    if any(
+        phrase in msg_lower
+        for phrase in (
+            "prompt is too long",
+            "context window",
+            "maximum context length",
+            "input is too long",
+        )
+    ):
+        return ErrorCode.context_limit
+    return ErrorCode.agent_crash
 
 
 def _provider_from_env() -> str:
@@ -294,7 +341,7 @@ class ClaudeAgentTranslator:
 
     def __init__(
         self,
-        config: Commission,
+        commission: Commission,
         on_event: Callable[[BaseModel], None],
         *,
         manifest: AgentManifest | None = None,
@@ -308,6 +355,7 @@ class ClaudeAgentTranslator:
         parent_agent_span_id: str | None = None,
         suppress_lifecycle: bool = False,
         parent_tracer: Any | None = None,
+        extra_sdk_options: dict[str, Any] | None = None,
     ) -> None:
         """Translates Claude Agent SDK events to AVP wire events.
 
@@ -319,8 +367,18 @@ class ClaudeAgentTranslator:
         wire is one tree) and skips its own `agent_started` / `at_end` /
         `agent_stopped` emission (the parent emits those on its own
         lifecycle bookends).
+
+        `extra_sdk_options` is a dict merged into the `ClaudeAgentOptions`
+        passed to the SDK. Use it for SDK-specific concerns that don't
+        belong on the AVP wire — e.g., `{"permission_mode":
+        "bypassPermissions", "cwd": "/path/to/workspace",
+        "add_dirs": ["/tmp/staging"]}`. These pass through opaque to
+        AVP; consumers of the trajectory don't see them. Commission-level
+        fields (`allowed_tools`, `system_prompt`, `model`, `subagents`,
+        `mcp_servers`) take precedence — `extra_sdk_options` cannot
+        override the AVP-spec wire shape.
         """
-        self.config = config
+        self.commission = commission
         self.on_event = on_event
         self._manifest = manifest
         self._prelude_emitted = False
@@ -342,6 +400,7 @@ class ClaudeAgentTranslator:
         # cost but agent_stopped reports zeros — see
         # `_handle_assistant_message` for the per-turn push.
         self._parent_tracer = parent_tracer
+        self._extra_sdk_options = dict(extra_sdk_options or {})
         self._current_turn_span_id: str | None = None
         self._tool_span_by_call_id: dict[str, str] = {}
         # Subagent lifecycle bookkeeping. The Claude Agent SDK surfaces a
@@ -351,7 +410,7 @@ class ClaudeAgentTranslator:
         # stash the frame span_id keyed by tool_use_id; PostToolUse pops it
         # and emits `subagent_returned`.
         self._subagents_by_name: dict[str, Subagent] = {
-            sa.name: sa for sa in (config.subagents or [])
+            sa.name: sa for sa in (commission.subagents or [])
         }
         self._subagent_invocations: dict[
             str, dict[str, Any]
@@ -393,7 +452,7 @@ class ClaudeAgentTranslator:
         # `data.tools` / `data.skills` / `data.subagents` carry the
         # SDK's authoritative view (descriptions, agent type, skill
         # frontmatter). If connect() raises before we get there, the
-        # exception path in run() falls back to bare cfg-only emission
+        # exception path in run() falls back to bare commission-only emission
         # so the lifecycle invariant (agent_started before agent_stopped)
         # holds.
         self._agent_started_emitted = False
@@ -449,7 +508,7 @@ class ClaudeAgentTranslator:
         # `agent_started` is emitted post-`client.connect()` so its
         # `tools` / `skills` / `subagents` carry SDK-side enrichment
         # (descriptions, agentType, source). The exception path below
-        # falls back to cfg-only emission if connect raises.
+        # falls back to commission-only emission if connect raises.
         #
         # The run-prelude (run_requested + agent_described) fires FIRST,
         # before the SDK is touched. Even if connect raises, the wire
@@ -469,17 +528,18 @@ class ClaudeAgentTranslator:
         except Exception as e:
             logger.exception("avp-claude-agent: SDK error")
             # Fallback: if SDK connect failed before we could fetch
-            # enrichment, emit a bare cfg-only `agent_started` so the
+            # enrichment, emit a bare commission-only `agent_started` so the
             # wire still has the lifecycle marker before `agent_stopped`.
             if not self._agent_started_emitted:
                 self._emit_agent_started()
+            classified_code = _classify_sdk_exception(e)
             self._emit(
                 ErrorOccurredEvent(
-                    subject=self.config.run_id,
+                    subject=self.commission.run_id,
                     data=ErrorOccurredData(
                         **self._own_span(self._current_parent_for_run_event()),
                         **{
-                            "avp.error.code": ErrorCode.agent_crash,
+                            "avp.error.code": classified_code,
                             "avp.error.message": str(e),
                         },
                     ),
@@ -494,7 +554,7 @@ class ClaudeAgentTranslator:
                 assert self._current_turn_span_id is not None
                 self._emit(
                     ModelTurnEndedEvent(
-                        subject=self.config.run_id,
+                        subject=self.commission.run_id,
                         data=ModelTurnEndedData(
                             **self._shared_span(self._current_turn_span_id, self._agent_span_id),
                             step=self._step,
@@ -534,7 +594,7 @@ class ClaudeAgentTranslator:
             self._sdk_agent_definition_cls = AgentDefinition
 
         options = self._build_sdk_options()
-        prompt = self.config.prompt or ""
+        prompt = self.commission.prompt or ""
 
         async with self._sdk_client_cls(options=options) as client:
             await client.connect(prompt)
@@ -556,7 +616,7 @@ class ClaudeAgentTranslator:
         """Translate Commission → ClaudeAgentOptions.
 
         Mapping:
-          - Commission.allowed_tools  → options.allowed_tools  (SDK enforces natively)
+          - Commission.exposed  → options.allowed_tools  (SDK enforces natively)
           - Commission.system_prompt  → options.system_prompt
           - Commission.model          → options.model
           - Commission.subagents      → options.agents = {name: AgentDefinition(...)}
@@ -571,36 +631,64 @@ class ClaudeAgentTranslator:
                                               the tool_use is the SDK's `Agent` tool with
                                               a subagent_type matching a declared subagent
         """
-        cfg = self.config
+        commission = self.commission
         assert self._sdk_options_cls is not None
         assert self._sdk_hook_matcher_cls is not None
 
         kwargs: dict[str, Any] = {}
-        # AVP Commission.allowed_tools per SPEC.md §8.1: "the agent exposes ONLY
-        # tools whose names are in this list" — that's exposure-filter
-        # semantics. The Claude Agent SDK has TWO parameters with different
-        # meanings (verified against `ClaudeAgentOptions` docstrings):
+        # AVP Commission.exposed (SPEC §8.2): exhaustive supervisor-declared
+        # surface, supports fnmatch globs. The Claude Agent SDK's `tools`
+        # parameter expects concrete names — globs must be expanded against
+        # the SDK's preset before the call.
         #
-        #   - `tools` — what the model CAN see. List restricts; `[]` disables
-        #     all built-ins; `None` falls back to the `claude_code` preset.
-        #   - `allowed_tools` — auto-execute without permission prompt. Does
-        #     NOT restrict visibility.
+        # Resolution rules:
+        #   - exposed contains "*" (match-everything glob)        → omit
+        #     `tools` so the SDK uses its full claude_code preset.
+        #   - exposed = []                                         → tools=[]
+        #     (model sees no built-ins).
+        #   - exposed has only literals + non-`*` globs            → expand
+        #     globs over CLAUDE_CODE_PRESET_TOOLS, pass the concrete subset.
         #
-        # AVP semantics maps to SDK `tools`, not SDK `allowed_tools`. Earlier
-        # versions mapped wrong — the model could see the full preset and
-        # only auto-approval was filtered, breaking AVP's "MUST expose ONLY"
-        # contract.
-        if cfg.allowed_tools is not None:
-            # Includes the empty-list case: AVP Commission.allowed_tools=[] means
-            # "no tools at all," which maps to SDK tools=[].
-            kwargs["tools"] = list(cfg.allowed_tools)
-        if cfg.system_prompt:
-            kwargs["system_prompt"] = cfg.system_prompt
-        if cfg.model:
-            kwargs["model"] = cfg.model
-        if cfg.subagents:
+        # Note: the SDK has a separate `allowed_tools` parameter that means
+        # "auto-execute without permission prompt." Do NOT confuse with AVP
+        # `exposed` — AVP semantics maps to SDK `tools`, not `allowed_tools`.
+        exposed_patterns = list(commission.exposed)
+        if not exposed_patterns:
+            kwargs["tools"] = []
+        elif "*" in exposed_patterns:
+            # Match-everything wildcard — let SDK fall back to default preset.
+            pass
+        else:
+            import fnmatch as _fnmatch
+
+            resolved: list[str] = []
+            seen: set[str] = set()
+
+            def _add(name: str) -> None:
+                if name not in seen:
+                    seen.add(name)
+                    resolved.append(name)
+
+            for pattern in exposed_patterns:
+                if any(c in pattern for c in "*?["):
+                    for n in CLAUDE_CODE_PRESET_TOOLS:
+                        if _fnmatch.fnmatchcase(n, pattern):
+                            _add(n)
+                else:
+                    # Literal — pass through; the SDK will reject it if it
+                    # doesn't recognize the name. AVPAgent-side validation
+                    # would already have errored on a non-resolvable
+                    # literal (see `_validate_exposed`); reaching here means
+                    # it was either a built-in or an MCP-server tool.
+                    _add(pattern)
+            kwargs["tools"] = resolved
+        if commission.system_prompt:
+            kwargs["system_prompt"] = commission.system_prompt
+        if commission.model:
+            kwargs["model"] = commission.model
+        if commission.subagents:
             kwargs["agents"] = self._build_sdk_agents()
-        if cfg.mcp_servers:
+        if commission.mcp_servers:
             kwargs["mcp_servers"] = self._build_sdk_mcp_servers()
         # Bridge any user-provided LocalTools into the SDK's in-process
         # MCP server slot so a single AVP-LocalTools registration works
@@ -652,6 +740,14 @@ class ClaudeAgentTranslator:
 
         kwargs.setdefault("stderr", _forward_stderr)
 
+        # Merge in user-supplied SDK-specific options (permission_mode,
+        # cwd, add_dirs, can_use_tool, etc.). Commission-derived kwargs
+        # already in `kwargs` take precedence — extra_sdk_options can't
+        # override AVP wire-shape concerns like `tools` (which maps from
+        # Commission.exposed).
+        for k, v in self._extra_sdk_options.items():
+            kwargs.setdefault(k, v)
+
         return self._sdk_options_cls(**kwargs)
 
     def _build_sdk_agents(self) -> dict[str, Any]:
@@ -663,7 +759,7 @@ class ClaudeAgentTranslator:
           AVP Subagent.description    → AgentDefinition.description
           AVP Subagent.system_prompt  → AgentDefinition.prompt
           AVP Subagent.model          → AgentDefinition.model
-          AVP Subagent.allowed_tools  → AgentDefinition.tools (allowlist)
+          AVP Subagent.exposed  → AgentDefinition.tools (allowlist)
 
         v0.1 prototype: subagent.skills / inherit_tools / nested subagents
         are not yet wired into the SDK side. The Subagent type accepts them;
@@ -675,14 +771,14 @@ class ClaudeAgentTranslator:
         injected — the SDK accepts dicts in some versions; tests rely on this.
         """
         agents: dict[str, Any] = {}
-        for sa in self.config.subagents or []:
+        for sa in self.commission.subagents or []:
             payload: dict[str, Any] = {"description": sa.description}
             if sa.system_prompt:
                 payload["prompt"] = sa.system_prompt
             if sa.model:
                 payload["model"] = sa.model
-            if sa.allowed_tools is not None:
-                payload["tools"] = list(sa.allowed_tools)
+            if sa.exposed is not None:
+                payload["tools"] = list(sa.exposed)
             if self._sdk_agent_definition_cls is not None:
                 agents[sa.name] = self._sdk_agent_definition_cls(**payload)
             else:
@@ -702,7 +798,7 @@ class ClaudeAgentTranslator:
         the originating server.
         """
         servers: dict[str, dict[str, Any]] = {}
-        for s in self.config.mcp_servers or []:
+        for s in self.commission.mcp_servers or []:
             entry: dict[str, Any] = {"type": s.transport}
             if s.transport == "stdio":
                 if s.command:
@@ -768,9 +864,9 @@ class ClaudeAgentTranslator:
         reset signal (PreCompact / SubagentStart), emit error_occurred
         rather than silently clamping the delta.
         """
-        cfg = self.config
+        commission = self.commission
         usage = getattr(message, "usage", None)
-        model_id = getattr(message, "model", cfg.model or "unspecified")
+        model_id = getattr(message, "model", commission.model or "unspecified")
         cumulative_ti, cumulative_to, cumulative_cr, cumulative_cw, cumulative_cost, cost_source = (
             _compute_cost(model_id, usage)
         )
@@ -806,7 +902,7 @@ class ClaudeAgentTranslator:
         if unexpected_reset:
             self._emit(
                 ErrorOccurredEvent(
-                    subject=cfg.run_id,
+                    subject=commission.run_id,
                     data=ErrorOccurredData(
                         **self._own_span(self._current_parent_for_run_event()),
                         **{
@@ -866,7 +962,7 @@ class ClaudeAgentTranslator:
         self._turn_t0_monotonic_ms = _monotonic_ms()
         self._emit(
             ModelTurnStartedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=ModelTurnStartedData(
                     **self._shared_span(self._current_turn_span_id, self._agent_span_id),
                     step=self._step,
@@ -884,7 +980,7 @@ class ClaudeAgentTranslator:
                 if text:
                     self._emit(
                         TextEmittedEvent(
-                            subject=cfg.run_id,
+                            subject=commission.run_id,
                             data=TextEmittedData(
                                 **self._own_span(self._current_turn_span_id),
                                 step=self._step,
@@ -906,7 +1002,7 @@ class ClaudeAgentTranslator:
                     rkwargs["avp.reasoning.signature"] = sig
                 self._emit(
                     ReasoningEmittedEvent(
-                        subject=cfg.run_id,
+                        subject=commission.run_id,
                         data=ReasoningEmittedData(
                             **self._own_span(self._current_turn_span_id),
                             step=self._step,
@@ -927,7 +1023,7 @@ class ClaudeAgentTranslator:
                     rkwargs["avp.reasoning.signature"] = sig
                 self._emit(
                     ReasoningEmittedEvent(
-                        subject=cfg.run_id,
+                        subject=commission.run_id,
                         data=ReasoningEmittedData(
                             **self._own_span(self._current_turn_span_id),
                             step=self._step,
@@ -973,7 +1069,7 @@ class ClaudeAgentTranslator:
 
         self._emit(
             ModelTurnEndedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=ModelTurnEndedData(
                     **self._shared_span(self._current_turn_span_id, self._agent_span_id),
                     step=self._step,
@@ -1007,7 +1103,7 @@ class ClaudeAgentTranslator:
             )
         self._emit(
             CostRecordedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=CostRecordedData(
                     **self._own_span(self._current_turn_span_id),
                     # Tag the source so consumers can join this event with
@@ -1042,7 +1138,7 @@ class ClaudeAgentTranslator:
             self._total_cost_usd = float(sdk_cost)
             self._emit(
                 CostRecordedEvent(
-                    subject=self.config.run_id,
+                    subject=self.commission.run_id,
                     data=CostRecordedData(
                         **self._own_span(self._current_parent_for_run_event()),
                         **{
@@ -1108,7 +1204,7 @@ class ClaudeAgentTranslator:
 
         self._emit(
             ToolInvokedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=ToolInvokedData(
                     **self._shared_span(tool_span_id, parent),
                     step=self._step,
@@ -1125,7 +1221,7 @@ class ClaudeAgentTranslator:
         server is explicitly declared, so a tool that happens to start
         with `mcp__` but came from elsewhere (filesystem-loaded MCP, SDK
         defaults) doesn't get mis-tagged."""
-        return any(s.id == server_id for s in (self.config.mcp_servers or []))
+        return any(s.id == server_id for s in (self.commission.mcp_servers or []))
 
     async def _on_post_tool_use_hook(
         self, input_data: dict[str, Any], tool_use_id: str | None, _context: Any
@@ -1171,7 +1267,7 @@ class ClaudeAgentTranslator:
             returned_kwargs["avp.tool.result.structured"] = output_structured
         self._emit(
             ToolReturnedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=ToolReturnedData(
                     **self._shared_span(tool_span_id, parent),
                     step=self._step,
@@ -1215,7 +1311,7 @@ class ClaudeAgentTranslator:
             invoked_data["gen_ai.agent.description"] = sa.description
         self._emit(
             SubagentInvokedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=SubagentInvokedData(
                     **self._shared_span(frame_span_id, parent),
                     **invoked_data,
@@ -1277,7 +1373,7 @@ class ClaudeAgentTranslator:
         parent = self._current_turn_span_id or self._agent_span_id
         self._emit(
             SubagentReturnedEvent(
-                subject=self.config.run_id,
+                subject=self.commission.run_id,
                 data=SubagentReturnedData(
                     **self._shared_span(frame_span_id, parent),
                     **returned_data,
@@ -1328,18 +1424,18 @@ class ClaudeAgentTranslator:
         """
         if self._suppress_lifecycle or self._manifest is None or self._prelude_emitted:
             return
-        cfg = self.config
-        sup = cfg.supervisor
-        config_snapshot = cfg.model_dump(by_alias=True, exclude_none=True, mode="json")
+        commission = self.commission
+        sup = commission.supervisor
+        commission_snapshot = commission.model_dump(by_alias=True, exclude_none=True, mode="json")
         run_requested_kwargs: dict[str, Any] = {
             "avp.supervisor.name": sup.name if sup is not None else "unknown",
-            "avp.commission": config_snapshot,
+            "avp.commission": commission_snapshot,
         }
         if sup is not None and sup.version is not None:
             run_requested_kwargs["avp.supervisor.version"] = sup.version
         self._emit(
             RunRequestedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=RunRequestedData(
                     trace_id=self._trace_id,
                     span_id=new_span_id(),
@@ -1350,12 +1446,12 @@ class ClaudeAgentTranslator:
         )
         self._emit(
             AgentDescribedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=AgentDescribedData(
                     trace_id=self._trace_id,
                     span_id=new_span_id(),
                     parent_span_id=ZERO_SPAN_ID,
-                    **{"avp.agent": self._manifest},
+                    **{"avp.manifest": self._manifest},
                 ),
             )
         )
@@ -1391,38 +1487,54 @@ class ClaudeAgentTranslator:
             # Idempotent: enriched post-connect emit takes precedence; a
             # later fallback in run()'s exception path becomes a no-op.
             return
-        cfg = self.config
+        commission = self.commission
         enrichment = enrichment or {}
         tool_enrich: dict[str, dict[str, Any]] = enrichment.get("tools", {})
         subagent_enrich: dict[str, dict[str, Any]] = enrichment.get("subagents", {})
         skill_enrich: dict[str, dict[str, Any]] = enrichment.get("skills", {})
-        # Build the effective tool surface the model sees, mirroring the
-        # reference agent's "Commission.tools ∪ agent_builtin_tools, filtered
-        # by allowed_tools" pattern (SPEC.md §13.1.2). For the CASDK agent,
-        # the "agent builtins" are the Claude Agent SDK's own tools (Read,
-        # Write, Bash, …) plus any MCP-routed names.
+        # Build the effective tool surface the model sees by resolving
+        # `commission.exposed` (the supervisor's exhaustive name surface,
+        # supporting fnmatch globs) against the SDK's `claude_code` preset.
+        # For the CASDK agent, the "agent builtins" are the Claude Agent
+        # SDK's own tools (Read, Write, Bash, …); MCP tools surface
+        # separately on `mcp_server_connected.data.avp.mcp.tools`.
         #
-        # Three Commission shapes drive different behaviors so the wire
-        # accurately reflects what the model can actually see:
-        #
-        #   - `cfg.allowed_tools = ["Read", ...]` → restricted: surface
-        #     exactly those names. SDK is told `tools=[...]` matching.
-        #   - `cfg.allowed_tools = []` → no tools: emit empty surface
-        #     (still distinguishes from "preset" — model sees nothing).
-        #     SDK is told `tools=[]`.
-        #   - `cfg.allowed_tools = None` (not set) → SDK uses the
-        #     `claude_code` preset; surface the documented preset names
-        #     so the audit trail isn't blank for the common
-        #     "let-the-SDK-handle-it" case.
+        # Resolution rules:
+        #   - `exposed = ["*"]`        → expand to the full SDK preset.
+        #   - `exposed = ["Bash", ...]` (literals only) → surface those names.
+        #   - `exposed = ["mcp_*"]`    (glob) → expand against preset; matches
+        #     none here (those are MCP names; reported on mcp_server_connected).
+        #   - `exposed = []`           → empty surface; the model sees no
+        #     built-ins. Distinct from "no commission filter."
         tools_meta_list: list[dict[str, Any]] = []
 
-        # Decide which built-in names to surface based on the Commission shape.
-        # `cfg.allowed_tools is None` means "use SDK preset"; any list
-        # (including empty) means "exactly these."
-        if cfg.allowed_tools is None:
-            builtin_names = list(_CLAUDE_CODE_PRESET_TOOLS)
-        else:
-            builtin_names = list(cfg.allowed_tools)
+        # Resolve patterns over the SDK preset PLUS MCP-prefixed literals.
+        #   - Globs (`*`, `?`, `[`) expand against the SDK preset only —
+        #     they're meant for trust-the-namespace patterns over built-ins
+        #     (`*` for full preset, `Read*` for read-shaped, etc.).
+        #   - MCP-prefixed literals (`mcp__<server>__<tool>`) are kept as-is
+        #     so they surface on agent_started.data.tools with the right
+        #     dispatch_target=mcp_server tag (per `_make_builtin_tool_decl`).
+        #   - Other literals that match a preset name are kept; literals
+        #     that match nothing are dropped (validation has already errored
+        #     on truly-unresolvable literals upstream).
+        import fnmatch as _fnmatch
+
+        builtin_names: list[str] = []
+        seen_builtin: set[str] = set()
+
+        def _add_builtin(name: str) -> None:
+            if name not in seen_builtin:
+                seen_builtin.add(name)
+                builtin_names.append(name)
+
+        for pattern in commission.exposed:
+            if any(c in pattern for c in "*?["):
+                for n in _CLAUDE_CODE_PRESET_TOOLS:
+                    if _fnmatch.fnmatchcase(n, pattern):
+                        _add_builtin(n)
+            elif pattern.startswith("mcp__") or pattern in _CLAUDE_CODE_PRESET_TOOLS:
+                _add_builtin(pattern)
 
         for name in builtin_names:
             decl = _make_builtin_tool_decl(name)
@@ -1444,17 +1556,17 @@ class ClaudeAgentTranslator:
         # description / system prompt / tools for us to authoritatively
         # report.
         subagents_meta_list: list[dict[str, Any]] = []
-        rpc_subagent_names: set[str] = {sa.name for sa in (cfg.subagents or [])}
-        if cfg.subagents:
+        rpc_subagent_names: set[str] = {sa.name for sa in (commission.subagents or [])}
+        if commission.subagents:
             subagents_meta_list.extend(
                 {
                     "name": sa.name,
                     "description": sa.description,
                     **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
                 }
-                for sa in cfg.subagents
+                for sa in commission.subagents
             )
-        if cfg.subagents is None:
+        if commission.subagents is None:
             for name in _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS:
                 if name in rpc_subagent_names:
                     continue
@@ -1469,12 +1581,12 @@ class ClaudeAgentTranslator:
                     decl["avp.agent_type"] = extra["agent_type"]
                 subagents_meta_list.append(decl)
         subagents_meta = subagents_meta_list or None
-        # Skills: Commission-declared skills (cfg.skills) carry name + source.
+        # Skills: Commission-declared skills (commission.skills) carry name + source.
         # Enrichment from get_context_usage().skills can add a description
         # parsed from SKILL.md frontmatter — that's the authoritative
         # description the SDK loaded.
         skills_meta_list: list[dict[str, Any]] = []
-        for s in cfg.skills or []:
+        for s in commission.skills or []:
             decl: dict[str, Any] = {"name": s.name, "avp.source": s.avp_source}
             extra = skill_enrich.get(s.name) or {}
             if extra.get("description"):
@@ -1497,29 +1609,29 @@ class ClaudeAgentTranslator:
             "trace_id": self._trace_id,
             "span_id": self._agent_span_id,
             "parent_span_id": ZERO_SPAN_ID,
-            "prompt": cfg.prompt,
-            "system_prompt": cfg.system_prompt,
+            "prompt": commission.prompt,
+            "system_prompt": commission.system_prompt,
             "tools": tools_meta,
             "skills": skills_meta,
             "subagents": subagents_meta,
         }
-        if cfg.model:
-            data_kwargs["gen_ai.request.model"] = cfg.model
+        if commission.model:
+            data_kwargs["gen_ai.request.model"] = commission.model
         # OTel-shaped operation + provider tags. Always set on agent_started:
         # the Claude Agent SDK is always an "invoke_agent" operation; the
         # provider is "anthropic" unless one of the SDK's backend env vars
         # selects Bedrock / Vertex / Foundry. See `_provider_from_env`.
         data_kwargs["gen_ai.operation.name"] = "invoke_agent"
         data_kwargs["gen_ai.provider.name"] = _provider_from_env()
-        if cfg.thread_id:
-            data_kwargs["avp.thread_id"] = cfg.thread_id
-        if cfg.tags:
-            data_kwargs["avp.tags"] = cfg.tags
-        if cfg.meta:
-            data_kwargs["avp.meta"] = cfg.meta
+        if commission.thread_id:
+            data_kwargs["avp.thread_id"] = commission.thread_id
+        if commission.tags:
+            data_kwargs["avp.tags"] = commission.tags
+        if commission.meta:
+            data_kwargs["avp.meta"] = commission.meta
         self._emit(
             AgentStartedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=AgentStartedData(**data_kwargs),
             )
         )
@@ -1542,7 +1654,7 @@ class ClaudeAgentTranslator:
 
         Defensive: if the method is missing (older SDK, test fakes),
         raises, or returns shapes we don't recognize, return an empty
-        dict so the caller falls back to bare cfg-only emission.
+        dict so the caller falls back to bare commission-only emission.
 
         SDK shape (`ContextUsageResponse`):
             {
@@ -1564,7 +1676,7 @@ class ClaudeAgentTranslator:
         try:
             usage: Any = await get_usage()
         except Exception as e:
-            logger.debug("get_context_usage failed; using cfg-only enrichment: %s", e)
+            logger.debug("get_context_usage failed; using commission-only enrichment: %s", e)
             return {}
         if not isinstance(usage, dict):
             return {}
@@ -1621,7 +1733,7 @@ class ClaudeAgentTranslator:
     async def _emit_agent_started_with_sdk_enrichment(self, client: Any) -> None:
         """Fetch SDK enrichment, then emit `agent_started` with it.
 
-        On any failure, falls back to cfg-only emission via
+        On any failure, falls back to commission-only emission via
         `_emit_agent_started(enrichment=None)` so the lifecycle invariant
         (agent_started before agent_stopped) is preserved.
         """
@@ -1647,7 +1759,7 @@ class ClaudeAgentTranslator:
         Commission.mcp_servers entry with `tool_count=0` and no live
         tools, so the wire still records the lifecycle moment.
         """
-        cfg = self.config
+        commission = self.commission
         get_status = getattr(client, "get_mcp_status", None)
         statuses: list[Any] = []
         if get_status is not None:
@@ -1665,12 +1777,12 @@ class ClaudeAgentTranslator:
 
         # Fallback path: no live data, emit Commission-time stubs so the
         # lifecycle marker is at least present on the wire.
-        if not cfg.mcp_servers:
+        if not commission.mcp_servers:
             return
-        for server in cfg.mcp_servers:
+        for server in commission.mcp_servers:
             self._emit(
                 McpServerConnectedEvent(
-                    subject=cfg.run_id,
+                    subject=commission.run_id,
                     data=McpServerConnectedData(
                         **self._own_span(self._agent_span_id),
                         **{
@@ -1690,7 +1802,7 @@ class ClaudeAgentTranslator:
         SDK's `McpServerStatus` TypedDict: `name`, `status`,
         `serverInfo` (NotRequired), `error` (NotRequired), `tools`
         (NotRequired list of `McpToolInfo`)."""
-        cfg = self.config
+        commission = self.commission
         # status keys are camelCase per the SDK's TypedDict.
         server_id = str(status.get("name", ""))
         if not server_id:
@@ -1739,7 +1851,7 @@ class ClaudeAgentTranslator:
 
         self._emit(
             McpServerConnectedEvent(
-                subject=cfg.run_id,
+                subject=commission.run_id,
                 data=McpServerConnectedData(
                     **self._own_span(self._agent_span_id),
                     **kwargs,
@@ -1756,7 +1868,7 @@ class ClaudeAgentTranslator:
             return None
         snap = self._snapshot()
         ev = AgentStoppedEvent(
-            subject=self.config.run_id,
+            subject=self.commission.run_id,
             data=AgentStoppedData(
                 trace_id=self._trace_id,
                 span_id=self._agent_span_id,

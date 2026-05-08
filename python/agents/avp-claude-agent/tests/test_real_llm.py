@@ -35,7 +35,10 @@ from avp import (
     ModelTurnEndedEvent,
     StopReason,
     TextEmittedEvent,
+    ToolInvokedEvent,
+    ToolReturnedEvent,
 )
+from avp_claude_agent import manifest as agent_manifest
 from avp_claude_agent.translator import ClaudeAgentTranslator
 
 _HAS_SDK = importlib.util.find_spec("claude_agent_sdk") is not None
@@ -54,14 +57,15 @@ SMOKE_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _new_translator(*, prompt: str, run_id: str):
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id=run_id,
         model=SMOKE_MODEL,
         prompt=prompt,
+        exposed=["*"],
     )
     captured: list = []
-    translator = ClaudeAgentTranslator(config, on_event=captured.append)
+    translator = ClaudeAgentTranslator(commission, on_event=captured.append)
     return translator, captured
 
 
@@ -154,18 +158,19 @@ def test_traced_client_drop_in_round_trip_against_real_sdk() -> None:
 
     from avp_claude_agent import TracedClaudeSDKClient
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="traced-client-smoke",
         model=SMOKE_MODEL,
         prompt="Reply with exactly the single word 'pong'.",
+        exposed=["*"],
     )
     captured: list = []
     received_messages: list = []
 
     async def _run() -> None:
-        async with TracedClaudeSDKClient(config=config, on_event=captured.append) as client:
-            await client.connect(config.prompt)
+        async with TracedClaudeSDKClient(commission=commission, on_event=captured.append) as client:
+            await client.connect(commission.prompt)
             async for message in client.receive_response():
                 received_messages.append(message)
             client.converged()
@@ -219,3 +224,78 @@ def test_model_turn_ended_carries_otel_genai_usage() -> None:
                 f"AVP §9.4: gen_ai.usage.input_tokens ({te.data.gen_ai_usage_input_tokens}) "
                 f"MUST include cache reads ({cache_read})"
             )
+
+
+def test_local_tool_invoked_returned_pair_against_real_sdk(tmp_path) -> None:
+    """When the Claude Agent SDK dispatches a built-in tool (`Read`,
+    `Bash`, etc.), the translator MUST surface it as
+    `tool_invoked` → `tool_returned` on the AVP wire — paired by
+    `gen_ai.tool.call.id`. Pins the SDK-hooks → wire-events translation.
+
+    Whether the model decides to use a tool is real-model behavior we
+    don't control. We narrow the surface to a single tool (`Read`) and
+    pin the workspace to tmp_path, but Haiku may still answer inline.
+    If no tool fires, we skip rather than fail — the wire correctness
+    is exercised by the translator unit tests; this test only adds
+    value when a tool actually fires end-to-end.
+    """
+    target = tmp_path / "secret.txt"
+    secret = "hunter2-skqp9j"  # unique enough that "answered from prior knowledge" is implausible
+    target.write_text(f"the password is {secret}")
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="claude-agent-smoke-tool",
+        model=SMOKE_MODEL,
+        # `allowed_tools=["Read"]` narrows the SDK's exposed tool surface
+        # to just Read so the model can't reach for Bash / Edit / etc.
+        # The strong system prompt removes ambiguity about whether to
+        # answer inline.
+        system_prompt=(
+            "You are a file-reading assistant. Your only ability is to call "
+            "the Read tool with a file path. You MUST always call Read at "
+            "least once before answering. Never answer from prior knowledge."
+        ),
+        prompt=(
+            f"Use the Read tool to read {target}. After reading, reply with "
+            "only the password value found in the file."
+        ),
+        exposed=["Read"],
+    )
+    captured: list = []
+    translator = ClaudeAgentTranslator(
+        commission,
+        on_event=captured.append,
+        manifest=agent_manifest(),
+        # Non-interactive runs need bypassPermissions so the CLI doesn't
+        # auto-reject the tool call without invoking it (PreToolUse fires,
+        # PostToolUse never does, no tool_returned on the wire).
+        # `cwd` scopes the CLI's filesystem access to tmp_path so reads
+        # of files we created there are allowed.
+        extra_sdk_options={
+            "permission_mode": "bypassPermissions",
+            "cwd": str(tmp_path),
+        },
+    )
+    translator.run()
+
+    invocations = [ev for ev in captured if isinstance(ev, ToolInvokedEvent)]
+    returns = [ev for ev in captured if isinstance(ev, ToolReturnedEvent)]
+
+    if not invocations:
+        # The model converged without using a tool. That's its prerogative —
+        # we don't control model behavior. The wire shape (PreToolUse →
+        # tool_invoked, PostToolUse → tool_returned) is exercised in unit
+        # tests with a mocked SDK; this real-LLM test only adds value
+        # when a tool actually fires.
+        pytest.skip(
+            "Real model didn't invoke any tool on this run — wire correctness "
+            "still pinned by translator unit tests. Skipping to keep smoke "
+            "stable; model behavior isn't part of this test's contract."
+        )
+
+    assert returns, "tool fired but no tool_returned — PostToolUse hook is silent"
+
+    inv_ids = {ev.data.gen_ai_tool_call_id for ev in invocations}
+    ret_ids = {ev.data.gen_ai_tool_call_id for ev in returns}
+    assert inv_ids <= ret_ids, f"unmatched tool_invoked: invoked={inv_ids}, returned={ret_ids}"

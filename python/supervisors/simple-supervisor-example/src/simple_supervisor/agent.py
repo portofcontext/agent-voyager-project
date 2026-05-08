@@ -5,8 +5,8 @@ yields NDJSON event lines. Errors on stderr are forwarded so the user sees
 why the agent died.
 
 Two entry points:
-- `run_subprocess(cmd, config)` — drives an external agent CLI (avp-anthropic)
-- `run_in_process(config, runner_factory)` — drives the reference agent directly,
+- `run_subprocess(cmd, commission)` — drives an external agent CLI (avp-anthropic)
+- `run_in_process(commission, agent_factory)` — drives the reference agent directly,
   for fast unit-test-friendly demos with ScriptedModel
 """
 
@@ -26,7 +26,7 @@ from avp import Commission, parse_event
 
 def run_subprocess(
     cmd: list[str],
-    config: Commission,
+    commission: Commission,
     *,
     cwd: str | None = None,
     extra_env: dict[str, str] | None = None,
@@ -69,7 +69,7 @@ def run_subprocess(
 
     threading.Thread(target=_drain_stderr, daemon=True).start()
 
-    proc.stdin.write(config.model_dump_json(by_alias=True, exclude_none=True) + "\n")
+    proc.stdin.write(commission.model_dump_json(by_alias=True, exclude_none=True) + "\n")
     proc.stdin.flush()
 
     events: list[BaseModel | dict[str, Any]] = []
@@ -102,7 +102,7 @@ def run_subprocess(
 
 def stream_subprocess(
     cmd: list[str],
-    config: Commission,
+    commission: Commission,
     *,
     cwd: str | None = None,
     extra_env: dict[str, str] | None = None,
@@ -137,7 +137,7 @@ def stream_subprocess(
 
     threading.Thread(target=_drain_stderr, daemon=True).start()
 
-    proc.stdin.write(config.model_dump_json(by_alias=True, exclude_none=True) + "\n")
+    proc.stdin.write(commission.model_dump_json(by_alias=True, exclude_none=True) + "\n")
     proc.stdin.flush()
 
     try:

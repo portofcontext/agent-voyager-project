@@ -1,6 +1,6 @@
 """simple-supervisor-example — a worked AVP v0.1 supervisor.
 
-Build Configs from Profiles, drive a agent subprocess (or in-process), surface
+Build Configs from Profiles, drive an agent subprocess (or in-process), surface
 the trajectory (what the agent did, the run cost).
 """
 

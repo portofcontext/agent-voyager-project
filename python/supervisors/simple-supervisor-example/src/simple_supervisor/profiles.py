@@ -18,13 +18,14 @@ from dataclasses import dataclass, field
 class Profile:
     """A bundle of Commission-shaped defaults the supervisor wants to apply.
 
-    Compiles to: allowed_tools (filter) plus a system_prompt hint that
-    frames the agent's role inside this profile.
+    Compiles to: `exposed` (the model-facing name surface, with fnmatch
+    glob support) plus a system_prompt hint that frames the agent's role
+    inside this profile.
     """
 
     name: str
     description: str
-    allowed_tools: list[str] = field(default_factory=list)
+    exposed: list[str] = field(default_factory=list)
     system_prompt: str | None = None
 
 
@@ -36,7 +37,7 @@ DEV_LOOSE = Profile(
         "Permissive surface for exploratory dev work. Use this to show "
         "'what would the agent do if I didn't gate it'."
     ),
-    allowed_tools=["bash", "read_file", "write_file"],
+    exposed=["bash", "read_file", "write_file"],
 )
 
 
@@ -46,7 +47,7 @@ READ_ONLY = Profile(
         "Read-only inspection profile. Useful for code-review and "
         "explanation tasks where you want the agent to look but not touch."
     ),
-    allowed_tools=["read_file"],
+    exposed=["read_file"],
 )
 
 

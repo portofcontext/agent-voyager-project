@@ -30,10 +30,10 @@ from avp_claude_agent.translator import ClaudeAgentTranslator
 from .test_translator import _FakeHookMatcher, _FakeOptions
 
 
-def _make_translator(cfg: Commission) -> tuple[ClaudeAgentTranslator, list]:
+def _make_translator(commission: Commission) -> tuple[ClaudeAgentTranslator, list]:
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -64,13 +64,14 @@ def test_live_status_emits_real_tool_names_per_server() -> None:
     """SDK reports two connected servers, each with real tools. The
     translator emits one event per server with `avp.mcp.tools`
     populated and `avp.mcp.tool_count` matching the actual count."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="live-mcp",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
 
     response = {
         "mcpServers": [
@@ -117,8 +118,14 @@ def test_tool_descriptions_when_provided_by_server() -> None:
     """McpToolInfo's `description` is NotRequired. When the server
     provides one, surface it; when missing, leave description out
     (honest-null beats authored-prose for tools we don't author)."""
-    cfg = Commission(schema_version="0.1", run_id="desc", model="claude-sonnet-4-6", prompt="hi")
-    t, out = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1",
+        run_id="desc",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        exposed=["*"],
+    )
+    t, out = _make_translator(commission)
     response = {
         "mcpServers": [
             {
@@ -146,8 +153,14 @@ def test_failed_server_status_and_error_surface_on_event() -> None:
     """When SDK reports `status=failed` with an error message, both
     fields land on the wire so audit consumers can spot which servers
     didn't connect and why."""
-    cfg = Commission(schema_version="0.1", run_id="fail", model="claude-sonnet-4-6", prompt="hi")
-    t, out = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1",
+        run_id="fail",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        exposed=["*"],
+    )
+    t, out = _make_translator(commission)
     response = {
         "mcpServers": [
             {
@@ -172,8 +185,14 @@ def test_needs_auth_status_surfaced() -> None:
     """`needs-auth` is a distinct state — server is reachable but
     authentication wasn't accepted. Same wire shape, different status
     value."""
-    cfg = Commission(schema_version="0.1", run_id="auth", model="claude-sonnet-4-6", prompt="hi")
-    t, out = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1",
+        run_id="auth",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        exposed=["*"],
+    )
+    t, out = _make_translator(commission)
     response = {
         "mcpServers": [
             {
@@ -201,14 +220,15 @@ def test_fallback_when_client_has_no_get_mcp_status() -> None:
     class _ClientWithoutStatus:
         pass
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="no-status",
         model="claude-sonnet-4-6",
         prompt="hi",
         mcp_servers=[McpServer(id="legacy", transport="http", url="https://x.example.com")],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
     asyncio.run(t._emit_mcp_connections_after_connect(_ClientWithoutStatus()))
     events = _by_type(out, McpServerConnectedEvent)
     assert len(events) == 1
@@ -228,14 +248,15 @@ def test_fallback_when_get_mcp_status_raises() -> None:
         async def get_mcp_status(self):
             raise RuntimeError("transport went away")
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="boom",
         model="claude-sonnet-4-6",
         prompt="hi",
         mcp_servers=[McpServer(id="resilience", transport="http", url="https://x.example.com")],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
     asyncio.run(t._emit_mcp_connections_after_connect(_Boom()))
     events = _by_type(out, McpServerConnectedEvent)
     assert len(events) == 1
@@ -245,8 +266,14 @@ def test_fallback_when_get_mcp_status_raises() -> None:
 def test_no_servers_no_events_when_status_empty() -> None:
     """SDK reports zero servers and Commission has none → zero events.
     Symmetric with the no-MCP case."""
-    cfg = Commission(schema_version="0.1", run_id="empty", model="claude-sonnet-4-6", prompt="hi")
-    t, out = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1",
+        run_id="empty",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        exposed=["*"],
+    )
+    t, out = _make_translator(commission)
     asyncio.run(t._emit_mcp_connections_after_connect(_StubClient({"mcpServers": []})))
     assert not _by_type(out, McpServerConnectedEvent)
 
@@ -261,15 +288,16 @@ def test_sdk_discovered_server_not_in_config_still_emits() -> None:
     them — auditors see the FULL set of connected servers, not just
     the Commission-declared ones. Keeps the wire honest about what was
     actually connected."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="filesystem-mcp",
         model="claude-sonnet-4-6",
         prompt="hi",
         # Note: NO mcp_servers in Commission. The SDK reads them from
-        # ~/.claude/settings.json or similar.
+        # ~/.claude/settings.json or similar.,
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
     response = {
         "mcpServers": [
             {

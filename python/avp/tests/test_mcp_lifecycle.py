@@ -33,8 +33,8 @@ def _trivial_model() -> ScriptedModel:
 
 
 def test_no_mcp_servers_emits_no_lifecycle_events() -> None:
-    cfg = Commission(schema_version="0.1", run_id="r-no-mcp", prompt="hi")
-    agent = AVPAgent(cfg, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
+    commission = Commission(schema_version="0.1", run_id="r-no-mcp", prompt="hi", exposed=["*"])
+    agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
     agent.run()
     types = [ev.type for ev in agent.trajectory]
     assert "avp.mcp_server_connected" not in types
@@ -42,7 +42,7 @@ def test_no_mcp_servers_emits_no_lifecycle_events() -> None:
 
 
 def test_mcp_servers_emit_connect_then_disconnect_in_order() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-mcp-pair",
         prompt="hi",
@@ -50,8 +50,9 @@ def test_mcp_servers_emit_connect_then_disconnect_in_order() -> None:
             McpServer(id="github", transport="http", url="https://example.com/mcp"),
             McpServer(id="fs", transport="stdio", command=["npx", "mcp-server-fs"]),
         ],
+        exposed=["*"],
     )
-    agent = AVPAgent(cfg, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
+    agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
     agent.run()
 
     types = [ev.type for ev in agent.trajectory]
@@ -89,17 +90,17 @@ def test_mcp_disconnect_fires_even_when_run_errors_at_validation() -> None:
     lifecycle is symmetric: every connected event has a matching disconnected."""
     from avp import Subagent
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="r-mcp-err",
         prompt="hi",
         # Subagent declared but missing from allowed_tools — the agent
         # flags this at startup and stops with reason=error.
-        subagents=[Subagent(name="missing", description="x")],
-        allowed_tools=["other"],
+        subagents=[Subagent(name="missing", description="x", exposed=["*"])],
+        exposed=["other"],
         mcp_servers=[McpServer(id="github", transport="http", url="https://x/mcp")],
     )
-    agent = AVPAgent(cfg, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
+    agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
     agent.run()
 
     types = [ev.type for ev in agent.trajectory]

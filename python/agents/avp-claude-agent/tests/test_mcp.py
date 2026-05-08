@@ -47,10 +47,10 @@ class _FakeHookMatcher:
     hooks: list
 
 
-def _make_translator(cfg: Commission) -> tuple[ClaudeAgentTranslator, list]:
+def _make_translator(commission: Commission) -> tuple[ClaudeAgentTranslator, list]:
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -66,7 +66,7 @@ def _by_type(events: list, type_: type) -> list:
 
 
 def test_stdio_mcp_server_translates_to_sdk_shape() -> None:
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-stdio",
         model="claude-sonnet-4-6",
@@ -79,8 +79,9 @@ def test_stdio_mcp_server_translates_to_sdk_shape() -> None:
                 env={"GITHUB_TOKEN": "shhh"},
             )
         ],
+        exposed=["*"],
     )
-    t, _ = _make_translator(cfg)
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     servers = opts.kwargs["mcp_servers"]
     # SDK shape is a dict keyed by server id; each entry carries the
@@ -100,7 +101,7 @@ def test_http_mcp_server_with_bearer_auth_resolves_token_from_env(monkeypatch) -
     translator passes a finished `Authorization: Bearer …` header to
     the SDK."""
     monkeypatch.setenv("MY_API_TOKEN", "secret-123")
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-http",
         model="claude-sonnet-4-6",
@@ -112,8 +113,9 @@ def test_http_mcp_server_with_bearer_auth_resolves_token_from_env(monkeypatch) -
                 auth=McpHttpAuth(type="bearer", token_env="MY_API_TOKEN"),
             )
         ],
+        exposed=["*"],
     )
-    t, _ = _make_translator(cfg)
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     entry = opts.kwargs["mcp_servers"]["weather"]
     assert entry["type"] == "http"
@@ -126,7 +128,7 @@ def test_http_mcp_server_without_env_token_skips_header(monkeypatch) -> None:
     header — better to fail at the server than to send `Bearer ` and
     look like an authentication attempt."""
     monkeypatch.delenv("UNSET_TOKEN", raising=False)
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-no-token",
         model="claude-sonnet-4-6",
@@ -138,8 +140,9 @@ def test_http_mcp_server_without_env_token_skips_header(monkeypatch) -> None:
                 auth=McpHttpAuth(type="bearer", token_env="UNSET_TOKEN"),
             )
         ],
+        exposed=["*"],
     )
-    t, _ = _make_translator(cfg)
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     entry = opts.kwargs["mcp_servers"]["public"]
     assert "headers" not in entry
@@ -148,9 +151,11 @@ def test_http_mcp_server_without_env_token_skips_header(monkeypatch) -> None:
 def test_no_mcp_servers_omits_kwarg_entirely() -> None:
     """Backwards-compat: a Commission without mcp_servers MUST NOT populate
     options.mcp_servers (so existing setups that rely on the SDK's
-    filesystem-loaded MCP config keep working)."""
-    cfg = Commission(schema_version="0.1", run_id="no-mcp", model="claude-sonnet-4-6")
-    t, _ = _make_translator(cfg)
+    filesystem-loaded MCP commission keep working)."""
+    commission = Commission(
+        schema_version="0.1", run_id="no-mcp", model="claude-sonnet-4-6", exposed=["*"]
+    )
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     assert "mcp_servers" not in opts.kwargs
 
@@ -172,7 +177,7 @@ def test_emits_mcp_server_connected_per_declared_server() -> None:
         async def __aexit__(self, *args):
             return None
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-connected",
         model="claude-sonnet-4-6",
@@ -180,8 +185,9 @@ def test_emits_mcp_server_connected_per_declared_server() -> None:
             McpServer(id="github", transport="stdio", command=["npx", "-y", "x"]),
             McpServer(id="weather", transport="http", url="https://mcp.example.com"),
         ],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
 
     # Drive the post-connect emission with a stub client that doesn't
     # have get_mcp_status — exercises the fallback path that emits one
@@ -210,8 +216,10 @@ def test_no_mcp_servers_emits_no_connected_events() -> None:
         async def __aexit__(self, *args):
             return None
 
-    cfg = Commission(schema_version="0.1", run_id="no-mcp-events", model="claude-sonnet-4-6")
-    t, out = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1", run_id="no-mcp-events", model="claude-sonnet-4-6", exposed=["*"]
+    )
+    t, out = _make_translator(commission)
     t._emit_agent_started()
     asyncio.run(t._emit_mcp_connections_after_connect(_ClientWithoutStatus()))
     assert not _by_type(out, McpServerConnectedEvent)
@@ -225,13 +233,14 @@ def test_mcp_prefixed_tool_call_tags_dispatch_target_and_server_id() -> None:
     AND the server is declared in our Commission, we tag the tool_invoked
     event with `dispatch_target=mcp_server` + `avp.mcp_server_id` so
     consumers can correlate the tool call back to the connected event."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-tag",
         model="claude-sonnet-4-6",
         mcp_servers=[McpServer(id="github", transport="stdio", command=["x"])],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -255,17 +264,18 @@ def test_mcp_prefixed_tool_call_tags_dispatch_target_and_server_id() -> None:
 
 def test_mcp_prefixed_tool_with_undeclared_server_falls_back_to_local() -> None:
     """If the SDK surfaces a tool with the `mcp__` prefix for a server
-    we DIDN'T declare (e.g. filesystem-loaded SDK config, vendor
+    we DIDN'T declare (e.g. filesystem-loaded SDK commission, vendor
     defaults), we don't pretend to know what we didn't bring — tag as
     local. Audit-honest: the tool came from somewhere we didn't
     declare."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-undeclared",
         model="claude-sonnet-4-6",
         mcp_servers=[McpServer(id="github", transport="stdio", command=["x"])],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -288,13 +298,14 @@ def test_mcp_prefixed_tool_with_undeclared_server_falls_back_to_local() -> None:
 def test_non_mcp_tool_keeps_local_dispatch_target() -> None:
     """SDK built-ins (Read, Write, Bash, etc.) don't have the `mcp__`
     prefix — they stay tagged as `local`."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-builtin",
         model="claude-sonnet-4-6",
         mcp_servers=[McpServer(id="github", transport="stdio", command=["x"])],
+        exposed=["*"],
     )
-    t, out = _make_translator(cfg)
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -337,13 +348,14 @@ def test_mcp_server_id_extraction_handles_underscores_in_server_name() -> None:
 def test_options_carry_both_avp_hooks_and_mcp_servers() -> None:
     """Smoke check that adding mcp_servers doesn't break the existing
     hook installation — both keys land on the options together."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="mcp-with-hooks",
         model="claude-sonnet-4-6",
         mcp_servers=[McpServer(id="github", transport="stdio", command=["x"])],
+        exposed=["*"],
     )
-    t, _ = _make_translator(cfg)
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     assert "mcp_servers" in opts.kwargs
     assert "hooks" in opts.kwargs

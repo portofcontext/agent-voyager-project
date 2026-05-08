@@ -26,12 +26,14 @@ from avp import (
 )
 from avp.agent.drivers import (
     ModelDriver,
+    ModelDriverError,
     ModelResponse,
     ReasoningBlock,
     Refusal,
     ScriptedToolCall,
     ServerToolCall,
 )
+from avp.enums import ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +297,7 @@ def _h_hosted_result(block: Any, acc: _BlockAcc) -> None:
 # closures that carry the subtype.
 # Anthropic-API hosted server-side tools the agent KNOWS HOW to parse
 # when the user opts them in via the API's tool-use mechanisms. Public:
-# Commission authors building `cfg.allowed_tools` import this to surface what
+# Commission authors building `commission.exposed` import this to surface what
 # the agent can recognize on the wire if the API is configured to use
 # hosted tools.
 #
@@ -590,7 +592,7 @@ class AnthropicModelDriver(ModelDriver):
     `mcp_servers_param` is the API's MCP-connector shape — a list of
     `{type, name, url, ...}` dicts that the Anthropic API connects to and
     exposes as additional tools to the model. Translate from
-    `Commission.mcp_servers[]` via `build_anthropic_mcp_servers(config)` —
+    `Commission.mcp_servers[]` via `build_anthropic_mcp_servers(commission)` —
     HTTP-only, since the API connector doesn't speak stdio.
     """
 
@@ -604,7 +606,21 @@ class AnthropicModelDriver(ModelDriver):
         prices: PriceTable | None = None,
         max_tokens: int = 4096,
         extra_kwargs: dict[str, Any] | None = None,
+        extra_client_kwargs: dict[str, Any] | None = None,
     ) -> None:
+        """`extra_kwargs` is merged into each `messages.create(...)` call —
+        per-request knobs (`metadata`, `top_p`, `temperature`, etc.).
+
+        `extra_client_kwargs` is the deployment-layer escape hatch
+        (parallel to `avp-claude-agent`'s `extra_sdk_options`): merged
+        into `anthropic.Anthropic(**extra_client_kwargs)` when the
+        driver lazily constructs its default client. Use it for
+        SDK-construction concerns AVP intentionally doesn't put on the
+        wire — `timeout`, `max_retries`, `base_url`, custom HTTP
+        headers — without forcing callers to hand-build the client just
+        to set one option. Ignored when `client=` is passed explicitly
+        (the caller already controls construction).
+        """
         self.model = model
         self._client = client
         self.tools_param = tools_param
@@ -612,6 +628,7 @@ class AnthropicModelDriver(ModelDriver):
         self.prices = prices or DEFAULT_PRICES
         self.max_tokens = max_tokens
         self.extra_kwargs = extra_kwargs or {}
+        self._extra_client_kwargs = dict(extra_client_kwargs or {})
 
     @property
     def client(self) -> Any:
@@ -622,7 +639,7 @@ class AnthropicModelDriver(ModelDriver):
                 raise RuntimeError(
                     "avp-anthropic: install the `anthropic` SDK or pass a client explicitly"
                 ) from e
-            self._client = anthropic.Anthropic()
+            self._client = anthropic.Anthropic(**self._extra_client_kwargs)
         return self._client
 
     def step(self, history: list[dict[str, Any]]) -> ModelResponse:
@@ -641,9 +658,46 @@ class AnthropicModelDriver(ModelDriver):
         kwargs.update(self.extra_kwargs)
 
         t0 = time.monotonic()
-        response = self.client.messages.create(**kwargs)
+        try:
+            response = self.client.messages.create(**kwargs)
+        except Exception as e:
+            raise _classify_anthropic_exception(e) from e
         duration_ms = int((time.monotonic() - t0) * 1000)
         return _anthropic_response_to_avp(response, self.model, self.prices, duration_ms)
+
+
+def _classify_anthropic_exception(e: Exception) -> ModelDriverError:
+    """Map an Anthropic SDK exception to a ModelDriverError with the
+    right ErrorCode. Falls back to `unknown` when the exception type is
+    unrecognized — preserves the original message either way.
+
+    Reads exception classes lazily so the driver still works with mock
+    clients that raise plain exceptions in tests (no anthropic SDK in
+    scope).
+    """
+    type_name = type(e).__name__
+    msg = str(e)
+    msg_lower = msg.lower()
+    if type_name == "RateLimitError":
+        return ModelDriverError(msg, code=ErrorCode.rate_limit)
+    if type_name in ("AuthenticationError", "PermissionDeniedError"):
+        return ModelDriverError(msg, code=ErrorCode.auth_error)
+    if type_name == "BadRequestError":
+        # Anthropic's "prompt is too long" / context-window-exceeded errors
+        # come back as 400s; the message text is the only durable signal
+        # (status code is shared with other validation failures).
+        if any(
+            phrase in msg_lower
+            for phrase in (
+                "prompt is too long",
+                "context window",
+                "maximum context length",
+                "input is too long",
+            )
+        ):
+            return ModelDriverError(msg, code=ErrorCode.context_limit)
+        return ModelDriverError(msg, code=ErrorCode.unknown)
+    return ModelDriverError(f"{type_name}: {msg}", code=ErrorCode.unknown)
 
 
 # ── Commission → Anthropic tools[] translation ────────────────────────────────────
@@ -659,7 +713,7 @@ _DEFAULT_SUBAGENT_INPUT_SCHEMA: dict[str, Any] = {
 
 
 def build_anthropic_tools(
-    config: Commission,
+    commission: Commission,
     *,
     builtins: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
@@ -668,13 +722,13 @@ def build_anthropic_tools(
     Merges two sources into one Anthropic-shaped tools[] list:
       1. `builtins` — agent-provided tools the driver always exposes (e.g.
          `avp_anthropic.shell_tools.SHELL_TOOL_SCHEMAS`). Pass `None` to omit.
-      2. `config.subagents` — declared subagents become MCP-shaped tools the
+      2. `commission.subagents` — declared subagents become MCP-shaped tools the
          model can call by name. The agent routes the call through the
          subagent lifecycle on dispatch (NOT the tool lifecycle), but the
          model sees them as ordinary tools — this matches Claude Agent SDK,
          Google ADK AgentTool, and DeepAgents conventions.
 
-    Applies `config.allowed_tools` as a final allowlist filter when set.
+    Applies `commission.exposed` as a final allowlist filter when set.
 
     Translates camelCase MCP `inputSchema` to snake_case `input_schema` (the
     Anthropic API's wire spelling) at the boundary.
@@ -685,22 +739,34 @@ def build_anthropic_tools(
     in-process callers (tests, custom supervisors) need to call it themselves.
     """
     out: list[dict[str, Any]] = list(builtins or [])
-    if config.subagents:
+    if commission.subagents:
         out.extend(
             {
                 "name": sa.name,
                 "description": sa.description,
                 "input_schema": sa.inputSchema or _DEFAULT_SUBAGENT_INPUT_SCHEMA,
             }
-            for sa in config.subagents
+            for sa in commission.subagents
         )
-    if config.allowed_tools is not None:
-        allowed = set(config.allowed_tools)
-        out = [t for t in out if t["name"] in allowed]
+    # Apply Commission.exposed as a name-level filter, with fnmatch globs.
+    # - `["*"]` matches everything → no filtering
+    # - other patterns / literals filter the candidate list
+    if commission.exposed:
+        import fnmatch as _fnmatch
+
+        patterns = list(commission.exposed)
+
+        def _matches(name: str) -> bool:
+            return any(_fnmatch.fnmatchcase(name, p) for p in patterns)
+
+        out = [t for t in out if _matches(t["name"])]
+    elif commission.exposed is not None:
+        # Empty list = no tools exposed.
+        out = []
     return out
 
 
-def build_anthropic_mcp_servers(config: Commission) -> list[dict[str, Any]]:
+def build_anthropic_mcp_servers(commission: Commission) -> list[dict[str, Any]]:
     """Translate `Commission.mcp_servers[]` to Anthropic's API MCP-connector shape.
 
     Anthropic's Messages API accepts an `mcp_servers` parameter — a list
@@ -722,7 +788,7 @@ def build_anthropic_mcp_servers(config: Commission) -> list[dict[str, Any]]:
     import warnings as _warnings
 
     out: list[dict[str, Any]] = []
-    for s in config.mcp_servers or []:
+    for s in commission.mcp_servers or []:
         if s.transport != "http":
             _warnings.warn(
                 f"avp-anthropic: skipping MCP server {s.id!r} — Anthropic's API "

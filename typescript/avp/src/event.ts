@@ -26,7 +26,6 @@ export type AVPV01Event =
   | RefusalRecordedEvent
   | CostRecordedEvent
   | SkillLoadedEvent
-  | SkillExecutedEvent
   | ErrorOccurredEvent
   | McpServerConnectedEvent
   | McpServerDisconnectedEvent;
@@ -60,13 +59,14 @@ export type AgentName = string;
 export type AgentVersion = string;
 export type AvpSpecVersion = "0.1";
 export type DefaultModel = string | null;
+export type SupportedModels = string[] | null;
 export type BuiltInTools = _ToolDecl[] | null;
 export type Name = string;
 export type Description = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
-export type AvpDispatchTarget = ("mcp_server" | "local") | null;
+export type AvpDispatchTarget = ("mcp_server" | "local" | "hosted") | null;
 export type AvpMcpServerId = string | null;
 export type BuiltInSubagents = _SubagentDecl[] | null;
 export type Name1 = string;
@@ -199,7 +199,7 @@ export type ParentSpanId6 = string;
 export type Step2 = number;
 export type GenAiToolCallId = string;
 export type GenAiToolName = string;
-export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
+export type AvpToolDispatchTarget = ("mcp_server" | "local" | "hosted") | null;
 export type AvpToolSubtype = string | null;
 export type Specversion7 = "1.0";
 export type Id7 = string;
@@ -236,7 +236,7 @@ export type Step4 = number;
 export type GenAiToolCallId2 = string;
 export type GenAiToolName2 = string;
 export type AvpToolError = string;
-export type AvpToolErrorCode = number | null;
+export type AvpToolErrorCode = string | null;
 export type Specversion9 = "1.0";
 export type Id9 = string;
 export type Time9 = string;
@@ -371,13 +371,21 @@ export type Subject17 = string | null;
 export type Datacontenttype17 = string | null;
 export type Dataschema17 = string | null;
 export type AvpCorrelationId17 = string | null;
-export type Type17 = "avp.skill_executed";
+export type Type17 = "avp.error_occurred";
 export type Source17 = "avp://agent";
 export type TraceId17 = string;
 export type SpanId17 = string;
 export type ParentSpanId17 = string;
-export type Step12 = number;
-export type AvpSkillName1 = string;
+export type ErrorCode =
+  | "rate_limit"
+  | "context_limit"
+  | "auth_error"
+  | "agent_crash"
+  | "accounting_reset"
+  | "unsupported_model"
+  | "exposed_unresolved"
+  | "unknown";
+export type AvpErrorMessage = string;
 export type Specversion18 = "1.0";
 export type Id18 = string;
 export type Time18 = string;
@@ -385,13 +393,24 @@ export type Subject18 = string | null;
 export type Datacontenttype18 = string | null;
 export type Dataschema18 = string | null;
 export type AvpCorrelationId18 = string | null;
-export type Type18 = "avp.error_occurred";
+export type Type18 = "avp.mcp_server_connected";
 export type Source18 = "avp://agent";
 export type TraceId18 = string;
 export type SpanId18 = string;
 export type ParentSpanId18 = string;
-export type ErrorCode = "rate_limit" | "context_limit" | "auth_error" | "agent_crash" | "accounting_reset" | "unknown";
-export type AvpErrorMessage = string;
+export type AvpMcpServerId1 = string;
+export type AvpMcpProtocolVersion = string;
+export type AvpMcpToolCount = number;
+export type AvpMcpServerName = string | null;
+export type AvpMcpServerVersion = string | null;
+export type AvpMcpTools = _ToolDecl[] | null;
+export type AvpMcpResources = _ResourceDecl[] | null;
+export type Uri = string;
+export type Name3 = string | null;
+export type Description3 = string | null;
+export type Mimetype = string | null;
+export type AvpMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
+export type AvpMcpError = string | null;
 export type Specversion19 = "1.0";
 export type Id19 = string;
 export type Time19 = string;
@@ -399,31 +418,11 @@ export type Subject19 = string | null;
 export type Datacontenttype19 = string | null;
 export type Dataschema19 = string | null;
 export type AvpCorrelationId19 = string | null;
-export type Type19 = "avp.mcp_server_connected";
+export type Type19 = "avp.mcp_server_disconnected";
 export type Source19 = "avp://agent";
 export type TraceId19 = string;
 export type SpanId19 = string;
 export type ParentSpanId19 = string;
-export type AvpMcpServerId1 = string;
-export type AvpMcpProtocolVersion = string;
-export type AvpMcpToolCount = number;
-export type AvpMcpServerName = string | null;
-export type AvpMcpServerVersion = string | null;
-export type AvpMcpTools = _ToolDecl[] | null;
-export type AvpMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
-export type AvpMcpError = string | null;
-export type Specversion20 = "1.0";
-export type Id20 = string;
-export type Time20 = string;
-export type Subject20 = string | null;
-export type Datacontenttype20 = string | null;
-export type Dataschema20 = string | null;
-export type AvpCorrelationId20 = string | null;
-export type Type20 = "avp.mcp_server_disconnected";
-export type Source20 = "avp://agent";
-export type TraceId20 = string;
-export type SpanId20 = string;
-export type ParentSpanId20 = string;
 export type AvpMcpServerId2 = string;
 export type AvpMcpDisconnectReason = "clean" | "error";
 export type AvpMcpDisconnectMessage = string | null;
@@ -456,8 +455,8 @@ export interface RunRequestedEvent {
  * so no I/O contract change beyond Commission — but attribution is the
  * supervisor's, not the agent's.
  *
- * `avp.config` is the full Commission snapshot the supervisor handed in.
- * Carrying it on the wire makes the trajectory self-contained: an
+ * `avp.commission` is the full Commission snapshot the supervisor handed
+ * in. Carrying it on the wire makes the trajectory self-contained: an
  * auditor can replay (or re-validate) the run from the trajectory
  * alone, without an external Commission registry.
  */
@@ -502,7 +501,7 @@ export interface AgentDescribedData {
   trace_id: TraceId1;
   span_id: SpanId1;
   parent_span_id: ParentSpanId1;
-  "avp.agent": AgentManifest;
+  "avp.manifest": AgentManifest;
   [k: string]: unknown;
 }
 /**
@@ -516,7 +515,7 @@ export interface AgentDescribedData {
  *
  *   1. **Pre-flight** — `<agent> describe` prints the manifest as JSON
  *      to stdout. A supervisor authoring a Commission can introspect what
- *      the agent offers before invoking it (so `Commission.allowed_tools`,
+ *      the agent offers before invoking it (so `Commission.exposed`,
  *      `Commission.subagents`, etc. can be authored against ground truth).
  *
  *   2. **On the wire** — the agent emits a `agent_described` event
@@ -538,6 +537,7 @@ export interface AgentManifest {
   agent_version: AgentVersion;
   avp_spec_version: AvpSpecVersion;
   default_model?: DefaultModel;
+  supported_models?: SupportedModels;
   built_in_tools?: BuiltInTools;
   built_in_subagents?: BuiltInSubagents;
   built_in_skills?: BuiltInSkills;
@@ -990,7 +990,7 @@ export interface RefusalRecordedEvent {
  * consumers normalize the reason code without context-guessing.
  *
  * A refusal terminates the turn — the model produced no useful text or
- * tool call. Whether the *run* terminates is a agent decision (the
+ * tool call. Whether the *run* terminates is an agent decision (the
  * reference agent stops with `StopReason.refused`); a higher-level
  * supervisor may choose to reset history and retry.
  */
@@ -1037,6 +1037,29 @@ export interface SkillLoadedEvent {
   source?: Source16;
   data: SkillLoadedData;
 }
+/**
+ * Payload of `avp.skill_loaded` events.
+ *
+ * Semantics: emitted when the SKILL.md body content has been added to
+ * the model's active context window. NOT a registration acknowledgment
+ * — the registration view is `agent_started.data.skills[]`.
+ *
+ * Two emission patterns, differentiated by the agent's
+ * `manifest.capabilities`:
+ *
+ *   - `skills:eager` — agent injects all declared SKILL.md bodies at
+ *     startup (e.g., as system_prompt suffix). Emit once per skill at
+ *     `step=0`, after `agent_started` and `mcp_server_connected`.
+ *   - `skills:progressive` — model decides per-turn which skill bodies
+ *     to pull in (Anthropic Skills, Claude Code progressive disclosure).
+ *     Emit when the body actually enters context, with `step=N` matching
+ *     the turn it loaded in. MAY fire multiple times for the same
+ *     skill (e.g., re-load after compaction).
+ *
+ * Agents whose SDK does not expose progressive-disclosure load events
+ * SHOULD NOT emit `skill_loaded` at all — `agent_started.data.skills[]`
+ * still records the registration. Honest-silent beats fabricated events.
+ */
 export interface SkillLoadedData {
   trace_id: TraceId16;
   span_id: SpanId16;
@@ -1046,7 +1069,7 @@ export interface SkillLoadedData {
   "avp.skill.source"?: AvpSkillSource;
   [k: string]: unknown;
 }
-export interface SkillExecutedEvent {
+export interface ErrorOccurredEvent {
   specversion?: Specversion17;
   id?: Id17;
   time?: Time17;
@@ -1056,17 +1079,17 @@ export interface SkillExecutedEvent {
   "avp.correlation_id"?: AvpCorrelationId17;
   type?: Type17;
   source?: Source17;
-  data: SkillExecutedData;
+  data: ErrorOccurredData;
 }
-export interface SkillExecutedData {
+export interface ErrorOccurredData {
   trace_id: TraceId17;
   span_id: SpanId17;
   parent_span_id: ParentSpanId17;
-  step: Step12;
-  "avp.skill.name": AvpSkillName1;
+  "avp.error.code": ErrorCode;
+  "avp.error.message": AvpErrorMessage;
   [k: string]: unknown;
 }
-export interface ErrorOccurredEvent {
+export interface McpServerConnectedEvent {
   specversion?: Specversion18;
   id?: Id18;
   time?: Time18;
@@ -1076,17 +1099,40 @@ export interface ErrorOccurredEvent {
   "avp.correlation_id"?: AvpCorrelationId18;
   type?: Type18;
   source?: Source18;
-  data: ErrorOccurredData;
+  data: McpServerConnectedData;
 }
-export interface ErrorOccurredData {
+export interface McpServerConnectedData {
   trace_id: TraceId18;
   span_id: SpanId18;
   parent_span_id: ParentSpanId18;
-  "avp.error.code": ErrorCode;
-  "avp.error.message": AvpErrorMessage;
+  "avp.mcp.server_id": AvpMcpServerId1;
+  "avp.mcp.protocol_version": AvpMcpProtocolVersion;
+  "avp.mcp.tool_count": AvpMcpToolCount;
+  "avp.mcp.server_name"?: AvpMcpServerName;
+  "avp.mcp.server_version"?: AvpMcpServerVersion;
+  "avp.mcp.tools"?: AvpMcpTools;
+  "avp.mcp.resources"?: AvpMcpResources;
+  "avp.mcp.status"?: AvpMcpStatus;
+  "avp.mcp.error"?: AvpMcpError;
   [k: string]: unknown;
 }
-export interface McpServerConnectedEvent {
+/**
+ * MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.
+ *
+ * Mirrors MCP's `Resource` type from the protocol spec — `uri` is the
+ * primary identifier the agent uses to fetch via `resources/read`,
+ * `name` and `description` are display/discovery metadata, `mimeType`
+ * hints at the content format. Skills sourced as `mcp://<server-id>/<path>`
+ * in `Commission.skills[].avp.source` resolve through this catalog.
+ */
+export interface _ResourceDecl {
+  uri: Uri;
+  name?: Name3;
+  description?: Description3;
+  mimeType?: Mimetype;
+  [k: string]: unknown;
+}
+export interface McpServerDisconnectedEvent {
   specversion?: Specversion19;
   id?: Id19;
   time?: Time19;
@@ -1096,38 +1142,12 @@ export interface McpServerConnectedEvent {
   "avp.correlation_id"?: AvpCorrelationId19;
   type?: Type19;
   source?: Source19;
-  data: McpServerConnectedData;
-}
-export interface McpServerConnectedData {
-  trace_id: TraceId19;
-  span_id: SpanId19;
-  parent_span_id: ParentSpanId19;
-  "avp.mcp.server_id": AvpMcpServerId1;
-  "avp.mcp.protocol_version": AvpMcpProtocolVersion;
-  "avp.mcp.tool_count": AvpMcpToolCount;
-  "avp.mcp.server_name"?: AvpMcpServerName;
-  "avp.mcp.server_version"?: AvpMcpServerVersion;
-  "avp.mcp.tools"?: AvpMcpTools;
-  "avp.mcp.status"?: AvpMcpStatus;
-  "avp.mcp.error"?: AvpMcpError;
-  [k: string]: unknown;
-}
-export interface McpServerDisconnectedEvent {
-  specversion?: Specversion20;
-  id?: Id20;
-  time?: Time20;
-  subject?: Subject20;
-  datacontenttype?: Datacontenttype20;
-  dataschema?: Dataschema20;
-  "avp.correlation_id"?: AvpCorrelationId20;
-  type?: Type20;
-  source?: Source20;
   data: McpServerDisconnectedData;
 }
 export interface McpServerDisconnectedData {
-  trace_id: TraceId20;
-  span_id: SpanId20;
-  parent_span_id: ParentSpanId20;
+  trace_id: TraceId19;
+  span_id: SpanId19;
+  parent_span_id: ParentSpanId19;
   "avp.mcp.server_id": AvpMcpServerId2;
   "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
   "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;

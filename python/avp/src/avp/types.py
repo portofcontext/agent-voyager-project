@@ -70,7 +70,7 @@ ZERO_SPAN_ID = "0" * 16
 
 # ── Source URIs and event type names (CloudEvents reverse-DNS) ────────────────
 
-SOURCE_RUNNER = "avp://agent"
+SOURCE_AGENT = "avp://agent"
 # `avp://supervisor` is used by the agent-relayed `run_requested` event;
 # the agent stamps that source URI on the wire to attribute the run to
 # the originating supervisor build (see Commission.supervisor). Supervisors
@@ -94,7 +94,6 @@ T_REASONING_EMITTED = "avp.reasoning_emitted"
 T_REFUSAL_RECORDED = "avp.refusal_recorded"
 T_COST_RECORDED = "avp.cost_recorded"
 T_SKILL_LOADED = "avp.skill_loaded"
-T_SKILL_EXECUTED = "avp.skill_executed"
 T_ERROR_OCCURRED = "avp.error_occurred"
 T_MCP_SERVER_CONNECTED = "avp.mcp_server_connected"
 T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
@@ -125,7 +124,7 @@ class Skill(BaseModel):
     model_config = _STRICT
     name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
     avp_source: str = Field(alias="avp.source", min_length=1)
-    avp_config: dict[str, Any] | None = Field(default=None, alias="avp.commission")
+    avp_config: dict[str, Any] | None = Field(default=None, alias="avp.config")
 
 
 class McpHttpAuth(BaseModel):
@@ -197,7 +196,11 @@ class Subagent(BaseModel):
     model: str | None = None
 
     inherit_tools: bool = False
-    allowed_tools: list[str] | None = None
+    # Required exhaustive surface (same semantics as Commission.exposed —
+    # see Commission for full rules). When `inherit_tools=True`, this list
+    # filters the parent's exposed surface; when False, it resolves only
+    # against this subagent's own mcp_servers + nested subagents.
+    exposed: list[str] = Field(default_factory=list)
     mcp_servers: list[McpServer] | None = None
     skills: list[Skill] | None = None
     output_schema: dict[str, Any] | None = None
@@ -272,9 +275,40 @@ class Commission(BaseModel):
     # avp-anthropic) are agent-package built-ins and surface via the
     # agent's manifest, not via Commission.
     mcp_servers: list[McpServer] | None = None
-    allowed_tools: list[str] | None = None
     output_schema: dict[str, Any] | None = None
     subagents: list[Subagent] | None = None
+
+    # Required exhaustive model-facing surface — the complete list of names
+    # the model can invoke this run. No implicit defaults; each entry MUST
+    # resolve at startup against:
+    #
+    #   - manifest.built_in_tools[].name
+    #   - manifest.built_in_subagents[].name
+    #   - Commission.subagents[].name
+    #   - Each connected MCP server's catalog (post-handshake names,
+    #     typically `mcp__<server-id>__<tool>`)
+    #   - Hosted tool names exposed by the agent's provider (e.g.
+    #     Anthropic's `web_search`, `code_execution`)
+    #
+    # Each entry MAY be a literal name OR an fnmatch glob (`*`, `?`, `[abc]`).
+    # Resolution rules at startup, AFTER `mcp_server_connected` events fire:
+    #
+    #   - Literal entries that match nothing  → `error_occurred` with
+    #     `code: "exposed_unresolved"` + `agent_stopped(reason: "error")`
+    #     before turn 1. (Fail-loud-on-drift: a Commission referencing a
+    #     specific tool the agent no longer offers is a contract violation.)
+    #   - Glob entries that match nothing     → permitted silently.
+    #     Patterns describe sets, and an empty set is a legitimate set.
+    #
+    # Empty list = expose nothing (model has no invocables; only text turns).
+    # Globs handle the "supervisor doesn't know post-mangle MCP names yet"
+    # case: write `mcp__github__*` for full-server trust, or
+    # `mcp__github__get_*` for read-shaped operations only.
+    #
+    # Every Commission.subagents[].name MUST appear in `exposed` (literal or
+    # glob match) or the agent errors at startup — the same fail-loud rule
+    # for declared subagents.
+    exposed: list[str]
 
     # Agent plane (what the agent runs)
     prompt: str | None = None
@@ -317,7 +351,7 @@ class _ToolDecl(BaseModel):
     name: str
     description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
-    avp_dispatch_target: Literal["mcp_server", "local"] | None = Field(
+    avp_dispatch_target: Literal["mcp_server", "local", "hosted"] | None = Field(
         default=None, alias="avp.dispatch_target"
     )
     avp_mcp_server_id: str | None = Field(default=None, alias="avp.mcp_server_id")
@@ -362,6 +396,22 @@ class _SkillDecl(BaseModel):
     avp_source: str | None = Field(default=None, alias="avp.source")
 
 
+class _ResourceDecl(BaseModel):
+    """MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.
+
+    Mirrors MCP's `Resource` type from the protocol spec — `uri` is the
+    primary identifier the agent uses to fetch via `resources/read`,
+    `name` and `description` are display/discovery metadata, `mimeType`
+    hints at the content format. Skills sourced as `mcp://<server-id>/<path>`
+    in `Commission.skills[].avp.source` resolve through this catalog."""
+
+    model_config = _OPEN
+    uri: str = Field(min_length=1)
+    name: str | None = None
+    description: str | None = None
+    mimeType: str | None = Field(default=None, alias="mimeType")
+
+
 class AgentManifest(BaseModel):
     """Self-description of an AVP agent — who it is, what it brings.
 
@@ -373,7 +423,7 @@ class AgentManifest(BaseModel):
 
       1. **Pre-flight** — `<agent> describe` prints the manifest as JSON
          to stdout. A supervisor authoring a Commission can introspect what
-         the agent offers before invoking it (so `Commission.allowed_tools`,
+         the agent offers before invoking it (so `Commission.exposed`,
          `Commission.subagents`, etc. can be authored against ground truth).
 
       2. **On the wire** — the agent emits a `agent_described` event
@@ -396,6 +446,17 @@ class AgentManifest(BaseModel):
     agent_version: str = Field(min_length=1)
     avp_spec_version: Literal["0.1"]
     default_model: str | None = None
+    # Optional whitelist of models the agent's driver / wrapped SDK can run.
+    # Each entry is a glob pattern matched against `Commission.model`
+    # (fnmatch semantics): "claude-*" matches any Claude model,
+    # "claude-haiku-4-5-*" pins to Haiku 4.5 builds, "gpt-*" matches
+    # any GPT. When None, the agent advertises support for any model
+    # the supervisor provides — but the driver may still fail at the
+    # provider call. When set, an agent SHOULD validate `Commission.model`
+    # at startup and emit `error_occurred(code: "unsupported_model")` +
+    # `agent_stopped(reason: "error")` before any model turn if the
+    # provided model is not matched.
+    supported_models: list[str] | None = None
     built_in_tools: list[_ToolDecl] | None = None
     built_in_subagents: list[_SubagentDecl] | None = None
     built_in_skills: list[_SkillDecl] | None = None
@@ -411,15 +472,15 @@ class RunRequestedData(_SpanData):
     so no I/O contract change beyond Commission — but attribution is the
     supervisor's, not the agent's.
 
-    `avp.config` is the full Commission snapshot the supervisor handed in.
-    Carrying it on the wire makes the trajectory self-contained: an
+    `avp.commission` is the full Commission snapshot the supervisor handed
+    in. Carrying it on the wire makes the trajectory self-contained: an
     auditor can replay (or re-validate) the run from the trajectory
     alone, without an external Commission registry.
     """
 
     avp_supervisor_name: str = Field(min_length=1, alias="avp.supervisor.name")
     avp_supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
-    avp_config: dict[str, Any] = Field(alias="avp.commission")
+    avp_commission: dict[str, Any] = Field(alias="avp.commission")
 
 
 class AgentDescribedData(_SpanData):
@@ -430,7 +491,7 @@ class AgentDescribedData(_SpanData):
     prints to stdout for the same agent build.
     """
 
-    avp_agent: AgentManifest = Field(alias="avp.agent")
+    avp_manifest: AgentManifest = Field(alias="avp.manifest")
 
 
 class AgentStartedData(_SpanData):
@@ -471,7 +532,7 @@ class AgentStoppedData(_SpanData):
     @model_validator(mode="after")
     def _convenience_aliases_match_state(self) -> AgentStoppedData:
         """The top-level convenience fields MUST agree with `avp.state.*`
-        when populated. Catches drift at construction time (so a agent
+        when populated. Catches drift at construction time (so an agent
         that forgets to keep them in sync fails its own validation rather
         than shipping inconsistent events the supervisor has to reconcile)."""
         pairs = [
@@ -534,7 +595,7 @@ class ToolInvokedData(_SpanData):
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     gen_ai_tool_call_arguments: dict[str, Any] = Field(alias="gen_ai.tool.call.arguments")
-    avp_tool_dispatch_target: Literal["mcp_server", "local"] | None = Field(
+    avp_tool_dispatch_target: Literal["mcp_server", "local", "hosted"] | None = Field(
         default=None, alias="avp.tool.dispatch_target"
     )
     avp_tool_subtype: str | None = Field(default=None, alias="avp.tool.subtype")
@@ -556,7 +617,7 @@ class ToolFailedData(_SpanData):
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     avp_tool_error: str = Field(alias="avp.tool.error")
-    avp_tool_error_code: int | None = Field(default=None, alias="avp.tool.error.code")
+    avp_tool_error_code: str | None = Field(default=None, alias="avp.tool.error.code")
 
 
 class SubagentInvokedData(_SpanData):
@@ -640,7 +701,7 @@ class RefusalRecordedData(_SpanData):
     consumers normalize the reason code without context-guessing.
 
     A refusal terminates the turn — the model produced no useful text or
-    tool call. Whether the *run* terminates is a agent decision (the
+    tool call. Whether the *run* terminates is an agent decision (the
     reference agent stops with `StopReason.refused`); a higher-level
     supervisor may choose to reset history and retry.
     """
@@ -678,7 +739,7 @@ class ReasoningEmittedData(_SpanData):
 class CostRecordedData(_SpanData):
     avp_state: RunStateSnapshot = Field(alias="avp.state")
     # Provenance of the snapshot's running cost total. Set to `reported`
-    # on the reconciliation event a agent emits after the API/SDK hands
+    # on the reconciliation event an agent emits after the API/SDK hands
     # back an authoritative total (Claude Agent SDK's
     # ResultMessage.total_cost_usd, etc.). Per-turn cost_recorded events
     # leave it unset because the running total is a mix of per-turn
@@ -690,14 +751,32 @@ class CostRecordedData(_SpanData):
 
 
 class SkillLoadedData(_SpanData):
+    """Payload of `avp.skill_loaded` events.
+
+    Semantics: emitted when the SKILL.md body content has been added to
+    the model's active context window. NOT a registration acknowledgment
+    — the registration view is `agent_started.data.skills[]`.
+
+    Two emission patterns, differentiated by the agent's
+    `manifest.capabilities`:
+
+      - `skills:eager` — agent injects all declared SKILL.md bodies at
+        startup (e.g., as system_prompt suffix). Emit once per skill at
+        `step=0`, after `agent_started` and `mcp_server_connected`.
+      - `skills:progressive` — model decides per-turn which skill bodies
+        to pull in (Anthropic Skills, Claude Code progressive disclosure).
+        Emit when the body actually enters context, with `step=N` matching
+        the turn it loaded in. MAY fire multiple times for the same
+        skill (e.g., re-load after compaction).
+
+    Agents whose SDK does not expose progressive-disclosure load events
+    SHOULD NOT emit `skill_loaded` at all — `agent_started.data.skills[]`
+    still records the registration. Honest-silent beats fabricated events.
+    """
+
     step: int = Field(ge=0)
     avp_skill_name: str = Field(alias="avp.skill.name")
     avp_skill_source: str | None = Field(default=None, alias="avp.skill.source")
-
-
-class SkillExecutedData(_SpanData):
-    step: int = Field(ge=0)
-    avp_skill_name: str = Field(alias="avp.skill.name")
 
 
 class ErrorOccurredData(_SpanData):
@@ -720,6 +799,13 @@ class McpServerConnectedData(_SpanData):
     # `agent_started.data.tools`, with `avp.dispatch_target=mcp_server`
     # and `avp.mcp_server_id` matching this event's server id.
     avp_mcp_tools: list[_ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
+    # Live resource catalog from MCP's `resources/list`. Parallel to
+    # `avp.mcp.tools`. Populated by agents that drive the MCP handshake;
+    # null on stub emitters. Skills declared in `Commission.skills[]` with
+    # `avp.source = "mcp://<server-id>/<resource-path>"` resolve against
+    # this catalog: the agent calls `resources/read` on the named server
+    # before turn 1 to pull the SKILL.md body into the model's context.
+    avp_mcp_resources: list[_ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
     # SDK-reported connection status, mirroring the Claude Agent SDK's
     # McpServerStatus.status enum. Default null because pre-live-transport
     # stub emitters didn't have this signal.
@@ -783,121 +869,115 @@ class AgentDescribedEvent(_CloudEventBase):
     """
 
     type: Literal["avp.agent_described"] = T_AGENT_DESCRIBED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: AgentDescribedData
 
 
 class AgentStartedEvent(_CloudEventBase):
     type: Literal["avp.agent_started"] = T_AGENT_STARTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: AgentStartedData
 
 
 class AgentStoppedEvent(_CloudEventBase):
     type: Literal["avp.agent_stopped"] = T_AGENT_STOPPED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: AgentStoppedData
 
 
 class ModelTurnStartedEvent(_CloudEventBase):
     type: Literal["avp.model_turn_started"] = T_MODEL_TURN_STARTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ModelTurnStartedData
 
 
 class ModelTurnEndedEvent(_CloudEventBase):
     type: Literal["avp.model_turn_ended"] = T_MODEL_TURN_ENDED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ModelTurnEndedData
 
 
 class ToolInvokedEvent(_CloudEventBase):
     type: Literal["avp.tool_invoked"] = T_TOOL_INVOKED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ToolInvokedData
 
 
 class ToolReturnedEvent(_CloudEventBase):
     type: Literal["avp.tool_returned"] = T_TOOL_RETURNED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ToolReturnedData
 
 
 class ToolFailedEvent(_CloudEventBase):
     type: Literal["avp.tool_failed"] = T_TOOL_FAILED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ToolFailedData
 
 
 class SubagentInvokedEvent(_CloudEventBase):
     type: Literal["avp.subagent_invoked"] = T_SUBAGENT_INVOKED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: SubagentInvokedData
 
 
 class SubagentReturnedEvent(_CloudEventBase):
     type: Literal["avp.subagent_returned"] = T_SUBAGENT_RETURNED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: SubagentReturnedData
 
 
 class SubagentFailedEvent(_CloudEventBase):
     type: Literal["avp.subagent_failed"] = T_SUBAGENT_FAILED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: SubagentFailedData
 
 
 class TextEmittedEvent(_CloudEventBase):
     type: Literal["avp.text_emitted"] = T_TEXT_EMITTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: TextEmittedData
 
 
 class ReasoningEmittedEvent(_CloudEventBase):
     type: Literal["avp.reasoning_emitted"] = T_REASONING_EMITTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ReasoningEmittedData
 
 
 class RefusalRecordedEvent(_CloudEventBase):
     type: Literal["avp.refusal_recorded"] = T_REFUSAL_RECORDED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: RefusalRecordedData
 
 
 class CostRecordedEvent(_CloudEventBase):
     type: Literal["avp.cost_recorded"] = T_COST_RECORDED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: CostRecordedData
 
 
 class SkillLoadedEvent(_CloudEventBase):
     type: Literal["avp.skill_loaded"] = T_SKILL_LOADED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: SkillLoadedData
-
-
-class SkillExecutedEvent(_CloudEventBase):
-    type: Literal["avp.skill_executed"] = T_SKILL_EXECUTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
-    data: SkillExecutedData
 
 
 class ErrorOccurredEvent(_CloudEventBase):
     type: Literal["avp.error_occurred"] = T_ERROR_OCCURRED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: ErrorOccurredData
 
 
 class McpServerConnectedEvent(_CloudEventBase):
     type: Literal["avp.mcp_server_connected"] = T_MCP_SERVER_CONNECTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: McpServerConnectedData
 
 
 class McpServerDisconnectedEvent(_CloudEventBase):
     type: Literal["avp.mcp_server_disconnected"] = T_MCP_SERVER_DISCONNECTED
-    source: Literal["avp://agent"] = SOURCE_RUNNER
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: McpServerDisconnectedData
 
 
@@ -922,7 +1002,6 @@ _AGENT_EVENT_TYPES = (
     RefusalRecordedEvent,
     CostRecordedEvent,
     SkillLoadedEvent,
-    SkillExecutedEvent,
     ErrorOccurredEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
@@ -946,7 +1025,6 @@ Event = Annotated[
     | RefusalRecordedEvent
     | CostRecordedEvent
     | SkillLoadedEvent
-    | SkillExecutedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
     | McpServerDisconnectedEvent,
@@ -964,7 +1042,7 @@ _REQUIRED_ENVELOPE_FIELDS = ("specversion", "id", "source", "type", "time", "dat
 
 
 def parse_event(payload: dict[str, Any]) -> BaseModel | dict[str, Any]:
-    """Parse a agent-emitted event payload.
+    """Parse an agent-emitted event payload.
 
     Known types validate against their Pydantic model. Unknown types pass
     through as a dict (per SPEC §12: consumers MUST pass through unknown

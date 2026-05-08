@@ -54,10 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     if not commission_blob.strip():
         print("avp-claude-agent: expected one Commission JSON line on stdin", file=sys.stderr)
         return 2
-    config = Commission.model_validate(json.loads(commission_blob))
+    commission = Commission.model_validate(json.loads(commission_blob))
 
     translator = ClaudeAgentTranslator(
-        config=config,
+        commission=commission,
         on_event=lambda ev: write_event(ev, file=sys.stdout),
         manifest=build_manifest(),
     )

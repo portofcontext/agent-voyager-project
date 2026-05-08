@@ -29,4 +29,6 @@ class ErrorCode(StrEnum):
     auth_error = "auth_error"
     agent_crash = "agent_crash"
     accounting_reset = "accounting_reset"
+    unsupported_model = "unsupported_model"
+    exposed_unresolved = "exposed_unresolved"
     unknown = "unknown"

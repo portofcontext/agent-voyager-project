@@ -67,10 +67,10 @@ class _FakeAgentDefinition:
         self.payload = kwargs
 
 
-def _make_translator(cfg: Commission) -> tuple[ClaudeAgentTranslator, list]:
+def _make_translator(commission: Commission) -> tuple[ClaudeAgentTranslator, list]:
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -91,12 +91,12 @@ def _cfg_with_subagent(**overrides: Any) -> Commission:
                 description="Looks things up.",
                 system_prompt="You are a researcher.",
                 model="claude-haiku-4-5-20251001",
-                allowed_tools=["bash"],
+                exposed=["bash"],
             )
         ],
     }
     base.update(overrides)
-    return Commission(**base)
+    return Commission(**base, exposed=["*"])
 
 
 def _by_type(events: list, type_: type) -> list:
@@ -107,8 +107,8 @@ def test_config_subagents_translate_to_sdk_agents_dict() -> None:
     """Commission.subagents must populate ClaudeAgentOptions.agents with the
     SDK's AgentDefinition shape: name as key, description/prompt/model/tools
     as values."""
-    cfg = _cfg_with_subagent()
-    t, _ = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     agents = opts.kwargs.get("agents")
     assert agents is not None and "researcher" in agents
@@ -125,15 +125,17 @@ def test_no_subagents_yields_no_agents_kwarg() -> None:
     """Backwards-compat: a Commission without subagents MUST NOT populate
     options.agents (so existing setups that assume the SDK uses its
     filesystem-loaded agents continue to work)."""
-    cfg = Commission(schema_version="0.1", run_id="t", model="claude-sonnet-4-6")
-    t, _ = _make_translator(cfg)
+    commission = Commission(
+        schema_version="0.1", run_id="t", model="claude-sonnet-4-6", exposed=["*"]
+    )
+    t, _ = _make_translator(commission)
     opts = t._build_sdk_options()
     assert "agents" not in opts.kwargs
 
 
 def test_pre_tool_use_on_agent_with_declared_subagent_emits_subagent_invoked() -> None:
-    cfg = _cfg_with_subagent()
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -163,8 +165,8 @@ def test_pre_tool_use_on_agent_with_declared_subagent_emits_subagent_invoked() -
 
 
 def test_post_tool_use_for_subagent_emits_subagent_returned() -> None:
-    cfg = _cfg_with_subagent()
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -200,8 +202,8 @@ def test_subagent_invoked_and_returned_share_frame_span_id() -> None:
     """Frame pairing — the load-bearing invariant for nested span tree
     reconstruction. If this drifts, consumers can't pair invocations to
     their results, and AVP's wire shape stops being a tree."""
-    cfg = _cfg_with_subagent()
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -233,8 +235,8 @@ def test_agent_tool_with_undeclared_subagent_falls_through_as_tool() -> None:
     other reason (filesystem-defined subagent, external) MUST still be
     surfaced as a regular tool_invoked so it doesn't disappear from the
     trajectory."""
-    cfg = _cfg_with_subagent()  # only `researcher` is declared
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()  # only `researcher` is declared
+    t, out = _make_translator(commission)
 
     asyncio.run(
         t._on_pre_tool_use_hook(
@@ -255,8 +257,8 @@ def test_agent_tool_with_undeclared_subagent_falls_through_as_tool() -> None:
 
 
 def test_subagents_appear_in_agent_started_data() -> None:
-    cfg = _cfg_with_subagent()
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, out = _make_translator(commission)
     t._emit_agent_started()
     started = _by_type(out, AgentStartedEvent)[0]
     assert started.data.subagents and len(started.data.subagents) == 1
@@ -268,8 +270,8 @@ def test_subagent_helper_handles_multiple_invocations_in_sequence() -> None:
     """Two sequential subagent calls each get their own frame span and
     invocation_id — and the second invocation's PostToolUse correctly
     pairs to the second's PreToolUse (not the first's)."""
-    cfg = _cfg_with_subagent()
-    t, out = _make_translator(cfg)
+    commission = _cfg_with_subagent()
+    t, out = _make_translator(commission)
 
     for tu_id, prompt in [("tu-a", "first"), ("tu-b", "second")]:
         asyncio.run(

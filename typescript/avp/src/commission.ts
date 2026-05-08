@@ -24,7 +24,6 @@ export type InitTimeoutMs = number;
 export type Meta = {
   [k: string]: unknown;
 } | null;
-export type AllowedTools = string[] | null;
 export type OutputSchema = {
   [k: string]: unknown;
 } | null;
@@ -37,18 +36,19 @@ export type Inputschema = {
 export type SystemPrompt = string | null;
 export type Model = string | null;
 export type InheritTools = boolean;
-export type AllowedTools1 = string[] | null;
+export type Exposed = string[];
 export type McpServers1 = McpServer[] | null;
 export type Skills = Skill[] | null;
 export type Name2 = string;
 export type AvpSource = string;
-export type AvpCommission = {
+export type AvpConfig = {
   [k: string]: unknown;
 } | null;
 export type OutputSchema1 = {
   [k: string]: unknown;
 } | null;
 export type Subagents1 = Subagent[] | null;
+export type Exposed1 = string[];
 export type Prompt = string | null;
 export type SystemPrompt1 = string | null;
 export type Model1 = string | null;
@@ -67,9 +67,9 @@ export interface AVPV01Commission {
   run_id: RunId;
   supervisor?: SupervisorPreamble | null;
   mcp_servers?: McpServers;
-  allowed_tools?: AllowedTools;
   output_schema?: OutputSchema;
   subagents?: Subagents;
+  exposed: Exposed1;
   prompt?: Prompt;
   system_prompt?: SystemPrompt1;
   model?: Model1;
@@ -156,7 +156,7 @@ export interface Subagent {
   system_prompt?: SystemPrompt;
   model?: Model;
   inherit_tools?: InheritTools;
-  allowed_tools?: AllowedTools1;
+  exposed?: Exposed;
   mcp_servers?: McpServers1;
   skills?: Skills;
   output_schema?: OutputSchema1;
@@ -176,5 +176,5 @@ export interface Subagent {
 export interface Skill {
   name: Name2;
   "avp.source": AvpSource;
-  "avp.commission"?: AvpCommission;
+  "avp.config"?: AvpConfig;
 }

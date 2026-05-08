@@ -1,17 +1,17 @@
 {
   "id": "agent-described-carries-manifest-payload",
-  "title": "agent_described carries the runner's manifest verbatim",
-  "description": "After run_requested and before agent_started, the runner emits agent_described tagged source=avp://agent. data.avp.agent is the same payload `<runner> describe` prints to stdout for the same runner build \u2014 runner identity, version, supported AVP spec, default model (or null), and the SDK-defaults built-in tools / subagents / skills lists. This is the runtime audit-trail counterpart to the static manifest a Commission author introspects pre-flight.",
+  "title": "agent_described carries the agent's manifest verbatim",
+  "description": "After run_requested and before agent_started, the agent emits agent_described tagged source=avp://agent. data.avp.manifest is the same payload `<agent> describe` prints to stdout for the same agent build \u2014 agent identity, version, supported AVP spec, default model (or null), and the SDK-defaults built-in tools / subagents / skills lists. This is the runtime audit-trail counterpart to the static manifest a Commission author introspects pre-flight.",
   "spec_refs": [
     "spec/v0.1/SPEC.md#run-prelude",
     "spec/v0.1/event.schema.json#/$defs/AgentDescribedEvent",
     "spec/v0.1/event.schema.json#/$defs/AgentManifest"
   ],
   "applies_to": [
-    "runner"
+    "agent"
   ],
   "agent_manifest": {
-    "agent_name": "avp-test-runner",
+    "agent_name": "avp-test-agent",
     "agent_version": "9.9.9",
     "avp_spec_version": "0.1",
     "default_model": null,
@@ -30,13 +30,16 @@
       "mcp"
     ]
   },
-  "config": {
+  "commission": {
     "schema_version": "0.1",
-    "run_id": "prelude-runner-described",
+    "run_id": "prelude-agent-described",
     "model": "test/mock",
     "supervisor": {
       "name": "test-supervisor"
-    }
+    },
+    "exposed": [
+      "*"
+    ]
   },
   "scripted_model": [
     {
@@ -63,8 +66,8 @@
           "source": "avp://agent",
           "data": {
             "parent_span_id": "0000000000000000",
-            "avp.agent": {
-              "agent_name": "avp-test-runner",
+            "avp.manifest": {
+              "agent_name": "avp-test-agent",
               "agent_version": "9.9.9",
               "avp_spec_version": "0.1",
               "built_in_tools": [

@@ -46,7 +46,7 @@ def test_matching_top_level_and_snapshot_construct_cleanly() -> None:
 
 
 def test_top_level_none_with_snapshot_present_is_allowed() -> None:
-    """The convenience fields are optional; a agent that wants to skip
+    """The convenience fields are optional; an agent that wants to skip
     them entirely can do so. SPEC: 'when non-null these MUST equal'."""
     AgentStoppedData(
         **_span_kwargs(),

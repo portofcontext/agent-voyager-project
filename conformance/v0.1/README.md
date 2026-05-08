@@ -14,7 +14,7 @@ conformance/v0.1/
 │   └── test-case.schema.json   (JSON Schema for case files)
 ├── validate.py        (validates all cases against test-case.schema.json)
 └── cases/
-    ├── allowed-tools/           (Commission.allowed_tools filters the surface)
+    ├── allowed-tools/           (Commission.exposed filters the surface)
     ├── mcp/                     (mcp_server_connected lifecycle, dispatch_target tagging)
     ├── prelude/                 (run_requested → agent_described → agent_started ordering)
     ├── reasoning/               (avp.reasoning.* attributes on model_turn_ended)
@@ -50,7 +50,7 @@ Each case is a JSON document validating against [`schema/test-case.schema.json`]
   "title": "What this case asserts in one line",
   "spec_refs": ["spec/v0.1/SPEC.md#10-the-agent-loop-normative"],
   "applies_to": ["agent"],
-  "config": { "schema_version": "0.1", "run_id": "test-1" },
+  "commission": { "schema_version": "0.1", "run_id": "test-1" },
   "scripted_model": [
     { "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.001, "duration_ms": 1, "text": "done", "converged": true }
   ],
@@ -74,7 +74,7 @@ Default ordering is `in_order_subsequence`: matchers must appear in the captured
 
 ### Supervisor scripting
 
-A `scripted_supervisor` step fires when a agent-emitted event matches its `on` pattern. The harness then either sends the `send` SupervisorMessage (after `delay_ms`) or, if `skip: true`, deliberately does nothing — so timeout cases can assert `*_timed_out` events.
+A `scripted_supervisor` step fires when an agent-emitted event matches its `on` pattern. The harness then either sends the `send` SupervisorMessage (after `delay_ms`) or, if `skip: true`, deliberately does nothing — so timeout cases can assert `*_timed_out` events.
 
 ## Adding a case
 

@@ -128,11 +128,12 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
     )
     client = _SequencedClient([turn1, turn2])
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="multi-turn-r1",
         model="claude-sonnet-4-6",
         prompt="What's in x.txt?",
+        exposed=["*"],
     )
 
     driver = AnthropicModelDriver(
@@ -152,7 +153,7 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
     )
 
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=driver,
         tools=_DictTools({"read_file": "hello"}),
         supervisor=ScriptedSupervisor([]),
@@ -254,15 +255,16 @@ def test_assistant_turn_with_text_and_tool_use_renders_both_blocks() -> None:
     )
     client = _SequencedClient([turn1, turn2])
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="multi-turn-r2",
         model="claude-sonnet-4-6",
         prompt="Read y.txt",
+        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=driver,
         tools=_DictTools({"read_file": "yo"}),
         supervisor=ScriptedSupervisor([]),
@@ -309,15 +311,16 @@ def test_pure_text_turn_history_unchanged_for_string_content() -> None:
     _ = turn1  # silence unused
     client = _SequencedClient([turn1_continuing, turn2])
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="multi-turn-r3",
         model="claude-sonnet-4-6",
         prompt="x",
+        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=driver,
         tools=_DictTools({"noop": "ok"}),
         supervisor=ScriptedSupervisor([]),
@@ -364,15 +367,16 @@ def test_tool_failure_records_tool_result_in_history_so_next_turn_validates() ->
     )
     client = _SequencedClient([turn1, turn2])
 
-    config = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="tool-fail-history",
         model="claude-sonnet-4-6",
         prompt="Read /some/dir",
+        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(
-        config=config,
+        commission=commission,
         model=driver,
         tools=_ErroringTools(locals_={"read_file"}, error="IsADirectoryError: /some/dir"),
         supervisor=ScriptedSupervisor([]),

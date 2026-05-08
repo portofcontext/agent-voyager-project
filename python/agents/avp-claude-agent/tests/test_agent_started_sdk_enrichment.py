@@ -7,12 +7,12 @@ translator pulls that view via `get_context_usage()` and merges it into
 real descriptions / agentType / source rather than name-only stubs.
 
 Pre-fix the translator emitted `agent_started` synchronously with
-cfg-only data, leaving descriptions null even when the SDK had them.
+commission-only data, leaving descriptions null even when the SDK had them.
 Auditors had to derive that surface from post-hoc events. Now the input
 event carries it upfront.
 
 Fallback: when `get_context_usage` is missing (older SDK, test fakes)
-or raises, the translator falls back to cfg-only emission — same v0.1
+or raises, the translator falls back to commission-only emission — same v0.1
 behavior, lifecycle marker still on the wire.
 """
 
@@ -28,10 +28,10 @@ from avp_claude_agent.translator import ClaudeAgentTranslator
 from .test_translator import _FakeHookMatcher, _FakeOptions
 
 
-def _new_translator(cfg: Commission) -> tuple[ClaudeAgentTranslator, list]:
+def _new_translator(commission: Commission) -> tuple[ClaudeAgentTranslator, list]:
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_options_cls=_FakeOptions,
         sdk_hook_matcher_cls=_FakeHookMatcher,
@@ -61,13 +61,14 @@ class _UsageClient:
 def test_systemtools_descriptions_attach_to_builtin_tool_decls() -> None:
     """SDK reports `Read` with a description; the translator merges it
     onto the built-in tool decl rather than leaving it null."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="enriched-tools",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient(
         {
             "systemTools": [
@@ -94,13 +95,14 @@ def test_agents_attach_description_and_agent_type_for_builtin() -> None:
     """SDK reports `general-purpose` with a description + agentType.
     The built-in subagent decl picks both up so the supervisor's
     audit trail shows what the agent actually was."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="enriched-subagent",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient(
         {
             "agents": [
@@ -124,8 +126,8 @@ def test_agents_attach_description_and_agent_type_for_builtin() -> None:
 def test_cfg_declared_subagent_description_is_not_overwritten() -> None:
     """Like with tools: when the supervisor declares a Subagent, that
     description is canonical. Enrichment only fills in the BUILT-IN
-    decls, not cfg-declared ones."""
-    cfg = Commission(
+    decls, not commission-declared ones."""
+    commission = Commission(
         schema_version="0.1",
         run_id="rpc-subagent-supersedes-sdk",
         model="claude-sonnet-4-6",
@@ -135,10 +137,12 @@ def test_cfg_declared_subagent_description_is_not_overwritten() -> None:
                 name="code-reviewer",
                 description="Supervisor-authored review specialist.",
                 system_prompt="...",
+                exposed=["*"],
             )
         ],
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient(
         {
             "agents": [
@@ -157,22 +161,23 @@ def test_cfg_declared_subagent_description_is_not_overwritten() -> None:
     assert started.data.subagents[0].description == "Supervisor-authored review specialist."
 
 
-# ── Skills: SDK-loaded filesystem skills appear; cfg gets descriptions ──
+# ── Skills: SDK-loaded filesystem skills appear; commission gets descriptions ──
 
 
 def test_sdk_loaded_filesystem_skills_appear_on_wire() -> None:
     """The SDK loads skills from `~/.claude/skills/` and project paths
-    that aren't in `cfg.skills`. Surface them so the audit trail
+    that aren't in `commission.skills`. Surface them so the audit trail
     reflects what the agent ACTUALLY had access to, not just what the
     supervisor declared."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="filesystem-skills",
         model="claude-sonnet-4-6",
         prompt="hi",
-        # Note: no cfg.skills — these all come from filesystem.
+        # Note: no commission.skills — these all come from filesystem.,
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient(
         {
             "skills": [
@@ -201,10 +206,10 @@ def test_sdk_loaded_filesystem_skills_appear_on_wire() -> None:
 
 
 def test_cfg_skill_gets_sdk_description_when_sdk_loaded_it() -> None:
-    """`cfg.skills` declares a name + source; the SDK loaded the
+    """`commission.skills` declares a name + source; the SDK loaded the
     skill from that source and parsed its frontmatter description.
-    Merge: cfg supplies the source, SDK supplies the description."""
-    cfg = Commission(
+    Merge: commission supplies the source, SDK supplies the description."""
+    commission = Commission(
         schema_version="0.1",
         run_id="skill-merge",
         model="claude-sonnet-4-6",
@@ -212,8 +217,9 @@ def test_cfg_skill_gets_sdk_description_when_sdk_loaded_it() -> None:
         skills=[
             Skill.model_validate({"name": "style-guide", "avp.source": "./skills/style-guide"}),
         ],
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient(
         {
             "skills": [
@@ -240,24 +246,25 @@ def test_cfg_skill_gets_sdk_description_when_sdk_loaded_it() -> None:
 
 
 def test_fallback_when_client_has_no_get_context_usage() -> None:
-    """SDKs predating get_context_usage → cfg-only emission. Same
+    """SDKs predating get_context_usage → commission-only emission. Same
     behavior as v0.1; lifecycle invariant preserved."""
 
     class _ClientWithoutUsage:
         pass
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="no-usage",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     asyncio.run(t._emit_agent_started_with_sdk_enrichment(_ClientWithoutUsage()))
 
     started = _agent_started(out)
     assert started.data.subagents is not None
-    # general-purpose still surfaced from the cfg-side preset; just no
+    # general-purpose still surfaced from the commission-side preset; just no
     # description / agentType because we couldn't fetch them.
     by_name = {sa.name: sa for sa in started.data.subagents}
     assert "general-purpose" in by_name
@@ -267,24 +274,25 @@ def test_fallback_when_client_has_no_get_context_usage() -> None:
 
 def test_fallback_when_get_context_usage_raises() -> None:
     """If the call raises (transport hiccup, version mismatch), the
-    translator falls back to cfg-only emission rather than crashing
+    translator falls back to commission-only emission rather than crashing
     the run."""
 
     class _Boom:
         async def get_context_usage(self):
             raise RuntimeError("sdk transport went away")
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="boom",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     asyncio.run(t._emit_agent_started_with_sdk_enrichment(_Boom()))
 
     started = _agent_started(out)
-    # Lifecycle marker on wire; fields fall back to cfg-only defaults.
+    # Lifecycle marker on wire; fields fall back to commission-only defaults.
     assert started.data.subagents is not None
 
 
@@ -297,13 +305,14 @@ def test_fallback_when_response_shape_is_wrong() -> None:
         async def get_context_usage(self):
             return "not a dict at all"
 
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="garbage",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     asyncio.run(t._emit_agent_started_with_sdk_enrichment(_Garbage()))
 
     started = _agent_started(out)
@@ -318,13 +327,14 @@ def test_double_emit_is_idempotent() -> None:
     (e.g., a fallback path runs after the enriched path), only one
     `agent_started` event lands on the wire. Required for lifecycle
     correctness."""
-    cfg = Commission(
+    commission = Commission(
         schema_version="0.1",
         run_id="idempotent",
         model="claude-sonnet-4-6",
         prompt="hi",
+        exposed=["*"],
     )
-    t, out = _new_translator(cfg)
+    t, out = _new_translator(commission)
     client = _UsageClient({"systemTools": [{"name": "Read", "description": "rd"}]})
     asyncio.run(t._emit_agent_started_with_sdk_enrichment(client))
     t._emit_agent_started()  # second call — should be a no-op

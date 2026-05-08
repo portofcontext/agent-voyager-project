@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avp.dev/conformance/v0.1/test-case.schema.json",
   "title": "AVP Conformance Test Case (v0.1)",
-  "description": "Language-agnostic test case format. Each SDK implements a thin harness (see HARNESS.md) that reads cases of this shape, runs them against its implementation, and asserts. Cases describe (a) the Commission the runner receives, (b) a deterministic script of model responses, tool outputs, and supervisor messages, and (c) expectations over the emitted event trajectory. This is the operational answer to spec drift: any behavior the spec mandates should be encoded as a case here, and every SDK MUST pass.",
+  "description": "Language-agnostic test case format. Each SDK implements a thin harness (see HARNESS.md) that reads cases of this shape, runs them against its implementation, and asserts. Cases describe (a) the Commission the agent receives, (b) a deterministic script of model responses, tool outputs, and supervisor messages, and (c) expectations over the emitted event trajectory. This is the operational answer to spec drift: any behavior the spec mandates should be encoded as a case here, and every SDK MUST pass.",
   "type": "object",
-  "required": ["id", "title", "applies_to", "config", "expectations"],
+  "required": ["id", "title", "applies_to", "commission", "expectations"],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -27,22 +27,22 @@
     },
     "applies_to": {
       "type": "array",
-      "items": { "enum": ["runner", "supervisor"] },
+      "items": { "enum": ["agent", "supervisor"] },
       "minItems": 1,
-      "description": "Which side(s) of the seam this case validates. Most cases test runner behavior given a scripted supervisor; supervisor cases assert the supervisor produces conforming messages given a scripted runner."
+      "description": "Which side(s) of the seam this case validates. Most cases test agent behavior given a scripted supervisor; supervisor cases assert the supervisor produces conforming messages given a scripted agent."
     },
-    "config": {
+    "commission": {
       "$ref": "https://avp.dev/schema/v0.1/commission.schema.json"
     },
     "scripted_model": {
       "type": "array",
       "items": { "$ref": "#/$defs/ModelResponse" },
-      "description": "One entry per turn the harness should serve in order. The harness's mock model returns these responses to the runner regardless of conversation history."
+      "description": "One entry per turn the harness should serve in order. The harness's mock model returns these responses to the agent regardless of conversation history."
     },
     "scripted_tools": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/ToolResponse" },
-      "description": "Map from tool name to the response the harness returns when that tool is called. Tools not listed here are assumed to be supervisor-executed (declared in config.tools) and routed via tool_exec_requested."
+      "description": "Map from tool name to the response the harness returns when that tool is called. Tools not listed here are assumed to be supervisor-executed (declared in commission.tools) and routed via tool_exec_requested."
     },
     "scripted_supervisor": {
       "type": "array",
@@ -52,11 +52,11 @@
     "scripted_subagents": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/SubagentOutcomeSpec" },
-      "description": "Map from subagent name (matching Commission.subagents[].name) to a canned outcome the harness's mock SubagentDriver will return. When set, the runner is constructed with a ScriptedSubagentDriver; when omitted and Commission.subagents is non-empty, the runner runs without a driver and any subagent invocation surfaces as subagent_failed."
+      "description": "Map from subagent name (matching Commission.subagents[].name) to a canned outcome the harness's mock SubagentDriver will return. When set, the agent is constructed with a ScriptedSubagentDriver; when omitted and Commission.subagents is non-empty, the agent runs without a driver and any subagent invocation surfaces as subagent_failed."
     },
     "agent_manifest": {
       "type": "object",
-      "description": "Optional. AgentManifest the harness passes to AVPAgent so it emits the run_requested + agent_described prelude. Cases that don't set this exercise the no-prelude path (the runner skips emission and the trajectory looks the same as before this field existed). The value is validated as a Pydantic AgentManifest at run time.",
+      "description": "Optional. AgentManifest the harness passes to AVPAgent so it emits the run_requested + agent_described prelude. Cases that don't set this exercise the no-prelude path (the agent skips emission and the trajectory looks the same as before this field existed). The value is validated as a Pydantic AgentManifest at run time.",
       "additionalProperties": true
     },
     "agent_builtin_tools": {
@@ -71,7 +71,7 @@
           "input_schema": { "type": "object", "additionalProperties": true }
         }
       },
-      "description": "Optional. Declares the runner's built-in tool catalog so cases can exercise SPEC.md §13.1.2 (agent_started.tools reflects effective surface = Commission.tools ∪ agent_builtin_tools, filtered by allowed_tools). Each entry is a tool descriptor the runner exposes natively (e.g., bash, read_file). Cases that don't set this exercise the Commission.tools-only path."
+      "description": "Optional. Declares the agent's built-in tool catalog so cases can exercise SPEC.md §13.1.2 (agent_started.tools reflects effective surface = Commission.tools ∪ agent_builtin_tools, filtered by allowed_tools). Each entry is a tool descriptor the agent exposes natively (e.g., bash, read_file). Cases that don't set this exercise the Commission.tools-only path."
     },
     "expectations": {
       "type": "object",
@@ -139,7 +139,7 @@
         },
         "refusal": {
           "type": "object",
-          "description": "When set, the runner emits avp.refusal_recorded and terminates with StopReason.refused. Universal across providers — `reason` is the provider's verbatim code (anthropic 'refusal'/'sensitive', openai 'content_filter', gemini 'SAFETY'/'BLOCKLIST'/etc.).",
+          "description": "When set, the agent emits avp.refusal_recorded and terminates with StopReason.refused. Universal across providers — `reason` is the provider's verbatim code (anthropic 'refusal'/'sensitive', openai 'content_filter', gemini 'SAFETY'/'BLOCKLIST'/etc.).",
           "required": ["reason"],
           "additionalProperties": false,
           "properties": {
@@ -152,7 +152,7 @@
         "converged": {
           "type": "boolean",
           "default": false,
-          "description": "When true and tool_calls is empty, the runner should treat the response as terminal and stop with reason=converged."
+          "description": "When true and tool_calls is empty, the agent should treat the response as terminal and stop with reason=converged."
         }
       }
     },
@@ -210,7 +210,7 @@
     "SubagentOutcomeSpec": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Canned outcome for one subagent invocation, parallel to runner.drivers.SubagentOutcome. The harness emits subagent_invoked, runs this canned outcome, then emits subagent_returned (or subagent_failed if `error` is set).",
+      "description": "Canned outcome for one subagent invocation, parallel to agent.drivers.SubagentOutcome. The harness emits subagent_invoked, runs this canned outcome, then emits subagent_returned (or subagent_failed if `error` is set).",
       "properties": {
         "text": {
           "type": "string",

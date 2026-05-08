@@ -3,7 +3,7 @@
 These tests pin the contract that matters: events emitted by AVPTracer MUST
 be byte-equivalent to events AVPAgent produces for the same Commission and
 the same set of (turn, tool, subagent) operations. Consumers downstream
-of the wire can't tell whether the trajectory came from a agent or a
+of the wire can't tell whether the trajectory came from an agent or a
 traced loop. If that ever drifts, this file fails first.
 
 Coverage:
@@ -51,7 +51,7 @@ def _basic_config(**overrides) -> Commission:
         "prompt": "do the thing",
     }
     base.update(overrides)
-    return Commission(**base)
+    return Commission(**base, exposed=["*"])
 
 
 # ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ def test_minimal_run_emits_full_lifecycle() -> None:
     assert stopped.data.avp_reason == "converged"
 
 
-def test_emitted_events_match_avprunner_envelope_shape() -> None:
+def test_emitted_events_match_avp_envelope_shape() -> None:
     """CloudEvents 1.0 envelope invariants. Same as AVPAgent."""
     out: list = []
     with AVPTracer(_basic_config(), on_event=out.append) as tracer:
@@ -173,6 +173,7 @@ def _cfg_with_subagent() -> Commission:
                 description="Compresses a passage to a bullet.",
                 system_prompt="You are a summarizer.",
                 model="claude-haiku-4-5-20251001",
+                exposed=["*"],
             )
         ]
     )

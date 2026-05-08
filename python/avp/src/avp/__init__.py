@@ -35,7 +35,7 @@ from avp.tracer import (
     print_event,
 )
 from avp.types import (
-    SOURCE_RUNNER,
+    SOURCE_AGENT,
     SOURCE_SUPERVISOR,
     T_AGENT_DESCRIBED,
     T_AGENT_STARTED,
@@ -49,7 +49,6 @@ from avp.types import (
     T_REASONING_EMITTED,
     T_REFUSAL_RECORDED,
     T_RUN_REQUESTED,
-    T_SKILL_EXECUTED,
     T_SKILL_LOADED,
     T_SUBAGENT_FAILED,
     T_SUBAGENT_INVOKED,
@@ -90,8 +89,6 @@ from avp.types import (
     RunRequestedEvent,
     RunStateSnapshot,
     Skill,
-    SkillExecutedData,
-    SkillExecutedEvent,
     SkillLoadedData,
     SkillLoadedEvent,
     Subagent,
@@ -127,7 +124,7 @@ __all__ = [
     "COST_SOURCE_UNKNOWN",
     "SCHEMA_VERSION",
     # Source URIs
-    "SOURCE_RUNNER",
+    "SOURCE_AGENT",
     "SOURCE_SUPERVISOR",
     "T_AGENT_DESCRIBED",
     # Event type strings
@@ -142,7 +139,6 @@ __all__ = [
     "T_REASONING_EMITTED",
     "T_REFUSAL_RECORDED",
     "T_RUN_REQUESTED",
-    "T_SKILL_EXECUTED",
     "T_SKILL_LOADED",
     "T_SUBAGENT_FAILED",
     "T_SUBAGENT_INVOKED",
@@ -193,8 +189,6 @@ __all__ = [
     "RunRequestedEvent",
     "RunStateSnapshot",
     "Skill",
-    "SkillExecutedData",
-    "SkillExecutedEvent",
     "SkillLoadedData",
     "SkillLoadedEvent",
     "Source",

@@ -47,6 +47,13 @@ _CAPABILITIES = (
     "mcp",
     "subagents",
     "skills",
+    # The Claude Agent SDK uses progressive disclosure: skill bodies are
+    # pulled into context only when the model decides it needs them, not
+    # eagerly at startup. The SDK doesn't currently expose a hook for that
+    # moment, so the translator does NOT emit `skill_loaded` at startup —
+    # the registration view (`agent_started.data.skills[]`) is the audit
+    # trail; engagement is opaque for this agent.
+    "skills:progressive",
     "thinking",
     "filesystem-skills",
     "filesystem-subagents",
@@ -90,6 +97,12 @@ def manifest() -> AgentManifest:
             # The SDK doesn't compile in a default model — Commission or the
             # SDK's own resolution chain selects. Honest-null.
             "default_model": None,
+            # The Claude Agent SDK shells out to the `claude` CLI which only
+            # speaks to Anthropic models. Glob covers all current and future
+            # Claude variants; supervisors authoring with `model: "gpt-4"` get
+            # a clean error_occurred(unsupported_model) at startup instead of
+            # an opaque CLI failure on the first turn.
+            "supported_models": ["claude-*"],
             "built_in_tools": built_in_tools,
             "built_in_subagents": built_in_subagents or None,
             # SDK does not bundle skills programmatically; SKILL.md files are

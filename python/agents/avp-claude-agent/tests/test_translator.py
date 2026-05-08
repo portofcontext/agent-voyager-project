@@ -137,20 +137,20 @@ def _client_factory(
 
 
 def _new_translator(
-    cfg: Commission | None = None,
+    commission: Commission | None = None,
     *,
     sdk_client_cls: Callable[..., Any] | None = None,
 ) -> tuple[ClaudeAgentTranslator, list]:
-    cfg = cfg or Commission(
+    commission = commission or Commission(
         schema_version="0.1",
         run_id="t1",
         model="claude-sonnet-4-6",
         prompt="hello",
-        allowed_tools=["bash"],
+        exposed=["bash"],
     )
     out: list = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         sdk_client_cls=sdk_client_cls,
         sdk_options_cls=_FakeOptions,
@@ -173,7 +173,7 @@ def test_agent_started_emitted_with_config_metadata() -> None:
 
 
 def test_build_sdk_options_maps_config_fields() -> None:
-    """AVP Commission.allowed_tools is the exposure filter (SPEC §8.1) — it
+    """AVP Commission.exposed is the exposure filter (SPEC §8.1) — it
     maps to SDK `tools`, not SDK `allowed_tools` (auto-approve list).
     See test_agent_started_tool_surface for the deeper rationale."""
     t, _ = _new_translator()

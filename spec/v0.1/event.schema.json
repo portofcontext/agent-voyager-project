@@ -25,7 +25,7 @@
           "title": "Parent Span Id",
           "type": "string"
         },
-        "avp.agent": {
+        "avp.manifest": {
           "$ref": "#/$defs/AgentManifest"
         }
       },
@@ -33,7 +33,7 @@
         "trace_id",
         "span_id",
         "parent_span_id",
-        "avp.agent"
+        "avp.manifest"
       ],
       "title": "AgentDescribedData",
       "type": "object"
@@ -131,7 +131,7 @@
     },
     "AgentManifest": {
       "additionalProperties": false,
-      "description": "Self-description of an AVP agent — who it is, what it brings.\n\nEvery AVP-compliant agent MUST publish a manifest that enumerates\neverything triggerable without supervisor configuration: SDK preset\ntools, runtime-bundled subagents, runtime-bundled skills, plus the\nagent's name / version / supported AVP spec version. Consumers use\nthe manifest in two ways:\n\n  1. **Pre-flight** — `<agent> describe` prints the manifest as JSON\n     to stdout. A supervisor authoring a Commission can introspect what\n     the agent offers before invoking it (so `Commission.allowed_tools`,\n     `Commission.subagents`, etc. can be authored against ground truth).\n\n  2. **On the wire** — the agent emits a `agent_described` event\n     right after `run_requested` and right before `agent_started`.\n     The on-wire payload MUST equal what `describe` prints for the\n     same agent build, so the audit trail records exactly what the\n     consumer would have seen at pre-flight time.\n\nScope: SDK defaults only. The manifest does NOT include\nsupervisor-declared surfaces (`Commission.tools`, `Commission.subagents`,\n`Commission.skills`) and does NOT include environment-discovered\nsurfaces (filesystem skills under `~/.claude/skills/`, MCP servers\ndiscovered at startup, user-installed plugins). Those appear on\n`agent_started` (the merged-view event) and `mcp_server_connected`\nrespectively. The manifest is the agent's identity, not the run's.",
+      "description": "Self-description of an AVP agent — who it is, what it brings.\n\nEvery AVP-compliant agent MUST publish a manifest that enumerates\neverything triggerable without supervisor configuration: SDK preset\ntools, runtime-bundled subagents, runtime-bundled skills, plus the\nagent's name / version / supported AVP spec version. Consumers use\nthe manifest in two ways:\n\n  1. **Pre-flight** — `<agent> describe` prints the manifest as JSON\n     to stdout. A supervisor authoring a Commission can introspect what\n     the agent offers before invoking it (so `Commission.exposed`,\n     `Commission.subagents`, etc. can be authored against ground truth).\n\n  2. **On the wire** — the agent emits a `agent_described` event\n     right after `run_requested` and right before `agent_started`.\n     The on-wire payload MUST equal what `describe` prints for the\n     same agent build, so the audit trail records exactly what the\n     consumer would have seen at pre-flight time.\n\nScope: SDK defaults only. The manifest does NOT include\nsupervisor-declared surfaces (`Commission.tools`, `Commission.subagents`,\n`Commission.skills`) and does NOT include environment-discovered\nsurfaces (filesystem skills under `~/.claude/skills/`, MCP servers\ndiscovered at startup, user-installed plugins). Those appear on\n`agent_started` (the merged-view event) and `mcp_server_connected`\nrespectively. The manifest is the agent's identity, not the run's.",
       "properties": {
         "agent_name": {
           "minLength": 1,
@@ -159,6 +159,21 @@
           ],
           "default": null,
           "title": "Default Model"
+        },
+        "supported_models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supported Models"
         },
         "built_in_tools": {
           "anyOf": [
@@ -864,6 +879,8 @@
         "auth_error",
         "agent_crash",
         "accounting_reset",
+        "unsupported_model",
+        "exposed_unresolved",
         "unknown"
       ],
       "title": "ErrorCode",
@@ -1077,6 +1094,21 @@
           ],
           "default": null,
           "title": "Avp.Mcp.Tools"
+        },
+        "avp.mcp.resources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/_ResourceDecl"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Mcp.Resources"
         },
         "avp.mcp.status": {
           "anyOf": [
@@ -1949,7 +1981,7 @@
     },
     "RefusalRecordedData": {
       "additionalProperties": true,
-      "description": "The model declined to generate a response or had its output filtered.\n\nCommon across providers but each exposes a different slice:\n  - Anthropic:  `stop_reason=\"refusal\"` (or `\"sensitive\"`), no\n                structured category, sometimes a refusal-flavored\n                text block.\n  - OpenAI:     `finish_reason=\"content_filter\"` plus a dedicated\n                `refusal` field on the assistant message containing\n                the model's refusal text.\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\n                per-category `safetyRatings`.\n\nAVP normalizes to a provider-agnostic shape: `reason` is the\nprovider's raw code (verbatim, so audit pipelines can match exact\nupstream strings), `message` is the model's refusal text when given,\n`category` is the provider's safety category (free-form because\nevery provider names them differently), `provider` lets downstream\nconsumers normalize the reason code without context-guessing.\n\nA refusal terminates the turn — the model produced no useful text or\ntool call. Whether the *run* terminates is a agent decision (the\nreference agent stops with `StopReason.refused`); a higher-level\nsupervisor may choose to reset history and retry.",
+      "description": "The model declined to generate a response or had its output filtered.\n\nCommon across providers but each exposes a different slice:\n  - Anthropic:  `stop_reason=\"refusal\"` (or `\"sensitive\"`), no\n                structured category, sometimes a refusal-flavored\n                text block.\n  - OpenAI:     `finish_reason=\"content_filter\"` plus a dedicated\n                `refusal` field on the assistant message containing\n                the model's refusal text.\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\n                per-category `safetyRatings`.\n\nAVP normalizes to a provider-agnostic shape: `reason` is the\nprovider's raw code (verbatim, so audit pipelines can match exact\nupstream strings), `message` is the model's refusal text when given,\n`category` is the provider's safety category (free-form because\nevery provider names them differently), `provider` lets downstream\nconsumers normalize the reason code without context-guessing.\n\nA refusal terminates the turn — the model produced no useful text or\ntool call. Whether the *run* terminates is an agent decision (the\nreference agent stops with `StopReason.refused`); a higher-level\nsupervisor may choose to reset history and retry.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2121,7 +2153,7 @@
     },
     "RunRequestedData": {
       "additionalProperties": true,
-      "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory: the supervisor's assertion that this run was\nrequested with this Commission. Agent-relayed (the agent emits the\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\nso no I/O contract change beyond Commission — but attribution is the\nsupervisor's, not the agent's.\n\n`avp.config` is the full Commission snapshot the supervisor handed in.\nCarrying it on the wire makes the trajectory self-contained: an\nauditor can replay (or re-validate) the run from the trajectory\nalone, without an external Commission registry.",
+      "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory: the supervisor's assertion that this run was\nrequested with this Commission. Agent-relayed (the agent emits the\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\nso no I/O contract change beyond Commission — but attribution is the\nsupervisor's, not the agent's.\n\n`avp.commission` is the full Commission snapshot the supervisor handed\nin. Carrying it on the wire makes the trajectory self-contained: an\nauditor can replay (or re-validate) the run from the trajectory\nalone, without an external Commission registry.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2388,142 +2420,9 @@
       "title": "RunStateSnapshot",
       "type": "object"
     },
-    "SkillExecutedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "step": {
-          "minimum": 0,
-          "title": "Step",
-          "type": "integer"
-        },
-        "avp.skill.name": {
-          "title": "Avp.Skill.Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "step",
-        "avp.skill.name"
-      ],
-      "title": "SkillExecutedData",
-      "type": "object"
-    },
-    "SkillExecutedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.skill_executed",
-          "default": "avp.skill_executed",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/SkillExecutedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "SkillExecutedEvent",
-      "type": "object"
-    },
     "SkillLoadedData": {
       "additionalProperties": true,
+      "description": "Payload of `avp.skill_loaded` events.\n\nSemantics: emitted when the SKILL.md body content has been added to\nthe model's active context window. NOT a registration acknowledgment\n— the registration view is `agent_started.data.skills[]`.\n\nTwo emission patterns, differentiated by the agent's\n`manifest.capabilities`:\n\n  - `skills:eager` — agent injects all declared SKILL.md bodies at\n    startup (e.g., as system_prompt suffix). Emit once per skill at\n    `step=0`, after `agent_started` and `mcp_server_connected`.\n  - `skills:progressive` — model decides per-turn which skill bodies\n    to pull in (Anthropic Skills, Claude Code progressive disclosure).\n    Emit when the body actually enters context, with `step=N` matching\n    the turn it loaded in. MAY fire multiple times for the same\n    skill (e.g., re-load after compaction).\n\nAgents whose SDK does not expose progressive-disclosure load events\nSHOULD NOT emit `skill_loaded` at all — `agent_started.data.skills[]`\nstill records the registration. Honest-silent beats fabricated events.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3357,7 +3256,7 @@
         "avp.tool.error.code": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "string"
             },
             {
               "type": "null"
@@ -3517,7 +3416,8 @@
             {
               "enum": [
                 "mcp_server",
-                "local"
+                "local",
+                "hosted"
               ],
               "type": "string"
             },
@@ -3828,6 +3728,58 @@
       "title": "ToolReturnedEvent",
       "type": "object"
     },
+    "_ResourceDecl": {
+      "additionalProperties": true,
+      "description": "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec — `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog.",
+      "properties": {
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mimetype"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "_ResourceDecl",
+      "type": "object"
+    },
     "_SkillDecl": {
       "additionalProperties": true,
       "description": "Skill descriptor in `agent_started.data.skills` — name plus\noptional metadata about each skill loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `avp.source` is the\nSKILL.md path / URI when known.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
@@ -3957,7 +3909,8 @@
             {
               "enum": [
                 "mcp_server",
-                "local"
+                "local",
+                "hosted"
               ],
               "type": "string"
             },
@@ -4002,7 +3955,6 @@
       "avp.reasoning_emitted": "#/$defs/ReasoningEmittedEvent",
       "avp.refusal_recorded": "#/$defs/RefusalRecordedEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
-      "avp.skill_executed": "#/$defs/SkillExecutedEvent",
       "avp.skill_loaded": "#/$defs/SkillLoadedEvent",
       "avp.subagent_failed": "#/$defs/SubagentFailedEvent",
       "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
@@ -4065,9 +4017,6 @@
     },
     {
       "$ref": "#/$defs/SkillLoadedEvent"
-    },
-    {
-      "$ref": "#/$defs/SkillExecutedEvent"
     },
     {
       "$ref": "#/$defs/ErrorOccurredEvent"

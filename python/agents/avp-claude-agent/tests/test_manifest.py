@@ -4,7 +4,7 @@ The manifest the agent publishes lives in three places that MUST agree:
 
   1. `avp_claude_agent.manifest()` — the in-process function.
   2. `avp-claude-agent describe` — the CLI subcommand, prints JSON.
-  3. `agent_described.data.avp.agent` — the on-wire event the agent
+  3. `agent_described.data.avp.manifest` — the on-wire event the agent
      emits between run_requested and agent_started.
 
 If any of these diverged, a Commission author who introspected the agent
@@ -70,19 +70,20 @@ def test_translator_emits_run_prelude_when_manifest_supplied() -> None:
     run_requested → agent_described — even with a no-op SDK fake. The
     agent_described event's payload MUST equal the supplied manifest.
     """
-    cfg = Commission.model_validate(
+    commission = Commission.model_validate(
         {
             "schema_version": "0.1",
             "run_id": "manifest-seam",
             "model": "claude-sonnet-4-6",
             "prompt": "hello",
             "supervisor": {"name": "test-supervisor"},
+            "exposed": ["*"],
         }
     )
     out: list[Any] = []
     manifest = build_manifest()
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         manifest=manifest,
     )
@@ -91,11 +92,11 @@ def test_translator_emits_run_prelude_when_manifest_supplied() -> None:
     assert isinstance(out[0], RunRequestedEvent)
     assert out[0].source == "avp://supervisor"
     assert out[0].data.avp_supervisor_name == "test-supervisor"
-    assert out[0].data.avp_config["run_id"] == "manifest-seam"
+    assert out[0].data.avp_commission["run_id"] == "manifest-seam"
 
     assert isinstance(out[1], AgentDescribedEvent)
     assert out[1].source == "avp://agent"
-    on_wire = out[1].data.avp_agent.model_dump(by_alias=True, exclude_none=True)
+    on_wire = out[1].data.avp_manifest.model_dump(by_alias=True, exclude_none=True)
     expected = manifest.model_dump(by_alias=True, exclude_none=True)
     assert on_wire == expected
 
@@ -106,12 +107,17 @@ def test_translator_skips_prelude_in_delegated_mode() -> None:
     duplicate run_requested + agent_described under the same trace_id —
     which consumers cannot reconcile.
     """
-    cfg = Commission.model_validate(
-        {"schema_version": "0.1", "run_id": "delegated", "supervisor": {"name": "x"}}
+    commission = Commission.model_validate(
+        {
+            "schema_version": "0.1",
+            "run_id": "delegated",
+            "supervisor": {"name": "x"},
+            "exposed": ["*"],
+        }
     )
     out: list[Any] = []
     t = ClaudeAgentTranslator(
-        cfg,
+        commission,
         on_event=out.append,
         manifest=build_manifest(),
         suppress_lifecycle=True,
@@ -125,8 +131,14 @@ def test_translator_skips_prelude_when_no_manifest() -> None:
     MUST NOT emit prelude. The wire only opens with run_requested when
     the agent identifies itself.
     """
-    cfg = Commission.model_validate({"schema_version": "0.1", "run_id": "no-manifest"})
+    commission = Commission.model_validate(
+        {
+            "schema_version": "0.1",
+            "run_id": "no-manifest",
+            "exposed": ["*"],
+        }
+    )
     out: list[Any] = []
-    t = ClaudeAgentTranslator(cfg, on_event=out.append)
+    t = ClaudeAgentTranslator(commission, on_event=out.append)
     t._emit_run_prelude()
     assert out == []

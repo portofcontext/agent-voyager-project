@@ -7,7 +7,7 @@ the same Commission-declared environment they'd get from a driver-pattern agent.
 What this example demonstrates:
   - The same Commission-building flow as example 01 — profile + overrides
   - Translation of Commission → ClaudeAgentOptions:
-      Commission.allowed_tools  → SDK's allowed_tools (enforced natively by SDK)
+      Commission.exposed  → SDK's allowed_tools (enforced natively by SDK)
       Commission.system_prompt  → SDK's system_prompt
       Commission.model          → SDK's model
   - Claude Code hooks (PreToolUse / PostToolUse) registered by the translator
@@ -46,7 +46,7 @@ def main() -> int:
         prompt="Read the README.md and tell me what this project demonstrates. End with 'DONE'.",
         profile="read-only",
         model="claude-haiku-4-5-20251001",
-    ).model_copy(update={"allowed_tools": ["Read"]})
+    ).model_copy(update={"exposed": ["Read"]})
 
     print("== Commission (compiled from profile='read-only', re-targeted at Claude Code tools) ==")
     print(config.model_dump_json(indent=2, exclude_none=True))
