@@ -11,7 +11,9 @@ Skip in normal runs (default behavior in CI for forked PRs):
     pytest -m "not real_llm"
 
 Each test uses claude-haiku-4-5-20251001 (the cheapest current Claude model)
-and tight boundaries to keep cost per run under ~$0.001.
+and tight prompts to keep cost per run under ~$0.001. v0.1 has no spec
+mechanism for caps (boundaries were dropped); these tests rely on the
+model converging on its own from short prompts.
 """
 
 from __future__ import annotations
@@ -47,7 +49,6 @@ pytestmark = [
 
 
 SMOKE_MODEL = "claude-haiku-4-5-20251001"  # cheapest current Claude
-TIGHT_BOUNDARY = {"max_steps": 3, "max_cost_usd": 0.10, "max_tokens": 4000}
 
 
 def _new_runner(*, prompt: str, run_id: str) -> AVPAgent:
@@ -56,7 +57,6 @@ def _new_runner(*, prompt: str, run_id: str) -> AVPAgent:
         run_id=run_id,
         model=SMOKE_MODEL,
         prompt=prompt,
-        boundary=TIGHT_BOUNDARY,
     )
     return AVPAgent(
         config=config,
@@ -122,32 +122,6 @@ def test_token_and_cost_accounting_monotonic_across_turns() -> None:
         last_tokens = snap.total_tokens
 
 
-def test_boundary_max_steps_enforced_against_real_model() -> None:
-    """Set max_steps=1; Claude should respond once and the agent should stop with reason='turn_limit'.
-    Proves the strict-greater step check works against a real model that doesn't naturally converge."""
-    config = Commission(
-        schema_version="0.1",
-        run_id="smoke-max-steps",
-        model=SMOKE_MODEL,
-        prompt="Pick three numbers between 1 and 10 then call out which is largest. Then ask me to pick another set.",
-        boundary={"max_steps": 1, "max_cost_usd": 0.10},
-    )
-    agent = AVPAgent(
-        config=config,
-        model=AnthropicModelDriver(model=SMOKE_MODEL, max_tokens=200),
-        tools=ScriptedTools(),
-        supervisor=ScriptedSupervisor([]),
-    )
-    stop = agent.run()
-
-    # Either Claude converged in 1 turn (reason=converged with total_turns=1)
-    # or hit the max_steps boundary (reason=turn_limit with total_turns=1).
-    # Both prove the agent respected the boundary; total_turns MUST equal exactly 1.
-    snap = stop.data.avp_state
-    assert snap.total_turns == 1, f"max_steps=1 must yield exactly 1 turn, got {snap.total_turns}"
-    assert stop.data.avp_reason in (StopReason.converged, StopReason.turn_limit)
-
-
 def test_subagent_delegation_round_trip_against_real_model() -> None:
     """End-to-end: parent agent calls a declared subagent, the subagent runs
     its own sub-loop on the real Anthropic API, and the wire shape assembles
@@ -156,8 +130,8 @@ def test_subagent_delegation_round_trip_against_real_model() -> None:
     parent run converges.
 
     Two real model calls: one for the parent's tool-use turn, one for the
-    subagent's reply. Parent's converging turn may add a third. Tight
-    boundary keeps cost per run under ~$0.002 on Haiku.
+    subagent's reply. Parent's converging turn may add a third. Short
+    prompts keep cost per run under ~$0.002 on Haiku.
     """
     config = Commission(
         schema_version="0.1",
@@ -188,10 +162,8 @@ def test_subagent_delegation_round_trip_against_real_model() -> None:
                     "≤ 10 words. Output nothing else."
                 ),
                 model=SMOKE_MODEL,
-                boundary={"max_steps": 2},
             )
         ],
-        boundary={"max_steps": 4, "max_cost_usd": 0.10},
         allowed_tools=["summarizer"],
     )
     # When wiring AVPAgent directly (no CLI), the caller is responsible for
@@ -251,19 +223,15 @@ def test_subagent_delegation_round_trip_against_real_model() -> None:
     assert sa_usage.total_cost_usd > 0, "subagent didn't accrue cost — driver swallowed it"
     assert sa_usage.total_tokens > 0
     assert sa_usage.total_turns >= 1
-    assert ret.data.avp_subagent_reason in (
-        StopReason.converged,
-        StopReason.turn_limit,
-        StopReason.budget_exhausted,
-    )
+    assert ret.data.avp_subagent_reason == StopReason.converged
 
     # Parent's cumulative state includes the subagent's spend.
     parent_snap = stop.data.avp_state
     assert parent_snap.total_cost_usd >= sa_usage.total_cost_usd, (
-        "subagent usage MUST roll up into parent's RunStateSnapshot — "
-        "parent's boundary check would otherwise be blind to subagent cost"
+        "subagent usage MUST roll up into parent's RunStateSnapshot so "
+        "the parent's aep.state reflects the true total"
     )
-    assert stop.data.avp_reason in (StopReason.converged, StopReason.turn_limit)
+    assert stop.data.avp_reason == StopReason.converged
 
 
 def test_traced_client_drop_in_round_trip_against_real_model() -> None:
@@ -273,9 +241,8 @@ def test_traced_client_drop_in_round_trip_against_real_model() -> None:
     same lifecycle, real cost, real tokens.
 
     This is the test that proves the drop-in story works against the
-    actual API: the loop body is a vanilla Anthropic loop (no
-    `should_stop()` guard, no separate tracer); AVP events appear on
-    the wire."""
+    actual API: the loop body is a vanilla Anthropic loop with no
+    separate tracer; AVP events appear on the wire."""
     import anthropic
 
     from avp_anthropic import AnthropicTracedClient
@@ -285,7 +252,6 @@ def test_traced_client_drop_in_round_trip_against_real_model() -> None:
         run_id="smoke-traced-client",
         model=SMOKE_MODEL,
         prompt="Reply with exactly the single word 'pong' and nothing else.",
-        boundary={"max_steps": 2, "max_cost_usd": 0.10},
     )
 
     out: list = []

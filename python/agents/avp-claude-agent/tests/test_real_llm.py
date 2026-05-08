@@ -13,10 +13,10 @@ They sit behind the `real_llm` pytest marker so default test runs skip them.
 Run explicitly:
     ANTHROPIC_API_KEY=sk-... uv run pytest python/agents/avp-claude-agent -m real_llm
 
-Each test uses a tight boundary to keep cost per run small. The tests assert
-the SAME wire shape as `avp-anthropic`'s real-LLM smoke — that's the point of
-parity: a downstream supervisor MUST be able to consume both agents' output
-identically.
+Each test uses tight prompts to keep cost per run small (v0.1 has no spec
+mechanism for caps). The tests assert the SAME wire shape as
+`avp-anthropic`'s real-LLM smoke — that's the point of parity: a downstream
+supervisor MUST be able to consume both agents' output identically.
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ pytestmark = [
 
 
 SMOKE_MODEL = "claude-haiku-4-5-20251001"
-TIGHT_BOUNDARY = {"max_steps": 2, "max_cost_usd": 0.10, "max_tokens": 4000}
 
 
 def _new_translator(*, prompt: str, run_id: str):
@@ -60,7 +59,6 @@ def _new_translator(*, prompt: str, run_id: str):
         run_id=run_id,
         model=SMOKE_MODEL,
         prompt=prompt,
-        boundary=TIGHT_BOUNDARY,
     )
     captured: list = []
     translator = ClaudeAgentTranslator(config, on_event=captured.append)
@@ -79,7 +77,7 @@ def test_simple_text_response_completes_successfully() -> None:
     types = [type(ev).__name__ for ev in captured]
 
     assert isinstance(stop, AgentStoppedEvent)
-    assert stop.data.avp_reason in (StopReason.converged, StopReason.turn_limit), (
+    assert stop.data.avp_reason == StopReason.converged, (
         f"unexpected stop reason {stop.data.avp_reason}: trajectory types={types}"
     )
 
@@ -161,7 +159,6 @@ def test_traced_client_drop_in_round_trip_against_real_sdk() -> None:
         run_id="traced-client-smoke",
         model=SMOKE_MODEL,
         prompt="Reply with exactly the single word 'pong'.",
-        boundary=TIGHT_BOUNDARY,
     )
     captured: list = []
     received_messages: list = []
@@ -197,7 +194,7 @@ def test_traced_client_drop_in_round_trip_against_real_sdk() -> None:
     assert has_content, "expected at least one message with .content"
 
     stopped = next(ev for ev in captured if isinstance(ev, AgentStoppedEvent))
-    assert stopped.data.avp_reason in (StopReason.converged, StopReason.turn_limit)
+    assert stopped.data.avp_reason == StopReason.converged
     assert stopped.data.avp_state.total_cost_usd > 0
 
 
