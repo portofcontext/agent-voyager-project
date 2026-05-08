@@ -63,24 +63,24 @@ Three message classes:
   "schema_version": "0.1",
   "run_id": "auth-refactor-20260502-abc123",
 
-  "tools": [
-    {
-      "name": "lookup_user",
-      "description": "Look up a user by email.",
-      "input_schema": { "type": "object", "required": ["email"], "properties": { "email": { "type": "string" } } },
-      "timeout_ms": 15000
-    }
-  ],
+  "supervisor": { "name": "acme-engineering-supervisor", "version": "2.4.1" },
+
   "mcp_servers": [
-    { "id": "github",  "transport": "http",  "url": "https://mcp.github.com/", "auth": { "type": "bearer", "token_env": "GH_MCP_TOKEN" } },
+    { "id": "github",  "transport": "http",  "url": "https://mcp.github.com/",
+      "auth": { "type": "bearer", "token_env": "GH_MCP_TOKEN" } },
     { "id": "weather", "transport": "stdio", "command": ["npx"], "args": ["-y", "@example/weather-mcp"] }
   ],
-  "exposed": ["lookup_user", "bash"],
+  "exposed": [
+    "Read", "Bash", "Edit",                   // agent built-ins
+    "mcp__github__get_*",                     // glob: read-shaped GitHub tools
+    "mcp__github__create_pull_request",       // literal: this specific write
+    "mcp__weather__*"                         // glob: trust the weather server's namespace
+  ],
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
   "model":         "claude-sonnet-4-6",
-  "skills":        [ { "name": "style-guide", "source": "./skills/style-guide" } ],
+  "skills":        [ { "name": "style-guide", "avp.source": "./skills/style-guide" } ],
 
   "thread_id":     "session-xyz",
   "tags":          ["auth", "refactor"],
@@ -88,10 +88,9 @@ Three message classes:
 }
 ```
 
-| Plane | Field | Purpose |
+| Concern | Field | Purpose |
 |---|---|---|
-| Environment | `tools` | RPC tools the agent can call. Routed through the `tool_exec_*` lifecycle. |
-| Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the agent connects to natively. Their tools are dispatched by the MCP layer and tagged on the wire with `avp.tool.dispatch_target=mcp_server` + `avp.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
+| Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the agent connects to. Tools are dispatched by the MCP layer and tagged on the wire with `avp.tool.dispatch_target=mcp_server` + `avp.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
 | Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `skills`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
 | Environment | `exposed` | Required exhaustive list of names the model can invoke this run. Each entry resolves at startup against built-in tools, built-in subagents, Commission.subagents, and live MCP-server catalogs (post-handshake). Supports fnmatch globs (`mcp__github__*`); literals that resolve to nothing fail loud with `error_occurred(exposed_unresolved)`. |
 | Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |
