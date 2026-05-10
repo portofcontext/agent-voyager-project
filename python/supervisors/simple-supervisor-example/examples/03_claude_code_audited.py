@@ -7,9 +7,9 @@ the same Commission-declared environment they'd get from a driver-pattern agent.
 What this example demonstrates:
   - The same Commission-building flow as example 01 — profile + overrides
   - Translation of Commission → ClaudeAgentOptions:
-      Commission.exposed  → SDK's allowed_tools (enforced natively by SDK)
-      Commission.system_prompt  → SDK's system_prompt
-      Commission.model          → SDK's model
+      Commission.enabled_builtin_tools → SDK's `tools` parameter
+      Commission.system_prompt        → SDK's system_prompt
+      Commission.model                → SDK's model
   - Claude Code hooks (PreToolUse / PostToolUse) registered by the translator
     to emit AVP tool_invoked / tool_returned in step with the SDK's own dispatch
   - Same post-run summary as the driver examples
@@ -39,14 +39,15 @@ def main() -> int:
 
     run_id = f"claude-code-audit-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
-    # Allowed tools are Claude Code's tool names (Read / Write / Bash / Edit / Glob).
-    # The supervisor narrows the surface to read-only audit; the SDK enforces it.
+    # Tool names here are Claude Code's (Read / Write / Bash / Edit / Glob).
+    # The supervisor narrows the surface to a read-only audit; the SDK enforces
+    # it via the `tools` parameter the translator passes through.
     config = build_commission(
         run_id=run_id,
         prompt="Read the README.md and tell me what this project demonstrates. End with 'DONE'.",
         profile="read-only",
         model="claude-haiku-4-5-20251001",
-    ).model_copy(update={"exposed": ["Read"]})
+    ).model_copy(update={"enabled_builtin_tools": ["Read"]})
 
     print("== Commission (compiled from profile='read-only', re-targeted at Claude Code tools) ==")
     print(config.model_dump_json(indent=2, exclude_none=True))

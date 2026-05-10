@@ -51,7 +51,6 @@ def main() -> int:
             "`greet(name)` that returns 'hello, ' plus the name. Include "
             "a one-line docstring. Then say DONE."
         ),
-        exposed=["Write", "Read", "Bash"],
     )
 
     # Compare to a plain ClaudeSDKClient loop:

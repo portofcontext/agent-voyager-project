@@ -1,30 +1,9 @@
 {
   "$defs": {
-    "McpHttpAuth": {
+    "JsonValue": {},
+    "McpServerRef": {
       "additionalProperties": false,
-      "description": "Auth for an MCP server reachable via HTTP.",
-      "properties": {
-        "type": {
-          "const": "bearer",
-          "default": "bearer",
-          "title": "Type",
-          "type": "string"
-        },
-        "token_env": {
-          "minLength": 1,
-          "title": "Token Env",
-          "type": "string"
-        }
-      },
-      "required": [
-        "token_env"
-      ],
-      "title": "McpHttpAuth",
-      "type": "object"
-    },
-    "McpServer": {
-      "additionalProperties": false,
-      "description": "External MCP server endpoint. The agent connects, runs initialize +\ntools/list, and merges returned tools into the effective surface.",
+      "description": "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and\ntransport are deployment concerns — AVP does not constrain them.",
       "properties": {
         "id": {
           "minLength": 1,
@@ -32,275 +11,57 @@
           "title": "Id",
           "type": "string"
         },
-        "transport": {
-          "enum": [
-            "http",
-            "stdio"
-          ],
-          "title": "Transport",
-          "type": "string"
-        },
-        "url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Url"
-        },
-        "auth": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/McpHttpAuth"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "command": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Command"
-        },
-        "args": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Args"
-        },
-        "env": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Env"
-        },
-        "init_timeout_ms": {
-          "default": 30000,
-          "exclusiveMinimum": 0,
-          "title": "Init Timeout Ms",
-          "type": "integer"
-        },
-        "_meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Meta"
+        "ref": {
+          "$ref": "#/$defs/JsonValue"
         }
       },
       "required": [
         "id",
-        "transport"
+        "ref"
       ],
-      "title": "McpServer",
+      "title": "McpServerRef",
       "type": "object"
     },
-    "Skill": {
+    "SkillRef": {
       "additionalProperties": false,
-      "description": "Reference to a SKILL.md following the agentskills.io specification.\n\n`name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits\nhyphens, no leading/trailing hyphen, no consecutive hyphens). The\n`avp_source` and `avp_config` fields are AVP extensions; agentskills.io\ndoesn't define a remote-load scheme.",
+      "description": "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads) — agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses.",
       "properties": {
-        "name": {
-          "maxLength": 64,
-          "minLength": 1,
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-          "title": "Name",
-          "type": "string"
-        },
-        "avp.source": {
-          "minLength": 1,
-          "title": "Avp.Source",
-          "type": "string"
-        },
-        "avp.config": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Config"
-        }
-      },
-      "required": [
-        "name",
-        "avp.source"
-      ],
-      "title": "Skill",
-      "type": "object"
-    },
-    "Subagent": {
-      "additionalProperties": false,
-      "description": "Declares a sub-agent the parent can delegate to.\n\nSits alongside `tools` and `skills` as a top-level Commission primitive: the\nsupervisor declares the full set of subagents up front, the parent agent\ninvokes one by name at runtime. The model surface is MCP-shaped (`name`,\n`description`, `inputSchema`) so the model sees a subagent the same way\nit sees a tool. The wire surface is its own lifecycle —\n`subagent_invoked` / `subagent_returned` / `subagent_failed` — so\nnested turns and tool calls observe as their own span tree rather than\nflatten into a single tool call.\n\nA Subagent carries an environment slice that mirrors Commission (its own\n`system_prompt`, `model`, `tools`, `skills`, `output_schema`). The subagent runs in a fresh conversation —\n`inherit_tools=False` by default (matches Google ADK; safer than the\nClaude Agent SDK default of inheriting). Skills and prompt context are\nnever inherited.",
-      "properties": {
-        "name": {
-          "maxLength": 64,
+        "id": {
           "minLength": 1,
           "pattern": "^[a-z0-9_-]+$",
-          "title": "Name",
+          "title": "Id",
           "type": "string"
         },
-        "description": {
-          "minLength": 1,
-          "title": "Description",
-          "type": "string"
-        },
-        "inputSchema": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Inputschema"
-        },
-        "system_prompt": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "System Prompt"
-        },
-        "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Model"
-        },
-        "inherit_tools": {
-          "default": false,
-          "title": "Inherit Tools",
-          "type": "boolean"
-        },
-        "exposed": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Exposed",
-          "type": "array"
-        },
-        "mcp_servers": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/McpServer"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Mcp Servers"
-        },
-        "skills": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/Skill"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Skills"
-        },
-        "output_schema": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Output Schema"
-        },
-        "subagents": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/Subagent"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subagents"
+        "ref": {
+          "$ref": "#/$defs/JsonValue"
         }
       },
       "required": [
-        "name",
-        "description"
+        "id",
+        "ref"
       ],
-      "title": "Subagent",
+      "title": "SkillRef",
+      "type": "object"
+    },
+    "SubagentRef": {
+      "additionalProperties": false,
+      "description": "Reference to a supervisor-managed subagent.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"subagent\", id, ref}`; the resolver returns the model-facing\nmetadata (`name`, `description`, `inputSchema`) so the parent's model\ncan decide whether to delegate. When the model invokes the subagent at\nruntime, the agent calls `avp.spawn_subagent` with the same ref to\nobtain a child `run_id`. The subagent run carries its own complete\ntrajectory; the parent's `subagent_invoked.data[\"avp.subagent.run_id\"]`\nreferences it.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "id",
+        "ref"
+      ],
+      "title": "SubagentRef",
       "type": "object"
     },
     "SupervisorPreamble": {
@@ -360,7 +121,7 @@
       "anyOf": [
         {
           "items": {
-            "$ref": "#/$defs/McpServer"
+            "$ref": "#/$defs/McpServerRef"
           },
           "type": "array"
         },
@@ -370,6 +131,81 @@
       ],
       "default": null,
       "title": "Mcp Servers"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/SkillRef"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skills"
+    },
+    "subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/SubagentRef"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subagents"
+    },
+    "enabled_builtin_tools": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enabled Builtin Tools"
+    },
+    "enabled_builtin_subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enabled Builtin Subagents"
+    },
+    "enabled_builtin_skills": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enabled Builtin Skills"
     },
     "output_schema": {
       "anyOf": [
@@ -383,28 +219,6 @@
       ],
       "default": null,
       "title": "Output Schema"
-    },
-    "subagents": {
-      "anyOf": [
-        {
-          "items": {
-            "$ref": "#/$defs/Subagent"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Subagents"
-    },
-    "exposed": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Exposed",
-      "type": "array"
     },
     "prompt": {
       "anyOf": [
@@ -441,21 +255,6 @@
       ],
       "default": null,
       "title": "Model"
-    },
-    "skills": {
-      "anyOf": [
-        {
-          "items": {
-            "$ref": "#/$defs/Skill"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Skills"
     },
     "thread_id": {
       "anyOf": [
@@ -500,8 +299,7 @@
   },
   "required": [
     "schema_version",
-    "run_id",
-    "exposed"
+    "run_id"
   ],
   "title": "AVP v0.1 Commission",
   "type": "object",

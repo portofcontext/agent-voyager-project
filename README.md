@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/avp-white.png">
-    <img src="assets/avp.png" alt="AVP Logo" style="height: 128px">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/portofcontext/agent-voyage-protocol/main/assets/avp-white.png">
+    <img src="https://raw.githubusercontent.com/portofcontext/agent-voyage-protocol/main/assets/avp.png" alt="AVP Logo" style="height: 128px">
   </picture>
   <h1>Agent Voyage Protocol (AVP)</h1>
 </div>
@@ -10,19 +10,16 @@
 
 AVP draws one line, between two roles, and ships a wire format across that line.
 
-- **Supervisor** — issues a Commission at startup declaring the full environment for the run (prompt, model, MCP servers, subagents, skills, the exposed name surface), then observes the trajectory the agent emits — never reaches in unilaterally.
-- **Agent** — runs the agent inside the declared environment and emits a stream of facts.
+- **Supervisor** — issues a Commission at startup, then observes the trajectory the agent emits.
+- **Agent** — runs inside the declared environment and emits a stream of facts.
 
-**Two unidirectional flows.** Control flows down at setup; observation flows up during the run. No mid-run bidirectional negotiation. The agent's bounded context is intact because its environment was fully declared up front.
-
-**Built on existing standards** AVP specializes
+**Built on existing standards.** AVP specializes
 [CloudEvents 1.0](https://cloudevents.io/), [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
 OTel spans, [JSON-RPC 2.0](https://www.jsonrpc.org/specification),
 [MCP](https://modelcontextprotocol.io/), [Agent Skills](https://agentskills.io/specification),
 and JSON Schema 2020-12 — the way MCP specialized JSON-RPC for LLM tools.
-Every event is a CloudEvent. Every model turn carries OTel GenAI attributes.
-Every tool call's RPC payload is JSON-RPC 2.0. Every tool descriptor is
-MCP-compatible. AVP's own contribution is small and focused: the
+Every event is a CloudEvent. Every model turn carries OTel GenAI
+attributes. AVP's own contribution is small and focused: the
 no-mid-run-reach-in topology, the agent self-description manifest, and
 the trajectory-as-source-of-truth contract. Read
 [`FOUNDATIONS.md`](FOUNDATIONS.md) for the full mapping.
@@ -40,19 +37,18 @@ the trajectory-as-source-of-truth contract. Read
    supervisor  ◀──────── trajectory ─────────  agent
 ```
 
-A **Commission** carries `prompt`, `model`, `mcp_servers`, `subagents`, `skills`, and `exposed` (the exhaustive model-facing name surface, with fnmatch globs allowed) — sent once at startup. The **trajectory** is the stream of CloudEvents the agent emits as it runs; it opens with `run_requested` → `agent_described` (which publishes the agent's **manifest** — built-in tools, capabilities, version) → `agent_started`, and closes with `agent_stopped`.
-
-The one runtime exception is **environmental services**: when the agent calls a Commission-declared tool whose implementation is out-of-process (or fetches an observation from a supervisor-stood-up service), the agent issues an RPC and awaits a reply. The agent records the reply into the trajectory verbatim. This is agent-initiated — the supervisor pre-deployed the service, but at runtime there's no decision-making.
+The supervisor sends one Commission at startup describing the run's environment. The agent runs the loop and emits the trajectory: a stream of CloudEvents that opens with the run prelude and closes with `agent_stopped`. The supervisor never reaches in mid-run.
 
 ---
 
 ## What AVP defines
 
-Three message classes:
+Two message classes:
 
-1. **Commission** — supervisor → agent, once at startup. Declares the agent's full environment.
+1. **Commission** — supervisor → agent, once at startup.
 2. **Events** — agent → supervisor, streamed throughout the run. The trajectory.
-3. **SupervisorMessage** — supervisor service → agent, RPC replies only (`tool_exec_resolved`). The agent records each into the trajectory.
+
+Plus a small **resolver protocol** (JSON-RPC 2.0) the agent calls against a supervisor-stood-up service to dereference managed-asset refs in the Commission. The agent dials it; nothing pushes back.
 
 ---
 
@@ -66,21 +62,19 @@ Three message classes:
   "supervisor": { "name": "acme-engineering-supervisor", "version": "2.4.1" },
 
   "mcp_servers": [
-    { "id": "github",  "transport": "http",  "url": "https://mcp.github.com/",
-      "auth": { "type": "bearer", "token_env": "GH_MCP_TOKEN" } },
-    { "id": "weather", "transport": "stdio", "command": ["npx"], "args": ["-y", "@example/weather-mcp"] }
+    { "id": "github", "ref": { "vault": "prod", "key": "gh-mcp-v2" } }
   ],
-  "exposed": [
-    "Read", "Bash", "Edit",                   // agent built-ins
-    "mcp__github__get_*",                     // glob: read-shaped GitHub tools
-    "mcp__github__create_pull_request",       // literal: this specific write
-    "mcp__weather__*"                         // glob: trust the weather server's namespace
+  "skills": [
+    { "id": "style-guide",     "ref": "sha256:abc..." },
+    { "id": "domain-glossary", "ref": { "vault": "prod", "key": "skill-glossary-v2" } }
+  ],
+  "subagents": [
+    { "id": "researcher", "ref": "sk_subagent_abc123" }
   ],
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
   "model":         "claude-sonnet-4-6",
-  "skills":        [ { "name": "style-guide", "avp.source": "./skills/style-guide" } ],
 
   "thread_id":     "session-xyz",
   "tags":          ["auth", "refactor"],
@@ -88,16 +82,48 @@ Three message classes:
 }
 ```
 
-| Concern | Field | Purpose |
-|---|---|---|
-| Environment | `mcp_servers` | Remote MCP servers (HTTP or stdio) the agent connects to. Tools are dispatched by the MCP layer and tagged on the wire with `avp.tool.dispatch_target=mcp_server` + `avp.mcp_server_id`. HTTP `auth.token_env` is resolved at translation time so secrets never land on events. |
-| Environment | `subagents` | Delegate agents the parent can invoke by name. Each carries its own `system_prompt` / `model` / `skills`. Routed through the `subagent_invoked` / `subagent_returned` lifecycle so nested runs observe as a span tree, not a flattened tool call. |
-| Environment | `exposed` | Required exhaustive list of names the model can invoke this run. Each entry resolves at startup against built-in tools, built-in subagents, Commission.subagents, and live MCP-server catalogs (post-handshake). Supports fnmatch globs (`mcp__github__*`); literals that resolve to nothing fail loud with `error_occurred(exposed_unresolved)`. |
-| Environment | `output_schema` | Structured output contract; validated on `agent_stopped`. |
-| Agent | `prompt` / `system_prompt` / `model` / `skills` | What the agent runs and how. |
-| Metadata | `thread_id` / `tags` / `meta` | For correlation, filtering, ad-hoc context. |
+`schema_version` MUST equal `"0.1"`. `run_id` MUST be unique per run. Optional `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` allow-lists scope which agent built-ins (from the manifest below) the model sees this run; absent = all. Full field reference is in [`SPEC.md`](spec/v0.1/SPEC.md).
 
-`schema_version` MUST equal `"0.1"`. `run_id` MUST be unique per run. Full field reference is in [`SPEC.md`](spec/v0.1/SPEC.md).
+---
+
+## A worked manifest
+
+The agent's self-description. This payload rides on `agent_described.data["avp.manifest"]` at run-time for pre-flight introspection.
+
+```jsonc
+{
+  "agent_name":       "avp-claude-agent",
+  "agent_version":    "0.1.0",
+  "avp_spec_version": "0.1",
+  "default_model":    null,
+  "supported_models": ["claude-*"],
+
+  "built_in_tools": [
+    { "name": "Read",         "avp.dispatch_target": "local" },
+    { "name": "Write",        "avp.dispatch_target": "local" },
+    { "name": "Edit",         "avp.dispatch_target": "local" },
+    { "name": "Glob",         "avp.dispatch_target": "local" },
+    { "name": "Grep",         "avp.dispatch_target": "local" },
+    { "name": "Bash",         "avp.dispatch_target": "local" },
+    { "name": "WebFetch",     "avp.dispatch_target": "local" },
+    { "name": "WebSearch",    "avp.dispatch_target": "local" },
+    { "name": "Task",         "avp.dispatch_target": "local" },
+    { "name": "TodoWrite",    "avp.dispatch_target": "local" },
+    { "name": "NotebookEdit", "avp.dispatch_target": "local" }
+  ],
+
+  "built_in_subagents": [
+    { "name": "general-purpose", "avp.agent_type": "general-purpose" }
+  ],
+
+  "built_in_skills": null,
+
+  "capabilities": [
+    "mcp", "subagents", "skills", "skills:progressive",
+    "thinking", "filesystem-skills", "filesystem-subagents"
+  ]
+}
+```
 
 ---
 

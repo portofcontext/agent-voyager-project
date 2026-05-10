@@ -133,7 +133,6 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
         run_id="multi-turn-r1",
         model="claude-sonnet-4-6",
         prompt="What's in x.txt?",
-        exposed=["*"],
     )
 
     driver = AnthropicModelDriver(
@@ -260,7 +259,6 @@ def test_assistant_turn_with_text_and_tool_use_renders_both_blocks() -> None:
         run_id="multi-turn-r2",
         model="claude-sonnet-4-6",
         prompt="Read y.txt",
-        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(
@@ -316,7 +314,6 @@ def test_pure_text_turn_history_unchanged_for_string_content() -> None:
         run_id="multi-turn-r3",
         model="claude-sonnet-4-6",
         prompt="x",
-        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(
@@ -372,7 +369,6 @@ def test_tool_failure_records_tool_result_in_history_so_next_turn_validates() ->
         run_id="tool-fail-history",
         model="claude-sonnet-4-6",
         prompt="Read /some/dir",
-        exposed=["*"],
     )
     driver = AnthropicModelDriver(model="claude-sonnet-4-6", client=client)
     agent = AVPAgent(

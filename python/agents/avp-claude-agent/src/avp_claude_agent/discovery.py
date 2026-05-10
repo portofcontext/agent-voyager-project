@@ -1,30 +1,17 @@
 """Environment discovery for Commission authoring.
 
-A Commission author building `commission.exposed`, `commission.subagents`, and
-`commission.skills` needs visibility into what's actually available before
-writing the Commission. Some surfaces are knowable programmatically (SDK
-constants we ship); others require walking the runtime environment
-(filesystem skills under `~/.claude/skills/`, custom subagents under
-`.claude/agents/`).
+A Commission author writing `enabled_builtin_tools` (the SDK preset
+allowlist) needs visibility into what's actually available before
+authoring the Commission. Some surfaces are knowable programmatically
+(SDK constants we ship); others — like filesystem-discovered skills
+under `~/.claude/skills/` and custom subagents under `.claude/agents/`
+— require walking the runtime environment.
 
-This module exposes a single `discover_environment` function that
-combines both. Returns a flat snapshot the author can introspect or
-splat directly into Commission:
-
-    from avp_claude_agent.discovery import discover_environment
-    from avp import Commission, Skill
-
-    env = discover_environment(cwd=".", setting_sources=["user", "project"])
-
-    commission = Commission(
-        # All built-in tools the SDK exposes by default:
-        exposed=list(env.builtin_tools),
-        # All filesystem-discovered skills, by name + source path:
-        skills=[
-            Skill.model_validate({"name": s.name, "avp.source": str(s.source_path)})
-            for s in env.filesystem_skills
-        ],
-    )
+This module exposes `discover_environment()` which combines both.
+Filesystem-discovered skills/subagents inform the supervisor's
+deployment-layer decisions about what to mount into the agent's
+workspace; the v0.1 wire doesn't surface them as managed assets
+(that's the resolver's job).
 
 What this module CAN'T discover at **Commission-author time** (before a
 run starts):

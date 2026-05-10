@@ -1,27 +1,37 @@
 {
   "id": "skill-source-missing-stops-with-error",
-  "title": "Commission.skills with an unresolvable filesystem source stops with error_occurred + agent_stopped(reason=error) before any turn runs",
-  "description": "SPEC.md \u00a78.7.3 \u2014 skill resolution is part of the prelude. If a Commission.skills[].avp.source can't be read (file missing, IO error, malformed SKILL.md), the agent MUST emit avp.error_occurred and stop with reason=error before turn 1. Pins fail-fast behavior so a Commission with stale skill paths never silently runs without the skill bodies its author intended.",
+  "title": "Resolver returning error for a skill ref MUST emit managed_ref_resolve_failed and stop with reason=error before any turn",
+  "description": "SPEC.md \u00a76.4 \u2014 startup resolution is fail-fast. When the AVP resolver protocol fails for any Commission-declared managed asset (resolver service unreachable, ref not understood, content malformed), the agent MUST emit managed_ref_resolve_failed carrying the kind/id/error, then agent_stopped(reason=error) before any model turn. Pins the contract that supervisors learn about stale or broken refs at startup, never via silent surface degradation.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#8-7-skills",
-    "spec/v0.1/event.schema.json#/$defs/Skill"
+    "spec/v0.1/SPEC.md#6-the-resolver-protocol",
+    "spec/v0.1/SPEC.md#9-7-skills"
   ],
   "applies_to": [
     "agent"
   ],
   "commission": {
     "schema_version": "0.1",
-    "run_id": "skills-load-failure",
+    "run_id": "skill-resolve-failure",
     "model": "test/mock",
     "skills": [
       {
-        "name": "style-guide",
-        "avp.source": "./skills/does-not-exist-anywhere"
+        "id": "style-guide",
+        "ref": "vault://missing/style-guide"
       }
-    ],
-    "exposed": [
-      "*"
     ]
+  },
+  "agent_manifest": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1"
+  },
+  "scripted_resolver": {
+    "resolutions": {
+      "skill:style-guide": {
+        "error": "skill content not found in store",
+        "error_code": "not_found"
+      }
+    }
   },
   "scripted_model": [
     {
@@ -38,7 +48,12 @@
     "events": [
       {
         "match": {
-          "type": "avp.error_occurred"
+          "type": "avp.managed_ref_resolve_failed",
+          "data": {
+            "avp.managed.kind": "skill",
+            "avp.managed.id": "style-guide",
+            "avp.resolve.error.code": "not_found"
+          }
         }
       },
       {
@@ -52,13 +67,13 @@
     ],
     "forbidden_events": [
       {
-        "label": "no model turn runs when a declared skill can't be resolved",
+        "label": "no model turn runs when a managed ref fails to resolve",
         "match": {
           "type": "avp.model_turn_started"
         }
       },
       {
-        "label": "skill_loaded must NOT fire for a skill whose body never reached context",
+        "label": "skill_loaded MUST NOT fire for a skill that never resolved",
         "match": {
           "type": "avp.skill_loaded"
         }

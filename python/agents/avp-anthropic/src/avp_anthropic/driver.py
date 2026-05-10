@@ -518,7 +518,6 @@ def _pair_hosted_blocks(
                 output_structured=structured,
                 is_error=is_error,
                 dispatch_target="local",
-                subtype=use.get("subtype"),
             )
         )
     return out
@@ -719,92 +718,35 @@ def build_anthropic_tools(
 ) -> list[dict[str, Any]]:
     """Build the `tools` parameter for Anthropic's Messages API from an AVP Commission.
 
-    Merges two sources into one Anthropic-shaped tools[] list:
-      1. `builtins` — agent-provided tools the driver always exposes (e.g.
-         `avp_anthropic.shell_tools.SHELL_TOOL_SCHEMAS`). Pass `None` to omit.
-      2. `commission.subagents` — declared subagents become MCP-shaped tools the
-         model can call by name. The agent routes the call through the
-         subagent lifecycle on dispatch (NOT the tool lifecycle), but the
-         model sees them as ordinary tools — this matches Claude Agent SDK,
-         Google ADK AgentTool, and DeepAgents conventions.
+    Returns the agent's built-in tool catalog (passed in via `builtins`),
+    filtered by `Commission.enabled_builtin_tools` when that allowlist is
+    set. Subagents and managed MCP-server tools are NOT surfaced here in
+    v0.1's avp-anthropic CLI — managed assets land via the resolver
+    protocol (separate Phase 4 follow-up) and the model sees them as
+    additional entries on `tools[]` once that's wired.
 
-    Applies `commission.exposed` as a final allowlist filter when set.
-
-    Translates camelCase MCP `inputSchema` to snake_case `input_schema` (the
-    Anthropic API's wire spelling) at the boundary.
-
-    Use this whenever you wire `AVPAgent` directly with `AnthropicModelDriver`
-    — without it, the model sees no tools at all and any subagent dispatch
-    path is unreachable. The `avp-anthropic` CLI calls this for you;
-    in-process callers (tests, custom supervisors) need to call it themselves.
+    Translates camelCase MCP `inputSchema` to snake_case `input_schema`
+    (the Anthropic API's wire spelling) at the boundary if the input
+    builtin used the camelCase form.
     """
-    out: list[dict[str, Any]] = list(builtins or [])
-    if commission.subagents:
-        out.extend(
-            {
-                "name": sa.name,
-                "description": sa.description,
-                "input_schema": sa.inputSchema or _DEFAULT_SUBAGENT_INPUT_SCHEMA,
-            }
-            for sa in commission.subagents
-        )
-    # Apply Commission.exposed as a name-level filter, with fnmatch globs.
-    # - `["*"]` matches everything → no filtering
-    # - other patterns / literals filter the candidate list
-    if commission.exposed:
-        import fnmatch as _fnmatch
-
-        patterns = list(commission.exposed)
-
-        def _matches(name: str) -> bool:
-            return any(_fnmatch.fnmatchcase(name, p) for p in patterns)
-
-        out = [t for t in out if _matches(t["name"])]
-    elif commission.exposed is not None:
-        # Empty list = no tools exposed.
-        out = []
+    candidates: list[dict[str, Any]] = list(builtins or [])
+    allow = commission.enabled_builtin_tools
+    if allow is None:
+        out = candidates
+    else:
+        names = set(allow)
+        out = [t for t in candidates if t.get("name") in names]
     return out
 
 
 def build_anthropic_mcp_servers(commission: Commission) -> list[dict[str, Any]]:
-    """Translate `Commission.mcp_servers[]` to Anthropic's API MCP-connector shape.
+    """Placeholder for Anthropic API MCP-connector translation.
 
-    Anthropic's Messages API accepts an `mcp_servers` parameter — a list
-    of `{type, name, url, ...}` dicts identifying remote MCP servers the
-    API itself connects to during the request. The API runs the MCP loop
-    internally (initialize, tools/list, tools/call) and returns the
-    final assistant content with the tool calls embedded.
-
-    HTTP-only: the API connector doesn't speak stdio. Stdio servers in
-    `Commission.mcp_servers[]` are SKIPPED — host them from your supervisor
-    instead and proxy via `Commission.tools[]` (supervisor-RPC dispatch),
-    or wait for agent-side stdio support.
-
-    HTTP auth with `token_env` is resolved at translation time so the
-    secret never lands on the wire (Commission / events). When the env var
-    isn't set, no authorization header is shipped.
+    In the refs-only Commission model, mcp_server connection material is
+    returned by `avp.resolve` at startup (per SPEC §6) — not embedded in
+    the Commission. Wiring resolved material into Anthropic's API
+    connector parameter is a Phase 4 follow-up; for now this returns an
+    empty list. Commissions with non-empty `mcp_servers` will fail at
+    AVPAgent's `resolver_not_configured` gate when no resolver is wired.
     """
-    import os as _os
-    import warnings as _warnings
-
-    out: list[dict[str, Any]] = []
-    for s in commission.mcp_servers or []:
-        if s.transport != "http":
-            _warnings.warn(
-                f"avp-anthropic: skipping MCP server {s.id!r} — Anthropic's API "
-                "MCP connector only supports HTTP transport. Run stdio servers "
-                "from your supervisor and proxy via Commission.tools[] instead.",
-                stacklevel=2,
-            )
-            continue
-        entry: dict[str, Any] = {
-            "type": "url",
-            "name": s.id,
-            "url": s.url,
-        }
-        if s.auth is not None:
-            token = _os.environ.get(s.auth.token_env, "")
-            if token:
-                entry["authorization_token"] = token
-        out.append(entry)
-    return out
+    return []

@@ -2,7 +2,7 @@
 """Generate JSON Schema 2020-12 files from the Pydantic v2 models in `avp.types`.
 
 The Pydantic models in `python/avp/src/avp/types.py` are the source of truth
-for the wire format. This script regenerates the four canonical schema files
+for the wire format. This script regenerates the canonical schema files
 under `spec/v0.1/` so they cannot drift from the implementation.
 
 Run from repo root:
@@ -10,10 +10,9 @@ Run from repo root:
     uv run python scripts/generate-schemas.py
 
 Outputs:
-    spec/v0.1/commission.schema.json              — the Commission message
-    spec/v0.1/event.schema.json               — agent-emitted Event union
-    spec/v0.1/supervisor-message.schema.json  — SupervisorMessage union
-    spec/v0.1/avp.schema.json                 — top-level bundle referencing all three
+    spec/v0.1/commission.schema.json   — the Commission message
+    spec/v0.1/event.schema.json        — agent-emitted Event union
+    spec/v0.1/avp.schema.json          — top-level bundle (oneOf over both)
 """
 
 from __future__ import annotations

@@ -8,10 +8,16 @@ The wire format is built on:
   tool attribute names inside `data` (e.g., `gen_ai.usage.input_tokens`).
 - **OpenTelemetry span identification** (`trace_id`, `span_id`,
   `parent_span_id`) so downstream consumers reconstruct the run's span tree.
-- **JSON-RPC 2.0** for the RPC payloads inside `tool_exec_request.data` /
-  `tool_exec_resolved.data`.
-- **MCP** tool descriptors for `Commission.tools[]` (camelCase `inputSchema`).
-- **Agent Skills** for `SKILL.md` referenced by `Commission.skills[]`.
+- **JSON-RPC 2.0** for the AVP resolver protocol — the agent calls
+  `avp.resolve` (and `avp.spawn_subagent` for managed subagents) against a
+  supervisor-stood-up resolver service to dereference opaque refs in
+  `Commission.{mcp_servers,skills,subagents}[].ref`.
+
+The Commission carries supervisor-managed assets as opaque refs only —
+their resolved material (MCP connection details, skill content, subagent
+metadata) is fetched via the resolver protocol at startup. Anything the
+agent provides on its own (in-process tools, baked-in skills) is invisible
+to AVP and surfaced through the agent's manifest at run time.
 
 AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace.
@@ -31,6 +37,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     model_validator,
 )
 
@@ -100,6 +107,8 @@ T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
 T_SUBAGENT_INVOKED = "avp.subagent_invoked"
 T_SUBAGENT_RETURNED = "avp.subagent_returned"
 T_SUBAGENT_FAILED = "avp.subagent_failed"
+T_MANAGED_REF_RESOLVED = "avp.managed_ref_resolved"
+T_MANAGED_REF_RESOLVE_FAILED = "avp.managed_ref_resolve_failed"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept
@@ -112,100 +121,62 @@ _OPEN = ConfigDict(extra="allow", populate_by_name=True)
 # ── Commission: value objects ─────────────────────────────────────────────────────
 
 
-class Skill(BaseModel):
-    """Reference to a SKILL.md following the agentskills.io specification.
+# An opaque, supervisor-defined reference resolved by the AVP resolver
+# protocol. AVP does not constrain the shape — it can be a string (UUID, ARN,
+# content hash, URL, anything the supervisor's resolver understands), an
+# object (the supervisor's own structured shape, e.g. Anthropic Managed
+# Agents' `{type, skill_id, version}`), or any other JSON value. The agent
+# round-trips the value verbatim to the resolver and uses the returned
+# connection material; the agent never interprets it.
+_ID_PATTERN = r"^[a-z0-9_-]+$"
 
-    `name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits
-    hyphens, no leading/trailing hyphen, no consecutive hyphens). The
-    `avp_source` and `avp_config` fields are AVP extensions; agentskills.io
-    doesn't define a remote-load scheme.
+
+class McpServerRef(BaseModel):
+    """Reference to a supervisor-managed MCP server.
+
+    The agent resolves this entry at startup by calling `avp.resolve` with
+    `{kind: "mcp_server", id, ref}`. The resolver returns the connection
+    material (transport, URL, auth, etc.) the agent uses to dial the actual
+    MCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and
+    transport are deployment concerns — AVP does not constrain them.
     """
 
     model_config = _STRICT
-    name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
-    avp_source: str = Field(alias="avp.source", min_length=1)
-    avp_config: dict[str, Any] | None = Field(default=None, alias="avp.config")
+    id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    ref: JsonValue
 
 
-class McpHttpAuth(BaseModel):
-    """Auth for an MCP server reachable via HTTP."""
+class SkillRef(BaseModel):
+    """Reference to a supervisor-managed skill.
 
-    model_config = _STRICT
-    type: Literal["bearer"] = "bearer"
-    token_env: str = Field(min_length=1)
-
-
-class McpServer(BaseModel):
-    """External MCP server endpoint. The agent connects, runs initialize +
-    tools/list, and merges returned tools into the effective surface."""
-
-    model_config = _STRICT
-    id: str = Field(min_length=1, pattern=r"^[a-z0-9_-]+$")
-    transport: Literal["http", "stdio"]
-    # http transport
-    url: str | None = None
-    auth: McpHttpAuth | None = None
-    # stdio transport
-    command: list[str] | None = None
-    args: list[str] | None = None
-    env: dict[str, str] | None = None
-    # common
-    init_timeout_ms: int = Field(default=30000, gt=0)
-    meta: dict[str, Any] | None = Field(default=None, alias="_meta")
-
-    @model_validator(mode="after")
-    def _transport_fields_consistent(self) -> McpServer:
-        if self.transport == "http":
-            if not self.url:
-                raise ValueError("McpServer with transport='http' requires `url`")
-            if self.command or self.args or self.env:
-                raise ValueError("McpServer with transport='http' cannot set stdio fields")
-        elif self.transport == "stdio":
-            if not self.command:
-                raise ValueError("McpServer with transport='stdio' requires `command`")
-            if self.url or self.auth:
-                raise ValueError("McpServer with transport='stdio' cannot set http fields")
-        return self
-
-
-class Subagent(BaseModel):
-    """Declares a sub-agent the parent can delegate to.
-
-    Sits alongside `tools` and `skills` as a top-level Commission primitive: the
-    supervisor declares the full set of subagents up front, the parent agent
-    invokes one by name at runtime. The model surface is MCP-shaped (`name`,
-    `description`, `inputSchema`) so the model sees a subagent the same way
-    it sees a tool. The wire surface is its own lifecycle —
-    `subagent_invoked` / `subagent_returned` / `subagent_failed` — so
-    nested turns and tool calls observe as their own span tree rather than
-    flatten into a single tool call.
-
-    A Subagent carries an environment slice that mirrors Commission (its own
-    `system_prompt`, `model`, `tools`, `skills`, `output_schema`). The subagent runs in a fresh conversation —
-    `inherit_tools=False` by default (matches Google ADK; safer than the
-    Claude Agent SDK default of inheriting). Skills and prompt context are
-    never inherited.
+    The agent resolves this entry at startup by calling `avp.resolve` with
+    `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
+    (or a location the agent fetches and reads) — agentskills.io's content
+    model still applies; the resolver just hands the content back from
+    whatever store the supervisor uses.
     """
 
     model_config = _STRICT
-    name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_-]+$")
-    description: str = Field(min_length=1)
-    inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
+    id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    ref: JsonValue
 
-    system_prompt: str | None = None
-    model: str | None = None
 
-    inherit_tools: bool = False
-    # Required exhaustive surface (same semantics as Commission.exposed —
-    # see Commission for full rules). When `inherit_tools=True`, this list
-    # filters the parent's exposed surface; when False, it resolves only
-    # against this subagent's own mcp_servers + nested subagents.
-    exposed: list[str] = Field(default_factory=list)
-    mcp_servers: list[McpServer] | None = None
-    skills: list[Skill] | None = None
-    output_schema: dict[str, Any] | None = None
+class SubagentRef(BaseModel):
+    """Reference to a supervisor-managed subagent.
 
-    subagents: list[Subagent] | None = None
+    The agent resolves this entry at startup by calling `avp.resolve` with
+    `{kind: "subagent", id, ref}`; the resolver returns the model-facing
+    metadata (`name`, `description`, `inputSchema`) so the parent's model
+    can decide whether to delegate. When the model invokes the subagent at
+    runtime, the agent calls `avp.spawn_subagent` with the same ref to
+    obtain a child `run_id`. The subagent run carries its own complete
+    trajectory; the parent's `subagent_invoked.data["avp.subagent.run_id"]`
+    references it.
+    """
+
+    model_config = _STRICT
+    id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    ref: JsonValue
 
 
 class RunStateSnapshot(BaseModel):
@@ -253,7 +224,22 @@ class SupervisorPreamble(BaseModel):
 
 
 class Commission(BaseModel):
-    """Supervisor's complete declaration of the agent's environment."""
+    """Supervisor's declaration of the supervisor-managed environment slice.
+
+    All asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs
+    resolved by the AVP resolver protocol at startup (see SPEC.md). The
+    supervisor never embeds connection material, file paths, or inline
+    asset definitions on the wire — those land in `run_requested.data`
+    on the trajectory and would leak secrets to consumers.
+
+    Anything the agent provides on its own (in-process tools, baked-in
+    skills, internally-defined subagents) is invisible to AVP and the
+    Commission entirely. The agent's own contribution surfaces in
+    `agent_described.data["avp.manifest"]` so consumers can audit what the
+    agent showed up with. The agent's runtime layer merges its internal
+    contribution with the resolved managed assets into one bag the loop
+    dispatches against; collisions on `id` are a startup error.
+    """
 
     model_config = _STRICT
 
@@ -267,54 +253,39 @@ class Commission(BaseModel):
     # still emits `run_requested` but with `avp.supervisor.name="unknown"`.
     supervisor: SupervisorPreamble | None = None
 
-    # Supervisor plane (the environment). v0.1 has one mechanism for
-    # supervisor-side tool dispatch: MCP. Anything a supervisor wants to
-    # expose to the model gets wrapped as an MCP server (stdio or HTTP,
-    # in-process or external) and declared in `mcp_servers`. Tools the
-    # agent ships in-process (e.g. `bash`/`read_file`/`write_file` for
-    # avp-anthropic) are agent-package built-ins and surface via the
-    # agent's manifest, not via Commission.
-    mcp_servers: list[McpServer] | None = None
-    output_schema: dict[str, Any] | None = None
-    subagents: list[Subagent] | None = None
+    # Supervisor-managed assets. Each entry is `{id, ref}` where `ref` is
+    # opaque to AVP and to the agent. Resolution timing:
+    #   - mcp_servers, skills: at startup (fail-fast on resolver error)
+    #   - subagents: metadata at startup; spawn on-demand via
+    #     `avp.spawn_subagent` when the model invokes the subagent
+    mcp_servers: list[McpServerRef] | None = None
+    skills: list[SkillRef] | None = None
+    subagents: list[SubagentRef] | None = None
 
-    # Required exhaustive model-facing surface — the complete list of names
-    # the model can invoke this run. No implicit defaults; each entry MUST
-    # resolve at startup against:
+    # Allow-lists over the agent's manifest-published built-ins. Each list
+    # gates the parallel `manifest.built_in_*` surface for this run.
     #
-    #   - manifest.built_in_tools[].name
-    #   - manifest.built_in_subagents[].name
-    #   - Commission.subagents[].name
-    #   - Each connected MCP server's catalog (post-handshake names,
-    #     typically `mcp__<server-id>__<tool>`)
-    #   - Hosted tool names exposed by the agent's provider (e.g.
-    #     Anthropic's `web_search`, `code_execution`)
+    #   - None (absent) → every built-in of that kind is exposed (default).
+    #   - []            → no built-in of that kind is exposed.
+    #   - [n1, n2, …]   → only the listed names are exposed; the agent
+    #                     hides the rest from the model and runtime-blocks
+    #                     any hallucinated invocation with `tool_failed` /
+    #                     `subagent_failed`.
     #
-    # Each entry MAY be a literal name OR an fnmatch glob (`*`, `?`, `[abc]`).
-    # Resolution rules at startup, AFTER `mcp_server_connected` events fire:
-    #
-    #   - Literal entries that match nothing  → `error_occurred` with
-    #     `code: "exposed_unresolved"` + `agent_stopped(reason: "error")`
-    #     before turn 1. (Fail-loud-on-drift: a Commission referencing a
-    #     specific tool the agent no longer offers is a contract violation.)
-    #   - Glob entries that match nothing     → permitted silently.
-    #     Patterns describe sets, and an empty set is a legitimate set.
-    #
-    # Empty list = expose nothing (model has no invocables; only text turns).
-    # Globs handle the "supervisor doesn't know post-mangle MCP names yet"
-    # case: write `mcp__github__*` for full-server trust, or
-    # `mcp__github__get_*` for read-shaped operations only.
-    #
-    # Every Commission.subagents[].name MUST appear in `exposed` (literal or
-    # glob match) or the agent errors at startup — the same fail-loud rule
-    # for declared subagents.
-    exposed: list[str]
+    # Names MUST appear in the corresponding manifest list at startup or
+    # the agent emits `error_occurred(code: "commission_collision")` and
+    # stops with `reason=error`. Has no effect on supervisor-managed
+    # assets (those are gated by being-in-the-Commission).
+    enabled_builtin_tools: list[str] | None = None
+    enabled_builtin_subagents: list[str] | None = None
+    enabled_builtin_skills: list[str] | None = None
+
+    output_schema: dict[str, Any] | None = None
 
     # Agent plane (what the agent runs)
     prompt: str | None = None
     system_prompt: str | None = None
     model: str | None = None
-    skills: list[Skill] | None = None
 
     # Metadata
     thread_id: str | None = None
@@ -351,7 +322,7 @@ class _ToolDecl(BaseModel):
     name: str
     description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
-    avp_dispatch_target: Literal["mcp_server", "local", "hosted"] | None = Field(
+    avp_dispatch_target: Literal["mcp_server", "local"] | None = Field(
         default=None, alias="avp.dispatch_target"
     )
     avp_mcp_server_id: str | None = Field(default=None, alias="avp.mcp_server_id")
@@ -595,10 +566,9 @@ class ToolInvokedData(_SpanData):
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     gen_ai_tool_call_arguments: dict[str, Any] = Field(alias="gen_ai.tool.call.arguments")
-    avp_tool_dispatch_target: Literal["mcp_server", "local", "hosted"] | None = Field(
+    avp_tool_dispatch_target: Literal["mcp_server", "local"] | None = Field(
         default=None, alias="avp.tool.dispatch_target"
     )
-    avp_tool_subtype: str | None = Field(default=None, alias="avp.tool.subtype")
 
 
 class ToolReturnedData(_SpanData):
@@ -629,6 +599,13 @@ class SubagentInvokedData(_SpanData):
     tree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is
     `invoke_agent` and `gen_ai.agent.name` carries the subagent's declared
     name.
+
+    `avp.subagent.run_id` is set when the subagent is supervisor-managed —
+    the parent's runtime calls `avp.spawn_subagent` and receives the child
+    `run_id` of the subagent's separate, independently-trajectoried run.
+    Consumers correlate the parent and child trajectories via this field.
+    Absent (or null) when the subagent runs in-process (the parent's loop
+    is the same process as the subagent's loop).
     """
 
     step: int = Field(ge=0)
@@ -639,6 +616,7 @@ class SubagentInvokedData(_SpanData):
     )
     avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
     avp_subagent_input: dict[str, Any] = Field(alias="avp.subagent.input")
+    avp_subagent_run_id: str | None = Field(default=None, min_length=1, alias="avp.subagent.run_id")
 
 
 class SubagentReturnedData(_SpanData):
@@ -823,6 +801,42 @@ class McpServerDisconnectedData(_SpanData):
     avp_mcp_disconnect_message: str | None = Field(default=None, alias="avp.mcp.disconnect_message")
 
 
+# Kinds of asset the AVP resolver protocol can dereference. Carried on
+# `managed_ref_resolved` / `managed_ref_resolve_failed` events to discriminate
+# which asset class the resolution was for.
+ManagedKind = Literal["mcp_server", "skill", "subagent"]
+
+
+class ManagedRefResolvedData(_SpanData):
+    """Audit event emitted when the agent successfully resolves one
+    Commission-declared managed-asset ref via the AVP resolver protocol.
+
+    Fires once per `Commission.{mcp_servers,skills,subagents}[]` entry the
+    agent dereferences. For mcp_servers and skills the resolution is
+    startup-only; for subagents this fires for the metadata-resolve at
+    startup (the on-demand spawn at runtime is recorded on
+    `subagent_invoked` instead). The opaque ref material is NOT re-recorded
+    here — `run_requested.data["avp.commission"]` already has it. This
+    event records only that the round-trip happened.
+    """
+
+    avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
+    avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
+    duration_ms: int = Field(ge=0)
+
+
+class ManagedRefResolveFailedData(_SpanData):
+    """The resolver returned an error or could not be reached for one of
+    the Commission's managed-asset refs. The agent MUST stop with
+    `agent_stopped(reason: "error")` after emitting this event — startup
+    resolution is fail-fast (see SPEC.md)."""
+
+    avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
+    avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
+    avp_resolve_error: str = Field(min_length=1, alias="avp.resolve.error")
+    avp_resolve_error_code: str | None = Field(default=None, alias="avp.resolve.error.code")
+
+
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
 #
 # Each event is a CloudEvent. `type` discriminates the union. `source` is the
@@ -981,6 +995,18 @@ class McpServerDisconnectedEvent(_CloudEventBase):
     data: McpServerDisconnectedData
 
 
+class ManagedRefResolvedEvent(_CloudEventBase):
+    type: Literal["avp.managed_ref_resolved"] = T_MANAGED_REF_RESOLVED
+    source: Literal["avp://agent"] = SOURCE_AGENT
+    data: ManagedRefResolvedData
+
+
+class ManagedRefResolveFailedEvent(_CloudEventBase):
+    type: Literal["avp.managed_ref_resolve_failed"] = T_MANAGED_REF_RESOLVE_FAILED
+    source: Literal["avp://agent"] = SOURCE_AGENT
+    data: ManagedRefResolveFailedData
+
+
 # ── Discriminated unions ──────────────────────────────────────────────────────
 
 
@@ -1005,6 +1031,8 @@ _AGENT_EVENT_TYPES = (
     ErrorOccurredEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
+    ManagedRefResolvedEvent,
+    ManagedRefResolveFailedEvent,
 )
 
 Event = Annotated[
@@ -1027,7 +1055,9 @@ Event = Annotated[
     | SkillLoadedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
-    | McpServerDisconnectedEvent,
+    | McpServerDisconnectedEvent
+    | ManagedRefResolvedEvent
+    | ManagedRefResolveFailedEvent,
     Field(discriminator="type"),
 ]
 

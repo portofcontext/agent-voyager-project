@@ -9,53 +9,29 @@ export type SchemaVersion = "0.1";
 export type RunId = string;
 export type Name = string;
 export type Version = string | null;
-export type McpServers = McpServer[] | null;
+export type McpServers = McpServerRef[] | null;
 export type Id = string;
-export type Transport = "http" | "stdio";
-export type Url = string | null;
-export type Type = "bearer";
-export type TokenEnv = string;
-export type Command = string[] | null;
-export type Args = string[] | null;
-export type Env = {
-  [k: string]: string;
-} | null;
-export type InitTimeoutMs = number;
-export type Meta = {
-  [k: string]: unknown;
-} | null;
+/**
+ * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * via the `definition` "JsonValue".
+ */
+export type JsonValue = unknown;
+export type Skills = SkillRef[] | null;
+export type Id1 = string;
+export type Subagents = SubagentRef[] | null;
+export type Id2 = string;
+export type EnabledBuiltinTools = string[] | null;
+export type EnabledBuiltinSubagents = string[] | null;
+export type EnabledBuiltinSkills = string[] | null;
 export type OutputSchema = {
   [k: string]: unknown;
 } | null;
-export type Subagents = Subagent[] | null;
-export type Name1 = string;
-export type Description = string;
-export type Inputschema = {
-  [k: string]: unknown;
-} | null;
+export type Prompt = string | null;
 export type SystemPrompt = string | null;
 export type Model = string | null;
-export type InheritTools = boolean;
-export type Exposed = string[];
-export type McpServers1 = McpServer[] | null;
-export type Skills = Skill[] | null;
-export type Name2 = string;
-export type AvpSource = string;
-export type AvpConfig = {
-  [k: string]: unknown;
-} | null;
-export type OutputSchema1 = {
-  [k: string]: unknown;
-} | null;
-export type Subagents1 = Subagent[] | null;
-export type Exposed1 = string[];
-export type Prompt = string | null;
-export type SystemPrompt1 = string | null;
-export type Model1 = string | null;
-export type Skills1 = Skill[] | null;
 export type ThreadId = string | null;
 export type Tags = string[] | null;
-export type Meta1 = {
+export type Meta = {
   [k: string]: unknown;
 } | null;
 
@@ -67,16 +43,18 @@ export interface AVPV01Commission {
   run_id: RunId;
   supervisor?: SupervisorPreamble | null;
   mcp_servers?: McpServers;
-  output_schema?: OutputSchema;
+  skills?: Skills;
   subagents?: Subagents;
-  exposed: Exposed1;
+  enabled_builtin_tools?: EnabledBuiltinTools;
+  enabled_builtin_subagents?: EnabledBuiltinSubagents;
+  enabled_builtin_skills?: EnabledBuiltinSkills;
+  output_schema?: OutputSchema;
   prompt?: Prompt;
-  system_prompt?: SystemPrompt1;
-  model?: Model1;
-  skills?: Skills1;
+  system_prompt?: SystemPrompt;
+  model?: Model;
   thread_id?: ThreadId;
   tags?: Tags;
-  meta?: Meta1;
+  meta?: Meta;
 }
 /**
  * Identifies the supervisor that is requesting the run.
@@ -101,80 +79,53 @@ export interface SupervisorPreamble {
   version?: Version;
 }
 /**
- * External MCP server endpoint. The agent connects, runs initialize +
- * tools/list, and merges returned tools into the effective surface.
+ * Reference to a supervisor-managed MCP server.
+ *
+ * The agent resolves this entry at startup by calling `avp.resolve` with
+ * `{kind: "mcp_server", id, ref}`. The resolver returns the connection
+ * material (transport, URL, auth, etc.) the agent uses to dial the actual
+ * MCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and
+ * transport are deployment concerns — AVP does not constrain them.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "McpServer".
+ * via the `definition` "McpServerRef".
  */
-export interface McpServer {
+export interface McpServerRef {
   id: Id;
-  transport: Transport;
-  url?: Url;
-  auth?: McpHttpAuth | null;
-  command?: Command;
-  args?: Args;
-  env?: Env;
-  init_timeout_ms?: InitTimeoutMs;
-  _meta?: Meta;
+  ref: JsonValue;
 }
 /**
- * Auth for an MCP server reachable via HTTP.
+ * Reference to a supervisor-managed skill.
+ *
+ * The agent resolves this entry at startup by calling `avp.resolve` with
+ * `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
+ * (or a location the agent fetches and reads) — agentskills.io's content
+ * model still applies; the resolver just hands the content back from
+ * whatever store the supervisor uses.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "McpHttpAuth".
+ * via the `definition` "SkillRef".
  */
-export interface McpHttpAuth {
-  type?: Type;
-  token_env: TokenEnv;
+export interface SkillRef {
+  id: Id1;
+  ref: JsonValue;
 }
 /**
- * Declares a sub-agent the parent can delegate to.
+ * Reference to a supervisor-managed subagent.
  *
- * Sits alongside `tools` and `skills` as a top-level Commission primitive: the
- * supervisor declares the full set of subagents up front, the parent agent
- * invokes one by name at runtime. The model surface is MCP-shaped (`name`,
- * `description`, `inputSchema`) so the model sees a subagent the same way
- * it sees a tool. The wire surface is its own lifecycle —
- * `subagent_invoked` / `subagent_returned` / `subagent_failed` — so
- * nested turns and tool calls observe as their own span tree rather than
- * flatten into a single tool call.
- *
- * A Subagent carries an environment slice that mirrors Commission (its own
- * `system_prompt`, `model`, `tools`, `skills`, `output_schema`). The subagent runs in a fresh conversation —
- * `inherit_tools=False` by default (matches Google ADK; safer than the
- * Claude Agent SDK default of inheriting). Skills and prompt context are
- * never inherited.
+ * The agent resolves this entry at startup by calling `avp.resolve` with
+ * `{kind: "subagent", id, ref}`; the resolver returns the model-facing
+ * metadata (`name`, `description`, `inputSchema`) so the parent's model
+ * can decide whether to delegate. When the model invokes the subagent at
+ * runtime, the agent calls `avp.spawn_subagent` with the same ref to
+ * obtain a child `run_id`. The subagent run carries its own complete
+ * trajectory; the parent's `subagent_invoked.data["avp.subagent.run_id"]`
+ * references it.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "Subagent".
+ * via the `definition` "SubagentRef".
  */
-export interface Subagent {
-  name: Name1;
-  description: Description;
-  inputSchema?: Inputschema;
-  system_prompt?: SystemPrompt;
-  model?: Model;
-  inherit_tools?: InheritTools;
-  exposed?: Exposed;
-  mcp_servers?: McpServers1;
-  skills?: Skills;
-  output_schema?: OutputSchema1;
-  subagents?: Subagents1;
-}
-/**
- * Reference to a SKILL.md following the agentskills.io specification.
- *
- * `name` MUST follow agentskills.io rules (1-64 chars, lowercase a-z digits
- * hyphens, no leading/trailing hyphen, no consecutive hyphens). The
- * `avp_source` and `avp_config` fields are AVP extensions; agentskills.io
- * doesn't define a remote-load scheme.
- *
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "Skill".
- */
-export interface Skill {
-  name: Name2;
-  "avp.source": AvpSource;
-  "avp.config"?: AvpConfig;
+export interface SubagentRef {
+  id: Id2;
+  ref: JsonValue;
 }

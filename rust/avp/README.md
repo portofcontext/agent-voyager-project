@@ -9,10 +9,10 @@ avp = { git = "https://github.com/portofcontext/agent-execution-protocol" }
 
 ## What's here
 
-Generated Rust types for the AVP v0.1 wire format. Three modules, one per top-level message class:
+Generated Rust types for the AVP v0.1 wire format. Two modules, one per top-level message class:
 
 ```rust
-use avp::{Commission, Event, SupervisorMessage};
+use avp::{Commission, Event};
 
 let event: Event = serde_json::from_str(line)?;
 match event {
@@ -26,7 +26,7 @@ match event {
 }
 ```
 
-Use `avp::commission`, `avp::event`, `avp::supervisor_message` for the helper data types (the per-event `*Data` structs, `JsonRpcRequestPayload`, etc.).
+Use `avp::commission` and `avp::event` for the helper data types (the per-event `*Data` structs, etc.).
 
 ## Source of truth
 
@@ -34,7 +34,7 @@ Use `avp::commission`, `avp::event`, `avp::supervisor_message` for the helper da
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `rust/avp/src/*.rs` (generated here, via `cargo-typify`)
 
-Don't edit `src/{commission,event,supervisor_message}.rs` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event}.rs` by hand — they're regenerated. Edit `types.py` upstream.
 
 ## Regenerating
 
@@ -48,4 +48,4 @@ make bindings-test      # smoke tests for both Rust and TS
 
 - **Newtype wrappers everywhere.** typify generates `pub struct AvpApprovalId(String)` and similar one-line wrappers per nullable string. Use `.0` or `Deref` to get the inner value. Verbose but type-safe.
 - **`Subject`, `Id`, etc. are duplicated per event variant.** typify can't deduplicate identical types across schema definitions. They're equivalent on the wire; the duplication is a code-size wart, not a correctness problem.
-- **Helper types repeat across modules.** `JsonRpcRequestPayload` exists in both `event` and `supervisor_message` because typify can't follow `$ref` across schema files. Pick the module-scoped one matching what you're deserializing.
+- **Helper types repeat across modules.** Some helper structs are duplicated across `commission` and `event` because typify can't follow `$ref` across schema files. Pick the module-scoped one matching what you're deserializing.

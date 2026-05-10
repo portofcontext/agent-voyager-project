@@ -880,7 +880,8 @@
         "agent_crash",
         "accounting_reset",
         "unsupported_model",
-        "exposed_unresolved",
+        "resolver_not_configured",
+        "commission_collision",
         "unknown"
       ],
       "title": "ErrorCode",
@@ -1016,6 +1017,310 @@
         "data"
       ],
       "title": "ErrorOccurredEvent",
+      "type": "object"
+    },
+    "ManagedRefResolveFailedData": {
+      "additionalProperties": true,
+      "description": "The resolver returned an error or could not be reached for one of\nthe Commission's managed-asset refs. The agent MUST stop with\n`agent_stopped(reason: \"error\")` after emitting this event — startup\nresolution is fail-fast (see SPEC.md).",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "avp.managed.kind": {
+          "enum": [
+            "mcp_server",
+            "skill",
+            "subagent"
+          ],
+          "title": "Avp.Managed.Kind",
+          "type": "string"
+        },
+        "avp.managed.id": {
+          "minLength": 1,
+          "title": "Avp.Managed.Id",
+          "type": "string"
+        },
+        "avp.resolve.error": {
+          "minLength": 1,
+          "title": "Avp.Resolve.Error",
+          "type": "string"
+        },
+        "avp.resolve.error.code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Resolve.Error.Code"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "avp.managed.kind",
+        "avp.managed.id",
+        "avp.resolve.error"
+      ],
+      "title": "ManagedRefResolveFailedData",
+      "type": "object"
+    },
+    "ManagedRefResolveFailedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "avp.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Correlation Id"
+        },
+        "type": {
+          "const": "avp.managed_ref_resolve_failed",
+          "default": "avp.managed_ref_resolve_failed",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "avp://agent",
+          "default": "avp://agent",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ManagedRefResolveFailedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ManagedRefResolveFailedEvent",
+      "type": "object"
+    },
+    "ManagedRefResolvedData": {
+      "additionalProperties": true,
+      "description": "Audit event emitted when the agent successfully resolves one\nCommission-declared managed-asset ref via the AVP resolver protocol.\n\nFires once per `Commission.{mcp_servers,skills,subagents}[]` entry the\nagent dereferences. For mcp_servers and skills the resolution is\nstartup-only; for subagents this fires for the metadata-resolve at\nstartup (the on-demand spawn at runtime is recorded on\n`subagent_invoked` instead). The opaque ref material is NOT re-recorded\nhere — `run_requested.data[\"avp.commission\"]` already has it. This\nevent records only that the round-trip happened.",
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "avp.managed.kind": {
+          "enum": [
+            "mcp_server",
+            "skill",
+            "subagent"
+          ],
+          "title": "Avp.Managed.Kind",
+          "type": "string"
+        },
+        "avp.managed.id": {
+          "minLength": 1,
+          "title": "Avp.Managed.Id",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "avp.managed.kind",
+        "avp.managed.id",
+        "duration_ms"
+      ],
+      "title": "ManagedRefResolvedData",
+      "type": "object"
+    },
+    "ManagedRefResolvedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "avp.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Correlation Id"
+        },
+        "type": {
+          "const": "avp.managed_ref_resolved",
+          "default": "avp.managed_ref_resolved",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "avp://agent",
+          "default": "avp://agent",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ManagedRefResolvedData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ManagedRefResolvedEvent",
       "type": "object"
     },
     "McpServerConnectedData": {
@@ -2744,7 +3049,7 @@
     },
     "SubagentInvokedData": {
       "additionalProperties": true,
-      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname.",
+      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname.\n\n`avp.subagent.run_id` is set when the subagent is supervisor-managed —\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\n`run_id` of the subagent's separate, independently-trajectoried run.\nConsumers correlate the parent and child trajectories via this field.\nAbsent (or null) when the subagent runs in-process (the parent's loop\nis the same process as the subagent's loop).",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2803,6 +3108,19 @@
           "additionalProperties": true,
           "title": "Avp.Subagent.Input",
           "type": "object"
+        },
+        "avp.subagent.run_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Subagent.Run Id"
         }
       },
       "required": [
@@ -3416,8 +3734,7 @@
             {
               "enum": [
                 "mcp_server",
-                "local",
-                "hosted"
+                "local"
               ],
               "type": "string"
             },
@@ -3427,18 +3744,6 @@
           ],
           "default": null,
           "title": "Avp.Tool.Dispatch Target"
-        },
-        "avp.tool.subtype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Tool.Subtype"
         }
       },
       "required": [
@@ -3909,8 +4214,7 @@
             {
               "enum": [
                 "mcp_server",
-                "local",
-                "hosted"
+                "local"
               ],
               "type": "string"
             },
@@ -3948,6 +4252,8 @@
       "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
       "avp.cost_recorded": "#/$defs/CostRecordedEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
+      "avp.managed_ref_resolve_failed": "#/$defs/ManagedRefResolveFailedEvent",
+      "avp.managed_ref_resolved": "#/$defs/ManagedRefResolvedEvent",
       "avp.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
       "avp.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
       "avp.model_turn_ended": "#/$defs/ModelTurnEndedEvent",
@@ -4026,6 +4332,12 @@
     },
     {
       "$ref": "#/$defs/McpServerDisconnectedEvent"
+    },
+    {
+      "$ref": "#/$defs/ManagedRefResolvedEvent"
+    },
+    {
+      "$ref": "#/$defs/ManagedRefResolveFailedEvent"
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",

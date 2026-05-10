@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from avp.agent.drivers import (
     ModelDriver,
     ModelResponse,
+    ResolveError,
+    ResolverDriver,
     ScriptedToolCall,
-    SubagentDriver,
-    SubagentOutcome,
+    SubagentSpawnOutcome,
     ToolDriver,
     ToolOutcome,
 )
 from avp.enums import StopReason
-from avp.types import RunStateSnapshot, Subagent
+from avp.types import ManagedKind, RunStateSnapshot
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -109,17 +109,17 @@ class ScriptedTools(ToolDriver):
         )
 
 
-# ── Supervisor (RPC scripting only) ──────────────────────────────────────────
+# ── Supervisor (event sink, no RPC) ──────────────────────────────────────────
 
 
 class ScriptedSupervisor:
     """No-op event sink for the conformance harness.
 
-    v0.1 has no agent→supervisor RPC channel — the agent doesn't talk to
-    the supervisor mid-run. The harness still constructs one of these so
-    AVPAgent has somewhere to call `observe()`. The constructor accepts a
-    `steps` argument for backwards compatibility with older case files;
-    nothing is dispatched off it in v0.1.
+    The supervisor never pushes mid-run messages to the agent — the
+    harness still constructs one of these so AVPAgent has somewhere to
+    call `observe()`. The constructor accepts a `steps` argument for
+    backwards compatibility with older case files; nothing is dispatched
+    off it in v0.1.
     """
 
     def __init__(self, steps: list[dict[str, Any]] | None = None) -> None:
@@ -129,46 +129,67 @@ class ScriptedSupervisor:
         return None
 
 
-# ── Subagent (scripted outcomes for the conformance harness) ─────────────────
+# ── Resolver (canned outcomes by entry id) ───────────────────────────────────
 
 
-class ScriptedSubagentDriver(SubagentDriver):
-    """SubagentDriver that returns canned outcomes by subagent name.
+class ScriptedResolver(ResolverDriver):
+    """In-process `ResolverDriver` for tests and the conformance harness.
 
-    `outcomes` maps subagent name → outcome dict, where the dict carries
-    fields parallel to `SubagentOutcome` plus an optional `usage` block
-    describing the subagent's RunStateSnapshot rollup. Used by conformance
-    cases to exercise the subagent lifecycle deterministically without an
-    LLM in the loop.
+    `resolutions` maps `(kind, id)` → result dict returned from
+    `resolve`. Entries can also carry an `error` field — when present,
+    `resolve` raises `ResolveError(error, code=error_code)` instead of
+    returning material, exercising the `managed_ref_resolve_failed`
+    path. Lookup is keyed by id only when the kind-prefixed key is
+    missing, which keeps simple cases concise.
 
-    Example:
-        ScriptedSubagentDriver({
-            "researcher": {
-                "text": "found 3 handlers",
-                "reason": "converged",
-                "duration_ms": 50,
-                "usage": {"total_cost_usd": 0.001, "total_tokens": 80, "total_turns": 1},
-            }
-        })
+    `subagent_spawns` maps subagent id → spawn outcome dict. The dict's
+    fields parallel `SubagentSpawnOutcome` plus an optional `usage` block
+    describing the child's `RunStateSnapshot` rollup.
+
+    Both maps are checked at the per-call layer so missing entries
+    surface as `ResolveError("no scripted result for id={id!r}")`,
+    making test assertions read clearly.
+
+    The resolver records every call into `calls_resolve` /
+    `calls_spawn_subagent` so tests can assert "this id was resolved",
+    "spawn was called with input X", etc.
     """
 
-    def __init__(self, outcomes: dict[str, dict[str, Any]] | None = None) -> None:
-        self._outcomes = outcomes or {}
-        self._invocations: list[tuple[str, dict[str, Any]]] = []
-
-    def invoke(
+    def __init__(
         self,
-        subagent: Subagent,
-        invocation_input: dict[str, Any],
-        *,
-        parent_trace_id: str,
-        parent_frame_span_id: str,
-        parent_observer: Callable[[BaseModel], None],
-    ) -> SubagentOutcome:
-        # Record for assertion-by-inspection in tests.
-        self._invocations.append((subagent.name, dict(invocation_input)))
+        resolutions: dict[str, dict[str, Any]] | None = None,
+        subagent_spawns: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        self._resolutions = dict(resolutions or {})
+        self._subagent_spawns = dict(subagent_spawns or {})
+        self.calls_resolve: list[tuple[ManagedKind, str, JsonValue]] = []
+        self.calls_spawn_subagent: list[tuple[str, dict[str, Any]]] = []
 
-        spec = self._outcomes.get(subagent.name) or {}
+    def _lookup_resolution(self, kind: ManagedKind, id_: str) -> dict[str, Any] | None:
+        return self._resolutions.get(f"{kind}:{id_}") or self._resolutions.get(id_)
+
+    def resolve(self, *, kind: ManagedKind, id: str, ref: JsonValue) -> dict[str, Any]:
+        self.calls_resolve.append((kind, id, ref))
+        spec = self._lookup_resolution(kind, id)
+        if spec is None:
+            raise ResolveError(
+                f"ScriptedResolver: no canned resolution for kind={kind!r} id={id!r}",
+                code="not_found",
+            )
+        if "error" in spec:
+            raise ResolveError(spec["error"], code=spec.get("error_code"))
+        return dict(spec.get("result") or {})
+
+    def spawn_subagent(
+        self,
+        *,
+        run_id: str,
+        id: str,
+        ref: JsonValue,
+        input: dict[str, Any],
+    ) -> SubagentSpawnOutcome:
+        self.calls_spawn_subagent.append((id, dict(input)))
+        spec = self._subagent_spawns.get(id) or {}
         usage_spec = spec.get("usage") or {}
         usage = RunStateSnapshot(
             total_cost_usd=float(usage_spec.get("total_cost_usd", 0.0)),
@@ -180,7 +201,8 @@ class ScriptedSubagentDriver(SubagentDriver):
         reason = spec.get("reason", StopReason.converged)
         if isinstance(reason, str):
             reason = StopReason(reason)
-        return SubagentOutcome(
+        return SubagentSpawnOutcome(
+            child_run_id=str(spec.get("child_run_id", f"sub-{run_id}-{id}")),
             text=str(spec.get("text", "")),
             structured=spec.get("structured"),
             reason=reason,
@@ -194,7 +216,7 @@ class ScriptedSubagentDriver(SubagentDriver):
 __all__ = [
     "ModelExhausted",
     "ScriptedModel",
-    "ScriptedSubagentDriver",
+    "ScriptedResolver",
     "ScriptedSupervisor",
     "ScriptedTools",
     "parse_scripted_model",

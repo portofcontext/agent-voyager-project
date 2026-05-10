@@ -239,9 +239,7 @@ def test_agent_dispatches_local_tool_and_emits_full_lifecycle() -> None:
     tools.register("greet", lambda inp: f"hi {inp['x']}", description="x", input_schema={})
 
     agent = AVPAgent(
-        commission=Commission(
-            schema_version="0.1", run_id="lt-e2e", model="test/mock", exposed=["*"]
-        ),
+        commission=Commission(schema_version="0.1", run_id="lt-e2e", model="test/mock"),
         model=_model_calling("greet"),
         tools=tools,
         supervisor=ScriptedSupervisor(),
@@ -267,9 +265,7 @@ def test_agent_routes_local_tool_with_fallback_to_correct_handler() -> None:
     tools.register("calc", lambda inp: {"r": 42}, description="x", input_schema={})
 
     agent = AVPAgent(
-        commission=Commission(
-            schema_version="0.1", run_id="lt-mixed", model="test/mock", exposed=["*"]
-        ),
+        commission=Commission(schema_version="0.1", run_id="lt-mixed", model="test/mock"),
         model=_model_calling("calc"),
         tools=tools,
         supervisor=ScriptedSupervisor(),
@@ -291,9 +287,7 @@ def test_local_tool_exception_emits_tool_failed_not_tool_returned() -> None:
     tools.register("explode", explode, description="x", input_schema={})
 
     agent = AVPAgent(
-        commission=Commission(
-            schema_version="0.1", run_id="lt-fail", model="test/mock", exposed=["*"]
-        ),
+        commission=Commission(schema_version="0.1", run_id="lt-fail", model="test/mock"),
         model=_model_calling("explode"),
         tools=tools,
         supervisor=ScriptedSupervisor(),

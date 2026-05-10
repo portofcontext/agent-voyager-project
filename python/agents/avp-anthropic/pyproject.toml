@@ -5,26 +5,20 @@ build-backend = "hatchling.build"
 [project]
 name = "avp-anthropic"
 version = "0.1.0"
-description = "AVP v0.1 runner for the Anthropic Messages API. Driver pattern: this package owns the agent loop, calls the Anthropic SDK each turn, and emits AVP events."
+description = "AVP v0.1 agent for the Anthropic Messages API. Driver pattern: this package owns the agent loop, calls the Anthropic SDK each turn, and emits AVP events."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = [
-    "avp>=0.1,<0.2",
-    "anthropic>=0.40,<1",
-]
+dependencies = ["avp>=0.1,<0.2", "anthropic>=0.40,<1"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7",
-    "ruff>=0.6",
-]
+dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.scripts]
 avp-anthropic = "avp_anthropic.cli:main"
 
 [project.urls]
-Spec    = "https://github.com/portofcontext/agent-execution-protocol/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-execution-protocol/tree/main/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp_anthropic"]

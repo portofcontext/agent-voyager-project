@@ -1,0 +1,122 @@
+{
+  "id": "subagent-failed-when-spawn-errors",
+  "title": "Resolver returning an error outcome from spawn_subagent emits subagent_invoked \u2192 subagent_failed",
+  "description": "SPEC.md \u00a76.3 + \u00a79.5 \u2014 when avp.spawn_subagent returns an outcome with `error` set (the child run encountered an error) or the resolver call itself raises (transport / driver error), the parent agent MUST emit subagent_invoked at frame open and then subagent_failed (NOT subagent_returned) at frame close. The model receives an `Error: \u2026` tool_result so the next turn can react.",
+  "spec_refs": [
+    "spec/v0.1/SPEC.md#9-5-subagents",
+    "spec/v0.1/SPEC.md#6-3-the-avp-spawn-subagent-method"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "subagent-spawn-error",
+    "model": "test/mock",
+    "subagents": [
+      {
+        "id": "broken",
+        "ref": "sk_broken"
+      }
+    ]
+  },
+  "agent_manifest": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1"
+  },
+  "scripted_resolver": {
+    "resolutions": {
+      "subagent:broken": {
+        "result": {
+          "name": "broken",
+          "description": "Always fails for testing."
+        }
+      }
+    },
+    "subagent_spawns": {
+      "broken": {
+        "child_run_id": "sub-failed-1",
+        "text": "",
+        "reason": "error",
+        "duration_ms": 5,
+        "usage": {
+          "total_cost_usd": 0.0,
+          "total_tokens": 0,
+          "total_turns": 0
+        },
+        "error": "child run crashed at turn 1",
+        "error_code": "agent_crash"
+      }
+    }
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 20,
+      "tokens_output": 4,
+      "cost_usd": 0.0001,
+      "duration_ms": 1,
+      "tool_calls": [
+        {
+          "call_id": "c1",
+          "tool": "broken",
+          "input": {
+            "task": "x"
+          }
+        }
+      ],
+      "converged": false
+    },
+    {
+      "tokens_input": 8,
+      "tokens_output": 3,
+      "cost_usd": 0.0,
+      "duration_ms": 1,
+      "text": "got error from subagent",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "avp.subagent_invoked",
+          "data": {
+            "gen_ai.agent.name": "broken",
+            "avp.subagent.run_id": "sub-failed-1"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.subagent_failed",
+          "data": {
+            "gen_ai.agent.name": "broken",
+            "avp.subagent.error": "child run crashed at turn 1",
+            "avp.subagent.error.code": "agent_crash"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "subagent_returned MUST NOT fire when the child reported an error",
+        "match": {
+          "type": "avp.subagent_returned",
+          "data": {
+            "gen_ai.agent.name": "broken"
+          }
+        }
+      }
+    ]
+  }
+}

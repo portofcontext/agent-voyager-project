@@ -24,7 +24,6 @@ from avp_anthropic.driver import (
 )
 from avp_anthropic.manifest import manifest as build_manifest
 from avp_anthropic.shell_tools import SHELL_TOOL_SCHEMAS, ShellTools
-from avp_anthropic.subagent import AnthropicSubagentDriver
 
 
 class StdoutSink:
@@ -165,15 +164,17 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
     )
 
-    subagent_driver = AnthropicSubagentDriver(default_model=model) if commission.subagents else None
-
+    # Managed assets (Commission.{mcp_servers,skills,subagents}) require a
+    # ResolverDriver. The avp-anthropic CLI doesn't yet ship an HTTP-backed
+    # resolver client; Commissions with managed asset lists fail at AVPAgent's
+    # `resolver_not_configured` gate. Local-only Commissions run cleanly.
     agent = AVPAgent(
         commission=commission,
         model=driver,
         tools=ShellTools(),
         supervisor=StdoutSink(sys.stdout),
         agent_builtin_tools=list(SHELL_TOOL_SCHEMAS),
-        subagent_driver=subagent_driver,
+        resolver=None,
         manifest=build_manifest(),
     )
     agent.run()

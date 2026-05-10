@@ -50,8 +50,8 @@ echo '<config json>' | avp-anthropic   # runs and emits NDJSON events on stdout
 This is what your Rust DDD supervisor pipes against:
 
 ```
-your-supervisor ──stdin (Commission + SupervisorMessages)──▶ avp-anthropic
-                ◀──stdout (NDJSON Event trajectory)─── avp-anthropic
+your-supervisor ──stdin (Commission, once)──────────────▶ avp-anthropic
+                ◀──stdout (NDJSON Event trajectory)───── avp-anthropic
 ```
 
 ## What this agent translates

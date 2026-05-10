@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from avp.agent.agent import AVPAgent
 from avp.agent.mock import (
-    ScriptedSubagentDriver,
+    ScriptedResolver,
     ScriptedSupervisor,
     ScriptedTools,
     parse_scripted_model,
@@ -176,12 +176,32 @@ def _build_agent(case: dict[str, Any]) -> AVPAgent:
     tools = ScriptedTools(case.get("scripted_tools") or {})
     supervisor = ScriptedSupervisor(case.get("scripted_supervisor") or [])
     builtin_tools = case.get("agent_builtin_tools") or None
-    # `scripted_subagents` maps subagent name → canned outcome (text, reason,
-    # duration_ms, usage). When a case declares Commission.subagents AND wants
-    # a successful invocation, supply this; omit it to exercise the
-    # missing-driver path that emits subagent_failed.
-    scripted_sa = case.get("scripted_subagents")
-    sa_driver = ScriptedSubagentDriver(scripted_sa) if scripted_sa else None
+    # `scripted_resolver` configures the in-process ResolverDriver the
+    # AVPAgent uses to dereference Commission-managed refs. Two keys:
+    #
+    #   "resolutions": maps "<kind>:<id>" (or just "<id>") → either
+    #     {"result": <material>} or {"error": "...", "error_code": "..."}.
+    #   "subagent_spawns": maps subagent id → canned SubagentSpawnOutcome
+    #     fields (child_run_id, text, reason, usage, duration_ms, error?).
+    #
+    # When the Commission has any managed assets and the case omits
+    # `scripted_resolver`, the harness still wires a ScriptedResolver —
+    # the resolver will raise on every lookup, exercising the
+    # `managed_ref_resolve_failed` path. Cases that want a Profile-A run
+    # (no managed assets) leave the Commission lists empty and need no
+    # resolver.
+    sr_cfg = case.get("scripted_resolver") or {}
+    has_managed = bool(commission.mcp_servers or commission.skills or commission.subagents)
+    resolver: ScriptedResolver | None
+    if has_managed and not case.get("omit_resolver"):
+        resolver = ScriptedResolver(
+            resolutions=sr_cfg.get("resolutions") or {},
+            subagent_spawns=sr_cfg.get("subagent_spawns") or {},
+        )
+    else:
+        # Either no managed assets, or the case wants to exercise the
+        # `resolver_not_configured` startup gate (omit_resolver=true).
+        resolver = None
     # When the case ships a `agent_manifest`, the agent emits the
     # `run_requested` + `agent_described` prelude. Cases not exercising
     # the prelude omit the field — the agent skips emission and the rest
@@ -194,7 +214,7 @@ def _build_agent(case: dict[str, Any]) -> AVPAgent:
         tools=tools,
         supervisor=supervisor,
         agent_builtin_tools=builtin_tools,
-        subagent_driver=sa_driver,
+        resolver=resolver,
         manifest=manifest,
     )
 

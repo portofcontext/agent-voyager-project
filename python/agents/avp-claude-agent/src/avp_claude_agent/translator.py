@@ -58,9 +58,9 @@ from avp import (
     RunStateSnapshot,
     Source,
     StopReason,
-    Subagent,
     SubagentInvokedData,
     SubagentInvokedEvent,
+    SubagentRef,
     SubagentReturnedData,
     SubagentReturnedEvent,
     TextEmittedData,
@@ -409,8 +409,8 @@ class ClaudeAgentTranslator:
         # detects this we emit `subagent_invoked` (not `tool_invoked`) and
         # stash the frame span_id keyed by tool_use_id; PostToolUse pops it
         # and emits `subagent_returned`.
-        self._subagents_by_name: dict[str, Subagent] = {
-            sa.name: sa for sa in (commission.subagents or [])
+        self._subagents_by_name: dict[str, SubagentRef] = {
+            sa.id: sa for sa in (commission.subagents or [])
         }
         self._subagent_invocations: dict[
             str, dict[str, Any]
@@ -615,81 +615,40 @@ class ClaudeAgentTranslator:
     def _build_sdk_options(self) -> Any:
         """Translate Commission → ClaudeAgentOptions.
 
-        Mapping:
-          - Commission.exposed  → options.allowed_tools  (SDK enforces natively)
-          - Commission.system_prompt  → options.system_prompt
-          - Commission.model          → options.model
-          - Commission.subagents      → options.agents = {name: AgentDefinition(...)}
-          - Commission.mcp_servers    → options.mcp_servers — the SDK owns the
-                                    connection lifecycle, tools/list discovery,
-                                    and dispatch. Tools the SDK exposes from
-                                    these servers surface to PreToolUse with
-                                    the `mcp__<server>__<tool>` naming
-                                    convention; we tag them on the AVP wire.
-          - hooks={PreToolUse, PostToolUse} → translator-emitted tool_invoked / tool_returned
-                                              OR subagent_invoked / subagent_returned when
-                                              the tool_use is the SDK's `Agent` tool with
-                                              a subagent_type matching a declared subagent
+        Mapping (refs-only Commission, v0.1):
+          - Commission.system_prompt              → options.system_prompt
+          - Commission.model                      → options.model
+          - Commission.enabled_builtin_tools      → options.tools (allowlist
+                                                    against the SDK's preset)
+          - Commission.{mcp_servers,subagents}    → DEFERRED. Managed assets
+                                                    require the AVP resolver
+                                                    protocol; wiring them
+                                                    through to the SDK is a
+                                                    Phase 4+ follow-up.
+          - hooks={PreToolUse, PostToolUse}       → translator-emitted
+                                                    tool_invoked / tool_returned
+                                                    plus subagent lifecycle
+                                                    when the SDK dispatches its
+                                                    own built-in subagents.
         """
         commission = self.commission
         assert self._sdk_options_cls is not None
         assert self._sdk_hook_matcher_cls is not None
 
         kwargs: dict[str, Any] = {}
-        # AVP Commission.exposed (SPEC §8.2): exhaustive supervisor-declared
-        # surface, supports fnmatch globs. The Claude Agent SDK's `tools`
-        # parameter expects concrete names — globs must be expanded against
-        # the SDK's preset before the call.
-        #
-        # Resolution rules:
-        #   - exposed contains "*" (match-everything glob)        → omit
-        #     `tools` so the SDK uses its full claude_code preset.
-        #   - exposed = []                                         → tools=[]
-        #     (model sees no built-ins).
-        #   - exposed has only literals + non-`*` globs            → expand
-        #     globs over CLAUDE_CODE_PRESET_TOOLS, pass the concrete subset.
-        #
-        # Note: the SDK has a separate `allowed_tools` parameter that means
-        # "auto-execute without permission prompt." Do NOT confuse with AVP
-        # `exposed` — AVP semantics maps to SDK `tools`, not `allowed_tools`.
-        exposed_patterns = list(commission.exposed)
-        if not exposed_patterns:
-            kwargs["tools"] = []
-        elif "*" in exposed_patterns:
-            # Match-everything wildcard — let SDK fall back to default preset.
-            pass
-        else:
-            import fnmatch as _fnmatch
-
-            resolved: list[str] = []
-            seen: set[str] = set()
-
-            def _add(name: str) -> None:
-                if name not in seen:
-                    seen.add(name)
-                    resolved.append(name)
-
-            for pattern in exposed_patterns:
-                if any(c in pattern for c in "*?["):
-                    for n in CLAUDE_CODE_PRESET_TOOLS:
-                        if _fnmatch.fnmatchcase(n, pattern):
-                            _add(n)
-                else:
-                    # Literal — pass through; the SDK will reject it if it
-                    # doesn't recognize the name. AVPAgent-side validation
-                    # would already have errored on a non-resolvable
-                    # literal (see `_validate_exposed`); reaching here means
-                    # it was either a built-in or an MCP-server tool.
-                    _add(pattern)
-            kwargs["tools"] = resolved
+        # Commission.enabled_builtin_tools is the v0.1 allowlist. Absent →
+        # SDK uses its full preset (no `tools` kwarg). Present → pass the
+        # named subset to the SDK's `tools` parameter; the SDK enforces.
+        # Names that aren't in the SDK preset are AVPAgent's startup-validation
+        # responsibility (commission_collision); reaching here means they
+        # already passed manifest cross-check.
+        allow = commission.enabled_builtin_tools
+        if allow is not None:
+            kwargs["tools"] = list(allow)
         if commission.system_prompt:
             kwargs["system_prompt"] = commission.system_prompt
         if commission.model:
             kwargs["model"] = commission.model
-        if commission.subagents:
-            kwargs["agents"] = self._build_sdk_agents()
-        if commission.mcp_servers:
-            kwargs["mcp_servers"] = self._build_sdk_mcp_servers()
         # Bridge any user-provided LocalTools into the SDK's in-process
         # MCP server slot so a single AVP-LocalTools registration works
         # across agents. Tools land on the wire as `mcp__<name>__<tool>`
@@ -751,77 +710,26 @@ class ClaudeAgentTranslator:
         return self._sdk_options_cls(**kwargs)
 
     def _build_sdk_agents(self) -> dict[str, Any]:
-        """Translate Commission.subagents → ClaudeAgentOptions.agents.
+        """Translate Commission-managed subagents → SDK AgentDefinitions.
 
-        Maps the AVP Subagent shape onto Claude Agent SDK's `AgentDefinition`:
-
-          AVP Subagent.name           → key in the agents dict
-          AVP Subagent.description    → AgentDefinition.description
-          AVP Subagent.system_prompt  → AgentDefinition.prompt
-          AVP Subagent.model          → AgentDefinition.model
-          AVP Subagent.exposed  → AgentDefinition.tools (allowlist)
-
-        v0.1 prototype: subagent.skills / inherit_tools / nested subagents
-        are not yet wired into the SDK side. The Subagent type accepts them;
-        this agent ignores them (with a warning would be louder, but the
-        prototype's job is to demonstrate the wire shape, not ship full v1
-        mapping).
-
-        Falls back to constructing a plain dict when AgentDefinition isn't
-        injected — the SDK accepts dicts in some versions; tests rely on this.
+        Refs-only Commission (v0.1): subagent metadata + spawn behavior come
+        from the AVP resolver protocol (`avp.resolve` for metadata,
+        `avp.spawn_subagent` for runtime invocation). Wiring resolved
+        material into the Claude Agent SDK's `agents` parameter is a Phase 4
+        follow-up; for now this returns an empty dict.
         """
-        agents: dict[str, Any] = {}
-        for sa in self.commission.subagents or []:
-            payload: dict[str, Any] = {"description": sa.description}
-            if sa.system_prompt:
-                payload["prompt"] = sa.system_prompt
-            if sa.model:
-                payload["model"] = sa.model
-            if sa.exposed is not None:
-                payload["tools"] = list(sa.exposed)
-            if self._sdk_agent_definition_cls is not None:
-                agents[sa.name] = self._sdk_agent_definition_cls(**payload)
-            else:
-                agents[sa.name] = payload
-        return agents
+        return {}
 
     def _build_sdk_mcp_servers(self) -> dict[str, dict[str, Any]]:
-        """Translate Commission.mcp_servers → ClaudeAgentOptions.mcp_servers.
+        """Translate Commission-managed MCP servers → SDK mcp_servers.
 
-        The Claude Agent SDK accepts a dict keyed by server id; each entry
-        is a transport-shape dict ({type: stdio, command, args, env} or
-        {type: http, url, headers}). The SDK owns connect / tools/list /
-        dispatch from there.
-
-        AVP's `avp://mcp/<id>` URI scheme uses the same `id` as the SDK's
-        dict key — that's what links a `tool_exec_resolved` reply back to
-        the originating server.
+        Same story as `_build_sdk_agents`: refs-only Commission means MCP
+        connection material comes from the resolver, not from inline
+        Commission fields. Returning an empty dict here means the CLI runs
+        cleanly for non-managed Commissions; managed-MCP Commissions fail
+        at AVPAgent's `resolver_not_configured` gate.
         """
-        servers: dict[str, dict[str, Any]] = {}
-        for s in self.commission.mcp_servers or []:
-            entry: dict[str, Any] = {"type": s.transport}
-            if s.transport == "stdio":
-                if s.command:
-                    entry["command"] = list(s.command)
-                if s.args:
-                    entry["args"] = list(s.args)
-                if s.env:
-                    entry["env"] = dict(s.env)
-            else:  # http
-                if s.url:
-                    entry["url"] = s.url
-                if s.auth is not None:
-                    # AVP's McpHttpAuth uses {type: bearer, token_env: ENV_VAR}.
-                    # The SDK's HTTP transport expects an Authorization header;
-                    # resolve the env var here so the secret never lands on
-                    # the wire (Commission / events).
-                    import os as _os
-
-                    token = _os.environ.get(s.auth.token_env, "")
-                    if token:
-                        entry["headers"] = {"Authorization": f"Bearer {token}"}
-            servers[s.id] = entry
-        return servers
+        return {}
 
     @staticmethod
     def _mcp_server_id_from_tool_name(tool_name: str) -> str | None:
@@ -1303,12 +1211,10 @@ class ClaudeAgentTranslator:
         parent = self._current_turn_span_id or self._agent_span_id
         invoked_data: dict[str, Any] = {
             "step": self._step,
-            "gen_ai.agent.name": sa.name,
+            "gen_ai.agent.name": sa.id,
             "avp.subagent.invocation_id": invocation_id,
             "avp.subagent.input": sanitized_input,
         }
-        if sa.description:
-            invoked_data["gen_ai.agent.description"] = sa.description
         self._emit(
             SubagentInvokedEvent(
                 subject=self.commission.run_id,
@@ -1492,110 +1398,56 @@ class ClaudeAgentTranslator:
         tool_enrich: dict[str, dict[str, Any]] = enrichment.get("tools", {})
         subagent_enrich: dict[str, dict[str, Any]] = enrichment.get("subagents", {})
         skill_enrich: dict[str, dict[str, Any]] = enrichment.get("skills", {})
-        # Build the effective tool surface the model sees by resolving
-        # `commission.exposed` (the supervisor's exhaustive name surface,
-        # supporting fnmatch globs) against the SDK's `claude_code` preset.
-        # For the CASDK agent, the "agent builtins" are the Claude Agent
-        # SDK's own tools (Read, Write, Bash, …); MCP tools surface
-        # separately on `mcp_server_connected.data.avp.mcp.tools`.
-        #
-        # Resolution rules:
-        #   - `exposed = ["*"]`        → expand to the full SDK preset.
-        #   - `exposed = ["Bash", ...]` (literals only) → surface those names.
-        #   - `exposed = ["mcp_*"]`    (glob) → expand against preset; matches
-        #     none here (those are MCP names; reported on mcp_server_connected).
-        #   - `exposed = []`           → empty surface; the model sees no
-        #     built-ins. Distinct from "no commission filter."
+        # Effective tool surface for `agent_started.data.tools[]`.
+        # v0.1 refs-only Commission: filter the SDK's preset by the
+        # optional `enabled_builtin_tools` allowlist (absent → all enabled).
+        # MCP-server tools surface separately on
+        # `mcp_server_connected.data.avp.mcp.tools[]` after handshake.
+        allow = commission.enabled_builtin_tools
+        if allow is None:
+            preset_subset = list(_CLAUDE_CODE_PRESET_TOOLS)
+        else:
+            allow_set = set(allow)
+            preset_subset = [n for n in _CLAUDE_CODE_PRESET_TOOLS if n in allow_set]
+
         tools_meta_list: list[dict[str, Any]] = []
-
-        # Resolve patterns over the SDK preset PLUS MCP-prefixed literals.
-        #   - Globs (`*`, `?`, `[`) expand against the SDK preset only —
-        #     they're meant for trust-the-namespace patterns over built-ins
-        #     (`*` for full preset, `Read*` for read-shaped, etc.).
-        #   - MCP-prefixed literals (`mcp__<server>__<tool>`) are kept as-is
-        #     so they surface on agent_started.data.tools with the right
-        #     dispatch_target=mcp_server tag (per `_make_builtin_tool_decl`).
-        #   - Other literals that match a preset name are kept; literals
-        #     that match nothing are dropped (validation has already errored
-        #     on truly-unresolvable literals upstream).
-        import fnmatch as _fnmatch
-
-        builtin_names: list[str] = []
-        seen_builtin: set[str] = set()
-
-        def _add_builtin(name: str) -> None:
-            if name not in seen_builtin:
-                seen_builtin.add(name)
-                builtin_names.append(name)
-
-        for pattern in commission.exposed:
-            if any(c in pattern for c in "*?["):
-                for n in _CLAUDE_CODE_PRESET_TOOLS:
-                    if _fnmatch.fnmatchcase(n, pattern):
-                        _add_builtin(n)
-            elif pattern.startswith("mcp__") or pattern in _CLAUDE_CODE_PRESET_TOOLS:
-                _add_builtin(pattern)
-
-        for name in builtin_names:
+        for name in preset_subset:
             decl = _make_builtin_tool_decl(name)
-            # Enrichment from get_context_usage() may carry a description
-            # the SDK pulled from its own internal catalog or user-side
-            # filesystem definitions. Only set when present; honest-null
-            # otherwise.
             extra = tool_enrich.get(name) or {}
             if extra.get("description"):
                 decl["description"] = extra["description"]
             tools_meta_list.append(decl)
         tools_meta = tools_meta_list or None
-        # Same three-shape pattern as `tools` (above): None → SDK built-ins
-        # surfaced; [] → empty surface (model has no subagents to delegate
-        # to from a Commission-declared list, though SDK runtime may still
-        # expose general-purpose); list → those names exactly. Built-in
-        # subagents (currently just `general-purpose` per the Agent SDK
-        # docs) get a name-only decl since the SDK doesn't expose their
-        # description / system prompt / tools for us to authoritatively
-        # report.
+
+        # Subagent surface. Commission-managed subagents are refs-only and
+        # need the resolver to materialize metadata; v0.1 surfaces them as
+        # id-only stubs (consumers correlate with managed_ref_resolved
+        # events). SDK built-in subagents (general-purpose) are surfaced
+        # when present in enrichment.
         subagents_meta_list: list[dict[str, Any]] = []
-        rpc_subagent_names: set[str] = {sa.name for sa in (commission.subagents or [])}
         if commission.subagents:
-            subagents_meta_list.extend(
-                {
-                    "name": sa.name,
-                    "description": sa.description,
-                    **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
-                }
-                for sa in commission.subagents
-            )
-        if commission.subagents is None:
-            for name in _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS:
-                if name in rpc_subagent_names:
-                    continue
-                decl: dict[str, Any] = {"name": name}
-                # Enrichment from get_context_usage().agents — when the
-                # SDK reports the agent's description (typically from the
-                # markdown source's frontmatter) and agentType.
-                extra = subagent_enrich.get(name) or {}
-                if extra.get("description"):
-                    decl["description"] = extra["description"]
-                if extra.get("agent_type"):
-                    decl["avp.agent_type"] = extra["agent_type"]
-                subagents_meta_list.append(decl)
-        subagents_meta = subagents_meta_list or None
-        # Skills: Commission-declared skills (commission.skills) carry name + source.
-        # Enrichment from get_context_usage().skills can add a description
-        # parsed from SKILL.md frontmatter — that's the authoritative
-        # description the SDK loaded.
-        skills_meta_list: list[dict[str, Any]] = []
-        for s in commission.skills or []:
-            decl: dict[str, Any] = {"name": s.name, "avp.source": s.avp_source}
-            extra = skill_enrich.get(s.name) or {}
+            subagents_meta_list.extend({"name": sa.id} for sa in commission.subagents)
+        for name in _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS:
+            if any(d["name"] == name for d in subagents_meta_list):
+                continue
+            decl: dict[str, Any] = {"name": name}
+            extra = subagent_enrich.get(name) or {}
             if extra.get("description"):
                 decl["description"] = extra["description"]
-            skills_meta_list.append(decl)
-        # If Commission didn't declare skills but the SDK loaded some from
-        # user / project filesystem, surface those too.
+            if extra.get("agent_type"):
+                decl["avp.agent_type"] = extra["agent_type"]
+            subagents_meta_list.append(decl)
+        subagents_meta = subagents_meta_list or None
+
+        # Skills surface. Commission-managed skills appear as id-only stubs
+        # (the resolver returns SKILL.md content; descriptions arrive on
+        # managed_ref_resolved). Filesystem-discovered skills (when the SDK
+        # is configured to read them) surface via `skill_enrich`.
+        skills_meta_list: list[dict[str, Any]] = []
+        if commission.skills:
+            skills_meta_list.extend({"name": s.id} for s in commission.skills)
         for name, extra in skill_enrich.items():
-            if any(s["name"] == name for s in skills_meta_list):
+            if any(d["name"] == name for d in skills_meta_list):
                 continue
             decl = {"name": name}
             if extra.get("description"):

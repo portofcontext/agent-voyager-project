@@ -5,8 +5,8 @@ Conformance suite: [`conformance/v0.1/`](../../conformance/v0.1/)
 
 This package ships:
 
-- **Wire types** (`avp.types`) — Pydantic v2 models for every Commission / Event / SupervisorMessage variant in v0.1, with discriminated unions on `type`.
-- **NDJSON IO** (`avp.io`) — line-buffered stdio readers and writers for trajectories and supervisor messages.
+- **Wire types** (`avp.types`) — Pydantic v2 models for every Commission and Event variant in v0.1, with discriminated unions on `type`.
+- **NDJSON IO** (`avp.io`) — line-buffered stdio readers and writers for the Commission (in) + Event trajectory (out).
 - **Reference agent** (`avp.agent`) — implements the normative loop in [`SPEC.md` §9.3](../../spec/v0.1/SPEC.md#93-the-loop). Pluggable model and tool drivers (mock drivers ship with the package for testing).
 - **Conformance harness** (`avp.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference agent with scripted model / tools / supervisor, asserts captured trajectory against the expectations. CLI: `avp-conformance run` (subcommands `run` / `validate` / `check-coverage`).
 
@@ -36,7 +36,7 @@ uv run avp-conformance check-coverage     # every event type has at least 1 case
 src/avp/
   __init__.py           # public re-exports
   enums.py              # Source, StopReason, ErrorCode helpers
-  types.py              # Pydantic models for Commission / Event / SupervisorMessage
+  types.py              # Pydantic models for Commission / Event
   io.py                 # NDJSON readers / writers
   agent/
     __init__.py         # public re-exports

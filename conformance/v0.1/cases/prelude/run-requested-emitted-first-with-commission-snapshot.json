@@ -24,10 +24,7 @@
     "supervisor": {
       "name": "simple-supervisor-example",
       "version": "1.2.3"
-    },
-    "exposed": [
-      "*"
-    ]
+    }
   },
   "scripted_model": [
     {

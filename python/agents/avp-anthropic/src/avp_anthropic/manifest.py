@@ -1,17 +1,17 @@
 """Agent manifest for avp-anthropic.
 
 The manifest enumerates everything triggerable without supervisor
-configuration: SDK preset tools, runtime-bundled subagents, and
-runtime-bundled skills. Surfaced in two places that MUST agree:
+configuration: SDK preset tools and runtime-bundled subagents/skills.
+Surfaced in two places that MUST agree:
 
   - `avp-anthropic describe` prints `manifest()` as JSON to stdout.
   - The `agent_described` event the agent emits between
     `run_requested` and `agent_started` carries the same payload.
 
-Scope: SDK defaults only. Supervisor-declared surfaces (Commission.tools,
-Commission.subagents, Commission.skills) and environment-discovered surfaces
-(filesystem skills, MCP server tool lists) are NOT included here —
-they appear on `agent_started` and `mcp_server_connected` respectively.
+Scope: SDK defaults only. Supervisor-managed assets
+(Commission.{mcp_servers,skills,subagents} refs) and environment-discovered
+surfaces (filesystem skills, MCP server tool lists) are NOT included here —
+they appear on `managed_ref_resolved`, `mcp_server_connected`, etc.
 """
 
 from __future__ import annotations
@@ -25,16 +25,9 @@ from avp_anthropic.shell_tools import SHELL_TOOL_SCHEMAS
 # Commission-aware tooling to gate features (e.g., "skip this Commission if the
 # agent doesn't support thinking blocks").
 #
-# - `mcp`: forwards MCP server descriptors to Anthropic's API connector.
-#   HTTP-only; stdio MCP servers in Commission are skipped with a warning.
-# - `subagents`: AnthropicSubagentDriver dispatches subagents declared in
-#   Commission.subagents.
-# - `skills`: SKILL.md descriptors in Commission.skills are surfaced as
-#   `skill_loaded` events; injection into prompt context is the
-#   supervisor's job.
 # - `thinking`: Anthropic extended-thinking blocks parsed and emitted
 #   as `reasoning_emitted` events.
-_CAPABILITIES = ("mcp", "subagents", "skills", "skills:eager", "thinking")
+_CAPABILITIES = ("thinking",)
 
 
 def manifest() -> AgentManifest:

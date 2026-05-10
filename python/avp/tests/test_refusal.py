@@ -26,9 +26,7 @@ def _by_type(traj, type_):
 
 
 def _agent(model: ScriptedModel) -> AVPAgent:
-    commission = Commission(
-        schema_version="0.1", run_id="refusal", model="test/mock", exposed=["*"]
-    )
+    commission = Commission(schema_version="0.1", run_id="refusal", model="test/mock")
     return AVPAgent(
         commission=commission,
         model=model,

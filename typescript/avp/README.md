@@ -8,10 +8,10 @@ npm install github:portofcontext/agent-execution-protocol#main --save
 
 ## What's here
 
-Generated TypeScript types for the AVP v0.1 wire format. Three modules, one per top-level message class:
+Generated TypeScript types for the AVP v0.1 wire format. Two modules, one per top-level message class:
 
 ```typescript
-import type { Commission, Event, SupervisorMessage } from "@avp/types";
+import type { Commission, Event } from "@avp/types";
 
 const event: Event = JSON.parse(line);
 
@@ -38,7 +38,6 @@ Sub-path imports for the helper types:
 ```typescript
 import type { Tool, McpServer } from "@avp/types/commission";
 import type { ModelTurnEndedEvent, AgentStartedData } from "@avp/types/event";
-import type { ToolExecResolvedEvent } from "@avp/types/supervisor-message";
 ```
 
 ## Source of truth
@@ -47,7 +46,7 @@ import type { ToolExecResolvedEvent } from "@avp/types/supervisor-message";
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `typescript/avp/src/*.ts` (generated here, via `json-schema-to-typescript`)
 
-Don't edit `src/{commission,event,supervisor-message}.ts` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event}.ts` by hand — they're regenerated. Edit `types.py` upstream.
 
 ## Regenerating
 

@@ -7,13 +7,12 @@ This directory is the **normative specification** for the Agent Voyage Protocol,
 | File | Purpose |
 |---|---|
 | [`SPEC.md`](./SPEC.md) | Normative prose. RFC 2119 keywords. Reference algorithm for the agent loop. Conformance criteria for agents and supervisors. |
-| [`avp.schema.json`](./avp.schema.json) | Bundled JSON Schema (Draft 2020-12). All type definitions in `$defs`; top-level `oneOf` over Commission / Event / SupervisorMessage. |
+| [`avp.schema.json`](./avp.schema.json) | Bundled JSON Schema (Draft 2020-12). All type definitions in `$defs`; top-level `oneOf` over Commission and Event. |
 | [`commission.schema.json`](./commission.schema.json) | Entry-point schema for the supervisor → agent Commission. |
-| [`event.schema.json`](./event.schema.json) | Entry-point schema for one event in the canonical trajectory (either source). |
-| [`supervisor-message.schema.json`](./supervisor-message.schema.json) | Entry-point schema for messages the supervisor sends to the agent. |
+| [`event.schema.json`](./event.schema.json) | Entry-point schema for one event in the canonical trajectory. |
 | [`examples/`](./examples/) | Conforming fixtures referenced by `SPEC.md`. |
 
-The three entry-point schemas all `$ref` into `avp.schema.json#/$defs/...`. Validators MUST resolve `$ref` against the `$id` URIs (or use a local `$id` → file mapping when validating offline).
+The two entry-point schemas both `$ref` into `avp.schema.json#/$defs/...`. Validators MUST resolve `$ref` against the `$id` URIs (or use a local `$id` → file mapping when validating offline).
 
 ## Schema dialect
 

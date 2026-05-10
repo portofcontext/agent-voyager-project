@@ -10,7 +10,7 @@
 #   plus README.md and LICENSE for context.
 #
 # Worked example Configs live at python/supervisors/simple-supervisor-example/
-# in the source repo and aren't shipped in the bundle — they need the runner
+# in the source repo and aren't shipped in the bundle — they need the agent
 # packages and an Anthropic API key to actually run, neither of which install
 # alongside a skill bundle. SKILL.md references them by their in-tree path so
 # downstream agents can follow the link back to the repo.

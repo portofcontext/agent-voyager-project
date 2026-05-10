@@ -28,7 +28,9 @@ export type AVPV01Event =
   | SkillLoadedEvent
   | ErrorOccurredEvent
   | McpServerConnectedEvent
-  | McpServerDisconnectedEvent;
+  | McpServerDisconnectedEvent
+  | ManagedRefResolvedEvent
+  | ManagedRefResolveFailedEvent;
 export type Specversion = "1.0";
 export type Id = string;
 export type Time = string;
@@ -66,7 +68,7 @@ export type Description = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
-export type AvpDispatchTarget = ("mcp_server" | "local" | "hosted") | null;
+export type AvpDispatchTarget = ("mcp_server" | "local") | null;
 export type AvpMcpServerId = string | null;
 export type BuiltInSubagents = _SubagentDecl[] | null;
 export type Name1 = string;
@@ -199,8 +201,7 @@ export type ParentSpanId6 = string;
 export type Step2 = number;
 export type GenAiToolCallId = string;
 export type GenAiToolName = string;
-export type AvpToolDispatchTarget = ("mcp_server" | "local" | "hosted") | null;
-export type AvpToolSubtype = string | null;
+export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
 export type Specversion7 = "1.0";
 export type Id7 = string;
 export type Time7 = string;
@@ -254,6 +255,7 @@ export type GenAiAgentName = string;
 export type GenAiAgentDescription = string | null;
 export type GenAiOperationName1 = "invoke_agent";
 export type AvpSubagentInvocationId = string;
+export type AvpSubagentRunId = string | null;
 export type Specversion10 = "1.0";
 export type Id10 = string;
 export type Time10 = string;
@@ -383,7 +385,8 @@ export type ErrorCode =
   | "agent_crash"
   | "accounting_reset"
   | "unsupported_model"
-  | "exposed_unresolved"
+  | "resolver_not_configured"
+  | "commission_collision"
   | "unknown";
 export type AvpErrorMessage = string;
 export type Specversion18 = "1.0";
@@ -426,6 +429,37 @@ export type ParentSpanId19 = string;
 export type AvpMcpServerId2 = string;
 export type AvpMcpDisconnectReason = "clean" | "error";
 export type AvpMcpDisconnectMessage = string | null;
+export type Specversion20 = "1.0";
+export type Id20 = string;
+export type Time20 = string;
+export type Subject20 = string | null;
+export type Datacontenttype20 = string | null;
+export type Dataschema20 = string | null;
+export type AvpCorrelationId20 = string | null;
+export type Type20 = "avp.managed_ref_resolved";
+export type Source20 = "avp://agent";
+export type TraceId20 = string;
+export type SpanId20 = string;
+export type ParentSpanId20 = string;
+export type AvpManagedKind = "mcp_server" | "skill" | "subagent";
+export type AvpManagedId = string;
+export type DurationMs5 = number;
+export type Specversion21 = "1.0";
+export type Id21 = string;
+export type Time21 = string;
+export type Subject21 = string | null;
+export type Datacontenttype21 = string | null;
+export type Dataschema21 = string | null;
+export type AvpCorrelationId21 = string | null;
+export type Type21 = "avp.managed_ref_resolve_failed";
+export type Source21 = "avp://agent";
+export type TraceId21 = string;
+export type SpanId21 = string;
+export type ParentSpanId21 = string;
+export type AvpManagedKind1 = "mcp_server" | "skill" | "subagent";
+export type AvpManagedId1 = string;
+export type AvpResolveError = string;
+export type AvpResolveErrorCode = string | null;
 
 /**
  * First event of the trajectory. Agent-relayed but supervisor-attributed:
@@ -743,7 +777,6 @@ export interface ToolInvokedData {
   "gen_ai.tool.name": GenAiToolName;
   "gen_ai.tool.call.arguments": GenAiToolCallArguments;
   "avp.tool.dispatch_target"?: AvpToolDispatchTarget;
-  "avp.tool.subtype"?: AvpToolSubtype;
   [k: string]: unknown;
 }
 export interface GenAiToolCallArguments {
@@ -819,6 +852,13 @@ export interface SubagentInvokedEvent {
  * tree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is
  * `invoke_agent` and `gen_ai.agent.name` carries the subagent's declared
  * name.
+ *
+ * `avp.subagent.run_id` is set when the subagent is supervisor-managed —
+ * the parent's runtime calls `avp.spawn_subagent` and receives the child
+ * `run_id` of the subagent's separate, independently-trajectoried run.
+ * Consumers correlate the parent and child trajectories via this field.
+ * Absent (or null) when the subagent runs in-process (the parent's loop
+ * is the same process as the subagent's loop).
  */
 export interface SubagentInvokedData {
   trace_id: TraceId9;
@@ -830,6 +870,7 @@ export interface SubagentInvokedData {
   "gen_ai.operation.name"?: GenAiOperationName1;
   "avp.subagent.invocation_id": AvpSubagentInvocationId;
   "avp.subagent.input": AvpSubagentInput;
+  "avp.subagent.run_id"?: AvpSubagentRunId;
   [k: string]: unknown;
 }
 export interface AvpSubagentInput {
@@ -1151,5 +1192,66 @@ export interface McpServerDisconnectedData {
   "avp.mcp.server_id": AvpMcpServerId2;
   "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
   "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;
+  [k: string]: unknown;
+}
+export interface ManagedRefResolvedEvent {
+  specversion?: Specversion20;
+  id?: Id20;
+  time?: Time20;
+  subject?: Subject20;
+  datacontenttype?: Datacontenttype20;
+  dataschema?: Dataschema20;
+  "avp.correlation_id"?: AvpCorrelationId20;
+  type?: Type20;
+  source?: Source20;
+  data: ManagedRefResolvedData;
+}
+/**
+ * Audit event emitted when the agent successfully resolves one
+ * Commission-declared managed-asset ref via the AVP resolver protocol.
+ *
+ * Fires once per `Commission.{mcp_servers,skills,subagents}[]` entry the
+ * agent dereferences. For mcp_servers and skills the resolution is
+ * startup-only; for subagents this fires for the metadata-resolve at
+ * startup (the on-demand spawn at runtime is recorded on
+ * `subagent_invoked` instead). The opaque ref material is NOT re-recorded
+ * here — `run_requested.data["avp.commission"]` already has it. This
+ * event records only that the round-trip happened.
+ */
+export interface ManagedRefResolvedData {
+  trace_id: TraceId20;
+  span_id: SpanId20;
+  parent_span_id: ParentSpanId20;
+  "avp.managed.kind": AvpManagedKind;
+  "avp.managed.id": AvpManagedId;
+  duration_ms: DurationMs5;
+  [k: string]: unknown;
+}
+export interface ManagedRefResolveFailedEvent {
+  specversion?: Specversion21;
+  id?: Id21;
+  time?: Time21;
+  subject?: Subject21;
+  datacontenttype?: Datacontenttype21;
+  dataschema?: Dataschema21;
+  "avp.correlation_id"?: AvpCorrelationId21;
+  type?: Type21;
+  source?: Source21;
+  data: ManagedRefResolveFailedData;
+}
+/**
+ * The resolver returned an error or could not be reached for one of
+ * the Commission's managed-asset refs. The agent MUST stop with
+ * `agent_stopped(reason: "error")` after emitting this event — startup
+ * resolution is fail-fast (see SPEC.md).
+ */
+export interface ManagedRefResolveFailedData {
+  trace_id: TraceId21;
+  span_id: SpanId21;
+  parent_span_id: ParentSpanId21;
+  "avp.managed.kind": AvpManagedKind1;
+  "avp.managed.id": AvpManagedId1;
+  "avp.resolve.error": AvpResolveError;
+  "avp.resolve.error.code"?: AvpResolveErrorCode;
   [k: string]: unknown;
 }

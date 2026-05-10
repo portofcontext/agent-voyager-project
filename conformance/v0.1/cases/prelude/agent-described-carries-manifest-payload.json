@@ -36,10 +36,7 @@
     "model": "test/mock",
     "supervisor": {
       "name": "test-supervisor"
-    },
-    "exposed": [
-      "*"
-    ]
+    }
   },
   "scripted_model": [
     {

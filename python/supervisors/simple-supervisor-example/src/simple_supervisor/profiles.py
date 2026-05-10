@@ -11,21 +11,24 @@ purely declarative — easy to read top-to-bottom.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class Profile:
     """A bundle of Commission-shaped defaults the supervisor wants to apply.
 
-    Compiles to: `exposed` (the model-facing name surface, with fnmatch
-    glob support) plus a system_prompt hint that frames the agent's role
-    inside this profile.
+    Compiles to: `enabled_builtin_tools` (the agent built-ins this profile
+    allows) plus a system_prompt hint that frames the agent's role.
+    `enabled_builtin_tools=None` means "all built-ins enabled"; an empty
+    list means "no built-ins"; a list narrows to those names. The
+    Commission's allowlist is validated against the agent's manifest at
+    startup.
     """
 
     name: str
     description: str
-    exposed: list[str] = field(default_factory=list)
+    enabled_builtin_tools: list[str] | None = None
     system_prompt: str | None = None
 
 
@@ -33,11 +36,8 @@ class Profile:
 
 DEV_LOOSE = Profile(
     name="dev-loose",
-    description=(
-        "Permissive surface for exploratory dev work. Use this to show "
-        "'what would the agent do if I didn't gate it'."
-    ),
-    exposed=["bash", "read_file", "write_file"],
+    description=("Permissive surface for exploratory dev work. All built-ins enabled."),
+    enabled_builtin_tools=None,
 )
 
 
@@ -47,7 +47,7 @@ READ_ONLY = Profile(
         "Read-only inspection profile. Useful for code-review and "
         "explanation tasks where you want the agent to look but not touch."
     ),
-    exposed=["read_file"],
+    enabled_builtin_tools=["read_file"],
 )
 
 

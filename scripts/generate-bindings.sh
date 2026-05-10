@@ -94,7 +94,7 @@ echo "Generating Rust bindings (cargo-typify)…"
 generate_rust "commission" "$SPEC/commission.schema.json"
 generate_rust "event" "$SPEC/event.schema.json"
 
-# v0.1 has no supervisor → runner channel; remove old generated files if they
+# v0.1 has no supervisor → agent channel; remove old generated files if they
 # linger from a previous run.
 rm -f "$RUST_OUT/supervisor_message.rs" "$TS_OUT/supervisor-message.ts"
 

@@ -1604,6 +1604,153 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
             })
     }
 }
+#[doc = "`AvpManagedId`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Avp.Managed.Id\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct AvpManagedId(::std::string::String);
+impl ::std::ops::Deref for AvpManagedId {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<AvpManagedId> for ::std::string::String {
+    fn from(value: AvpManagedId) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for AvpManagedId {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for AvpManagedId {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AvpManagedId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AvpManagedId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for AvpManagedId {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`AvpManagedKind`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Avp.Managed.Kind\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"mcp_server\","]
+#[doc = "    \"skill\","]
+#[doc = "    \"subagent\""]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AvpManagedKind {
+    #[serde(rename = "mcp_server")]
+    McpServer,
+    #[serde(rename = "skill")]
+    Skill,
+    #[serde(rename = "subagent")]
+    Subagent,
+}
+impl ::std::fmt::Display for AvpManagedKind {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::McpServer => f.write_str("mcp_server"),
+            Self::Skill => f.write_str("skill"),
+            Self::Subagent => f.write_str("subagent"),
+        }
+    }
+}
+impl ::std::str::FromStr for AvpManagedKind {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "mcp_server" => Ok(Self::McpServer),
+            "skill" => Ok(Self::Skill),
+            "subagent" => Ok(Self::Subagent),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AvpManagedKind {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AvpManagedKind {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AvpManagedKind {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`AvpMcpDisconnectReason`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -1804,6 +1951,75 @@ impl ::std::convert::TryFrom<::std::string::String> for AvpRefusalReason {
     }
 }
 impl<'de> ::serde::Deserialize<'de> for AvpRefusalReason {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`AvpResolveError`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Avp.Resolve.Error\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct AvpResolveError(::std::string::String);
+impl ::std::ops::Deref for AvpResolveError {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<AvpResolveError> for ::std::string::String {
+    fn from(value: AvpResolveError) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for AvpResolveError {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for AvpResolveError {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AvpResolveError {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AvpResolveError {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for AvpResolveError {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
     where
         D: ::serde::Deserializer<'de>,
@@ -2022,6 +2238,12 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
 #[doc = "    },"]
 #[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/McpServerDisconnectedEvent\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ManagedRefResolvedEvent\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ManagedRefResolveFailedEvent\""]
 #[doc = "    }"]
 #[doc = "  ],"]
 #[doc = "  \"discriminator\": {"]
@@ -2031,6 +2253,8 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
 #[doc = "      \"avp.agent_stopped\": \"#/$defs/AgentStoppedEvent\","]
 #[doc = "      \"avp.cost_recorded\": \"#/$defs/CostRecordedEvent\","]
 #[doc = "      \"avp.error_occurred\": \"#/$defs/ErrorOccurredEvent\","]
+#[doc = "      \"avp.managed_ref_resolve_failed\": \"#/$defs/ManagedRefResolveFailedEvent\","]
+#[doc = "      \"avp.managed_ref_resolved\": \"#/$defs/ManagedRefResolvedEvent\","]
 #[doc = "      \"avp.mcp_server_connected\": \"#/$defs/McpServerConnectedEvent\","]
 #[doc = "      \"avp.mcp_server_disconnected\": \"#/$defs/McpServerDisconnectedEvent\","]
 #[doc = "      \"avp.model_turn_ended\": \"#/$defs/ModelTurnEndedEvent\","]
@@ -2075,6 +2299,8 @@ pub enum AvpV01Event {
     ErrorOccurredEvent(ErrorOccurredEvent),
     McpServerConnectedEvent(McpServerConnectedEvent),
     McpServerDisconnectedEvent(McpServerDisconnectedEvent),
+    ManagedRefResolvedEvent(ManagedRefResolvedEvent),
+    ManagedRefResolveFailedEvent(ManagedRefResolveFailedEvent),
 }
 impl ::std::convert::From<RunRequestedEvent> for AvpV01Event {
     fn from(value: RunRequestedEvent) -> Self {
@@ -2174,6 +2400,16 @@ impl ::std::convert::From<McpServerConnectedEvent> for AvpV01Event {
 impl ::std::convert::From<McpServerDisconnectedEvent> for AvpV01Event {
     fn from(value: McpServerDisconnectedEvent) -> Self {
         Self::McpServerDisconnectedEvent(value)
+    }
+}
+impl ::std::convert::From<ManagedRefResolvedEvent> for AvpV01Event {
+    fn from(value: ManagedRefResolvedEvent) -> Self {
+        Self::ManagedRefResolvedEvent(value)
+    }
+}
+impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01Event {
+    fn from(value: ManagedRefResolveFailedEvent) -> Self {
+        Self::ManagedRefResolveFailedEvent(value)
     }
 }
 #[doc = "`CostRecordedData`"]
@@ -2599,7 +2835,8 @@ impl<'de> ::serde::Deserialize<'de> for CostRecordedEventSubject {
 #[doc = "    \"agent_crash\","]
 #[doc = "    \"accounting_reset\","]
 #[doc = "    \"unsupported_model\","]
-#[doc = "    \"exposed_unresolved\","]
+#[doc = "    \"resolver_not_configured\","]
+#[doc = "    \"commission_collision\","]
 #[doc = "    \"unknown\""]
 #[doc = "  ]"]
 #[doc = "}"]
@@ -2630,8 +2867,10 @@ pub enum ErrorCode {
     AccountingReset,
     #[serde(rename = "unsupported_model")]
     UnsupportedModel,
-    #[serde(rename = "exposed_unresolved")]
-    ExposedUnresolved,
+    #[serde(rename = "resolver_not_configured")]
+    ResolverNotConfigured,
+    #[serde(rename = "commission_collision")]
+    CommissionCollision,
     #[serde(rename = "unknown")]
     Unknown,
 }
@@ -2644,7 +2883,8 @@ impl ::std::fmt::Display for ErrorCode {
             Self::AgentCrash => f.write_str("agent_crash"),
             Self::AccountingReset => f.write_str("accounting_reset"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
-            Self::ExposedUnresolved => f.write_str("exposed_unresolved"),
+            Self::ResolverNotConfigured => f.write_str("resolver_not_configured"),
+            Self::CommissionCollision => f.write_str("commission_collision"),
             Self::Unknown => f.write_str("unknown"),
         }
     }
@@ -2659,7 +2899,8 @@ impl ::std::str::FromStr for ErrorCode {
             "agent_crash" => Ok(Self::AgentCrash),
             "accounting_reset" => Ok(Self::AccountingReset),
             "unsupported_model" => Ok(Self::UnsupportedModel),
-            "exposed_unresolved" => Ok(Self::ExposedUnresolved),
+            "resolver_not_configured" => Ok(Self::ResolverNotConfigured),
+            "commission_collision" => Ok(Self::CommissionCollision),
             "unknown" => Ok(Self::Unknown),
             _ => Err("invalid value".into()),
         }
@@ -3130,6 +3371,693 @@ impl ::std::convert::TryFrom<::std::string::String> for Id {
     }
 }
 impl<'de> ::serde::Deserialize<'de> for Id {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "The resolver returned an error or could not be reached for one of\nthe Commission's managed-asset refs. The agent MUST stop with\n`agent_stopped(reason: \"error\")` after emitting this event — startup\nresolution is fail-fast (see SPEC.md)."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ManagedRefResolveFailedData\","]
+#[doc = "  \"description\": \"The resolver returned an error or could not be reached for one of\\nthe Commission's managed-asset refs. The agent MUST stop with\\n`agent_stopped(reason: \\\"error\\\")` after emitting this event — startup\\nresolution is fail-fast (see SPEC.md).\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"avp.managed.id\","]
+#[doc = "    \"avp.managed.kind\","]
+#[doc = "    \"avp.resolve.error\","]
+#[doc = "    \"parent_span_id\","]
+#[doc = "    \"span_id\","]
+#[doc = "    \"trace_id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.managed.id\": {"]
+#[doc = "      \"title\": \"Avp.Managed.Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"avp.managed.kind\": {"]
+#[doc = "      \"title\": \"Avp.Managed.Kind\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"enum\": ["]
+#[doc = "        \"mcp_server\","]
+#[doc = "        \"skill\","]
+#[doc = "        \"subagent\""]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"avp.resolve.error\": {"]
+#[doc = "      \"title\": \"Avp.Resolve.Error\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"avp.resolve.error.code\": {"]
+#[doc = "      \"title\": \"Avp.Resolve.Error.Code\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"parent_span_id\": {"]
+#[doc = "      \"title\": \"Parent Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"span_id\": {"]
+#[doc = "      \"title\": \"Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"trace_id\": {"]
+#[doc = "      \"title\": \"Trace Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 32,"]
+#[doc = "      \"minLength\": 32,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ManagedRefResolveFailedData {
+    #[serde(rename = "avp.managed.id")]
+    pub avp_managed_id: AvpManagedId,
+    #[serde(rename = "avp.managed.kind")]
+    pub avp_managed_kind: AvpManagedKind,
+    #[serde(rename = "avp.resolve.error")]
+    pub avp_resolve_error: AvpResolveError,
+    #[serde(
+        rename = "avp.resolve.error.code",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_resolve_error_code: ::std::option::Option<::std::string::String>,
+    pub parent_span_id: ParentSpanId,
+    pub span_id: SpanId,
+    pub trace_id: TraceId,
+}
+#[doc = "`ManagedRefResolveFailedEvent`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ManagedRefResolveFailedEvent\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"data\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.correlation_id\": {"]
+#[doc = "      \"title\": \"Avp.Correlation Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"data\": {"]
+#[doc = "      \"$ref\": \"#/$defs/ManagedRefResolveFailedData\""]
+#[doc = "    },"]
+#[doc = "    \"datacontenttype\": {"]
+#[doc = "      \"title\": \"Datacontenttype\","]
+#[doc = "      \"default\": \"application/json\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"dataschema\": {"]
+#[doc = "      \"title\": \"Dataschema\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"default\": \"avp://agent\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp://agent\""]
+#[doc = "    },"]
+#[doc = "    \"specversion\": {"]
+#[doc = "      \"title\": \"Specversion\","]
+#[doc = "      \"default\": \"1.0\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"1.0\""]
+#[doc = "    },"]
+#[doc = "    \"subject\": {"]
+#[doc = "      \"title\": \"Subject\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"time\": {"]
+#[doc = "      \"title\": \"Time\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"avp.managed_ref_resolve_failed\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp.managed_ref_resolve_failed\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedRefResolveFailedEvent {
+    #[serde(
+        rename = "avp.correlation_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_correlation_id: ::std::option::Option<ManagedRefResolveFailedEventAvpCorrelationId>,
+    pub data: ManagedRefResolveFailedData,
+    #[serde(default = "defaults::managed_ref_resolve_failed_event_datacontenttype")]
+    pub datacontenttype: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub dataschema: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: ::std::option::Option<Id>,
+    #[serde(default = "defaults::managed_ref_resolve_failed_event_source")]
+    pub source: ::std::string::String,
+    #[serde(default = "defaults::managed_ref_resolve_failed_event_specversion")]
+    pub specversion: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub subject: ::std::option::Option<ManagedRefResolveFailedEventSubject>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub time: ::std::option::Option<::std::string::String>,
+    #[serde(
+        rename = "type",
+        default = "defaults::managed_ref_resolve_failed_event_type"
+    )]
+    pub type_: ::std::string::String,
+}
+#[doc = "`ManagedRefResolveFailedEventAvpCorrelationId`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct ManagedRefResolveFailedEventAvpCorrelationId(::std::string::String);
+impl ::std::ops::Deref for ManagedRefResolveFailedEventAvpCorrelationId {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<ManagedRefResolveFailedEventAvpCorrelationId> for ::std::string::String {
+    fn from(value: ManagedRefResolveFailedEventAvpCorrelationId) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for ManagedRefResolveFailedEventAvpCorrelationId {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for ManagedRefResolveFailedEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String>
+    for ManagedRefResolveFailedEventAvpCorrelationId
+{
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String>
+    for ManagedRefResolveFailedEventAvpCorrelationId
+{
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ManagedRefResolveFailedEventAvpCorrelationId {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`ManagedRefResolveFailedEventSubject`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct ManagedRefResolveFailedEventSubject(::std::string::String);
+impl ::std::ops::Deref for ManagedRefResolveFailedEventSubject {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<ManagedRefResolveFailedEventSubject> for ::std::string::String {
+    fn from(value: ManagedRefResolveFailedEventSubject) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for ManagedRefResolveFailedEventSubject {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for ManagedRefResolveFailedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for ManagedRefResolveFailedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ManagedRefResolveFailedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ManagedRefResolveFailedEventSubject {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "Audit event emitted when the agent successfully resolves one\nCommission-declared managed-asset ref via the AVP resolver protocol.\n\nFires once per `Commission.{mcp_servers,skills,subagents}[]` entry the\nagent dereferences. For mcp_servers and skills the resolution is\nstartup-only; for subagents this fires for the metadata-resolve at\nstartup (the on-demand spawn at runtime is recorded on\n`subagent_invoked` instead). The opaque ref material is NOT re-recorded\nhere — `run_requested.data[\"avp.commission\"]` already has it. This\nevent records only that the round-trip happened."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ManagedRefResolvedData\","]
+#[doc = "  \"description\": \"Audit event emitted when the agent successfully resolves one\\nCommission-declared managed-asset ref via the AVP resolver protocol.\\n\\nFires once per `Commission.{mcp_servers,skills,subagents}[]` entry the\\nagent dereferences. For mcp_servers and skills the resolution is\\nstartup-only; for subagents this fires for the metadata-resolve at\\nstartup (the on-demand spawn at runtime is recorded on\\n`subagent_invoked` instead). The opaque ref material is NOT re-recorded\\nhere — `run_requested.data[\\\"avp.commission\\\"]` already has it. This\\nevent records only that the round-trip happened.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"avp.managed.id\","]
+#[doc = "    \"avp.managed.kind\","]
+#[doc = "    \"duration_ms\","]
+#[doc = "    \"parent_span_id\","]
+#[doc = "    \"span_id\","]
+#[doc = "    \"trace_id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.managed.id\": {"]
+#[doc = "      \"title\": \"Avp.Managed.Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"avp.managed.kind\": {"]
+#[doc = "      \"title\": \"Avp.Managed.Kind\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"enum\": ["]
+#[doc = "        \"mcp_server\","]
+#[doc = "        \"skill\","]
+#[doc = "        \"subagent\""]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"duration_ms\": {"]
+#[doc = "      \"title\": \"Duration Ms\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"parent_span_id\": {"]
+#[doc = "      \"title\": \"Parent Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"span_id\": {"]
+#[doc = "      \"title\": \"Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"trace_id\": {"]
+#[doc = "      \"title\": \"Trace Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 32,"]
+#[doc = "      \"minLength\": 32,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ManagedRefResolvedData {
+    #[serde(rename = "avp.managed.id")]
+    pub avp_managed_id: AvpManagedId,
+    #[serde(rename = "avp.managed.kind")]
+    pub avp_managed_kind: AvpManagedKind,
+    pub duration_ms: u64,
+    pub parent_span_id: ParentSpanId,
+    pub span_id: SpanId,
+    pub trace_id: TraceId,
+}
+#[doc = "`ManagedRefResolvedEvent`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ManagedRefResolvedEvent\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"data\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.correlation_id\": {"]
+#[doc = "      \"title\": \"Avp.Correlation Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"data\": {"]
+#[doc = "      \"$ref\": \"#/$defs/ManagedRefResolvedData\""]
+#[doc = "    },"]
+#[doc = "    \"datacontenttype\": {"]
+#[doc = "      \"title\": \"Datacontenttype\","]
+#[doc = "      \"default\": \"application/json\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"dataschema\": {"]
+#[doc = "      \"title\": \"Dataschema\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"default\": \"avp://agent\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp://agent\""]
+#[doc = "    },"]
+#[doc = "    \"specversion\": {"]
+#[doc = "      \"title\": \"Specversion\","]
+#[doc = "      \"default\": \"1.0\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"1.0\""]
+#[doc = "    },"]
+#[doc = "    \"subject\": {"]
+#[doc = "      \"title\": \"Subject\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"time\": {"]
+#[doc = "      \"title\": \"Time\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"avp.managed_ref_resolved\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp.managed_ref_resolved\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedRefResolvedEvent {
+    #[serde(
+        rename = "avp.correlation_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_correlation_id: ::std::option::Option<ManagedRefResolvedEventAvpCorrelationId>,
+    pub data: ManagedRefResolvedData,
+    #[serde(default = "defaults::managed_ref_resolved_event_datacontenttype")]
+    pub datacontenttype: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub dataschema: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: ::std::option::Option<Id>,
+    #[serde(default = "defaults::managed_ref_resolved_event_source")]
+    pub source: ::std::string::String,
+    #[serde(default = "defaults::managed_ref_resolved_event_specversion")]
+    pub specversion: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub subject: ::std::option::Option<ManagedRefResolvedEventSubject>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub time: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type", default = "defaults::managed_ref_resolved_event_type")]
+    pub type_: ::std::string::String,
+}
+#[doc = "`ManagedRefResolvedEventAvpCorrelationId`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct ManagedRefResolvedEventAvpCorrelationId(::std::string::String);
+impl ::std::ops::Deref for ManagedRefResolvedEventAvpCorrelationId {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<ManagedRefResolvedEventAvpCorrelationId> for ::std::string::String {
+    fn from(value: ManagedRefResolvedEventAvpCorrelationId) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for ManagedRefResolvedEventAvpCorrelationId {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for ManagedRefResolvedEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for ManagedRefResolvedEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ManagedRefResolvedEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ManagedRefResolvedEventAvpCorrelationId {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`ManagedRefResolvedEventSubject`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct ManagedRefResolvedEventSubject(::std::string::String);
+impl ::std::ops::Deref for ManagedRefResolvedEventSubject {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<ManagedRefResolvedEventSubject> for ::std::string::String {
+    fn from(value: ManagedRefResolvedEventSubject) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for ManagedRefResolvedEventSubject {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for ManagedRefResolvedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for ManagedRefResolvedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for ManagedRefResolvedEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ManagedRefResolvedEventSubject {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
     where
         D: ::serde::Deserializer<'de>,
@@ -7278,14 +8206,14 @@ impl<'de> ::serde::Deserialize<'de> for SubagentFailedEventSubject {
             })
     }
 }
-#[doc = "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname."]
+#[doc = "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname.\n\n`avp.subagent.run_id` is set when the subagent is supervisor-managed —\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\n`run_id` of the subagent's separate, independently-trajectoried run.\nConsumers correlate the parent and child trajectories via this field.\nAbsent (or null) when the subagent runs in-process (the parent's loop\nis the same process as the subagent's loop)."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SubagentInvokedData\","]
-#[doc = "  \"description\": \"Parent agent delegates to a declared subagent.\\n\\nThe event's `span_id` IS the subagent's frame span. Events emitted by\\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\\nthrough descendants of it), so the trajectory reconstructs as a nested\\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\\nname.\","]
+#[doc = "  \"description\": \"Parent agent delegates to a declared subagent.\\n\\nThe event's `span_id` IS the subagent's frame span. Events emitted by\\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\\nthrough descendants of it), so the trajectory reconstructs as a nested\\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\\nname.\\n\\n`avp.subagent.run_id` is set when the subagent is supervisor-managed —\\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\\n`run_id` of the subagent's separate, independently-trajectoried run.\\nConsumers correlate the parent and child trajectories via this field.\\nAbsent (or null) when the subagent runs in-process (the parent's loop\\nis the same process as the subagent's loop).\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.subagent.input\","]
@@ -7306,6 +8234,18 @@ impl<'de> ::serde::Deserialize<'de> for SubagentFailedEventSubject {
 #[doc = "      \"title\": \"Avp.Subagent.Invocation Id\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"avp.subagent.run_id\": {"]
+#[doc = "      \"title\": \"Avp.Subagent.Run Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"gen_ai.agent.description\": {"]
 #[doc = "      \"title\": \"Gen Ai.Agent.Description\","]
@@ -7366,6 +8306,12 @@ pub struct SubagentInvokedData {
     #[serde(rename = "avp.subagent.invocation_id")]
     pub avp_subagent_invocation_id: AvpSubagentInvocationId,
     #[serde(
+        rename = "avp.subagent.run_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_subagent_run_id: ::std::option::Option<SubagentInvokedDataAvpSubagentRunId>,
+    #[serde(
         rename = "gen_ai.agent.description",
         default,
         skip_serializing_if = "::std::option::Option::is_none"
@@ -7382,6 +8328,74 @@ pub struct SubagentInvokedData {
     pub span_id: SpanId,
     pub step: u64,
     pub trace_id: TraceId,
+}
+#[doc = "`SubagentInvokedDataAvpSubagentRunId`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct SubagentInvokedDataAvpSubagentRunId(::std::string::String);
+impl ::std::ops::Deref for SubagentInvokedDataAvpSubagentRunId {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<SubagentInvokedDataAvpSubagentRunId> for ::std::string::String {
+    fn from(value: SubagentInvokedDataAvpSubagentRunId) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for SubagentInvokedDataAvpSubagentRunId {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for SubagentInvokedDataAvpSubagentRunId {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for SubagentInvokedDataAvpSubagentRunId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for SubagentInvokedDataAvpSubagentRunId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for SubagentInvokedDataAvpSubagentRunId {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
 }
 #[doc = "`SubagentInvokedEvent`"]
 #[doc = r""]
@@ -8344,8 +9358,7 @@ impl<'de> ::serde::Deserialize<'de> for TextEmittedEventSubject {
 #[doc = "          \"type\": \"string\","]
 #[doc = "          \"enum\": ["]
 #[doc = "            \"mcp_server\","]
-#[doc = "            \"local\","]
-#[doc = "            \"hosted\""]
+#[doc = "            \"local\""]
 #[doc = "          ]"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -8430,8 +9443,7 @@ pub struct ToolDecl {
 #[doc = "  \"type\": \"string\","]
 #[doc = "  \"enum\": ["]
 #[doc = "    \"mcp_server\","]
-#[doc = "    \"local\","]
-#[doc = "    \"hosted\""]
+#[doc = "    \"local\""]
 #[doc = "  ]"]
 #[doc = "}"]
 #[doc = r" ```"]
@@ -8453,15 +9465,12 @@ pub enum ToolDeclAvpDispatchTarget {
     McpServer,
     #[serde(rename = "local")]
     Local,
-    #[serde(rename = "hosted")]
-    Hosted,
 }
 impl ::std::fmt::Display for ToolDeclAvpDispatchTarget {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         match *self {
             Self::McpServer => f.write_str("mcp_server"),
             Self::Local => f.write_str("local"),
-            Self::Hosted => f.write_str("hosted"),
         }
     }
 }
@@ -8471,7 +9480,6 @@ impl ::std::str::FromStr for ToolDeclAvpDispatchTarget {
         match value {
             "mcp_server" => Ok(Self::McpServer),
             "local" => Ok(Self::Local),
-            "hosted" => Ok(Self::Hosted),
             _ => Err("invalid value".into()),
         }
     }
@@ -8872,20 +9880,8 @@ impl<'de> ::serde::Deserialize<'de> for ToolFailedEventSubject {
 #[doc = "          \"type\": \"string\","]
 #[doc = "          \"enum\": ["]
 #[doc = "            \"mcp_server\","]
-#[doc = "            \"local\","]
-#[doc = "            \"hosted\""]
+#[doc = "            \"local\""]
 #[doc = "          ]"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.subtype\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Subtype\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -8945,12 +9941,6 @@ pub struct ToolInvokedData {
         skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub avp_tool_dispatch_target: ::std::option::Option<ToolInvokedDataAvpToolDispatchTarget>,
-    #[serde(
-        rename = "avp.tool.subtype",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_tool_subtype: ::std::option::Option<::std::string::String>,
     #[serde(rename = "gen_ai.tool.call.arguments")]
     pub gen_ai_tool_call_arguments: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     #[serde(rename = "gen_ai.tool.call.id")]
@@ -8971,8 +9961,7 @@ pub struct ToolInvokedData {
 #[doc = "  \"type\": \"string\","]
 #[doc = "  \"enum\": ["]
 #[doc = "    \"mcp_server\","]
-#[doc = "    \"local\","]
-#[doc = "    \"hosted\""]
+#[doc = "    \"local\""]
 #[doc = "  ]"]
 #[doc = "}"]
 #[doc = r" ```"]
@@ -8994,15 +9983,12 @@ pub enum ToolInvokedDataAvpToolDispatchTarget {
     McpServer,
     #[serde(rename = "local")]
     Local,
-    #[serde(rename = "hosted")]
-    Hosted,
 }
 impl ::std::fmt::Display for ToolInvokedDataAvpToolDispatchTarget {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         match *self {
             Self::McpServer => f.write_str("mcp_server"),
             Self::Local => f.write_str("local"),
-            Self::Hosted => f.write_str("hosted"),
         }
     }
 }
@@ -9012,7 +9998,6 @@ impl ::std::str::FromStr for ToolInvokedDataAvpToolDispatchTarget {
         match value {
             "mcp_server" => Ok(Self::McpServer),
             "local" => Ok(Self::Local),
-            "hosted" => Ok(Self::Hosted),
             _ => Err("invalid value".into()),
         }
     }
@@ -9901,6 +10886,32 @@ pub mod defaults {
     }
     pub(super) fn error_occurred_event_type() -> ::std::string::String {
         "avp.error_occurred".to_string()
+    }
+    pub(super) fn managed_ref_resolve_failed_event_datacontenttype(
+    ) -> ::std::option::Option<::std::string::String> {
+        ::std::option::Option::Some("application/json".to_string())
+    }
+    pub(super) fn managed_ref_resolve_failed_event_source() -> ::std::string::String {
+        "avp://agent".to_string()
+    }
+    pub(super) fn managed_ref_resolve_failed_event_specversion() -> ::std::string::String {
+        "1.0".to_string()
+    }
+    pub(super) fn managed_ref_resolve_failed_event_type() -> ::std::string::String {
+        "avp.managed_ref_resolve_failed".to_string()
+    }
+    pub(super) fn managed_ref_resolved_event_datacontenttype(
+    ) -> ::std::option::Option<::std::string::String> {
+        ::std::option::Option::Some("application/json".to_string())
+    }
+    pub(super) fn managed_ref_resolved_event_source() -> ::std::string::String {
+        "avp://agent".to_string()
+    }
+    pub(super) fn managed_ref_resolved_event_specversion() -> ::std::string::String {
+        "1.0".to_string()
+    }
+    pub(super) fn managed_ref_resolved_event_type() -> ::std::string::String {
+        "avp.managed_ref_resolved".to_string()
     }
     pub(super) fn mcp_server_connected_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {

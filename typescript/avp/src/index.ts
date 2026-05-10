@@ -10,13 +10,17 @@
  *
  * Two modules, one per top-level message class:
  *
- * - `commission` — `Commission`, the supervisor's setup message (mcp_servers,
- *   allowed_tools, skills, subagents, prompts). Sent once at run start.
+ * - `commission` — `Commission`, the supervisor's setup message. Lists
+ *   supervisor-managed assets (mcp_servers, skills, subagents) as opaque
+ *   refs the agent dereferences via the AVP resolver protocol at startup.
+ *   Sent once at run start.
  * - `event` — agent-emitted events. The `AVPV01Event` discriminated union
  *   is what your code matches on when consuming a trajectory.
  *
- * v0.1 has no supervisor → agent channel. The supervisor pipes `Commission` in
- * once and reads the NDJSON event stream out; nothing else flows back.
+ * v0.1 has no supervisor → agent push channel. The supervisor pipes
+ * `Commission` in once and reads the NDJSON event stream out. The agent
+ * initiates an `avp.resolve` JSON-RPC call to a supervisor-stood-up
+ * resolver service to dereference each managed ref; agent-driven, no push.
  *
  * ## Regenerating
  *

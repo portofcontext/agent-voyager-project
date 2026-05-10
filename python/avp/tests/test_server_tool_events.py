@@ -42,9 +42,7 @@ def _converged_with_server_calls(server_tool_calls: list[ServerToolCall]) -> Mod
 
 
 def _agent(model: ScriptedModel) -> AVPAgent:
-    commission = Commission(
-        schema_version="0.1", run_id="server-tool", model="test/mock", exposed=["*"]
-    )
+    commission = Commission(schema_version="0.1", run_id="server-tool", model="test/mock")
     return AVPAgent(
         commission=commission,
         model=model,

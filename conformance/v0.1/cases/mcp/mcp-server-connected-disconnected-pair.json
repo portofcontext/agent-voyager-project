@@ -1,11 +1,10 @@
 {
   "id": "mcp-server-connected-disconnected-pair",
-  "title": "Each Commission.mcp_servers entry MUST emit a connected event after agent_started and a disconnected event before agent_stopped",
-  "description": "When Commission.mcp_servers declares one or more servers, the agent MUST emit one avp.mcp_server_connected event per server immediately after agent_started (before any model turns), and one avp.mcp_server_disconnected event per server immediately before agent_stopped. Both events carry avp.mcp.server_id matching the Commission entry's id, plus the protocol version. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run \u2014 not just which were declared.",
+  "title": "Each Commission.mcp_servers entry MUST emit a connected event after resolution and a disconnected event before agent_stopped",
+  "description": "When Commission.mcp_servers declares one or more managed servers, the agent MUST resolve each ref via avp.resolve at startup, emit managed_ref_resolved per ref, then emit avp.mcp_server_connected per server before any model turns runs, and avp.mcp_server_disconnected per server before agent_stopped. Each event carries avp.mcp.server_id matching the Commission entry's id. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#6-mcp-integration",
-    "spec/v0.1/avp.schema.json#/$defs/McpServerConnectedEvent",
-    "spec/v0.1/avp.schema.json#/$defs/McpServerDisconnectedEvent"
+    "spec/v0.1/SPEC.md#7-tool-dispatch-via-mcp",
+    "spec/v0.1/SPEC.md#6-the-resolver-protocol"
   ],
   "applies_to": [
     "agent"
@@ -17,18 +16,37 @@
     "mcp_servers": [
       {
         "id": "github",
-        "transport": "http",
-        "url": "https://example.com/mcp/github"
+        "ref": {
+          "vault": "test",
+          "key": "gh"
+        }
       },
       {
         "id": "weather",
-        "transport": "http",
-        "url": "https://example.com/mcp/weather"
+        "ref": "weather-mcp-v1"
       }
-    ],
-    "exposed": [
-      "*"
     ]
+  },
+  "agent_manifest": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1"
+  },
+  "scripted_resolver": {
+    "resolutions": {
+      "mcp_server:github": {
+        "result": {
+          "transport": "http",
+          "url": "https://example.com/mcp/github"
+        }
+      },
+      "mcp_server:weather": {
+        "result": {
+          "transport": "http",
+          "url": "https://example.com/mcp/weather"
+        }
+      }
+    }
   },
   "scripted_model": [
     {
@@ -47,6 +65,24 @@
         "match": {
           "type": "avp.agent_started",
           "subject": "mcp-lifecycle"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.managed_ref_resolved",
+          "data": {
+            "avp.managed.kind": "mcp_server",
+            "avp.managed.id": "github"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.managed_ref_resolved",
+          "data": {
+            "avp.managed.kind": "mcp_server",
+            "avp.managed.id": "weather"
+          }
         }
       },
       {
@@ -88,7 +124,10 @@
       },
       {
         "match": {
-          "type": "avp.agent_stopped"
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
         }
       }
     ]

@@ -59,11 +59,11 @@ from avp.types import (
     ModelTurnStartedData,
     ModelTurnStartedEvent,
     RunStateSnapshot,
-    Subagent,
     SubagentFailedData,
     SubagentFailedEvent,
     SubagentInvokedData,
     SubagentInvokedEvent,
+    SubagentRef,
     SubagentReturnedData,
     SubagentReturnedEvent,
     TextEmittedData,
@@ -297,7 +297,7 @@ class SubagentScope:
         self,
         tracer: AVPTracer,
         *,
-        subagent: Subagent,
+        subagent: SubagentRef,
         invocation_id: str,
         frame_span_id: str,
         parent_frame_span_id: str,
@@ -411,8 +411,8 @@ class AVPTracer:
         self._cv_token: Token[AVPTracer | None] | None = None
         # For subagents declared in Commission — we look these up by name when
         # the caller uses tracer.subagent(name=...).
-        self._declared_subagents: dict[str, Subagent] = {
-            sa.name: sa for sa in (commission.subagents or [])
+        self._declared_subagents: dict[str, SubagentRef] = {
+            sa.id: sa for sa in (commission.subagents or [])
         }
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
@@ -516,14 +516,11 @@ class AVPTracer:
         tools_meta = None
         subagents_meta = None
         if commission.subagents:
-            subagents_meta = [
-                {
-                    "name": sa.name,
-                    "description": sa.description,
-                    **({"inputSchema": sa.inputSchema} if sa.inputSchema is not None else {}),
-                }
-                for sa in commission.subagents
-            ]
+            # v0.1 refs-only Commission: descriptions and inputSchemas come
+            # from resolving each ref via `avp.resolve` at startup. Phase 2
+            # will plumb the resolver into the tracer and populate richer
+            # metadata here. For now, surface ids only.
+            subagents_meta = [{"name": sa.id} for sa in commission.subagents]
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
             "span_id": self._agent_span_id,
@@ -531,10 +528,10 @@ class AVPTracer:
             "prompt": commission.prompt,
             "system_prompt": commission.system_prompt,
             "tools": tools_meta,
-            "skills": [
-                {"name": s.name, "avp.source": s.avp_source} for s in (commission.skills or [])
-            ]
-            or None,
+            # v0.1 refs-only Commission: skills surface here as ids only
+            # until Phase 2 wires the resolver to fill in descriptions /
+            # avp.source from resolved SKILL.md content.
+            "skills": [{"name": s.id} for s in (commission.skills or [])] or None,
             "subagents": subagents_meta,
         }
         if commission.model:
@@ -874,12 +871,10 @@ class AVPTracer:
 
         invoked_data: dict[str, Any] = {
             "step": self._step,
-            "gen_ai.agent.name": sa.name,
+            "gen_ai.agent.name": sa.id,
             "avp.subagent.invocation_id": invocation_id,
             "avp.subagent.input": invocation_input,
         }
-        if sa.description:
-            invoked_data["gen_ai.agent.description"] = sa.description
         self._emit(
             SubagentInvokedEvent(
                 subject=self.commission.run_id,
@@ -912,7 +907,7 @@ class AVPTracer:
         if scope._error is not None:
             failed_data: dict[str, Any] = {
                 "step": scope._step,
-                "gen_ai.agent.name": scope._subagent.name,
+                "gen_ai.agent.name": scope._subagent.id,
                 "avp.subagent.invocation_id": scope._invocation_id,
                 "duration_ms": duration_ms,
                 "avp.subagent.error": scope._error,
@@ -932,7 +927,7 @@ class AVPTracer:
 
         returned_data: dict[str, Any] = {
             "step": scope._step,
-            "gen_ai.agent.name": scope._subagent.name,
+            "gen_ai.agent.name": scope._subagent.id,
             "avp.subagent.invocation_id": scope._invocation_id,
             "duration_ms": duration_ms,
             "avp.subagent.result.text": scope._result_text or "",

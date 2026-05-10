@@ -20,23 +20,25 @@ def build_commission(
 ) -> Commission:
     """Compose a Commission from a profile plus task-specific overrides.
 
-    The profile contributes the *shape of the environment* (exposed).
-    The caller fills in the *task* (prompt, run_id, model).
+    The profile contributes the *shape of the environment*
+    (`enabled_builtin_tools`). The caller fills in the *task*
+    (prompt, run_id, model).
 
-    Supervisor-side tools (when wanted) are exposed via Commission.mcp_servers
-    — supervisors stand up an MCP server (stdio or HTTP) and declare it.
-    The builder doesn't currently expose mcp_servers configuration; pass
-    it into a Commission(...) directly, or extend this builder.
+    Supervisor-managed assets (`mcp_servers`, `skills`, `subagents` refs)
+    are not configured by this builder; pass them into Commission(...)
+    directly, or extend this builder.
     """
     p = profile if isinstance(profile, Profile) else get_profile(profile)
 
-    return Commission(
-        schema_version="0.1",
-        run_id=run_id,
-        prompt=prompt,
-        system_prompt=system_prompt or p.system_prompt,
-        model=model,
-        exposed=list(p.exposed) if p.exposed else ["*"],
-        tags=tags,
-        meta=meta,
-    )
+    kwargs: dict[str, Any] = {
+        "schema_version": "0.1",
+        "run_id": run_id,
+        "prompt": prompt,
+        "system_prompt": system_prompt or p.system_prompt,
+        "model": model,
+        "tags": tags,
+        "meta": meta,
+    }
+    if p.enabled_builtin_tools is not None:
+        kwargs["enabled_builtin_tools"] = list(p.enabled_builtin_tools)
+    return Commission(**kwargs)

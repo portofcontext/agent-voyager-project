@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avp.dev/conformance/v0.1/test-case.schema.json",
   "title": "AVP Conformance Test Case (v0.1)",
-  "description": "Language-agnostic test case format. Each SDK implements a thin harness (see HARNESS.md) that reads cases of this shape, runs them against its implementation, and asserts. Cases describe (a) the Commission the agent receives, (b) a deterministic script of model responses, tool outputs, and supervisor messages, and (c) expectations over the emitted event trajectory. This is the operational answer to spec drift: any behavior the spec mandates should be encoded as a case here, and every SDK MUST pass.",
+  "description": "Language-agnostic test case format. Each SDK implements a thin harness (see HARNESS.md) that reads cases of this shape, runs them against its implementation, and asserts. Cases describe (a) the Commission the agent receives, (b) a deterministic script of model responses, tool outputs, and resolver outcomes, and (c) expectations over the emitted event trajectory.",
   "type": "object",
   "required": ["id", "title", "applies_to", "commission", "expectations"],
   "additionalProperties": false,
@@ -29,7 +29,7 @@
       "type": "array",
       "items": { "enum": ["agent", "supervisor"] },
       "minItems": 1,
-      "description": "Which side(s) of the seam this case validates. Most cases test agent behavior given a scripted supervisor; supervisor cases assert the supervisor produces conforming messages given a scripted agent."
+      "description": "Which side(s) of the seam this case validates. Most cases test agent behavior given a scripted resolver; supervisor cases assert the supervisor produces conforming Commissions."
     },
     "commission": {
       "$ref": "https://avp.dev/schema/v0.1/commission.schema.json"
@@ -42,17 +42,29 @@
     "scripted_tools": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/ToolResponse" },
-      "description": "Map from tool name to the response the harness returns when that tool is called. Tools not listed here are assumed to be supervisor-executed (declared in commission.tools) and routed via tool_exec_requested."
+      "description": "Map from tool name to the response the harness returns when that tool is called locally. Tools not listed here either fall through to a Commission-managed MCP server (when one is declared) or surface as tool_failed (unknown tool)."
     },
-    "scripted_supervisor": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/SupervisorScriptStep" },
-      "description": "Triggered actions for the harness's mock supervisor. When an event matching 'on' is observed, the harness sends 'send' (or, if 'skip' is true, deliberately does nothing — used to test timeouts)."
+    "omit_resolver": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the harness skips wiring a ResolverDriver even if the Commission carries managed assets. Used to exercise the `resolver_not_configured` startup gate (SPEC.md §6.1)."
     },
-    "scripted_subagents": {
+    "scripted_resolver": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/SubagentOutcomeSpec" },
-      "description": "Map from subagent name (matching Commission.subagents[].name) to a canned outcome the harness's mock SubagentDriver will return. When set, the agent is constructed with a ScriptedSubagentDriver; when omitted and Commission.subagents is non-empty, the agent runs without a driver and any subagent invocation surfaces as subagent_failed."
+      "additionalProperties": false,
+      "description": "Configures the in-process ResolverDriver the harness wires when the Commission carries any managed assets. Cases that omit this with a non-empty Commission asset list exercise the managed_ref_resolve_failed path (every lookup misses).",
+      "properties": {
+        "resolutions": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ResolveOutcome" },
+          "description": "Maps lookup key → outcome. Key may be '<kind>:<id>' (e.g. 'mcp_server:github') or just '<id>' (matched across kinds for short cases). Matching value carries either {result: ...} for success or {error, error_code?} for the resolve-failed path."
+        },
+        "subagent_spawns": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/SubagentSpawnSpec" },
+          "description": "Maps Commission.subagents[].id to a canned avp.spawn_subagent outcome. Only consulted when the model invokes a subagent at runtime."
+        }
+      }
     },
     "agent_manifest": {
       "type": "object",
@@ -71,7 +83,7 @@
           "input_schema": { "type": "object", "additionalProperties": true }
         }
       },
-      "description": "Optional. Declares the agent's built-in tool catalog so cases can exercise SPEC.md §13.1.2 (agent_started.tools reflects effective surface = Commission.tools ∪ agent_builtin_tools, filtered by allowed_tools). Each entry is a tool descriptor the agent exposes natively (e.g., bash, read_file). Cases that don't set this exercise the Commission.tools-only path."
+      "description": "Optional. Declares the agent's built-in tool catalog so cases can exercise the agent-internal contribution to agent_started.tools[]. Each entry is a tool descriptor the agent exposes natively (e.g., bash, read_file)."
     },
     "expectations": {
       "type": "object",
@@ -178,40 +190,40 @@
         }
       ]
     },
-    "SupervisorScriptStep": {
-      "type": "object",
-      "required": ["on"],
-      "additionalProperties": false,
-      "properties": {
-        "on": { "$ref": "#/$defs/EventMatcher" },
-        "delay_ms": { "type": "integer", "minimum": 0, "default": 0 },
-        "send": { "$ref": "https://avp.dev/schema/v0.1/supervisor-message.schema.json" },
-        "skip": {
-          "type": "boolean",
-          "default": false,
-          "description": "When true, the harness deliberately does NOT respond — used to assert timeout behavior."
+    "ResolveOutcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["result"],
+          "additionalProperties": false,
+          "properties": {
+            "result": {
+              "description": "Material the resolver returns to the agent. Shape varies by kind (per SPEC.md §6.2).",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["error"],
+          "additionalProperties": false,
+          "properties": {
+            "error": { "type": "string", "minLength": 1 },
+            "error_code": { "type": "string" }
+          }
         }
-      },
-      "anyOf": [
-        { "required": ["send"] },
-        { "required": ["skip"] }
       ]
     },
-    "EventMatcher": {
-      "type": "object",
-      "required": ["match"],
-      "additionalProperties": false,
-      "description": "Partial-match pattern. Every key/value in 'match' must appear in the event with that exact value (deep-equal for nested objects). Other keys MAY be present.",
-      "properties": {
-        "match": { "type": "object", "additionalProperties": true },
-        "label": { "type": "string", "description": "Human-readable name for assertion failure messages." }
-      }
-    },
-    "SubagentOutcomeSpec": {
+    "SubagentSpawnSpec": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Canned outcome for one subagent invocation, parallel to agent.drivers.SubagentOutcome. The harness emits subagent_invoked, runs this canned outcome, then emits subagent_returned (or subagent_failed if `error` is set).",
+      "description": "Canned outcome for one avp.spawn_subagent call, mirroring agent.drivers.SubagentSpawnOutcome. The harness emits subagent_invoked carrying child_run_id, then emits subagent_returned (or subagent_failed when `error` is set).",
       "properties": {
+        "child_run_id": {
+          "type": "string",
+          "description": "Child run_id stamped on subagent_invoked.data['avp.subagent.run_id']. When omitted, the harness synthesizes a deterministic id."
+        },
         "text": {
           "type": "string",
           "description": "Result text the subagent returned to the parent (becomes the parent's tool_result-equivalent)."
@@ -249,6 +261,16 @@
           "type": "string",
           "description": "Optional stable error code accompanying `error`."
         }
+      }
+    },
+    "EventMatcher": {
+      "type": "object",
+      "required": ["match"],
+      "additionalProperties": false,
+      "description": "Partial-match pattern. Every key/value in 'match' must appear in the event with that exact value (deep-equal for nested objects). Other keys MAY be present.",
+      "properties": {
+        "match": { "type": "object", "additionalProperties": true },
+        "label": { "type": "string", "description": "Human-readable name for assertion failure messages." }
       }
     },
     "FinalState": {

@@ -1,19 +1,25 @@
-"""MCP server lifecycle: when Commission.mcp_servers is non-empty, the agent MUST
-emit one mcp_server_connected per server right after agent_started/skills_loaded
-and one mcp_server_disconnected per server right before agent_stopped.
+"""MCP server lifecycle: when Commission.mcp_servers is non-empty, the agent
+MUST resolve each ref via avp.resolve at startup, emit one
+mcp_server_connected per server before the first model turn, and one
+mcp_server_disconnected per server before agent_stopped.
 
-This pins the WIRE FORMAT for MCP integration. The reference agent ships v0.1
-with stub event emission (no real `initialize` / `tools/list` over the
-transport); the live transport is a separable concern landing in a follow-up
-once the optional `mcp` Python SDK or HTTP client is plumbed in.
+The reference agent ships v0.1 with stub event emission (no real `initialize`
+/ `tools/list` over the transport); the live transport is a separable concern
+landing in a follow-up once the optional `mcp` Python SDK or HTTP client is
+plumbed in.
 """
 
 from __future__ import annotations
 
-from avp import Commission, McpServer
+from avp import AgentManifest, Commission, McpServerRef
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse
-from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
+from avp.agent.mock import (
+    ScriptedModel,
+    ScriptedResolver,
+    ScriptedSupervisor,
+    ScriptedTools,
+)
 from avp.types import McpServerConnectedEvent, McpServerDisconnectedEvent
 
 
@@ -32,8 +38,16 @@ def _trivial_model() -> ScriptedModel:
     )
 
 
+def _managed_manifest() -> AgentManifest:
+    return AgentManifest(
+        agent_name="test-agent",
+        agent_version="0.0.0",
+        avp_spec_version="0.1",
+    )
+
+
 def test_no_mcp_servers_emits_no_lifecycle_events() -> None:
-    commission = Commission(schema_version="0.1", run_id="r-no-mcp", prompt="hi", exposed=["*"])
+    commission = Commission(schema_version="0.1", run_id="r-no-mcp", prompt="hi")
     agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
     agent.run()
     types = [ev.type for ev in agent.trajectory]
@@ -47,17 +61,30 @@ def test_mcp_servers_emit_connect_then_disconnect_in_order() -> None:
         run_id="r-mcp-pair",
         prompt="hi",
         mcp_servers=[
-            McpServer(id="github", transport="http", url="https://example.com/mcp"),
-            McpServer(id="fs", transport="stdio", command=["npx", "mcp-server-fs"]),
+            McpServerRef(id="github", ref={"vault": "test", "key": "gh"}),
+            McpServerRef(id="fs", ref="vault://fs-mcp"),
         ],
-        exposed=["*"],
     )
-    agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
+    resolver = ScriptedResolver(
+        resolutions={
+            "mcp_server:github": {"result": {"transport": "http", "url": "https://x/gh"}},
+            "mcp_server:fs": {"result": {"transport": "stdio", "command": ["fs"]}},
+        }
+    )
+    agent = AVPAgent(
+        commission,
+        _trivial_model(),
+        ScriptedTools(),
+        ScriptedSupervisor(),
+        resolver=resolver,
+        manifest=_managed_manifest(),
+    )
     agent.run()
 
     types = [ev.type for ev in agent.trajectory]
 
-    # Connect events fire after agent_started, before model_turn_started.
+    # Connect events fire after agent_started + each ref's managed_ref_resolved,
+    # before model_turn_started.
     started_idx = types.index("avp.agent_started")
     first_turn_idx = types.index("avp.model_turn_started")
     connect_idxs = [i for i, t in enumerate(types) if t == "avp.mcp_server_connected"]
@@ -84,28 +111,31 @@ def test_mcp_servers_emit_connect_then_disconnect_in_order() -> None:
         assert ev.data.avp_mcp_disconnect_reason == "clean"
 
 
-def test_mcp_disconnect_fires_even_when_run_errors_at_validation() -> None:
-    """If the agent errors during validation (e.g. allowed_tools cross-check
-    fails), it still MUST disconnect any MCP servers it announced. The
-    lifecycle is symmetric: every connected event has a matching disconnected."""
-    from avp import Subagent
-
+def test_managed_ref_resolve_failed_short_circuits_before_mcp_connect() -> None:
+    """When a Commission.mcp_servers ref fails to resolve, the agent emits
+    managed_ref_resolve_failed and stops before any mcp_server_connected
+    fires — the resolver gate runs ahead of the connection attempt."""
     commission = Commission(
         schema_version="0.1",
-        run_id="r-mcp-err",
+        run_id="r-mcp-resolve-fail",
         prompt="hi",
-        # Subagent declared but missing from allowed_tools — the agent
-        # flags this at startup and stops with reason=error.
-        subagents=[Subagent(name="missing", description="x", exposed=["*"])],
-        exposed=["other"],
-        mcp_servers=[McpServer(id="github", transport="http", url="https://x/mcp")],
+        mcp_servers=[McpServerRef(id="github", ref="bad-ref")],
     )
-    agent = AVPAgent(commission, _trivial_model(), ScriptedTools(), ScriptedSupervisor())
+    resolver = ScriptedResolver(
+        resolutions={"mcp_server:github": {"error": "not found", "error_code": "not_found"}}
+    )
+    agent = AVPAgent(
+        commission,
+        _trivial_model(),
+        ScriptedTools(),
+        ScriptedSupervisor(),
+        resolver=resolver,
+        manifest=_managed_manifest(),
+    )
     agent.run()
 
     types = [ev.type for ev in agent.trajectory]
-    assert "avp.mcp_server_connected" in types
-    assert "avp.mcp_server_disconnected" in types
-    # Ordering: connect → error → disconnect → agent_stopped
-    assert types.index("avp.mcp_server_connected") < types.index("avp.error_occurred")
-    assert types.index("avp.mcp_server_disconnected") < types.index("avp.agent_stopped")
+    assert "avp.managed_ref_resolve_failed" in types
+    assert "avp.mcp_server_connected" not in types
+    assert "avp.model_turn_started" not in types
+    assert types[-1] == "avp.agent_stopped"

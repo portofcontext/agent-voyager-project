@@ -25,9 +25,9 @@ from avp import (
     Commission,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
-    Subagent,
     SubagentFailedEvent,
     SubagentInvokedEvent,
+    SubagentRef,
     SubagentReturnedEvent,
     ToolFailedEvent,
     ToolInvokedEvent,
@@ -51,7 +51,7 @@ def _basic_config(**overrides) -> Commission:
         "prompt": "do the thing",
     }
     base.update(overrides)
-    return Commission(**base, exposed=["*"])
+    return Commission(**base)
 
 
 # ── Lifecycle ────────────────────────────────────────────────────────────────
@@ -166,17 +166,7 @@ def test_tool_call_reject_marks_rejected_on_returned() -> None:
 
 
 def _cfg_with_subagent() -> Commission:
-    return _basic_config(
-        subagents=[
-            Subagent(
-                name="summarizer",
-                description="Compresses a passage to a bullet.",
-                system_prompt="You are a summarizer.",
-                model="claude-haiku-4-5-20251001",
-                exposed=["*"],
-            )
-        ]
-    )
+    return _basic_config(subagents=[SubagentRef(id="summarizer", ref="sk_summarizer_v1")])
 
 
 def test_subagent_scope_emits_invoked_and_returned_with_paired_span() -> None:
@@ -194,7 +184,8 @@ def test_subagent_scope_emits_invoked_and_returned_with_paired_span() -> None:
     ret = _by_type(out, SubagentReturnedEvent)[0]
     assert inv.data.span_id == ret.data.span_id, "frame span paired"
     assert inv.data.gen_ai_agent_name == "summarizer"
-    assert inv.data.gen_ai_agent_description == "Compresses a passage to a bullet."
+    # Description / inputSchema land on resolved metadata, not on the bare
+    # SubagentRef in Commission. The tracer emits id-based name only in v0.1.
     assert inv.data.gen_ai_operation_name == "invoke_agent"
     assert ret.data.avp_subagent_result_text == "bullet"
 

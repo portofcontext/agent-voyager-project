@@ -1,9 +1,10 @@
 {
   "id": "subagent-invoked-and-returned-pair-frame-span",
-  "title": "Parent agent's subagent invocation emits subagent_invoked \u2192 subagent_returned pair sharing one frame span_id",
-  "description": "Subagents are a Commission primitive alongside tools and skills. When the parent agent calls a declared subagent by name, the agent MUST route the call through the subagent lifecycle (NOT the tool lifecycle): emit subagent_invoked at frame open, run the subagent, emit subagent_returned at frame close. The two events MUST share span_id so consumers can pair them and reconstruct the nested span tree.",
+  "title": "Managed subagent invocation emits subagent_invoked \u2192 subagent_returned pair sharing one frame span_id, with avp.subagent.run_id set",
+  "description": "Subagents are a Commission primitive alongside mcp_servers and skills. When the parent agent calls a declared subagent by id, the agent MUST route through the subagent lifecycle (not the tool lifecycle): emit subagent_invoked at frame open, call avp.spawn_subagent against the resolver, emit subagent_returned at frame close. The two events share span_id; subagent_invoked carries avp.subagent.run_id (the child's run identifier) so consumers can correlate parent and child trajectories.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#subagents"
+    "spec/v0.1/SPEC.md#9-5-subagents",
+    "spec/v0.1/SPEC.md#6-3-the-avp-spawn-subagent-method"
   ],
   "applies_to": [
     "agent"
@@ -14,15 +15,48 @@
     "model": "test/mock",
     "subagents": [
       {
-        "name": "researcher",
-        "description": "Looks things up.",
-        "system_prompt": "You are a researcher.",
-        "model": "test/mock"
+        "id": "researcher",
+        "ref": "sk_subagent_researcher_v1"
       }
-    ],
-    "exposed": [
-      "*"
     ]
+  },
+  "agent_manifest": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1"
+  },
+  "scripted_resolver": {
+    "resolutions": {
+      "subagent:researcher": {
+        "result": {
+          "name": "researcher",
+          "description": "Looks things up.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "subagent_spawns": {
+      "researcher": {
+        "child_run_id": "sub-subagent-pair-researcher-1",
+        "text": "Found 3 handlers in src/auth/.",
+        "reason": "converged",
+        "duration_ms": 50,
+        "usage": {
+          "total_cost_usd": 0.0008,
+          "total_tokens": 75,
+          "total_turns": 1,
+          "tokens_input_total": 50,
+          "tokens_output_total": 25
+        }
+      }
+    }
   },
   "scripted_model": [
     {
@@ -50,23 +84,18 @@
       "converged": true
     }
   ],
-  "scripted_subagents": {
-    "researcher": {
-      "text": "Found 3 handlers in src/auth/.",
-      "reason": "converged",
-      "duration_ms": 50,
-      "usage": {
-        "total_cost_usd": 0.0008,
-        "total_tokens": 75,
-        "total_turns": 1,
-        "tokens_input_total": 50,
-        "tokens_output_total": 25
-      }
-    }
-  },
   "expectations": {
     "ordering": "in_order_subsequence",
     "events": [
+      {
+        "match": {
+          "type": "avp.managed_ref_resolved",
+          "data": {
+            "avp.managed.kind": "subagent",
+            "avp.managed.id": "researcher"
+          }
+        }
+      },
       {
         "match": {
           "type": "avp.subagent_invoked",
@@ -74,12 +103,13 @@
             "gen_ai.agent.name": "researcher",
             "gen_ai.agent.description": "Looks things up.",
             "gen_ai.operation.name": "invoke_agent",
+            "avp.subagent.run_id": "sub-subagent-pair-researcher-1",
             "avp.subagent.input": {
               "prompt": "find auth handlers"
             }
           }
         },
-        "label": "subagent_invoked names the declared subagent and carries the parent's input"
+        "label": "subagent_invoked carries the resolved metadata, parent's input, and the child's run_id"
       },
       {
         "match": {
@@ -90,7 +120,7 @@
             "avp.subagent.reason": "converged"
           }
         },
-        "label": "subagent_returned carries the result text and stop reason"
+        "label": "subagent_returned carries the result text and stop reason from the spawn outcome"
       },
       {
         "match": {
@@ -98,8 +128,7 @@
           "data": {
             "avp.reason": "converged"
           }
-        },
-        "label": "parent run converges after subagent returns"
+        }
       }
     ],
     "forbidden_events": [
@@ -110,7 +139,7 @@
             "gen_ai.tool.name": "researcher"
           }
         },
-        "label": "subagent invocation MUST NOT also surface as tool_invoked"
+        "label": "managed subagent invocation MUST NOT surface as tool_invoked"
       },
       {
         "match": {
@@ -119,7 +148,7 @@
             "gen_ai.tool.name": "researcher"
           }
         },
-        "label": "subagent invocation MUST NOT also surface as tool_returned"
+        "label": "managed subagent invocation MUST NOT surface as tool_returned"
       }
     ]
   }

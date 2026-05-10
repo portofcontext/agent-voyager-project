@@ -30,5 +30,7 @@ class ErrorCode(StrEnum):
     agent_crash = "agent_crash"
     accounting_reset = "accounting_reset"
     unsupported_model = "unsupported_model"
-    exposed_unresolved = "exposed_unresolved"
+    # Commission-managed-asset / resolver-protocol error codes (v0.1).
+    resolver_not_configured = "resolver_not_configured"
+    commission_collision = "commission_collision"
     unknown = "unknown"

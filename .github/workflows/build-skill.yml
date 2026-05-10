@@ -2,7 +2,7 @@ name: Build skill artifact
 
 # Re-package avp.skill whenever the skill bundle's contents change. Path filter
 # scopes this to files that actually end up inside the .skill — code-only changes
-# under python/runners/ or root README.md don't trigger a rebuild.
+# under python/agents/ or root README.md don't trigger a rebuild.
 
 on:
   push:

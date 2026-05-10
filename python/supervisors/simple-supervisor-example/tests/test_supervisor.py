@@ -36,17 +36,17 @@ from avp import (
 
 def test_build_commission_inherits_dev_loose_profile() -> None:
     commission = build_commission(run_id="r1", prompt="x", profile="dev-loose")
-    assert commission.exposed is not None
-    assert "bash" in commission.exposed
+    # dev-loose enables every built-in (None = no allowlist).
+    assert commission.enabled_builtin_tools is None
 
 
 def test_build_commission_inherits_read_only_profile() -> None:
     commission = build_commission(run_id="r1", prompt="x", profile="read-only")
-    assert commission.exposed == ["read_file"]
+    assert commission.enabled_builtin_tools == ["read_file"]
 
 
 def test_profiles_are_distinct() -> None:
-    assert DEV_LOOSE.exposed != READ_ONLY.exposed
+    assert DEV_LOOSE.enabled_builtin_tools != READ_ONLY.enabled_builtin_tools
 
 
 # ── Trajectory summarization ──────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def test_summarize_classifies_fact_classes() -> None:
         new_trace_id,
     )
 
-    Commission(schema_version="0.1", run_id="r-summary", model="m", exposed=["*"])
+    Commission(schema_version="0.1", run_id="r-summary", model="m")
     trace = new_trace_id()
     agent_span = new_span_id()
     turn_span = new_span_id()

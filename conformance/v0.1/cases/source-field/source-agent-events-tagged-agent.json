@@ -12,10 +12,7 @@
   "commission": {
     "schema_version": "0.1",
     "run_id": "source-agent-baseline",
-    "model": "test/mock",
-    "exposed": [
-      "*"
-    ]
+    "model": "test/mock"
   },
   "scripted_model": [
     {

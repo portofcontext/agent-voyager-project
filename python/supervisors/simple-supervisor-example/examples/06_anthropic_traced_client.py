@@ -38,7 +38,6 @@ def main() -> int:
             "Use the `add_two_numbers` tool to compute 17 + 25, then state "
             "the result and stop. Do not compute it yourself."
         ),
-        exposed=["add_two_numbers"],
     )
 
     # Local tool implementation. In a real agent this is your existing dispatch.

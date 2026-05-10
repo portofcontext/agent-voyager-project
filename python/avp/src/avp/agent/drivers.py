@@ -1,24 +1,26 @@
 """Pluggable driver protocols for the reference AVP agent (v0.1).
 
-Four drivers:
+Three drivers:
 
 - ModelDriver       — produces the next ModelResponse given conversation history.
-- ToolDriver        — executes locally-handled (non-RPC) tools.
-- SupervisorDriver  — handles tool_exec RPC interactions.
-- SubagentDriver    — executes declared subagent invocations (sub-loop).
+- ToolDriver        — executes locally-handled (built-in / agent-internal) tools.
+- ResolverDriver    — dereferences supervisor-managed Commission refs (mcp_server,
+                      skill, subagent) via the AVP resolver protocol; spawns
+                      managed subagents on demand.
+- SupervisorDriver  — sink for agent-emitted events (NDJSON to stdout in
+                      production; capture-into-list in tests). Not an RPC channel.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 if TYPE_CHECKING:
     from avp.enums import ErrorCode, StopReason
-    from avp.types import RunStateSnapshot, Subagent
+    from avp.types import ManagedKind, RunStateSnapshot
 
 # ── Model driver ──────────────────────────────────────────────────────────────
 
@@ -102,11 +104,6 @@ class ServerToolCall:
     duration_ms: int = 0
     dispatch_target: Literal["mcp_server", "local"] = "mcp_server"
     server_id: str | None = None
-    # `avp.tool.subtype` discriminator on the wire — `web_search`,
-    # `code_execution`, etc. for provider-hosted tools that aren't MCP.
-    # Lets consumers filter / count by hosted-tool kind without
-    # parsing the tool name.
-    subtype: str | None = None
 
 
 @dataclass
@@ -190,10 +187,10 @@ class ToolDriver(Protocol):
 class SupervisorDriver(Protocol):
     """Sink for agent-emitted events.
 
-    v0.1 has no agent→supervisor RPC channel. Supervisor-side tool dispatch
-    happens through MCP (Commission.mcp_servers); the agent doesn't talk to the
-    supervisor mid-run. The driver's only job is `observe()` — in production
-    that writes events to stdout (NDJSON); in tests it captures into a list.
+    The supervisor observes the trajectory but does NOT push messages to
+    the agent — v0.1 has no supervisor → agent push channel. The driver's
+    only job is `observe()`: in production it writes events to stdout
+    (NDJSON); in tests it captures into a list.
     """
 
     def observe(self, event: BaseModel) -> None:
@@ -201,23 +198,38 @@ class SupervisorDriver(Protocol):
         ...
 
 
-# ── Subagent driver ──────────────────────────────────────────────────────────
+# ── Resolver driver (AVP resolver protocol) ─────────────────────────────────
+
+
+class ResolveError(Exception):
+    """Raised by `ResolverDriver.resolve` when the resolver service rejects
+    the request, is unreachable, or returns malformed material. Carries
+    optional `code` (free-form string from the resolver / transport layer)
+    that lands on `avp.managed_ref_resolve_failed.data["avp.resolve.error.code"]`.
+    """
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
-class SubagentOutcome:
-    """Result of running one subagent invocation.
+class SubagentSpawnOutcome:
+    """Result of an `avp.spawn_subagent` call.
 
-    `text` is the model-visible result returned to the parent (always set —
-    becomes the parent's `tool_result`-equivalent). `structured` is optional;
-    populated if the subagent's `output_schema` validates a structured result.
-    `usage` is the subagent's own consumption rollup; the agent reflects it
-    in the parent's cumulative state on `subagent_returned.data.avp.subagent.usage`.
+    `child_run_id` is the supervisor-assigned `run_id` for the subagent's
+    child trajectory; the parent agent stamps it on
+    `subagent_invoked.data["avp.subagent.run_id"]` so consumers can join
+    parent and child trajectories.
 
-    `error` and `error_code`, when set, mean the subagent failed and the
-    agent SHOULD emit `subagent_failed` instead of `subagent_returned`.
+    The remaining fields are the inline summary the parent's loop hands
+    back to the model as the tool result. They mirror what was previously
+    `SubagentOutcome` so consumers (the model, the trajectory's
+    `subagent_returned` event) see the same shape regardless of whether
+    the subagent ran in-process or via the resolver.
     """
 
+    child_run_id: str
     text: str
     reason: StopReason
     duration_ms: int
@@ -227,30 +239,40 @@ class SubagentOutcome:
     error_code: str | None = None
 
 
-class SubagentDriver(Protocol):
-    """Provider-specific subagent execution.
+class ResolverDriver(Protocol):
+    """Driver that dereferences Commission-declared managed refs against
+    the supervisor's resolver service (the AVP resolver protocol).
 
-    The agent calls `invoke()` when the parent agent invokes a tool whose
-    name matches a declared `Commission.subagents[*].name`. Implementations run
-    the subagent's sub-loop (model + tools as declared on the Subagent
-    object) and return the result + a usage rollup.
+    Two methods, both agent-initiated, both crossing the only
+    supervisor↔agent runtime boundary AVP defines:
 
-    Implementations MAY emit nested events via `parent_observer` so the
-    subagent's internal turns observe as a span tree. Each emitted event's
-    `data.parent_span_id` MUST be `parent_frame_span_id` (or descend from
-    it) and `data.trace_id` MUST equal `parent_trace_id`. Implementations
-    MAY skip nested observability — the parent will still emit
-    `subagent_invoked` and `subagent_returned` regardless, so the lifecycle
-    is on the wire even when the subagent is opaque to the agent (e.g.,
-    when delegating into an external SDK that doesn't surface internals).
+    - `resolve(kind, id, ref)` — startup-only. Called once per
+      `Commission.{mcp_servers,skills,subagents}[]` entry. Returns the
+      connection material / content / metadata the supervisor wants the
+      agent to use. The result shape varies by `kind` (see SPEC.md §6.2);
+      the agent's runtime layer interprets it.
+    - `spawn_subagent(...)` — on-demand. Called when the parent's model
+      invokes a Commission-declared subagent. Returns the child run id
+      plus the inline summary the parent's loop hands back to the model.
+
+    Production drivers dial `AVP_RESOLVER_URL` over HTTP/JSON-RPC. Tests
+    inject `ScriptedResolver` from `avp.agent.mock` for canned outcomes.
     """
 
-    def invoke(
+    def resolve(self, *, kind: ManagedKind, id: str, ref: JsonValue) -> dict[str, Any]:
+        """Dereference one managed ref. Raise `ResolveError` on failure;
+        the agent will emit `managed_ref_resolve_failed` and stop."""
+        ...
+
+    def spawn_subagent(
         self,
-        subagent: Subagent,
-        invocation_input: dict[str, Any],
         *,
-        parent_trace_id: str,
-        parent_frame_span_id: str,
-        parent_observer: Callable[[BaseModel], None],
-    ) -> SubagentOutcome: ...
+        run_id: str,
+        id: str,
+        ref: JsonValue,
+        input: dict[str, Any],
+    ) -> SubagentSpawnOutcome:
+        """Invoke a managed subagent. Raise on transport errors; return an
+        outcome with `error` set when the subagent itself failed (the parent
+        emits `subagent_failed` either way)."""
+        ...

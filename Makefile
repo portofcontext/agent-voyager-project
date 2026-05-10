@@ -65,7 +65,7 @@ test:
 	@failed=""; \
 	for pkg in $(TEST_PKGS); do \
 		echo "==== $$pkg (test) ===="; \
-		(cd $$pkg && uv run pytest -m "not real_llm" -q) || failed="$$failed $$pkg"; \
+		(cd $$pkg && uv run python -m pytest -m "not real_llm" -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
 	if [ -n "$$failed" ]; then echo ""; echo "FAILED packages:$$failed"; exit 1; fi; \
 	echo ""; echo "All package tests passed."
@@ -149,7 +149,7 @@ test-real-llm:
 	@failed=""; \
 	for pkg in python/agents/avp-anthropic python/agents/avp-claude-agent; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
-		(cd $$pkg && uv run pytest -m real_llm -q) || failed="$$failed $$pkg"; \
+		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
 	if [ -n "$$failed" ]; then echo ""; echo "FAILED packages:$$failed"; exit 1; fi; \
 	echo ""; echo "All real-LLM tests passed."

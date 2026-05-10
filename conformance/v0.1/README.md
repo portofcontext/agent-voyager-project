@@ -74,7 +74,7 @@ Default ordering is `in_order_subsequence`: matchers must appear in the captured
 
 ### Supervisor scripting
 
-A `scripted_supervisor` step fires when an agent-emitted event matches its `on` pattern. The harness then either sends the `send` SupervisorMessage (after `delay_ms`) or, if `skip: true`, deliberately does nothing — so timeout cases can assert `*_timed_out` events.
+The `scripted_supervisor` field is retained in the test-case schema for backwards compatibility but is a no-op in v0.1: there is no supervisor → agent runtime channel for the harness to drive. Existing case files may still declare steps; the v0.1 harness does not dispatch them.
 
 ## Adding a case
 

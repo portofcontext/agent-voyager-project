@@ -8,25 +8,22 @@
   },
 
   "mcp_servers": [
-    {
-      "id": "corp-directory",
-      "transport": "http",
-      "url": "https://internal.example.com/mcp",
-      "auth": { "type": "bearer", "token_env": "CORP_DIRECTORY_TOKEN" }
-    }
+    { "id": "corp-directory", "ref": { "vault": "prod", "key": "corp-dir-mcp" } }
   ],
 
-  "exposed": ["lookup_user", "Read", "Edit", "Bash"],
+  "skills": [
+    { "id": "style-guide", "ref": { "type": "custom", "skill_id": "skill_styleguide_v3" } }
+  ],
+
+  "subagents": [
+    { "id": "researcher", "ref": "sk_subagent_researcher_v1" }
+  ],
 
   "output_schema": null,
 
   "prompt": "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
   "model": "claude-sonnet-4-6",
-
-  "skills": [
-    { "name": "style-guide", "avp.source": "./skills/style-guide" }
-  ],
 
   "thread_id": "session-xyz",
   "tags": ["auth", "refactor"],

@@ -5,26 +5,20 @@ build-backend = "hatchling.build"
 [project]
 name = "avp-claude-agent"
 version = "0.1.0"
-description = "AVP v0.1 runner for the Claude Agent SDK (Claude Code as an SDK). Observer pattern: the SDK owns its loop; this package translates the SDK's lifecycle events into AVP."
+description = "AVP v0.1 agent for the Claude Agent SDK (Claude Code as an SDK). Observer pattern: the SDK owns its loop; this package translates the SDK's lifecycle events into AVP."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = [
-    "avp>=0.1,<0.2",
-    "claude-agent-sdk>=0.1",
-]
+dependencies = ["avp>=0.1,<0.2", "claude-agent-sdk>=0.1"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7",
-    "ruff>=0.6",
-]
+dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.scripts]
 avp-claude-agent = "avp_claude_agent.cli:main"
 
 [project.urls]
-Spec    = "https://github.com/portofcontext/agent-execution-protocol/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-execution-protocol/tree/main/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp_claude_agent"]

@@ -39,7 +39,6 @@ def _trivial_run() -> list[Any]:
         run_id="interop-trivial",
         prompt="hi",
         model="claude-sonnet-4-6",
-        exposed=["*"],
     )
     model = ScriptedModel(
         [
