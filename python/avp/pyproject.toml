@@ -23,8 +23,8 @@ interop = [
 avp-conformance = "avp.conformance.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/portofcontext/agent-execution-protocol"
-Spec = "https://github.com/portofcontext/agent-execution-protocol/tree/main/spec/v0.1"
+Homepage = "https://github.com/portofcontext/agent-voyager-project"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp"]

@@ -15,7 +15,7 @@ dependencies = ["avp>=0.1,<0.2", "anthropic>=0.40,<1"]
 dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.urls]
-Spec = "https://github.com/portofcontext/agent-voyage-protocol/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp_anthropic"]

@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-avp = { git = "https://github.com/portofcontext/agent-execution-protocol" }
+avp = { git = "https://github.com/portofcontext/agent-voyager-project" }
 ```
 
 (Not yet on crates.io. Vendor by git path until v0.1 stabilizes.)

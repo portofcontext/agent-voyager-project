@@ -17,7 +17,7 @@ The reference agent is the gate for AVP v0.1 correctness. All conformance cases 
 The repo is a uv workspace; bootstrap once from the repo root:
 
 ```bash
-cd /path/to/agent-execution-protocol
+cd /path/to/agent-voyager-project
 uv sync
 ```
 

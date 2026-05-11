@@ -38,7 +38,7 @@ examples/
 The repo is a multi-language workspace; the Python workspace root lives at [`python/`](../../). `make sync` from the repo root installs every Python package editably and resolves cross-package deps to local sources:
 
 ```bash
-cd /path/to/agent-voyage-protocol
+cd /path/to/agent-voyager-project
 make sync                              # uv --directory python sync
 
 # Show available profiles

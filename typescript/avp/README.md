@@ -1,7 +1,7 @@
 # @avp/types — TypeScript types for the AVP wire format
 
 ```bash
-npm install github:portofcontext/agent-execution-protocol#main --save
+npm install github:portofcontext/agent-voyager-project#main --save
 ```
 
 (Not yet on npm. Vendor by git path until v0.1 stabilizes.)

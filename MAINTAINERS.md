@@ -31,5 +31,5 @@ As the project grows, we will likely adopt the Kubernetes-style **OWNERS** model
 
 ## Contact
 
-- File issues and PRs against [github.com/portofcontext/agent-voyage-protocol](https://github.com/portofcontext/agent-voyage-protocol).
+- File issues and PRs against [github.com/portofcontext/agent-voyager-project](https://github.com/portofcontext/agent-voyager-project).
 - Security reports: see `SECURITY.md` (TODO).

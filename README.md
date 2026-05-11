@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/portofcontext/agent-voyage-protocol/main/assets/avp-white.png">
-    <img src="https://raw.githubusercontent.com/portofcontext/agent-voyage-protocol/main/assets/avp.png" alt="AVP Logo" style="height: 128px">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/assets/avp-white.png">
+    <img src="https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/assets/avp.png" alt="AVP Logo" style="height: 128px">
   </picture>
   <h1>Agent Voyager Project (AVP)</h1>
 </div>
@@ -59,8 +59,8 @@ For a complete walk through that builds a Commission, runs an agent, and prints 
 The repo is a multi-language workspace. The Python side uses [uv](https://github.com/astral-sh/uv) with its workspace root at [`python/`](python/); Rust and TypeScript packages each have their own `Cargo.toml` / `package.json`. Run everything from the repo root:
 
 ```bash
-git clone https://github.com/portofcontext/agent-voyage-protocol
-cd agent-voyage-protocol
+git clone https://github.com/portofcontext/agent-voyager-project
+cd agent-voyager-project
 make sync           # `uv --directory python sync` under the hood
 make check
 ```
@@ -91,4 +91,4 @@ Three of these are data-shape specs. They describe a JSON document and nothing m
 
 ## Support
 
-If something does not work, please open an [issue](https://github.com/portofcontext/agent-voyage-protocol/issues). For questions, use the [GitHub Discussions board](https://github.com/portofcontext/agent-voyage-protocol/discussions).
+If something does not work, please open an [issue](https://github.com/portofcontext/agent-voyager-project/issues). For questions, use the [GitHub Discussions board](https://github.com/portofcontext/agent-voyager-project/discussions).
