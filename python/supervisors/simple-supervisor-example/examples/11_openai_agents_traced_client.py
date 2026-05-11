@@ -1,7 +1,7 @@
-"""Example 09 — drop-in instrumentation for an existing OpenAI Agents SDK run.
+"""Example 11 — drop-in instrumentation for an existing OpenAI Agents SDK run.
 
-Companion to example 08 (which drives the full translator end-to-end via
-its `.run()`). Example 09 shows the lighter-touch shape: you already have
+Companion to example 10 (which drives the full translator end-to-end via
+its `.run()`). Example 11 shows the lighter-touch shape: you already have
 working `agents.Runner` code; you just want AVP events on the wire.
 
 The change to add AVP: wrap the call in `with AVPTracer(...)` and use
@@ -10,7 +10,7 @@ factory pulls Commission from the active tracer; the SDK's `RunHooks`
 emit AVP events as turns and tools fire.
 
 Run:
-  OPENAI_API_KEY=... python examples/09_openai_agents_traced_client.py
+  OPENAI_API_KEY=... python examples/11_openai_agents_traced_client.py
 """
 
 from __future__ import annotations

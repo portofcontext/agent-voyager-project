@@ -27,13 +27,14 @@ TEST_PKGS := \
 	python/agents/avp-openai-agent \
 	python/supervisors/simple-supervisor-example
 
-# Examples, sorted by provider so a single-provider smoke run is
-# obvious from the file layout (01-07 Anthropic / Claude Code,
-# 08+ OpenAI). Each script self-detects missing preflight (API key,
-# SDK package, CLI binary) and exits 2; the run-an-example loop
-# treats exit 2 as a skip rather than a failure, so a workstation
-# with only one provider key set still completes the relevant
-# subset cleanly.
+# Examples, numbered so each provider has its own decade: 01-09 for
+# Anthropic / Claude Code, 10-19 for OpenAI, leaving room for more in
+# each lane without renumbering. A single-provider smoke run is
+# obvious from the file layout. Each script self-detects missing
+# preflight (API key, SDK package, CLI binary) and exits 2; the
+# run-an-example loop treats exit 2 as a skip rather than a failure,
+# so a workstation with only one provider key set still completes
+# the relevant subset cleanly.
 EXAMPLES_ANTHROPIC := \
 	python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
 	python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
@@ -41,8 +42,8 @@ EXAMPLES_ANTHROPIC := \
 	python/supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
 	python/supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
 EXAMPLES_OPENAI := \
-	python/supervisors/simple-supervisor-example/examples/08_openai_agents_audited.py \
-	python/supervisors/simple-supervisor-example/examples/09_openai_agents_traced_client.py
+	python/supervisors/simple-supervisor-example/examples/10_openai_agents_audited.py \
+	python/supervisors/simple-supervisor-example/examples/11_openai_agents_traced_client.py
 EXAMPLES := $(EXAMPLES_ANTHROPIC) $(EXAMPLES_OPENAI)
 
 # Real-LLM test packages, grouped by which provider key they need.

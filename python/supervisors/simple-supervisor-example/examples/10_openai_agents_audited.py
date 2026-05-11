@@ -1,4 +1,4 @@
-"""Example 08 — Audited OpenAI Agents SDK session (observer pattern, avp-openai-agent).
+"""Example 10 — Audited OpenAI Agents SDK session (observer pattern, avp-openai-agent).
 
 Story: the user runs an existing OpenAI Agents SDK session (the SDK
 owns its own loop and RunHooks lifecycle) but the supervisor still wants
@@ -99,16 +99,16 @@ def main() -> int:
     issues = _validate_outcome(events)
     print()
     if issues:
-        print("== ✗ FAIL — example 08 ==")
+        print("== ✗ FAIL — example 10 ==")
         for msg in issues:
             print(f"  - {msg}")
         return 1
-    print("== ✓ PASS — example 08 ==")
+    print("== ✓ PASS — example 10 ==")
     return 0
 
 
 def _validate_outcome(events: list) -> list[str]:
-    """Post-conditions for example 08. LLM trajectory varies; outcomes don't.
+    """Post-conditions for example 10. LLM trajectory varies; outcomes don't.
 
     PASS criteria:
       - Run converged
