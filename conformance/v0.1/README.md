@@ -80,10 +80,10 @@ The `scripted_supervisor` field is retained in the test-case schema for backward
 
 ## Adding a case
 
-1. Identify a normative requirement in one of the v0.1 sub-specs ([`trajectory.md`](../../spec/v0.1/trajectory.md), [`commission.md`](../../spec/v0.1/commission.md), [`agent-descriptor.md`](../../spec/v0.1/agent-descriptor.md), [`resolver.md`](../../spec/v0.1/resolver.md)) that two well-meaning implementers could resolve differently.
+1. Identify a normative requirement in one of the v0.1 specs ([`trajectory.md`](../../spec/v0.1/trajectory.md), [`commission.md`](../../spec/v0.1/commission.md), [`agent-descriptor.md`](../../spec/v0.1/agent-descriptor.md), [`resolver.md`](../../spec/v0.1/resolver.md)) that two well-meaning implementers could resolve differently.
 2. Write the smallest case that distinguishes the right answer from the wrong ones. One requirement per file.
 3. File-name slug = `id` field, kebab-case.
 4. Run `python3 validate.py` — every case file MUST validate against the schema.
-5. Reference the sub-spec section in `spec_refs`.
+5. Reference the spec section in `spec_refs`.
 
-If a behavior cannot be tested via this format (e.g. cross-cutting transport concerns), add a normative paragraph to the relevant sub-spec (or to the umbrella [`spec/v0.1/README.md`](../../spec/v0.1/README.md)) and link the discussion.
+If a behavior cannot be tested via this format (e.g. cross-cutting transport concerns), add a normative paragraph to the relevant spec (or to the umbrella [`spec/v0.1/README.md`](../../spec/v0.1/README.md)) and link the discussion.

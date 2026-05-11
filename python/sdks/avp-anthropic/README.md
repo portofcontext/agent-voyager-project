@@ -74,7 +74,7 @@ See `examples/06_anthropic_traced_client.py` for an end-to-end run.
 | Anthropic API | AVP v0.1 |
 |---|---|
 | `client.messages.create(...)` per turn | `model_turn_started` / `model_turn_ended` |
-| `response.usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | `model_turn_ended.tokens_input` (cache-read INCLUDED), `tokens_output`, `tokens_cache_read`, `tokens_cache_write` |
+| `response.usage.input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` | `model_turn_ended.tokens_input` (cache-read AND cache-write INCLUDED — the SDK reports `input_tokens` as fresh-only, so cached and newly-cached tokens are added back), `tokens_output`, `tokens_cache_read`, `tokens_cache_write` |
 | Cost (model x tokens via local pricing table) | `model_turn_ended.cost_usd` |
 | `content` blocks of type `tool_use` | `tool_invoked` events (one per block) |
 | `content` blocks of type `text` | `text_emitted` |
@@ -105,7 +105,7 @@ driver = AnthropicModelDriver(
 )
 ```
 
-This is the analog of `avp-claude-agent`'s `extra_sdk_options` (same purpose, deployment-layer config that doesn't translate to a wire-format concept; different SDK surface). Commission-derived kwargs (`messages`, `system`, `tools`, `mcp_servers`) take precedence.
+This is the analog of `avp-claude-agent`'s `extra_sdk_options` (same purpose, deployment-layer config that doesn't translate to a wire-format concept; different SDK surface). AVP wire-shape fields the driver populates per turn (`model`, `max_tokens`, `messages` and `system` from AVP history, `tools` from `tools_param` plus any subagents resolved via `set_resolved_assets`, `mcp_servers` from resolver-returned HTTP MCP material) take precedence — `extra_kwargs` cannot override them, since doing so would let a supervisor silently desync the trajectory from what the model actually saw.
 
 ## Pricing table
 

@@ -1,6 +1,6 @@
 # AVP-RFCs
 
-AVP-RFCs are how the Agent Voyager Project evolves. An **AVP-RFC** (Agent Voyager RFC) is a written design document that proposes, communicates, and coordinates a new effort: a new event type, a new resolver method, a structural change to a sub-spec, a process change.
+AVP-RFCs are how the Agent Voyager Project evolves. An **AVP-RFC** (Agent Voyager RFC) is a written design document that proposes, communicates, and coordinates a new effort: a new event type, a new resolver method, a structural change to a spec, a process change.
 
 > Acronym note: **AVP** is the project (Agent Voyager Project). **AVP-RFC** is a proposal against it. Keep them separate.
 
@@ -11,9 +11,9 @@ The format is borrowed from [Kubernetes Enhancement Proposals (KEPs)](https://gi
 File an AVP-RFC for:
 
 - **Wire-format changes**: new event types, new Commission fields, new Agent Descriptor fields, new Resolver API methods, breaking changes to existing shapes.
-- **Stability transitions**: moving a sub-spec from `alpha` to `beta` to `stable`, or marking one `deprecated`.
+- **Stability transitions**: moving a spec from `alpha` to `beta` to `stable`, or marking one `deprecated`.
 - **Process changes**: changes to the AVP-RFC process itself, governance, the conformance suite contract.
-- **Architectural decisions**: adding/removing a sub-spec, splitting one in two, renaming.
+- **Architectural decisions**: adding/removing a spec, splitting one in two, renaming.
 
 You do **not** need an AVP-RFC for:
 
@@ -25,7 +25,7 @@ When in doubt, file one. AVP-RFCs are cheap; downstream churn from un-discussed 
 
 ## Quick start
 
-1. **Read the umbrella sub-spec index** at [`../spec/v0.1/README.md`](../spec/v0.1/README.md) so you know which sub-spec your change touches.
+1. **Read the umbrella spec index** at [`../spec/v0.1/README.md`](../spec/v0.1/README.md) so you know which spec your change touches.
 2. **Copy [`NNNN-template/`](./NNNN-template/)** to `proposals/<NNNN>-<short-title>/` where `<NNNN>` is the next free integer (zero-padded).
 3. **Fill out the README.md** following the section headings. The `Summary` and `Motivation` sections are the minimum to merge as `provisional`.
 4. **Fill out `metadata.yaml`** with at minimum `title`, `authors`, `status`, `created`.
@@ -64,11 +64,11 @@ proposals/
 │   └── metadata.yaml
 └── 0001-avp-to-atif-conversion/       # example future proposal
     ├── README.md                      # the design doc
-    └── metadata.yaml                  # title, authors, status, created, sub-specs touched
+    └── metadata.yaml                  # title, authors, status, created, specs touched
 ```
 
-## Relationship to sub-spec versioning
+## Relationship to spec versioning
 
-The four sub-specs ([Trajectory](../spec/v0.1/trajectory.md) / [Commission](../spec/v0.1/commission.md) / [Agent Descriptor](../spec/v0.1/agent-descriptor.md) / [Resolver API](../spec/v0.1/resolver.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each sub-spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
+The four specs ([Trajectory](../spec/v0.1/trajectory.md) / [Commission](../spec/v0.1/commission.md) / [Agent Descriptor](../spec/v0.1/agent-descriptor.md) / [Resolver API](../spec/v0.1/resolver.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
 
-When an AVP-RFC lands a wire-affecting change, its `metadata.yaml` records which sub-spec(s) it touches and the target umbrella version. Future tooling can render an "AVP-RFCs implemented since v0.1" view by querying that metadata.
+When an AVP-RFC lands a wire-affecting change, its `metadata.yaml` records which spec(s) it touches and the target umbrella version. Future tooling can render an "AVP-RFCs implemented since v0.1" view by querying that metadata.

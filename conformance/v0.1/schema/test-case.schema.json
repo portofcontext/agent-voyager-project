@@ -23,7 +23,7 @@
     "spec_refs": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Section refs into the v0.1 sub-specs (trajectory.md, commission.md, agent-descriptor.md, resolver.md) or schema fragments this case verifies."
+      "description": "Section refs into the v0.1 specs (trajectory.md, commission.md, agent-descriptor.md, resolver.md) or schema fragments this case verifies."
     },
     "applies_to": {
       "type": "array",

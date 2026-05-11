@@ -22,7 +22,7 @@ to AVP and surfaced through the agent's Descriptor at run time.
 AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace.
 
-See `FOUNDATIONS.md` for the full mapping rationale and the four sub-specs
+See `FOUNDATIONS.md` for the full mapping rationale and the four specs
 under `spec/v0.1/` (trajectory, commission, agent-descriptor, resolver) for
 normative requirements.
 """

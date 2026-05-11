@@ -15,7 +15,7 @@ agent-execution case:
 
 The three data-shape specs (Trajectory/Commission/Agent Descriptor) compose
 independently; the Resolver API is the only thing that's actually a
-protocol (wire-level request/response). Each sub-spec carries its own RFC
+protocol (wire-level request/response). Each spec carries its own RFC
 2119 keywords and conformance criteria for its layer; an
 implementation may adopt one or all.
 
@@ -105,7 +105,7 @@ The seams in this repo:
 | Layer | Location | Catches |
 |---|---|---|
 | **JSON Schema** | `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json` | Wire shape: every `Event`, `Commission`, and `AgentDescriptor` field |
-| **Conformance** | `conformance/v0.1/cases/*.json` | Wire-level rules (every MUST across the sub-specs); driven via `avp-conformance` against the reference agent with `ScriptedModel` |
+| **Conformance** | `conformance/v0.1/cases/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against the reference agent with `ScriptedModel` |
 | **Unit** | `python/<pkg>/tests/test_*.py` | Single-component behavior with seams mocked |
 | **Seam** | `tests/test_cli_smoke.py`, `tests/test_multi_turn.py`, translator-state tests | Cross-component bugs that unit tests can't see |
 | **Real-LLM** | `tests/test_real_llm.py` (gated `-m real_llm` + `ANTHROPIC_API_KEY`) | End-to-end correctness against actual model responses |
@@ -113,7 +113,7 @@ The seams in this repo:
 
 ## Decision tree when adding a feature
 
-1. **Wire-level rule (a MUST in any sub-spec)** → add a conformance case.
+1. **Wire-level rule (a MUST in any spec)** → add a conformance case.
 2. **Single-component behavior** → unit test in that package's `tests/`.
 3. **Behavior depends on cross-component state** (history shape, cumulative
    usage, CLI lifecycle, subprocess CWD) → **seam test**. This is the layer
@@ -177,8 +177,8 @@ that compiled fine but undercounted by 30%).
 
 ## Things you should not do
 
-- Do NOT add prose docs that duplicate the sub-specs under `spec/v0.1/`. Two
-  sources of truth drift. Either update the relevant sub-spec
+- Do NOT add prose docs that duplicate the specs under `spec/v0.1/`. Two
+  sources of truth drift. Either update the relevant spec
   (`trajectory.md` / `commission.md` / `agent-descriptor.md` / `resolver.md`) or
   update `README.md`'s explanation; not both with the same content.
 - Do NOT update test counts in any markdown doc. They will go stale within
@@ -199,7 +199,7 @@ that compiled fine but undercounted by 30%).
 
 ## Project shape
 
-- `spec/v0.1/`: the four normative sub-specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
+- `spec/v0.1/`: the four normative specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
 - `conformance/v0.1/cases/`: language-agnostic test cases.
 - `python/avp/`: wire types (Pydantic), reference agent (`AVPAgent`),
   reference tracer (`AVPTracer` in `avp.tracer` for instrumenting an existing

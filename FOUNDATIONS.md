@@ -6,7 +6,7 @@
 > JSON-RPC for LLM tools, AVP specializes the broader telemetry-and-RPC
 > stack for runs.
 
-AVP is a **collection of sub-specs**, not a single protocol. There are
+AVP is a **collection of specs**, not a single protocol. There are
 three data-shape specs (Trajectory, Commission, Agent Descriptor) and one
 wire-level protocol (Resolver). Each is implementable independently and
 references how it composes with the others; this document describes the
@@ -118,7 +118,7 @@ namespace.
 **What AVP does NOT take:** experimental conventions still flagged as
 unstable. The GenAI conventions overall are still under the
 `gen_ai_latest_experimental` stability flag (consumers opt in via
-`OTEL_SEMCONV_STABILITY_OPT_IN`); the AVP sub-specs pin a specific
+`OTEL_SEMCONV_STABILITY_OPT_IN`); the AVP specs pin a specific
 upstream commit and only adopt attributes whose names have stabilized.
 
 **On cost specifically:** OTel has not standardized a cost attribute as
@@ -244,7 +244,7 @@ exactly that draft.
 Normative keywords (MUST, SHOULD, MAY, MUST NOT, SHOULD NOT). Standard for
 conformance language in protocol specs.
 
-**What AVP takes:** the keyword vocabulary. Used throughout the sub-specs
+**What AVP takes:** the keyword vocabulary. Used throughout the specs
 (`spec/v0.1/{trajectory,commission,agent-descriptor,resolver}.md`) to
 distinguish hard requirements from recommendations.
 
@@ -525,7 +525,7 @@ v0.1 scope.
 ## Versioning and stability
 
 `schema_version: "0.1"` covers the AVP-specific surface. The upstream
-specs we build on have their own versions, pinned in the sub-specs and
+specs we build on have their own versions, pinned in the specs and
 the umbrella [`spec/v0.1/README.md`](spec/v0.1/README.md):
 
 - CloudEvents: 1.0

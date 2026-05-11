@@ -34,9 +34,9 @@ The design. Include:
   - The wire shape (JSON examples, schema deltas)
   - The semantic rules (MUSTs / SHOULDs / MAYs)
   - Backwards compatibility and migration story
-  - How it composes with the other sub-specs
+  - How it composes with the other specs
 
-If the proposal touches multiple sub-specs, organize by sub-spec.
+If the proposal touches multiple specs, organize by spec.
 -->
 
 ### Wire format changes
@@ -46,7 +46,7 @@ If the proposal touches multiple sub-specs, organize by sub-spec.
 ### Conformance impact
 
 <!--
-Does this proposal add MUST/SHOULD criteria? Which sub-spec's conformance
+Does this proposal add MUST/SHOULD criteria? Which spec's conformance
 section gains them? Are new conformance cases required?
 -->
 

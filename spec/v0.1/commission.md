@@ -162,7 +162,7 @@ The agent MUST validate every name in each allowlist against the corresponding D
 
 ---
 
-## 5. How Commission composes with the other sub-specs
+## 5. How Commission composes with the other specs
 
 | Composes with | How |
 |---|---|

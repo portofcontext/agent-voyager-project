@@ -6,7 +6,7 @@ description: |
 
 # AVP: Agent Voyager Project
 
-AVP is an open standard for the agent-execution case, defined by four sub-specs that compose independently:
+AVP is an open standard for the agent-execution case, defined by four specs that compose independently:
 
 - **Commission** ([`spec/v0.1/commission.md`](spec/v0.1/commission.md)): what the supervisor sends the agent at startup (model, prompt, allowlists, opaque refs to managed assets).
 - **Agent Descriptor** ([`spec/v0.1/agent-descriptor.md`](spec/v0.1/agent-descriptor.md)): what the agent advertises about itself before a run begins.
@@ -145,13 +145,13 @@ Common temptations to push back on:
 
 ## When in doubt, read these (in this order)
 
-1. `spec/v0.1/README.md`: umbrella entry point indexing the four sub-specs (trajectory, commission, agent-descriptor, resolver) plus shared concerns (foundations, transports, deployment scope, versioning).
-2. The relevant sub-spec for your question:
+1. `spec/v0.1/README.md`: umbrella entry point indexing the four specs (trajectory, commission, agent-descriptor, resolver) plus shared concerns (foundations, transports, deployment scope, versioning).
+2. The relevant spec for your question:
    - **Event stream / loop / cost rules / event catalog** → `spec/v0.1/trajectory.md`
    - **Run-config / allowlists / refs-only assets** → `spec/v0.1/commission.md`
    - **Agent self-description / capabilities** → `spec/v0.1/agent-descriptor.md`
    - **JSON-RPC methods, bootstrap, error handling** → `spec/v0.1/resolver.md`
-3. `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per sub-spec; authoritative for field-by-field shape. `spec/v0.1/avp.schema.json` is the bundled `oneOf`.
+3. `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape. `spec/v0.1/avp.schema.json` is the bundled `oneOf`.
 4. `conformance/v0.1/cases/`: executable test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
 5. `python/avp/src/avp/types.py`: Pydantic models that mirror the schemas. Authoritative Python surface. Scoped re-exports: `avp.trajectory`, `avp.commission`, `avp.descriptor`, `avp.resolver`.
 6. `python/avp/src/avp/agent/agent.py`: the canonical agent loop in working code.
@@ -162,7 +162,7 @@ Common temptations to push back on:
 
 1. Identify which of Tasks A / B / C they're asking about (or which combination).
 2. Read the closest match in `python/supervisors/simple-supervisor-example/examples/` (numbered 01–07, narrative format) first to ground yourself in current shape.
-3. Cross-reference with the sub-specs: [`resolver.md`](spec/v0.1/resolver.md) (Resolver API), [`commission.md`](spec/v0.1/commission.md) §4 (built-in allowlists), [`trajectory.md`](spec/v0.1/trajectory.md) §3 (the loop) and §4 (tool dispatch).
+3. Cross-reference with the specs: [`resolver.md`](spec/v0.1/resolver.md) (Resolver API), [`commission.md`](spec/v0.1/commission.md) §4 (built-in allowlists), [`trajectory.md`](spec/v0.1/trajectory.md) §3 (the loop) and §4 (tool dispatch).
 4. For runtime correctness questions, the conformance cases under `conformance/v0.1/cases/` are precedent. Find the case that matches the situation.
 5. Generate code that imports from `avp.types`, `avp.agent`, `avp.io`. Do NOT inline-redefine the wire types.
 6. If asked about a behavior the spec doesn't cover, say so explicitly and propose a path that doesn't violate any of the existing conformance cases.

@@ -9,7 +9,7 @@ Run from repo root:
 
     uv run python scripts/generate-schemas.py
 
-One entry-point schema per AVP v0.1 sub-spec, plus the unified bundle:
+One entry-point schema per AVP v0.1 spec, plus the unified bundle:
 
     spec/v0.1/commission.schema.json        — the Commission shape
     spec/v0.1/trajectory.schema.json        — agent-emitted Event union
@@ -123,7 +123,7 @@ def main() -> int:
             "concepts — the no-mid-run-reach-in topology, the "
             "trajectory-as-source-of-truth contract — live under the "
             "`avp.*` attribute namespace. See FOUNDATIONS.md and the "
-            "per-sub-spec entry-point schemas: commission.schema.json, "
+            "per-spec entry-point schemas: commission.schema.json, "
             "trajectory.schema.json, agent-descriptor.schema.json."
         ),
         "oneOf": [

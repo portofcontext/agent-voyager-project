@@ -2,7 +2,7 @@
 
 Scoped re-exports of the trajectory surface (CloudEvents envelope + event
 types + per-event `data` payloads + `RunStateSnapshot` + helpers). This
-module mirrors the [Trajectory sub-spec](../../../../spec/v0.1/trajectory.md).
+module mirrors the [Trajectory spec](../../../../spec/v0.1/trajectory.md).
 
 Consumers wanting only the event stream can:
 

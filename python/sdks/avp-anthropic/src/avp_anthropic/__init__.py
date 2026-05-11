@@ -26,7 +26,6 @@ from avp_anthropic.driver import (
     DEFAULT_PRICES,
     AnthropicModelDriver,
     PriceTable,
-    build_anthropic_mcp_servers,
     build_anthropic_mcp_servers_from_resolved,
     build_anthropic_tools,
 )
@@ -42,7 +41,6 @@ __all__ = [
     "Environment",
     "PriceTable",
     "__version__",
-    "build_anthropic_mcp_servers",
     "build_anthropic_mcp_servers_from_resolved",
     "build_anthropic_tools",
     "build_descriptor",

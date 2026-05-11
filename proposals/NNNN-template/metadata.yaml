@@ -17,8 +17,8 @@ created: "YYYY-MM-DD"
 # ISO 8601 date. Update on each status transition.
 last-updated: "YYYY-MM-DD"
 
-# Which sub-specs this proposal touches. Any of: trajectory, commission, agent-descriptor, resolver
-sub-specs:
+# Which specs this proposal touches. Any of: trajectory, commission, agent-descriptor, resolver
+specs:
   - trajectory
 # - commission
 # - agent-descriptor

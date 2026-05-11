@@ -95,7 +95,7 @@ generate_rust "commission" "$SPEC/commission.schema.json"
 generate_rust "trajectory" "$SPEC/trajectory.schema.json"
 generate_rust "agent_descriptor" "$SPEC/agent-descriptor.schema.json"
 
-# Old generated files from previous schema/sub-spec names; clean up to avoid
+# Old generated files from previous schema/spec names; clean up to avoid
 # stale code drifting in tree.
 rm -f "$RUST_OUT/event.rs" "$RUST_OUT/supervisor_message.rs"
 rm -f "$TS_OUT/event.ts" "$TS_OUT/supervisor-message.ts"

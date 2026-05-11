@@ -4,7 +4,7 @@
 **Umbrella version:** v0.1
 **$id base:** `https://avp.dev/schema/v0.1/`
 
-This directory is the **normative specification** for v0.1 of the Agent Voyager Project (AVP). AVP is a collection of four sub-specs that compose into a coherent wire format for the agent-execution case:
+This directory is the **normative specification** for v0.1 of the Agent Voyager Project (AVP). AVP is a collection of four specs that compose into a coherent wire format for the agent-execution case:
 
 | Sub-spec | Kind | What it defines | File |
 |---|---|---|---|
@@ -13,9 +13,9 @@ This directory is the **normative specification** for v0.1 of the Agent Voyager 
 | **AVP Agent Descriptor** | Data-shape spec | What an agent advertises pre-flight: built-in tool/subagent/skill catalogs, capabilities, supported models | [`agent-descriptor.md`](./agent-descriptor.md) |
 | **AVP Resolver API** | Protocol | JSON-RPC 2.0 methods (`avp.resolve`, `avp.spawn_subagent`) for dereferencing managed-asset refs against a supervisor-stood-up service | [`resolver.md`](./resolver.md) |
 
-The three data-shape specs are independent; each can be adopted on its own. The Resolver API is the only sub-spec that defines wire-level request/response between two parties, and depends on Commission (the refs it dereferences live there).
+The three data-shape specs are independent; each can be adopted on its own. The Resolver API is the only spec that defines wire-level request/response between two parties, and depends on Commission (the refs it dereferences live there).
 
-The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in every sub-spec are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
+The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in every spec are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
 ---
 
@@ -75,7 +75,7 @@ v0.1 has no supervisor → agent push channel.
 
 ## 3. Transport
 
-AVP is transport-agnostic for the Commission / event pipe. The three data-shape sub-specs (Commission, Trajectory, Agent Descriptor) describe JSON document shapes; how those bytes move between supervisor and agent is a deployment concern. Subprocess pipes, HTTP, Server-Sent Events, a message bus, an in-process callback: any of these can carry a Commission in and trajectory events out, as long as the JSON on the wire matches the sub-spec schemas.
+AVP is transport-agnostic for the Commission / event pipe. The three data-shape specs (Commission, Trajectory, Agent Descriptor) describe JSON document shapes; how those bytes move between supervisor and agent is a deployment concern. Subprocess pipes, HTTP, Server-Sent Events, a message bus, an in-process callback: any of these can carry a Commission in and trajectory events out, as long as the JSON on the wire matches the spec schemas.
 
 The Resolver API is the one exception: it IS a wire protocol (JSON-RPC 2.0 over HTTP/HTTPS/unix-socket) because it's a runtime request/response service the agent dials. See [`resolver.md`](./resolver.md) §1.
 
@@ -89,7 +89,7 @@ The reference implementations in this repo use stdio as their concrete transport
 - After reading `Commission`, stdin is unused.
 - The agent emits `Event` documents to stdout as NDJSON, one JSON object per line, no pretty-printing, terminated by `\n`. The agent flushes stdout after each line.
 
-Implementers using any other transport (HTTP+SSE, gRPC streaming, Kafka, in-process) are not constrained by AVP beyond preserving the JSON shapes the sub-specs define.
+Implementers using any other transport (HTTP+SSE, gRPC streaming, Kafka, in-process) are not constrained by AVP beyond preserving the JSON shapes the specs define.
 
 ---
 
@@ -138,7 +138,7 @@ This section names the lines so readers don't trip on them. A complete productio
 
 ## 7. Versioning
 
-- The sub-specs share a single umbrella version (v0.1). They MAY decouple in a future major version.
+- The specs share a single umbrella version (v0.1). They MAY decouple in a future major version.
 - `Commission.schema_version` MUST equal `"0.1"`.
 - `agent_started.data["avp.schema_version"]` MUST equal `"0.1"`.
 - Future minor versions MAY add new event types, fields, or enum values. They MUST NOT remove or repurpose existing ones.
@@ -165,7 +165,7 @@ Future versions live in sibling directories; published schemas are immutable.
 
 ## 9. Examples
 
-[`examples/`](./examples/) contains conforming fixtures referenced by individual sub-specs:
+[`examples/`](./examples/) contains conforming fixtures referenced by individual specs:
 
 - `commission.json`: a worked Commission
 - `run.ndjson`: a worked trajectory

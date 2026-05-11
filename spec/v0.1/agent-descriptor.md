@@ -163,7 +163,7 @@ Implementations MAY publish additional vendor-namespaced flags (e.g., `vendor.ac
 
 ---
 
-## 4. How Agent Descriptor composes with the other sub-specs
+## 4. How Agent Descriptor composes with the other specs
 
 | Composes with | How |
 |---|---|

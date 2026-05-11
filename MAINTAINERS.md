@@ -26,7 +26,7 @@ As the project grows, we will likely adopt the Kubernetes-style **OWNERS** model
 
 ## What maintainers don't do
 
-- Speak for individual sub-specs' design unilaterally. Wire-affecting changes go through the [AVP-RFC process](proposals/README.md).
+- Speak for individual specs' design unilaterally. Wire-affecting changes go through the [AVP-RFC process](proposals/README.md).
 - Override the conformance suite. If the harness fails a case, the implementation is wrong (or the case is, and a proposal fixes it).
 
 ## Contact

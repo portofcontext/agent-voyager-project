@@ -1,7 +1,7 @@
 """avp.resolver — client types for the AVP Resolver API.
 
 Scoped re-exports of the Resolver-API client surface. This module
-mirrors the [Resolver API sub-spec](../../../../spec/v0.1/resolver.md).
+mirrors the [Resolver API spec](../../../../spec/v0.1/resolver.md).
 
 Consumers building or consuming the Resolver API can:
 

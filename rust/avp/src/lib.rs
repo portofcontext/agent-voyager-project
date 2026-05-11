@@ -7,7 +7,7 @@
 //!
 //! ## Layout
 //!
-//! One module per AVP v0.1 sub-spec:
+//! One module per AVP v0.1 spec:
 //!
 //! - [`commission`] — `Commission`, the supervisor's setup message. Lists
 //!   supervisor-managed assets (mcp_servers, skills, subagents) as opaque

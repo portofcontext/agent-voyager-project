@@ -11,7 +11,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 
 ## 1. Scope
 
-The Resolver API is the only sub-spec under the AVP v0.1 umbrella that is **actually a wire-level protocol**: it defines request/response semantics between an agent and a supervisor-stood-up service. The other three sub-specs (Trajectory, Commission, Agent Descriptor) are data-shape specs.
+The Resolver API is the only spec under the AVP v0.1 umbrella that is **actually a wire-level protocol**: it defines request/response semantics between an agent and a supervisor-stood-up service. The other three specs (Trajectory, Commission, Agent Descriptor) are data-shape specs.
 
 The Resolver API exists because [Commission](./commission.md) carries managed assets as opaque `{id, ref}` pairs. To use them, the agent calls the resolver to dereference the opaque ref into the connection material / content / metadata it needs to actually run.
 

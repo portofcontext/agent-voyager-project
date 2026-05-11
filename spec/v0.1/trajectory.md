@@ -12,7 +12,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 
 ## 1. Scope
 
-The Trajectory Spec defines the **stream of events** an agent emits as it runs. It is independently implementable: an existing agent loop with its own run-config object can emit conforming AVP events without adopting [Commission](./commission.md), [Agent Descriptor](./agent-descriptor.md), or the [Resolver API](./resolver.md). When the other sub-specs ARE adopted, this document describes how they compose into the event stream (the run prelude carries a Commission snapshot and an Agent Descriptor payload; managed-asset events record Resolver round-trips).
+The Trajectory Spec defines the **stream of events** an agent emits as it runs. It is independently implementable: an existing agent loop with its own run-config object can emit conforming AVP events without adopting [Commission](./commission.md), [Agent Descriptor](./agent-descriptor.md), or the [Resolver API](./resolver.md). When the other specs ARE adopted, this document describes how they compose into the event stream (the run prelude carries a Commission snapshot and an Agent Descriptor payload; managed-asset events record Resolver round-trips).
 
 The trajectory holds two semantically distinct kinds of facts:
 

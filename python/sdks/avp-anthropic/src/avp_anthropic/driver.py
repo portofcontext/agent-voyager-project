@@ -590,9 +590,12 @@ class AnthropicModelDriver(ModelDriver):
 
     `mcp_servers_param` is the API's MCP-connector shape — a list of
     `{type, name, url, ...}` dicts that the Anthropic API connects to and
-    exposes as additional tools to the model. Translate from
-    `Commission.mcp_servers[]` via `build_anthropic_mcp_servers(commission)` —
-    HTTP-only, since the API connector doesn't speak stdio.
+    exposes as additional tools to the model. The driver populates it from
+    resolved material at runtime: AVPAgent calls `set_resolved_assets`
+    with the resolver's output, and the driver runs
+    `build_anthropic_mcp_servers_from_resolved` to translate that into the
+    connector shape. HTTP-only — Anthropic's connector doesn't speak
+    stdio, so stdio entries are skipped with a warning.
     """
 
     def __init__(
@@ -706,7 +709,13 @@ class AnthropicModelDriver(ModelDriver):
             kwargs["tools"] = self.tools_param
         if self.mcp_servers_param:
             kwargs["mcp_servers"] = self.mcp_servers_param
-        kwargs.update(self.extra_kwargs)
+        # AVP wire-shape fields already in `kwargs` (model, max_tokens,
+        # messages, system, tools, mcp_servers) take precedence;
+        # extra_kwargs is a per-request escape hatch for knobs AVP doesn't
+        # put on the wire (temperature, top_p, metadata, etc.) and cannot
+        # silently override what the trajectory records.
+        for k, v in self.extra_kwargs.items():
+            kwargs.setdefault(k, v)
 
         t0 = time.monotonic()
         try:
@@ -789,23 +798,6 @@ def build_anthropic_tools(
         names = set(allow)
         out = [t for t in candidates if t.get("name") in names]
     return out
-
-
-def build_anthropic_mcp_servers(commission: Commission) -> list[dict[str, Any]]:
-    """Compat shim — returns `[]` for any Commission.
-
-    In the refs-only model, MCP connection material is not embedded in
-    the Commission; it arrives via the AVP resolver protocol. The CLI
-    builds the Anthropic API connector spec from the resolved material
-    via `build_anthropic_mcp_servers_from_resolved` (called from
-    `AnthropicModelDriver.set_resolved_assets` once AVPAgent has
-    populated `_resolved_mcp_servers`).
-
-    Kept here so older callers that imported the helper still load
-    cleanly; new callers should not need it.
-    """
-    del commission  # refs only; nothing to translate at Commission time
-    return []
 
 
 def build_anthropic_mcp_servers_from_resolved(

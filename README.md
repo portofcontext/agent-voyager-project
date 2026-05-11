@@ -71,7 +71,7 @@ See [CLAUDE.md](CLAUDE.md) for the contributor checklist. See [`proposals/`](pro
 
 ## What AVP defines
 
-AVP is split into four sub-specs. Each one can be adopted on its own. Most consumers use them together, but the choice is yours.
+AVP is split into four specs. Each one can be adopted on its own. Most consumers use them together, but the choice is yours.
 
 | Sub-spec | What it covers |
 |---|---|
@@ -85,7 +85,7 @@ Three of these are data-shape specs. They describe a JSON document and nothing m
 ## Where to learn more
 
 - [FOUNDATIONS.md](FOUNDATIONS.md) covers the upstream specs AVP builds on and what AVP adds on top.
-- [`spec/v0.1/`](spec/v0.1/) is the normative specification, organized by sub-spec.
+- [`spec/v0.1/`](spec/v0.1/) is the normative specification, organized by spec.
 - [`conformance/v0.1/`](conformance/v0.1/) is the language agnostic test suite every conforming implementation MUST pass.
 - [SKILL.md](SKILL.md) is a skill file for AI assistants working inside this repo.
 
