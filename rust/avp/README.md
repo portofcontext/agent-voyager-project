@@ -26,7 +26,7 @@ match event {
 }
 ```
 
-Use `avp::commission` and `avp::event` for the helper data types (the per-event `*Data` structs, etc.).
+Use `avp::commission`, `avp::trajectory`, and `avp::agent_descriptor` for the helper data types (the per-event `*Data` structs, the `AgentDescriptor` shape, etc.).
 
 ## Source of truth
 

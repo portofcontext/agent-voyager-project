@@ -319,13 +319,14 @@ def test_run_with_fake_query_emits_full_lifecycle() -> None:
 
 
 def test_assistant_message_with_no_new_output_or_content_is_not_a_turn() -> None:
-    """SPEC.md §9.1: a 'turn' is one fresh model call with new output. The
-    Claude Agent SDK emits AssistantMessages for non-turn things
-    (continuations, restatements). The translator MUST skip those — count
-    AVP turns only when delta_output > 0 OR new content is present.
+    """trajectory.md §3.1: a 'turn' is one fresh model call with new
+    output. The Claude Agent SDK emits AssistantMessages for non-turn
+    things (continuations, restatements). The translator MUST skip
+    those — count AVP turns only when delta_output > 0 OR new content
+    is present.
 
     Pre-fix the translator incremented _step on every AssistantMessage,
-    inflating state.total_turns above what AVP §9.2 promises."""
+    inflating state.total_turns above what the spec promises."""
     t, out = _new_translator()
 
     # Real turn 1
@@ -360,10 +361,11 @@ def test_assistant_message_with_no_new_output_or_content_is_not_a_turn() -> None
 
 
 def test_unannounced_cumulative_reset_emits_error_occurred() -> None:
-    """SPEC.md §9.4: when the SDK's cumulative usage drops without a
-    PreCompact / SubagentStart signal, the translator MUST emit
-    error_occurred (code='accounting_reset') rather than silently clamping.
-    Consumers cannot tell silent clamping apart from a quiet turn."""
+    """trajectory.md §3.3: when the SDK's cumulative usage drops without
+    a PreCompact / SubagentStart signal, the translator MUST emit
+    error_occurred (code='accounting_reset') rather than silently
+    clamping. Consumers cannot tell silent clamping apart from a quiet
+    turn."""
     t, out = _new_translator()
 
     # Turn 1: cumulative 100 input

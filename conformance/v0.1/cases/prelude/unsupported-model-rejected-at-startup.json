@@ -1,15 +1,15 @@
 {
   "id": "unsupported-model-rejected-at-startup",
-  "title": "Commission.model not matching manifest.supported_models is rejected pre-loop with error_occurred(unsupported_model)",
-  "description": "When the agent's manifest declares supported_models (a list of glob patterns) and Commission.model does not match any of them, the agent MUST detect the mismatch at startup, emit avp.error_occurred with code='unsupported_model', and stop with avp.reason='error' before any model turn runs. Catches the avp-claude-agent-with-gpt-4 case cleanly at the wire boundary instead of letting the driver fail later.",
+  "title": "Commission.model not matching descriptor.supported_models is rejected pre-loop with error_occurred(unsupported_model)",
+  "description": "When the agent's Descriptor declares supported_models (a list of glob patterns) and Commission.model does not match any of them, the agent MUST detect the mismatch at startup, emit avp.error_occurred with code='unsupported_model', and stop with avp.reason='error' before any model turn runs. Catches the avp-claude-agent-with-gpt-4 case cleanly at the wire boundary instead of letting the driver fail later.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#3-1-run-prelude",
-    "spec/v0.1/event.schema.json#/$defs/AgentManifest"
+    "spec/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/v0.1/trajectory.schema.json#/$defs/AgentDescriptor"
   ],
   "applies_to": [
     "agent"
   ],
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "avp-test-agent",
     "agent_version": "9.9.9",
     "avp_spec_version": "0.1",

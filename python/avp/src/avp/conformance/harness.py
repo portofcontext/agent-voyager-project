@@ -17,7 +17,7 @@ from avp.agent.mock import (
     parse_scripted_model,
 )
 from avp.conformance.matcher import matches_partial
-from avp.types import AgentManifest, Commission
+from avp.types import AgentDescriptor, Commission
 
 # ── Result types ──────────────────────────────────────────────────────────────
 
@@ -185,10 +185,10 @@ def _build_agent(case: dict[str, Any]) -> AVPAgent:
     #     fields (child_run_id, text, reason, usage, duration_ms, error?).
     #
     # When the Commission has any managed assets and the case omits
-    # `scripted_resolver`, the harness still wires a ScriptedResolver —
+    # `scripted_resolver`, the harness still wires a ScriptedResolver:
     # the resolver will raise on every lookup, exercising the
-    # `managed_ref_resolve_failed` path. Cases that want a Profile-A run
-    # (no managed assets) leave the Commission lists empty and need no
+    # `managed_ref_resolve_failed` path. Cases that want a run with no
+    # managed assets leave the Commission lists empty and need no
     # resolver.
     sr_cfg = case.get("scripted_resolver") or {}
     has_managed = bool(commission.mcp_servers or commission.skills or commission.subagents)
@@ -202,12 +202,12 @@ def _build_agent(case: dict[str, Any]) -> AVPAgent:
         # Either no managed assets, or the case wants to exercise the
         # `resolver_not_configured` startup gate (omit_resolver=true).
         resolver = None
-    # When the case ships a `agent_manifest`, the agent emits the
+    # When the case ships an `agent_descriptor`, the agent emits the
     # `run_requested` + `agent_described` prelude. Cases not exercising
     # the prelude omit the field — the agent skips emission and the rest
     # of the trajectory looks the same as before this field existed.
-    manifest_dict = case.get("agent_manifest")
-    manifest = AgentManifest.model_validate(manifest_dict) if manifest_dict else None
+    descriptor_dict = case.get("agent_descriptor")
+    descriptor = AgentDescriptor.model_validate(descriptor_dict) if descriptor_dict else None
     return AVPAgent(
         commission=commission,
         model=model,
@@ -215,7 +215,7 @@ def _build_agent(case: dict[str, Any]) -> AVPAgent:
         supervisor=supervisor,
         agent_builtin_tools=builtin_tools,
         resolver=resolver,
-        manifest=manifest,
+        descriptor=descriptor,
     )
 
 

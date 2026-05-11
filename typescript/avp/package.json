@@ -1,17 +1,26 @@
 {
   "name": "@avp/types",
   "version": "0.1.0",
-  "description": "Agent Voyage Protocol — TypeScript types for the v0.1 wire format.",
+  "description": "Agent Voyager Project — TypeScript types for the v0.1 wire format.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/portofcontext/agent-execution-protocol"
   },
-  "keywords": ["avp", "agents", "llm", "wire-format", "cloudevents"],
+  "keywords": [
+    "avp",
+    "agents",
+    "llm",
+    "wire-format",
+    "cloudevents"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

@@ -16,7 +16,7 @@ import json
 import sys
 
 from avp import Commission, write_event
-from avp_claude_agent.manifest import manifest as build_manifest
+from avp_claude_agent.descriptor import descriptor as build_descriptor
 from avp_claude_agent.translator import ClaudeAgentTranslator
 
 
@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser(
         "describe",
         help=(
-            "Print this agent's manifest as JSON to stdout and exit. The "
+            "Print this agent's Descriptor as JSON to stdout and exit. The "
             "payload matches the `agent_described` event the agent emits "
             "between `run_requested` and `agent_started` for the same "
             "agent build."
@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.subcommand == "describe":
         sys.stdout.write(
             json.dumps(
-                build_manifest().model_dump(by_alias=True, exclude_none=True),
+                build_descriptor().model_dump(by_alias=True, exclude_none=True),
                 indent=2,
             )
             + "\n"
@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     translator = ClaudeAgentTranslator(
         commission=commission,
         on_event=lambda ev: write_event(ev, file=sys.stdout),
-        manifest=build_manifest(),
+        descriptor=build_descriptor(),
     )
     translator.run()
     return 0

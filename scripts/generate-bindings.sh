@@ -92,16 +92,19 @@ generate_ts() {
 
 echo "Generating Rust bindings (cargo-typify)…"
 generate_rust "commission" "$SPEC/commission.schema.json"
-generate_rust "event" "$SPEC/event.schema.json"
+generate_rust "trajectory" "$SPEC/trajectory.schema.json"
+generate_rust "agent_descriptor" "$SPEC/agent-descriptor.schema.json"
 
-# v0.1 has no supervisor → agent channel; remove old generated files if they
-# linger from a previous run.
-rm -f "$RUST_OUT/supervisor_message.rs" "$TS_OUT/supervisor-message.ts"
+# Old generated files from previous schema/sub-spec names; clean up to avoid
+# stale code drifting in tree.
+rm -f "$RUST_OUT/event.rs" "$RUST_OUT/supervisor_message.rs"
+rm -f "$TS_OUT/event.ts" "$TS_OUT/supervisor-message.ts"
 
 echo
 echo "Generating TypeScript bindings (json-schema-to-typescript)…"
 generate_ts "commission" "$SPEC/commission.schema.json"
-generate_ts "event" "$SPEC/event.schema.json"
+generate_ts "trajectory" "$SPEC/trajectory.schema.json"
+generate_ts "agent-descriptor" "$SPEC/agent-descriptor.schema.json"
 
 echo
 echo "Done."

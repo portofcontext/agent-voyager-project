@@ -33,8 +33,8 @@ def test_subagent_ref_id_pattern_enforced() -> None:
 
 
 def test_subagent_ref_no_extra_fields() -> None:
-    # The legacy rich shape (system_prompt, model, etc.) is gone — refs are
-    # opaque, model contract comes from the resolver.
+    # SubagentRef carries `{id, ref}` only. The ref is opaque to AVP; model
+    # contract, system prompt, and other rich metadata come from the resolver.
     with pytest.raises(ValidationError):
         SubagentRef.model_validate(
             {"id": "x", "ref": "y", "system_prompt": "should not be allowed"}
@@ -54,6 +54,10 @@ def test_commission_carries_subagent_refs_only() -> None:
     assert c.subagents[0].id == "researcher"
 
 
-def test_commission_rejects_legacy_exposed_field() -> None:
+def test_commission_rejects_unknown_field() -> None:
+    # Commission uses strict-extra-fields so a typo or stale field surfaces
+    # as a validation error rather than being silently dropped.
     with pytest.raises(ValidationError):
-        Commission.model_validate({"schema_version": "0.1", "run_id": "r1", "exposed": ["*"]})
+        Commission.model_validate(
+            {"schema_version": "0.1", "run_id": "r1", "not_a_real_field": ["*"]}
+        )

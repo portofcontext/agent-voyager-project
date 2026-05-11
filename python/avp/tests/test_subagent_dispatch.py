@@ -11,7 +11,7 @@ conformance/v0.1/cases/subagent/.
 from __future__ import annotations
 
 from avp import (
-    AgentManifest,
+    AgentDescriptor,
     Commission,
     SubagentInvokedEvent,
     SubagentRef,
@@ -49,8 +49,8 @@ def _model_invokes_then_converges() -> ScriptedModel:
     )
 
 
-def _managed_manifest() -> AgentManifest:
-    return AgentManifest(
+def _managed_descriptor() -> AgentDescriptor:
+    return AgentDescriptor(
         agent_name="test-agent",
         agent_version="0.0.0",
         avp_spec_version="0.1",
@@ -82,7 +82,7 @@ def test_managed_subagent_returns_with_child_run_id() -> None:
         ScriptedTools(),
         ScriptedSupervisor(),
         resolver=resolver,
-        manifest=_managed_manifest(),
+        descriptor=_managed_descriptor(),
     )
     agent.run()
 

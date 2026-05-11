@@ -3,8 +3,8 @@
   "title": "Each Commission.mcp_servers entry MUST emit a connected event after resolution and a disconnected event before agent_stopped",
   "description": "When Commission.mcp_servers declares one or more managed servers, the agent MUST resolve each ref via avp.resolve at startup, emit managed_ref_resolved per ref, then emit avp.mcp_server_connected per server before any model turns runs, and avp.mcp_server_disconnected per server before agent_stopped. Each event carries avp.mcp.server_id matching the Commission entry's id. This is the lifecycle a supervisor relies on to know which MCP servers were actually wired up for the run.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#7-tool-dispatch-via-mcp",
-    "spec/v0.1/SPEC.md#6-the-resolver-protocol"
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/resolver.md"
   ],
   "applies_to": [
     "agent"
@@ -27,7 +27,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"

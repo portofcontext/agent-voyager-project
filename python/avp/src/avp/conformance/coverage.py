@@ -40,21 +40,23 @@ def event_types_from_schema(schema_path: Path) -> set[str]:
     consts ('agent', 'supervisor', schema_version values) don't bleed in.
 
     Accepts either:
-      - the per-shape schema (event.schema.json) — has `$defs` directly
+      - the per-shape schema (trajectory.schema.json) — has `$defs` directly
       - the bundle (avp.schema.json) — uses `oneOf` of `$ref` to siblings;
-        we resolve to the sibling `event.schema.json` and read its `$defs`
+        we resolve to the sibling `trajectory.schema.json` and read its
+        `$defs`
 
-    Raises FileNotFoundError if pointed at a bundle whose sibling event
-    schema is missing — that's a build/regen issue, not a silent gap.
+    Raises FileNotFoundError if pointed at a bundle whose sibling
+    trajectory schema is missing — that's a build/regen issue, not a
+    silent gap.
     """
     bundle = json.loads(schema_path.read_text())
     defs = bundle.get("$defs") or {}
     if not defs:
-        # Likely a bundle — find the sibling event schema and read from it.
-        sibling = schema_path.parent / "event.schema.json"
+        # Likely a bundle — find the sibling trajectory schema and read from it.
+        sibling = schema_path.parent / "trajectory.schema.json"
         if not sibling.exists():
             raise FileNotFoundError(
-                f"{schema_path.name} has no $defs and no sibling event.schema.json "
+                f"{schema_path.name} has no $defs and no sibling trajectory.schema.json "
                 f"at {sibling}; regenerate schemas with scripts/generate-schemas.py."
             )
         defs = json.loads(sibling.read_text()).get("$defs") or {}

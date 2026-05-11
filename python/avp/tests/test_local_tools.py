@@ -158,7 +158,7 @@ def test_unknown_tool_returns_error() -> None:
 def test_fallback_driver_handles_unregistered_tools() -> None:
     """Local-first: a tool LocalTools knows about wins. Anything else
     falls through to the fallback driver. Lets users layer their own
-    callables over agent built-ins like ShellTools."""
+    callables over an agent's own tool catalog."""
     fallback = ScriptedTools({"shellish": {"output": "from-fallback"}})
     tools = LocalTools(fallback=fallback)
     tools.register("local", lambda i: "from-local", description="x", input_schema={})
@@ -181,10 +181,10 @@ def test_local_wins_over_fallback_on_name_collision() -> None:
 
 
 def test_schemas_property_combines_local_and_fallback_schemas() -> None:
-    """When the fallback exposes a `.schemas` list (e.g. ShellTools
-    style), LocalTools.schemas returns the merged list — local first,
-    then fallback entries we don't shadow. Lets the agent declare
-    everything to the model in one shot."""
+    """When the fallback exposes a `.schemas` list (an agent's own
+    tool catalog), LocalTools.schemas returns the merged list: local
+    first, then fallback entries we don't shadow. Lets the agent
+    declare everything to the model in one shot."""
 
     class _Fallback:
         @property

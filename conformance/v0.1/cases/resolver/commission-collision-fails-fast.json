@@ -1,10 +1,10 @@
 {
   "id": "commission-collision-fails-fast",
   "title": "Commission entry id colliding with an agent built-in stops with commission_collision before any model turn",
-  "description": "SPEC.md \u00a79.1, \u00a79.5, \u00a714.1 \u2014 id/name collisions between agent-internal contributions and Commission-managed assets are configuration errors. The agent MUST detect them at startup and emit error_occurred(commission_collision) + agent_stopped(reason=error) before any model turn. This case wires a built-in tool named `bash` and a Commission.subagents entry with id `bash`; the collision is fatal.",
+  "description": "id/name collisions between agent-internal contributions and Commission-managed assets are configuration errors. The agent MUST detect them at startup and emit error_occurred(commission_collision) + agent_stopped(reason=error) before any model turn. This case wires a built-in tool named `bash` and a Commission.subagents entry with id `bash`; the collision is fatal.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#9-1-merge-semantics-agent-internal-commission-managed",
-    "spec/v0.1/SPEC.md#14-1-agent"
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#8-conformance"
   ],
   "applies_to": [
     "agent"
@@ -20,7 +20,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"
@@ -72,7 +72,7 @@
         }
       },
       {
-        "label": "managed_ref_resolved MUST NOT fire \u2014 collision check runs before resolution",
+        "label": "managed_ref_resolved MUST NOT fire — collision check runs before resolution",
         "match": {
           "type": "avp.managed_ref_resolved"
         }

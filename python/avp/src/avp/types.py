@@ -8,21 +8,22 @@ The wire format is built on:
   tool attribute names inside `data` (e.g., `gen_ai.usage.input_tokens`).
 - **OpenTelemetry span identification** (`trace_id`, `span_id`,
   `parent_span_id`) so downstream consumers reconstruct the run's span tree.
-- **JSON-RPC 2.0** for the AVP resolver protocol — the agent calls
+- **JSON-RPC 2.0** for the AVP Resolver API. The agent calls
   `avp.resolve` (and `avp.spawn_subagent` for managed subagents) against a
   supervisor-stood-up resolver service to dereference opaque refs in
   `Commission.{mcp_servers,skills,subagents}[].ref`.
 
-The Commission carries supervisor-managed assets as opaque refs only —
+The Commission carries supervisor-managed assets as opaque refs only;
 their resolved material (MCP connection details, skill content, subagent
-metadata) is fetched via the resolver protocol at startup. Anything the
+metadata) is fetched via the Resolver API at startup. Anything the
 agent provides on its own (in-process tools, baked-in skills) is invisible
-to AVP and surfaced through the agent's manifest at run time.
+to AVP and surfaced through the agent's Descriptor at run time.
 
 AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace.
 
-See `FOUNDATIONS.md` for the full mapping rationale and `SPEC.md` for
+See `FOUNDATIONS.md` for the full mapping rationale and the four sub-specs
+under `spec/v0.1/` (trajectory, commission, agent-descriptor, resolver) for
 normative requirements.
 """
 
@@ -71,7 +72,7 @@ def new_span_id() -> str:
     return secrets.token_hex(8)
 
 
-# 16 zero hex chars — the OTel "absent parent" sentinel for top-level spans.
+# 16 zero hex chars: the OTel "absent parent" sentinel for top-level spans.
 ZERO_SPAN_ID = "0" * 16
 
 
@@ -122,7 +123,7 @@ _OPEN = ConfigDict(extra="allow", populate_by_name=True)
 
 
 # An opaque, supervisor-defined reference resolved by the AVP resolver
-# protocol. AVP does not constrain the shape — it can be a string (UUID, ARN,
+# protocol. AVP does not constrain the shape; it can be a string (UUID, ARN,
 # content hash, URL, anything the supervisor's resolver understands), an
 # object (the supervisor's own structured shape, e.g. Anthropic Managed
 # Agents' `{type, skill_id, version}`), or any other JSON value. The agent
@@ -137,8 +138,9 @@ class McpServerRef(BaseModel):
     The agent resolves this entry at startup by calling `avp.resolve` with
     `{kind: "mcp_server", id, ref}`. The resolver returns the connection
     material (transport, URL, auth, etc.) the agent uses to dial the actual
-    MCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and
-    transport are deployment concerns — AVP does not constrain them.
+    MCP server. Per-`kind` result schemas are pinned in the Resolver API
+    spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
+    concerns; AVP does not constrain them.
     """
 
     model_config = _STRICT
@@ -151,7 +153,7 @@ class SkillRef(BaseModel):
 
     The agent resolves this entry at startup by calling `avp.resolve` with
     `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
-    (or a location the agent fetches and reads) — agentskills.io's content
+    (or a location the agent fetches and reads); agentskills.io's content
     model still applies; the resolver just hands the content back from
     whatever store the supervisor uses.
     """
@@ -181,7 +183,7 @@ class SubagentRef(BaseModel):
 
 class RunStateSnapshot(BaseModel):
     """Cumulative run-state used in cost_recorded and agent_stopped data.
-    Open model — supervisor SDKs can carry implementation-specific fields."""
+    Open model: supervisor SDKs can carry implementation-specific fields."""
 
     model_config = _OPEN
     total_cost_usd: float = Field(ge=0)
@@ -210,7 +212,7 @@ class SupervisorPreamble(BaseModel):
 
     `name` SHOULD be a stable identifier for the supervisor implementation
     or instance (e.g. `"simple-supervisor-example"`, `"acme.scheduler"`).
-    `version` is optional but recommended — it travels with the trajectory
+    `version` is optional but recommended; it travels with the trajectory
     and lets auditors correlate a run with the exact supervisor build
     that requested it.
     """
@@ -227,15 +229,16 @@ class Commission(BaseModel):
     """Supervisor's declaration of the supervisor-managed environment slice.
 
     All asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs
-    resolved by the AVP resolver protocol at startup (see SPEC.md). The
+    resolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).
+    The
     supervisor never embeds connection material, file paths, or inline
-    asset definitions on the wire — those land in `run_requested.data`
+    asset definitions on the wire; those land in `run_requested.data`
     on the trajectory and would leak secrets to consumers.
 
     Anything the agent provides on its own (in-process tools, baked-in
     skills, internally-defined subagents) is invisible to AVP and the
     Commission entirely. The agent's own contribution surfaces in
-    `agent_described.data["avp.manifest"]` so consumers can audit what the
+    `agent_described.data["avp.descriptor"]` so consumers can audit what the
     agent showed up with. The agent's runtime layer merges its internal
     contribution with the resolved managed assets into one bag the loop
     dispatches against; collisions on `id` are a startup error.
@@ -246,8 +249,7 @@ class Commission(BaseModel):
     schema_version: Literal["0.1"]
     run_id: str = Field(min_length=1)
 
-    # Supervisor identity. Optional in v0.1 to keep backwards-compat with
-    # existing Commission blobs, but RECOMMENDED — when present, the agent
+    # Supervisor identity. Optional but RECOMMENDED. When present, the agent
     # stamps `run_requested.data.avp.supervisor.*` from this field so the
     # trajectory records who requested the run. When absent, the agent
     # still emits `run_requested` but with `avp.supervisor.name="unknown"`.
@@ -316,7 +318,7 @@ class _SpanData(BaseModel):
 
 
 class _ToolDecl(BaseModel):
-    """Tool descriptor in `agent_started.data.tools` — MCP-shaped + AVP fields."""
+    """Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields."""
 
     model_config = _OPEN
     name: str
@@ -329,7 +331,7 @@ class _ToolDecl(BaseModel):
 
 
 class _SubagentDecl(BaseModel):
-    """Subagent descriptor in `agent_started.data.subagents` — what the
+    """Subagent descriptor in `agent_started.data.subagents`: what the
     parent model sees when deciding whether to delegate. Same MCP-shaped
     triple (`name`, `description`, `inputSchema`) tools use, so adapters
     can render subagents to the model's tool list with no translation.
@@ -347,7 +349,7 @@ class _SubagentDecl(BaseModel):
 
 
 class _SkillDecl(BaseModel):
-    """Skill descriptor in `agent_started.data.skills` — name plus
+    """Skill descriptor in `agent_started.data.skills`: name plus
     optional metadata about each skill loaded for the run.
 
     Replaces the v0.1-prototype `list[str]` shape (names-only) with a
@@ -370,7 +372,7 @@ class _SkillDecl(BaseModel):
 class _ResourceDecl(BaseModel):
     """MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.
 
-    Mirrors MCP's `Resource` type from the protocol spec — `uri` is the
+    Mirrors MCP's `Resource` type from the protocol spec; `uri` is the
     primary identifier the agent uses to fetch via `resources/read`,
     `name` and `description` are display/discovery metadata, `mimeType`
     hints at the content format. Skills sourced as `mcp://<server-id>/<path>`
@@ -383,33 +385,33 @@ class _ResourceDecl(BaseModel):
     mimeType: str | None = Field(default=None, alias="mimeType")
 
 
-class AgentManifest(BaseModel):
-    """Self-description of an AVP agent — who it is, what it brings.
+class AgentDescriptor(BaseModel):
+    """Self-description of an AVP agent: who it is, what it brings.
 
-    Every AVP-compliant agent MUST publish a manifest that enumerates
+    Every AVP-compliant agent MUST publish a Descriptor that enumerates
     everything triggerable without supervisor configuration: SDK preset
     tools, runtime-bundled subagents, runtime-bundled skills, plus the
     agent's name / version / supported AVP spec version. Consumers use
-    the manifest in two ways:
+    the Descriptor in two ways:
 
-      1. **Pre-flight** — `<agent> describe` prints the manifest as JSON
-         to stdout. A supervisor authoring a Commission can introspect what
-         the agent offers before invoking it (so `Commission.exposed`,
-         `Commission.subagents`, etc. can be authored against ground truth).
+      1. **Pre-flight**: `<agent> describe` prints the Descriptor as
+         JSON to stdout. A supervisor authoring a Commission can
+         introspect what the agent offers before invoking it.
 
-      2. **On the wire** — the agent emits a `agent_described` event
+      2. **On the wire**: the agent emits an `agent_described` event
          right after `run_requested` and right before `agent_started`.
          The on-wire payload MUST equal what `describe` prints for the
          same agent build, so the audit trail records exactly what the
          consumer would have seen at pre-flight time.
 
-    Scope: SDK defaults only. The manifest does NOT include
-    supervisor-declared surfaces (`Commission.tools`, `Commission.subagents`,
-    `Commission.skills`) and does NOT include environment-discovered
-    surfaces (filesystem skills under `~/.claude/skills/`, MCP servers
-    discovered at startup, user-installed plugins). Those appear on
-    `agent_started` (the merged-view event) and `mcp_server_connected`
-    respectively. The manifest is the agent's identity, not the run's.
+    Scope: SDK defaults only. The Descriptor does NOT include
+    supervisor-declared surfaces (`Commission.mcp_servers`,
+    `Commission.subagents`, `Commission.skills`) and does NOT include
+    environment-discovered surfaces (filesystem skills under
+    `~/.claude/skills/`, MCP servers discovered at startup,
+    user-installed plugins). Those appear on `agent_started` (the
+    merged-view event) and `mcp_server_connected` respectively. The
+    Descriptor is the agent's identity, not the run's.
     """
 
     model_config = _STRICT
@@ -422,7 +424,7 @@ class AgentManifest(BaseModel):
     # (fnmatch semantics): "claude-*" matches any Claude model,
     # "claude-haiku-4-5-*" pins to Haiku 4.5 builds, "gpt-*" matches
     # any GPT. When None, the agent advertises support for any model
-    # the supervisor provides — but the driver may still fail at the
+    # the supervisor provides, but the driver may still fail at the
     # provider call. When set, an agent SHOULD validate `Commission.model`
     # at startup and emit `error_occurred(code: "unsupported_model")` +
     # `agent_stopped(reason: "error")` before any model turn if the
@@ -440,7 +442,7 @@ class RunRequestedData(_SpanData):
     Anchors the trajectory: the supervisor's assertion that this run was
     requested with this Commission. Agent-relayed (the agent emits the
     event with `source: avp://supervisor` based on `Commission.supervisor`),
-    so no I/O contract change beyond Commission — but attribution is the
+    so no I/O contract change beyond Commission, but attribution is the
     supervisor's, not the agent's.
 
     `avp.commission` is the full Commission snapshot the supervisor handed
@@ -457,12 +459,12 @@ class RunRequestedData(_SpanData):
 class AgentDescribedData(_SpanData):
     """Payload of avp.agent_described events.
 
-    The agent's published manifest, emitted between `run_requested` and
-    `agent_started`. `avp.agent` MUST equal what `<agent> describe`
-    prints to stdout for the same agent build.
+    The agent's published Descriptor, emitted between `run_requested`
+    and `agent_started`. `avp.descriptor` MUST equal what
+    `<agent> describe` prints to stdout for the same agent build.
     """
 
-    avp_manifest: AgentManifest = Field(alias="avp.manifest")
+    avp_descriptor: AgentDescriptor = Field(alias="avp.descriptor")
 
 
 class AgentStartedData(_SpanData):
@@ -492,7 +494,7 @@ class AgentStoppedData(_SpanData):
     # field on `avp.state` (validator below enforces). Existed historically
     # as one-hop reads for consumers who only want the headline numbers
     # from the terminator event. New consumers SHOULD read `avp.state.*`
-    # instead — it's the canonical surface and the same shape that ships
+    # instead; it's the canonical surface and the same shape that ships
     # on every `cost_recorded` event. Marked for removal in v0.2.
     avp_total_tokens: int | None = Field(default=None, ge=0, alias="avp.total_tokens")
     avp_total_cost_usd: float | None = Field(default=None, ge=0, alias="avp.total_cost_usd")
@@ -520,7 +522,7 @@ class AgentStoppedData(_SpanData):
                     f"agent_stopped.{alias}={top!r} disagrees with "
                     f"avp.state.{alias.removeprefix('avp.')}={snap!r}; "
                     "the top-level field MUST equal the snapshot field "
-                    "(see SPEC §11.1). Either populate from the snapshot or "
+                    "(see spec/v0.1/trajectory.md §7.1). Either populate from the snapshot or "
                     "leave the top-level None."
                 )
         return self
@@ -600,7 +602,7 @@ class SubagentInvokedData(_SpanData):
     `invoke_agent` and `gen_ai.agent.name` carries the subagent's declared
     name.
 
-    `avp.subagent.run_id` is set when the subagent is supervisor-managed —
+    `avp.subagent.run_id` is set when the subagent is supervisor-managed:
     the parent's runtime calls `avp.spawn_subagent` and receives the child
     `run_id` of the subagent's separate, independently-trajectoried run.
     Consumers correlate the parent and child trajectories via this field.
@@ -622,7 +624,7 @@ class SubagentInvokedData(_SpanData):
 class SubagentReturnedData(_SpanData):
     """Closes the subagent's frame. `span_id` matches the corresponding
     `subagent_invoked` event so consumers can pair them. `avp.subagent.usage`
-    rolls up the subagent's own consumption (cost, tokens, turns) — this
+    rolls up the subagent's own consumption (cost, tokens, turns); this
     rollup is also reflected in the parent run's cumulative state, but the
     breakdown is preserved here so consumers can attribute spend to the
     subagent that incurred it."""
@@ -678,7 +680,7 @@ class RefusalRecordedData(_SpanData):
     every provider names them differently), `provider` lets downstream
     consumers normalize the reason code without context-guessing.
 
-    A refusal terminates the turn — the model produced no useful text or
+    A refusal terminates the turn; the model produced no useful text or
     tool call. Whether the *run* terminates is an agent decision (the
     reference agent stops with `StopReason.refused`); a higher-level
     supervisor may choose to reset history and retry.
@@ -694,7 +696,7 @@ class RefusalRecordedData(_SpanData):
 class ReasoningEmittedData(_SpanData):
     """The model produced a reasoning / thinking block during this turn.
 
-    Distinct from `text_emitted` — reasoning is not user-facing output;
+    Distinct from `text_emitted`: reasoning is not user-facing output;
     it's the model's internal chain-of-thought that some providers
     expose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,
     etc.). Consumers can filter on this event type to redact / collapse
@@ -704,7 +706,7 @@ class ReasoningEmittedData(_SpanData):
     cryptographic signature on the thinking block (Anthropic does this
     for redacted_thinking blocks); empty when the provider doesn't.
     `avp.reasoning.redacted` flags blocks the provider has returned in
-    encrypted-only form (no plaintext) — the wire still records the
+    encrypted-only form (no plaintext); the wire still records the
     occurrence so audit consumers can count thinking turns.
     """
 
@@ -721,7 +723,7 @@ class CostRecordedData(_SpanData):
     # back an authoritative total (Claude Agent SDK's
     # ResultMessage.total_cost_usd, etc.). Per-turn cost_recorded events
     # leave it unset because the running total is a mix of per-turn
-    # numbers — `avp.cost.source` on each `model_turn_ended` event is
+    # numbers; `avp.cost.source` on each `model_turn_ended` event is
     # the authoritative tag for individual turn costs.
     avp_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
         default=None, alias="avp.cost.source"
@@ -733,22 +735,22 @@ class SkillLoadedData(_SpanData):
 
     Semantics: emitted when the SKILL.md body content has been added to
     the model's active context window. NOT a registration acknowledgment
-    — the registration view is `agent_started.data.skills[]`.
+    (the registration view is `agent_started.data.skills[]`).
 
     Two emission patterns, differentiated by the agent's
     `manifest.capabilities`:
 
-      - `skills:eager` — agent injects all declared SKILL.md bodies at
+      - `skills:eager`: agent injects all declared SKILL.md bodies at
         startup (e.g., as system_prompt suffix). Emit once per skill at
         `step=0`, after `agent_started` and `mcp_server_connected`.
-      - `skills:progressive` — model decides per-turn which skill bodies
+      - `skills:progressive`: model decides per-turn which skill bodies
         to pull in (Anthropic Skills, Claude Code progressive disclosure).
         Emit when the body actually enters context, with `step=N` matching
         the turn it loaded in. MAY fire multiple times for the same
         skill (e.g., re-load after compaction).
 
     Agents whose SDK does not expose progressive-disclosure load events
-    SHOULD NOT emit `skill_loaded` at all — `agent_started.data.skills[]`
+    SHOULD NOT emit `skill_loaded` at all; `agent_started.data.skills[]`
     still records the registration. Honest-silent beats fabricated events.
     """
 
@@ -771,7 +773,7 @@ class McpServerConnectedData(_SpanData):
     # Per-server tool list, populated by agents that actually drive the
     # MCP handshake (e.g. avp-claude-agent calling
     # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
-    # agent emits a stub event (e.g. the reference agent — its
+    # agent emits a stub event (e.g. the reference agent; its
     # mcp_server_connected events are placeholders without live transport).
     # Each entry is the same `_ToolDecl` shape used on
     # `agent_started.data.tools`, with `avp.dispatch_target=mcp_server`
@@ -816,7 +818,7 @@ class ManagedRefResolvedData(_SpanData):
     startup-only; for subagents this fires for the metadata-resolve at
     startup (the on-demand spawn at runtime is recorded on
     `subagent_invoked` instead). The opaque ref material is NOT re-recorded
-    here — `run_requested.data["avp.commission"]` already has it. This
+    here; `run_requested.data["avp.commission"]` already has it. This
     event records only that the round-trip happened.
     """
 
@@ -828,8 +830,8 @@ class ManagedRefResolvedData(_SpanData):
 class ManagedRefResolveFailedData(_SpanData):
     """The resolver returned an error or could not be reached for one of
     the Commission's managed-asset refs. The agent MUST stop with
-    `agent_stopped(reason: "error")` after emitting this event — startup
-    resolution is fail-fast (see SPEC.md)."""
+    `agent_stopped(reason: "error")` after emitting this event. Startup
+    resolution is fail-fast (see `spec/v0.1/resolver.md` §5)."""
 
     avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
     avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
@@ -876,7 +878,7 @@ class RunRequestedEvent(_CloudEventBase):
 
 
 class AgentDescribedEvent(_CloudEventBase):
-    """Second event of the trajectory. The agent's "whoami" — its
+    """Second event of the trajectory. The agent's "whoami":
     self-published manifest of everything triggerable without supervisor
     configuration. Carries the same JSON `<agent> describe` prints to
     stdout for this agent build.
@@ -1075,7 +1077,7 @@ def parse_event(payload: dict[str, Any]) -> BaseModel | dict[str, Any]:
     """Parse an agent-emitted event payload.
 
     Known types validate against their Pydantic model. Unknown types pass
-    through as a dict (per SPEC §12: consumers MUST pass through unknown
+    through as a dict (per spec/v0.1/README.md §4: consumers MUST pass through unknown
     types without error), provided they carry the CloudEvents-required
     envelope fields.
     """

@@ -2,9 +2,9 @@
 
 The agent runs inside the supervisor's declared environment. The Commission
 carries supervisor-managed asset refs (mcp_servers, skills, subagents). The
-agent dereferences each ref at startup via the AVP resolver protocol
-(see SPEC.md §6) before the main loop runs; managed subagents spawn
-on-demand via `avp.spawn_subagent` when the model invokes them.
+agent dereferences each ref at startup via the AVP Resolver API
+(see `spec/v0.1/resolver.md`) before the main loop runs; managed subagents
+spawn on-demand via `avp.spawn_subagent` when the model invokes them.
 
 Each emitted event is a CloudEvent 1.0 envelope carrying typed `data`. Span
 identification (`trace_id`, `span_id`, `parent_span_id`) follows OpenTelemetry
@@ -45,7 +45,7 @@ from avp.types import (
     ZERO_SPAN_ID,
     AgentDescribedData,
     AgentDescribedEvent,
-    AgentManifest,
+    AgentDescriptor,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
@@ -150,7 +150,7 @@ class AVPAgent:
         agent_builtin_tools: list[dict[str, Any]] | None = None,
         resolver: ResolverDriver | None = None,
         *,
-        manifest: AgentManifest | None = None,
+        descriptor: AgentDescriptor | None = None,
         on_event: Callable[[BaseModel], None] | None = None,
     ) -> None:
         """`agent_builtin_tools` declares the agent's built-in tool catalog.
@@ -161,17 +161,19 @@ class AVPAgent:
         assets (`mcp_servers`, `skills`, or `subagents` non-empty). The
         resolver dereferences the opaque refs into the connection material /
         content / metadata the agent uses; managed subagents are also
-        spawned through it on demand. When the Commission is empty of
-        managed assets, `resolver` MAY be None (the Profile-A case).
+        spawned through it on demand. When the Commission carries no
+        managed assets, `resolver` MAY be None.
 
-        `manifest` is the agent's self-description (see `AgentManifest`).
-        When provided, the agent opens the trajectory with the
-        `run_requested` → `agent_described` prelude before `agent_started`.
-        When None, the prelude is skipped — used by embedded callers
-        (the in-process supervisor example, conformance harness) that drive
-        AVPAgent against a synthetic Commission without a packaged agent
-        identity. Top-level CLI invocations (`avp-anthropic`,
-        `avp-claude-agent`) MUST pass a manifest so the wire is complete.
+        `descriptor` is the agent's self-description (see
+        `AgentDescriptor`). When provided, the agent opens the trajectory
+        with the `run_requested` → `agent_described` prelude before
+        `agent_started`. When None, the prelude is skipped — used by
+        embedded callers (the in-process supervisor example, conformance
+        harness) that drive AVPAgent against a synthetic Commission
+        without a packaged agent identity. Top-level CLI invocations
+        (e.g. `avp-claude-agent`, the reference avp-anthropic agent in
+        `supervisors/simple-supervisor-example/examples/`) MUST pass a
+        descriptor so the wire is complete.
 
         `on_event` is an optional callback invoked synchronously as each event
         is emitted, BEFORE it lands in `self.trajectory`. The agent still
@@ -187,7 +189,7 @@ class AVPAgent:
         self.tools = tools
         self.supervisor = supervisor
         self._resolver = resolver
-        self._manifest = manifest
+        self._descriptor = descriptor
         self._on_event = on_event
         self.trajectory: list[BaseModel | dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
@@ -277,7 +279,7 @@ class AVPAgent:
 
         # Resolve managed refs. Each successful resolution emits
         # `managed_ref_resolved`; any failure emits `managed_ref_resolve_failed`
-        # and short-circuits with reason=error per SPEC §6.4.
+        # and short-circuits with reason=error per spec/v0.1/resolver.md §5.
         if not self._resolve_managed_assets():
             return self._emit_agent_stopped(StopReason.error)
 
@@ -314,7 +316,7 @@ class AVPAgent:
 
     def _validate_resolver_present(self) -> bool:
         """If the Commission carries managed assets but no ResolverDriver was
-        supplied, fail-fast with `resolver_not_configured` (SPEC §6.1).
+        supplied, fail-fast with `resolver_not_configured` (spec/v0.1/resolver.md §2).
 
         Production agents construct an HTTP-backed driver from
         `AVP_RESOLVER_URL` before calling AVPAgent; the agent itself only
@@ -328,7 +330,7 @@ class AVPAgent:
             (
                 "Commission carries managed assets but no ResolverDriver was "
                 "supplied to AVPAgent (and AVP_RESOLVER_URL was not bootstrapped). "
-                "Configure a resolver service per SPEC.md §6.1."
+                "Configure a resolver service per `spec/v0.1/resolver.md` §2."
             ),
         )
         return False
@@ -338,19 +340,19 @@ class AVPAgent:
         and Commission-declared entries. v0.1 covers:
 
           - `Commission.subagents[].id` ↔ agent built-in tool names
-          - `Commission.subagents[].id` ↔ manifest.built_in_subagents[].name
-          - `Commission.mcp_servers[].id` ↔ manifest.built_in_subagents[].name
+          - `Commission.subagents[].id` ↔ descriptor.built_in_subagents[].name
+          - `Commission.mcp_servers[].id` ↔ descriptor.built_in_subagents[].name
             / built_in_tool names (the reference agent doesn't ship internal
             MCP servers, but the rule is uniform across asset kinds)
 
         Tool-name collisions across distinct resolved MCP servers are an
         agent-runtime concern (the MCP client layer namespaces them) and
-        not enforced here. See SPEC.md §9.1."""
+        not enforced here. See `spec/v0.1/trajectory.md` §4.1."""
         commission = self.commission
         builtin_tool_names = {bt["name"] for bt in self._agent_builtin_tools}
-        if self._manifest is not None:
-            builtin_tool_names |= {t.name for t in (self._manifest.built_in_tools or [])}
-            builtin_subagent_names = {s.name for s in (self._manifest.built_in_subagents or [])}
+        if self._descriptor is not None:
+            builtin_tool_names |= {t.name for t in (self._descriptor.built_in_tools or [])}
+            builtin_subagent_names = {s.name for s in (self._descriptor.built_in_subagents or [])}
         else:
             builtin_subagent_names = set()
         commission_subagent_ids = {sa.id for sa in (commission.subagents or [])}
@@ -361,13 +363,13 @@ class AVPAgent:
             collisions.append(f"subagent id {entry_id!r} collides with a built-in tool name")
         for entry_id in commission_subagent_ids & builtin_subagent_names:
             collisions.append(
-                f"subagent id {entry_id!r} collides with a manifest-declared built-in subagent"
+                f"subagent id {entry_id!r} collides with a descriptor-declared built-in subagent"
             )
         for entry_id in commission_mcp_ids & builtin_tool_names:
             collisions.append(f"mcp_server id {entry_id!r} collides with a built-in tool name")
         for entry_id in commission_mcp_ids & builtin_subagent_names:
             collisions.append(
-                f"mcp_server id {entry_id!r} collides with a manifest-declared built-in subagent"
+                f"mcp_server id {entry_id!r} collides with a descriptor-declared built-in subagent"
             )
         if not collisions:
             return True
@@ -379,8 +381,8 @@ class AVPAgent:
 
     def _validate_enabled_builtins(self) -> bool:
         """Validate `Commission.enabled_builtin_*` allowlists against the
-        agent's manifest-published built-in surfaces. Names that don't
-        match any manifest entry are configuration mistakes and fail-fast.
+        agent's descriptor-published built-in surfaces. Names that don't
+        match any descriptor entry are configuration mistakes and fail-fast.
 
         Each list is independent: absent → all built-ins of that kind
         exposed; present → only the listed names exposed; `[]` → none of
@@ -391,21 +393,21 @@ class AVPAgent:
         commission = self.commission
         unknown: list[str] = []
 
-        # Resolve the source-of-truth name sets. Manifest is authoritative
+        # Resolve the source-of-truth name sets. The Descriptor is authoritative
         # when present; the constructor's `agent_builtin_tools` is the
         # fallback for the tool list (the reference agent's embedders pass
-        # tools directly without a manifest). Subagents and skills only
-        # have a manifest source — there's no constructor-arg equivalent.
-        if self._manifest is not None and self._manifest.built_in_tools is not None:
-            known_tools = {t.name for t in self._manifest.built_in_tools}
+        # tools directly without a Descriptor). Subagents and skills only
+        # have a Descriptor source — there's no constructor-arg equivalent.
+        if self._descriptor is not None and self._descriptor.built_in_tools is not None:
+            known_tools = {t.name for t in self._descriptor.built_in_tools}
         else:
             known_tools = {bt["name"] for bt in self._agent_builtin_tools}
-        if self._manifest is not None and self._manifest.built_in_subagents is not None:
-            known_subagents = {s.name for s in self._manifest.built_in_subagents}
+        if self._descriptor is not None and self._descriptor.built_in_subagents is not None:
+            known_subagents = {s.name for s in self._descriptor.built_in_subagents}
         else:
             known_subagents = set()
-        if self._manifest is not None and self._manifest.built_in_skills is not None:
-            known_skills = {s.name for s in self._manifest.built_in_skills}
+        if self._descriptor is not None and self._descriptor.built_in_skills is not None:
+            known_skills = {s.name for s in self._descriptor.built_in_skills}
         else:
             known_skills = set()
 
@@ -452,25 +454,25 @@ class AVPAgent:
 
     def _validate_supported_model(self) -> bool:
         """Cross-check Commission.model against the agent's
-        manifest.supported_models (glob list). Skipped when no manifest is
-        published, when the manifest declares no constraint, or when the
+        descriptor.supported_models (glob list). Skipped when no Descriptor is
+        published, when the Descriptor declares no constraint, or when the
         Commission omits `model`."""
         import fnmatch
 
         commission = self.commission
-        manifest = self._manifest
-        if manifest is None or manifest.supported_models is None:
+        descriptor = self._descriptor
+        if descriptor is None or descriptor.supported_models is None:
             return True
         if not commission.model:
             return True
-        if any(fnmatch.fnmatchcase(commission.model, p) for p in manifest.supported_models):
+        if any(fnmatch.fnmatchcase(commission.model, p) for p in descriptor.supported_models):
             return True
         self._emit_error(
             ErrorCode.unsupported_model,
             (
                 f"Commission.model={commission.model!r} is not supported by "
-                f"{manifest.agent_name}@{manifest.agent_version}; "
-                f"supported_models={manifest.supported_models}"
+                f"{descriptor.agent_name}@{descriptor.agent_version}; "
+                f"supported_models={descriptor.supported_models}"
             ),
         )
         return False
@@ -1116,7 +1118,7 @@ class AVPAgent:
     # ── Prelude / footer ────────────────────────────────────────────────────
 
     def _emit_run_prelude(self) -> None:
-        if self._manifest is None:
+        if self._descriptor is None:
             return
         commission = self.commission
         sup = commission.supervisor
@@ -1145,7 +1147,7 @@ class AVPAgent:
                     trace_id=self._trace_id,
                     span_id=new_span_id(),
                     parent_span_id=ZERO_SPAN_ID,
-                    **{"avp.manifest": self._manifest},
+                    **{"avp.descriptor": self._descriptor},
                 ),
             )
         )

@@ -1,8 +1,9 @@
 """ClaudeAgentTranslator — observer/translator that turns Claude Agent SDK
 lifecycle events into AVP v0.1 events.
 
-Structurally different from avp-anthropic's driver pattern: the Claude Agent
-SDK owns the agent loop, so we cannot drive turns ourselves. Instead, we wire
+Structurally different from the driver-pattern adapter for the raw Anthropic
+API (`avp-anthropic`): the Claude Agent SDK owns the agent loop, so we cannot
+drive turns ourselves. Instead, we wire
 into the SDK's two natural observation surfaces:
 
   1. The async message stream from `query()` — delivers AssistantMessage
@@ -35,7 +36,7 @@ from avp import (
     ZERO_SPAN_ID,
     AgentDescribedData,
     AgentDescribedEvent,
-    AgentManifest,
+    AgentDescriptor,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
@@ -204,7 +205,7 @@ _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS = CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS
 #
 # Public: re-exported from `avp_claude_agent` so Commission authors can
 # `from avp_claude_agent import CLAUDE_CODE_PRESET_TOOLS` and pass or
-# filter the list when building `Commission.exposed`.
+# filter the list when building `Commission.enabled_builtin_tools`.
 CLAUDE_CODE_PRESET_TOOLS: tuple[str, ...] = (
     "Read",
     "Write",
@@ -355,7 +356,7 @@ class ClaudeAgentTranslator:
         on_event: Callable[[BaseModel], None],
         *,
         resolver: Any | None = None,
-        manifest: AgentManifest | None = None,
+        descriptor: AgentDescriptor | None = None,
         local_tools: Any | None = None,
         local_tools_server_name: str = "local",
         sdk_client_cls: Callable[..., Any] | None = None,
@@ -392,12 +393,12 @@ class ClaudeAgentTranslator:
         self.commission = commission
         self.on_event = on_event
         self._resolver = resolver
-        # Resolved material from the AVP resolver protocol (SPEC §6).
+        # Resolved material from the AVP Resolver API (see resolver.md).
         # Populated by `_resolve_managed_assets` before the SDK runs.
         self._resolved_mcp_servers: dict[str, dict[str, Any]] = {}
         self._resolved_skills: dict[str, dict[str, Any]] = {}
         self._resolved_subagents: dict[str, dict[str, Any]] = {}
-        self._manifest = manifest
+        self._descriptor = descriptor
         self._prelude_emitted = False
         self._local_tools = local_tools
         self._local_tools_server_name = local_tools_server_name
@@ -533,7 +534,7 @@ class ClaudeAgentTranslator:
         # the audit fact, independent of whether the SDK ever spun up.
         self._emit_run_prelude()
 
-        # Resolver gate (SPEC §6). When the Commission carries any managed
+        # Resolver gate (spec/v0.1/resolver.md). When the Commission carries any managed
         # assets, the agent MUST dereference each ref before any model
         # turn. Failure to resolve is fatal — fail-fast before the SDK
         # spins up.
@@ -639,7 +640,7 @@ class ClaudeAgentTranslator:
             async for message in client.receive_response():
                 self._on_sdk_message(message)
 
-    # ── Resolver protocol (SPEC §6) ────────────────────────────────────────
+    # ── Resolver protocol (spec/v0.1/resolver.md) ────────────────────────────────────────
 
     def _has_managed_assets(self) -> bool:
         c = self.commission
@@ -648,7 +649,7 @@ class ClaudeAgentTranslator:
     def _validate_resolver_present(self) -> bool:
         """If the Commission carries managed assets but no ResolverDriver
         was supplied (and AVP_RESOLVER_URL was not bootstrapped into one),
-        fail-fast with `resolver_not_configured` (SPEC §6.1)."""
+        fail-fast with `resolver_not_configured` (spec/v0.1/resolver.md §2)."""
         if not self._has_managed_assets():
             return True
         if self._resolver is not None:
@@ -663,7 +664,7 @@ class ClaudeAgentTranslator:
                         "avp.error.message": (
                             "Commission carries managed assets but no ResolverDriver "
                             "was supplied to ClaudeAgentTranslator (and AVP_RESOLVER_URL "
-                            "was not bootstrapped). Configure a resolver service per SPEC.md §6.1."
+                            "was not bootstrapped). Configure a resolver service per `spec/v0.1/resolver.md` §2."
                         ),
                     },
                 ),
@@ -779,16 +780,17 @@ class ClaudeAgentTranslator:
     def _build_sdk_options(self) -> Any:
         """Translate Commission → ClaudeAgentOptions.
 
-        Mapping (refs-only Commission, v0.1):
+        Mapping (refs-only Commission):
           - Commission.system_prompt              → options.system_prompt
           - Commission.model                      → options.model
           - Commission.enabled_builtin_tools      → options.tools (allowlist
                                                     against the SDK's preset)
-          - Commission.{mcp_servers,subagents}    → DEFERRED. Managed assets
-                                                    require the AVP resolver
-                                                    protocol; wiring them
-                                                    through to the SDK is a
-                                                    Phase 4+ follow-up.
+          - Commission.{mcp_servers,subagents}    → not set here. Managed
+                                                    assets are dereferenced
+                                                    via the AVP resolver
+                                                    protocol and applied to
+                                                    the SDK options elsewhere
+                                                    in the translator.
           - hooks={PreToolUse, PostToolUse}       → translator-emitted
                                                     tool_invoked / tool_returned
                                                     plus subagent lifecycle
@@ -805,11 +807,11 @@ class ClaudeAgentTranslator:
         # named subset to the SDK's `tools` parameter; the SDK enforces.
         # Names that aren't in the SDK preset are AVPAgent's startup-validation
         # responsibility (commission_collision); reaching here means they
-        # already passed manifest cross-check.
+        # already passed Descriptor cross-check.
         # NOTE on filesystem discovery: the Claude Agent SDK auto-loads
         # skills from `~/.claude/skills/` and subagents from
         # `.claude/agents/` unless `setting_sources` is overridden. AVP
-        # discloses this on the manifest (`filesystem-discovery-available`
+        # discloses this on the Descriptor (`filesystem-discovery-available`
         # capability) and leaves the SDK's default in place — passing
         # `setting_sources=[]` here cascades into the SDK's tool-definition
         # loading and `permission_mode` resolution in ways that aren't
@@ -893,9 +895,9 @@ class ClaudeAgentTranslator:
 
         # Merge in user-supplied SDK-specific options (permission_mode,
         # cwd, add_dirs, can_use_tool, etc.). Commission-derived kwargs
-        # already in `kwargs` take precedence — extra_sdk_options can't
+        # already in `kwargs` take precedence; extra_sdk_options can't
         # override AVP wire-shape concerns like `tools` (which maps from
-        # Commission.exposed).
+        # Commission.enabled_builtin_tools).
         for k, v in self._extra_sdk_options.items():
             kwargs.setdefault(k, v)
 
@@ -905,14 +907,13 @@ class ClaudeAgentTranslator:
         """Translate resolved managed subagents → SDK `AgentDefinition` dict.
 
         The AVP resolver returns model-facing metadata for each
-        `Commission.subagents[]` entry — `name`, optional `description`,
+        `Commission.subagents[]` entry: `name`, optional `description`,
         optional `inputSchema`. The Claude Agent SDK's `agents` parameter
         accepts a `{name: AgentDefinition(description, prompt, model, tools)}`
         dict; we map AVP's metadata onto it. Fields the AVP resolver
-        doesn't surface (system_prompt, model, tools) stay unset — the
-        SDK uses its own defaults, and a follow-up SPEC bump can add
-        those to the resolver result shape if a real implementation
-        needs them.
+        doesn't surface (system_prompt, model, tools) stay unset, so the
+        SDK uses its own defaults. A future spec revision can extend the
+        resolver result shape if a real implementation needs them.
         """
         out: dict[str, Any] = {}
         for entry in self.commission.subagents or []:
@@ -1009,16 +1010,17 @@ class ClaudeAgentTranslator:
     def _handle_assistant_message(self, message: Any) -> None:
         """One AssistantMessage MAY correspond to one AVP turn — or not.
 
-        SPEC.md §9.1: an AVP turn is one fresh model call. The Claude Agent
-        SDK emits AssistantMessages for things that aren't fresh calls
-        (continuations, internal restatements, follow-ups around tool
-        results). We use the SDK's cumulative usage to detect: a message
-        with NO new output tokens AND no fresh content is not a turn — skip
-        the turn-started / turn-ended emission entirely.
+        trajectory.md §3.1: an AVP turn is one fresh model call. The
+        Claude Agent SDK emits AssistantMessages for things that aren't
+        fresh calls (continuations, internal restatements, follow-ups
+        around tool results). We use the SDK's cumulative usage to
+        detect: a message with NO new output tokens AND no fresh content
+        is not a turn — skip the turn-started / turn-ended emission
+        entirely.
 
-        SPEC.md §9.4: when the SDK's cumulative drops without a deliberate
-        reset signal (PreCompact / SubagentStart), emit error_occurred
-        rather than silently clamping the delta.
+        trajectory.md §3.3: when the SDK's cumulative drops without a
+        deliberate reset signal (PreCompact / SubagentStart), emit
+        error_occurred rather than silently clamping the delta.
         """
         commission = self.commission
         usage = getattr(message, "usage", None)
@@ -1440,7 +1442,7 @@ class ClaudeAgentTranslator:
         """Emit `subagent_invoked` and stash the frame state for the matching
         post-hook. Strips the SDK's `subagent_type` discriminator from the
         recorded input so the AVP wire shows just what the parent actually
-        passed to the subagent (matches the AnthropicSubagentDriver shape)."""
+        passed to the subagent."""
         sa = self._subagents_by_name[sa_name]
         invocation_id = f"sa-{next(self._sa_seq)}"
         frame_span_id = new_span_id()
@@ -1564,11 +1566,11 @@ class ClaudeAgentTranslator:
 
     def _emit_run_prelude(self) -> None:
         """Emit `run_requested` (supervisor-attributed; agent-relayed) and
-        `agent_described` (agent's manifest), the two events that open
+        `agent_described` (agent's Descriptor), the two events that open
         every AVP trajectory before `agent_started`.
 
         Skipped when running in delegated mode (parent tracer owns the
-        lifecycle bookends) or when no manifest was supplied. Idempotent —
+        lifecycle bookends) or when no Descriptor was supplied. Idempotent —
         run() may invoke this from both the normal-path and exception-path
         branches; the second call is a no-op.
 
@@ -1576,7 +1578,7 @@ class ClaudeAgentTranslator:
         the `agent_started` span. Each owns a fresh span; they are not
         paired.
         """
-        if self._suppress_lifecycle or self._manifest is None or self._prelude_emitted:
+        if self._suppress_lifecycle or self._descriptor is None or self._prelude_emitted:
             return
         commission = self.commission
         sup = commission.supervisor
@@ -1605,7 +1607,7 @@ class ClaudeAgentTranslator:
                     trace_id=self._trace_id,
                     span_id=new_span_id(),
                     parent_span_id=ZERO_SPAN_ID,
-                    **{"avp.manifest": self._manifest},
+                    **{"avp.descriptor": self._descriptor},
                 ),
             )
         )

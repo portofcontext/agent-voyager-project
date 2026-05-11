@@ -13,7 +13,7 @@ from avp.types import parse_event
 
 
 def write_event(event: BaseModel | dict[str, Any], file: IO | None = None) -> None:
-    """Serialize one event to NDJSON. Flushes after the line per SPEC.md §5.1."""
+    """Serialize one event to NDJSON. Flushes after the line per `spec/v0.1/README.md` §3.1."""
     out = file if file is not None else sys.stdout
     if isinstance(event, BaseModel):
         # by_alias emits the dotted wire form (e.g. `gen_ai.usage.input_tokens`);

@@ -1,9 +1,9 @@
 {
   "id": "managed-assets-without-resolver-stops-at-startup",
   "title": "Commission with managed assets but no ResolverDriver wired fails-fast with resolver_not_configured",
-  "description": "SPEC.md \u00a76.1 \u2014 v0.1-conforming agents are expected to honor managed assets when given a wired resolver. When AVP_RESOLVER_URL is unset (or, equivalently, no ResolverDriver was supplied to AVPAgent) and the Commission carries managed assets, the agent MUST emit error_occurred(resolver_not_configured) and agent_stopped(reason=error) before any model turn. The case sets `omit_resolver: true` so the harness skips wiring the in-process ScriptedResolver.",
+  "description": "v0.1-conforming agents are expected to honor managed assets when given a wired resolver. When AVP_RESOLVER_URL is unset (or, equivalently, no ResolverDriver was supplied to AVPAgent) and the Commission carries managed assets, the agent MUST emit error_occurred(resolver_not_configured) and agent_stopped(reason=error) before any model turn. The case sets `omit_resolver: true` so the harness skips wiring the in-process ScriptedResolver.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#6-1-bootstrap"
+    "spec/v0.1/resolver.md#2-bootstrap"
   ],
   "applies_to": [
     "agent"
@@ -19,7 +19,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"

@@ -23,7 +23,7 @@
     "spec_refs": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Section refs into spec/v0.1/SPEC.md or schema fragments this case verifies."
+      "description": "Section refs into the v0.1 sub-specs (trajectory.md, commission.md, agent-descriptor.md, resolver.md) or schema fragments this case verifies."
     },
     "applies_to": {
       "type": "array",
@@ -47,7 +47,7 @@
     "omit_resolver": {
       "type": "boolean",
       "default": false,
-      "description": "When true, the harness skips wiring a ResolverDriver even if the Commission carries managed assets. Used to exercise the `resolver_not_configured` startup gate (SPEC.md §6.1)."
+      "description": "When true, the harness skips wiring a ResolverDriver even if the Commission carries managed assets. Used to exercise the `resolver_not_configured` startup gate (spec/v0.1/resolver.md §2)."
     },
     "scripted_resolver": {
       "type": "object",
@@ -66,9 +66,9 @@
         }
       }
     },
-    "agent_manifest": {
+    "agent_descriptor": {
       "type": "object",
-      "description": "Optional. AgentManifest the harness passes to AVPAgent so it emits the run_requested + agent_described prelude. Cases that don't set this exercise the no-prelude path (the agent skips emission and the trajectory looks the same as before this field existed). The value is validated as a Pydantic AgentManifest at run time.",
+      "description": "Optional. AgentDescriptor the harness passes to AVPAgent so it emits the run_requested + agent_described prelude. Cases that don't set this exercise the no-prelude path (the agent skips emission and the trajectory looks the same as before this field existed). The value is validated as a Pydantic AgentDescriptor at run time.",
       "additionalProperties": true
     },
     "agent_builtin_tools": {
@@ -198,7 +198,7 @@
           "additionalProperties": false,
           "properties": {
             "result": {
-              "description": "Material the resolver returns to the agent. Shape varies by kind (per SPEC.md §6.2).",
+              "description": "Material the resolver returns to the agent. Shape varies by kind (per spec/v0.1/resolver.md §3).",
               "type": "object",
               "additionalProperties": true
             }

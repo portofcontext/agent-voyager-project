@@ -5,9 +5,11 @@ yields NDJSON event lines. Errors on stderr are forwarded so the user sees
 why the agent died.
 
 Two entry points:
-- `run_subprocess(cmd, commission)` — drives an external agent CLI (avp-anthropic)
-- `run_in_process(commission, agent_factory)` — drives the reference agent directly,
-  for fast unit-test-friendly demos with ScriptedModel
+- `run_subprocess(cmd, commission)`: drives an external agent CLI (e.g. the
+  reference avp-anthropic agent in `examples/_anthropic_reference_agent.py`,
+  or `avp-claude-agent`).
+- `run_in_process(commission, agent_factory)`: drives the reference agent
+  directly, for fast unit-test-friendly demos with ScriptedModel.
 """
 
 from __future__ import annotations
@@ -33,10 +35,11 @@ def run_subprocess(
     rpc_responder: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     timeout_s: float = 120.0,
 ) -> list[BaseModel | dict[str, Any]]:
-    """Run `cmd` (e.g. ['avp-anthropic']) with Commission piped on stdin.
+    """Run `cmd` (e.g. `[sys.executable, "examples/_anthropic_reference_agent.py"]`
+    or `["avp-claude-agent"]`) with Commission piped on stdin.
 
     Returns the trajectory as parsed Pydantic events. Custom event types pass
-    through as raw dicts (per SPEC.md §12).
+    through as raw dicts (per `spec/v0.1/README.md` §4).
 
     `rpc_responder` is an optional callback the supervisor uses to service
     tool_exec_request events: it receives the request dict and returns either

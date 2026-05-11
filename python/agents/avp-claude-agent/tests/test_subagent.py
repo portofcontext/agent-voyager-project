@@ -5,9 +5,9 @@ The Claude Agent SDK exposes a parent's subagent invocation as a single
 internals are opaque to the parent's observer surface). This translator
 diverts that pair into AVP's `subagent_invoked` / `subagent_returned`
 lifecycle so consumers see one consistent wire shape across agents
-(driver-pattern avp-anthropic produces the rich nested-tree variant; this
-agent produces the thin invoked+returned variant — same events, just
-without internals).
+(a driver-pattern agent on top of avp-anthropic produces the rich
+nested-tree variant; this agent produces the thin invoked+returned
+variant: same events, just without internals).
 
 These tests pin:
   - Commission.subagents → ClaudeAgentOptions.agents translation

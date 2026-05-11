@@ -20,8 +20,8 @@ from avp_claude_agent.translator import (
 
 __version__ = "0.1.0"
 
-# Imported after __version__ because manifest() reads it.
-from avp_claude_agent.manifest import manifest
+# Imported after __version__ because descriptor() reads it.
+from avp_claude_agent.descriptor import descriptor
 
 __all__ = [
     "CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS",
@@ -32,8 +32,8 @@ __all__ = [
     "SubagentInfo",
     "TracedClaudeSDKClient",
     "__version__",
+    "descriptor",
     "discover_environment",
-    "manifest",
     "to_sdk_mcp_server",
     "traced_claude_sdk_client",
 ]

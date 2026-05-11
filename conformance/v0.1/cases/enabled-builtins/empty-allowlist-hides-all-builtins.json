@@ -1,29 +1,47 @@
 {
   "id": "empty-allowlist-hides-all-builtins",
   "title": "Commission.enabled_builtin_tools=[] hides every built-in from the model surface",
-  "description": "SPEC.md §9.2 — distinguishing absent (all enabled) from `[]` (none enabled) matters. With an empty allowlist, agent_started.data.tools[] MUST contain no built-ins of that kind. The agent still runs (text-only delegation flow); the model just sees no tools.",
+  "description": "distinguishing absent (all enabled) from `[]` (none enabled) matters. With an empty allowlist, agent_started.data.tools[] MUST contain no built-ins of that kind. The agent still runs (text-only delegation flow); the model just sees no tools.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#9-2-built-in-surface-allowlists"
+    "spec/v0.1/commission.md#4-built-in-surface-allowlists"
   ],
-  "applies_to": ["agent"],
+  "applies_to": [
+    "agent"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "empty-allowlist",
     "model": "test/mock",
     "enabled_builtin_tools": []
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1",
     "built_in_tools": [
-      { "name": "Read" },
-      { "name": "Bash" }
+      {
+        "name": "Read"
+      },
+      {
+        "name": "Bash"
+      }
     ]
   },
   "agent_builtin_tools": [
-    { "name": "Read", "description": "Read.", "input_schema": { "type": "object" } },
-    { "name": "Bash", "description": "Bash.", "input_schema": { "type": "object" } }
+    {
+      "name": "Read",
+      "description": "Read.",
+      "input_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "Bash",
+      "description": "Bash.",
+      "input_schema": {
+        "type": "object"
+      }
+    }
   ],
   "scripted_model": [
     {
@@ -48,7 +66,9 @@
       {
         "match": {
           "type": "avp.agent_stopped",
-          "data": { "avp.reason": "converged" }
+          "data": {
+            "avp.reason": "converged"
+          }
         }
       }
     ],
@@ -57,7 +77,13 @@
         "label": "no tool surfaces when allowlist is empty",
         "match": {
           "type": "avp.agent_started",
-          "data": { "tools": [{ "name": "Read" }] }
+          "data": {
+            "tools": [
+              {
+                "name": "Read"
+              }
+            ]
+          }
         }
       }
     ]

@@ -1,0 +1,41 @@
+# AVP-RFC metadata
+#
+# Required fields: title, authors, status, created
+# All other fields are optional / situational.
+
+title: "Short, descriptive title (matches README.md heading)"
+
+authors:
+  - "Your Name <your@email>"
+
+# One of: provisional | accepted | implementable | implemented | rejected | withdrawn | superseded-by-NNNN
+status: provisional
+
+# ISO 8601 date. Set when the AVP-RFC is first filed; do not change.
+created: "YYYY-MM-DD"
+
+# ISO 8601 date. Update on each status transition.
+last-updated: "YYYY-MM-DD"
+
+# Which sub-specs this proposal touches. Any of: trajectory, commission, agent-descriptor, resolver
+sub-specs:
+  - trajectory
+# - commission
+# - agent-descriptor
+# - resolver
+
+# Target umbrella release for landing this proposal (when accepted).
+# Leave blank while provisional.
+target-version: ""
+
+# Optional: tracking issue, related AVP-RFCs.
+tracking-issue: ""
+related:
+  []
+  # - NNNN
+  # - NNNN
+
+# Optional: short list of approvers when the proposal moves to accepted.
+approvers:
+  []
+  # - "Approver Name <approver@email>"

@@ -3,7 +3,7 @@
   "title": "Every agent-emitted event in a baseline run carries source='agent'",
   "description": "Source-field discipline. Without supervisor messages, every event in the trajectory MUST be tagged source='agent'. No event MAY be missing the source field, and no agent-emitted event MAY be tagged source='supervisor'.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#3-the-bidirectional-trajectory",
+    "spec/v0.1/trajectory.md",
     "spec/v0.1/avp.schema.json#/$defs/EventBase"
   ],
   "applies_to": [

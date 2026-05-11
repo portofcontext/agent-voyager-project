@@ -1,12 +1,14 @@
 {
   "id": "tool-failed-on-unknown-tool",
   "title": "Model invocation of an unknown tool emits tool_invoked → tool_failed",
-  "description": "SPEC.md §9 + §14.1 — when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_failed with an error message. The model receives an `Error: …` tool_result so the next turn can react. The wire stays well-formed; tool_returned MUST NOT fire.",
+  "description": "when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_failed with an error message. The model receives an `Error: …` tool_result so the next turn can react. The wire stays well-formed; tool_returned MUST NOT fire.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#9-tools",
-    "spec/v0.1/SPEC.md#14-1-agent"
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#8-conformance"
   ],
-  "applies_to": ["agent"],
+  "applies_to": [
+    "agent"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "tool-unknown",
@@ -19,7 +21,13 @@
       "cost_usd": 0.0001,
       "duration_ms": 1,
       "tool_calls": [
-        { "call_id": "c1", "tool": "does_not_exist", "input": { "x": 1 } }
+        {
+          "call_id": "c1",
+          "tool": "does_not_exist",
+          "input": {
+            "x": 1
+          }
+        }
       ],
       "converged": false
     },
@@ -38,19 +46,25 @@
       {
         "match": {
           "type": "avp.tool_invoked",
-          "data": { "gen_ai.tool.name": "does_not_exist" }
+          "data": {
+            "gen_ai.tool.name": "does_not_exist"
+          }
         }
       },
       {
         "match": {
           "type": "avp.tool_failed",
-          "data": { "gen_ai.tool.name": "does_not_exist" }
+          "data": {
+            "gen_ai.tool.name": "does_not_exist"
+          }
         }
       },
       {
         "match": {
           "type": "avp.agent_stopped",
-          "data": { "avp.reason": "converged" }
+          "data": {
+            "avp.reason": "converged"
+          }
         }
       }
     ],
@@ -59,7 +73,9 @@
         "label": "tool_returned MUST NOT fire for an unknown tool",
         "match": {
           "type": "avp.tool_returned",
-          "data": { "gen_ai.tool.name": "does_not_exist" }
+          "data": {
+            "gen_ai.tool.name": "does_not_exist"
+          }
         }
       }
     ]

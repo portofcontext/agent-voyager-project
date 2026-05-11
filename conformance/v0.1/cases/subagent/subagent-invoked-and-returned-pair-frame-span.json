@@ -3,8 +3,8 @@
   "title": "Managed subagent invocation emits subagent_invoked \u2192 subagent_returned pair sharing one frame span_id, with avp.subagent.run_id set",
   "description": "Subagents are a Commission primitive alongside mcp_servers and skills. When the parent agent calls a declared subagent by id, the agent MUST route through the subagent lifecycle (not the tool lifecycle): emit subagent_invoked at frame open, call avp.spawn_subagent against the resolver, emit subagent_returned at frame close. The two events share span_id; subagent_invoked carries avp.subagent.run_id (the child's run identifier) so consumers can correlate parent and child trajectories.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#9-5-subagents",
-    "spec/v0.1/SPEC.md#6-3-the-avp-spawn-subagent-method"
+    "spec/v0.1/trajectory.md#5-subagents",
+    "spec/v0.1/resolver.md#4-the-avpspawn_subagent-method"
   ],
   "applies_to": [
     "agent"
@@ -20,7 +20,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"

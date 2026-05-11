@@ -249,8 +249,9 @@ class ResolverDriver(Protocol):
     - `resolve(kind, id, ref)` — startup-only. Called once per
       `Commission.{mcp_servers,skills,subagents}[]` entry. Returns the
       connection material / content / metadata the supervisor wants the
-      agent to use. The result shape varies by `kind` (see SPEC.md §6.2);
-      the agent's runtime layer interprets it.
+      agent to use. The result shape varies by `kind` (see
+      `spec/v0.1/resolver.md` §3.2); the agent's runtime layer interprets
+      it.
     - `spawn_subagent(...)` — on-demand. Called when the parent's model
       invokes a Commission-declared subagent. Returns the child run id
       plus the inline summary the parent's loop hands back to the model.

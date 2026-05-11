@@ -294,8 +294,8 @@ def test_bridged_tool_invocation_tags_dispatch_target_local() -> None:
     (`mcp__local__calc`). Because `local` is NOT in `Commission.mcp_servers`,
     the translator's existing tag-MCP-by-Commission logic correctly tags
     the resulting `tool_invoked` event with
-    `avp.tool.dispatch_target=local` — same wire shape `avp-anthropic`
-    produces for the same callable."""
+    `avp.tool.dispatch_target=local`: the same wire shape a
+    driver-pattern agent on top of `avp-anthropic` produces."""
     cfg = Commission(
         schema_version="0.1",
         run_id="lt-tag",

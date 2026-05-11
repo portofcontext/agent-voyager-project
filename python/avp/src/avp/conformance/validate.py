@@ -33,7 +33,8 @@ def _build_registry(spec_dir: Path, test_case_schema_path: Path) -> Registry:
     schema_files = [
         spec_dir / "avp.schema.json",
         spec_dir / "commission.schema.json",
-        spec_dir / "event.schema.json",
+        spec_dir / "trajectory.schema.json",
+        spec_dir / "agent-descriptor.schema.json",
         test_case_schema_path,
     ]
     for sf in schema_files:

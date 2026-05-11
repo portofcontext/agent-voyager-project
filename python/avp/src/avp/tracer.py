@@ -516,10 +516,9 @@ class AVPTracer:
         tools_meta = None
         subagents_meta = None
         if commission.subagents:
-            # v0.1 refs-only Commission: descriptions and inputSchemas come
-            # from resolving each ref via `avp.resolve` at startup. Phase 2
-            # will plumb the resolver into the tracer and populate richer
-            # metadata here. For now, surface ids only.
+            # Refs-only Commission: rich metadata (descriptions, inputSchemas)
+            # comes from resolving each ref via `avp.resolve` at startup. The
+            # tracer doesn't drive the resolver itself, so surface ids only.
             subagents_meta = [{"name": sa.id} for sa in commission.subagents]
         data_kwargs: dict[str, Any] = {
             "trace_id": self._trace_id,
@@ -528,9 +527,7 @@ class AVPTracer:
             "prompt": commission.prompt,
             "system_prompt": commission.system_prompt,
             "tools": tools_meta,
-            # v0.1 refs-only Commission: skills surface here as ids only
-            # until Phase 2 wires the resolver to fill in descriptions /
-            # avp.source from resolved SKILL.md content.
+            # Same refs-only rationale: skills surface here as ids only.
             "skills": [{"name": s.id} for s in (commission.skills or [])] or None,
             "subagents": subagents_meta,
         }

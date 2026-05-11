@@ -1,4 +1,4 @@
-"""Reference AVP agent — implements SPEC.md §10.3 over pluggable drivers."""
+"""Reference AVP agent — implements the loop in `spec/v0.1/trajectory.md` §3.2 over pluggable drivers."""
 
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import (

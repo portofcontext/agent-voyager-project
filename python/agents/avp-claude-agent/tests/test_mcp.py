@@ -1,16 +1,16 @@
 """Tests for managed MCP support in avp-claude-agent.
 
 The translator dereferences `Commission.mcp_servers[]` refs via the AVP
-resolver protocol (SPEC §6) before the SDK runs. Resolved connection
+resolver protocol (spec/v0.1/resolver.md) before the SDK runs. Resolved connection
 material lands on the Claude Agent SDK's `mcp_servers` parameter; the SDK
 owns the connection lifecycle, tools/list discovery, and tools/call
 dispatch from there. AVP records the AVP-side wire events
 (`managed_ref_resolved`, then SDK-side `mcp_server_connected` after
 handshake).
 
-These tests pin the translator-side translation only — they don't run
+These tests pin the translator-side translation only; they don't run
 the SDK. Real-MCP end-to-end is covered by `make smoke`'s real-LLM
-target (Phase 6 follow-up).
+target.
 """
 
 from __future__ import annotations

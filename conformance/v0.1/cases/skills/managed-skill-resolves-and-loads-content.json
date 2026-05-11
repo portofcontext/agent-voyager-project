@@ -1,10 +1,10 @@
 {
   "id": "managed-skill-resolves-and-loads-content",
   "title": "Resolved managed skill emits managed_ref_resolved + skill_loaded with the content from the resolver",
-  "description": "SPEC.md \u00a76.4 + \u00a79.7 \u2014 when the resolver returns SKILL.md content for a Commission.skills[] ref, the agent MUST emit managed_ref_resolved (kind=skill), inject the content into the model's context, and emit skill_loaded (step=0) so consumers see the registration AND the load. The resolver's `name` field is informational; the agent uses Commission.skills[].id as the model-facing name.",
+  "description": "when the resolver returns SKILL.md content for a Commission.skills[] ref, the agent MUST emit managed_ref_resolved (kind=skill), inject the content into the model's context, and emit skill_loaded (step=0) so consumers see the registration AND the load. The resolver's `name` field is informational; the agent uses Commission.skills[].id as the model-facing name.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#6-2-the-avp-resolve-method",
-    "spec/v0.1/SPEC.md#9-7-skills"
+    "spec/v0.1/resolver.md#3-the-avpresolve-method",
+    "spec/v0.1/trajectory.md#6-skills"
   ],
   "applies_to": [
     "agent"
@@ -23,7 +23,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"

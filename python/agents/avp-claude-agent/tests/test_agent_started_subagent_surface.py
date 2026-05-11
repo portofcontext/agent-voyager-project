@@ -11,7 +11,7 @@ Commission semantics (v0.1 refs-only):
   - `cfg.subagents = [SubagentRef(...)]` → id-only stub appears on the wire;
                                             descriptions arrive separately on
                                             `managed_ref_resolved` after the
-                                            resolver runs (SPEC §6).
+                                            resolver runs (spec/v0.1/resolver.md).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""HTTP-backed `ResolverDriver` for the AVP resolver protocol (SPEC §6).
+"""HTTP-backed `ResolverDriver` for the AVP resolver protocol (spec/v0.1/resolver.md).
 
 The agent's bootstrap reads `AVP_RESOLVER_URL` from the environment (the
 supervisor sets it when spawning the agent). At startup, the agent calls
@@ -134,7 +134,7 @@ class HttpResolver(ResolverDriver):
         # `run_id` isn't strictly part of the AVPAgent's resolver-call API
         # surface — the agent doesn't pass it through to this method. It's
         # available in HttpResolver's run-context if a future refactor
-        # wants it; for now per SPEC §6.2 we include kind/id/ref.
+        # wants it; for now per spec/v0.1/resolver.md §3 we include kind/id/ref.
         return self._post(
             "avp.resolve",
             {"kind": kind, "id": id, "ref": ref},
@@ -153,7 +153,7 @@ class HttpResolver(ResolverDriver):
             {"run_id": run_id, "id": id, "ref": ref, "input": dict(input)},
         )
 
-        # Per SPEC §6.3 the result shape carries `subagent_run_id` and an
+        # Per spec/v0.1/resolver.md §4 the result shape carries `subagent_run_id` and an
         # inline summary block. Be permissive about missing fields so a
         # resolver that returns less than the spec wants still produces a
         # usable outcome — the parent records what it got and stops on
@@ -194,10 +194,10 @@ def http_resolver_from_env(
 ) -> HttpResolver | None:
     """Construct an `HttpResolver` from the supervisor-configured environment.
 
-    Returns `None` when `AVP_RESOLVER_URL` is unset or empty — the
-    canonical Profile-A signal. The agent's startup gate then rejects
+    Returns `None` when `AVP_RESOLVER_URL` is unset or empty, signaling
+    the no-managed-assets case. The agent's startup gate then rejects
     any Commission carrying managed assets with
-    `error_occurred(resolver_not_configured)` per SPEC §6.1.
+    `error_occurred(resolver_not_configured)` per spec/v0.1/resolver.md §2.
 
     `AVP_RESOLVER_TOKEN`, when set, is used as a bearer token on every
     JSON-RPC request. Different supervisors can override the env var

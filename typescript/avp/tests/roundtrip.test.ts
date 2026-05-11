@@ -17,7 +17,7 @@ import type {
   AgentStartedEvent,
   ModelTurnEndedEvent,
   RefusalRecordedEvent,
-} from "../src/event.js";
+} from "../src/trajectory.js";
 
 test("agent_started parses + matches the discriminator", () => {
   const raw = `{

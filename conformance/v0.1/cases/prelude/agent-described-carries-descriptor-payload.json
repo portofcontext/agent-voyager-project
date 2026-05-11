@@ -1,0 +1,107 @@
+{
+  "id": "agent-described-carries-descriptor-payload",
+  "title": "agent_described carries the agent's Descriptor verbatim",
+  "description": "After run_requested and before agent_started, the agent emits agent_described tagged source=avp://agent. data['avp.descriptor'] is the same payload `<agent> describe` prints to stdout for the same agent build \u2014 agent identity, version, supported AVP spec, default model (or null), and the SDK-defaults built-in tools / subagents / skills lists. This is the runtime audit-trail counterpart to the static Descriptor a Commission author introspects pre-flight.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/v0.1/trajectory.schema.json#/$defs/AgentDescribedEvent",
+    "spec/v0.1/trajectory.schema.json#/$defs/AgentDescriptor"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "agent_descriptor": {
+    "agent_name": "avp-test-agent",
+    "agent_version": "9.9.9",
+    "avp_spec_version": "0.1",
+    "default_model": null,
+    "built_in_tools": [
+      {
+        "name": "bash",
+        "avp.dispatch_target": "local"
+      }
+    ],
+    "built_in_subagents": [
+      {
+        "name": "general-purpose"
+      }
+    ],
+    "capabilities": [
+      "mcp"
+    ]
+  },
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "prelude-agent-described",
+    "model": "test/mock",
+    "supervisor": {
+      "name": "test-supervisor"
+    }
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 5,
+      "tokens_output": 1,
+      "cost_usd": 0.0,
+      "duration_ms": 1,
+      "text": "ok",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "events": [
+      {
+        "label": "run_requested first",
+        "match": {
+          "type": "avp.run_requested"
+        }
+      },
+      {
+        "label": "agent_described carries the Descriptor verbatim",
+        "match": {
+          "type": "avp.agent_described",
+          "source": "avp://agent",
+          "data": {
+            "parent_span_id": "0000000000000000",
+            "avp.descriptor": {
+              "agent_name": "avp-test-agent",
+              "agent_version": "9.9.9",
+              "avp_spec_version": "0.1",
+              "built_in_tools": [
+                {
+                  "name": "bash",
+                  "avp.dispatch_target": "local"
+                }
+              ],
+              "built_in_subagents": [
+                {
+                  "name": "general-purpose"
+                }
+              ],
+              "capabilities": [
+                "mcp"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_started follows",
+        "match": {
+          "type": "avp.agent_started"
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no agent_described before run_requested",
+        "match": {
+          "type": "avp.agent_described",
+          "data": {
+            "span_id": "before"
+          }
+        }
+      }
+    ]
+  }
+}

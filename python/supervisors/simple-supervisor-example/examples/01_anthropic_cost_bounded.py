@@ -1,18 +1,22 @@
-"""Example 01 — Cost-bounded inspection (driver pattern, avp-anthropic).
+"""Example 01: Cost-bounded inspection (driver pattern, avp-anthropic SDK).
 
 Story: a code-explanation agent with a tiny budget. The supervisor cares about
 ONE thing: not letting it run away with cost. Profile = `read-only`
 (allowed_tools=[read_file], max_cost_usd=$0.05, max_steps=3).
 
+The agent the supervisor spawns is `_anthropic_reference_agent.py` (sibling
+script), a reference agent built on top of the avp-anthropic SDK adapter.
+The SDK itself ships no agent loop and no built-in tools; the reference
+agent supplies a ShellTools catalog and wires `AVPAgent` to the driver.
+
 What you'll see:
   - The Commission the supervisor compiled (printed as JSON before launch)
-  - Live trajectory: each event as it streams from avp-anthropic's stdout
+  - Live trajectory: each event as it streams from the reference agent's stdout
   - Post-run summary (what the agent did / cost)
-  - agent_stopped reason — usually 'converged' for short tasks
+  - agent_stopped reason: usually 'converged' for short tasks
 
 Requires:
-  pip install -e python/avp -e python/agents/avp-anthropic \\
-              -e python/supervisors/simple-supervisor-example
+  uv sync
   export ANTHROPIC_API_KEY=...
 
 Run:
@@ -32,6 +36,10 @@ from simple_supervisor import build_commission, render, stream_subprocess, summa
 # layer picks this; we point it at this examples/ directory so the agent's
 # relative file path below resolves against a known location.
 WORKSPACE = Path(__file__).resolve().parent
+
+# The reference agent the supervisor spawns. Built on top of the
+# avp-anthropic SDK adapter; see the script for the full wiring.
+REFERENCE_AGENT = str(Path(__file__).resolve().parent / "_anthropic_reference_agent.py")
 
 
 def main() -> int:
@@ -60,7 +68,7 @@ def main() -> int:
     print("== Live trajectory ==")
 
     events = []
-    for ev in stream_subprocess(["avp-anthropic"], config, cwd=str(WORKSPACE)):
+    for ev in stream_subprocess([sys.executable, REFERENCE_AGENT], config, cwd=str(WORKSPACE)):
         events.append(ev)
         # One-line preview of each event as it arrives
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")

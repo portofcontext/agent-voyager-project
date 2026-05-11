@@ -14,9 +14,10 @@ Run explicitly:
     ANTHROPIC_API_KEY=sk-... uv run pytest python/agents/avp-claude-agent -m real_llm
 
 Each test uses a tight, short prompt to keep cost per run small. The tests
-assert the SAME wire shape as `avp-anthropic`'s real-LLM smoke — that's the
-point of parity: a downstream supervisor MUST be able to consume both
-agents' output identically.
+assert the SAME wire shape as `avp-anthropic`'s real-LLM smoke (which
+runs `AVPAgent` + the driver in-process): that's the point of parity, a
+downstream supervisor MUST be able to consume both agents' output
+identically.
 """
 
 from __future__ import annotations
@@ -102,7 +103,7 @@ def test_simple_text_response_completes_successfully() -> None:
 def test_token_and_cost_accounting_monotonic_across_turns() -> None:
     """Translators over cumulative-usage SDKs MUST derive per-turn deltas
     correctly so consecutive cost_recorded events report monotonic totals
-    (SPEC.md §9.4)."""
+    (`spec/v0.1/trajectory.md` §3.3)."""
     translator, captured = _new_translator(
         prompt="Reply with 'ok'.",
         run_id="claude-agent-smoke-monotonic",
@@ -124,7 +125,7 @@ def test_token_and_cost_accounting_monotonic_across_turns() -> None:
 
 def test_text_emitted_carries_assistant_content() -> None:
     """When Claude produces text, the translator MUST emit text_emitted
-    with the verbatim content under data["avp.text"] (SPEC §11)."""
+    with the verbatim content under data["avp.text"] (spec/v0.1/trajectory.md §7)."""
     translator, captured = _new_translator(
         prompt="Reply with exactly the word 'hello' and nothing else.",
         run_id="claude-agent-smoke-text-content",

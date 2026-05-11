@@ -1,16 +1,16 @@
 # simple-supervisor-example
 
-A worked example of an AVP v0.1 supervisor. Builds Commissions from category profiles, runs them against an AVP agent, observes the streamed trajectory, and surfaces the trajectory classes SPEC.md §10 calls out:
+A worked example of an AVP v0.1 supervisor. Builds Commissions from category profiles, runs them against an AVP agent, observes the streamed trajectory, and surfaces the trajectory classes [`spec/v0.1/trajectory.md` §1](../../../spec/v0.1/trajectory.md) calls out:
 
 - **What the agent did** — model turns, tool calls, subagent invocations
 - **What the run cost** — cumulative cost / tokens / duration
 
-Both agent SDKs are demonstrated:
+Both AVP integration patterns are demonstrated:
 
-| SDK | Pattern | What this example shows |
+| Integration | Pattern | What this example shows |
 |---|---|---|
-| `avp-anthropic` | Driver — owns the loop | Cost-tracked refactor, subagent delegation, drop-in `AnthropicTracedClient` instrumentation |
-| `avp-claude-agent` | Observer — wraps Claude Agent SDK | Same Commission wrapping a session that owns its own loop; trajectory observable from outside |
+| `avp-anthropic` SDK adapter + a reference agent built on it (`examples/_anthropic_reference_agent.py`) | Driver, AVPAgent owns the loop | Cost-tracked refactor, subagent delegation, drop-in `AnthropicTracedClient` instrumentation |
+| `avp-claude-agent` (wraps the Claude Agent SDK) | Observer, SDK owns the loop | Same Commission against a session that owns its own loop; trajectory observable from outside |
 
 This is **not a production framework**. It's a stepping stone — proof that the wire format works end-to-end. Read the source top to bottom; it should fit in your head.
 
@@ -24,6 +24,8 @@ src/simple_supervisor/
   observability.py  # summarize(events) -> Summary; render(summary) -> str
   cli.py            # `simple-supervisor list-profiles` / `show-commission` / `examples`
 examples/
+  _anthropic_reference_agent.py    # reference agent built on the avp-anthropic SDK
+                                   # adapter (spawned by examples 01/05; not numbered).
   01_anthropic_cost_bounded.py
   03_claude_code_audited.py
   05_anthropic_subagent_delegation.py
@@ -33,28 +35,27 @@ examples/
 
 ## Quickstart
 
-The repo is a uv workspace — `uv sync` from the root installs all AVP
-packages editably and resolves cross-package deps to local sources. Use `uv` for everything:
+The repo is a multi-language workspace; the Python workspace root lives at [`python/`](../../). `make sync` from the repo root installs every Python package editably and resolves cross-package deps to local sources:
 
 ```bash
-cd /path/to/agent-execution-protocol
-uv sync
+cd /path/to/agent-voyage-protocol
+make sync                              # uv --directory python sync
 
 # Show available profiles
-uv run simple-supervisor list-profiles
+uv --directory python run simple-supervisor list-profiles
 
 # Render a Commission without running anything
-uv run simple-supervisor show-commission --profile cost-bounded --prompt "Explain main.py"
+uv --directory python run simple-supervisor show-commission --profile cost-bounded --prompt "Explain main.py"
 
 # Run the examples end-to-end (uses ~/.anthropic-key or $ANTHROPIC_API_KEY)
-uv run simple-supervisor examples
+uv --directory python run simple-supervisor examples
 ```
 
 ## What each example demonstrates
 
-### 01 — Read-only inspection (driver pattern)
+### 01: Read-only inspection (driver pattern)
 
-Wires the `read-only` profile (`enabled_builtin_tools=["read_file"]`) at a Claude Haiku model. Runs `avp-anthropic`, observes the trajectory.
+Wires the `read-only` profile (`enabled_builtin_tools=["read_file"]`) at a Claude Haiku model. Spawns the reference agent at `examples/_anthropic_reference_agent.py` (built on the `avp-anthropic` SDK adapter), observes the trajectory.
 
 What you'll see in the post-run summary:
 - `agent_stopped reason="converged"` once the agent finishes
@@ -91,24 +92,24 @@ When you read the examples, notice how little supervisor code there is. AVP does
 
 ## Running the examples
 
-The fastest path — uses `~/.anthropic-key` if it exists, otherwise `$ANTHROPIC_API_KEY`:
+The fastest path (uses `~/.anthropic-key` if it exists, otherwise `$ANTHROPIC_API_KEY`):
 
 ```bash
-uv run simple-supervisor examples            # all five
-uv run simple-supervisor examples 01         # just example 01
-uv run simple-supervisor examples 01 03 05   # any subset
+uv --directory python run simple-supervisor examples            # all five
+uv --directory python run simple-supervisor examples 01         # just example 01
+uv --directory python run simple-supervisor examples 01 03 05   # any subset
 ```
 
-Or invoke them directly:
+Or invoke them directly (the `make examples` target wraps this with `--directory python` for you):
 
 ```bash
 export ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)"
 
 # Real Haiku, ~$0.001 each (driver pattern)
-uv run python python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py
+uv --directory python run python ../python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py
 
 # Real claude-agent-sdk + Claude Code, ~$0.10 (observer pattern)
-USE_REAL_SDK=1 uv run python python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py
+USE_REAL_SDK=1 uv --directory python run python ../python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py
 ```
 
 Each example prints (a) the compiled Commission, (b) live events line-by-line as they stream, then (c) a compact post-run summary.
@@ -120,5 +121,5 @@ If your real supervisor needs anything beyond what's here — a UI, a database o
 The deliberate omissions:
 - No persistent storage (events live in memory per run).
 - No multi-run orchestration.
-- No HTTP transport (stdio only).
-- No category/profile authoring tools — profiles live in code.
+- Only the stdio binding to the supervisor↔agent pipe is wired here. AVP is transport-agnostic; real supervisors can carry Commissions and trajectories over HTTP, a message bus, in-process callbacks, or anything else that preserves the JSON shapes.
+- No category/profile authoring tools; profiles live in code.

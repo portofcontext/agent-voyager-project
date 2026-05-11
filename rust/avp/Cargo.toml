@@ -2,7 +2,7 @@
 name = "avp"
 version = "0.1.0"
 edition = "2021"
-description = "Agent Voyage Protocol — Rust types for the v0.1 wire format."
+description = "Agent Voyager Protocol — Rust types for the v0.1 wire format."
 license = "MIT"
 repository = "https://github.com/portofcontext/agent-execution-protocol"
 readme = "README.md"

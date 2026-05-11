@@ -14,7 +14,7 @@ class StopReason(StrEnum):
     """Why a run terminated. v0.1 keeps the enum tight: model said done,
     model declined, agent crashed, or operator interrupted. Cap-driven
     stop reasons (turn / token / cost / duration limits) are not part of
-    v0.1 — agents that need bounded execution wire it externally
+    v0.1; agents that need bounded execution wire it externally
     (subprocess timeouts, supervisor SIGKILL)."""
 
     converged = "converged"

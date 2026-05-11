@@ -2,8 +2,8 @@
 
 Pins:
   - Known event types validate against their Pydantic models
-  - Unknown event types pass through as plain dicts (SPEC.md §12: consumers
-    MUST pass them through without error)
+  - Unknown event types pass through as plain dicts (umbrella README §4:
+    consumers MUST pass them through without error)
   - Unknown types missing required CloudEvents envelope fields raise
   - The envelope round-trips through model_dump(by_alias=True) into the
     canonical CloudEvents wire form
@@ -69,7 +69,7 @@ def test_known_event_type_returns_pydantic_model() -> None:
 
 
 def test_unknown_event_type_passes_through_as_dict() -> None:
-    """SPEC.md §12: custom event types MUST pass through. Implementations
+    """spec/v0.1/README.md §4: custom event types MUST pass through. Implementations
     SHOULD use reverse-DNS types like 'com.example.something' to avoid
     future conflicts with `avp.*`. Consumers MUST NOT raise on unknown types."""
     payload = _envelope(

@@ -1,26 +1,33 @@
-# AVP — orchestration commands for the workspace.
+# AVP: orchestration commands for the multi-language repo.
 #
 # Default target prints help. Use `make smoke` for the full $$ sanity check
 # you want before tagging a release.
 #
+# The Python workspace lives under python/ (its own pyproject.toml + ruff.toml
+# + uv.lock); this Makefile invokes uv via `uv --directory python` so the repo
+# root stays language-agnostic.
+#
 # Cost notes: targets that hit a real LLM are clearly marked. The default
 # `make smoke` runs the entire matrix (all real-LLM tests + all examples)
-# and currently costs roughly $0.10–0.20 on Haiku. The free checks
+# and currently costs roughly $0.10 to $0.20 on Haiku. The free checks
 # (`make check`) cover format / lint / unit tests / conformance.
 
 SHELL := /usr/bin/env bash
+
+# All uv calls route through python/ so the repo root has no Python config.
+UV := uv --directory python
 
 # Each package has its own pyproject.toml + tests/ directory. Pytest's
 # importer collides if invoked at the repo root because every package
 # uses the same `tests` dirname, so we iterate per-package.
 TEST_PKGS := \
 	python/avp \
-	python/agents/avp-anthropic \
+	python/sdks/avp-anthropic \
 	python/agents/avp-claude-agent \
 	python/supervisors/simple-supervisor-example
 
 # All examples. Each script self-detects missing preflight (API key,
-# claude_agent_sdk, the `claude` CLI) and exits 2 — the run-an-example
+# claude_agent_sdk, the `claude` CLI) and exits 2. The run-an-example
 # loop treats exit 2 as a skip rather than a failure, so a run on a
 # workstation without the Claude Code CLI still completes the Anthropic-
 # only examples cleanly.
@@ -34,27 +41,27 @@ EXAMPLES := \
 
 .PHONY: help
 help:
-	@echo "AVP — orchestration commands"
+	@echo "AVP: orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
-	@echo "    make test            — pytest across every package, real-LLM excluded"
-	@echo "    make conformance     — avp-conformance run + validate + check-coverage"
-	@echo "    make lint            — ruff check"
-	@echo "    make format          — ruff format (writes)"
-	@echo "    make format-check    — ruff format --check (read-only)"
-	@echo "    make schemas         — regenerate JSON schemas from Pydantic models"
-	@echo "    make bindings        — regenerate Rust + TS bindings from schemas"
-	@echo "    make bindings-check  — drift detector (regen + git-diff against tracked)"
-	@echo "    make bindings-test   — cargo test (rust/avp) + npm test (typescript/avp)"
-	@echo "    make check           — format-check + lint + test + conformance + bindings-check"
+	@echo "    make test            pytest across every package, real-LLM excluded"
+	@echo "    make conformance     avp-conformance run + validate + check-coverage"
+	@echo "    make lint            ruff check"
+	@echo "    make format          ruff format (writes)"
+	@echo "    make format-check    ruff format --check (read-only)"
+	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
+	@echo "    make bindings        regenerate Rust + TS bindings from schemas"
+	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
+	@echo "    make bindings-test   cargo test (rust/avp) + npm test (typescript/avp)"
+	@echo "    make check           format-check + lint + test + conformance + bindings-check"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make test-real-llm   — real-LLM smoke tests for both agents"
-	@echo "    make examples        — all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
-	@echo "    make smoke           — check + bindings-test + test-real-llm + examples (full sanity)"
+	@echo "    make test-real-llm   real-LLM smoke tests for both agents"
+	@echo "    make examples        all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
+	@echo "    make smoke           check + bindings-test + test-real-llm + examples (full sanity)"
 	@echo ""
 	@echo "  Other:"
-	@echo "    make sync            — uv sync the workspace"
+	@echo "    make sync            uv sync the Python workspace at python/"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -73,31 +80,31 @@ test:
 
 .PHONY: conformance
 conformance:
-	@uv run avp-conformance validate
-	@uv run avp-conformance run
-	@uv run avp-conformance check-coverage
+	@$(UV) run avp-conformance validate
+	@$(UV) run avp-conformance run
+	@$(UV) run avp-conformance check-coverage
 
 
 .PHONY: lint
 lint:
-	@uv run ruff check python
+	@$(UV) run ruff check .
 
 
 .PHONY: format
 format:
-	@uv run ruff format python
-	@uv run ruff check --fix python
+	@$(UV) run ruff format .
+	@$(UV) run ruff check --fix .
 
 
 .PHONY: format-check
 format-check:
-	@uv run ruff format --check python
-	@uv run ruff check python
+	@$(UV) run ruff format --check .
+	@$(UV) run ruff check .
 
 
 .PHONY: schemas
 schemas:
-	@uv run python scripts/generate-schemas.py
+	@$(UV) run python ../scripts/generate-schemas.py
 
 
 .PHONY: bindings
@@ -108,7 +115,7 @@ bindings:
 .PHONY: bindings-check
 bindings-check:
 	@# Drift check: snapshot current bindings, regenerate, diff against
-	@# the snapshot. Pure working-tree comparison — does NOT require the
+	@# the snapshot. Pure working-tree comparison; does NOT require the
 	@# bindings to be committed. If regeneration changes any byte, the
 	@# user's bindings are stale relative to types.py / schemas.
 	@snapshot=$$(mktemp -d); \
@@ -147,7 +154,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in python/agents/avp-anthropic python/agents/avp-claude-agent; do \
+	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
@@ -157,13 +164,13 @@ test-real-llm:
 
 # Common run-an-example macro. Distinguishes:
 #   exit 0 → pass
-#   exit 2 → preflight skip (missing API key / SDK / CLI) — we report it but don't fail
+#   exit 2 → preflight skip (missing API key / SDK / CLI); we report it but don't fail
 #   anything else → fail
 define run_examples
 	@failed=""; skipped=""; \
 	for ex in $(1); do \
 		echo ""; echo "==== $$ex ===="; \
-		uv run python $$ex; \
+		$(UV) run python ../$$ex; \
 		rc=$$?; \
 		case $$rc in \
 			0) ;; \
@@ -188,7 +195,7 @@ examples:
 
 .PHONY: smoke
 smoke: check bindings-test test-real-llm examples
-	@echo ""; echo "✓ smoke complete — free checks + bindings tests + real-LLM tests + all examples passed."
+	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + all examples passed."
 
 
 # ── Other ─────────────────────────────────────────────────────────────────────
@@ -196,7 +203,7 @@ smoke: check bindings-test test-real-llm examples
 
 .PHONY: sync
 sync:
-	@uv sync
+	@$(UV) sync
 
 
 # Default goal

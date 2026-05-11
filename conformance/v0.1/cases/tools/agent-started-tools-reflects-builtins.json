@@ -1,12 +1,14 @@
 {
   "id": "agent-started-tools-reflects-builtins",
   "title": "agent_started.data.tools[] surfaces every agent-built-in tool with avp.tool.dispatch_target=local",
-  "description": "SPEC.md §9: with the refs-only Commission, agent_started.data.tools[] is the agent-internal contribution to the unified tool bag — built-in tools the agent ships compiled into its package. Each entry MUST include `name` and SHOULD set `avp.dispatch_target` to `local`. MCP-server tools land separately on `mcp_server_connected.data.avp.mcp.tools[]` after resolution. There is no Commission.exposed filter in v0.1 — every built-in surfaces directly.",
+  "description": "With the refs-only Commission, agent_started.data.tools[] is the agent-internal contribution to the unified tool bag: built-in tools the agent ships compiled into its package. Each entry MUST include `name` and SHOULD set `avp.dispatch_target` to `local`. MCP-server tools land separately on `mcp_server_connected.data.avp.mcp.tools[]` after resolution.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#9-tools",
-    "spec/v0.1/SPEC.md#3-1-run-prelude"
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#2-1-run-prelude"
   ],
-  "applies_to": ["agent"],
+  "applies_to": [
+    "agent"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "tools-effective-surface",
@@ -18,8 +20,14 @@
       "description": "Read a file from the workspace.",
       "input_schema": {
         "type": "object",
-        "properties": { "path": { "type": "string" } },
-        "required": ["path"]
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
       }
     },
     {
@@ -27,8 +35,14 @@
       "description": "Run a shell command.",
       "input_schema": {
         "type": "object",
-        "properties": { "command": { "type": "string" } },
-        "required": ["command"]
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
       }
     }
   ],
@@ -68,7 +82,9 @@
       {
         "match": {
           "type": "avp.agent_stopped",
-          "data": { "avp.reason": "converged" }
+          "data": {
+            "avp.reason": "converged"
+          }
         }
       }
     ]

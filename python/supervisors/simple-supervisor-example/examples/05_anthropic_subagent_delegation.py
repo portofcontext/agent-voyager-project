@@ -1,15 +1,19 @@
-"""Example 05 — Managed-subagent delegation via the AVP resolver protocol.
+"""Example 05: Managed-subagent delegation via the AVP Resolver API.
+
+Builds an avp-anthropic-driven agent in-process (no subprocess). The
+reference agent's ShellTools + descriptor live in the sibling script
+`_anthropic_reference_agent.py`; this example imports them directly.
 
 Story: a supervisor declares ONE managed subagent — a `summarizer` whose
 job is to turn a passage into a couple of bullets. The Commission carries
 just an opaque ref for the subagent; an in-process `ScriptedResolver`
 stands in for what a production supervisor would wire as an HTTP service
-(per SPEC.md §6). The parent agent runs against Claude, calls
+(per `spec/v0.1/resolver.md`). The parent agent runs against Claude, calls
 `avp.spawn_subagent` when the model invokes the subagent, and emits the
 expected lifecycle on the wire.
 
 What you'll see on the wire:
-  - `agent_described.data["avp.manifest"]` — the agent's whoami
+  - `agent_described.data["avp.descriptor"]` — the agent's whoami
   - `agent_started.data.subagents = [{name: "summarizer"}]` — id-only
     stub (descriptions arrive via `managed_ref_resolved`)
   - `managed_ref_resolved` (for the subagent ref) before any model turn
@@ -34,18 +38,17 @@ import os
 import sys
 from datetime import UTC, datetime
 
+from _anthropic_reference_agent import (
+    SHELL_TOOL_SCHEMAS,
+    ShellTools,
+    descriptor,
+)
 from simple_supervisor import render, summarize
 
 from avp import Commission, SubagentRef
 from avp.agent import AVPAgent
 from avp.agent.mock import ScriptedResolver, ScriptedSupervisor
-from avp_anthropic import (
-    SHELL_TOOL_SCHEMAS,
-    AnthropicModelDriver,
-    build_anthropic_tools,
-    manifest,
-)
-from avp_anthropic.shell_tools import ShellTools
+from avp_anthropic import AnthropicModelDriver, build_anthropic_tools
 
 
 def main() -> int:
@@ -111,7 +114,7 @@ def main() -> int:
         supervisor=ScriptedSupervisor(),
         agent_builtin_tools=list(SHELL_TOOL_SCHEMAS),
         resolver=resolver,
-        manifest=manifest(),
+        descriptor=descriptor(),
         on_event=events.append,
     )
     agent.run()

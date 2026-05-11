@@ -36,7 +36,7 @@ export type Meta = {
 } | null;
 
 /**
- * Supervisor → agent setup message. Declares the agent's complete environment (mcp_servers, allowed_tools, skills, subagents, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run.
+ * Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md.
  */
 export interface AVPV01Commission {
   schema_version: SchemaVersion;
@@ -67,7 +67,7 @@ export interface AVPV01Commission {
  *
  * `name` SHOULD be a stable identifier for the supervisor implementation
  * or instance (e.g. `"simple-supervisor-example"`, `"acme.scheduler"`).
- * `version` is optional but recommended — it travels with the trajectory
+ * `version` is optional but recommended; it travels with the trajectory
  * and lets auditors correlate a run with the exact supervisor build
  * that requested it.
  *
@@ -84,8 +84,9 @@ export interface SupervisorPreamble {
  * The agent resolves this entry at startup by calling `avp.resolve` with
  * `{kind: "mcp_server", id, ref}`. The resolver returns the connection
  * material (transport, URL, auth, etc.) the agent uses to dial the actual
- * MCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and
- * transport are deployment concerns — AVP does not constrain them.
+ * MCP server. Per-`kind` result schemas are pinned in the Resolver API
+ * spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
+ * concerns; AVP does not constrain them.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
  * via the `definition` "McpServerRef".
@@ -99,7 +100,7 @@ export interface McpServerRef {
  *
  * The agent resolves this entry at startup by calling `avp.resolve` with
  * `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
- * (or a location the agent fetches and reads) — agentskills.io's content
+ * (or a location the agent fetches and reads); agentskills.io's content
  * model still applies; the resolver just hands the content back from
  * whatever store the supervisor uses.
  *

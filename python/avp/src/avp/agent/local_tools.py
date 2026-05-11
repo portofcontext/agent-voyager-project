@@ -13,12 +13,12 @@ Design points:
     callables at startup and pass the `LocalTools` instance to
     `AVPAgent(tools=...)`.
   - Composition over special-casing. LocalTools accepts a `fallback`
-    ToolDriver so users can mix their callables with an agent's
-    built-ins (e.g. `ShellTools` from avp-anthropic): callables
-    LocalTools knows about win, everything else falls through.
+    ToolDriver so users can mix their callables with the agent's own
+    tool catalog (e.g. a `ShellTools` shipped by the wrapping agent):
+    callables LocalTools knows about win, everything else falls through.
   - Schemas exported. `.schemas` returns the `{name, description,
     input_schema}` list agents hand to the model so it can call them.
-    Same shape as `avp_anthropic.shell_tools.SHELL_TOOL_SCHEMAS`.
+    Same shape the agent uses for its own built-in tools.
 
 Two registration styles:
 
@@ -66,10 +66,10 @@ ToolFn = Callable[[dict[str, Any]], Any]
 class LocalTools(ToolDriver):
     """Runtime registry of in-process Python tools.
 
-    Compose with a fallback `ToolDriver` (e.g. `ShellTools`) to layer
-    user-defined tools over agent built-ins:
+    Compose with a fallback `ToolDriver` to layer user-defined tools
+    over an agent's own tool catalog:
 
-        tools = LocalTools(fallback=ShellTools())
+        tools = LocalTools(fallback=AgentShellTools())
 
     The agent sees a single `ToolDriver`. LocalTools' callables win
     by name; everything else routes to the fallback (and ultimately to
@@ -144,8 +144,8 @@ class LocalTools(ToolDriver):
         """The `[{name, description, input_schema}]` list to hand to a
         agent's tool-surface builder so the model knows about these
         tools. For avp-anthropic, pass to
-        `build_anthropic_tools(config, builtins=...)`. Combines with a
-        fallback's schemas if the fallback exposes them."""
+        `avp_anthropic.build_anthropic_tools(config, builtins=...)`.
+        Combines with a fallback's schemas if the fallback exposes them."""
         out = list(self._schemas.values())
         fallback_schemas = getattr(self._fallback, "schemas", None)
         if isinstance(fallback_schemas, list):

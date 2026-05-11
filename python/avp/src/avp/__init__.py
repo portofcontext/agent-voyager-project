@@ -1,4 +1,4 @@
-"""avp — Python reference implementation for Agent Voyage Protocol (v0.1 model).
+"""avp — Python reference implementation for the Agent Voyager Project (v0.1 model).
 
 The wire format is built on CloudEvents 1.0, OpenTelemetry GenAI semantic
 conventions, OTel spans, JSON-RPC 2.0, MCP, Agent Skills, and JSON Schema.
@@ -62,7 +62,7 @@ from avp.types import (
     ZERO_SPAN_ID,
     AgentDescribedData,
     AgentDescribedEvent,
-    AgentManifest,
+    AgentDescriptor,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
@@ -160,7 +160,7 @@ __all__ = [
     "AVPTracer",
     "AgentDescribedData",
     "AgentDescribedEvent",
-    "AgentManifest",
+    "AgentDescriptor",
     # Event envelopes + payloads
     "AgentStartedData",
     "AgentStartedEvent",

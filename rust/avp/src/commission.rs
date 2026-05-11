@@ -29,7 +29,7 @@ pub mod error {
         }
     }
 }
-#[doc = "Supervisor → agent setup message. Declares the agent's complete environment (mcp_servers, allowed_tools, skills, subagents, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run."]
+#[doc = "Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
@@ -37,7 +37,7 @@ pub mod error {
 #[doc = "{"]
 #[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/commission.schema.json\","]
 #[doc = "  \"title\": \"AVP v0.1 Commission\","]
-#[doc = "  \"description\": \"Supervisor → agent setup message. Declares the agent's complete environment (mcp_servers, allowed_tools, skills, subagents, prompts). Sent once at startup. The supervisor MUST NOT modify the environment mid-run.\","]
+#[doc = "  \"description\": \"Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"run_id\","]
@@ -372,14 +372,14 @@ impl ::std::convert::From<::serde_json::Value> for JsonValue {
         Self(value)
     }
 }
-#[doc = "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and\ntransport are deployment concerns — AVP does not constrain them."]
+#[doc = "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\nconcerns; AVP does not constrain them."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"McpServerRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed MCP server.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"mcp_server\\\", id, ref}`. The resolver returns the connection\\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\\nMCP server. Per-`kind` result schemas are pinned in SPEC.md. Auth and\\ntransport are deployment concerns — AVP does not constrain them.\","]
+#[doc = "  \"description\": \"Reference to a supervisor-managed MCP server.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"mcp_server\\\", id, ref}`. The resolver returns the connection\\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\\nconcerns; AVP does not constrain them.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\","]
@@ -545,14 +545,14 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
             })
     }
 }
-#[doc = "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads) — agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses."]
+#[doc = "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads); agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SkillRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed skill.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"skill\\\", id, ref}`. The resolver returns the SKILL.md content\\n(or a location the agent fetches and reads) — agentskills.io's content\\nmodel still applies; the resolver just hands the content back from\\nwhatever store the supervisor uses.\","]
+#[doc = "  \"description\": \"Reference to a supervisor-managed skill.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"skill\\\", id, ref}`. The resolver returns the SKILL.md content\\n(or a location the agent fetches and reads); agentskills.io's content\\nmodel still applies; the resolver just hands the content back from\\nwhatever store the supervisor uses.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\","]
@@ -615,14 +615,14 @@ pub struct SubagentRef {
     #[serde(rename = "ref")]
     pub ref_: JsonValue,
 }
-#[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and stamped onto the\n`run_requested` event the agent emits as the first event of the\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\nconsumer attribute the run to the originating supervisor without an\nout-of-band lookup.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended — it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
+#[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and stamped onto the\n`run_requested` event the agent emits as the first event of the\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\nconsumer attribute the run to the originating supervisor without an\nout-of-band lookup.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SupervisorPreamble\","]
-#[doc = "  \"description\": \"Identifies the supervisor that is requesting the run.\\n\\nCarried inside `Commission.supervisor` and stamped onto the\\n`run_requested` event the agent emits as the first event of the\\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\\nconsumer attribute the run to the originating supervisor without an\\nout-of-band lookup.\\n\\n`name` SHOULD be a stable identifier for the supervisor implementation\\nor instance (e.g. `\\\"simple-supervisor-example\\\"`, `\\\"acme.scheduler\\\"`).\\n`version` is optional but recommended — it travels with the trajectory\\nand lets auditors correlate a run with the exact supervisor build\\nthat requested it.\","]
+#[doc = "  \"description\": \"Identifies the supervisor that is requesting the run.\\n\\nCarried inside `Commission.supervisor` and stamped onto the\\n`run_requested` event the agent emits as the first event of the\\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\\nconsumer attribute the run to the originating supervisor without an\\nout-of-band lookup.\\n\\n`name` SHOULD be a stable identifier for the supervisor implementation\\nor instance (e.g. `\\\"simple-supervisor-example\\\"`, `\\\"acme.scheduler\\\"`).\\n`version` is optional but recommended; it travels with the trajectory\\nand lets auditors correlate a run with the exact supervisor build\\nthat requested it.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]

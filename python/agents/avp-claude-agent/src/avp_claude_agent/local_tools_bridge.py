@@ -1,19 +1,20 @@
 """Bridge: AVP `LocalTools` → Claude Agent SDK in-process MCP server.
 
 User B writes their tool registration ONCE against `avp.agent.LocalTools`
-and runs the same Commission against either agent. With avp-anthropic,
-`LocalTools` is the `ToolDriver` directly (the agent already accepts
-`tools: ToolDriver`). With avp-claude-agent, the SDK owns the loop and
-expects in-process tools registered via its own `@tool` /
-`create_sdk_mcp_server` mechanism — this bridge converts the AVP
-registry to that shape so the SDK can dispatch them.
+and runs the same Commission against either agent. With an agent built
+on avp-anthropic (driver-pattern), `LocalTools` is the `ToolDriver`
+directly (`AVPAgent` already accepts `tools: ToolDriver`). With
+avp-claude-agent, the SDK owns the loop and expects in-process tools
+registered via its own `@tool` / `create_sdk_mcp_server` mechanism: this
+bridge converts the AVP registry to that shape so the SDK can dispatch
+them.
 
 Wire-shape consequence: bridged tools land on the AVP wire as
 `mcp__<server>__<tool>` with `dispatch_target=local` (the SDK names
 them MCP-style, but the bridged server isn't in `Commission.mcp_servers[]`,
 so the translator's existing tag-MCP-by-Commission logic correctly tags
-them as local). Same on-the-wire shape `avp-anthropic` produces for
-the same callable.
+them as local). Same on-the-wire shape a driver-pattern agent produces
+for the same callable.
 
 Return-value coercion: each bridged tool wraps the user's sync
 callable in an async shim that calls it and renders the result to

@@ -1,4 +1,4 @@
-"""SPEC §11.1: agent_stopped's top-level convenience aliases
+"""spec/v0.1/trajectory.md §7.1: agent_stopped's top-level convenience aliases
 (`avp.total_tokens`, `avp.total_cost_usd`, `avp.total_turns`,
 `avp.duration_ms`) MUST equal the matching fields inside `avp.state`
 when populated. Pydantic's model_validator enforces this at

@@ -1,10 +1,10 @@
 {
   "id": "skill-source-missing-stops-with-error",
   "title": "Resolver returning error for a skill ref MUST emit managed_ref_resolve_failed and stop with reason=error before any turn",
-  "description": "SPEC.md \u00a76.4 \u2014 startup resolution is fail-fast. When the AVP resolver protocol fails for any Commission-declared managed asset (resolver service unreachable, ref not understood, content malformed), the agent MUST emit managed_ref_resolve_failed carrying the kind/id/error, then agent_stopped(reason=error) before any model turn. Pins the contract that supervisors learn about stale or broken refs at startup, never via silent surface degradation.",
+  "description": "startup resolution is fail-fast. When the AVP resolver protocol fails for any Commission-declared managed asset (resolver service unreachable, ref not understood, content malformed), the agent MUST emit managed_ref_resolve_failed carrying the kind/id/error, then agent_stopped(reason=error) before any model turn. Pins the contract that supervisors learn about stale or broken refs at startup, never via silent surface degradation.",
   "spec_refs": [
-    "spec/v0.1/SPEC.md#6-the-resolver-protocol",
-    "spec/v0.1/SPEC.md#9-7-skills"
+    "spec/v0.1/resolver.md",
+    "spec/v0.1/trajectory.md#6-skills"
   ],
   "applies_to": [
     "agent"
@@ -20,7 +20,7 @@
       }
     ]
   },
-  "agent_manifest": {
+  "agent_descriptor": {
     "agent_name": "test-agent",
     "agent_version": "0.0.0",
     "avp_spec_version": "0.1"
