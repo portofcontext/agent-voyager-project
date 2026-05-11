@@ -1046,6 +1046,15 @@ def format_event(event: BaseModel) -> str:
         head = data.avp_text.replace("\n", " ")[:80]
         return f"     text: {head!r}"
 
+    if cls == "ReasoningEmittedEvent":
+        # Reasoning summaries are often redacted by the provider (gpt-5
+        # default, claude thinking with signature-only), so distinguish
+        # those from plaintext rather than printing a bare class name.
+        if getattr(data, "avp_reasoning_redacted", False):
+            return "     reasoning: <redacted>"
+        text = (data.avp_reasoning_text or "").replace("\n", " ")[:80]
+        return f"     reasoning: {text!r}"
+
     if cls == "ToolInvokedEvent":
         return f"  -> {data.gen_ai_tool_name}({list(data.gen_ai_tool_call_arguments.keys())})"
 
