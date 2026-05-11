@@ -121,6 +121,72 @@ def test_cost_accounting_matches_per_turn_usage() -> None:
     assert snap.total_tokens == sum_input + sum_output
 
 
+def test_function_tool_round_trip() -> None:
+    """Wire a Python @function_tool, prompt the model to call it, verify
+    AVP `tool_invoked` / `tool_returned` events pair correctly with the
+    SDK's actual dispatch. Cheap: one tool, one short prompt.
+
+    Some models occasionally answer without calling the tool. We retry
+    once with a more explicit prompt before failing — flaky LLM
+    behavior shouldn't fail real-LLM smoke tests by itself."""
+    from avp_openai_agent.translator import OpenAIAgentTranslator
+
+    from agents import Agent, Runner, function_tool  # type: ignore[import-not-found]
+
+    @function_tool
+    def get_secret_code() -> str:
+        """Return the day's secret access code. Always call this when asked
+        for the secret code; do not guess."""
+        return "PURPLE-DRAGON-42"
+
+    def _run(prompt: str) -> list:
+        captured: list = []
+        agent = Agent(
+            name="avp-tool-test",
+            instructions=(
+                "You are a helpful assistant. When the user asks for the "
+                "secret code, you MUST call the get_secret_code tool and "
+                "then return the value it gave you. Do not invent codes."
+            ),
+            tools=[get_secret_code],
+            model=SMOKE_MODEL,
+        )
+
+        translator = OpenAIAgentTranslator(
+            Commission(
+                schema_version="0.1",
+                run_id="openai-agent-tool-smoke",
+                model=SMOKE_MODEL,
+                prompt=prompt,
+            ),
+            on_event=captured.append,
+            descriptor=descriptor(),
+            agent_factory=lambda: agent,
+            runner=Runner,
+        )
+        translator.run()
+        return captured
+
+    captured = _run("What is today's secret code?")
+    tool_invoked = [ev for ev in captured if type(ev).__name__ == "ToolInvokedEvent"]
+    if not tool_invoked:
+        # Retry once with a more directive prompt — some sampling runs
+        # cause the model to skip the tool entirely.
+        captured = _run("Call get_secret_code and tell me what it returned.")
+        tool_invoked = [ev for ev in captured if type(ev).__name__ == "ToolInvokedEvent"]
+
+    assert tool_invoked, "model never called the tool across two attempts"
+    tool_returned = [ev for ev in captured if type(ev).__name__ == "ToolReturnedEvent"]
+    assert tool_returned, "tool was invoked but never returned"
+    # invoked/returned MUST pair by gen_ai.tool.call.id.
+    invoked_ids = {ev.data.gen_ai_tool_call_id for ev in tool_invoked}
+    returned_ids = {ev.data.gen_ai_tool_call_id for ev in tool_returned}
+    assert invoked_ids == returned_ids
+    # The tool name surfaces on both sides — SDK uses the function's
+    # __name__ unless overridden.
+    assert all(ev.data.gen_ai_tool_name == "get_secret_code" for ev in tool_invoked)
+
+
 def test_cost_recorded_events_monotonic() -> None:
     """Per-turn cost_recorded snapshots MUST be monotonic across the run
     (spec/v0.1/trajectory.md §3.3). With per-call usage from the SDK,
