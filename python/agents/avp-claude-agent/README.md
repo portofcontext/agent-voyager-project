@@ -22,7 +22,7 @@ This means observer-pattern integrations like `avp-claude-agent` are first-class
 | `tool_invoked` / `tool_returned` / `tool_failed` | ✅ translated from SDK tool messages |
 | `text_emitted` | ✅ translated |
 | `cost_recorded` | ✅ usage from each model message |
-| MCP servers (`Commission.mcp_servers`) | ✅ passed straight to the SDK's `mcp_servers` slot; HTTP and stdio transports |
+| MCP servers (`Commission.mcp_servers`) | ✅ refs resolved via the Resolver API, then translated into the SDK's `mcp_servers` slot; stdio and HTTP transports |
 
 The TODOs marked `# TODO(claude-agent-sdk):` in `translator.py` are SDK-version-specific glue (which lifecycle events the SDK emits, what its tool-registration API looks like). Once filled in, this agent passes the conformance suite.
 
