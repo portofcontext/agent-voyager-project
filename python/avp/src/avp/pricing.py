@@ -9,8 +9,19 @@ Why this lives in `avp` core, not per-agent:
   a locally-computed number from a provider-reported one (or unknown).
 
 Default ships in `avp/data/prices.json`; `load_default_prices()` reads it
-fresh on each call. To override, pass a `PriceTable` to your driver /
-translator at construction.
+fresh on each call. Two override mechanisms:
+
+  - Programmatic: pass a `PriceTable` to your driver / translator at
+    construction (preferred when callers know their pricing source).
+  - Operational: set `AVP_PRICES_PATH=/abs/path/to/prices.json` in the
+    environment. `load_default_prices()` reads from that file instead of
+    the bundled one. Shape is identical to the bundled JSON. Missing or
+    unreadable file raises `FileNotFoundError` / `OSError`: silent fall
+    back would defeat the purpose (ops wants to see the misconfig, not
+    a stale bundled table). Pricing pages aren't programmatically
+    addressable for OpenAI or Anthropic as of 2026-05; the env override
+    is the next best thing for hot-swapping a price table without a
+    code release.
 
 `COST_SOURCE_*` constants name the audit-source values:
   - `computed`: we did the math locally from a price table
@@ -26,10 +37,14 @@ flags computed numbers from a stale price table.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
+from pathlib import Path
 from typing import Literal
+
+PRICES_PATH_ENV = "AVP_PRICES_PATH"
 
 CostSource = Literal["computed", "reported", "unknown"]
 
@@ -52,13 +67,22 @@ PriceTable = Mapping[str, ModelPrice]
 
 
 def load_default_prices() -> dict[str, ModelPrice]:
-    """Load the bundled default price table from `avp/data/prices.json`.
+    """Load the default price table.
+
+    Source order:
+      1. If `AVP_PRICES_PATH` is set, read from that file. Missing or
+         unreadable file raises (silent fallback hides ops misconfig).
+      2. Otherwise read the bundled `avp/data/prices.json`.
 
     Reads on each call so users who patch the file in-place get fresh
     numbers without restarting their process. Returns a fresh dict;
     callers can mutate without side effects.
     """
-    raw = resources.files("avp.data").joinpath("prices.json").read_text()
+    override = os.environ.get(PRICES_PATH_ENV)
+    if override:
+        raw = Path(override).read_text()
+    else:
+        raw = resources.files("avp.data").joinpath("prices.json").read_text()
     parsed = json.loads(raw)
     return {
         model: ModelPrice(

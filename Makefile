@@ -24,6 +24,7 @@ TEST_PKGS := \
 	python/avp \
 	python/sdks/avp-anthropic \
 	python/agents/avp-claude-agent \
+	python/agents/avp-openai-agent \
 	python/supervisors/simple-supervisor-example
 
 # All examples. Each script self-detects missing preflight (API key,
@@ -34,6 +35,7 @@ TEST_PKGS := \
 EXAMPLES := \
 	python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
 	python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
+	python/supervisors/simple-supervisor-example/examples/04_openai_agents_audited.py \
 	python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
 	python/supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
 	python/supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
@@ -150,11 +152,15 @@ check: format-check lint test conformance bindings-check
 
 .PHONY: test-real-llm
 test-real-llm:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
+	@if [ -z "$$ANTHROPIC_API_KEY" ] && [ -z "$$OPENAI_API_KEY" ]; then \
+		echo "error: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set; real-LLM tests require at least one"; exit 2; \
 	fi
+	@# Per-package real-LLM run. Each package's tests self-skip when their
+	@# required key isn't present (pytest skipif), so we iterate everything
+	@# and let pytest handle the gating. Exit 5 = "no tests collected" =
+	@# treat as pass (gating skipped the whole file).
 	@failed=""; \
-	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent; do \
+	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent python/agents/avp-openai-agent; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
@@ -187,9 +193,13 @@ endef
 
 .PHONY: examples
 examples:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set"; exit 2; \
+	@if [ -z "$$ANTHROPIC_API_KEY" ] && [ -z "$$OPENAI_API_KEY" ]; then \
+		echo "error: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set"; exit 2; \
 	fi
+	@# Each example self-detects missing preflight (provider key, SDK,
+	@# CLI) and exits 2 to signal "skipped" rather than "failed". So
+	@# anyone with just one provider key configured can still run the
+	@# matrix and get the relevant subset green.
 	$(call run_examples,$(EXAMPLES))
 
 

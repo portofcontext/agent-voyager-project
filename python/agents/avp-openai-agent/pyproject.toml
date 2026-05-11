@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avp-openai-agent"
+version = "0.1.0"
+description = "AVP v0.1 agent for the OpenAI Agents SDK (openai-agents). Observer pattern: the SDK owns its loop; this package translates the SDK's RunHooks lifecycle into AVP."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = ["avp>=0.1,<0.2", "openai-agents>=0.0.10"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.6"]
+
+[project.scripts]
+avp-openai-agent = "avp_openai_agent.cli:main"
+
+[project.urls]
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avp_openai_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "real_llm: tests that hit a live LLM via the OpenAI Agents SDK (require OPENAI_API_KEY; cost real money)",
+]

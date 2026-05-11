@@ -45,6 +45,39 @@ def test_load_returns_fresh_dict_on_each_call() -> None:
     assert "fake/model" not in b
 
 
+def test_avp_prices_path_env_override(tmp_path, monkeypatch) -> None:
+    """AVP_PRICES_PATH points load_default_prices() at a user-supplied file.
+
+    The override is the next-best-thing to a dynamic pricing API: neither
+    OpenAI nor Anthropic publishes pricing programmatically as of
+    2026-05, so ops needs a way to hot-swap a table without a code
+    release. The shape is identical to the bundled JSON.
+    """
+    import json
+
+    override = tmp_path / "prices.json"
+    override.write_text(
+        json.dumps({"models": {"ops/custom": {"input": 1.5, "output": 4.5, "cache_read": 0.1}}})
+    )
+    monkeypatch.setenv("AVP_PRICES_PATH", str(override))
+    prices = load_default_prices()
+    # Bundled defaults are NOT merged in — the override is authoritative.
+    assert "ops/custom" in prices
+    assert "claude-sonnet-4-6" not in prices
+    assert prices["ops/custom"].input == 1.5
+
+
+def test_avp_prices_path_missing_file_raises(tmp_path, monkeypatch) -> None:
+    """A misconfigured override is a loud failure, not a silent fallback —
+    ops needs to see the misconfig instead of running on a stale bundled
+    table they didn't realize they were using."""
+    monkeypatch.setenv("AVP_PRICES_PATH", str(tmp_path / "does-not-exist.json"))
+    import pytest
+
+    with pytest.raises(FileNotFoundError):
+        load_default_prices()
+
+
 # ── compute_cost: math + provenance ────────────────────────────────────────
 
 
