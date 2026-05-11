@@ -139,7 +139,10 @@ bindings-check:
 .PHONY: bindings-test
 bindings-test:
 	@cd rust/avp && cargo test --quiet
-	@cd typescript/avp && npm test --silent
+	@# node_modules/ and package-lock.json are gitignored, so a fresh
+	@# clone has neither. Install on demand so `make smoke` works without
+	@# a separate "npm install" step.
+	@cd typescript/avp && { [ -d node_modules ] || npm install --silent; } && npm test --silent
 
 
 .PHONY: check
