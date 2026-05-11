@@ -36,7 +36,7 @@ switch (event.type) {
 Sub-path imports for the helper types:
 
 ```typescript
-import type { Tool, McpServer } from "@avp/types/commission";
+import type { McpServerRef, SkillRef, SubagentRef } from "@avp/types/commission";
 import type { ModelTurnEndedEvent, AgentStartedData } from "@avp/types/event";
 ```
 

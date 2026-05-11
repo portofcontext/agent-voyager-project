@@ -12,10 +12,12 @@ from avp.agent.drivers import (
     ToolDriver,
     ToolOutcome,
 )
+from avp.agent.http_resolver import HttpResolver, http_resolver_from_env
 from avp.agent.local_tools import LocalTools
 
 __all__ = [
     "AVPAgent",
+    "HttpResolver",
     "LocalTools",
     "ModelDriver",
     "ModelResponse",
@@ -26,4 +28,5 @@ __all__ = [
     "SupervisorDriver",
     "ToolDriver",
     "ToolOutcome",
+    "http_resolver_from_env",
 ]

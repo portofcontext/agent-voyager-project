@@ -54,24 +54,24 @@ uv run simple-supervisor examples
 
 ### 01 — Read-only inspection (driver pattern)
 
-Wires the `cost-bounded` profile (`exposed=["read_file"]`) at a Claude Haiku model. Runs `avp-anthropic`, observes the trajectory.
+Wires the `read-only` profile (`enabled_builtin_tools=["read_file"]`) at a Claude Haiku model. Runs `avp-anthropic`, observes the trajectory.
 
 What you'll see in the post-run summary:
 - `agent_stopped reason="converged"` once the agent finishes
-- `read_file: N call(s)` — the only tool the allowlist permitted
+- `read_file: N call(s)` — the only built-in the allowlist permitted
 - The cost trajectory line-by-line as `cost_recorded` events stream in
 
 ### 03 — Audited Claude Code session (observer pattern)
 
 Wraps the Claude Agent SDK (Claude Code as an SDK) via `avp-claude-agent`'s translator. The supervisor builds a Commission and the translator emits AVP events as the SDK runs. Same Profile-derived Commission, same post-run summary.
 
-The point: the SDK owns the agent loop, but the supervisor still declares the surface (`exposed`, `mcp_servers`) and reads the trajectory from the bus. **No mid-run reach-in** — the supervisor sets up environment in Commission and observes events.
+The point: the SDK owns the agent loop, but the supervisor still declares the surface (`enabled_builtin_tools`, managed `mcp_servers` refs) and reads the trajectory from the bus. **No supervisor → agent push channel** — the supervisor sets up the environment in the Commission, stands up the resolver service for managed-asset dereferencing, and observes events.
 
 This example uses a mock SDK by default (so it runs without `claude-agent-sdk` installed and without an API key). Set `USE_REAL_SDK=1` and install the SDK to drive against the real thing.
 
-### 05 — Subagent delegation (driver pattern)
+### 05 — Managed-subagent delegation (driver pattern)
 
-Wires a Commission that declares a `Subagent` the parent agent can invoke by name. The parent dispatches a question to the subagent; the subagent runs its own model loop; both lifecycles are visible on the trajectory as a span tree (parent's `subagent_invoked` / `subagent_returned` bracketing the child's `model_turn_*` events).
+Wires a Commission that declares a `SubagentRef` the parent agent can invoke by name. At startup the agent calls the resolver to get the subagent's model-facing metadata; when the model invokes it, the agent calls `avp.spawn_subagent` to dispatch. The parent's `subagent_invoked` carries `avp.subagent.run_id` so consumers can correlate parent and child trajectories. Uses an in-process `ScriptedResolver` so the demo runs without a live resolver service.
 
 ### 06 — Traced Anthropic client (drop-in instrumentation)
 
@@ -86,7 +86,7 @@ Same drop-in pattern, but for `ClaudeSDKClient`. `traced_claude_sdk_client` prod
 When you read the examples, notice how little supervisor code there is. AVP does the heavy lifting:
 
 - **Commission-down means no mid-run plumbing.** You hand the agent one JSON document. No callbacks, no hook registry, no inversion-of-control framework to learn.
-- **The agent enforces `exposed`.** The supervisor doesn't need to police what the agent did; it only needs to *observe what happened*.
+- **The agent enforces `enabled_builtin_*` allowlists.** The supervisor doesn't need to police what the agent did; it only needs to *observe what happened*.
 - **The trajectory classes separate cleanly.** The summary view in `observability.py` is short because the wire format already segments by event type.
 
 ## Running the examples

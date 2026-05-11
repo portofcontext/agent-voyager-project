@@ -14,10 +14,14 @@ change MUST stay compatible with the upstream spec it's anchored to:
   attribute names inside `data` (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`)
 - **OTel span identification** — `trace_id` / `span_id` / `parent_span_id` on
   every event's `data`
-- **JSON-RPC 2.0** for `tool_exec_request.data.rpc` and `tool_exec_resolved.data.rpc`
-- **MCP 2025-11-25** for `Commission.tools[]` descriptors (camelCase `inputSchema`)
-  and `Commission.mcp_servers[]` transport declarations
-- **Agent Skills** (agentskills.io) for SKILL.md format
+- **JSON-RPC 2.0** for the AVP resolver protocol — agent calls `avp.resolve`
+  + `avp.spawn_subagent` against a supervisor-stood-up service to dereference
+  opaque refs in `Commission.{mcp_servers,skills,subagents}[].ref`
+- **MCP 2025-11-25** for the connection material the resolver returns for
+  each `mcp_server` ref (transport / url / auth / command etc.); the agent's
+  MCP client consumes it
+- **Agent Skills** (agentskills.io) for SKILL.md content (returned by the
+  resolver for each `skill` ref)
 
 AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace. See `FOUNDATIONS.md`

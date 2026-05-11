@@ -12,6 +12,7 @@ from avp_anthropic.driver import (
     AnthropicModelDriver,
     PriceTable,
     build_anthropic_mcp_servers,
+    build_anthropic_mcp_servers_from_resolved,
     build_anthropic_tools,
 )
 from avp_anthropic.manifest import manifest
@@ -31,6 +32,7 @@ __all__ = [
     "PriceTable",
     "__version__",
     "build_anthropic_mcp_servers",
+    "build_anthropic_mcp_servers_from_resolved",
     "build_anthropic_tools",
     "discover_environment",
     "manifest",

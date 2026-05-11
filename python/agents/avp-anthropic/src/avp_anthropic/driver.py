@@ -629,6 +629,58 @@ class AnthropicModelDriver(ModelDriver):
         self.extra_kwargs = extra_kwargs or {}
         self._extra_client_kwargs = dict(extra_client_kwargs or {})
 
+    def set_resolved_assets(
+        self,
+        *,
+        mcp_servers: dict[str, dict[str, Any]],
+        skills: dict[str, dict[str, Any]] | None = None,
+        subagents: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """AVP resolver-protocol hook: AVPAgent calls this after
+        `avp.resolve` returns material for each managed asset. The driver
+        translates each kind for the next `messages.create(...)` call:
+
+        - mcp_servers: appended to `mcp_servers_param` in Anthropic's
+          connector shape.
+        - subagents: each resolved subagent's `{name, description}` is
+          appended to `tools_param` as a callable tool. AVPAgent's
+          `_handle_tool_call` recognizes the name and routes to
+          `resolver.spawn_subagent`, emitting `subagent_invoked` /
+          `subagent_returned`. Without this exposure the model has no
+          way to *learn* the subagent is available.
+        - skills: unused here — skill content is injected directly into
+          the conversation by AVPAgent (`_inject_skill_bodies_to_history`).
+        """
+        del skills  # injected via AVPAgent, not the driver
+        resolved_servers = build_anthropic_mcp_servers_from_resolved(mcp_servers)
+        # Append-merge so a caller that pre-populated mcp_servers_param
+        # at construction time (legacy / test fixtures) doesn't lose it.
+        existing = list(self.mcp_servers_param or [])
+        existing_names = {entry.get("name") for entry in existing}
+        for entry in resolved_servers:
+            if entry.get("name") in existing_names:
+                continue
+            existing.append(entry)
+        self.mcp_servers_param = existing or None
+
+        if subagents:
+            tool_entries = list(self.tools_param or [])
+            tool_names = {t.get("name") for t in tool_entries}
+            for sa_id, material in subagents.items():
+                name = (material or {}).get("name") or sa_id
+                if name in tool_names:
+                    continue
+                entry: dict[str, Any] = {
+                    "name": name,
+                    "input_schema": _DEFAULT_SUBAGENT_INPUT_SCHEMA,
+                }
+                desc = (material or {}).get("description")
+                if desc:
+                    entry["description"] = desc
+                tool_entries.append(entry)
+                tool_names.add(name)
+            self.tools_param = tool_entries or None
+
     @property
     def client(self) -> Any:
         if self._client is None:
@@ -740,13 +792,68 @@ def build_anthropic_tools(
 
 
 def build_anthropic_mcp_servers(commission: Commission) -> list[dict[str, Any]]:
-    """Placeholder for Anthropic API MCP-connector translation.
+    """Compat shim — returns `[]` for any Commission.
 
-    In the refs-only Commission model, mcp_server connection material is
-    returned by `avp.resolve` at startup (per SPEC §6) — not embedded in
-    the Commission. Wiring resolved material into Anthropic's API
-    connector parameter is a Phase 4 follow-up; for now this returns an
-    empty list. Commissions with non-empty `mcp_servers` will fail at
-    AVPAgent's `resolver_not_configured` gate when no resolver is wired.
+    In the refs-only model, MCP connection material is not embedded in
+    the Commission; it arrives via the AVP resolver protocol. The CLI
+    builds the Anthropic API connector spec from the resolved material
+    via `build_anthropic_mcp_servers_from_resolved` (called from
+    `AnthropicModelDriver.set_resolved_assets` once AVPAgent has
+    populated `_resolved_mcp_servers`).
+
+    Kept here so older callers that imported the helper still load
+    cleanly; new callers should not need it.
     """
+    del commission  # refs only; nothing to translate at Commission time
     return []
+
+
+def build_anthropic_mcp_servers_from_resolved(
+    resolved: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Translate resolved-material from the AVP resolver into Anthropic's
+    API `mcp_servers` parameter.
+
+    The resolver returns whatever connection material the supervisor
+    chose to ship (per SPEC §6.2 — a permissive shape in v0.1). For the
+    Anthropic API connector we need at minimum `transport` and `url`;
+    optional `auth.token` becomes the `Authorization: Bearer <token>`
+    header the connector ships.
+
+    Stdio MCP servers are skipped — Anthropic's API connector only
+    speaks HTTP. Run stdio servers locally (resolver returns the
+    handshake details; the agent dials directly) or expose them through
+    a supervisor-side HTTP proxy.
+
+    `resolved` is keyed by Commission.mcp_servers[].id; each value is
+    the resolver's `result` payload.
+    """
+    import warnings as _warnings
+
+    out: list[dict[str, Any]] = []
+    for server_id, material in resolved.items():
+        transport = (material or {}).get("transport")
+        if transport != "http":
+            _warnings.warn(
+                f"avp-anthropic: skipping resolved MCP server {server_id!r} — "
+                "Anthropic's API connector only supports HTTP transport "
+                f"(got transport={transport!r}).",
+                stacklevel=2,
+            )
+            continue
+        url = material.get("url")
+        if not url:
+            _warnings.warn(
+                f"avp-anthropic: skipping resolved MCP server {server_id!r} — "
+                "no `url` in resolver material.",
+                stacklevel=2,
+            )
+            continue
+        entry: dict[str, Any] = {"type": "url", "name": server_id, "url": url}
+        auth = material.get("auth")
+        if isinstance(auth, dict):
+            token = auth.get("token")
+            if token:
+                entry["authorization_token"] = token
+        out.append(entry)
+    return out

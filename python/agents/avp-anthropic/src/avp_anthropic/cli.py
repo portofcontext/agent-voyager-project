@@ -16,10 +16,9 @@ from typing import IO
 from pydantic import BaseModel
 
 from avp import Commission, write_event
-from avp.agent import AVPAgent
+from avp.agent import AVPAgent, http_resolver_from_env
 from avp_anthropic.driver import (
     AnthropicModelDriver,
-    build_anthropic_mcp_servers,
     build_anthropic_tools,
 )
 from avp_anthropic.manifest import manifest as build_manifest
@@ -146,35 +145,34 @@ def main(argv: list[str] | None = None) -> int:
 
     model = args.model or commission.model or "claude-sonnet-4-6"
 
-    # MCP servers declared in Commission flow into Anthropic's API connector.
-    # HTTP-only — stdio servers in the Commission are warned about and skipped
-    # by the helper. The API runs the MCP loop inside the request and
-    # returns mcp_tool_use / mcp_tool_result blocks alongside the model's
-    # text output; this v0.1 prototype forwards the connector but does
-    # NOT yet emit per-MCP-tool events on the AVP wire (the trajectory
-    # shows the model_turn_ended cost rolled up; per-call detail TBD).
-    mcp_servers_param: list[dict] = build_anthropic_mcp_servers(commission)
-
     tools_param: list[dict] = build_anthropic_tools(commission, builtins=list(SHELL_TOOL_SCHEMAS))
 
     driver = AnthropicModelDriver(
         model=model,
         tools_param=tools_param or None,
-        mcp_servers_param=mcp_servers_param or None,
         max_tokens=args.max_tokens,
     )
 
-    # Managed assets (Commission.{mcp_servers,skills,subagents}) require a
-    # ResolverDriver. The avp-anthropic CLI doesn't yet ship an HTTP-backed
-    # resolver client; Commissions with managed asset lists fail at AVPAgent's
-    # `resolver_not_configured` gate. Local-only Commissions run cleanly.
+    # The AVP resolver protocol (SPEC §6). When the supervisor stands up a
+    # resolver service and sets AVP_RESOLVER_URL on the agent's env, the
+    # CLI dials it via HTTP/JSON-RPC. AVPAgent calls `avp.resolve` for each
+    # Commission-managed asset at startup; after resolution succeeds, the
+    # AVPAgent hands the connection material to AnthropicModelDriver via
+    # `set_resolved_assets`, which translates managed MCP servers into
+    # Anthropic's API connector parameter for subsequent turns.
+    #
+    # No AVP_RESOLVER_URL → resolver is None → Commissions with managed
+    # asset lists fail at AVPAgent's `resolver_not_configured` gate
+    # (Profile-A only, no managed assets is the clean path).
+    resolver = http_resolver_from_env()
+
     agent = AVPAgent(
         commission=commission,
         model=driver,
         tools=ShellTools(),
         supervisor=StdoutSink(sys.stdout),
         agent_builtin_tools=list(SHELL_TOOL_SCHEMAS),
-        resolver=None,
+        resolver=resolver,
         manifest=build_manifest(),
     )
     agent.run()

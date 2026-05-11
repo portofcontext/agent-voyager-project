@@ -27,36 +27,28 @@ from avp_claude_agent.translator import (
 )
 
 # What this agent can do that varies between AVP agents. Used by
-# Commission-aware tooling to gate features (e.g., "skip this Commission if the
-# agent doesn't support subagents-with-frontmatter").
+# Commission-aware tooling to gate features.
 #
-# - `mcp`: SDK forwards Commission.mcp_servers and surfaces live tool lists
-#   on `mcp_server_connected.avp.mcp.tools[]` after handshake.
-# - `subagents`: SDK's Agent tool dispatches Commission.subagents (plus the
-#   built-in `general-purpose`) as full nested trajectories.
-# - `skills`: SKILL.md descriptors in Commission.skills are surfaced as
-#   `skill_loaded` events.
+# - `skills:progressive`: skill bodies inject lazily on the SDK's own
+#   schedule, not eagerly at startup. The translator does not emit
+#   `skill_loaded` for SDK-managed skills.
 # - `thinking`: extended-thinking blocks parsed and emitted as
 #   `reasoning_emitted`.
-# - `filesystem-skills`: SDK auto-discovers SKILL.md under
-#   `~/.claude/skills/` and project `.claude/skills/`. The manifest
-#   itself doesn't enumerate them (env-dependent), but consumers can
-#   gate on the capability flag.
-# - `filesystem-subagents`: same pattern under `.claude/agents/`.
+# - `filesystem-discovery-available`: the Claude Agent SDK *can* load
+#   skills / subagents from `~/.claude/skills/` and `.claude/agents/`
+#   per its own `setting_sources` default. The translator does not
+#   override that default — overriding it cascades into the SDK's
+#   tool-definition loading and `permission_mode` resolution in ways
+#   that aren't ours to redesign. Supervisors who want strict
+#   no-discovery configure the SDK directly via
+#   `extra_sdk_options={"setting_sources": [], ...}` alongside a
+#   compatible `permission_mode`. This capability is an informational
+#   disclosure so consumers know discovery is part of the runtime
+#   surface unless the supervisor disables it.
 _CAPABILITIES = (
-    "mcp",
-    "subagents",
-    "skills",
-    # The Claude Agent SDK uses progressive disclosure: skill bodies are
-    # pulled into context only when the model decides it needs them, not
-    # eagerly at startup. The SDK doesn't currently expose a hook for that
-    # moment, so the translator does NOT emit `skill_loaded` at startup —
-    # the registration view (`agent_started.data.skills[]`) is the audit
-    # trail; engagement is opaque for this agent.
     "skills:progressive",
     "thinking",
-    "filesystem-skills",
-    "filesystem-subagents",
+    "filesystem-discovery-available",
 )
 
 

@@ -163,15 +163,15 @@ Called once per managed-asset ref, at startup, before any model turn.
 }
 ```
 
-**Successful response:** `result` payload depends on `kind`:
+**Successful response:** `result` payload depends on `kind`. v0.1 normative shapes:
 
-| Kind | Result schema (informative) |
-|---|---|
-| `mcp_server` | `{ "transport": "http"\|"stdio", "url"?: string, "auth"?: object, "command"?: string[], "args"?: string[], "env"?: object }` — connection material the agent uses to dial an MCP server. The exact field set is whatever the supervisor's resolver returns; the agent's MCP client consumes it. |
-| `skill` | `{ "name": string, "description"?: string, "content": string }` — SKILL.md frontmatter + body. The agent loads `content` into the model's context per agentskills.io semantics. (Alternatively, a `{ "url": "..." }` form the agent fetches; supervisors choose.) |
-| `subagent` | `{ "name": string, "description"?: string, "inputSchema"?: object }` — model-facing metadata so the parent's model can decide whether to delegate. The actual sub-loop lives behind `avp.spawn_subagent`. |
+| Kind | Result fields | Notes |
+|---|---|---|
+| `mcp_server` | **HTTP:** `{ "transport": "http", "url": string, "auth"?: {"token": string} \| {"header_name": string, "header_value": string}, "headers"?: object }`<br>**stdio:** `{ "transport": "stdio", "command": string[], "args"?: string[], "env"?: object }` | Connection material the agent's MCP client uses. `auth.token` materializes as `Authorization: Bearer <token>` for HTTP. Supervisors that need a different auth shape can pass headers directly via `headers` or `auth.header_name` / `auth.header_value`. |
+| `skill` | `{ "name"?: string, "description"?: string, "content": string }` | SKILL.md body (frontmatter optional but recommended). The agent injects `content` into the model's context per agentskills.io semantics. Agents claiming `skills:eager` MUST emit `skill_loaded` once per resolved skill; `skills:progressive` agents MAY skip emission (see §9.7.1). |
+| `subagent` | `{ "name"?: string, "description"?: string, "inputSchema"?: object, "system_prompt"?: string, "model"?: string, "tools"?: string[] }` | Model-facing metadata and (optionally) the subagent's environment slice. `name` defaults to the Commission entry's `id`. The actual sub-loop runs behind `avp.spawn_subagent`. Resolvers MAY include `system_prompt` / `model` / `tools` so the agent SDK can configure the SDK-side subagent definition (e.g. Claude Agent SDK's `AgentDefinition`); agents that don't use them ignore them. |
 
-Per-kind result schemas are authoritative in `commission.schema.json`'s `$defs` (Phase 2 will pin them precisely; v0.1 leaves the schema permissive while the resolver ecosystem stabilizes).
+Resolvers MAY return additional fields beyond those listed; consumers MUST ignore unknown keys. AVP does not define an extension namespace for resolver results — the supervisor and its resolver control the shape end-to-end.
 
 **Error response:** standard JSON-RPC 2.0 error object. The agent treats any non-success response as a fatal startup error per §6.4.
 

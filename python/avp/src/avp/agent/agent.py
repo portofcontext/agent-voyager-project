@@ -281,6 +281,19 @@ class AVPAgent:
         if not self._resolve_managed_assets():
             return self._emit_agent_stopped(StopReason.error)
 
+        # Notify the model driver that resolved material is available.
+        # Drivers that build provider-side params from MCP connection
+        # material (e.g. AnthropicModelDriver's MCP connector kwarg)
+        # implement `set_resolved_assets` and pick it up here. Drivers
+        # that don't care (no-op default) simply lack the method.
+        set_resolved = getattr(self.model, "set_resolved_assets", None)
+        if callable(set_resolved):
+            set_resolved(
+                mcp_servers=dict(self._resolved_mcp_servers),
+                skills=dict(self._resolved_skills),
+                subagents=dict(self._resolved_subagents),
+            )
+
         # Post-resolve materialization
         self._emit_mcp_connections()
         self._inject_skill_bodies_to_history()

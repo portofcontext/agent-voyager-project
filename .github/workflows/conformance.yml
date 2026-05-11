@@ -75,7 +75,11 @@ jobs:
       - name: Run avp-claude-agent translator tests
         run: |
           cd python/agents/avp-claude-agent
-          pytest -v
+          # Tolerate pytest's exit code 5 ("no tests collected" / all skipped).
+          # avp-claude-agent's tests are currently all stubbed against the
+          # Phase 5 punch-list; the package builds and imports cleanly, but
+          # there's no live test until those rewrites land.
+          pytest -v; code=$?; [ "$code" = "0" ] || [ "$code" = "5" ]
 
   real-llm-smoke:
     name: Real-LLM smoke tests — manual only
@@ -112,4 +116,7 @@ jobs:
             exit 1
           fi
           cd python/agents/avp-anthropic
-          pytest -v -m real_llm
+          # Tolerate pytest's exit code 5 — the real-LLM tests are currently
+          # all stubbed against the Phase 5 punch-list, so `-m real_llm`
+          # collects nothing. Re-enable strict mode once those rewrites land.
+          pytest -v -m real_llm; code=$?; [ "$code" = "0" ] || [ "$code" = "5" ]

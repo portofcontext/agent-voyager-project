@@ -12,13 +12,10 @@ The harness is invoked once per case file. Its inputs are:
 ## What the harness MUST do
 
 1. **Parse and validate the case** against `test-case.schema.json`. Reject malformed cases with a clear error.
-2. **Configure the SDK under test** with `case.config`. The Commission MUST be passed to the SDK exactly as written — the harness MUST NOT modify it.
+2. **Configure the SDK under test** with `case.commission`. The Commission MUST be passed to the agent exactly as written — the harness MUST NOT modify it.
 3. **Stub the model.** The SDK's model client MUST be replaced (via dependency injection, monkey-patching, or a recording HTTP layer — language-idiomatic) with one that returns `case.scripted_model[i]` on the i-th turn. The mock model MUST NOT make network calls. If the agent requests more turns than the script provides, the harness MUST raise an error.
-4. **Stub local tools.** When the SDK invokes a tool whose name is in `case.scripted_tools`, the harness returns the configured `output` (or raises with `error`). Tools NOT in `scripted_tools` MUST be assumed to be supervisor-executed (i.e. they appear in `case.config.tools`) and route via `tool_exec_requested`.
-5. **Drive the mock supervisor.** As the agent emits events:
-   - For each `case.scripted_supervisor` step whose `on.match` is satisfied by the latest emitted event, the harness fires the step.
-   - After `step.delay_ms`, if `step.skip` is false, the harness substitutes placeholders in `step.send` (see [Placeholder substitution](#placeholder-substitution) below) and sends the resulting message to the agent over its supervisor-message channel. If `step.skip` is true, the harness deliberately does nothing (timeout cases rely on this).
-   - **A step fires every time its `on` matcher is satisfied.** A single step that matches a given event type will fire on every occurrence. To respond differently on different fires, declare separate steps; when one event satisfies multiple `on` matchers, every matching step fires in declaration order.
+4. **Stub built-in tools.** When the agent invokes a tool whose name is in `case.scripted_tools`, the harness returns the configured `output` (or raises with `error`). Tools NOT in `scripted_tools` either fall through to a Commission-managed MCP server (post-resolution) or surface as `tool_failed` (unknown tool); the harness doesn't synthesize replies for them.
+5. **Wire the resolver.** When the Commission carries any managed assets (`mcp_servers`, `skills`, or `subagents` non-empty) the harness MUST inject a `ResolverDriver`. The reference Python harness builds one from `case.scripted_resolver` (canned `avp.resolve` outcomes per `<kind>:<id>` and canned `avp.spawn_subagent` outcomes per subagent id; see `python/avp/src/avp/agent/mock.py`'s `ScriptedResolver`). Cases that want to exercise the `resolver_not_configured` startup gate set `case.omit_resolver: true` so the harness passes `resolver=None` even with managed assets present.
 6. **Capture the trajectory.** Read every event the agent emits to its trajectory channel. The harness MUST record events in emission order with millisecond-or-better resolution.
 7. **Assert expectations:**
    - `expectations.events` patterns MUST match per `expectations.ordering` (default `in_order_subsequence`).
@@ -32,19 +29,7 @@ The harness is invoked once per case file. Its inputs are:
 - Mutate the case file or config.
 - Interpret event types not enumerated in the v0.1 spec — custom events MUST be passed through as opaque objects.
 - Modify event order or field values during capture.
-- Time out the run independently. The harness has no clock of its own besides `delay_ms` for supervisor scripting.
-
-## Placeholder substitution
-
-Supervisor messages need to reference IDs the agent generates at runtime (`request_id`, `run_id` if not authored by the supervisor, sometimes `call_id`). The harness MUST support the following substitutions in any string value within `step.send` before transmitting:
-
-| Placeholder | Replaced with |
-|---|---|
-| `{{event.<field>}}` | The value of `<field>` from the event that matched `step.on`. Dotted paths (`{{event.context.input.path}}`) recurse into nested objects. |
-| `{{now}}` | The current timestamp, ISO 8601 / RFC 3339 with `Z` suffix. |
-| `{{run_id}}` | Shorthand for `{{event.run_id}}`. |
-
-Substitutions are applied to string values only. Numeric, boolean, and structural fields are passed through unchanged. If a placeholder cannot be resolved (the field is absent on the matched event), the harness MUST fail the case with a clear error.
+- Time out the run independently. The harness has no clock of its own — cases drive turns through `scripted_model` and resolver outcomes through `scripted_resolver`; the harness has no asynchronous prodding.
 
 ## Matching rules (normative)
 

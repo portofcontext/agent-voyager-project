@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from avp import AgentManifest
+from avp_anthropic.driver import ANTHROPIC_HOSTED_TOOL_KINDS
 from avp_anthropic.shell_tools import SHELL_TOOL_SCHEMAS
 
 # What this agent can do that varies between AVP agents. Used by
@@ -54,6 +55,16 @@ def manifest() -> AgentManifest:
         if "input_schema" in schema:
             entry["inputSchema"] = schema["input_schema"]
         built_in_tools.append(entry)
+    # Anthropic-API hosted tools (web_search, code_execution, …) are
+    # provider-side built-ins from AVP's POV: the agent advertises them
+    # on the manifest with `dispatch_target=local`, the model invokes
+    # them as ordinary tool calls, and the API runs them inline. The
+    # agent's `step()` extracts the inline results via
+    # `_pair_hosted_blocks` and emits synthetic tool_invoked / tool_returned
+    # events. Surface them on the manifest so `enabled_builtin_tools` can
+    # gate them like any other built-in (e.g. "no web search this run").
+    for hosted_name in ANTHROPIC_HOSTED_TOOL_KINDS:
+        built_in_tools.append({"name": hosted_name, "avp.dispatch_target": "local"})
 
     return AgentManifest.model_validate(
         {

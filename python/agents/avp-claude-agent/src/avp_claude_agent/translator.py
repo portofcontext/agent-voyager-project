@@ -56,6 +56,8 @@ from avp import (
     RunRequestedData,
     RunRequestedEvent,
     RunStateSnapshot,
+    SkillLoadedData,
+    SkillLoadedEvent,
     Source,
     StopReason,
     SubagentInvokedData,
@@ -72,8 +74,16 @@ from avp import (
     new_span_id,
     new_trace_id,
 )
+from avp.agent.drivers import ResolveError
 from avp.enums import ErrorCode
-from avp.types import now_iso
+from avp.types import (
+    ManagedKind,
+    ManagedRefResolvedData,
+    ManagedRefResolvedEvent,
+    ManagedRefResolveFailedData,
+    ManagedRefResolveFailedEvent,
+    now_iso,
+)
 
 # MCP protocol version we declare on `mcp_server_connected` events. Same
 # value the AVP reference agent uses; tracks the upstream MCP spec.
@@ -344,6 +354,7 @@ class ClaudeAgentTranslator:
         commission: Commission,
         on_event: Callable[[BaseModel], None],
         *,
+        resolver: Any | None = None,
         manifest: AgentManifest | None = None,
         local_tools: Any | None = None,
         local_tools_server_name: str = "local",
@@ -380,6 +391,12 @@ class ClaudeAgentTranslator:
         """
         self.commission = commission
         self.on_event = on_event
+        self._resolver = resolver
+        # Resolved material from the AVP resolver protocol (SPEC §6).
+        # Populated by `_resolve_managed_assets` before the SDK runs.
+        self._resolved_mcp_servers: dict[str, dict[str, Any]] = {}
+        self._resolved_skills: dict[str, dict[str, Any]] = {}
+        self._resolved_subagents: dict[str, dict[str, Any]] = {}
         self._manifest = manifest
         self._prelude_emitted = False
         self._local_tools = local_tools
@@ -516,6 +533,16 @@ class ClaudeAgentTranslator:
         # the audit fact, independent of whether the SDK ever spun up.
         self._emit_run_prelude()
 
+        # Resolver gate (SPEC §6). When the Commission carries any managed
+        # assets, the agent MUST dereference each ref before any model
+        # turn. Failure to resolve is fatal — fail-fast before the SDK
+        # spins up.
+        if not self._validate_resolver_present():
+            return self._emit_agent_stopped(StopReason.error)
+        if not self._resolve_managed_assets():
+            return self._emit_agent_stopped(StopReason.error)
+        self._emit_skills_loaded()
+
         reason: StopReason
         error_msg: str | None = None
         try:
@@ -612,6 +639,143 @@ class ClaudeAgentTranslator:
             async for message in client.receive_response():
                 self._on_sdk_message(message)
 
+    # ── Resolver protocol (SPEC §6) ────────────────────────────────────────
+
+    def _has_managed_assets(self) -> bool:
+        c = self.commission
+        return bool(c.mcp_servers or c.skills or c.subagents)
+
+    def _validate_resolver_present(self) -> bool:
+        """If the Commission carries managed assets but no ResolverDriver
+        was supplied (and AVP_RESOLVER_URL was not bootstrapped into one),
+        fail-fast with `resolver_not_configured` (SPEC §6.1)."""
+        if not self._has_managed_assets():
+            return True
+        if self._resolver is not None:
+            return True
+        self._emit(
+            ErrorOccurredEvent(
+                subject=self.commission.run_id,
+                data=ErrorOccurredData(
+                    **self._own_span(self._agent_span_id),
+                    **{
+                        "avp.error.code": ErrorCode.resolver_not_configured,
+                        "avp.error.message": (
+                            "Commission carries managed assets but no ResolverDriver "
+                            "was supplied to ClaudeAgentTranslator (and AVP_RESOLVER_URL "
+                            "was not bootstrapped). Configure a resolver service per SPEC.md §6.1."
+                        ),
+                    },
+                ),
+            )
+        )
+        return False
+
+    def _resolve_managed_assets(self) -> bool:
+        """Walk Commission-managed assets, call the resolver for each, emit
+        managed_ref_resolved or managed_ref_resolve_failed. Returns False
+        on any failure so the caller can short-circuit with reason=error."""
+        commission = self.commission
+        if not self._has_managed_assets():
+            return True
+        assert self._resolver is not None
+
+        for entry in commission.mcp_servers or []:
+            ok, material = self._resolve_one("mcp_server", entry.id, entry.ref)
+            if not ok:
+                return False
+            self._resolved_mcp_servers[entry.id] = material
+        for entry in commission.skills or []:
+            ok, material = self._resolve_one("skill", entry.id, entry.ref)
+            if not ok:
+                return False
+            self._resolved_skills[entry.id] = material
+        for entry in commission.subagents or []:
+            ok, material = self._resolve_one("subagent", entry.id, entry.ref)
+            if not ok:
+                return False
+            self._resolved_subagents[entry.id] = material
+        return True
+
+    def _resolve_one(
+        self, kind: ManagedKind, entry_id: str, ref: Any
+    ) -> tuple[bool, dict[str, Any]]:
+        commission = self.commission
+        assert self._resolver is not None
+        t0 = _monotonic_ms()
+        try:
+            material = self._resolver.resolve(kind=kind, id=entry_id, ref=ref)
+        except ResolveError as e:
+            kwargs: dict[str, Any] = {
+                "avp.managed.kind": kind,
+                "avp.managed.id": entry_id,
+                "avp.resolve.error": str(e),
+            }
+            if e.code is not None:
+                kwargs["avp.resolve.error.code"] = e.code
+            self._emit(
+                ManagedRefResolveFailedEvent(
+                    subject=commission.run_id,
+                    data=ManagedRefResolveFailedData(
+                        **self._own_span(self._agent_span_id),
+                        **kwargs,
+                    ),
+                )
+            )
+            return False, {}
+        except Exception as e:
+            self._emit(
+                ManagedRefResolveFailedEvent(
+                    subject=commission.run_id,
+                    data=ManagedRefResolveFailedData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "avp.managed.kind": kind,
+                            "avp.managed.id": entry_id,
+                            "avp.resolve.error": f"{type(e).__name__}: {e}",
+                            "avp.resolve.error.code": "driver_exception",
+                        },
+                    ),
+                )
+            )
+            return False, {}
+
+        duration_ms = max(0, _monotonic_ms() - t0)
+        self._emit(
+            ManagedRefResolvedEvent(
+                subject=commission.run_id,
+                data=ManagedRefResolvedData(
+                    **self._own_span(self._agent_span_id),
+                    **{
+                        "avp.managed.kind": kind,
+                        "avp.managed.id": entry_id,
+                        "duration_ms": duration_ms,
+                    },
+                ),
+            )
+        )
+        return True, dict(material) if material else {}
+
+    def _emit_skills_loaded(self) -> None:
+        """One `skill_loaded` event per resolved skill whose body actually
+        entered the system prompt (i.e. the resolver returned `content`).
+        Honest-silent for metadata-only resolutions — the registration
+        view is `agent_started.data.skills`."""
+        for entry in self.commission.skills or []:
+            material = self._resolved_skills.get(entry.id) or {}
+            if not material.get("content"):
+                continue
+            self._emit(
+                SkillLoadedEvent(
+                    subject=self.commission.run_id,
+                    data=SkillLoadedData(
+                        **self._own_span(self._agent_span_id),
+                        step=0,
+                        **{"avp.skill.name": entry.id},
+                    ),
+                )
+            )
+
     def _build_sdk_options(self) -> Any:
         """Translate Commission → ClaudeAgentOptions.
 
@@ -642,13 +806,41 @@ class ClaudeAgentTranslator:
         # Names that aren't in the SDK preset are AVPAgent's startup-validation
         # responsibility (commission_collision); reaching here means they
         # already passed manifest cross-check.
+        # NOTE on filesystem discovery: the Claude Agent SDK auto-loads
+        # skills from `~/.claude/skills/` and subagents from
+        # `.claude/agents/` unless `setting_sources` is overridden. AVP
+        # discloses this on the manifest (`filesystem-discovery-available`
+        # capability) and leaves the SDK's default in place — passing
+        # `setting_sources=[]` here cascades into the SDK's tool-definition
+        # loading and `permission_mode` resolution in ways that aren't
+        # ours to redesign. Supervisors who want strict no-discovery set
+        # the SDK options themselves via `extra_sdk_options` (typically
+        # alongside a compatible `permission_mode`).
         allow = commission.enabled_builtin_tools
         if allow is not None:
             kwargs["tools"] = list(allow)
+        # Compose system prompt from Commission.system_prompt plus any
+        # resolved skill SKILL.md bodies. v0.1 convention: skills inject
+        # eagerly at startup as a system-prompt suffix.
+        system_parts: list[str] = []
         if commission.system_prompt:
-            kwargs["system_prompt"] = commission.system_prompt
+            system_parts.append(commission.system_prompt)
+        for entry in commission.skills or []:
+            content = (self._resolved_skills.get(entry.id) or {}).get("content")
+            if content:
+                system_parts.append(f'<skill name="{entry.id}">\n{content}\n</skill>')
+        if system_parts:
+            kwargs["system_prompt"] = "\n\n".join(system_parts)
         if commission.model:
             kwargs["model"] = commission.model
+        # Resolved managed assets land on the SDK's `mcp_servers` /
+        # `agents` kwargs.
+        sdk_mcp_servers = self._build_sdk_mcp_servers()
+        if sdk_mcp_servers:
+            kwargs["mcp_servers"] = sdk_mcp_servers
+        sdk_agents = self._build_sdk_agents()
+        if sdk_agents:
+            kwargs["agents"] = sdk_agents
         # Bridge any user-provided LocalTools into the SDK's in-process
         # MCP server slot so a single AVP-LocalTools registration works
         # across agents. Tools land on the wire as `mcp__<name>__<tool>`
@@ -710,26 +902,82 @@ class ClaudeAgentTranslator:
         return self._sdk_options_cls(**kwargs)
 
     def _build_sdk_agents(self) -> dict[str, Any]:
-        """Translate Commission-managed subagents → SDK AgentDefinitions.
+        """Translate resolved managed subagents → SDK `AgentDefinition` dict.
 
-        Refs-only Commission (v0.1): subagent metadata + spawn behavior come
-        from the AVP resolver protocol (`avp.resolve` for metadata,
-        `avp.spawn_subagent` for runtime invocation). Wiring resolved
-        material into the Claude Agent SDK's `agents` parameter is a Phase 4
-        follow-up; for now this returns an empty dict.
+        The AVP resolver returns model-facing metadata for each
+        `Commission.subagents[]` entry — `name`, optional `description`,
+        optional `inputSchema`. The Claude Agent SDK's `agents` parameter
+        accepts a `{name: AgentDefinition(description, prompt, model, tools)}`
+        dict; we map AVP's metadata onto it. Fields the AVP resolver
+        doesn't surface (system_prompt, model, tools) stay unset — the
+        SDK uses its own defaults, and a follow-up SPEC bump can add
+        those to the resolver result shape if a real implementation
+        needs them.
         """
-        return {}
+        out: dict[str, Any] = {}
+        for entry in self.commission.subagents or []:
+            material = self._resolved_subagents.get(entry.id) or {}
+            payload: dict[str, Any] = {}
+            description = material.get("description")
+            if description:
+                payload["description"] = description
+            system_prompt = material.get("system_prompt") or material.get("prompt")
+            if system_prompt:
+                payload["prompt"] = system_prompt
+            model = material.get("model")
+            if model:
+                payload["model"] = model
+            tools = material.get("tools")
+            if isinstance(tools, list):
+                payload["tools"] = list(tools)
+            if self._sdk_agent_definition_cls is not None and payload:
+                out[entry.id] = self._sdk_agent_definition_cls(**payload)
+            else:
+                out[entry.id] = payload or {"description": ""}
+        return out
 
     def _build_sdk_mcp_servers(self) -> dict[str, dict[str, Any]]:
-        """Translate Commission-managed MCP servers → SDK mcp_servers.
+        """Translate resolved managed MCP servers → SDK `mcp_servers` dict.
 
-        Same story as `_build_sdk_agents`: refs-only Commission means MCP
-        connection material comes from the resolver, not from inline
-        Commission fields. Returning an empty dict here means the CLI runs
-        cleanly for non-managed Commissions; managed-MCP Commissions fail
-        at AVPAgent's `resolver_not_configured` gate.
+        The Claude Agent SDK accepts a `{server_id: {type, ...}}` dict
+        keyed by server id; each entry carries transport-shape fields
+        (`{type: stdio, command, args, env}` or `{type: http, url, headers}`).
+        The resolver returns whatever connection material the supervisor
+        configured; we map the common shapes through.
         """
-        return {}
+        out: dict[str, dict[str, Any]] = {}
+        for entry in self.commission.mcp_servers or []:
+            material = self._resolved_mcp_servers.get(entry.id) or {}
+            transport = material.get("transport")
+            sdk_entry: dict[str, Any] = {}
+            if transport == "stdio":
+                sdk_entry["type"] = "stdio"
+                if isinstance(material.get("command"), list):
+                    sdk_entry["command"] = list(material["command"])
+                if isinstance(material.get("args"), list):
+                    sdk_entry["args"] = list(material["args"])
+                if isinstance(material.get("env"), dict):
+                    sdk_entry["env"] = dict(material["env"])
+            elif transport == "http":
+                sdk_entry["type"] = "http"
+                url = material.get("url")
+                if url:
+                    sdk_entry["url"] = url
+                auth = material.get("auth")
+                if isinstance(auth, dict):
+                    token = auth.get("token")
+                    if token:
+                        sdk_entry["headers"] = {"Authorization": f"Bearer {token}"}
+                headers = material.get("headers")
+                if isinstance(headers, dict):
+                    sdk_entry.setdefault("headers", {}).update(headers)
+            else:
+                # Unknown / unset transport — pass through the raw shape so a
+                # supervisor experimenting with a transport AVP doesn't
+                # know about can still wire the SDK up (the SDK validates).
+                sdk_entry.update(material)
+            out[entry.id] = sdk_entry
+        return out
 
     @staticmethod
     def _mcp_server_id_from_tool_name(tool_name: str) -> str | None:

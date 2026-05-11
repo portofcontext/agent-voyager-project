@@ -14,14 +14,16 @@ conformance/v0.1/
 │   └── test-case.schema.json   (JSON Schema for case files)
 ├── validate.py        (validates all cases against test-case.schema.json)
 └── cases/
-    ├── allowed-tools/           (Commission.exposed filters the surface)
+    ├── enabled-builtins/        (Commission.enabled_builtin_* allowlist gating)
     ├── mcp/                     (mcp_server_connected lifecycle, dispatch_target tagging)
     ├── prelude/                 (run_requested → agent_described → agent_started ordering)
     ├── reasoning/               (avp.reasoning.* attributes on model_turn_ended)
     ├── refusal/                 (refusal_recorded provenance)
-    ├── skills/                  (skill_loaded payload)
+    ├── resolver/                (resolver_not_configured / commission_collision gates)
+    ├── skills/                  (skill_loaded + managed_ref_resolved for skill refs)
     ├── source-field/            (source=agent vs supervisor discipline)
-    ├── subagent/                (subagent_invoked / subagent_returned bracketing)
+    ├── subagent/                (subagent_invoked / subagent_returned bracketing, avp.subagent.run_id)
+    ├── tools/                   (built-in tool surface on agent_started, tool_failed semantics)
     └── text/                    (text_emitted shape)
 ```
 
