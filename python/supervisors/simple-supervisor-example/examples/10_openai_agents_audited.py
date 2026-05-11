@@ -64,11 +64,37 @@ def main() -> int:
     print()
     print("== Live trajectory ==")
 
+    # Custom agent_factory: turn on reasoning summaries so the
+    # ReasoningEmittedEvent carries plaintext rather than a redacted
+    # marker. Without `reasoning.summary` GPT-5 still reasons server-side
+    # (you still pay reasoning tokens), but the API returns an empty
+    # summary — AVP emits `avp.reasoning.redacted=true`, which is
+    # honest but not very useful for an audit demo. `auto` lets OpenAI
+    # pick verbosity; `concise` and `detailed` are also valid.
+    #
+    # This is the AVP passthrough story: SDK-level knobs stay at the SDK
+    # layer (via your own Agent construction), Commission stays
+    # provider-neutral.
+    from openai.types.shared.reasoning import Reasoning
+
+    from agents import Agent, ModelSettings  # type: ignore[import-not-found]
+
+    def _build_agent() -> Agent:
+        return Agent(
+            name="avp-agent",
+            instructions=config.system_prompt or "",
+            model=config.model,
+            tools=[],
+            handoffs=[],
+            model_settings=ModelSettings(reasoning=Reasoning(summary="auto")),
+        )
+
     events: list = []
     translator = OpenAIAgentTranslator(
         config,
         on_event=events.append,
         descriptor=descriptor(),
+        agent_factory=_build_agent,
     )
     translator.run()
 

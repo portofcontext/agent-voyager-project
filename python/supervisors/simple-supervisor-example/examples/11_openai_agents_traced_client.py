@@ -36,7 +36,9 @@ def main() -> int:
         )
         return 2
 
-    from agents import Agent  # type: ignore[import-not-found]
+    from openai.types.shared.reasoning import Reasoning
+
+    from agents import Agent, ModelSettings  # type: ignore[import-not-found]
 
     commission = Commission(
         schema_version="0.1",
@@ -58,10 +60,19 @@ def main() -> int:
     #   - wrap with `AVPTracer(commission, on_event=...)` (sets active tracer)
     #   - `traced_openai_runner()` replaces direct `Runner.run_sync`;
     #     Commission flows from the active tracer.
+    # `reasoning.summary="auto"` asks OpenAI to return the model's
+    # reasoning summary alongside the answer. Without it, GPT-5 still
+    # reasons server-side and you still pay reasoning tokens, but the
+    # API returns an empty summary — so AVP emits reasoning_emitted
+    # with `avp.reasoning.redacted=true` (honest, but not very useful
+    # for an audit demo). Set `concise` or `detailed` to control
+    # verbosity; reasoning summaries cost a small number of extra
+    # output tokens.
     agent = Agent(
         name="avp-traced-agent",
         instructions="",
         model="gpt-5-nano",
+        model_settings=ModelSettings(reasoning=Reasoning(summary="auto")),
     )
 
     with AVPTracer(commission, on_event=print_event), traced_openai_runner() as t:
