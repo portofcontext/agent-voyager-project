@@ -52,6 +52,12 @@ The folder split reflects this: `python/agents/` for agents,
 `python/sdks/` for adapters, `python/supervisors/.../examples/` for
 worked reference agents that sit on top of adapters.
 
+Agents-vs-adapters is the packaging axis. The orthogonal *integration*
+axis (who owns the loop, what role Commission plays) is described in
+`PATTERNS.md`. When the question is "where does new code live," consult
+this section; when it's "how does an application wire onto AVP," consult
+`PATTERNS.md`.
+
 ## What AVP is built on (read before changing the wire)
 
 AVP specializes existing industry specs, it doesn't reinvent them. Every wire
