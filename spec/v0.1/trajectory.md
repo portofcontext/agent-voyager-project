@@ -242,15 +242,88 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.refusal_recorded` | `avp://agent` | Model declined the turn. Run terminates with `avp.agent_stopped.avp.reason="refused"`. |
 | `avp.cost_recorded` | `avp://agent` | Cumulative `RunStateSnapshot` snapshot. May carry `avp.cost.source="reported"` on the reconciliation event when the API/SDK hands back an authoritative cost total. |
 | `avp.skill_loaded` | `avp://agent` | SKILL.md loaded into context. |
-| `avp.error_occurred` | `avp://agent` | Non-tool error. |
+| `avp.error_occurred` | `avp://agent` | Non-tool error. Documented `data["avp.error.code"]` values include `commission_collision` (configuration), and `execution_backend_failure` (the runner determined its host execution environment can no longer continue; signals the supervisor that the run is a rescue candidate — see §7.3). |
 | `avp.mcp_server_connected` | `avp://agent` | Connection established to an MCP server (resolved from a `Commission.mcp_servers[].ref`). |
 | `avp.mcp_server_disconnected` | `avp://agent` | Connection to an MCP server closed. |
+| `avp.run_rescued` | `avp://supervisor` | Supervisor-sourced peer event (additive to §2.1; not part of the prelude). Inserted between a failed runner's last event and the new runner's first event when the supervisor swaps execution backends mid-run. Same `run_id`; the trajectory continues. See §7.3. |
 
 Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/types.py`).
 
 ### 7.1 `agent_stopped` convenience aliases
 
 `agent_stopped.data` carries `avp.total_tokens`, `avp.total_cost_usd`, `avp.total_turns`, and `avp.duration_ms` at the top level **as convenience aliases**. When non-null they MUST equal the matching field inside `avp.state` (a `RunStateSnapshot`). New consumers SHOULD read `avp.state.*`: the same shape ships on every `cost_recorded` event, so analytics code that targets `avp.state` works uniformly across the run timeline rather than special-casing the terminator. The top-level fields are scheduled for removal in v0.2.
+
+### 7.2 Per-event runner attribution (optional)
+
+A trajectory MAY span multiple execution backends (see §7.3, agent rescue). To let consumers attribute any single event to the runner that produced it without scanning for the nearest bracket, every agent-sourced event MAY carry `data["avp.runner"]`:
+
+```json
+"data": {
+  "avp.runner": {
+    "backend": "local-ollama",
+    "model":   "llama3.2:3b"
+  }
+}
+```
+
+Field semantics:
+
+- `backend` — stable identifier of the execution backend (matches the supervisor's `ExecutionBackend::identity`, e.g. `"modal-sandbox"`, `"local-ollama"`).
+- `model` — the underlying model id used for inference on this turn (the literal string passed to the model provider). MAY differ between events in the same trajectory if a rescue swapped to a backend that uses a different model.
+
+The field is **optional** for backward compatibility. Runners SHOULD populate it when they know they may participate in a rescued trajectory. Consumers MUST tolerate its absence and MUST NOT rely on a single trajectory-wide value.
+
+A run that traverses multiple backends will produce a trajectory whose `avp.runner` value changes across the boundary. The change MUST be flanked by an `avp.run_rescued` bracket (§7.3); the bracket is the authoritative boundary marker, `avp.runner` is the per-event tag.
+
+### 7.3 Agent rescue (supervisor-orchestrated)
+
+A supervisor MAY swap a run's execution backend mid-trajectory ("agent rescue") — for example, when a local-LLM runner crashes and the supervisor continues the same `run_id` on a CASDK runner. v0.1 specifies two surfaces for this:
+
+**Runner-side signal.** A runner that determines its host execution environment can no longer continue (and therefore cannot legitimately emit `agent_stopped`) SHOULD emit:
+
+```
+avp.error_occurred
+  data["avp.error.code"]    = "execution_backend_failure"
+  data["avp.error.message"] = <free-form runner-supplied description>
+```
+
+immediately before terminating. This is a signal to the supervisor that the run is a candidate for rescue, distinct from agent-side errors that warrant a normal `agent_stopped(reason: "error")`. A runner MAY choose to emit `agent_stopped` instead; the rescue signal is best-effort.
+
+**Supervisor-side bracket.** When the supervisor decides to swap backends, it appends a single `avp.run_rescued` event to the trajectory before re-dispatching:
+
+```json
+{
+  "specversion": "1.0",
+  "type":   "avp.run_rescued",
+  "source": "avp://supervisor",
+  "data": {
+    "from":   {"backend": "local-ollama",  "attempt": 1, "model": "llama3.2:3b"},
+    "to":     {"backend": "modal-sandbox", "attempt": 2, "model": "claude-sonnet-4-5"},
+    "reason": "execution_backend_failure: ollama: connection refused",
+    "last_completed_seq": 17
+  }
+}
+```
+
+- `source: "avp://supervisor"` (the second supervisor-sourced event type alongside `run_requested`).
+- The bracket does **not** restart the span tree. The new runner inherits the agent span opened by the original `agent_started`.
+- The new runner SHOULD read the prior events as read-only context (deterministic replay of completed turns is the v0.1 contract; see §1.1 for the deferred warm-rescue / `Commission.resume` extensions).
+- Cost / token totals accumulate across the swap — one `run_id`, one `RunStateSnapshot` lineage.
+
+The final terminator (`agent_stopped`) MUST come from whichever runner finishes the run, with `source: "avp://agent"`. v0.1 has no separate `agent_stopped(reason: "rescued")` — rescue is a mid-run event, not a termination.
+
+A rescued trajectory therefore looks like:
+
+```
+avp.run_requested      (avp://supervisor)
+avp.agent_described    (avp://agent, runner A)
+avp.agent_started      (avp://agent, runner A)
+…                      (runner A events, data.avp.runner = {backend: A, model: ...})
+avp.error_occurred     (avp://agent, runner A, avp.error.code = "execution_backend_failure")
+avp.run_rescued        (avp://supervisor)
+…                      (runner B events, data.avp.runner = {backend: B, model: ...})
+avp.agent_stopped      (avp://agent, runner B)
+```
 
 ---
 
