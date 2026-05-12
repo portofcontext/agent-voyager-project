@@ -1,7 +1,7 @@
 {
   "id": "tool-failed-on-unknown-tool",
-  "title": "Model invocation of an unknown tool emits tool_invoked → tool_failed",
-  "description": "when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_failed with an error message. The model receives an `Error: …` tool_result so the next turn can react. The wire stays well-formed; tool_returned MUST NOT fire.",
+  "title": "Model invocation of an unknown tool emits tool_invoked \u2192 tool_failed",
+  "description": "when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_failed with an error message. The model receives an `Error: \u2026` tool_result so the next turn can react. The wire stays well-formed; tool_returned MUST NOT fire.",
   "spec_refs": [
     "spec/v0.1/trajectory.md#4-tool-dispatch",
     "spec/v0.1/trajectory.md#8-conformance"
@@ -9,6 +9,7 @@
   "applies_to": [
     "agent"
   ],
+  "scripted_only": true,
   "commission": {
     "schema_version": "0.1",
     "run_id": "tool-unknown",

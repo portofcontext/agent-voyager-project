@@ -47,6 +47,7 @@ from avp.conformance.harness import (
     _ORDERING_FNS,
     CaseFailure,
     CaseResult,
+    SkipCase,
     _check_final_state,
     _trajectory_to_dicts,
 )
@@ -116,6 +117,15 @@ def run_case(path: Path, runner: CaseRunner) -> CaseResult:
     try:
         events = runner(case)
         traj = _trajectory_to_dicts(events)
+    except SkipCase as skip:
+        return CaseResult(
+            case_id=case_id,
+            path=path,
+            passed=True,
+            skipped=True,
+            skip_reason=skip.reason,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+        )
     except Exception as exc:
         return CaseResult(
             case_id=case_id,
@@ -228,8 +238,13 @@ def make_cli(
             return 2
 
         fails = 0
+        skipped = 0
         for r in results:
-            if r.passed:
+            if r.skipped:
+                skipped += 1
+                reason = f" — {r.skip_reason}" if r.skip_reason else ""
+                print(f"SKIP  {r.case_id}{reason}")
+            elif r.passed:
                 print(f"PASS  {r.case_id}  ({r.duration_ms}ms)")
             else:
                 fails += 1
@@ -241,7 +256,11 @@ def make_cli(
                     for ev in r.trajectory[-30:]:
                         print(f"        {ev.get('source', '?'):>10}  {ev.get('type', '?')}")
         print()
-        print(f"{len(results) - fails} / {len(results)} cases passed")
+        total = len(results)
+        msg = f"{total - fails - skipped} / {total} cases passed"
+        if skipped:
+            msg += f" ({skipped} skipped)"
+        print(msg)
         return 0 if fails == 0 else 1
 
     return main

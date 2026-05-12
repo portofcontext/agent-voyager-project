@@ -1,7 +1,7 @@
 {
   "id": "subagent-failed-when-spawn-errors",
-  "title": "Resolver returning an error outcome from spawn_subagent emits subagent_invoked → subagent_failed",
-  "description": "when avp.spawn_subagent returns an outcome with `error` set (the child run encountered an error) or the resolver call itself raises (transport / driver error), the parent agent MUST emit subagent_invoked at frame open and then subagent_failed (NOT subagent_returned) at frame close. The model receives an `Error: …` tool_result so the next turn can react.",
+  "title": "Resolver returning an error outcome from spawn_subagent emits subagent_invoked \u2192 subagent_failed",
+  "description": "when avp.spawn_subagent returns an outcome with `error` set (the child run encountered an error) or the resolver call itself raises (transport / driver error), the parent agent MUST emit subagent_invoked at frame open and then subagent_failed (NOT subagent_returned) at frame close. The model receives an `Error: \u2026` tool_result so the next turn can react.",
   "spec_refs": [
     "spec/v0.1/trajectory.md#5-subagents",
     "spec/v0.1/resolver.md#4-the-avpspawn_subagent-method"
@@ -9,6 +9,7 @@
   "applies_to": [
     "agent"
   ],
+  "scripted_only": true,
   "commission": {
     "schema_version": "0.1",
     "run_id": "subagent-spawn-error",

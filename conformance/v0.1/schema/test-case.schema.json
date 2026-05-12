@@ -31,6 +31,11 @@
       "minItems": 1,
       "description": "Which side(s) of the seam this case validates. Most cases test agent behavior given a scripted resolver; supervisor cases assert the supervisor produces conforming Commissions."
     },
+    "scripted_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, this case requires a scripted-model harness (deterministic model responses via `scripted_model`). Live harnesses that drive a real LLM MUST skip it — the wire rule it tests can't be reliably triggered with a live model (e.g. forcing a refusal, forcing the model to invoke a specific tool name). The AVPAgent reference harness still runs these cases."
+    },
     "commission": {
       "$ref": "https://avp.dev/schema/v0.1/commission.schema.json"
     },

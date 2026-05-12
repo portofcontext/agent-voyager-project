@@ -1,10 +1,13 @@
 # avp-claude-agent — conformance state
 
-> Snapshot of which v0.1 conformance cases pass against `ClaudeAgentTranslator` via `avp-claude-agent-conformance run`. Wired into `make conformance` alongside the AVPAgent reference harness.
+> Snapshot of the v0.1 conformance suite against `ClaudeAgentTranslator` via `avp-claude-agent-conformance run`. Wired into `make conformance` alongside the AVPAgent reference harness.
 
 ## Status
 
-**20 / 20 cases passing.** `make conformance` runs both `avp-conformance run` (against `AVPAgent`) and `avp-claude-agent-conformance run` (against `ClaudeAgentTranslator`).
+`make conformance` runs both harnesses:
+
+- **`avp-conformance run`** drives the reference `AVPAgent` with `ScriptedModel`. Deterministic, all 20 / 20 cases pass.
+- **`avp-claude-agent-conformance run`** drives `ClaudeAgentTranslator` against the **real** Claude Agent SDK. Requires `ANTHROPIC_API_KEY` + the `claude` CLI on `PATH`. 14 / 20 pass; 6 are skipped via `scripted_only: true` (see below).
 
 Run locally:
 
@@ -12,60 +15,60 @@ Run locally:
 uv --directory python run avp-claude-agent-conformance run
 ```
 
-## Adding a per-SDK conformance harness
+## Two case shapes: live vs scripted_only
 
-The reusable framework lives in [`avp.conformance.sdk_harness`](../../avp/src/avp/conformance/sdk_harness.py). It handles case loading, expectation evaluation (matchers, forbidden events, final-state checks), `CaseResult` construction, suite iteration, and the CLI. A new SDK harness implements **one function** and gets the rest for free:
+Cases divide into two groups based on whether their wire rule can be triggered with a non-deterministic live model.
 
-```python
-from avp.conformance.sdk_harness import (
-    build_commission, build_descriptor, build_resolver,
-    make_cli, run_case, run_suite,
-)
+**Live-friendly** — match structural events (event type, ordering, lifecycle bookends). The exact text / tool sequence the model produces doesn't matter. These run against both harnesses.
 
-def _run_one(case):
-    commission = build_commission(case)
-    events = []
-    agent = MyAgent(
-        commission=commission,
-        on_event=events.append,
-        resolver=build_resolver(case, commission),
-        descriptor=build_descriptor(case),
-        # ... SDK-specific construction
-    )
-    agent.run()
-    return events
+**`scripted_only: true`** — the wire rule needs the model to do something specific that can't be reliably triggered (invoke a forbidden tool, refuse on cue, produce thinking blocks reliably, invoke a managed subagent on cue, hallucinate a tool name). Live harnesses skip these; the AVPAgent harness with `ScriptedModel` still runs them.
 
-main = make_cli(
-    runner=_run_one,
-    prog="my-sdk-conformance",
-    description="Run v0.1 conformance cases against MyAgent.",
-)
+Six cases are currently tagged `scripted_only`:
+
+| Case | Why scripted |
+|---|---|
+| `allowlist-runtime-blocks-disabled-tool` | Needs the model to invoke a tool the SDK filters out of its catalog. |
+| `tool-failed-on-unknown-tool` | Needs the model to fabricate a tool name. |
+| `refusal-recorded-stops-with-refused` | Needs `stop_reason="refusal"`; modern Claude doesn't refuse arbitrary prompts. |
+| `reasoning-emitted-from-thinking-blocks` | Needs extended-thinking output; unreliable to trigger on demand. |
+| `subagent-invoked-and-returned-pair-frame-span` | Needs the model to invoke a declared subagent on cue. |
+| `subagent-failed-when-spawn-errors` | Same as above + needs the resolver's spawn outcome to surface as a failure. |
+
+## Pattern for writing new cases
+
+Write live-friendly by default. Match the wire SHAPE, not specific content. Use `scripted_only: true` only when the wire rule is genuinely unreliable to trigger live.
+
+**Do:**
+
+```json
+{
+  "match": { "type": "avp.text_emitted" },
+  "label": "text_emitted fires after some model_turn_ended"
+}
 ```
 
-And in `pyproject.toml`:
+**Avoid** (unless `scripted_only`):
 
-```toml
-[project.scripts]
-my-sdk-conformance = "my_sdk.conformance:main"
+```json
+{
+  "match": {
+    "type": "avp.text_emitted",
+    "data": { "step": 1, "avp.text": "the answer is 42. DONE." }
+  }
+}
 ```
 
-That's the whole contract. The framework provides `--case` / `--suite` / `-v` flags and the `PASS/FAIL` reporting format. Workspace-root discovery walks up from CWD looking for `conformance/v0.1/`.
+`text-emitted-carries-assistant-content.json` is the canonical live-friendly example: structural matchers, no `step` constraint, no exact-text assertion. The `commission.model` is set to a real Claude model and `commission.prompt` is short and predictable.
 
-## What avp-claude-agent's harness has on top of `_run_one`
+## How the harness is wired
 
-This is an **observer-pattern** agent: the Claude Agent SDK owns the loop. To drive the translator without opening the real SDK, the harness uses the `sdk_client_cls` constructor seam already on `ClaudeAgentTranslator.__init__` to inject `_ScriptedSDKClient` — a small class that implements `ClaudeSDKClient`'s protocol (async context manager, `connect`, `get_context_usage`, `get_mcp_status`, `receive_response`) and yields canned messages while invoking the translator's PreToolUse / PostToolUse hooks at the points the script specifies.
+`translator.run()` is the single public entry point. The harness wires resolver / descriptor / commission from the case (via `avp.conformance.sdk_harness.build_*` helpers), runs `translator.run()` against the real SDK, and returns the events the translator emitted. The framework (`avp.conformance.sdk_harness`) handles case loading, expectation evaluation, `scripted_only` skipping (`SkipCase` exception), CaseResult construction, and the CLI.
 
-The CASDK-specific bits in [`conformance.py`](src/avp_claude_agent/conformance.py):
-
-- `_ScriptedSDKClient` — scripted SDK client (no network, no `claude` CLI).
-- `_block`, `_assistant_message`, `_result_message` — duck-typed Message / Block stand-ins matching the shapes `_on_sdk_message` dispatches on.
-- `_case_to_script` — translates a case's AVP-shape `scripted_model` + `scripted_tools` into the SDK message stream + hook-fire sequence (handles cumulative-usage accumulation, subagent dispatch rewriting to the `Agent` tool, refusal mapping).
-
-Driver-pattern agents (built directly on `AVPAgent`) don't need any of this — the reference `avp.conformance.harness` already drives any `AVPAgent`-shaped agent.
+The full per-SDK harness lives in [`conformance.py`](src/avp_claude_agent/conformance.py) and is ~60 lines.
 
 ## Production wire order
 
-Now matches the conformance harness exactly, per trajectory.md §2.1 and §2.2:
+Matches the conformance harness exactly, per trajectory.md §2.1 and §2.2:
 
 1. `run_requested` — prelude
 2. `agent_described` — prelude

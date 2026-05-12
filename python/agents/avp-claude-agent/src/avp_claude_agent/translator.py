@@ -1110,9 +1110,17 @@ class ClaudeAgentTranslator:
             description = material.get("description")
             if description:
                 payload["description"] = description
-            system_prompt = material.get("system_prompt") or material.get("prompt")
-            if system_prompt:
-                payload["prompt"] = system_prompt
+            # CASDK's `AgentDefinition` requires `prompt`. Resolvers SHOULD
+            # supply one in `system_prompt` / `prompt`; if they don't, fall
+            # back to the description or a synthesized "you are <name>" so
+            # construction doesn't crash. Real supervisors should publish a
+            # proper prompt; this default is a floor, not a recommendation.
+            payload["prompt"] = (
+                material.get("system_prompt")
+                or material.get("prompt")
+                or description
+                or f"You are the {entry.id} subagent."
+            )
             model = material.get("model")
             if model:
                 payload["model"] = model
