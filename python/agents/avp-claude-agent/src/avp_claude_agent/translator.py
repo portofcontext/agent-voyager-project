@@ -85,6 +85,16 @@ from avp.types import (
     ManagedRefResolveFailedEvent,
     now_iso,
 )
+from avp_claude_agent.builtin_tools import (
+    CLAUDE_CODE_BUILTIN_TOOL_CATALOG,
+    CLAUDE_CODE_PRESET_TOOLS,
+)
+from avp_claude_agent.builtin_tools import (
+    SCHEMA_SNAPSHOT_DATE as BUILTIN_SCHEMA_SNAPSHOT_DATE,
+)
+from avp_claude_agent.builtin_tools import (
+    SCHEMA_SOURCE as BUILTIN_SCHEMA_SOURCE,
+)
 
 # MCP protocol version we declare on `mcp_server_connected` events. Same
 # value the AVP reference agent uses; tracks the upstream MCP spec.
@@ -186,40 +196,12 @@ _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS = CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS
 # are CLI features, not runtime-loaded artifacts the Python SDK exposes.
 
 
-# Canonical list of tools the Claude Agent SDK's `claude_code` preset
-# exposes when `ClaudeAgentOptions.tools` is left at default (None). The
-# SDK delegates to the Claude Code CLI binary which owns the actual list;
-# the Python SDK does NOT expose it programmatically. We snapshot from
-# the public Claude Code documentation so a worker that doesn't restrict
-# tools (the most common shape) still gets a usable
-# `agent_started.data.tools` audit on the wire.
-#
-# Sources:
-#   https://code.claude.com/docs/en/permissions
-#   https://code.claude.com/docs/en/settings
-# Snapshot: 2026-05-08. Update when Claude Code ships new built-ins.
-#
-# We omit `PowerShell` (gated behind CLAUDE_CODE_USE_POWERSHELL_TOOL=1)
-# and the `Agent` / `EnterWorktree` tools (subagent / worktree management
-# are surfaced via the dedicated subagent_invoked / worktree events).
-#
-# Public: re-exported from `avp_claude_agent` so Commission authors can
-# `from avp_claude_agent import CLAUDE_CODE_PRESET_TOOLS` and pass or
-# filter the list when building `Commission.enabled_builtin_tools`.
-CLAUDE_CODE_PRESET_TOOLS: tuple[str, ...] = (
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
-    "Bash",
-    "WebFetch",
-    "WebSearch",
-    "Task",
-    "TodoWrite",
-    "NotebookEdit",
-)
-# Backwards-compat alias for existing private callers.
+# The Claude Agent SDK delegates its preset tool catalog to the Claude
+# Code CLI binary and does NOT expose it programmatically. To keep
+# `agent_started.data.tools[]` self-describing, the preset name list and
+# the per-tool input schemas live in `builtin_tools.py` as a maintained
+# snapshot. Every emission carries `avp.tool.schema_source` and
+# `avp.tool.schema_snapshot_date` so consumers can detect staleness.
 _CLAUDE_CODE_PRESET_TOOLS = CLAUDE_CODE_PRESET_TOOLS
 
 
@@ -227,21 +209,21 @@ def _make_builtin_tool_decl(name: str) -> dict[str, Any]:
     """Build a `_ToolDecl`-shaped dict for one SDK-side tool name surfaced
     on `agent_started.data.tools`.
 
-    The Claude Agent SDK does NOT expose its built-in tool catalog
-    (Read, Write, Bash, Edit, Glob, Grep, …) programmatically — the
-    canonical descriptions live in the Claude Code CLI binary and
-    Anthropic's docs, not in the Python SDK. Rather than ship a
-    hardcoded prose table that drifts the moment Anthropic ships a new
-    tool or renames an existing one, we emit just `name` +
-    `avp.dispatch_target` here and let consumers cross-reference Claude
-    Code's tool documentation when they need descriptions.
+    For preset tools (Read, Write, Bash, Edit, Glob, Grep, WebFetch,
+    WebSearch, Task, TodoWrite, NotebookEdit), look up the bundled
+    `description` + `inputSchema` from `builtin_tools.CLAUDE_CODE_BUILTIN_TOOL_CATALOG`
+    and tag the emission with `avp.tool.schema_source` +
+    `avp.tool.schema_snapshot_date` so consumers know the provenance.
 
     For `mcp__<server>__<tool>` names the SDK uses for MCP-routed tools,
     tag `dispatch_target=mcp_server` + `avp.mcp_server_id` so consumers
-    can correlate with `mcp_server_connected` events. Everything else
-    is `local` (the SDK runs it in-process); those are inspected via
-    PreToolUse / PostToolUse hooks at dispatch time, where the SDK
-    surfaces real input/output we DO record on the wire.
+    can correlate with `mcp_server_connected` events. The schema for
+    those is surfaced separately on `mcp_server_connected.data.avp.mcp.tools[]`.
+
+    For anything else (a name the SDK dispatches but isn't in our
+    catalog — typically a new built-in we haven't snapshotted yet), fall
+    back to name-only. PreToolUse / PostToolUse hooks still record the
+    real input/output at dispatch time.
     """
     if name.startswith("mcp__"):
         rest = name[len("mcp__") :]
@@ -252,7 +234,14 @@ def _make_builtin_tool_decl(name: str) -> dict[str, Any]:
                 "avp.dispatch_target": "mcp_server",
                 "avp.mcp_server_id": rest[:idx],
             }
-    return {"name": name, "avp.dispatch_target": "local"}
+    decl: dict[str, Any] = {"name": name, "avp.dispatch_target": "local"}
+    entry = CLAUDE_CODE_BUILTIN_TOOL_CATALOG.get(name)
+    if entry is not None:
+        decl["description"] = entry["description"]
+        decl["inputSchema"] = entry["input_schema"]
+        decl["avp.tool.schema_source"] = BUILTIN_SCHEMA_SOURCE
+        decl["avp.tool.schema_snapshot_date"] = BUILTIN_SCHEMA_SNAPSHOT_DATE
+    return decl
 
 
 def _classify_sdk_exception(e: Exception) -> ErrorCode:
@@ -1689,13 +1678,23 @@ class ClaudeAgentTranslator:
             subagents_meta_list.append(decl)
         subagents_meta = subagents_meta_list or None
 
-        # Skills surface. Commission-managed skills appear as id-only stubs
-        # (the resolver returns SKILL.md content; descriptions arrive on
-        # managed_ref_resolved). Filesystem-discovered skills (when the SDK
-        # is configured to read them) surface via `skill_enrich`.
+        # Skills surface. Commission-managed skills are enriched from the
+        # resolver's payload (SKILL.md frontmatter carries `description`
+        # and the resolver returns it alongside `content`). Resolution has
+        # already run by the time `_emit_agent_started` is called, so
+        # `self._resolved_skills` is populated. Filesystem-discovered
+        # skills (when the SDK is configured to read them) surface via
+        # `skill_enrich`.
         skills_meta_list: list[dict[str, Any]] = []
         if commission.skills:
-            skills_meta_list.extend({"name": s.id} for s in commission.skills)
+            for s in commission.skills:
+                decl: dict[str, Any] = {"name": s.id}
+                material = self._resolved_skills.get(s.id) or {}
+                if description := material.get("description"):
+                    decl["description"] = description
+                if source := material.get("source") or material.get("avp.source"):
+                    decl["avp.source"] = source
+                skills_meta_list.append(decl)
         for name, extra in skill_enrich.items():
             if any(d["name"] == name for d in skills_meta_list):
                 continue

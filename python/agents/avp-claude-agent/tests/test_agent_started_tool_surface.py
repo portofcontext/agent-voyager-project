@@ -97,12 +97,23 @@ def test_unset_enabled_builtin_tools_omits_sdk_tools_kwarg() -> None:
 # ── Helper unit tests ────────────────────────────────────────────────────
 
 
-def test_make_builtin_tool_decl_emits_name_and_local_dispatch() -> None:
+def test_make_builtin_tool_decl_known_tool_includes_bundled_schema() -> None:
     decl = _make_builtin_tool_decl("Read")
-    assert decl == {"name": "Read", "avp.dispatch_target": "local"}
+    # Core identity + dispatch tagging.
+    assert decl["name"] == "Read"
+    assert decl["avp.dispatch_target"] == "local"
+    # Bundled schema material is surfaced so consumers don't have to
+    # cross-reference external docs.
+    assert "description" in decl
+    assert isinstance(decl["inputSchema"], dict)
+    assert decl["inputSchema"]["type"] == "object"
+    assert "file_path" in decl["inputSchema"]["properties"]
+    # Provenance tags let consumers detect staleness.
+    assert decl["avp.tool.schema_source"] == "avp-claude-agent-bundled"
+    assert decl["avp.tool.schema_snapshot_date"]
 
 
-def test_make_builtin_tool_decl_unknown_name_same_shape() -> None:
+def test_make_builtin_tool_decl_unknown_name_falls_back_to_name_only() -> None:
     decl = _make_builtin_tool_decl("FutureSDKTool")
     assert decl == {"name": "FutureSDKTool", "avp.dispatch_target": "local"}
 
@@ -182,4 +193,9 @@ def test_unset_enabled_builtin_tools_emits_full_preset() -> None:
     assert surfaced == set(_CLAUDE_CODE_PRESET_TOOLS)
     for tool in tools:
         assert tool.avp_dispatch_target == "local"
-        assert tool.description is None  # we don't author descriptions
+        # Every preset tool carries a bundled description + inputSchema
+        # plus provenance tags. The catalog asserts preset/catalog parity
+        # at import, so the lookup is guaranteed to hit for preset names.
+        assert tool.description
+        assert tool.inputSchema is not None
+        assert tool.inputSchema["type"] == "object"

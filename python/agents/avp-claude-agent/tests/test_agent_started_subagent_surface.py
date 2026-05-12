@@ -124,10 +124,10 @@ def test_skills_unset_stays_null() -> None:
     assert started.data.skills is None
 
 
-def test_skills_passes_through_as_id_stubs() -> None:
-    """`cfg.skills` flows through as id-only stubs on `agent_started.data.skills[]`.
-    SKILL.md content arrives via `avp.resolve` and surfaces in
-    `managed_ref_resolved` events at startup."""
+def test_skills_pass_through_name_when_resolution_carries_no_description() -> None:
+    """If the resolver returned material with no `description`,
+    `agent_started.data.skills[].description` stays None — the wire field
+    is optional and we don't fabricate."""
     from avp import SkillRef
 
     cfg = Commission(
@@ -138,9 +138,40 @@ def test_skills_passes_through_as_id_stubs() -> None:
         skills=[SkillRef(id="style-guide", ref="sha256:abc")],
     )
     t, out = _new_translator(cfg)
+    # Simulate resolution that returned only content (description-less).
+    t._resolved_skills["style-guide"] = {"content": "..."}
     t._emit_agent_started()
     started = _agent_started(out)
     assert started.data.skills is not None
     assert len(started.data.skills) == 1
     assert started.data.skills[0].name == "style-guide"
     assert started.data.skills[0].description is None
+
+
+def test_skills_surface_description_from_resolved_material() -> None:
+    """When the resolver returns SKILL.md frontmatter alongside content,
+    the description flows onto `agent_started.data.skills[].description`
+    so consumers don't have to cross-reference an external resolver."""
+    from avp import SkillRef
+
+    cfg = Commission(
+        schema_version="0.1",
+        run_id="with-skills",
+        model="claude-sonnet-4-6",
+        prompt="hi",
+        skills=[SkillRef(id="style-guide", ref="sha256:abc")],
+    )
+    t, out = _new_translator(cfg)
+    t._resolved_skills["style-guide"] = {
+        "description": "House code style for Python.",
+        "source": "skills/style-guide.md",
+        "content": "...",
+    }
+    t._emit_agent_started()
+    started = _agent_started(out)
+    assert started.data.skills is not None
+    assert len(started.data.skills) == 1
+    skill = started.data.skills[0]
+    assert skill.name == "style-guide"
+    assert skill.description == "House code style for Python."
+    assert skill.avp_source == "skills/style-guide.md"
