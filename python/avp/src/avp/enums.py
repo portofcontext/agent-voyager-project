@@ -33,4 +33,9 @@ class ErrorCode(StrEnum):
     # Commission-managed-asset / resolver-protocol error codes (v0.1).
     resolver_not_configured = "resolver_not_configured"
     commission_collision = "commission_collision"
+    # Runner determined its host execution environment can no longer
+    # continue. Signal to the supervisor that the run is a rescue
+    # candidate (see trajectory.md §7.3). Distinct from `agent_crash`,
+    # which is an agent-internal failure.
+    execution_backend_failure = "execution_backend_failure"
     unknown = "unknown"

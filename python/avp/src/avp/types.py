@@ -110,6 +110,9 @@ T_SUBAGENT_RETURNED = "avp.subagent_returned"
 T_SUBAGENT_FAILED = "avp.subagent_failed"
 T_MANAGED_REF_RESOLVED = "avp.managed_ref_resolved"
 T_MANAGED_REF_RESOLVE_FAILED = "avp.managed_ref_resolve_failed"
+# Supervisor-sourced bracket event marking a mid-run execution-backend
+# swap (trajectory.md §7.3). Peer event; does not restart the span tree.
+T_RUN_RESCUED = "avp.run_rescued"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept
@@ -839,6 +842,31 @@ class ManagedRefResolveFailedData(_SpanData):
     avp_resolve_error_code: str | None = Field(default=None, alias="avp.resolve.error.code")
 
 
+class RunRescuedEndpoint(BaseModel):
+    """One side of an `avp.run_rescued` event — describes either the
+    runner the supervisor is swapping away from or the one it's
+    swapping to. See trajectory.md §7.3."""
+
+    model_config = _STRICT
+    backend: str = Field(min_length=1)
+    attempt: int = Field(ge=1)
+    model: str | None = Field(default=None, min_length=1)
+
+
+class RunRescuedData(BaseModel):
+    """`avp.run_rescued` payload. Peer event in the trajectory inserted
+    by the supervisor between a failed runner's last event and the new
+    runner's first event. Does not restart the span tree; the new
+    runner continues the agent span opened by the original
+    `agent_started`. Same `run_id` across the swap."""
+
+    model_config = _STRICT
+    from_endpoint: RunRescuedEndpoint = Field(alias="from")
+    to_endpoint: RunRescuedEndpoint = Field(alias="to")
+    reason: str = Field(min_length=1)
+    last_completed_seq: int = Field(ge=0)
+
+
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
 #
 # Each event is a CloudEvent. `type` discriminates the union. `source` is the
@@ -1009,6 +1037,16 @@ class ManagedRefResolveFailedEvent(_CloudEventBase):
     data: ManagedRefResolveFailedData
 
 
+class RunRescuedEvent(_CloudEventBase):
+    """Supervisor-sourced peer event marking a mid-run execution-backend
+    swap. The second supervisor-attributed event type in v0.1 alongside
+    `run_requested`. See trajectory.md §7.3."""
+
+    type: Literal["avp.run_rescued"] = T_RUN_RESCUED
+    source: Literal["avp://supervisor"] = SOURCE_SUPERVISOR
+    data: RunRescuedData
+
+
 # ── Discriminated unions ──────────────────────────────────────────────────────
 
 
@@ -1035,6 +1073,7 @@ _AGENT_EVENT_TYPES = (
     McpServerDisconnectedEvent,
     ManagedRefResolvedEvent,
     ManagedRefResolveFailedEvent,
+    RunRescuedEvent,
 )
 
 Event = Annotated[
@@ -1059,7 +1098,8 @@ Event = Annotated[
     | McpServerConnectedEvent
     | McpServerDisconnectedEvent
     | ManagedRefResolvedEvent
-    | ManagedRefResolveFailedEvent,
+    | ManagedRefResolveFailedEvent
+    | RunRescuedEvent,
     Field(discriminator="type"),
 ]
 
