@@ -39,7 +39,7 @@ AVP is built and maintained by the [Port of Context](https://github.com/portofco
 
 If you want to run an AI agent that emits AVP events out of the box, install the reference agent built on the Claude Agent SDK:
 
-- [`avp-claude-agent`](python/agents/avp-claude-agent/) wraps the Claude Agent SDK, which ships its own loop and tools.
+- [`avp-claude-agent-sdk`](python/agents/avp-claude-agent-sdk/) wraps the Claude Agent SDK, which ships its own loop and tools.
 
 If you want to build your own agent on top of the raw Anthropic Messages API, install the SDK adapter and copy the reference agent from the examples:
 

@@ -60,7 +60,7 @@ The vocabulary below is the ubiquitous language of AVP. Every doc, type, and eve
 
 The protocol cares about wire shape, not packaging. But this repo packages two distinct things on top of the wire, and that distinction matters when you're answering "where does new code go" or "what does this package do":
 
-- **Agent**: owns the agent loop, reads a Commission, emits the trajectory, advertises an Agent Descriptor, dispatches tools, calls the resolver. An agent is what `spec/v0.1/` certifies as conforming. Examples: `python/agents/avp-claude-agent/` (a complete agent built on the Claude Agent SDK, which already ships a loop), and the reference agent at `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
+- **Agent**: owns the agent loop, reads a Commission, emits the trajectory, advertises an Agent Descriptor, dispatches tools, calls the resolver. An agent is what `spec/v0.1/` certifies as conforming. Examples: `python/agents/avp-claude-agent-sdk/` (a complete agent built on the Claude Agent SDK, which already ships a loop), and the reference agent at `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
 - **SDK adapter**: translates one raw API / client surface to AVP. Ships a `ModelDriver` (turn-by-turn translation that plugs into `AVPAgent`), a `TracedClient` (drop-in observability over an existing SDK loop), and Commission-to-API translators. Ships NO agent loop and NO built-in tools, because the upstream API doesn't have them. Agents wrap the adapter. Example: `python/sdks/avp-anthropic/` for the Anthropic Messages API.
 
 Rule of thumb: if the upstream SDK ships its own agent loop and tools, package the integration as a complete agent under `python/agents/`. If the upstream is a raw HTTP client, package it as an SDK adapter under `python/sdks/` and let a separate agent (in examples or a downstream package) wrap it.
@@ -90,7 +90,7 @@ The user wants AVP observability over an SDK that already owns its loop. Example
 
 Use this when: the user says "wrap Claude Code as an agent," "make LangChain emit AVP events," or "translate my SDK's lifecycle into AVP." Anywhere they can't own the loop but can subscribe to lifecycle events.
 
-The reference is `python/agents/avp-claude-agent/src/avp_claude_agent/translator.py`. The pattern:
+The reference is `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/translator.py`. The pattern:
 
 1. Accept the Commission and an optional `resolver: ResolverDriver`. Run the resolver gate (fail-fast with `resolver_not_configured` if the Commission carries managed assets but no resolver is wired); resolve all refs; emit `managed_ref_resolved` per success.
 2. Translate resolved material into the SDK's setup parameters (e.g. Claude Agent SDK's `mcp_servers` / `agents`).
@@ -108,16 +108,16 @@ Use this when: the user says "configure an agent," "lock down an agent," "what t
 
 The pattern: build a `Commission` (`avp.types.Commission`) with the supervisor primitives the situation calls for.
 
-| Concern | Field | Notes |
-|---|---|---|
-| Managed MCP servers | `mcp_servers: list[McpServerRef]` | Each entry is `{id, ref}`; the supervisor's resolver returns connection material at startup. Tagged on the wire with `avp.tool.dispatch_target=mcp_server` and `avp.mcp_server_id`. |
-| Managed skills | `skills: list[SkillRef]` | Each entry is `{id, ref}`; the resolver returns SKILL.md content. Surfaced on `skill_loaded` after resolution. |
-| Managed subagents | `subagents: list[SubagentRef]` | Each entry is `{id, ref}`; the resolver returns model-facing metadata at startup; `avp.spawn_subagent` runs the sub-loop on demand. The parent records the child run's id on `subagent_invoked.data["avp.subagent.run_id"]`. |
-| Built-in tool allowlist | `enabled_builtin_tools` | Optional list of names. Absent → all built-ins exposed; `[]` → none; subset → only those names. Validated against the agent's Descriptor at startup (fails with `commission_collision` on unknown names). |
-| Built-in subagent allowlist | `enabled_builtin_subagents` | Same semantics for built-in subagents. |
-| Built-in skill allowlist | `enabled_builtin_skills` | Same semantics for built-in skills. |
-| What it produces | `output_schema` | JSON schema. |
-| What it runs | `prompt`, `system_prompt`, `model` | Standard agent-plane fields. |
+| Concern                     | Field                              | Notes                                                                                                                                                                                                                        |
+| --------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Managed MCP servers         | `mcp_servers: list[McpServerRef]`  | Each entry is `{id, ref}`; the supervisor's resolver returns connection material at startup. Tagged on the wire with `avp.tool.dispatch_target=mcp_server` and `avp.mcp_server_id`.                                          |
+| Managed skills              | `skills: list[SkillRef]`           | Each entry is `{id, ref}`; the resolver returns SKILL.md content. Surfaced on `skill_loaded` after resolution.                                                                                                               |
+| Managed subagents           | `subagents: list[SubagentRef]`     | Each entry is `{id, ref}`; the resolver returns model-facing metadata at startup; `avp.spawn_subagent` runs the sub-loop on demand. The parent records the child run's id on `subagent_invoked.data["avp.subagent.run_id"]`. |
+| Built-in tool allowlist     | `enabled_builtin_tools`            | Optional list of names. Absent → all built-ins exposed; `[]` → none; subset → only those names. Validated against the agent's Descriptor at startup (fails with `commission_collision` on unknown names).                    |
+| Built-in subagent allowlist | `enabled_builtin_subagents`        | Same semantics for built-in subagents.                                                                                                                                                                                       |
+| Built-in skill allowlist    | `enabled_builtin_skills`           | Same semantics for built-in skills.                                                                                                                                                                                          |
+| What it produces            | `output_schema`                    | JSON schema.                                                                                                                                                                                                                 |
+| What it runs                | `prompt`, `system_prompt`, `model` | Standard agent-plane fields.                                                                                                                                                                                                 |
 
 See `spec/v0.1/examples/commission.json` for a wire-format equivalent and `python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py` for managed subagents.
 
@@ -125,10 +125,10 @@ See `spec/v0.1/examples/commission.json` for a wire-format equivalent and `pytho
 
 Whatever you build, the trajectory carries two distinct kinds of facts. Surface them separately to consumers; don't conflate.
 
-| Class | Event types | Semantics |
-|---|---|---|
-| What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `text_emitted` | Mechanical actions |
-| What the run cost | `cost_recorded`, `model_turn_ended.data["gen_ai.usage.*"]` | Resource accounting (OTel-shaped) |
+| Class              | Event types                                                                                                                                        | Semantics                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `text_emitted` | Mechanical actions                |
+| What the run cost  | `cost_recorded`, `model_turn_ended.data["gen_ai.usage.*"]`                                                                                         | Resource accounting (OTel-shaped) |
 
 ## Workspace and deployment scope
 
@@ -156,7 +156,7 @@ Common temptations to push back on:
 5. `python/avp/src/avp/types.py`: Pydantic models that mirror the schemas. Authoritative Python surface. Scoped re-exports: `avp.trajectory`, `avp.commission`, `avp.descriptor`, `avp.resolver`.
 6. `python/avp/src/avp/agent/agent.py`: the canonical agent loop in working code.
 7. `python/sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API. Ships a `ModelDriver`, a `TracedClient`, and Commission-to-API translators; the agent loop and tool catalog live in agents that wrap it. See `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` for a reference agent built on top.
-8. `python/agents/avp-claude-agent/`: observer-pattern agent over the Claude Agent SDK.
+8. `python/agents/avp-claude-agent-sdk/`: observer-pattern agent over the Claude Agent SDK.
 
 ## How to operate when the user describes a need
 

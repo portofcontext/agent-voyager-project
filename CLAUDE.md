@@ -28,7 +28,7 @@ right one when picking where new code lives; the contracts differ.
 trajectory, advertises an Agent Descriptor, dispatches tools, calls the
 resolver for managed assets, and produces `agent_stopped` with a stop
 reason. An agent IS what `spec/v0.1/` certifies as conforming. Examples
-in this repo: `avp-claude-agent` (built on the Claude Agent SDK, which
+in this repo: `avp-claude-agent-sdk` (built on the Claude Agent SDK, which
 already owns a loop), and the reference agent at
 `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`
 (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
@@ -166,7 +166,7 @@ seam tests but break real-model integration. Concretely, that's any of:
   dispatch, history shape).
 - **Provider drivers / translators**:
   `python/sdks/avp-anthropic/src/avp_anthropic/driver.py` (token / cost
-  extraction), `python/agents/avp-claude-agent/src/avp_claude_agent/translator.py`
+  extraction), `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/translator.py`
   (SDK message handling, hook installation).
 - **Tracer or traced clients**: `avp.tracer` (AVPTracer, format_event,
   module-level helpers), `avp_anthropic.AnthropicTracedClient` /
@@ -216,7 +216,7 @@ that compiled fine but undercounted by 30%).
   `AnthropicTracedClient` + `wrap_anthropic` (drop-in over an existing
   Anthropic SDK loop), and Commission-to-API translators. No agent loop or
   built-in tools: the API itself ships neither, and agents wrap the SDK.
-- `python/agents/avp-claude-agent/`: observer-pattern agent over Claude Agent SDK,
+- `python/agents/avp-claude-agent-sdk/`: observer-pattern agent over Claude Agent SDK,
   plus `TracedClaudeSDKClient` and `traced_claude_sdk_client` (drop-in over an
   existing `ClaudeSDKClient` loop). The Claude Agent SDK ships its own loop +
   tools, so this is a complete agent rather than an adapter.

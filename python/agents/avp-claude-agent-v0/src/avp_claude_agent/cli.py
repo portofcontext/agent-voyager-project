@@ -22,7 +22,7 @@ from avp_claude_agent.translator import ClaudeAgentTranslator
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="avp-claude-agent",
+        prog="avp-claude-agent-sdk",
         description=(
             "AVP v0.1 agent for the Claude Agent SDK (observer pattern). "
             "Reads a Commission from stdin, streams events to stdout."

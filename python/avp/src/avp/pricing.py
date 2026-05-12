@@ -1,7 +1,7 @@
 """Shared pricing for AVP agents.
 
 Why this lives in `avp` core, not per-agent:
-- Both `avp-anthropic` and `avp-claude-agent` need the same model-price
+- Both `avp-anthropic` and `avp-claude-agent-sdk` need the same model-price
   lookup. Two copies drift the moment Anthropic ships new pricing.
 - The price table is data, not policy — agents load it at startup,
   users can override via the public `PriceTable` type, and the on-wire

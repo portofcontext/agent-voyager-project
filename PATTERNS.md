@@ -20,7 +20,7 @@ You subscribe to the SDK's lifecycle (message stream, tool hooks, run-end signal
 
 **When to pick.** You're building a new agent on top of an agentic SDK whose loop is the reason you picked it. You want the SDK's behavior preserved and AVP layered on top without restructuring the run.
 
-**What you trade.** Some wire-level rules are observable but not enforceable from outside the SDK (timing of certain lifecycle signals, the SDK's internal cumulative-usage accounting, when exactly a tool is *invoked* vs *prepared*). Expect SDK-version-specific workarounds. See `python/agents/avp-claude-agent/README.md` "Known SDK quirks" for what that looks like in practice.
+**What you trade.** Some wire-level rules are observable but not enforceable from outside the SDK (timing of certain lifecycle signals, the SDK's internal cumulative-usage accounting, when exactly a tool is *invoked* vs *prepared*). Expect SDK-version-specific workarounds. See `python/agents/avp-claude-agent-sdk/README.md` "Known SDK quirks" for what that looks like in practice.
 
 **Composition.**
 
@@ -31,7 +31,7 @@ translator.run()
 
 The translator builds the SDK's options object from the Commission, opens the SDK's loop, subscribes to its events, and emits AVP events as it goes.
 
-**Worked example.** `python/agents/avp-claude-agent/` — the whole package is this pattern. An OpenAI Agents SDK equivalent would follow the same shape: subscribe to the SDK's run lifecycle, translate each signal.
+**Worked example.** `python/agents/avp-claude-agent-sdk/` — the whole package is this pattern. An OpenAI Agents SDK equivalent would follow the same shape: subscribe to the SDK's run lifecycle, translate each signal.
 
 ## Instrument your own loop
 
@@ -100,7 +100,7 @@ This is **not a recommended integration path** for a product. It exists to certi
 
 The packaging layer (what code lives in which package) is a separate axis covered in `CLAUDE.md` "Agents vs SDK adapters":
 
-- **Agents** (`python/agents/`) own the loop. `avp-claude-agent` is a "Wrap an Agent SDK" agent.
+- **Agents** (`python/agents/`) own the loop. `avp-claude-agent-sdk` is a "Wrap an Agent SDK" agent.
 - **SDK adapters** (`python/sdks/`) translate one provider API to AVP and ship pieces — `ModelDriver`, `TracedClient`, Commission-to-API helpers — that the "Instrument your own loop" path composes directly. `avp-anthropic` is an adapter.
 
 A reference agent built on an adapter (e.g. `_anthropic_reference_agent.py`) composes the adapter's `ModelDriver` with `AVPAgent`; that's a *Conformance internals* artifact, not a separate user-facing pattern.

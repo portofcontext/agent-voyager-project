@@ -171,7 +171,7 @@ class AVPAgent:
         embedded callers (the in-process supervisor example, conformance
         harness) that drive AVPAgent against a synthetic Commission
         without a packaged agent identity. Top-level CLI invocations
-        (e.g. `avp-claude-agent`, the reference avp-anthropic agent in
+        (e.g. `avp-claude-agent-sdk`, the reference avp-anthropic agent in
         `supervisors/simple-supervisor-example/examples/`) MUST pass a
         descriptor so the wire is complete.
 

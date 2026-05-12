@@ -771,7 +771,7 @@ class McpServerConnectedData(_SpanData):
     avp_mcp_server_name: str | None = Field(default=None, alias="avp.mcp.server_name")
     avp_mcp_server_version: str | None = Field(default=None, alias="avp.mcp.server_version")
     # Per-server tool list, populated by agents that actually drive the
-    # MCP handshake (e.g. avp-claude-agent calling
+    # MCP handshake (e.g. avp-claude-agent-sdk calling
     # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
     # agent emits a stub event (e.g. the reference agent; its
     # mcp_server_connected events are placeholders without live transport).

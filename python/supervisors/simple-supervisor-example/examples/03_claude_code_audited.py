@@ -1,4 +1,4 @@
-"""Example 03 — Audited Claude Code session (observer pattern, avp-claude-agent).
+"""Example 03 — Audited Claude Code session (observer pattern, avp-claude-agent-sdk).
 
 Story: the user runs an existing Claude Code session (the Claude Agent SDK
 owns its own loop) but the supervisor still wants the same observability and
@@ -123,7 +123,7 @@ def _validate_outcome(events: list) -> list[str]:
     if "TextEmittedEvent" not in types:
         issues.append("no text_emitted events — agent didn't produce a response")
 
-    # accounting_reset is a known SDK quirk (see avp-claude-agent README).
+    # accounting_reset is a known SDK quirk (see avp-claude-agent-sdk README).
     # Any OTHER error_occurred is a real failure.
     errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
     unexpected = [ev for ev in errs if ev.data.avp_error_code.value != "accounting_reset"]

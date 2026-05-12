@@ -53,7 +53,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e './python/avp[dev]'
           pip install -e './python/sdks/avp-anthropic[dev]' --no-deps
-          pip install -e './python/agents/avp-claude-agent[dev]' --no-deps
+          pip install -e './python/agents/avp-claude-agent-sdk[dev]' --no-deps
           pip install -e './python/supervisors/simple-supervisor-example[dev]' --no-deps
           # Real upstream SDKs are pulled separately so the package installs
           # don't block on Anthropic / Claude Agent SDK availability:
@@ -77,9 +77,9 @@ jobs:
           cd python/sdks/avp-anthropic
           pytest -v -m "not real_llm"
 
-      - name: Run avp-claude-agent translator tests
+      - name: Run avp-claude-agent-sdk translator tests
         run: |
-          cd python/agents/avp-claude-agent
+          cd python/agents/avp-claude-agent-sdk
           pytest -v -m "not real_llm"
 
       - name: Run simple-supervisor-example tests (reference agent CLI smoke)

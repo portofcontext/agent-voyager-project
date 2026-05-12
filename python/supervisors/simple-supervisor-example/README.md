@@ -10,7 +10,7 @@ Both AVP integration patterns are demonstrated:
 | Integration | Pattern | What this example shows |
 |---|---|---|
 | `avp-anthropic` SDK adapter + a reference agent built on it (`examples/_anthropic_reference_agent.py`) | Driver, AVPAgent owns the loop | Cost-tracked refactor, subagent delegation, drop-in `AnthropicTracedClient` instrumentation |
-| `avp-claude-agent` (wraps the Claude Agent SDK) | Observer, SDK owns the loop | Same Commission against a session that owns its own loop; trajectory observable from outside |
+| `avp-claude-agent-sdk` (wraps the Claude Agent SDK) | Observer, SDK owns the loop | Same Commission against a session that owns its own loop; trajectory observable from outside |
 
 This is **not a production framework**. It's a stepping stone — proof that the wire format works end-to-end. Read the source top to bottom; it should fit in your head.
 
@@ -64,7 +64,7 @@ What you'll see in the post-run summary:
 
 ### 03 — Audited Claude Code session (observer pattern)
 
-Wraps the Claude Agent SDK (Claude Code as an SDK) via `avp-claude-agent`'s translator. The supervisor builds a Commission and the translator emits AVP events as the SDK runs. Same Profile-derived Commission, same post-run summary.
+Wraps the Claude Agent SDK (Claude Code as an SDK) via `avp-claude-agent-sdk`'s translator. The supervisor builds a Commission and the translator emits AVP events as the SDK runs. Same Profile-derived Commission, same post-run summary.
 
 The point: the SDK owns the agent loop, but the supervisor still declares the surface (`enabled_builtin_tools`, managed `mcp_servers` refs) and reads the trajectory from the bus. **No supervisor → agent push channel** — the supervisor sets up the environment in the Commission, stands up the resolver service for managed-asset dereferencing, and observes events.
 

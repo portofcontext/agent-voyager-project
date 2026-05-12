@@ -23,7 +23,7 @@ UV := uv --directory python
 TEST_PKGS := \
 	python/avp \
 	python/sdks/avp-anthropic \
-	python/agents/avp-claude-agent \
+	python/agents/avp-claude-agent-sdk \
 	python/supervisors/simple-supervisor-example
 
 # All examples. Each script self-detects missing preflight (API key,
@@ -154,7 +154,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent; do \
+	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent-sdk; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \

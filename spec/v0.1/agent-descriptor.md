@@ -40,7 +40,7 @@ An Agent Descriptor is a single JSON document validating against [`agent-descrip
 
 ```jsonc
 {
-  "agent_name":       "avp-claude-agent",
+  "agent_name":       "avp-claude-agent-sdk",
   "agent_version":    "0.1.0",
   "avp_spec_version": "0.1",
 
@@ -71,7 +71,7 @@ An Agent Descriptor is a single JSON document validating against [`agent-descrip
 
 | Field | Type | Notes |
 |---|---|---|
-| `agent_name` | string | The agent's package / binary name (e.g., `"anthropic-reference-agent"`, `"avp-claude-agent"`). Stable across versions. |
+| `agent_name` | string | The agent's package / binary name (e.g., `"anthropic-reference-agent"`, `"avp-claude-agent-sdk"`). Stable across versions. |
 | `agent_version` | string | Semver-compatible. Bumped on any wire-affecting change. |
 | `avp_spec_version` | string | The AVP umbrella version the agent conforms to (`"0.1"` for this spec). |
 | `built_in_tools` | `Array<BuiltinTool> \| null` | Tool catalog. `null` means the agent has no built-in tools (vs. `[]` meaning it has a tool surface but no entries; semantically the same here but `null` is preferred for "none"). |

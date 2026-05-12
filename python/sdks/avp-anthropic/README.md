@@ -105,11 +105,11 @@ driver = AnthropicModelDriver(
 )
 ```
 
-This is the analog of `avp-claude-agent`'s `extra_sdk_options` (same purpose, deployment-layer config that doesn't translate to a wire-format concept; different SDK surface). AVP wire-shape fields the driver populates per turn (`model`, `max_tokens`, `messages` and `system` from AVP history, `tools` from `tools_param` plus any subagents resolved via `set_resolved_assets`, `mcp_servers` from resolver-returned HTTP MCP material) take precedence — `extra_kwargs` cannot override them, since doing so would let a supervisor silently desync the trajectory from what the model actually saw.
+This is the analog of `avp-claude-agent-sdk`'s `extra_sdk_options` (same purpose, deployment-layer config that doesn't translate to a wire-format concept; different SDK surface). AVP wire-shape fields the driver populates per turn (`model`, `max_tokens`, `messages` and `system` from AVP history, `tools` from `tools_param` plus any subagents resolved via `set_resolved_assets`, `mcp_servers` from resolver-returned HTTP MCP material) take precedence — `extra_kwargs` cannot override them, since doing so would let a supervisor silently desync the trajectory from what the model actually saw.
 
 ## Pricing table
 
-Hardcoded per-model rates (`USD per 1M tokens`) for the latest Claude family, shared with `avp-claude-agent` via the `avp` package:
+Hardcoded per-model rates (`USD per 1M tokens`) for the latest Claude family, shared with `avp-claude-agent-sdk` via the `avp` package:
 
 | Model | Input | Output | Cache read | Cache write |
 |---|---|---|---|---|

@@ -614,7 +614,7 @@ class AnthropicModelDriver(ModelDriver):
         per-request knobs (`metadata`, `top_p`, `temperature`, etc.).
 
         `extra_client_kwargs` is the deployment-layer escape hatch
-        (parallel to `avp-claude-agent`'s `extra_sdk_options`): merged
+        (parallel to `avp-claude-agent-sdk`'s `extra_sdk_options`): merged
         into `anthropic.Anthropic(**extra_client_kwargs)` when the
         driver lazily constructs its default client. Use it for
         SDK-construction concerns AVP intentionally doesn't put on the

@@ -21,23 +21,20 @@ requires-python = ">=3.11"
 dependencies = [
     "avp",
     "avp-anthropic",
-    "avp-claude-agent",
+    "avp-claude-agent-sdk",
     "simple-supervisor-example",
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=7",
-    "ruff>=0.6",
-]
+dev = ["pytest>=7", "ruff>=0.6"]
 
 [tool.uv.workspace]
 # Paths are relative to this pyproject.toml (python/).
 members = [
     "avp",
     "sdks/avp-anthropic",
-    "agents/avp-claude-agent",
     "supervisors/simple-supervisor-example",
+    "agents/avp-claude-agent-sdk",
 ]
 
 # When any workspace member declares `avp`, `avp-anthropic`, etc. as a
@@ -45,9 +42,9 @@ members = [
 # there's an unrelated package on PyPI named `avp` (security tooling), and
 # without this override `pip install` would pull it down on a fresh machine.
 [tool.uv.sources]
-avp                       = { workspace = true }
-avp-anthropic             = { workspace = true }
-avp-claude-agent          = { workspace = true }
+avp = { workspace = true }
+avp-anthropic = { workspace = true }
+avp-claude-agent-sdk = { workspace = true }
 simple-supervisor-example = { workspace = true }
 
 [tool.uv]
