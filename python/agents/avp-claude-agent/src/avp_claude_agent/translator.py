@@ -48,12 +48,16 @@ from avp import (
     ErrorOccurredEvent,
     McpServerConnectedData,
     McpServerConnectedEvent,
+    McpServerDisconnectedData,
+    McpServerDisconnectedEvent,
     ModelTurnEndedData,
     ModelTurnEndedEvent,
     ModelTurnStartedData,
     ModelTurnStartedEvent,
     ReasoningEmittedData,
     ReasoningEmittedEvent,
+    RefusalRecordedData,
+    RefusalRecordedEvent,
     RunRequestedData,
     RunRequestedEvent,
     RunStateSnapshot,
@@ -68,6 +72,8 @@ from avp import (
     SubagentReturnedEvent,
     TextEmittedData,
     TextEmittedEvent,
+    ToolFailedData,
+    ToolFailedEvent,
     ToolInvokedData,
     ToolInvokedEvent,
     ToolReturnedData,
@@ -99,6 +105,12 @@ from avp_claude_agent.builtin_tools import (
 # MCP protocol version we declare on `mcp_server_connected` events. Same
 # value the AVP reference agent uses; tracks the upstream MCP spec.
 MCP_PROTOCOL_VERSION = "2025-11-25"
+
+# AssistantMessage.stop_reason values that indicate the model declined
+# to produce useful output. Mapped to `avp.refusal_recorded` per
+# trajectory.md §7. Anthropic ships "refusal" and "sensitive" as the
+# two refusal-flavored codes today.
+_REFUSAL_STOP_REASONS: frozenset[str] = frozenset({"refusal", "sensitive"})
 
 logger = logging.getLogger(__name__)
 
@@ -437,6 +449,15 @@ class ClaudeAgentTranslator:
         # used to compute `duration_ms` on model_turn_ended / tool_returned.
         self._turn_t0_monotonic_ms: int | None = None
         self._tool_t0_by_call_id: dict[str, int] = {}
+        # call_ids the PreToolUse hook gated with tool_failed (disabled
+        # by allowlist or unknown to the effective tool bag). PostToolUse
+        # SKIPS tool_returned for these so the wire shape (tool_invoked →
+        # tool_failed, no tool_returned) is well-formed.
+        self._tool_failed_call_ids: set[str] = set()
+        # Set by `_handle_assistant_message` when stop_reason signals a
+        # refusal; consumed by `run` / `run_scripted` to switch the final
+        # `agent_stopped.reason` from converged to refused.
+        self._refusal_seen: bool = False
         self._turn_open = False  # True between model_turn_started and model_turn_ended
         # Claude Agent SDK reports usage as cumulative-per-message, not per-turn delta.
         # We track the previous cumulative so we can compute this turn's actual cost.
@@ -588,6 +609,144 @@ class ClaudeAgentTranslator:
 
         return self._emit_agent_stopped(reason, error_msg=error_msg)
 
+    # ── Conformance / test entry point ──────────────────────────────────────
+
+    def run_scripted(self, script: list[dict[str, Any]]) -> AgentStoppedEvent:
+        """Drive the translator without opening the real Claude Agent SDK.
+
+        Same phase sequence as `run()` — prelude → resolver gate → resolve
+        managed assets → emit `skill_loaded` → `agent_started` (the sync,
+        non-enriched path; no live SDK to introspect for tool/skill catalog
+        enrichment) → script-driven loop → `agent_stopped` — minus
+        `_async_invoke_sdk`. Used by the conformance harness in
+        `avp_claude_agent.conformance`.
+
+        Each `script` item is a dict tagged by `kind`:
+
+          {"kind": "sdk_message", "message": <duck-typed Message stand-in>}
+              Fed through `_on_sdk_message`; produces model_turn_*, text,
+              reasoning, cost events same as a real SDK stream.
+
+          {"kind": "pre_tool", "tool_name": str, "tool_use_id": str,
+           "tool_input": dict}
+              Invokes the PreToolUse hook; produces `tool_invoked`
+              (or `subagent_invoked` for `Agent` tool dispatches).
+
+          {"kind": "post_tool", "tool_name": str, "tool_use_id": str,
+           "tool_response": Any}
+              Invokes the PostToolUse hook; produces `tool_returned`
+              (or `subagent_returned`).
+
+        The conformance harness synthesizes this stream from a case's
+        `scripted_model` + `scripted_tools`. The translator's own
+        `_on_sdk_message` / hook callbacks are duck-typed by design, so
+        the stand-ins need only the attributes those handlers read.
+        """
+        # Spec order (trajectory.md §2.1): run_requested → agent_described →
+        # agent_started, in that order. managed_ref_resolved events come
+        # AFTER agent_started (§2.2), even though agent_started's "merged
+        # view" notionally reflects resolved state. We emit agent_started
+        # with declared-only data (Commission.skills/mcp_servers/subagents
+        # by id) and let `managed_ref_resolved` carry the round-trip facts
+        # downstream — same shape AVPAgent uses.
+        self._emit_run_prelude()
+        self._emit_agent_started()
+
+        # Startup gates — same order as AVPAgent.run().
+        if not self._validate_supported_model():
+            return self._emit_agent_stopped(StopReason.error)
+        if not self._validate_resolver_present():
+            return self._emit_agent_stopped(StopReason.error)
+        if not self._validate_no_collisions():
+            return self._emit_agent_stopped(StopReason.error)
+        if not self._validate_enabled_builtins():
+            return self._emit_agent_stopped(StopReason.error)
+        if not self._resolve_managed_assets():
+            return self._emit_agent_stopped(StopReason.error)
+        # mcp_server_connected events sit between managed_ref_resolved
+        # and the first model_turn_started per trajectory.md §4. Without
+        # a live SDK we emit stubs (tool_count=0); the lifecycle marker
+        # is what matters for conformance.
+        self._emit_mcp_connected_stubs()
+        self._emit_skills_loaded()
+
+        reason: StopReason
+        error_msg: str | None = None
+        try:
+            asyncio.run(self._drive_scripted(script))
+            reason = StopReason.refused if self._refusal_seen else StopReason.converged
+        except Exception as e:
+            logger.exception("avp-claude-agent: scripted run error")
+            self._emit(
+                ErrorOccurredEvent(
+                    subject=self.commission.run_id,
+                    data=ErrorOccurredData(
+                        **self._own_span(self._current_parent_for_run_event()),
+                        **{
+                            "avp.error.code": ErrorCode.unknown,
+                            "avp.error.message": str(e),
+                        },
+                    ),
+                )
+            )
+            reason = StopReason.error
+            error_msg = str(e)
+        finally:
+            if self._turn_open:
+                assert self._current_turn_span_id is not None
+                self._emit(
+                    ModelTurnEndedEvent(
+                        subject=self.commission.run_id,
+                        data=ModelTurnEndedData(
+                            **self._shared_span(self._current_turn_span_id, self._agent_span_id),
+                            step=self._step,
+                            duration_ms=0,
+                            **{
+                                "gen_ai.usage.input_tokens": 0,
+                                "gen_ai.usage.output_tokens": 0,
+                                "avp.cost_usd": 0.0,
+                            },
+                        ),
+                    )
+                )
+                self._turn_open = False
+            # mcp_server_disconnected events sit between the last model
+            # turn and agent_stopped per trajectory.md §4.
+            self._emit_mcp_disconnected_stubs()
+
+        return self._emit_agent_stopped(reason, error_msg=error_msg)
+
+    async def _drive_scripted(self, script: list[dict[str, Any]]) -> None:
+        """Consume one script step at a time. Async so PreToolUse /
+        PostToolUse hooks (which the SDK declares as async coroutines)
+        can be awaited."""
+        for step in script:
+            kind = step.get("kind")
+            if kind == "sdk_message":
+                self._on_sdk_message(step["message"])
+            elif kind == "pre_tool":
+                await self._on_pre_tool_use_hook(
+                    {
+                        "tool_use_id": step["tool_use_id"],
+                        "tool_name": step["tool_name"],
+                        "tool_input": step.get("tool_input") or {},
+                    },
+                    step["tool_use_id"],
+                    None,
+                )
+            elif kind == "post_tool":
+                await self._on_post_tool_use_hook(
+                    {
+                        "tool_use_id": step["tool_use_id"],
+                        "tool_name": step["tool_name"],
+                        "tool_response": step.get("tool_response", ""),
+                    },
+                    step["tool_use_id"],
+                    None,
+                )
+            else:
+                raise ValueError(f"run_scripted: unknown step kind {kind!r}")
+
     # ── SDK integration ────────────────────────────────────────────────────
 
     async def _async_invoke_sdk(self) -> None:
@@ -635,6 +794,19 @@ class ClaudeAgentTranslator:
         c = self.commission
         return bool(c.mcp_servers or c.skills or c.subagents)
 
+    def _emit_error(self, code: ErrorCode, message: str) -> None:
+        """Emit a single `error_occurred` event at the agent span. Used by
+        startup gates that fail-fast before the main loop opens."""
+        self._emit(
+            ErrorOccurredEvent(
+                subject=self.commission.run_id,
+                data=ErrorOccurredData(
+                    **self._own_span(self._agent_span_id),
+                    **{"avp.error.code": code, "avp.error.message": message},
+                ),
+            )
+        )
+
     def _validate_resolver_present(self) -> bool:
         """If the Commission carries managed assets but no ResolverDriver
         was supplied (and AVP_RESOLVER_URL was not bootstrapped into one),
@@ -643,22 +815,120 @@ class ClaudeAgentTranslator:
             return True
         if self._resolver is not None:
             return True
-        self._emit(
-            ErrorOccurredEvent(
-                subject=self.commission.run_id,
-                data=ErrorOccurredData(
-                    **self._own_span(self._agent_span_id),
-                    **{
-                        "avp.error.code": ErrorCode.resolver_not_configured,
-                        "avp.error.message": (
-                            "Commission carries managed assets but no ResolverDriver "
-                            "was supplied to ClaudeAgentTranslator (and AVP_RESOLVER_URL "
-                            "was not bootstrapped). Configure a resolver service per `spec/v0.1/resolver.md` §2."
-                        ),
-                    },
-                ),
-            )
+        self._emit_error(
+            ErrorCode.resolver_not_configured,
+            (
+                "Commission carries managed assets but no ResolverDriver "
+                "was supplied to ClaudeAgentTranslator (and AVP_RESOLVER_URL "
+                "was not bootstrapped). Configure a resolver service per `spec/v0.1/resolver.md` §2."
+            ),
         )
+        return False
+
+    def _validate_supported_model(self) -> bool:
+        """Cross-check `Commission.model` against the descriptor's
+        `supported_models` (glob list). Skipped when no Descriptor is
+        published, the Descriptor declares no constraint, or the Commission
+        omits `model`. Mirrors AVPAgent's gate."""
+        import fnmatch
+
+        descriptor = self._descriptor
+        commission = self.commission
+        if descriptor is None or descriptor.supported_models is None:
+            return True
+        if not commission.model:
+            return True
+        if any(fnmatch.fnmatchcase(commission.model, p) for p in descriptor.supported_models):
+            return True
+        self._emit_error(
+            ErrorCode.unsupported_model,
+            (
+                f"Commission.model={commission.model!r} is not supported by "
+                f"{descriptor.agent_name}@{descriptor.agent_version}; "
+                f"supported_models={descriptor.supported_models}"
+            ),
+        )
+        return False
+
+    def _validate_no_collisions(self) -> bool:
+        """Detect id/name collisions between agent-internal contributions
+        and Commission-declared entries. Mirrors AVPAgent's gate. Covers:
+
+          - `Commission.subagents[].id` ↔ built-in tool names
+          - `Commission.subagents[].id` ↔ descriptor.built_in_subagents[].name
+          - `Commission.mcp_servers[].id` ↔ same two surfaces
+        """
+        commission = self.commission
+        descriptor = self._descriptor
+        # Built-in tool surface: the bundled preset (Claude Code tools) plus
+        # any descriptor-published tool catalog.
+        builtin_tool_names: set[str] = set(CLAUDE_CODE_PRESET_TOOLS)
+        if descriptor is not None:
+            builtin_tool_names |= {t.name for t in (descriptor.built_in_tools or [])}
+            builtin_subagent_names = {s.name for s in (descriptor.built_in_subagents or [])}
+        else:
+            builtin_subagent_names = set()
+
+        commission_subagent_ids = {sa.id for sa in (commission.subagents or [])}
+        commission_mcp_ids = {m.id for m in (commission.mcp_servers or [])}
+
+        collisions: list[str] = []
+        for entry_id in commission_subagent_ids & builtin_tool_names:
+            collisions.append(f"subagent id {entry_id!r} collides with a built-in tool name")
+        for entry_id in commission_subagent_ids & builtin_subagent_names:
+            collisions.append(
+                f"subagent id {entry_id!r} collides with a descriptor-declared built-in subagent"
+            )
+        for entry_id in commission_mcp_ids & builtin_tool_names:
+            collisions.append(f"mcp_server id {entry_id!r} collides with a built-in tool name")
+        for entry_id in commission_mcp_ids & builtin_subagent_names:
+            collisions.append(
+                f"mcp_server id {entry_id!r} collides with a descriptor-declared built-in subagent"
+            )
+        if not collisions:
+            return True
+        self._emit_error(ErrorCode.commission_collision, "; ".join(collisions))
+        return False
+
+    def _validate_enabled_builtins(self) -> bool:
+        """Validate `Commission.enabled_builtin_*` allowlists against the
+        agent's descriptor-published built-in surfaces. Unknown names are
+        configuration mistakes that fail-fast. Mirrors AVPAgent's gate."""
+        commission = self.commission
+        descriptor = self._descriptor
+
+        # Tool catalog: descriptor wins when present; bundled preset is the
+        # fallback so a translator without a descriptor still has a name set
+        # to validate against.
+        if descriptor is not None and descriptor.built_in_tools is not None:
+            known_tools = {t.name for t in descriptor.built_in_tools}
+        else:
+            known_tools = set(CLAUDE_CODE_PRESET_TOOLS)
+        if descriptor is not None and descriptor.built_in_subagents is not None:
+            known_subagents = {s.name for s in descriptor.built_in_subagents}
+        else:
+            known_subagents = set()
+        if descriptor is not None and descriptor.built_in_skills is not None:
+            known_skills = {s.name for s in descriptor.built_in_skills}
+        else:
+            known_skills = set()
+
+        unknown: list[str] = []
+        for name in commission.enabled_builtin_tools or []:
+            if name not in known_tools:
+                unknown.append(f"enabled_builtin_tools: {name!r} not in agent's built-in tools")
+        for name in commission.enabled_builtin_subagents or []:
+            if name not in known_subagents:
+                unknown.append(
+                    f"enabled_builtin_subagents: {name!r} not in agent's built-in subagents"
+                )
+        for name in commission.enabled_builtin_skills or []:
+            if name not in known_skills:
+                unknown.append(f"enabled_builtin_skills: {name!r} not in agent's built-in skills")
+
+        if not unknown:
+            return True
+        self._emit_error(ErrorCode.commission_collision, "; ".join(unknown))
         return False
 
     def _resolve_managed_assets(self) -> bool:
@@ -1266,6 +1536,42 @@ class ClaudeAgentTranslator:
             )
         )
 
+        # Refusal detection. Anthropic signals refusal via
+        # `stop_reason="refusal"` or `"sensitive"`; the model's refusal
+        # text (when given) is in the TextBlock(s) we already emitted.
+        # We surface a structured `refusal_recorded` event and flip a
+        # one-way bit that the run() / run_scripted() callers consult to
+        # set agent_stopped.reason=refused.
+        if sdk_stop_reason and sdk_stop_reason in _REFUSAL_STOP_REASONS:
+            refusal_kwargs: dict[str, Any] = {
+                "step": self._step,
+                "avp.refusal.reason": str(sdk_stop_reason),
+                "avp.refusal.provider": "anthropic",
+            }
+            refusal_text = (
+                " ".join(p for p in text_parts if p).strip()
+                if (
+                    text_parts := [
+                        getattr(b, "text", "") or ""
+                        for b in (getattr(message, "content", []) or [])
+                        if type(b).__name__ == "TextBlock"
+                    ]
+                )
+                else ""
+            )
+            if refusal_text:
+                refusal_kwargs["avp.refusal.message"] = refusal_text
+            self._emit(
+                RefusalRecordedEvent(
+                    subject=commission.run_id,
+                    data=RefusalRecordedData(
+                        **self._own_span(self._current_turn_span_id),
+                        **refusal_kwargs,
+                    ),
+                )
+            )
+            self._refusal_seen = True
+
     def _handle_result_message(self, message: Any) -> None:
         """ResultMessage closes the run with the SDK's authoritative cost
         total. We:
@@ -1360,7 +1666,77 @@ class ClaudeAgentTranslator:
             )
         )
         self._tools_invoked[tool] = self._tools_invoked.get(tool, 0) + 1
+
+        # Runtime gate: even when an allowlist filters the tool surface
+        # on `agent_started`, a misbehaving model can still call a hidden
+        # name (prompt injection, hallucination). The wire records the
+        # attempt (tool_invoked above) and the refusal (tool_failed
+        # below); the actual tool MUST NOT execute. Same shape AVPAgent
+        # uses (trajectory.md §4, commission.md §4).
+        block_reason = self._classify_tool_dispatch_failure(tool)
+        if block_reason is not None:
+            self._emit(
+                ToolFailedEvent(
+                    subject=self.commission.run_id,
+                    data=ToolFailedData(
+                        **self._shared_span(tool_span_id, parent),
+                        step=self._step,
+                        **{
+                            "gen_ai.tool.call.id": call_id,
+                            "gen_ai.tool.name": tool,
+                            "avp.tool.error": block_reason[0],
+                            "avp.tool.error.code": block_reason[1],
+                        },
+                    ),
+                )
+            )
+            # Suppress the matching tool_returned: when the SDK's
+            # PostToolUse fires later, we won't double-emit.
+            self._tool_failed_call_ids.add(call_id)
         return {}
+
+    def _classify_tool_dispatch_failure(self, tool: str) -> tuple[str, str] | None:
+        """Return (error_message, error_code) when a tool MUST fail at
+        dispatch — disabled by allowlist, or unknown to the effective
+        tool bag. Returns None for tools that should execute normally.
+
+        Effective tool bag: built-in tools (descriptor.built_in_tools
+        when set, else the bundled preset), MCP-routed names prefixed
+        `mcp__<server>__`, the `Agent` subagent dispatcher.
+        """
+        commission = self.commission
+        # MCP-routed name → recognized iff the server id is declared in
+        # Commission.mcp_servers OR matches the local-tools bridge's
+        # synthetic server name (which mounts user-supplied local tools
+        # under `mcp__<local_tools_server_name>__*`).
+        if tool.startswith("mcp__"):
+            mcp_server_id = self._mcp_server_id_from_tool_name(tool)
+            if mcp_server_id and (
+                self._is_declared_mcp_server(mcp_server_id)
+                or mcp_server_id == self._local_tools_server_name
+            ):
+                return None
+            return (f"Unknown tool {tool!r}", "unknown_tool")
+        # `Agent` is always known when there are subagents; routed
+        # through _handle_subagent_pre earlier in the hook.
+        if tool == "Agent":
+            return None
+        # Built-in: name set from descriptor when present, else bundled preset.
+        descriptor = self._descriptor
+        if descriptor is not None and descriptor.built_in_tools is not None:
+            builtin_names = {t.name for t in descriptor.built_in_tools}
+        else:
+            builtin_names = set(CLAUDE_CODE_PRESET_TOOLS)
+        if tool not in builtin_names:
+            return (f"Unknown tool {tool!r}", "unknown_tool")
+        # Built-in name: check Commission.enabled_builtin_tools allowlist.
+        allow = commission.enabled_builtin_tools
+        if allow is not None and tool not in allow:
+            return (
+                f"Tool {tool!r} is disabled by Commission.enabled_builtin_tools",
+                "disabled_builtin",
+            )
+        return None
 
     def _is_declared_mcp_server(self, server_id: str) -> bool:
         """True iff `server_id` matches a `Commission.mcp_servers[].id`. Guards
@@ -1382,6 +1758,14 @@ class ClaudeAgentTranslator:
 
         if call_id in self._subagent_invocations:
             self._handle_subagent_post(call_id=call_id, response=response)
+            return {}
+        # The pre-hook already emitted tool_failed for this call_id —
+        # skip tool_returned so the wire records only invoked→failed
+        # (no execution).
+        if call_id in self._tool_failed_call_ids:
+            self._tool_failed_call_ids.discard(call_id)
+            self._tool_span_by_call_id.pop(call_id, None)
+            self._tool_t0_by_call_id.pop(call_id, None)
             return {}
 
         output: str
@@ -1638,24 +2022,50 @@ class ClaudeAgentTranslator:
         subagent_enrich: dict[str, dict[str, Any]] = enrichment.get("subagents", {})
         skill_enrich: dict[str, dict[str, Any]] = enrichment.get("skills", {})
         # Effective tool surface for `agent_started.data.tools[]`.
-        # v0.1 refs-only Commission: filter the SDK's preset by the
-        # optional `enabled_builtin_tools` allowlist (absent → all enabled).
+        # Source preference:
+        #   1. descriptor.built_in_tools, when set (it's authoritative per
+        #      agent-descriptor.md; lets supervisors / tests inject a
+        #      different catalog than the SDK's bundled preset);
+        #   2. CLAUDE_CODE_PRESET_TOOLS otherwise (the Claude Agent SDK
+        #      ships these even when the agent doesn't ship a Descriptor).
+        # Filter the result by `Commission.enabled_builtin_tools` if set.
         # MCP-server tools surface separately on
         # `mcp_server_connected.data.avp.mcp.tools[]` after handshake.
+        descriptor_tools: list[dict[str, Any]] | None = None
+        if self._descriptor is not None and self._descriptor.built_in_tools is not None:
+            descriptor_tools = [
+                t.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for t in self._descriptor.built_in_tools
+            ]
+
         allow = commission.enabled_builtin_tools
-        if allow is None:
-            preset_subset = list(_CLAUDE_CODE_PRESET_TOOLS)
-        else:
-            allow_set = set(allow)
-            preset_subset = [n for n in _CLAUDE_CODE_PRESET_TOOLS if n in allow_set]
+        allow_set: set[str] | None = set(allow) if allow is not None else None
 
         tools_meta_list: list[dict[str, Any]] = []
-        for name in preset_subset:
-            decl = _make_builtin_tool_decl(name)
-            extra = tool_enrich.get(name) or {}
-            if extra.get("description"):
-                decl["description"] = extra["description"]
-            tools_meta_list.append(decl)
+        if descriptor_tools is not None:
+            for entry in descriptor_tools:
+                name = entry.get("name")
+                if not isinstance(name, str):
+                    continue
+                if allow_set is not None and name not in allow_set:
+                    continue
+                decl: dict[str, Any] = {"name": name, "avp.dispatch_target": "local"}
+                if entry.get("description"):
+                    decl["description"] = entry["description"]
+                if entry.get("inputSchema"):
+                    decl["inputSchema"] = entry["inputSchema"]
+                tools_meta_list.append(decl)
+        else:
+            if allow_set is None:
+                preset_subset = list(_CLAUDE_CODE_PRESET_TOOLS)
+            else:
+                preset_subset = [n for n in _CLAUDE_CODE_PRESET_TOOLS if n in allow_set]
+            for name in preset_subset:
+                decl = _make_builtin_tool_decl(name)
+                extra = tool_enrich.get(name) or {}
+                if extra.get("description"):
+                    decl["description"] = extra["description"]
+                tools_meta_list.append(decl)
         tools_meta = tools_meta_list or None
 
         # Subagent surface. Commission-managed subagents are refs-only and
@@ -1860,7 +2270,6 @@ class ClaudeAgentTranslator:
         Commission.mcp_servers entry with `tool_count=0` and no live
         tools, so the wire still records the lifecycle moment.
         """
-        commission = self.commission
         get_status = getattr(client, "get_mcp_status", None)
         statuses: list[Any] = []
         if get_status is not None:
@@ -1878,6 +2287,18 @@ class ClaudeAgentTranslator:
 
         # Fallback path: no live data, emit Commission-time stubs so the
         # lifecycle marker is at least present on the wire.
+        self._emit_mcp_connected_stubs()
+
+    def _emit_mcp_connected_stubs(self) -> None:
+        """Emit one `mcp_server_connected` per declared Commission entry
+        with `tool_count=0` and no live tool catalog. Used in two places:
+
+          - production fallback when `get_mcp_status` isn't available or
+            returns nothing (older SDK, handshake didn't surface state);
+          - `run_scripted` (no live SDK) so the conformance lifecycle
+            marker is on the wire.
+        """
+        commission = self.commission
         if not commission.mcp_servers:
             return
         for server in commission.mcp_servers:
@@ -1890,6 +2311,28 @@ class ClaudeAgentTranslator:
                             "avp.mcp.server_id": server.id,
                             "avp.mcp.protocol_version": MCP_PROTOCOL_VERSION,
                             "avp.mcp.tool_count": 0,
+                        },
+                    ),
+                )
+            )
+
+    def _emit_mcp_disconnected_stubs(self) -> None:
+        """Emit one `mcp_server_disconnected` per declared Commission MCP
+        server entry. Paired with `_emit_mcp_connected_stubs`. Fires
+        before `agent_stopped` so the supervisor sees the lifecycle bookend.
+        """
+        commission = self.commission
+        if not commission.mcp_servers:
+            return
+        for server in commission.mcp_servers:
+            self._emit(
+                McpServerDisconnectedEvent(
+                    subject=commission.run_id,
+                    data=McpServerDisconnectedData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "avp.mcp.server_id": server.id,
+                            "avp.mcp.disconnect_reason": "clean",
                         },
                     ),
                 )

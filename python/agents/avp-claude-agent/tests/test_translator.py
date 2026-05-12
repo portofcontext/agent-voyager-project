@@ -271,12 +271,12 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
 
     pre_input = {
         "tool_use_id": "c1",
-        "tool_name": "bash",
+        "tool_name": "Bash",
         "tool_input": {"command": "ls"},
     }
     post_input = {
         "tool_use_id": "c1",
-        "tool_name": "bash",
+        "tool_name": "Bash",
         "tool_response": "file1\nfile2",
     }
     asyncio.run(t._on_pre_tool_use_hook(pre_input, "c1", None))
@@ -284,7 +284,7 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
 
     assert isinstance(out[0], ToolInvokedEvent)
     assert out[0].data.gen_ai_tool_call_id == "c1"
-    assert out[0].data.gen_ai_tool_name == "bash"
+    assert out[0].data.gen_ai_tool_name == "Bash"
     assert out[0].data.gen_ai_tool_call_arguments == {"command": "ls"}
     assert isinstance(out[1], ToolReturnedEvent)
     assert out[1].data.avp_tool_result_text == "file1\nfile2"
