@@ -65,6 +65,8 @@ from avp import (
     SkillLoadedEvent,
     Source,
     StopReason,
+    SubagentFailedData,
+    SubagentFailedEvent,
     SubagentInvokedData,
     SubagentInvokedEvent,
     SubagentRef,
@@ -81,7 +83,7 @@ from avp import (
     new_span_id,
     new_trace_id,
 )
-from avp.agent.drivers import ResolveError
+from avp.agent.drivers import ResolveError, SubagentSpawnOutcome
 from avp.enums import ErrorCode
 from avp.types import (
     ManagedKind,
@@ -399,6 +401,15 @@ class ClaudeAgentTranslator:
         self._resolved_mcp_servers: dict[str, dict[str, Any]] = {}
         self._resolved_skills: dict[str, dict[str, Any]] = {}
         self._resolved_subagents: dict[str, dict[str, Any]] = {}
+        # Resolution bookkeeping populated by `_resolve_managed_assets_silently`
+        # and replayed by `_emit_resolution_events` after `agent_started`,
+        # so the wire order matches trajectory.md §2.2 (managed_ref_resolved
+        # events come between agent_started and the first model_turn).
+        self._resolved_records: list[dict[str, Any]] = []
+        self._resolution_failure: dict[str, Any] | None = None
+        # Idempotence flags for the lifecycle-fallback path on errors.
+        self._resolution_events_emitted: bool = False
+        self._skills_loaded_emitted: bool = False
         self._descriptor = descriptor
         self._prelude_emitted = False
         self._local_tools = local_tools
@@ -532,44 +543,58 @@ class ClaudeAgentTranslator:
     def run(self) -> AgentStoppedEvent:
         """Start the Claude Agent SDK run and emit AVP events as it progresses.
 
-        Returns the terminal AgentStoppedEvent."""
-        # `agent_started` is emitted post-`client.connect()` so its
-        # `tools` / `skills` / `subagents` carry SDK-side enrichment
-        # (descriptions, agentType, source). The exception path below
-        # falls back to commission-only emission if connect raises.
-        #
-        # The run-prelude (run_requested + agent_described) fires FIRST,
-        # before the SDK is touched. Even if connect raises, the wire
-        # records who requested the run and who the agent is — that's
-        # the audit fact, independent of whether the SDK ever spun up.
-        self._emit_run_prelude()
+        Wire order, per trajectory.md §2.1 and §2.2:
 
-        # Resolver gate (spec/v0.1/resolver.md). When the Commission carries any managed
-        # assets, the agent MUST dereference each ref before any model
-        # turn. Failure to resolve is fatal — fail-fast before the SDK
-        # spins up.
+          1. run_requested            (run prelude)
+          2. agent_described          (run prelude)
+          3. agent_started            (3rd in prelude, MUST fire even on
+                                       validation / resolve failure)
+          4. managed_ref_resolved*    (replay of silent-phase resolutions)
+          5. mcp_server_connected*    (per declared server)
+          6. skill_loaded*            (per skill with content)
+          7. model_turn_* / tool_* / ... (drive)
+          8. mcp_server_disconnected* (lifecycle bookend)
+          9. agent_stopped
+
+        Returns the terminal AgentStoppedEvent.
+        """
+        self._emit_run_prelude()
+        # Spec §2.1: agent_started is the 3rd prelude event and MUST
+        # fire on every trajectory, even when validation or resolution
+        # fails. Built from declared sources (Commission + Descriptor +
+        # bundled built-in catalog); the runtime SDK introspection step
+        # we used to do here violated lifecycle ordering and is dropped.
+        self._emit_agent_started()
+
+        # Startup gates — fail-fast, agent_stopped(error) ends the run.
+        if not self._validate_supported_model():
+            return self._emit_agent_stopped(StopReason.error)
         if not self._validate_resolver_present():
             return self._emit_agent_stopped(StopReason.error)
-        if not self._resolve_managed_assets():
+        if not self._validate_no_collisions():
             return self._emit_agent_stopped(StopReason.error)
-        self._emit_skills_loaded()
+        if not self._validate_enabled_builtins():
+            return self._emit_agent_stopped(StopReason.error)
+
+        # Silent resolve. Records successes for replay; first failure
+        # halts further resolves. Resolution events fire AFTER agent_started
+        # (above) per §2.2, regardless of success or failure.
+        if not self._resolve_managed_assets_silently():
+            self._emit_resolution_events()
+            self._resolution_events_emitted = True
+            return self._emit_agent_stopped(StopReason.error)
 
         reason: StopReason
         error_msg: str | None = None
         try:
             asyncio.run(self._async_invoke_sdk())
-            reason = StopReason.converged
+            reason = StopReason.refused if self._refusal_seen else StopReason.converged
         except KeyboardInterrupt:
-            if not self._agent_started_emitted:
-                self._emit_agent_started()
+            self._emit_pending_lifecycle_events()
             reason = StopReason.interrupted
         except Exception as e:
             logger.exception("avp-claude-agent: SDK error")
-            # Fallback: if SDK connect failed before we could fetch
-            # enrichment, emit a bare commission-only `agent_started` so the
-            # wire still has the lifecycle marker before `agent_stopped`.
-            if not self._agent_started_emitted:
-                self._emit_agent_started()
+            self._emit_pending_lifecycle_events()
             classified_code = _classify_sdk_exception(e)
             self._emit(
                 ErrorOccurredEvent(
@@ -606,155 +631,39 @@ class ClaudeAgentTranslator:
                     )
                 )
                 self._turn_open = False
-
-        return self._emit_agent_stopped(reason, error_msg=error_msg)
-
-    # ── Conformance / test entry point ──────────────────────────────────────
-
-    def run_scripted(self, script: list[dict[str, Any]]) -> AgentStoppedEvent:
-        """Drive the translator without opening the real Claude Agent SDK.
-
-        Same phase sequence as `run()` — prelude → resolver gate → resolve
-        managed assets → emit `skill_loaded` → `agent_started` (the sync,
-        non-enriched path; no live SDK to introspect for tool/skill catalog
-        enrichment) → script-driven loop → `agent_stopped` — minus
-        `_async_invoke_sdk`. Used by the conformance harness in
-        `avp_claude_agent.conformance`.
-
-        Each `script` item is a dict tagged by `kind`:
-
-          {"kind": "sdk_message", "message": <duck-typed Message stand-in>}
-              Fed through `_on_sdk_message`; produces model_turn_*, text,
-              reasoning, cost events same as a real SDK stream.
-
-          {"kind": "pre_tool", "tool_name": str, "tool_use_id": str,
-           "tool_input": dict}
-              Invokes the PreToolUse hook; produces `tool_invoked`
-              (or `subagent_invoked` for `Agent` tool dispatches).
-
-          {"kind": "post_tool", "tool_name": str, "tool_use_id": str,
-           "tool_response": Any}
-              Invokes the PostToolUse hook; produces `tool_returned`
-              (or `subagent_returned`).
-
-        The conformance harness synthesizes this stream from a case's
-        `scripted_model` + `scripted_tools`. The translator's own
-        `_on_sdk_message` / hook callbacks are duck-typed by design, so
-        the stand-ins need only the attributes those handlers read.
-        """
-        # Spec order (trajectory.md §2.1): run_requested → agent_described →
-        # agent_started, in that order. managed_ref_resolved events come
-        # AFTER agent_started (§2.2), even though agent_started's "merged
-        # view" notionally reflects resolved state. We emit agent_started
-        # with declared-only data (Commission.skills/mcp_servers/subagents
-        # by id) and let `managed_ref_resolved` carry the round-trip facts
-        # downstream — same shape AVPAgent uses.
-        self._emit_run_prelude()
-        self._emit_agent_started()
-
-        # Startup gates — same order as AVPAgent.run().
-        if not self._validate_supported_model():
-            return self._emit_agent_stopped(StopReason.error)
-        if not self._validate_resolver_present():
-            return self._emit_agent_stopped(StopReason.error)
-        if not self._validate_no_collisions():
-            return self._emit_agent_stopped(StopReason.error)
-        if not self._validate_enabled_builtins():
-            return self._emit_agent_stopped(StopReason.error)
-        if not self._resolve_managed_assets():
-            return self._emit_agent_stopped(StopReason.error)
-        # mcp_server_connected events sit between managed_ref_resolved
-        # and the first model_turn_started per trajectory.md §4. Without
-        # a live SDK we emit stubs (tool_count=0); the lifecycle marker
-        # is what matters for conformance.
-        self._emit_mcp_connected_stubs()
-        self._emit_skills_loaded()
-
-        reason: StopReason
-        error_msg: str | None = None
-        try:
-            asyncio.run(self._drive_scripted(script))
-            reason = StopReason.refused if self._refusal_seen else StopReason.converged
-        except Exception as e:
-            logger.exception("avp-claude-agent: scripted run error")
-            self._emit(
-                ErrorOccurredEvent(
-                    subject=self.commission.run_id,
-                    data=ErrorOccurredData(
-                        **self._own_span(self._current_parent_for_run_event()),
-                        **{
-                            "avp.error.code": ErrorCode.unknown,
-                            "avp.error.message": str(e),
-                        },
-                    ),
-                )
-            )
-            reason = StopReason.error
-            error_msg = str(e)
-        finally:
-            if self._turn_open:
-                assert self._current_turn_span_id is not None
-                self._emit(
-                    ModelTurnEndedEvent(
-                        subject=self.commission.run_id,
-                        data=ModelTurnEndedData(
-                            **self._shared_span(self._current_turn_span_id, self._agent_span_id),
-                            step=self._step,
-                            duration_ms=0,
-                            **{
-                                "gen_ai.usage.input_tokens": 0,
-                                "gen_ai.usage.output_tokens": 0,
-                                "avp.cost_usd": 0.0,
-                            },
-                        ),
-                    )
-                )
-                self._turn_open = False
             # mcp_server_disconnected events sit between the last model
             # turn and agent_stopped per trajectory.md §4.
             self._emit_mcp_disconnected_stubs()
 
         return self._emit_agent_stopped(reason, error_msg=error_msg)
 
-    async def _drive_scripted(self, script: list[dict[str, Any]]) -> None:
-        """Consume one script step at a time. Async so PreToolUse /
-        PostToolUse hooks (which the SDK declares as async coroutines)
-        can be awaited."""
-        for step in script:
-            kind = step.get("kind")
-            if kind == "sdk_message":
-                self._on_sdk_message(step["message"])
-            elif kind == "pre_tool":
-                await self._on_pre_tool_use_hook(
-                    {
-                        "tool_use_id": step["tool_use_id"],
-                        "tool_name": step["tool_name"],
-                        "tool_input": step.get("tool_input") or {},
-                    },
-                    step["tool_use_id"],
-                    None,
-                )
-            elif kind == "post_tool":
-                await self._on_post_tool_use_hook(
-                    {
-                        "tool_use_id": step["tool_use_id"],
-                        "tool_name": step["tool_name"],
-                        "tool_response": step.get("tool_response", ""),
-                    },
-                    step["tool_use_id"],
-                    None,
-                )
-            else:
-                raise ValueError(f"run_scripted: unknown step kind {kind!r}")
+    def _emit_pending_lifecycle_events(self) -> None:
+        """If the SDK loop raised before its normal emission point, emit
+        the resolution / skills_loaded events here so the wire still
+        carries them before agent_stopped. Idempotent via instance flags."""
+        if not self._resolution_events_emitted:
+            self._emit_resolution_events()
+            self._resolution_events_emitted = True
+        if not self._skills_loaded_emitted:
+            self._emit_skills_loaded()
+            self._skills_loaded_emitted = True
 
     # ── SDK integration ────────────────────────────────────────────────────
 
     async def _async_invoke_sdk(self) -> None:
         """Drive the Claude Agent SDK via ClaudeSDKClient.
 
-        Drains the SDK's response stream until exhausted; the SDK owns the
-        loop. v0.1 leaves bounded execution to the caller — the translator
-        does not enforce caps.
+        Wire order inside this method (continuing the prelude `run()`
+        emitted):
+
+          agent_started (with SDK enrichment, post-connect)
+            → managed_ref_resolved* (replay from silent phase)
+            → mcp_server_connected* (per server)
+            → skill_loaded* (per skill with content)
+            → drive `client.receive_response()` → _on_sdk_message
+
+        The conformance harness substitutes a fake `ClaudeSDKClient` via
+        `_sdk_client_cls`; the rest of the orchestration is identical.
         """
         if self._sdk_client_cls is None:
             from claude_agent_sdk import (
@@ -774,17 +683,17 @@ class ClaudeAgentTranslator:
 
         async with self._sdk_client_cls(options=options) as client:
             await client.connect(prompt)
-            # `agent_started` and the per-server `mcp_server_connected`
-            # events both rely on SDK introspection that's only available
-            # AFTER connect(): `get_context_usage()` returns the SDK's
-            # tool / agent / skill catalog, and `get_mcp_status()`
-            # returns the live MCP handshake outcome. Emitting at this
-            # point makes the input event carry real descriptions,
-            # agentType, skill frontmatter, and live MCP tool lists —
-            # rather than name-only stubs the supervisor would have to
-            # reconcile against post-hoc tool_invoked events.
-            await self._emit_agent_started_with_sdk_enrichment(client)
+            # agent_started already fired in run() (spec §2.1 requires
+            # it 3rd in the prelude, before any validation / resolve).
+            # Here we emit the events that fall between agent_started and
+            # the first model_turn_started per §2.2:
+            #   managed_ref_resolved → mcp_server_connected → skill_loaded.
+            self._emit_resolution_events()
+            self._resolution_events_emitted = True
             await self._emit_mcp_connections_after_connect(client)
+            self._emit_skills_loaded()
+            self._skills_loaded_emitted = True
+            # Drive turns.
             async for message in client.receive_response():
                 self._on_sdk_message(message)
 
@@ -931,48 +840,101 @@ class ClaudeAgentTranslator:
         self._emit_error(ErrorCode.commission_collision, "; ".join(unknown))
         return False
 
-    def _resolve_managed_assets(self) -> bool:
-        """Walk Commission-managed assets, call the resolver for each, emit
-        managed_ref_resolved or managed_ref_resolve_failed. Returns False
-        on any failure so the caller can short-circuit with reason=error."""
+    def _resolve_managed_assets_silently(self) -> bool:
+        """Walk Commission-managed assets, call the resolver for each,
+        populate `self._resolved_*` maps WITHOUT emitting events. Returns
+        False on the first failure (short-circuits — kind/id matched per
+        spec/v0.1/resolver.md §5).
+
+        Why silent: spec/v0.1/trajectory.md §2.1 requires
+        `run_requested → agent_described → agent_started` in that exact
+        order, and §2.2 requires `managed_ref_resolved` events to fall
+        between `agent_started` and the first `model_turn_started`.
+        Resolution itself must happen BEFORE `agent_started` so the
+        merged-view event can list resolved descriptions. We square this
+        by separating "do the work" from "emit the events" — the silent
+        phase fills internal state; `_emit_resolution_events` replays the
+        round-trips after `agent_started` fires.
+        """
         commission = self.commission
         if not self._has_managed_assets():
             return True
         assert self._resolver is not None
 
-        for entry in commission.mcp_servers or []:
-            ok, material = self._resolve_one("mcp_server", entry.id, entry.ref)
-            if not ok:
-                return False
-            self._resolved_mcp_servers[entry.id] = material
-        for entry in commission.skills or []:
-            ok, material = self._resolve_one("skill", entry.id, entry.ref)
-            if not ok:
-                return False
-            self._resolved_skills[entry.id] = material
-        for entry in commission.subagents or []:
-            ok, material = self._resolve_one("subagent", entry.id, entry.ref)
-            if not ok:
-                return False
-            self._resolved_subagents[entry.id] = material
+        kind_passes: tuple[tuple[ManagedKind, Any, dict[str, dict[str, Any]]], ...] = (
+            ("mcp_server", commission.mcp_servers or [], self._resolved_mcp_servers),
+            ("skill", commission.skills or [], self._resolved_skills),
+            ("subagent", commission.subagents or [], self._resolved_subagents),
+        )
+        for kind, entries, target_map in kind_passes:
+            for entry in entries:
+                ok, material = self._resolve_one_silent(kind, entry.id, entry.ref)
+                if not ok:
+                    return False
+                target_map[entry.id] = material
         return True
 
-    def _resolve_one(
+    def _resolve_one_silent(
         self, kind: ManagedKind, entry_id: str, ref: Any
     ) -> tuple[bool, dict[str, Any]]:
-        commission = self.commission
+        """Call the resolver for one entry; record success / failure in
+        instance state. No event emission. Successes append to
+        `_resolved_records`; the first failure goes into
+        `_resolution_failure` (subsequent failures are not recorded
+        because we short-circuit)."""
         assert self._resolver is not None
         t0 = _monotonic_ms()
         try:
             material = self._resolver.resolve(kind=kind, id=entry_id, ref=ref)
         except ResolveError as e:
-            kwargs: dict[str, Any] = {
-                "avp.managed.kind": kind,
-                "avp.managed.id": entry_id,
-                "avp.resolve.error": str(e),
+            self._resolution_failure = {
+                "kind": kind,
+                "id": entry_id,
+                "error": str(e),
+                "error_code": e.code,
             }
-            if e.code is not None:
-                kwargs["avp.resolve.error.code"] = e.code
+            return False, {}
+        except Exception as e:
+            self._resolution_failure = {
+                "kind": kind,
+                "id": entry_id,
+                "error": f"{type(e).__name__}: {e}",
+                "error_code": "driver_exception",
+            }
+            return False, {}
+        duration_ms = max(0, _monotonic_ms() - t0)
+        self._resolved_records.append({"kind": kind, "id": entry_id, "duration_ms": duration_ms})
+        return True, dict(material) if material else {}
+
+    def _emit_resolution_events(self) -> None:
+        """Replay `managed_ref_resolved` for each successful resolution
+        recorded during the silent phase, then `managed_ref_resolve_failed`
+        for the first failure (if any). Ordered as the original resolver
+        calls were made."""
+        commission = self.commission
+        for rec in self._resolved_records:
+            self._emit(
+                ManagedRefResolvedEvent(
+                    subject=commission.run_id,
+                    data=ManagedRefResolvedData(
+                        **self._own_span(self._agent_span_id),
+                        **{
+                            "avp.managed.kind": rec["kind"],
+                            "avp.managed.id": rec["id"],
+                            "duration_ms": rec["duration_ms"],
+                        },
+                    ),
+                )
+            )
+        if self._resolution_failure is not None:
+            f = self._resolution_failure
+            kwargs: dict[str, Any] = {
+                "avp.managed.kind": f["kind"],
+                "avp.managed.id": f["id"],
+                "avp.resolve.error": f["error"],
+            }
+            if f["error_code"] is not None:
+                kwargs["avp.resolve.error.code"] = f["error_code"]
             self._emit(
                 ManagedRefResolveFailedEvent(
                     subject=commission.run_id,
@@ -982,39 +944,6 @@ class ClaudeAgentTranslator:
                     ),
                 )
             )
-            return False, {}
-        except Exception as e:
-            self._emit(
-                ManagedRefResolveFailedEvent(
-                    subject=commission.run_id,
-                    data=ManagedRefResolveFailedData(
-                        **self._own_span(self._agent_span_id),
-                        **{
-                            "avp.managed.kind": kind,
-                            "avp.managed.id": entry_id,
-                            "avp.resolve.error": f"{type(e).__name__}: {e}",
-                            "avp.resolve.error.code": "driver_exception",
-                        },
-                    ),
-                )
-            )
-            return False, {}
-
-        duration_ms = max(0, _monotonic_ms() - t0)
-        self._emit(
-            ManagedRefResolvedEvent(
-                subject=commission.run_id,
-                data=ManagedRefResolvedData(
-                    **self._own_span(self._agent_span_id),
-                    **{
-                        "avp.managed.kind": kind,
-                        "avp.managed.id": entry_id,
-                        "duration_ms": duration_ms,
-                    },
-                ),
-            )
-        )
-        return True, dict(material) if material else {}
 
     def _emit_skills_loaded(self) -> None:
         """One `skill_loaded` event per resolved skill whose body actually
@@ -1390,43 +1319,33 @@ class ClaudeAgentTranslator:
         )
         self._turn_open = True
 
+        # Walk content blocks and collect text / reasoning payloads
+        # WITHOUT emitting yet. Per trajectory.md §7 (and the reasoning
+        # case), reasoning_emitted and text_emitted come AFTER
+        # model_turn_ended ("model_turn_ended → reasoning_emitted →
+        # text_emitted" — thought, then spoke). ToolUseBlock content is
+        # observed separately via the PreToolUse hook.
+        text_payloads: list[str] = []
+        reasoning_payloads: list[dict[str, Any]] = []
         for block in getattr(message, "content", []) or []:
             btype = type(block).__name__
             if btype == "TextBlock":
                 text = getattr(block, "text", None)
                 if text:
-                    self._emit(
-                        TextEmittedEvent(
-                            subject=commission.run_id,
-                            data=TextEmittedData(
-                                **self._own_span(self._current_turn_span_id),
-                                step=self._step,
-                                **{"avp.text": text},
-                            ),
-                        )
-                    )
+                    text_payloads.append(text)
             elif btype == "ThinkingBlock":
                 # Extended-thinking block: chain-of-thought the model
-                # exposed for this turn. Emit reasoning_emitted so audit
-                # consumers can collapse / redact thinking from displays
-                # without losing it from the trajectory. Anthropic also
-                # returns a `signature` for replay across turns.
+                # exposed for this turn. We surface as reasoning_emitted
+                # so audit consumers can collapse / redact thinking from
+                # displays without losing it from the trajectory.
+                # Anthropic also returns a `signature` for replay.
                 rkwargs: dict[str, Any] = {
                     "avp.reasoning.text": getattr(block, "thinking", "") or "",
                 }
                 sig = getattr(block, "signature", None)
                 if sig:
                     rkwargs["avp.reasoning.signature"] = sig
-                self._emit(
-                    ReasoningEmittedEvent(
-                        subject=commission.run_id,
-                        data=ReasoningEmittedData(
-                            **self._own_span(self._current_turn_span_id),
-                            step=self._step,
-                            **rkwargs,
-                        ),
-                    )
-                )
+                reasoning_payloads.append(rkwargs)
             elif btype == "RedactedThinkingBlock":
                 # Encrypted-only thinking: no plaintext, but record the
                 # occurrence + signature so audit consumers can count
@@ -1438,18 +1357,7 @@ class ClaudeAgentTranslator:
                 sig = getattr(block, "data", None) or getattr(block, "signature", None)
                 if sig:
                     rkwargs["avp.reasoning.signature"] = sig
-                self._emit(
-                    ReasoningEmittedEvent(
-                        subject=commission.run_id,
-                        data=ReasoningEmittedData(
-                            **self._own_span(self._current_turn_span_id),
-                            step=self._step,
-                            **rkwargs,
-                        ),
-                    )
-                )
-            # ToolUseBlock content is observed via the PreToolUse hook (which
-            # fires in step with the SDK's actual tool dispatch).
+                reasoning_payloads.append(rkwargs)
 
         self._prev_cumulative_input_tokens = cumulative_ti
         self._prev_cumulative_output_tokens = cumulative_to
@@ -1536,6 +1444,33 @@ class ClaudeAgentTranslator:
             )
         )
 
+        # Deferred emission: reasoning, then text. Order matches
+        # trajectory.md §7 — "thought, then spoke" reconstructs the
+        # turn for audit consumers, and gives them a place to collapse
+        # / redact chain-of-thought without losing it from the wire.
+        for rkwargs in reasoning_payloads:
+            self._emit(
+                ReasoningEmittedEvent(
+                    subject=commission.run_id,
+                    data=ReasoningEmittedData(
+                        **self._own_span(self._current_turn_span_id),
+                        step=self._step,
+                        **rkwargs,
+                    ),
+                )
+            )
+        for text in text_payloads:
+            self._emit(
+                TextEmittedEvent(
+                    subject=commission.run_id,
+                    data=TextEmittedData(
+                        **self._own_span(self._current_turn_span_id),
+                        step=self._step,
+                        **{"avp.text": text},
+                    ),
+                )
+            )
+
         # Refusal detection. Anthropic signals refusal via
         # `stop_reason="refusal"` or `"sensitive"`; the model's refusal
         # text (when given) is in the TextBlock(s) we already emitted.
@@ -1548,17 +1483,7 @@ class ClaudeAgentTranslator:
                 "avp.refusal.reason": str(sdk_stop_reason),
                 "avp.refusal.provider": "anthropic",
             }
-            refusal_text = (
-                " ".join(p for p in text_parts if p).strip()
-                if (
-                    text_parts := [
-                        getattr(b, "text", "") or ""
-                        for b in (getattr(message, "content", []) or [])
-                        if type(b).__name__ == "TextBlock"
-                    ]
-                )
-                else ""
-            )
+            refusal_text = " ".join(p for p in text_payloads if p).strip()
             if refusal_text:
                 refusal_kwargs["avp.refusal.message"] = refusal_text
             self._emit(
@@ -1812,32 +1737,73 @@ class ClaudeAgentTranslator:
     def _handle_subagent_pre(
         self, *, call_id: str, sa_name: str, tool_input: dict[str, Any]
     ) -> None:
-        """Emit `subagent_invoked` and stash the frame state for the matching
-        post-hook. Strips the SDK's `subagent_type` discriminator from the
-        recorded input so the AVP wire shows just what the parent actually
-        passed to the subagent."""
+        """Emit `subagent_invoked`, delegate to the resolver, and stash the
+        outcome for the matching post-hook.
+
+        When `self._resolver` is configured (the supervisor stood up the
+        AVP resolver service), the parent agent MUST route declared-subagent
+        dispatch through `avp.spawn_subagent` (resolver.md §4). The resolver
+        returns a `SubagentSpawnOutcome` carrying the child run id, result
+        text, reason, and usage rollup — those are what `subagent_invoked`
+        and `subagent_returned`/`subagent_failed` carry on the wire.
+
+        Without a resolver (no managed-subagent contract), we fall back to
+        the thin observer shape: emit `subagent_invoked` with no child
+        run_id, let the SDK execute the subagent in-process, and surface
+        the SDK's tool_response on `subagent_returned`.
+        """
         sa = self._subagents_by_name[sa_name]
         invocation_id = f"sa-{next(self._sa_seq)}"
         frame_span_id = new_span_id()
         self._tool_span_by_call_id[call_id] = frame_span_id
         self._tools_invoked[sa_name] = self._tools_invoked.get(sa_name, 0) + 1
-        # Record bookkeeping so the post-hook can pair to this frame.
+
+        # Sanitize the input — drop SDK-internal `subagent_type`. What's left
+        # is what the parent agent actually intended to pass.
+        sanitized_input = {k: v for k, v in tool_input.items() if k != "subagent_type"}
+
+        # Delegate to the resolver if configured. spawn_subagent failures
+        # (raises) get recorded as a transport-level error and trigger
+        # subagent_failed at frame close, mirroring AVPAgent.
+        spawn_outcome: SubagentSpawnOutcome | None = None
+        spawn_error: tuple[str, str | None] | None = None
+        if self._resolver is not None:
+            try:
+                spawn_outcome = self._resolver.spawn_subagent(
+                    run_id=self.commission.run_id,
+                    id=sa.id,
+                    ref=sa.ref,
+                    input=sanitized_input,
+                )
+            except Exception as e:
+                spawn_error = (f"{type(e).__name__}: {e}", "spawn_transport_error")
+
         self._subagent_invocations[call_id] = {
             "frame_span_id": frame_span_id,
             "sa_name": sa_name,
             "invocation_id": invocation_id,
             "t0_monotonic_ms": _monotonic_ms(),
+            "spawn_outcome": spawn_outcome,
+            "spawn_error": spawn_error,
         }
-        # Sanitize the input — drop SDK-internal `subagent_type`. What's left
-        # is what the parent agent actually intended to pass.
-        sanitized_input = {k: v for k, v in tool_input.items() if k != "subagent_type"}
-        parent = self._current_turn_span_id or self._agent_span_id
+
+        # Resolved metadata enriches the invoked-event payload.
+        resolved = self._resolved_subagents.get(sa.id) or {}
+        description = resolved.get("description")
+
         invoked_data: dict[str, Any] = {
             "step": self._step,
             "gen_ai.agent.name": sa.id,
+            "gen_ai.operation.name": "invoke_agent",
             "avp.subagent.invocation_id": invocation_id,
             "avp.subagent.input": sanitized_input,
         }
+        if description:
+            invoked_data["gen_ai.agent.description"] = description
+        if spawn_outcome is not None and spawn_outcome.child_run_id:
+            invoked_data["avp.subagent.run_id"] = spawn_outcome.child_run_id
+
+        parent = self._current_turn_span_id or self._agent_span_id
         self._emit(
             SubagentInvokedEvent(
                 subject=self.commission.run_id,
@@ -1849,43 +1815,78 @@ class ClaudeAgentTranslator:
         )
 
     def _handle_subagent_post(self, *, call_id: str, response: Any) -> None:
-        """Emit `subagent_returned` paired with the matching `subagent_invoked`.
+        """Close the subagent frame. Emit `subagent_returned` from the
+        resolver's spawn outcome — OR `subagent_failed` when the resolver
+        call raised or the outcome carries an error.
 
-        The Claude Agent SDK does not surface the subagent's internal turns
-        or per-subagent usage breakdown to the parent's observer surface —
-        the wire shape from this agent is "thin": invoked + returned with
-        no nested model_turn events and a zeroed-out `avp.subagent.usage`
-        rollup. The subagent's actual spend is rolled into the parent's
-        cumulative state via the SDK's own usage accounting (it counts as
-        part of the parent run's tokens/cost), so the parent's
-        RunStateSnapshot is correct; only the per-subagent attribution is
-        unavailable here. Future versions may use the SDK's SubagentStart
-        hook to recover some breakdown.
-        """
+        Without a resolver, fall back to the thin observer shape using
+        the SDK's tool_response: zero usage, reason=converged, no
+        child_run_id. That path matters only for production deployments
+        without a supervisor resolver (rare for managed subagents, since
+        Commission.subagents implies the supervisor is wiring one up)."""
         frame = self._subagent_invocations.pop(call_id)
         frame_span_id: str = frame["frame_span_id"]
         sa_name: str = frame["sa_name"]
         invocation_id: str = frame["invocation_id"]
         duration_ms = max(0, _monotonic_ms() - frame["t0_monotonic_ms"])
+        spawn_outcome: SubagentSpawnOutcome | None = frame.get("spawn_outcome")
+        spawn_error: tuple[str, str | None] | None = frame.get("spawn_error")
 
-        # Coerce the SDK's tool_response (string or structured) into the AVP
-        # text + structured pair, same convention tool_returned uses.
-        if isinstance(response, str):
-            result_text = response
-            result_structured: Any | None = None
+        parent = self._current_turn_span_id or self._agent_span_id
+
+        # Error path: resolver raised, OR resolver returned an outcome with
+        # `error` set (child run crashed, model rejected, etc.).
+        error_msg: str | None = None
+        error_code: str | None = None
+        if spawn_error is not None:
+            error_msg, error_code = spawn_error
+        elif spawn_outcome is not None and spawn_outcome.error is not None:
+            error_msg = spawn_outcome.error
+            error_code = spawn_outcome.error_code
+        if error_msg is not None:
+            failed_kwargs: dict[str, Any] = {
+                "step": self._step,
+                "gen_ai.agent.name": sa_name,
+                "avp.subagent.invocation_id": invocation_id,
+                "duration_ms": duration_ms,
+                "avp.subagent.error": error_msg,
+            }
+            if error_code:
+                failed_kwargs["avp.subagent.error.code"] = error_code
+            self._emit(
+                SubagentFailedEvent(
+                    subject=self.commission.run_id,
+                    data=SubagentFailedData(
+                        **self._shared_span(frame_span_id, parent),
+                        **failed_kwargs,
+                    ),
+                )
+            )
+            return
+
+        # Success path. Prefer the resolver's spawn outcome (full
+        # child_run_id / usage); fall back to the SDK's tool_response
+        # only when no resolver was configured.
+        if spawn_outcome is not None:
+            result_text = spawn_outcome.text
+            result_structured = spawn_outcome.structured
+            reason = spawn_outcome.reason
+            usage = spawn_outcome.usage
         else:
-            try:
-                import json
-
-                result_text = json.dumps(response)
-                result_structured = response
-            except (TypeError, ValueError):
-                result_text = str(response)
+            if isinstance(response, str):
+                result_text = response
                 result_structured = None
+            else:
+                try:
+                    import json
 
-        # Per-subagent usage isn't surfaced by the SDK — emit a zero rollup.
-        # The parent's cumulative RunStateSnapshot still includes the spend.
-        zero_usage = RunStateSnapshot(total_cost_usd=0.0, total_tokens=0, total_turns=0)
+                    result_text = json.dumps(response)
+                    result_structured = response
+                except (TypeError, ValueError):
+                    result_text = str(response)
+                    result_structured = None
+            reason = StopReason.converged
+            usage = RunStateSnapshot(total_cost_usd=0.0, total_tokens=0, total_turns=0)
 
         returned_data: dict[str, Any] = {
             "step": self._step,
@@ -1893,13 +1894,12 @@ class ClaudeAgentTranslator:
             "avp.subagent.invocation_id": invocation_id,
             "duration_ms": duration_ms,
             "avp.subagent.result.text": result_text,
-            "avp.subagent.reason": StopReason.converged,
-            "avp.subagent.usage": zero_usage,
+            "avp.subagent.reason": reason,
+            "avp.subagent.usage": usage,
         }
         if result_structured is not None:
             returned_data["avp.subagent.result.structured"] = result_structured
 
-        parent = self._current_turn_span_id or self._agent_span_id
         self._emit(
             SubagentReturnedEvent(
                 subject=self.commission.run_id,

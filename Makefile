@@ -82,6 +82,7 @@ test:
 conformance:
 	@$(UV) run avp-conformance validate
 	@$(UV) run avp-conformance run
+	@$(UV) run avp-claude-agent-conformance run
 	@$(UV) run avp-conformance check-coverage
 
 
