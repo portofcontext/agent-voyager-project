@@ -44,6 +44,36 @@ This lets `RESCUE_FAIL_AT=turn:2` fire from the realistic "fail before turn 2
 starts" code path on a genuinely multi-turn conversation, rather than the
 short-prompt fall-through.
 
+## Warm rescue (reads `Commission.resume`)
+
+When the supervisor re-dispatches a rescued run, it attaches a `Commission.resume`
+block carrying:
+
+- `from_seq` — where the new runner starts emitting (no events `seq <= from_seq`).
+- `context.messages` — reconstructed conversation up to the rescue point.
+- `tool_cache` — prior tool invocations, replayed on cache hit instead of re-executed.
+
+`avp-ollama` honors the contract: skips the prelude, inherits the original agent span,
+seeds its model call from `context.messages` instead of the Commission's `prompt`, and
+short-circuits tool invocations that match the cache.
+
+## Test instrumentation (warm-rescue smoke)
+
+The warm-rescue T2 / T3 smoke tests need deterministic ways to introduce
+recall tokens and tool calls into the trajectory. Two demo-only env vars
+do that:
+
+| Env var | Format | What it does |
+|---|---|---|
+| `OLLAMA_INJECT_USER_MESSAGE_AT` | `turn:N:content` | After turn N completes, inject `{role: user, content}` into the conversation **and** emit it as a `text_emitted{role: user}` event. The next turn's model call sees the message. The supervisor's resume-block reconstruction picks it up so a rescued runner inherits it. Content may contain colons. |
+| `OLLAMA_INJECT_TOOL_CALL_AT` | `turn:N:tool_name:args_json` | Before turn N, emit a `tool_invoked` event for `tool_name` with `args_json` (must be valid JSON). The translator then either returns from the rescue `tool_cache` (cache hit) or executes the stub `echo` registry (cache miss). |
+
+These are **not** real agent behaviors — they're test scaffolding (same shape as `RESCUE_FAIL_AT`). Real agents drive tool calls and user messages from the model + user, respectively.
+
+### Stub tool registry
+
+Minimal — just `echo(args) -> args`. Anything else returns `{"_stub": true, "tool_name", "args"}`. Used by the smoke to prove that the tool-cache replay path actually short-circuits an invocation post-rescue. Real tool dispatch lands when `avp-ollama` grows real tool support.
+
 On injected failure the runner emits:
 
 ```
