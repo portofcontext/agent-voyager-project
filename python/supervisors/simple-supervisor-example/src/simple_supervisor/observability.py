@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from avp import (
+from avp.trajectory import (
     AgentStoppedEvent,
     CostRecordedEvent,
     ErrorOccurredEvent,

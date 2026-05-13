@@ -45,9 +45,12 @@ from _anthropic_reference_agent import (
 )
 from simple_supervisor import render, summarize
 
-from avp import Commission, SubagentRef
 from avp.agent import AVPAgent
 from avp.agent.mock import ScriptedResolver, ScriptedSupervisor
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
 from avp_anthropic import AnthropicModelDriver, build_anthropic_tools
 
 

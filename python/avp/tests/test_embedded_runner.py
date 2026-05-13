@@ -25,7 +25,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from avp import Commission
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import (
     ModelResponse,
@@ -34,6 +33,7 @@ from avp.agent.drivers import (
     ToolOutcome,
 )
 from avp.agent.mock import ScriptedModel, ScriptedTools
+from avp.commission import Commission
 
 # ── Streaming events: callback fires per emit ──────────────────────────────
 

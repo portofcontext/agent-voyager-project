@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from avp import Commission
+from avp.commission import Commission
 from simple_supervisor.profiles import Profile, get_profile
 
 

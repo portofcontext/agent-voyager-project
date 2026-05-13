@@ -11,7 +11,7 @@ via the resolver protocol and merged into `tools_param` by
 
 from __future__ import annotations
 
-from avp import Commission
+from avp.commission import Commission
 from avp_anthropic import build_anthropic_tools
 
 

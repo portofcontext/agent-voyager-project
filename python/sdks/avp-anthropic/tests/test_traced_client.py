@@ -29,15 +29,17 @@ from typing import Any
 
 import pytest
 
-from avp import (
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
-    StopReason,
     SubagentInvokedEvent,
-    SubagentRef,
     SubagentReturnedEvent,
     TextEmittedEvent,
     ToolInvokedEvent,
@@ -361,7 +363,7 @@ def test_wrap_anthropic_returns_proxy_that_emits_to_active_tracer() -> None:
     """`wrap_anthropic(client)` returns a proxy that finds its tracer via
     the ContextVar at call time — so the same wrapped client works
     across many traces."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_anthropic import wrap_anthropic
 
     out: list = []
@@ -402,7 +404,7 @@ def test_wrap_anthropic_works_across_multiple_traces() -> None:
     """The big payoff of the wrap-once-use-many pattern: the same
     wrapped client survives multiple `with AVPTracer` blocks. Compare
     to the constructor form which couples one wrapper to one run."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_anthropic import wrap_anthropic
 
     fake = _FakeAnthropic([_resp(text="t1"), _resp(text="t2")])
@@ -456,7 +458,7 @@ def test_module_level_tool_helper_works_with_wrap_anthropic() -> None:
     """The wrap-once flow: wrap the client at module load, use
     `avp.tracer.tool(...)` for tool dispatch inside an AVPTracer block.
     Both find the active tracer via the ContextVar."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp.tracer import tool as avp_tool
     from avp_anthropic import wrap_anthropic
 
@@ -497,7 +499,7 @@ def test_wrap_anthropic_handles_async_client() -> None:
     class name."""
     import asyncio
 
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_anthropic import wrap_anthropic
 
     fake = _FakeAsyncAnthropic([_resp(text="async hello")])

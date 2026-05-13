@@ -27,7 +27,7 @@ from pydantic import JsonValue
 
 from avp.agent.drivers import ResolveError, ResolverDriver, SubagentSpawnOutcome
 from avp.enums import StopReason
-from avp.types import ManagedKind, RunStateSnapshot
+from avp.trajectory import ManagedKind, RunStateSnapshot
 
 _DEFAULT_TIMEOUT_S = 30.0
 _USER_AGENT = "avp-resolver-client/0.1"

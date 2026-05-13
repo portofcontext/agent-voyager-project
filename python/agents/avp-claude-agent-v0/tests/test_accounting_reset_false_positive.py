@@ -17,8 +17,8 @@ the legitimate signal we built the guard for).
 
 from __future__ import annotations
 
-from avp import Commission
-from avp.types import ErrorOccurredEvent, ModelTurnEndedEvent
+from avp.commission import Commission
+from avp.trajectory import ErrorOccurredEvent, ModelTurnEndedEvent
 from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from .test_translator import (

@@ -39,11 +39,11 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
-from avp import (
+from avp.pricing import compute_cost
+from avp.tracer import (
     AVPTracer,
     SubagentScope,
     ToolCallRecorder,
-    compute_cost,
     current_tracer,
 )
 from avp_anthropic.driver import DEFAULT_PRICES, PriceTable
@@ -51,8 +51,8 @@ from avp_anthropic.driver import DEFAULT_PRICES, PriceTable
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from avp import Commission
-    from avp.types import RunStateSnapshot
+    from avp.commission import Commission
+    from avp.trajectory import RunStateSnapshot
 
 
 # Marker attribute set on wrapped clients so `wrap_anthropic` is idempotent —

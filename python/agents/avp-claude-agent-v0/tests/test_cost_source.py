@@ -15,7 +15,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from avp import Commission, CostRecordedEvent, ModelTurnEndedEvent
+from avp.commission import Commission
+from avp.trajectory import (
+    CostRecordedEvent,
+    ModelTurnEndedEvent,
+)
 from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from .test_translator import (

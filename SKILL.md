@@ -77,7 +77,7 @@ Use this when: the user says "I want to call Claude / GPT / Gemini and emit AVP"
 
 The reference is `python/avp/src/avp/agent/agent.py` (the canonical loop) plus `python/sdks/avp-anthropic/` (the SDK adapter for the raw Anthropic Messages API: it ships a `ModelDriver` but no loop or built-in tools, since the API itself ships neither) and `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` (a reference agent that wires the driver to `AVPAgent` with a local `ShellTools`). The pattern:
 
-1. Read a `Commission` from input. Validate against `avp.types.Commission`.
+1. Read a `Commission` from input. Validate against `avp.commission.Commission`.
 2. Construct an `AVPAgent` with `model: ModelDriver`, `tools: ToolDriver`, `supervisor: SupervisorDriver`, and (when the Commission may carry managed assets) `resolver=http_resolver_from_env()`.
 3. The agent emits the full lifecycle: `run_requested`, `agent_described`, `agent_started`, `managed_ref_resolved` (per asset), `mcp_server_connected` (per resolved MCP), `skill_loaded` (per resolved skill), `model_turn_started/ended`, `tool_invoked/returned`, `cost_recorded`, `agent_stopped`. Every event is a CloudEvents 1.0 envelope.
 4. The driver's only jobs are translating one model turn (`ModelDriver.step(history) -> ModelResponse`) and, optionally, implementing `set_resolved_assets(...)` so the agent can stage resolved MCP connection material into provider-side API params.
@@ -95,7 +95,7 @@ The reference is `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/transl
 1. Accept the Commission and an optional `resolver: ResolverDriver`. Run the resolver gate (fail-fast with `resolver_not_configured` if the Commission carries managed assets but no resolver is wired); resolve all refs; emit `managed_ref_resolved` per success.
 2. Translate resolved material into the SDK's setup parameters (e.g. Claude Agent SDK's `mcp_servers` / `agents`).
 3. Subscribe to the SDK's lifecycle (turn-start, turn-end, tool-use, tool-result, completion).
-4. Translate each lifecycle event into the corresponding AVP event using `avp.types.*` Pydantic models.
+4. Translate each lifecycle event into the corresponding AVP event using the Pydantic models in `avp.trajectory` (events / data classes) and `avp.commission` / `avp.descriptor` where they apply.
 5. Maintain a local `RunStateSnapshot` for cost/token accounting per `spec/v0.1/trajectory.md` §3.3.
 
 See `python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py` (audited Claude Code session) and `07_claude_agent_traced_client.py` (drop-in instrumentation over an existing `ClaudeSDKClient`).
@@ -106,7 +106,7 @@ The user wants to declare an agent environment: what the agent can do, what rule
 
 Use this when: the user says "configure an agent," "lock down an agent," "what tools should this agent have," or describes a domain and wants to translate it into agent gates.
 
-The pattern: build a `Commission` (`avp.types.Commission`) with the supervisor primitives the situation calls for.
+The pattern: build a `Commission` (`avp.commission.Commission`) with the supervisor primitives the situation calls for.
 
 | Concern                     | Field                              | Notes                                                                                                                                                                                                                        |
 | --------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -153,7 +153,7 @@ Common temptations to push back on:
    - **JSON-RPC methods, bootstrap, error handling** → `spec/v0.1/resolver.md`
 3. `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape. `spec/v0.1/avp.schema.json` is the bundled `oneOf`.
 4. `conformance/v0.1/cases/`: executable test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
-5. `python/avp/src/avp/types.py`: Pydantic models that mirror the schemas. Authoritative Python surface. Scoped re-exports: `avp.trajectory`, `avp.commission`, `avp.descriptor`, `avp.resolver`.
+5. `python/avp/src/avp/{commission,descriptor,trajectory}.py`: Pydantic models that mirror the schemas, one file per spec. Authoritative Python surface; `avp.resolver` re-exports the Resolver API client types from `avp.agent.*`. The top-level `avp` package re-exports all four for `from avp import ...` ergonomics.
 6. `python/avp/src/avp/agent/agent.py`: the canonical agent loop in working code.
 7. `python/sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API. Ships a `ModelDriver`, a `TracedClient`, and Commission-to-API translators; the agent loop and tool catalog live in agents that wrap it. See `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` for a reference agent built on top.
 8. `python/agents/avp-claude-agent-sdk/`: observer-pattern agent over the Claude Agent SDK.
@@ -164,5 +164,5 @@ Common temptations to push back on:
 2. Read the closest match in `python/supervisors/simple-supervisor-example/examples/` (numbered 01–07, narrative format) first to ground yourself in current shape.
 3. Cross-reference with the specs: [`resolver.md`](spec/v0.1/resolver.md) (Resolver API), [`commission.md`](spec/v0.1/commission.md) §4 (built-in allowlists), [`trajectory.md`](spec/v0.1/trajectory.md) §3 (the loop) and §4 (tool dispatch).
 4. For runtime correctness questions, the conformance cases under `conformance/v0.1/cases/` are precedent. Find the case that matches the situation.
-5. Generate code that imports from `avp.types`, `avp.agent`, `avp.io`. Do NOT inline-redefine the wire types.
+5. Generate code that imports from the spec-scoped modules (`avp.commission`, `avp.descriptor`, `avp.trajectory`, `avp.resolver`) plus `avp.agent` and `avp.io`. Do NOT inline-redefine the wire types.
 6. If asked about a behavior the spec doesn't cover, say so explicitly and propose a path that doesn't violate any of the existing conformance cases.

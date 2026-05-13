@@ -42,14 +42,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from avp.commission import Commission, SubagentRef
 from avp.enums import ErrorCode, StopReason
-from avp.types import (
+from avp.trajectory import (
     ZERO_SPAN_ID,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
-    Commission,
     CostRecordedData,
     CostRecordedEvent,
     ErrorOccurredData,
@@ -63,7 +63,6 @@ from avp.types import (
     SubagentFailedEvent,
     SubagentInvokedData,
     SubagentInvokedEvent,
-    SubagentRef,
     SubagentReturnedData,
     SubagentReturnedEvent,
     TextEmittedData,

@@ -26,15 +26,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from avp import (
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
-    StopReason,
     SubagentInvokedEvent,
-    SubagentRef,
     SubagentReturnedEvent,
     TextEmittedEvent,
     ToolInvokedEvent,
@@ -472,7 +474,7 @@ def test_factory_pulls_config_and_on_event_from_active_tracer() -> None:
     """Inside `with AVPTracer(config, on_event=publish):`, the factory
     constructs a TracedClaudeSDKClient that emits events through the
     same `publish` callback. No need to repeat config / on_event."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
     cfg = _basic_config()
@@ -509,7 +511,7 @@ def test_factory_translator_shares_trace_id_with_active_tracer() -> None:
     """Delegated mode: the translator's events MUST carry the AVPTracer's
     trace_id, not a fresh one. Without this, consumers reconstruct two
     disjoint trees instead of one."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
     cfg = _basic_config()
@@ -542,7 +544,7 @@ def test_factory_suppresses_translator_lifecycle_emission() -> None:
     """The translator MUST NOT emit its own agent_started / agent_stopped
     in delegated mode — the outer AVPTracer already did. Two of either
     on the wire under the same trace_id is malformed."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
     out: list = []
@@ -598,7 +600,7 @@ def test_factory_pushes_per_turn_spend_into_parent_tracer_state() -> None:
 
     Pinning this with a scripted run so a future refactor that drops
     the push fails this test before failing `make smoke`."""
-    from avp import AVPTracer
+    from avp.tracer import AVPTracer
     from avp_claude_agent import traced_claude_sdk_client
 
     cfg = _basic_config()

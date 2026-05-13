@@ -12,11 +12,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from avp import Commission
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, ServerToolCall
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import ToolInvokedEvent, ToolReturnedEvent
+from avp.commission import Commission
+from avp.trajectory import ToolInvokedEvent, ToolReturnedEvent
 from avp_anthropic import AnthropicModelDriver
 
 

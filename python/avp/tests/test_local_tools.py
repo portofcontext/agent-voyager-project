@@ -17,12 +17,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from avp import Commission
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, ScriptedToolCall, ToolOutcome
 from avp.agent.local_tools import LocalTools
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import (
+from avp.commission import Commission
+from avp.trajectory import (
     ToolFailedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,

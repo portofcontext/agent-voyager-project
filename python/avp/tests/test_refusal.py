@@ -10,11 +10,12 @@ optional `message`, optional `category`, optional `provider`.
 
 from __future__ import annotations
 
-from avp import Commission, StopReason
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, Refusal
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import (
+from avp.commission import Commission
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStoppedEvent,
     RefusalRecordedEvent,
     TextEmittedEvent,
@@ -160,7 +161,7 @@ def test_no_refusal_field_means_no_refusal_event() -> None:
 def test_refusal_recorded_parented_to_turn_span() -> None:
     """Refusal happened during a model turn — parent_span_id is the
     turn span, not the agent root."""
-    from avp.types import ModelTurnStartedEvent
+    from avp.trajectory import ModelTurnStartedEvent
 
     agent = _agent(ScriptedModel([_refused_response(Refusal(reason="refusal"))]))
     agent.run()

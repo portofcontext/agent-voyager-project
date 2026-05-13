@@ -42,11 +42,11 @@ import type { ModelTurnEndedEvent, AgentStartedData } from "@avp/types/event";
 
 ## Source of truth
 
-- `python/avp/src/avp/types.py` (Pydantic, hand-written)
+- `python/avp/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `typescript/avp/src/*.ts` (generated here, via `json-schema-to-typescript`)
 
-Don't edit `src/{commission,event}.ts` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event}.ts` by hand — they're regenerated. Edit the Python sources upstream.
 
 ## Regenerating
 

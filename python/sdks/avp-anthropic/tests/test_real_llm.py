@@ -30,9 +30,10 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from avp import Commission, write_event
 from avp.agent import AVPAgent, http_resolver_from_env
 from avp.agent.mock import ScriptedTools
+from avp.commission import Commission
+from avp.io import write_event
 from avp_anthropic import AnthropicModelDriver, build_descriptor
 
 SMOKE_MODEL = os.environ.get("AVP_SMOKE_MODEL", "claude-haiku-4-5-20251001")

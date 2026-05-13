@@ -28,13 +28,13 @@ import shutil
 
 import pytest
 
-from avp import (
+from avp.commission import Commission
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     CostRecordedEvent,
     ModelTurnEndedEvent,
-    StopReason,
     TextEmittedEvent,
 )
 from avp_claude_agent.translator import ClaudeAgentTranslator

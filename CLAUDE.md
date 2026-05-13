@@ -88,8 +88,9 @@ When you touch the wire, regenerate the schemas:
 make schemas    # uv --directory python run python ../scripts/generate-schemas.py
 ```
 
-The Pydantic models in `python/avp/src/avp/types.py` are the source of truth;
-the JSON Schema files under `spec/v0.1/` are derived from them.
+The Pydantic models under `python/avp/src/avp/` (`avp.commission`,
+`avp.descriptor`, `avp.trajectory`) are the source of truth; the JSON
+Schema files under `spec/v0.1/` are derived from them.
 
 ## The seams principle
 
@@ -147,9 +148,10 @@ matching conformance case fails the command. Wire it into CI when you have one.
 
 `make check` (format + lint + tests + conformance + bindings drift
 detection) is the **free pre-commit floor**. Run it on every change.
-Drift detection catches the case where `types.py` or schemas changed but
-the generated Rust / TypeScript bindings under `rust/avp/` and
-`typescript/avp/` weren't regenerated.
+Drift detection catches the case where the AVP Pydantic models
+(`avp.commission` / `avp.descriptor` / `avp.trajectory`) or schemas
+changed but the generated Rust / TypeScript bindings under `rust/avp/`
+and `typescript/avp/` weren't regenerated.
 
 `make smoke` is the **paid pre-merge ceiling**. It runs `check`, then the
 Rust + TS bindings test suites (`cargo test` + `npm test` against the
@@ -160,8 +162,8 @@ on Haiku.
 Run `make smoke` whenever you've changed something that could pass unit /
 seam tests but break real-model integration. Concretely, that's any of:
 
-- **Wire format**: `python/avp/src/avp/types.py`, the JSON Schemas, any new
-  event type or Commission field.
+- **Wire format**: `python/avp/src/avp/{commission,descriptor,trajectory}.py`,
+  the JSON Schemas, any new event type or Commission field.
 - **Agent loop**: `python/avp/src/avp/agent/agent.py` (tool/subagent
   dispatch, history shape).
 - **Provider drivers / translators**:

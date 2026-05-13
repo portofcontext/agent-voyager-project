@@ -40,17 +40,17 @@ from avp.agent.drivers import (
     ToolDriver,
     ToolOutcome,
 )
+from avp.commission import Commission
+from avp.descriptor import AgentDescriptor
 from avp.enums import ErrorCode, StopReason
-from avp.types import (
+from avp.trajectory import (
     ZERO_SPAN_ID,
     AgentDescribedData,
     AgentDescribedEvent,
-    AgentDescriptor,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
-    Commission,
     CostRecordedData,
     CostRecordedEvent,
     ErrorOccurredData,

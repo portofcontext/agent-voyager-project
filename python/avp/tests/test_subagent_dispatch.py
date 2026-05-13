@@ -10,13 +10,6 @@ conformance/v0.1/cases/subagent/.
 
 from __future__ import annotations
 
-from avp import (
-    AgentDescriptor,
-    Commission,
-    SubagentInvokedEvent,
-    SubagentRef,
-    SubagentReturnedEvent,
-)
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, ScriptedToolCall
 from avp.agent.mock import (
@@ -24,6 +17,15 @@ from avp.agent.mock import (
     ScriptedResolver,
     ScriptedSupervisor,
     ScriptedTools,
+)
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.descriptor import AgentDescriptor
+from avp.trajectory import (
+    SubagentInvokedEvent,
+    SubagentReturnedEvent,
 )
 
 

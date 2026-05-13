@@ -246,7 +246,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.mcp_server_connected` | `avp://agent` | Connection established to an MCP server (resolved from a `Commission.mcp_servers[].ref`). |
 | `avp.mcp_server_disconnected` | `avp://agent` | Connection to an MCP server closed. |
 
-Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/types.py`).
+Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/trajectory.py`).
 
 ### 7.1 `agent_stopped` convenience aliases
 

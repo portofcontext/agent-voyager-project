@@ -8,11 +8,11 @@ and `avp.reasoning.redacted` for encrypted-only blocks.
 
 from __future__ import annotations
 
-from avp import Commission
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, ReasoningBlock
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import (
+from avp.commission import Commission
+from avp.trajectory import (
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
     ReasoningEmittedEvent,

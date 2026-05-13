@@ -18,16 +18,18 @@ Coverage:
 
 from __future__ import annotations
 
-from avp import (
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.tracer import AVPTracer
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    AVPTracer,
-    Commission,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
     SubagentFailedEvent,
     SubagentInvokedEvent,
-    SubagentRef,
     SubagentReturnedEvent,
     ToolFailedEvent,
     ToolInvokedEvent,
@@ -292,7 +294,7 @@ def test_format_event_covers_lifecycle_events() -> None:
     crashing — so a user passing `print_event` as the on_event sink for
     a real run never sees a traceback. Pin the per-type formatting at
     the same time."""
-    from avp import format_event
+    from avp.tracer import format_event
 
     out: list = []
     with AVPTracer(_cfg_with_subagent(), on_event=out.append) as tracer:
@@ -330,7 +332,7 @@ def test_print_event_writes_to_stdout(capsys) -> None:
     """`print_event(ev)` writes a one-line summary to stdout. Use as
     `on_event=print_event` for examples / debugging without writing
     your own dispatch over event types."""
-    from avp import print_event
+    from avp.tracer import print_event
 
     with AVPTracer(_basic_config(), on_event=print_event) as tracer:
         with tracer.turn() as turn:

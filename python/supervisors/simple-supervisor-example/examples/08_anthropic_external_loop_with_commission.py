@@ -41,9 +41,12 @@ import sys
 
 import anthropic
 
-from avp import Commission, SkillRef, print_event
 from avp.agent.mock import ScriptedResolver
-from avp.tracer import AVPTracer
+from avp.commission import (
+    Commission,
+    SkillRef,
+)
+from avp.tracer import AVPTracer, print_event
 from avp_anthropic import build_anthropic_tools, wrap_anthropic
 
 # Local tool catalog the agent exposes. The Commission's

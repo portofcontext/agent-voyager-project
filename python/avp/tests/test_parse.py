@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from avp import parse_event
-from avp.types import (
+from avp.trajectory import (
     SOURCE_AGENT,
     ZERO_SPAN_ID,
     AgentStartedEvent,
@@ -25,6 +24,7 @@ from avp.types import (
     new_event_id,
     new_span_id,
     new_trace_id,
+    parse_event,
 )
 
 

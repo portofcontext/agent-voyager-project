@@ -24,7 +24,11 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from avp import AVPTracer, Commission, print_event
+from avp.commission import Commission
+from avp.tracer import (
+    AVPTracer,
+    print_event,
+)
 from avp_claude_agent import traced_claude_sdk_client
 
 

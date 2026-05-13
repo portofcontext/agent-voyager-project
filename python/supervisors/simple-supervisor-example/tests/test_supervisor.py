@@ -20,13 +20,13 @@ from simple_supervisor import (
     summarize,
 )
 
-from avp import (
+from avp.commission import Commission
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     CostRecordedEvent,
     ModelTurnEndedEvent,
-    StopReason,
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
@@ -63,7 +63,7 @@ def _make_state(*, cost: float, tokens: int, turns: int) -> dict:
 
 
 def test_summarize_classifies_fact_classes() -> None:
-    from avp.types import (
+    from avp.trajectory import (
         ZERO_SPAN_ID,
         AgentStartedData,
         AgentStoppedData,
@@ -169,7 +169,8 @@ def test_summarize_classifies_fact_classes() -> None:
 
 _INLINE_SCRIPTED_AGENT = """\
 import json, sys
-from avp import Commission, write_event
+from avp.commission import Commission
+from avp.io import write_event
 from avp.agent import AVPAgent
 from avp.agent.mock import ScriptedTools, ScriptedSupervisor, parse_scripted_model
 

@@ -12,11 +12,11 @@ per-call detail for server-side and agent-dispatched tools.
 
 from __future__ import annotations
 
-from avp import Commission
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse, ServerToolCall
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import (
+from avp.commission import Commission
+from avp.trajectory import (
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
     ToolFailedEvent,

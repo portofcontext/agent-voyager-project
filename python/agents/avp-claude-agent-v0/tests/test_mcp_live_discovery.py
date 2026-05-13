@@ -23,8 +23,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from avp import Commission
-from avp.types import McpServerConnectedEvent
+from avp.commission import Commission
+from avp.trajectory import McpServerConnectedEvent
 from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from .test_translator import _FakeHookMatcher, _FakeOptions
@@ -196,7 +196,7 @@ def test_fallback_when_client_has_no_get_mcp_status() -> None:
     the translator falls back to emitting one stub event per
     Commission.mcp_servers entry. Same v0.1 behavior; lifecycle marker
     still on the wire."""
-    from avp import McpServerRef
+    from avp.commission import McpServerRef
 
     class _ClientWithoutStatus:
         pass
@@ -224,7 +224,7 @@ def test_fallback_when_client_has_no_get_mcp_status() -> None:
 def test_fallback_when_get_mcp_status_raises() -> None:
     """If get_mcp_status raises (transport hiccup, version mismatch),
     the translator falls back to stubs rather than crashing the run."""
-    from avp import McpServerRef
+    from avp.commission import McpServerRef
 
     class _Boom:
         async def get_mcp_status(self):

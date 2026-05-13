@@ -32,20 +32,34 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from avp import (
+from avp.agent.drivers import ResolveError
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.descriptor import AgentDescriptor
+from avp.enums import (
+    ErrorCode,
+    Source,
+    StopReason,
+)
+from avp.trajectory import (
     ZERO_SPAN_ID,
     AgentDescribedData,
     AgentDescribedEvent,
-    AgentDescriptor,
     AgentStartedData,
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
-    Commission,
     CostRecordedData,
     CostRecordedEvent,
     ErrorOccurredData,
     ErrorOccurredEvent,
+    ManagedKind,
+    ManagedRefResolvedData,
+    ManagedRefResolvedEvent,
+    ManagedRefResolveFailedData,
+    ManagedRefResolveFailedEvent,
     McpServerConnectedData,
     McpServerConnectedEvent,
     ModelTurnEndedData,
@@ -59,11 +73,8 @@ from avp import (
     RunStateSnapshot,
     SkillLoadedData,
     SkillLoadedEvent,
-    Source,
-    StopReason,
     SubagentInvokedData,
     SubagentInvokedEvent,
-    SubagentRef,
     SubagentReturnedData,
     SubagentReturnedEvent,
     TextEmittedData,
@@ -74,15 +85,6 @@ from avp import (
     ToolReturnedEvent,
     new_span_id,
     new_trace_id,
-)
-from avp.agent.drivers import ResolveError
-from avp.enums import ErrorCode
-from avp.types import (
-    ManagedKind,
-    ManagedRefResolvedData,
-    ManagedRefResolvedEvent,
-    ManagedRefResolveFailedData,
-    ManagedRefResolveFailedEvent,
     now_iso,
 )
 from avp_claude_agent.builtin_tools import (
@@ -116,7 +118,7 @@ _DEFAULT_PRICES_CACHE: dict[str, Any] | None = None
 def _default_prices() -> dict[str, Any]:
     global _DEFAULT_PRICES_CACHE
     if _DEFAULT_PRICES_CACHE is None:
-        from avp import load_default_prices
+        from avp.pricing import load_default_prices
 
         _DEFAULT_PRICES_CACHE = load_default_prices()
     return _DEFAULT_PRICES_CACHE
@@ -140,8 +142,8 @@ def _compute_cost(
     cache_w = int(usage.get("cache_creation_input_tokens", 0) or 0)
     avp_input = input_t + cache_r + cache_w
 
-    from avp import COST_SOURCE_UNKNOWN
-    from avp import compute_cost as _shared_compute
+    from avp.pricing import COST_SOURCE_UNKNOWN
+    from avp.pricing import compute_cost as _shared_compute
 
     cost, source = _shared_compute(
         model,

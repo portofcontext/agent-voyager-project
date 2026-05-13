@@ -22,13 +22,11 @@ from typing import Any
 
 import pytest
 
-from avp import (
-    Commission,
-    event_to_wire,
-)
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse
 from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
+from avp.commission import Commission
+from avp.trajectory import event_to_wire
 
 _HAS_CLOUDEVENTS = importlib.util.find_spec("cloudevents") is not None
 

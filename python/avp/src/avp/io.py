@@ -9,7 +9,7 @@ from typing import IO, Any
 
 from pydantic import BaseModel
 
-from avp.types import parse_event
+from avp.trajectory import parse_event
 
 
 def write_event(event: BaseModel | dict[str, Any], file: IO | None = None) -> None:

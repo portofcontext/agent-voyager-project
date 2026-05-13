@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from avp import AgentDescriptor
+from avp.descriptor import AgentDescriptor
 from avp_claude_agent.translator import (
     CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
     CLAUDE_CODE_PRESET_TOOLS,

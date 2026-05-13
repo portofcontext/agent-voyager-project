@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from avp.types import AgentStoppedData, RunStateSnapshot, StopReason
+from avp.enums import StopReason
+from avp.trajectory import AgentStoppedData, RunStateSnapshot
 
 
 def _span_kwargs() -> dict:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from avp import AgentDescriptor
+from avp.descriptor import AgentDescriptor
 from avp_anthropic.driver import ANTHROPIC_HOSTED_TOOL_KINDS
 
 # Capabilities the avp-anthropic driver brings regardless of which agent

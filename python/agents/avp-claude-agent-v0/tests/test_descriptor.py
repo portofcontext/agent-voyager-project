@@ -21,7 +21,11 @@ from typing import Any
 
 import pytest
 
-from avp import AgentDescribedEvent, Commission, RunRequestedEvent
+from avp.commission import Commission
+from avp.trajectory import (
+    AgentDescribedEvent,
+    RunRequestedEvent,
+)
 from avp_claude_agent import (
     CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
     CLAUDE_CODE_PRESET_TOOLS,

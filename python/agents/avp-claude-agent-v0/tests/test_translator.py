@@ -17,14 +17,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from avp import (
+from avp.commission import Commission
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     CostRecordedEvent,
     ModelTurnEndedEvent,
     ModelTurnStartedEvent,
-    StopReason,
     TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,

@@ -16,8 +16,9 @@ from avp.agent.mock import (
     ScriptedTools,
     parse_scripted_model,
 )
+from avp.commission import Commission
 from avp.conformance.matcher import matches_partial
-from avp.types import AgentDescriptor, Commission
+from avp.descriptor import AgentDescriptor
 
 # ── Result types ──────────────────────────────────────────────────────────────
 

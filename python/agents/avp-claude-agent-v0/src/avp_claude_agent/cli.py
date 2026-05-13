@@ -15,7 +15,8 @@ import argparse
 import json
 import sys
 
-from avp import Commission, write_event
+from avp.commission import Commission
+from avp.io import write_event
 from avp_claude_agent.descriptor import descriptor as build_descriptor
 from avp_claude_agent.translator import ClaudeAgentTranslator
 

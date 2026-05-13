@@ -23,7 +23,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from avp import Commission, parse_event
+from avp.commission import Commission
+from avp.trajectory import parse_event
 
 
 def run_subprocess(

@@ -29,11 +29,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from avp import (
-    AgentStartedEvent,
+from avp.commission import (
     Commission,
-    SubagentInvokedEvent,
     SubagentRef,
+)
+from avp.trajectory import (
+    AgentStartedEvent,
+    SubagentInvokedEvent,
     SubagentReturnedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,

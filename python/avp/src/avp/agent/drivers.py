@@ -20,7 +20,7 @@ from pydantic import BaseModel, JsonValue
 
 if TYPE_CHECKING:
     from avp.enums import ErrorCode, StopReason
-    from avp.types import ManagedKind, RunStateSnapshot
+    from avp.trajectory import ManagedKind, RunStateSnapshot
 
 # ── Model driver ──────────────────────────────────────────────────────────────
 

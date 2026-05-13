@@ -30,11 +30,11 @@ Use `avp::commission`, `avp::trajectory`, and `avp::agent_descriptor` for the he
 
 ## Source of truth
 
-- `python/avp/src/avp/types.py` (Pydantic, hand-written)
+- `python/avp/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
   → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
   → `rust/avp/src/*.rs` (generated here, via `cargo-typify`)
 
-Don't edit `src/{commission,event}.rs` by hand — they're regenerated. Edit `types.py` upstream.
+Don't edit `src/{commission,event}.rs` by hand — they're regenerated. Edit the Python sources upstream.
 
 ## Regenerating
 

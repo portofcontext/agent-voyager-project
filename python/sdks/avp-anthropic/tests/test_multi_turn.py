@@ -16,19 +16,19 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from avp import (
+from avp.agent import AVPAgent
+from avp.agent.drivers import ToolDriver, ToolOutcome
+from avp.agent.mock import ScriptedSupervisor
+from avp.commission import Commission
+from avp.enums import StopReason
+from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    Commission,
     ModelTurnEndedEvent,
-    StopReason,
     TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
-from avp.agent import AVPAgent
-from avp.agent.drivers import ToolDriver, ToolOutcome
-from avp.agent.mock import ScriptedSupervisor
 from avp_anthropic import AnthropicModelDriver
 
 # ── Mock infrastructure ───────────────────────────────────────────────────────

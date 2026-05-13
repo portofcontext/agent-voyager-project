@@ -9,18 +9,18 @@ provenance of `avp.cost_usd` — `computed`, `reported`, or `unknown`.
 
 from __future__ import annotations
 
-from avp import (
+from avp.agent.agent import AVPAgent
+from avp.agent.drivers import ModelResponse
+from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
+from avp.commission import Commission
+from avp.pricing import (
     COST_SOURCE_COMPUTED,
     COST_SOURCE_UNKNOWN,
-    Commission,
     ModelPrice,
     compute_cost,
     load_default_prices,
 )
-from avp.agent.agent import AVPAgent
-from avp.agent.drivers import ModelResponse
-from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.types import ModelTurnEndedEvent
+from avp.trajectory import ModelTurnEndedEvent
 
 # ── Default table loads from JSON ──────────────────────────────────────────
 

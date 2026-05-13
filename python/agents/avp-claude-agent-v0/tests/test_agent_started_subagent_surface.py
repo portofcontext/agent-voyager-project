@@ -16,8 +16,11 @@ Commission semantics (v0.1 refs-only):
 
 from __future__ import annotations
 
-from avp import Commission, SubagentRef
-from avp.types import AgentStartedEvent
+from avp.commission import (
+    Commission,
+    SubagentRef,
+)
+from avp.trajectory import AgentStartedEvent
 from avp_claude_agent.translator import (
     _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
     ClaudeAgentTranslator,
@@ -128,7 +131,7 @@ def test_skills_pass_through_name_when_resolution_carries_no_description() -> No
     """If the resolver returned material with no `description`,
     `agent_started.data.skills[].description` stays None — the wire field
     is optional and we don't fabricate."""
-    from avp import SkillRef
+    from avp.commission import SkillRef
 
     cfg = Commission(
         schema_version="0.1",
@@ -152,7 +155,7 @@ def test_skills_surface_description_from_resolved_material() -> None:
     """When the resolver returns SKILL.md frontmatter alongside content,
     the description flows onto `agent_started.data.skills[].description`
     so consumers don't have to cross-reference an external resolver."""
-    from avp import SkillRef
+    from avp.commission import SkillRef
 
     cfg = Commission(
         schema_version="0.1",

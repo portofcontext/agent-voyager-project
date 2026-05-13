@@ -17,7 +17,7 @@ from avp.agent.drivers import (
     ToolOutcome,
 )
 from avp.enums import StopReason
-from avp.types import ManagedKind, RunStateSnapshot
+from avp.trajectory import ManagedKind, RunStateSnapshot
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 

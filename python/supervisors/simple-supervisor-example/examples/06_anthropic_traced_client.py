@@ -21,7 +21,8 @@ import sys
 
 import anthropic
 
-from avp import Commission, print_event
+from avp.commission import Commission
+from avp.tracer import print_event
 from avp_anthropic import AnthropicTracedClient
 
 

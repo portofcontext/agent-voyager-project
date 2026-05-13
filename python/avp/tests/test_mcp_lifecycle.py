@@ -11,7 +11,6 @@ plumbed in.
 
 from __future__ import annotations
 
-from avp import AgentDescriptor, Commission, McpServerRef
 from avp.agent.agent import AVPAgent
 from avp.agent.drivers import ModelResponse
 from avp.agent.mock import (
@@ -20,7 +19,12 @@ from avp.agent.mock import (
     ScriptedSupervisor,
     ScriptedTools,
 )
-from avp.types import McpServerConnectedEvent, McpServerDisconnectedEvent
+from avp.commission import (
+    Commission,
+    McpServerRef,
+)
+from avp.descriptor import AgentDescriptor
+from avp.trajectory import McpServerConnectedEvent, McpServerDisconnectedEvent
 
 
 def _trivial_model() -> ScriptedModel:
