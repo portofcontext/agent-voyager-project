@@ -103,7 +103,7 @@ def test_simple_text_response_completes_successfully() -> None:
 def test_token_and_cost_accounting_monotonic_across_turns() -> None:
     """Translators over cumulative-usage SDKs MUST derive per-turn deltas
     correctly so consecutive cost_recorded events report monotonic totals
-    (`spec/v0.1/trajectory.md` §3.3)."""
+    (`spec/trajectory/v0.1/trajectory.md` §3.3)."""
     translator, captured = _new_translator(
         prompt="Reply with 'ok'.",
         run_id="claude-agent-smoke-monotonic",
@@ -125,7 +125,7 @@ def test_token_and_cost_accounting_monotonic_across_turns() -> None:
 
 def test_text_emitted_carries_assistant_content() -> None:
     """When Claude produces text, the translator MUST emit text_emitted
-    with the verbatim content under data["avp.text"] (spec/v0.1/trajectory.md §7)."""
+    with the verbatim content under data["avp.text"] (spec/trajectory/v0.1/trajectory.md §7)."""
     translator, captured = _new_translator(
         prompt="Reply with exactly the word 'hello' and nothing else.",
         run_id="claude-agent-smoke-text-content",

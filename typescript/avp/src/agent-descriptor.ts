@@ -32,9 +32,9 @@ export type AvpSource = string | null;
 export type Capabilities = string[] | null;
 
 /**
- * The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md.
+ * The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/agent-descriptor/v0.1/agent-descriptor.md.
  */
-export interface AVPV01AgentDescriptor {
+export interface AVPAgentDescriptor {
   agent_name: AgentName;
   agent_version: AgentVersion;
   avp_spec_version: AvpSpecVersion;
@@ -48,7 +48,7 @@ export interface AVPV01AgentDescriptor {
 /**
  * Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields.
  *
- * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
+ * This interface was referenced by `AVPAgentDescriptor`'s JSON-Schema
  * via the `definition` "_ToolDecl".
  */
 export interface _ToolDecl {
@@ -70,7 +70,7 @@ export interface _ToolDecl {
  * the agent has authoritative knowledge of the name but not the prose
  * description. Honest-null beats authored-prose-that-drifts.
  *
- * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
+ * This interface was referenced by `AVPAgentDescriptor`'s JSON-Schema
  * via the `definition` "_SubagentDecl".
  */
 export interface _SubagentDecl {
@@ -95,7 +95,7 @@ export interface _SubagentDecl {
  * the name (Commission-declared without enrichment) still emit valid
  * decls.
  *
- * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
+ * This interface was referenced by `AVPAgentDescriptor`'s JSON-Schema
  * via the `definition` "_SkillDecl".
  */
 export interface _SkillDecl {

@@ -10,8 +10,8 @@ on:
     paths:
       - "SKILL.md"
       - "examples/**"
-      - "spec/v0.1/**"
-      - "conformance/v0.1/**"
+      - "spec/**"
+      - "conformance/**"
       - "python/avp/**"
       - "scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"

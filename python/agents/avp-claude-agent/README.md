@@ -70,7 +70,7 @@ echo '<config json>' | avp-claude-agent
 
 ## SDK options pass-through (`extra_sdk_options`)
 
-`ClaudeAgentTranslator` accepts an `extra_sdk_options: dict[str, Any]` kwarg that's merged into `ClaudeAgentOptions` before the SDK starts. This is the escape hatch for SDK-specific concerns AVP intentionally doesn't put on the wire (per [`spec/v0.1/README.md` §6](../../../spec/v0.1/README.md): deployment-layer config is out of scope for the wire format).
+`ClaudeAgentTranslator` accepts an `extra_sdk_options: dict[str, Any]` kwarg that's merged into `ClaudeAgentOptions` before the SDK starts. This is the escape hatch for SDK-specific concerns AVP intentionally doesn't put on the wire (per [`spec/README.md` §6](../../../spec/README.md): deployment-layer config is out of scope for the wire format).
 
 The most common knobs:
 
@@ -112,7 +112,7 @@ SDK-side cumulative-counter resets gracefully (see
 `_on_baseline_reset_hook`). In practice we observe additional cumulative
 drops that fire neither hook — usually within a single "turn" between
 multiple AssistantMessages. The translator handles these correctly per
-[`spec/v0.1/trajectory.md` §3.3](../../../spec/v0.1/trajectory.md#33-cost--token-accounting-rules-normative): emits `error_occurred` with `code: "accounting_reset"` and
+[`spec/trajectory/v0.1/trajectory.md` §3.3](../../../spec/trajectory/v0.1/trajectory.md#33-cost--token-accounting-rules-normative): emits `error_occurred` with `code: "accounting_reset"` and
 adopts the new cumulative as a fresh baseline so subsequent deltas are
 still computable.
 

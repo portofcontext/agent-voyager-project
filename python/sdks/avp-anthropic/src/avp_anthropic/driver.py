@@ -807,7 +807,7 @@ def build_anthropic_mcp_servers_from_resolved(
     API `mcp_servers` parameter.
 
     The resolver returns whatever connection material the supervisor
-    chose to ship (per spec/v0.1/resolver.md §3 — a permissive shape in v0.1). For the
+    chose to ship (per spec/resolver/v0.1-beta/resolver.md §3 — a permissive shape in v0.1). For the
     Anthropic API connector we need at minimum `transport` and `url`;
     optional `auth.token` becomes the `Authorization: Bearer <token>`
     header the connector ships.

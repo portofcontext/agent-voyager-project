@@ -6,7 +6,7 @@ Subcommands:
     avp-conformance check-coverage                    — every event type has ≥1 case
 
 Each subcommand discovers paths from a workspace root by walking up from the
-CWD looking for `conformance/v0.1/`. Override with explicit flags.
+CWD looking for `conformance/`. Override with explicit flags.
 """
 
 from __future__ import annotations
@@ -25,26 +25,44 @@ from avp.conformance.validate import validate_suite
 def _find_workspace_root(start: Path | None = None) -> Path | None:
     """Walk up from `start` (default CWD) looking for the conformance dir.
 
-    Returns the first ancestor that contains `conformance/v0.1/`, or None.
+    Returns the first ancestor that contains `conformance/HARNESS.md`, or None.
     """
     cur = (start or Path.cwd()).resolve()
     while True:
-        if (cur / "conformance" / "v0.1").is_dir():
+        if (cur / "conformance" / "HARNESS.md").is_file():
             return cur
         if cur.parent == cur:
             return None
         cur = cur.parent
 
 
-def _default_paths() -> tuple[Path | None, Path | None, Path | None]:
-    """Resolve (suite_dir, schema_path, test_case_schema_path) from CWD walk-up."""
+# Per-spec schema file locations (relative to repo root). Updated when a
+# spec version bumps; the CLI walks these paths to load all schemas.
+SPEC_SCHEMA_PATHS: dict[str, tuple[str, str]] = {
+    "trajectory": ("trajectory", "v0.1"),
+    "agent-descriptor": ("agent-descriptor", "v0.1"),
+    "commission": ("commission", "v0.1-beta"),
+    # resolver has no schema file; it's an RPC protocol.
+}
+
+
+def _spec_schema_files(root: Path) -> list[Path]:
+    """Resolve each entry in SPEC_SCHEMA_PATHS to an absolute schema path."""
+    return [
+        root / "spec" / spec / version / f"{spec}.schema.json"
+        for spec, (spec, version) in SPEC_SCHEMA_PATHS.items()
+    ]
+
+
+def _default_paths() -> tuple[Path | None, list[Path], Path | None]:
+    """Resolve (cases_root, spec_schema_files, test_case_schema_path)."""
     root = _find_workspace_root()
     if root is None:
-        return None, None, None
+        return None, [], None
     return (
-        root / "conformance" / "v0.1" / "cases",
-        root / "spec" / "v0.1" / "avp.schema.json",
-        root / "conformance" / "v0.1" / "schema" / "test-case.schema.json",
+        root / "conformance",
+        _spec_schema_files(root),
+        root / "conformance" / "schema" / "test-case.schema.json",
     )
 
 
@@ -54,7 +72,7 @@ def _resolve_suite(arg: Path | None, default: Path | None) -> Path:
     if default is not None:
         return default
     print(
-        "error: could not find conformance/v0.1/ from CWD; pass --suite explicitly",
+        "error: could not find conformance/ from CWD; pass --suite explicitly",
         file=sys.stderr,
     )
     raise SystemExit(2)
@@ -97,23 +115,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
-    default_suite, _, default_test_case_schema = _default_paths()
-    root = _find_workspace_root()
-    spec_dir = (
-        args.spec_dir if args.spec_dir is not None else (root / "spec" / "v0.1" if root else None)
-    )
+    default_suite, default_schema_files, default_test_case_schema = _default_paths()
     test_case_schema = args.test_case_schema or default_test_case_schema
     suite = _resolve_suite(args.suite, default_suite)
+    schema_files = [Path(p) for p in args.schema_file] if args.schema_file else default_schema_files
 
-    if spec_dir is None or test_case_schema is None:
+    if test_case_schema is None or not schema_files:
         print(
-            "error: could not find spec/v0.1/ or conformance/v0.1/schema/; pass --spec-dir + --test-case-schema",
+            "error: could not locate spec schemas or conformance/schema/test-case.schema.json; "
+            "pass --schema-file + --test-case-schema",
             file=sys.stderr,
         )
         return 2
 
     cases, failures = validate_suite(
-        suite_dir=suite, spec_dir=spec_dir, test_case_schema_path=test_case_schema
+        suite_dir=suite,
+        spec_schema_files=schema_files,
+        test_case_schema_path=test_case_schema,
     )
     if not cases:
         print(f"no cases found under {suite}", file=sys.stderr)
@@ -121,7 +139,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
     failed_paths = {f.path for f in failures}
     for path in cases:
-        rel = path.relative_to(suite.parent)
+        rel = path.relative_to(suite)
         if path in failed_paths:
             print(f"FAIL  {rel}")
             for f in failures:
@@ -140,18 +158,26 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_check_coverage(args: argparse.Namespace) -> int:
-    default_suite, default_schema, _ = _default_paths()
-    schema = args.schema or default_schema
+    default_suite, default_schema_files, _ = _default_paths()
     suite = _resolve_suite(args.suite, default_suite)
 
-    if schema is None:
+    if args.schema:
+        trajectory_schema = args.schema
+    else:
+        # Coverage uses the Trajectory schema specifically (event types live there).
+        trajectory_schema = next(
+            (p for p in default_schema_files if p.name == "trajectory.schema.json"), None
+        )
+
+    if trajectory_schema is None:
         print(
-            "error: could not find spec/v0.1/avp.schema.json; pass --schema explicitly",
+            "error: could not find spec/trajectory/<version>/trajectory.schema.json; "
+            "pass --schema explicitly",
             file=sys.stderr,
         )
         return 2
 
-    report = check_coverage(schema_path=schema, cases_dir=suite)
+    report = check_coverage(schema_path=trajectory_schema, cases_dir=suite)
 
     if report.ok:
         msg = f"✓ {len(report.declared - set(report.deferred))} of {len(report.declared)} event types covered"
@@ -167,9 +193,9 @@ def _cmd_check_coverage(args: argparse.Namespace) -> int:
     for name in sorted(report.uncovered):
         print(f"    - {name}", file=sys.stderr)
     print(
-        "\nadd a case under conformance/v0.1/cases/ that asserts on the missing type(s),\n"
-        "or add to DEFERRED_COVERAGE in avp.conformance.coverage with a reason if no\n"
-        "v0.1 agent emits it.",
+        "\nadd a case under conformance/<spec>/<version>/cases/ that asserts on the missing\n"
+        "type(s), or add to DEFERRED_COVERAGE in avp.conformance.coverage with a reason if\n"
+        "no v0.1 agent emits it.",
         file=sys.stderr,
     )
     return 1
@@ -181,7 +207,7 @@ def _cmd_check_coverage(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="avp-conformance",
-        description="AVP v0.1 wire-level conformance: run cases, validate them, check coverage.",
+        description="AVP wire-level conformance: run cases, validate them, check coverage.",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -195,21 +221,26 @@ def main(argv: list[str] | None = None) -> int:
     p_val = sub.add_parser("validate", help="schema-validate every case file")
     p_val.add_argument("--suite", type=Path, help="directory of *.json cases (recursive)")
     p_val.add_argument(
-        "--spec-dir", type=Path, help="path to spec/v0.1/ (auto-discovered by default)"
+        "--schema-file",
+        action="append",
+        help="schema file to register in the validation registry (repeatable; "
+        "auto-discovered from spec/<spec>/<version>/<spec>.schema.json by default)",
     )
     p_val.add_argument(
         "--test-case-schema",
         type=Path,
-        help="path to conformance/v0.1/schema/test-case.schema.json",
+        help="path to conformance/schema/test-case.schema.json",
     )
     p_val.set_defaults(func=_cmd_validate)
 
     p_cov = sub.add_parser(
         "check-coverage",
-        help="every event type declared in the schema has ≥1 conformance case asserting on it",
+        help="every event type declared in the trajectory schema has ≥1 conformance case",
     )
     p_cov.add_argument("--suite", type=Path, help="directory of *.json cases (recursive)")
-    p_cov.add_argument("--schema", type=Path, help="path to spec/v0.1/avp.schema.json")
+    p_cov.add_argument(
+        "--schema", type=Path, help="path to trajectory.schema.json (auto-discovered by default)"
+    )
     p_cov.set_defaults(func=_cmd_check_coverage)
 
     args = parser.parse_args(argv)

@@ -23,7 +23,7 @@ AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace.
 
 See `FOUNDATIONS.md` for the full mapping rationale and the four specs
-under `spec/v0.1/` (trajectory, commission, agent-descriptor, resolver) for
+under `spec/` (trajectory, commission, agent-descriptor, resolver) for
 normative requirements.
 """
 
@@ -139,7 +139,7 @@ class McpServerRef(BaseModel):
     `{kind: "mcp_server", id, ref}`. The resolver returns the connection
     material (transport, URL, auth, etc.) the agent uses to dial the actual
     MCP server. Per-`kind` result schemas are pinned in the Resolver API
-    spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
+    spec (`spec/resolver/v0.1-beta/resolver.md` §3.2). Auth and transport are deployment
     concerns; AVP does not constrain them.
     """
 
@@ -229,7 +229,7 @@ class Commission(BaseModel):
     """Supervisor's declaration of the supervisor-managed environment slice.
 
     All asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs
-    resolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).
+    resolved by the AVP Resolver API at startup (see `spec/resolver/v0.1-beta/resolver.md`).
     The
     supervisor never embeds connection material, file paths, or inline
     asset definitions on the wire; those land in `run_requested.data`
@@ -522,7 +522,7 @@ class AgentStoppedData(_SpanData):
                     f"agent_stopped.{alias}={top!r} disagrees with "
                     f"avp.state.{alias.removeprefix('avp.')}={snap!r}; "
                     "the top-level field MUST equal the snapshot field "
-                    "(see spec/v0.1/trajectory.md §7.1). Either populate from the snapshot or "
+                    "(see spec/trajectory/v0.1/trajectory.md §7.1). Either populate from the snapshot or "
                     "leave the top-level None."
                 )
         return self
@@ -831,7 +831,7 @@ class ManagedRefResolveFailedData(_SpanData):
     """The resolver returned an error or could not be reached for one of
     the Commission's managed-asset refs. The agent MUST stop with
     `agent_stopped(reason: "error")` after emitting this event. Startup
-    resolution is fail-fast (see `spec/v0.1/resolver.md` §5)."""
+    resolution is fail-fast (see `spec/resolver/v0.1-beta/resolver.md` §5)."""
 
     avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
     avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
@@ -1077,7 +1077,7 @@ def parse_event(payload: dict[str, Any]) -> BaseModel | dict[str, Any]:
     """Parse an agent-emitted event payload.
 
     Known types validate against their Pydantic model. Unknown types pass
-    through as a dict (per spec/v0.1/README.md §4: consumers MUST pass through unknown
+    through as a dict (per spec/README.md §4: consumers MUST pass through unknown
     types without error), provided they carry the CloudEvents-required
     envelope fields.
     """

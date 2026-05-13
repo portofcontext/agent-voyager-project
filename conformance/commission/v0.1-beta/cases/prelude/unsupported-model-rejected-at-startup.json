@@ -1,0 +1,93 @@
+{
+  "id": "unsupported-model-rejected-at-startup",
+  "title": "Commission.model not matching descriptor.supported_models is rejected pre-loop with error_occurred(unsupported_model)",
+  "description": "When the agent's Descriptor declares supported_models (a list of glob patterns) and Commission.model does not match any of them, the agent MUST detect the mismatch at startup, emit avp.error_occurred with code='unsupported_model', and stop with avp.reason='error' before any model turn runs. Catches the avp-claude-agent-with-gpt-4 case cleanly at the wire boundary instead of letting the driver fail later.",
+  "spec_refs": [
+    "spec/trajectory/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/trajectory/v0.1/trajectory.schema.json#/$defs/AgentDescriptor"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "agent_descriptor": {
+    "agent_name": "avp-test-agent",
+    "agent_version": "9.9.9",
+    "avp_spec_version": "0.1",
+    "supported_models": [
+      "claude-*"
+    ],
+    "built_in_tools": [
+      {
+        "name": "bash",
+        "avp.dispatch_target": "local"
+      }
+    ],
+    "capabilities": [
+      "mcp"
+    ]
+  },
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "unsupported-model-rejected",
+    "model": "gpt-4",
+    "supervisor": {
+      "name": "test-supervisor"
+    }
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 1,
+      "tokens_output": 1,
+      "cost_usd": 0.0,
+      "duration_ms": 1,
+      "text": "should not run",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "avp.agent_described"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_started"
+        }
+      },
+      {
+        "label": "error_occurred carries unsupported_model code",
+        "match": {
+          "type": "avp.error_occurred",
+          "data": {
+            "avp.error.code": "unsupported_model"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "error"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no model turn runs when supported_models rejects the commission",
+        "match": {
+          "type": "avp.model_turn_started"
+        }
+      },
+      {
+        "label": "no tool is invoked when supported_models rejects the commission",
+        "match": {
+          "type": "avp.tool_invoked"
+        }
+      }
+    ]
+  }
+}

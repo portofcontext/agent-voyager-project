@@ -1,0 +1,79 @@
+{
+  "id": "managed-assets-without-resolver-stops-at-startup",
+  "title": "Commission with managed assets but no ResolverDriver wired fails-fast with resolver_not_configured",
+  "description": "v0.1-conforming agents are expected to honor managed assets when given a wired resolver. When AVP_RESOLVER_URL is unset (or, equivalently, no ResolverDriver was supplied to AVPAgent) and the Commission carries managed assets, the agent MUST emit error_occurred(resolver_not_configured) and agent_stopped(reason=error) before any model turn. The case sets `omit_resolver: true` so the harness skips wiring the in-process ScriptedResolver.",
+  "spec_refs": [
+    "spec/resolver/v0.1-beta/resolver.md#2-bootstrap"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "no-resolver-wired",
+    "model": "test/mock",
+    "mcp_servers": [
+      {
+        "id": "github",
+        "ref": "sk_test_gh"
+      }
+    ]
+  },
+  "agent_descriptor": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1"
+  },
+  "omit_resolver": true,
+  "scripted_model": [
+    {
+      "tokens_input": 5,
+      "tokens_output": 1,
+      "cost_usd": 0.0,
+      "duration_ms": 1,
+      "text": "should not run",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "avp.error_occurred",
+          "data": {
+            "avp.error.code": "resolver_not_configured"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "error"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no model turn runs when no resolver is wired",
+        "match": {
+          "type": "avp.model_turn_started"
+        }
+      },
+      {
+        "label": "no managed_ref_resolved fires without a resolver",
+        "match": {
+          "type": "avp.managed_ref_resolved"
+        }
+      },
+      {
+        "label": "no mcp_server_connected fires without resolution",
+        "match": {
+          "type": "avp.mcp_server_connected"
+        }
+      }
+    ]
+  }
+}

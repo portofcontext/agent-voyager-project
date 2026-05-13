@@ -2,7 +2,7 @@
 
 Scoped re-exports of the Commission surface (`Commission` itself,
 managed-asset refs, supervisor preamble). This module mirrors the
-[Commission spec](../../../../spec/v0.1/commission.md).
+[Commission spec](../../../../spec/commission/v0.1-beta/commission.md).
 
 Consumers wanting only the run-config object can:
 

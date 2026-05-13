@@ -1,7 +1,7 @@
 """Tests for managed MCP support in avp-anthropic.
 
 `Commission.mcp_servers[]` carries opaque refs; the AVP resolver protocol
-(spec/v0.1/resolver.md) returns connection material; `AnthropicModelDriver.set_resolved_assets`
+(spec/resolver/v0.1-beta/resolver.md) returns connection material; `AnthropicModelDriver.set_resolved_assets`
 translates the material into the Anthropic API's `mcp_servers` connector
 parameter for subsequent `messages.create(...)` calls.
 

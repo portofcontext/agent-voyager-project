@@ -1,7 +1,7 @@
 """Tests for managed MCP support in avp-claude-agent.
 
 The translator dereferences `Commission.mcp_servers[]` refs via the AVP
-resolver protocol (spec/v0.1/resolver.md) before the SDK runs. Resolved connection
+resolver protocol (spec/resolver/v0.1-beta/resolver.md) before the SDK runs. Resolved connection
 material lands on the Claude Agent SDK's `mcp_servers` parameter; the SDK
 owns the connection lifecycle, tools/list discovery, and tools/call
 dispatch from there. AVP records the AVP-side wire events

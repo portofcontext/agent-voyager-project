@@ -1,6 +1,6 @@
 """Surface the two classes of trajectory facts.
 
-`spec/v0.1/trajectory.md` §1 splits trajectory events into two semantically
+`spec/trajectory/v0.1/trajectory.md` §1 splits trajectory events into two semantically
 distinct kinds in v0.1:
 
   1. What the agent did    — model_turn_*, tool_invoked/returned/failed, text_emitted

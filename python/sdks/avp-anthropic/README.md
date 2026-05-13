@@ -85,7 +85,7 @@ The driver also parses extended-thinking blocks (`reasoning_emitted`), refusal-f
 
 ## SDK options pass-through
 
-`AnthropicModelDriver` accepts two escape-hatch dicts for SDK-specific concerns AVP intentionally doesn't put on the wire (per [`spec/v0.1/README.md` §6](../../../spec/v0.1/README.md) deployment scope):
+`AnthropicModelDriver` accepts two escape-hatch dicts for SDK-specific concerns AVP intentionally doesn't put on the wire (per [`spec/README.md` §6](../../../spec/README.md) deployment scope):
 
 ```python
 driver = AnthropicModelDriver(
@@ -132,8 +132,8 @@ ANTHROPIC_API_KEY="$(cat ~/.anthropic-key)" \
   (cd python/sdks/avp-anthropic && uv run pytest -m real_llm)
 ```
 
-The mock-client tests assert wire-format correctness: what AVP events the driver emits given specific Anthropic responses. The real-LLM smoke tests assert end-to-end integration against actual Claude responses, including cost/token accounting and cache-token math (per [`spec/v0.1/trajectory.md` §3.3](../../../spec/v0.1/trajectory.md#33-cost--token-accounting-rules-normative)). They use `claude-haiku-4-5-20251001` (cheapest current model).
+The mock-client tests assert wire-format correctness: what AVP events the driver emits given specific Anthropic responses. The real-LLM smoke tests assert end-to-end integration against actual Claude responses, including cost/token accounting and cache-token math (per [`spec/trajectory/v0.1/trajectory.md` §3.3](../../../spec/trajectory/v0.1/trajectory.md#33-cost--token-accounting-rules-normative)). They use `claude-haiku-4-5-20251001` (cheapest current model).
 
 CLI-level smoke tests for the reference agent live in [`python/supervisors/simple-supervisor-example/tests/test_reference_agent.py`](../../supervisors/simple-supervisor-example/tests/test_reference_agent.py): describe, invalid-Commission handling, tool round-trips, NDJSON envelope shape.
 
-The conformance suite at [`conformance/v0.1/`](../../../conformance/v0.1/) tests AVP wire-level behavior using the [`avp` package's reference agent](../../avp/), not this adapter; passing it does not automatically certify an agent built on `avp-anthropic`.
+The conformance suite at [`conformance/`](../../../conformance/) tests AVP wire-level behavior using the [`avp` package's reference agent](../../avp/), not this adapter; passing it does not automatically certify an agent built on `avp-anthropic`.

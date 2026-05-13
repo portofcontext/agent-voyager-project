@@ -6,18 +6,25 @@
 ## What AVP is
 
 AVP = **Agent Voyager Project**, an open-source collection of specs for the
-agent-execution case:
+agent-execution case, rolling out in two stages.
 
-- **AVP Trajectory** (`spec/v0.1/trajectory.md`): event stream
-- **AVP Commission** (`spec/v0.1/commission.md`): run-config object
-- **AVP Agent Descriptor** (`spec/v0.1/agent-descriptor.md`): agent self-description
-- **AVP Resolver API** (`spec/v0.1/resolver.md`): JSON-RPC for ref dereferencing
+**Stage 1: standardize the agent journey** (Stable):
 
-The three data-shape specs (Trajectory/Commission/Agent Descriptor) compose
-independently; the Resolver API is the only thing that's actually a
-protocol (wire-level request/response). Each spec carries its own RFC
-2119 keywords and conformance criteria for its layer; an
-implementation may adopt one or all.
+- **AVP Trajectory** (`spec/trajectory/v0.1/trajectory.md`): the event stream every agent emits as it runs
+- **AVP Agent Descriptor** (`spec/agent-descriptor/v0.1/agent-descriptor.md`): what the agent advertises about itself
+
+**Stage 2: standardize how we pack the ships** (Beta):
+
+- **AVP Commission** (`spec/commission/v0.1-beta/commission.md`): the run-config a supervisor hands the agent at startup
+- **AVP Resolver API** (`spec/resolver/v0.1-beta/resolver.md`): the JSON-RPC channel the agent uses to dereference Commission refs at runtime
+
+Each spec is implementable independently. Stable specs maintain
+backward compatibility within their major version; Beta specs (`-beta`
+suffix) can take breaking changes before promotion while deployment
+patterns settle.
+Most production runs adopt both stages; trajectory-only adoption is
+first-class supported. Each spec carries its own RFC 2119 keywords and
+conformance criteria.
 
 ## Agents vs SDK adapters
 
@@ -27,7 +34,7 @@ right one when picking where new code lives; the contracts differ.
 **Agent.** Owns the agent loop. Reads a Commission from input, emits the
 trajectory, advertises an Agent Descriptor, dispatches tools, calls the
 resolver for managed assets, and produces `agent_stopped` with a stop
-reason. An agent IS what `spec/v0.1/` certifies as conforming. Examples
+reason. An agent IS what `spec/` certifies as conforming. Examples
 in this repo: `avp-claude-agent` (built on the Claude Agent SDK, which
 already owns a loop), and the reference agent at
 `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`
@@ -89,29 +96,14 @@ make schemas    # uv --directory python run python ../scripts/generate-schemas.p
 ```
 
 The Pydantic models in `python/avp/src/avp/types.py` are the source of truth;
-the JSON Schema files under `spec/v0.1/` are derived from them.
-
-## The seams principle
-
-**When you add a feature, add a test that crosses at least one seam.**
-
-The seams in this repo:
-
-- CLI ↔ agent: stdin parses Commission, agent runs, stdout streams events
-- agent ↔ driver across multiple turns: history accumulates; the driver
-  re-translates it on every turn
-- translator ↔ SDK: the SDK reports state (cumulative usage, message
-  classes); the translator must derive AVP wire shape from it
-- supervisor ↔ agent subprocess: Commission piped in, NDJSON piped out, RPC
-  replies on stdin
-- agent ↔ workspace: tool inputs resolve against the agent's CWD
+the JSON Schema files under `spec/` are derived from them.
 
 ## Test layers and where to add tests
 
 | Layer | Location | Catches |
 |---|---|---|
-| **JSON Schema** | `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json` | Wire shape: every `Event`, `Commission`, and `AgentDescriptor` field |
-| **Conformance** | `conformance/v0.1/cases/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against the reference agent with `ScriptedModel` |
+| **JSON Schema** | `spec/{trajectory,commission,agent-descriptor}.schema.json` | Wire shape: every `Event`, `Commission`, and `AgentDescriptor` field |
+| **Conformance** | `conformance/cases/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against the reference agent with `ScriptedModel` |
 | **Unit** | `python/<pkg>/tests/test_*.py` | Single-component behavior with seams mocked |
 | **Seam** | `tests/test_cli_smoke.py`, `tests/test_multi_turn.py`, translator-state tests | Cross-component bugs that unit tests can't see |
 | **Real-LLM** | `tests/test_real_llm.py` (gated `-m real_llm` + `ANTHROPIC_API_KEY`) | End-to-end correctness against actual model responses |
@@ -180,53 +172,3 @@ observable wire impact, or test-only changes. When in doubt, run it.
 The real-LLM tests have caught silent bugs that no mock could surface
 (model-side flakiness, SDK-version drift, cost-calculation arithmetic
 that compiled fine but undercounted by 30%).
-
-## Things you should not do
-
-- Do NOT add prose docs that duplicate the specs under `spec/v0.1/`. Two
-  sources of truth drift. Either update the relevant spec
-  (`trajectory.md` / `commission.md` / `agent-descriptor.md` / `resolver.md`) or
-  update `README.md`'s explanation; not both with the same content.
-- Do NOT update test counts in any markdown doc. They will go stale within
-  a week. The conformance harness CLI prints the live count.
-- Do NOT skip the seam-test step "because the unit tests pass." The
-  unit tests passed when each of the bugs we shipped was a bug.
-- Do NOT append assistant turns to history without their `tool_calls`
-  entries. The next model call will fail validation. (`agent.py` enforces
-  this; if you reorganize the loop, preserve it.)
-- Do NOT use em dashes in prose. Use commas, periods, semicolons, colons,
-  or parentheses instead.
-
-## What's intentionally out of scope
-
-- Supervisor↔agent transport. AVP defines the JSON shape of Commission and trajectory events; how bytes move (stdio, HTTP, message bus, in-process) is a deployment concern. The reference implementations bind to stdio; everything else is up to the implementer.
-- Multi-run orchestration (supervisor framework concern)
-- Persistence (events live in memory per run)
-
-## Project shape
-
-- `spec/v0.1/`: the four normative specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
-- `conformance/v0.1/cases/`: language-agnostic test cases.
-- `python/avp/`: wire types (Pydantic), reference agent (`AVPAgent`),
-  reference tracer (`AVPTracer` in `avp.tracer` for instrumenting an existing
-  loop), conformance harness, and cross-validation interop tests (gated on the
-  `[interop]` extras group).
-- `python/sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API:
-  `AnthropicModelDriver` (plugs into `AVPAgent` as a `ModelDriver`),
-  `AnthropicTracedClient` + `wrap_anthropic` (drop-in over an existing
-  Anthropic SDK loop), and Commission-to-API translators. No agent loop or
-  built-in tools: the API itself ships neither, and agents wrap the SDK.
-- `python/agents/avp-claude-agent/`: observer-pattern agent over Claude Agent SDK,
-  plus `TracedClaudeSDKClient` and `traced_claude_sdk_client` (drop-in over an
-  existing `ClaudeSDKClient` loop). The Claude Agent SDK ships its own loop +
-  tools, so this is a complete agent rather than an adapter.
-- `python/supervisors/simple-supervisor-example/`: worked supervisor example
-  plus runnable real-LLM examples (`examples/01_*` through `examples/07_*`)
-  and `examples/_anthropic_reference_agent.py`: a reference agent built on
-  the `avp-anthropic` SDK adapter, demonstrating how to wire a `ModelDriver`
-  to `AVPAgent` with a local `ToolDriver` (`ShellTools`).
-- `scripts/`: `generate-schemas.py`, `build-skill.sh`.
-- `Makefile`: `make help` lists all targets; `make smoke` is the pre-merge
-  full-matrix sanity check (see above).
-- `FOUNDATIONS.md`: what AVP is built on (CloudEvents, OTel GenAI, OTel spans,
-  JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes.

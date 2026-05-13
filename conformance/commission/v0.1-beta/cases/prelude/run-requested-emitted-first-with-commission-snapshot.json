@@ -1,0 +1,79 @@
+{
+  "id": "run-requested-emitted-first-with-commission-snapshot",
+  "title": "run_requested opens the trajectory, carries supervisor identity + full Commission snapshot",
+  "description": "The trajectory MUST open with a agent-relayed run_requested event tagged source=avp://supervisor. Its data carries avp.supervisor.name (from Commission.supervisor.name), the optional avp.supervisor.version, and avp.config \u2014 a faithful snapshot of the Commission the supervisor handed in. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone.",
+  "spec_refs": [
+    "spec/trajectory/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/trajectory/v0.1/trajectory.schema.json#/$defs/RunRequestedEvent"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "agent_descriptor": {
+    "agent_name": "avp-test-agent",
+    "agent_version": "0.0.1",
+    "avp_spec_version": "0.1",
+    "capabilities": [
+      "mcp"
+    ]
+  },
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "prelude-run-requested",
+    "model": "test/mock",
+    "supervisor": {
+      "name": "simple-supervisor-example",
+      "version": "1.2.3"
+    }
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 5,
+      "cost_usd": 0.001,
+      "duration_ms": 1,
+      "text": "done",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "events": [
+      {
+        "label": "run_requested is the very first event",
+        "match": {
+          "type": "avp.run_requested",
+          "source": "avp://supervisor",
+          "subject": "prelude-run-requested",
+          "data": {
+            "parent_span_id": "0000000000000000",
+            "avp.supervisor.name": "simple-supervisor-example",
+            "avp.supervisor.version": "1.2.3",
+            "avp.commission": {
+              "schema_version": "0.1",
+              "run_id": "prelude-run-requested",
+              "model": "test/mock",
+              "supervisor": {
+                "name": "simple-supervisor-example",
+                "version": "1.2.3"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_described comes second",
+        "match": {
+          "type": "avp.agent_described",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "agent_started comes third (post-merge view, unchanged role)",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent"
+        }
+      }
+    ]
+  }
+}

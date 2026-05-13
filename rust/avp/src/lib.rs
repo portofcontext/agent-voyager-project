@@ -1,7 +1,7 @@
 //! AVP — Agent Voyager Project v0.1 wire types.
 //!
 //! Types in this crate are generated from the canonical JSON Schemas under
-//! `spec/v0.1/` of the AVP repo. The Pydantic models in `python/avp/` are the
+//! `spec/` of the AVP repo. The Pydantic models in `python/avp/` are the
 //! source of truth; the JSON Schemas are derived from them; these Rust types
 //! are derived from the schemas. Single chain, no hand-maintained drift.
 //!

@@ -6,89 +6,54 @@
   <h1>Agent Voyager Project (AVP)</h1>
 </div>
 
-> **Status:** Draft v0.1
+> **(Stable, v0.1):** AVP Trajectory · AVP Agent Descriptor
+> **(Beta, v0.1-beta):** AVP Commission · AVP Resolver API
 
-AVP is an open standard for AI agents and the systems that run them. The supervisor sends a job, the agent runs it, and the agent reports back. Both sides know what to expect because both sides speak AVP.
+Build an AI agent today and the framework decides what its trajectory looks like: Anthropic emits one shape of telemetry, OpenAI another, your custom loop a third. Audit pipelines and orchestration platforms that watch agents end up writing one adapter per framework.
 
-<div align="center">
-<pre>
-≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
+AVP is an open standard for the wire those tools read. Agents that speak it emit a uniform event stream (model calls, tool uses, costs, errors), so an observer reads the same shape across every agent. AVP also defines how supervisors trigger and provision agents, keeping secrets and connection material off the wire.
 
-   I.   SUPERVISOR  ═════ Commission ══════▶  AGENT
-        what to do · which model · what's available
+We're rolling it out in two stages.
 
-  II.   AGENT  ◀═══ avp.resolve(ref) ═══▶  SUPERVISOR
-        MCP connections · skill content · subagent commissions
+**Stage 1: standardize the journey.** Stable at v0.1. The [Trajectory Spec](spec/trajectory/v0.1/trajectory.md) defines the event stream every agent emits as it runs. The [Agent Descriptor Spec](spec/agent-descriptor/v0.1/agent-descriptor.md) defines what an agent advertises about itself. Together they make any agent observable the same way, regardless of which SDK or model it runs on.
 
- III.   AGENT  ═════ Trajectory ══════▶  SUPERVISOR
-        every model + tool call · usage · outcome
+**Stage 2: standardize how we pack the ships.** Beta at v0.1-beta. The [Commission Spec](spec/commission/v0.1-beta/commission.md) defines the run-config a supervisor hands an agent at startup. The [Resolver API](spec/resolver/v0.1-beta/resolver.md) defines the JSON-RPC channel the agent uses to dereference Commission refs at runtime. Together they describe a portable protocol for supervisor-driven runs: secrets and MCP connection material stay in the supervisor's resolver service, the agent dereferences refs at startup, and every round-trip is recorded on the trajectory.
 
-≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
-</pre>
-</div>
+### todo image from website
 
-A typical run looks like this. A supervisor (the system) sends a small JSON document called a **Commission** to an agent. The Commission says what to do, which model to use, and what outside resources are available. The agent runs the work and sends back a **trajectory**, which is a stream of events that records every model call, every tool use, what the run cost, and how it ended. Both sides know exactly what to expect because both sides speak AVP.
+AVP does not invent new wire formats when good ones already exist. It reuses [CloudEvents](https://cloudevents.io/) for event envelopes, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [JSON-RPC](https://www.jsonrpc.org/specification) for the resolver, [MCP](https://modelcontextprotocol.io/) for tool dispatch, and [Agent Skills](https://agentskills.io/specification) for skill files. The work AVP does on top is small and focused. See [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping and where related work (such as Harbor's ATIF format) fits.
 
-AVP picks a shared vocabulary so any agent can plug into any platform that speaks it. It does not invent new wire formats when good ones already exist. AVP reuses [CloudEvents](https://cloudevents.io/) for the event envelope, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [JSON-RPC](https://www.jsonrpc.org/specification) for the resource lookup service, [MCP](https://modelcontextprotocol.io/) for tools, and [Agent Skills](https://agentskills.io/specification) for skill files. The work AVP does on top is small and focused. Read [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping and where related work (such as Harbor's ATIF format) fits.
-
-AVP is built and maintained by the [Port of Context](https://github.com/portofcontext) team and is licensed under MIT.
+AVP is built and maintained by the [Port of Context](https://github.com/portofcontext).
 
 ---
 
+## The four specs
+
+| Spec | Stage | Status | What it covers |
+|---|---|---|---|
+| [**AVP Trajectory**](spec/trajectory/v0.1/trajectory.md) | Agent journey | **Stable v0.1** | The stream of events an agent emits as it runs: lifecycle, model turns, tool calls, costs, errors. |
+| [**AVP Agent Descriptor**](spec/agent-descriptor/v0.1/agent-descriptor.md) | Agent journey | **Stable v0.1** | What an agent advertises about itself before a run begins: identity, supported models, built-in tools / skills / subagents. |
+| [**AVP Commission**](spec/commission/v0.1-beta/commission.md) | Packing the ships | **Beta v0.1-beta** | The run-config a supervisor sends to an agent at startup. Refs only, no inline material, no secrets. |
+| [**AVP Resolver API**](spec/resolver/v0.1-beta/resolver.md) | Packing the ships | **Beta v0.1-beta** | The JSON-RPC protocol an agent calls to dereference Commission refs at runtime. |
+
 ## To start using AVP
 
-If you want to run an AI agent that emits AVP events out of the box, install the reference agent built on the Claude Agent SDK:
-
-- [`avp-claude-agent`](python/agents/avp-claude-agent/) wraps the Claude Agent SDK, which ships its own loop and tools.
-
-If you want to build your own agent on top of the raw Anthropic Messages API, install the SDK adapter and copy the reference agent from the examples:
-
-- [`avp-anthropic`](python/sdks/avp-anthropic/) is the SDK adapter: a `ModelDriver`, a `TracedClient`, and Commission-to-API translators. The Anthropic API ships no loop or tools, so this package doesn't either; agents wrap it.
-- The reference agent at [`python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`](python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py) wires `avp-anthropic` to `AVPAgent` plus a local `ShellTools`. Examples 01 and 05 spawn it.
-
-If you want to consume an AVP trajectory from another language, install the typed bindings. They are generated from the same JSON Schemas the Python types come from, so they cannot drift:
+quickstart here
 
 - Python: [`python/avp/`](python/avp/)
 - Rust: [`rust/avp/`](rust/avp/)
 - TypeScript: [`typescript/avp/`](typescript/avp/)
 
-For a complete walk through that builds a Commission, runs an agent, and prints the trajectory, see [`python/supervisors/simple-supervisor-example/`](python/supervisors/simple-supervisor-example/). The example suite is the fastest way to see AVP end to end.
 
-## To start developing AVP
-
-The repo is a multi-language workspace. The Python side uses [uv](https://github.com/astral-sh/uv) with its workspace root at [`python/`](python/); Rust and TypeScript packages each have their own `Cargo.toml` / `package.json`. Run everything from the repo root:
-
-```bash
-git clone https://github.com/portofcontext/agent-voyager-project
-cd agent-voyager-project
-make sync           # `uv --directory python sync` under the hood
-make check
-```
-
-`make help` lists every target. `make check` runs the free checks (format, lint, tests, conformance, bindings drift detection). `make smoke` runs the full matrix against real Anthropic models and costs about $0.10 to $0.20 per run.
-
-See [CLAUDE.md](CLAUDE.md) for the contributor checklist. See [`proposals/`](proposals/) for the AVP-RFC process if you want to propose a change to the spec.
-
-## What AVP defines
-
-AVP is split into four specs. Each one can be adopted on its own. Most consumers use them together, but the choice is yours.
-
-| Sub-spec | What it covers |
-|---|---|
-| [AVP Trajectory](spec/v0.1/trajectory.md) | The stream of events an agent emits as it runs. |
-| [AVP Commission](spec/v0.1/commission.md) | The run configuration the supervisor sends to the agent at startup. |
-| [AVP Agent Descriptor](spec/v0.1/agent-descriptor.md) | What an agent advertises about itself before a run begins. |
-| [AVP Resolver API](spec/v0.1/resolver.md) | The JSON-RPC service the agent calls to look up the resources the Commission referenced. |
-
-Three of these are data-shape specs. They describe a JSON document and nothing more. The Resolver API is the only one that defines a two party wire protocol. The umbrella [`spec/v0.1/README.md`](spec/v0.1/README.md) indexes all four and the shared concerns (transport, versioning, deployment scope).
+## Proposals
+See [`proposals/`](proposals/) for the AVP-RFC process if you want to propose a change to a spec. Stage 1 specs require backward-compatible changes within v1 and a deprecation period for removals; Stage 2 specs can take breaking changes within v0.
 
 ## Where to learn more
 
-- [FOUNDATIONS.md](FOUNDATIONS.md) covers the upstream specs AVP builds on and what AVP adds on top.
-- [PATTERNS.md](PATTERNS.md) is the integration guide: the shapes an application can take to wire onto AVP, with composition sketches and links to worked examples.
-- [`spec/v0.1/`](spec/v0.1/) is the normative specification, organized by spec.
-- [`conformance/v0.1/`](conformance/v0.1/) is the language agnostic test suite every conforming implementation MUST pass.
-- [SKILL.md](SKILL.md) is a skill file for AI assistants working inside this repo.
+- [FOUNDATIONS.md](FOUNDATIONS.md): the specs each stage builds on (CloudEvents and OTel for the agent journey; JSON-RPC, MCP, and Agent Skills for packing the ships).
+- [PATTERNS.md](PATTERNS.md): integration patterns.
+- [`spec/`](spec/): the normative specifications.
+- [`conformance/`](conformance/): the language-agnostic test suite every conforming implementation MUST pass.
 
 ## Support
 

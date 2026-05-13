@@ -2,7 +2,7 @@
 
 Scoped re-export of `AgentDescriptor` (the agent's self-description
 shape). This module mirrors the
-[Agent Descriptor spec](../../../../spec/v0.1/agent-descriptor.md).
+[Agent Descriptor spec](../../../../spec/agent-descriptor/v0.1/agent-descriptor.md).
 
 Consumers wanting only the agent-self-description surface can:
 

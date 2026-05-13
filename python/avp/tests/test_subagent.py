@@ -2,7 +2,7 @@
 
 The subagent wire lifecycle (subagent_invoked / subagent_returned with
 avp.subagent.run_id, frame-span pairing, usage rollup) is exercised end-to-end
-by the conformance suite under conformance/v0.1/cases/subagent/. This file
+by the conformance suite under conformance/cases/subagent/. This file
 covers shape validation that doesn't need the full agent loop.
 """
 

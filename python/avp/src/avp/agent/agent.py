@@ -3,7 +3,7 @@
 The agent runs inside the supervisor's declared environment. The Commission
 carries supervisor-managed asset refs (mcp_servers, skills, subagents). The
 agent dereferences each ref at startup via the AVP Resolver API
-(see `spec/v0.1/resolver.md`) before the main loop runs; managed subagents
+(see `spec/resolver/v0.1-beta/resolver.md`) before the main loop runs; managed subagents
 spawn on-demand via `avp.spawn_subagent` when the model invokes them.
 
 Each emitted event is a CloudEvent 1.0 envelope carrying typed `data`. Span
@@ -279,7 +279,7 @@ class AVPAgent:
 
         # Resolve managed refs. Each successful resolution emits
         # `managed_ref_resolved`; any failure emits `managed_ref_resolve_failed`
-        # and short-circuits with reason=error per spec/v0.1/resolver.md §5.
+        # and short-circuits with reason=error per spec/resolver/v0.1-beta/resolver.md §5.
         if not self._resolve_managed_assets():
             return self._emit_agent_stopped(StopReason.error)
 
@@ -316,7 +316,7 @@ class AVPAgent:
 
     def _validate_resolver_present(self) -> bool:
         """If the Commission carries managed assets but no ResolverDriver was
-        supplied, fail-fast with `resolver_not_configured` (spec/v0.1/resolver.md §2).
+        supplied, fail-fast with `resolver_not_configured` (spec/resolver/v0.1-beta/resolver.md §2).
 
         Production agents construct an HTTP-backed driver from
         `AVP_RESOLVER_URL` before calling AVPAgent; the agent itself only
@@ -330,7 +330,7 @@ class AVPAgent:
             (
                 "Commission carries managed assets but no ResolverDriver was "
                 "supplied to AVPAgent (and AVP_RESOLVER_URL was not bootstrapped). "
-                "Configure a resolver service per `spec/v0.1/resolver.md` §2."
+                "Configure a resolver service per `spec/resolver/v0.1-beta/resolver.md` §2."
             ),
         )
         return False
@@ -347,7 +347,7 @@ class AVPAgent:
 
         Tool-name collisions across distinct resolved MCP servers are an
         agent-runtime concern (the MCP client layer namespaces them) and
-        not enforced here. See `spec/v0.1/trajectory.md` §4.1."""
+        not enforced here. See `spec/trajectory/v0.1/trajectory.md` §4.1."""
         commission = self.commission
         builtin_tool_names = {bt["name"] for bt in self._agent_builtin_tools}
         if self._descriptor is not None:

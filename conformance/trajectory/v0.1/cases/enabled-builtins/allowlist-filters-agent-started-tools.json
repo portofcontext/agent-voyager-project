@@ -1,0 +1,110 @@
+{
+  "id": "allowlist-filters-agent-started-tools",
+  "title": "Commission.enabled_builtin_tools filters agent_started.data.tools to the listed subset",
+  "description": "visibility layer. When Commission.enabled_builtin_tools is set, agent_started.data.tools[] MUST list only the named built-ins. Built-ins the agent ships but the supervisor didn't allow MUST be omitted (the model literally doesn't see them).",
+  "spec_refs": [
+    "spec/commission/v0.1-beta/commission.md#4-built-in-surface-allowlists"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "allowlist-visibility",
+    "model": "test/mock",
+    "enabled_builtin_tools": [
+      "Read",
+      "Glob"
+    ]
+  },
+  "agent_descriptor": {
+    "agent_name": "test-agent",
+    "agent_version": "0.0.0",
+    "avp_spec_version": "0.1",
+    "built_in_tools": [
+      {
+        "name": "Read"
+      },
+      {
+        "name": "Glob"
+      },
+      {
+        "name": "Bash"
+      },
+      {
+        "name": "WebFetch"
+      }
+    ]
+  },
+  "agent_builtin_tools": [
+    {
+      "name": "Read",
+      "description": "Read a file.",
+      "input_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "Glob",
+      "description": "Glob.",
+      "input_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "Bash",
+      "description": "Run shell.",
+      "input_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "name": "WebFetch",
+      "description": "Fetch a URL.",
+      "input_schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "scripted_model": [
+    {
+      "tokens_input": 5,
+      "tokens_output": 1,
+      "cost_usd": 0.0,
+      "duration_ms": 1,
+      "text": "ok",
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started.tools shows only allow-listed built-ins, in declaration order",
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "tools": [
+              {
+                "name": "Read",
+                "avp.dispatch_target": "local"
+              },
+              {
+                "name": "Glob",
+                "avp.dispatch_target": "local"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ]
+  }
+}

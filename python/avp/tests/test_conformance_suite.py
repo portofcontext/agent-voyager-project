@@ -1,7 +1,7 @@
-"""Run every conformance case in spec/v0.1/conformance/cases/ as a pytest test.
+"""Run every conformance case under conformance/ as a pytest test.
 
-This is the primary correctness gate. The package is AVP v0.1-correct iff every
-case in this suite passes."""
+This is the primary correctness gate. The package is wire-correct iff every
+case in the per-spec suites passes."""
 
 from __future__ import annotations
 
@@ -11,19 +11,19 @@ import pytest
 
 from avp.conformance.harness import run_case
 
-CASES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "conformance" / "v0.1" / "cases"
+CONFORMANCE_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "conformance"
 
 
 def _all_case_paths() -> list[Path]:
-    if not CASES_DIR.exists():
-        pytest.skip(f"cases dir missing: {CASES_DIR}")
-    return sorted(CASES_DIR.rglob("*.json"))
+    if not CONFORMANCE_ROOT.exists():
+        pytest.skip(f"conformance dir missing: {CONFORMANCE_ROOT}")
+    return sorted(p for p in CONFORMANCE_ROOT.rglob("*.json") if "cases" in p.parts)
 
 
 @pytest.mark.parametrize(
     "case_path",
     _all_case_paths(),
-    ids=lambda p: p.relative_to(CASES_DIR).as_posix(),
+    ids=lambda p: p.relative_to(CONFORMANCE_ROOT).as_posix(),
 )
 def test_conformance_case(case_path: Path) -> None:
     result = run_case(case_path)

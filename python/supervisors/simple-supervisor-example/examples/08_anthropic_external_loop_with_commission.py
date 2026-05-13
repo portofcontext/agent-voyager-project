@@ -108,7 +108,7 @@ def main() -> int:
     # ── Resolver: in-process stand-in for a real supervisor service ───────────
     # In production, this is `HttpResolver(url=..., token=...)` or
     # `http_resolver_from_env()`. The shape returned per resolution matches
-    # `spec/v0.1/resolver.md` §3.
+    # `spec/resolver/v0.1-beta/resolver.md` §3.
     resolver = ScriptedResolver(
         resolutions={
             "skill:arithmetic-style": {

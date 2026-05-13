@@ -8,10 +8,10 @@ description: |
 
 AVP is an open standard for the agent-execution case, defined by four specs that compose independently:
 
-- **Commission** ([`spec/v0.1/commission.md`](spec/v0.1/commission.md)): what the supervisor sends the agent at startup (model, prompt, allowlists, opaque refs to managed assets).
-- **Agent Descriptor** ([`spec/v0.1/agent-descriptor.md`](spec/v0.1/agent-descriptor.md)): what the agent advertises about itself before a run begins.
-- **Trajectory** ([`spec/v0.1/trajectory.md`](spec/v0.1/trajectory.md)): the stream of source-tagged events the agent emits as it runs.
-- **Resolver API** ([`spec/v0.1/resolver.md`](spec/v0.1/resolver.md)): the JSON-RPC service the agent dials at startup to dereference managed-asset refs. The one runtime crossing of the supervisor↔agent boundary; agent-initiated, scoped to startup (`avp.resolve`) plus on-demand managed-subagent dispatch (`avp.spawn_subagent`).
+- **Commission** ([`spec/commission/v0.1-beta/commission.md`](spec/commission/v0.1-beta/commission.md)): what the supervisor sends the agent at startup (model, prompt, allowlists, opaque refs to managed assets).
+- **Agent Descriptor** ([`spec/agent-descriptor/v0.1/agent-descriptor.md`](spec/agent-descriptor/v0.1/agent-descriptor.md)): what the agent advertises about itself before a run begins.
+- **Trajectory** ([`spec/trajectory/v0.1/trajectory.md`](spec/trajectory/v0.1/trajectory.md)): the stream of source-tagged events the agent emits as it runs.
+- **Resolver API** ([`spec/resolver/v0.1-beta/resolver.md`](spec/resolver/v0.1-beta/resolver.md)): the JSON-RPC service the agent dials at startup to dereference managed-asset refs. The one runtime crossing of the supervisor↔agent boundary; agent-initiated, scoped to startup (`avp.resolve`) plus on-demand managed-subagent dispatch (`avp.spawn_subagent`).
 
 The shape of one run: supervisor sends a Commission; agent reads it, dials the resolver for any managed-asset refs, runs, emits the trajectory. **No supervisor → agent push channel.** Once the Commission is sent, the supervisor only observes.
 
@@ -35,10 +35,10 @@ The vocabulary below is the ubiquitous language of AVP. Every doc, type, and eve
 
 - **Run**: one execution of an agent against one Commission. Has a `run_id`. Opens with `run_requested` → `agent_described` → `agent_started`. Closes with `agent_stopped`.
 - **Trajectory**: the ordered sequence of events emitted during a run. The source of truth: a non-technical reviewer reads it top-to-bottom to reconstruct what happened.
-- **Event**: one CloudEvents 1.0 envelope. 22 types in v0.1, all past-tense facts (`tool_invoked`, `model_turn_ended`, `managed_ref_resolved`, `agent_stopped`, …) under the `avp.*` namespace. See [`spec/v0.1/trajectory.md`](spec/v0.1/trajectory.md) §7 for the full catalog.
+- **Event**: one CloudEvents 1.0 envelope. 22 types in v0.1, all past-tense facts (`tool_invoked`, `model_turn_ended`, `managed_ref_resolved`, `agent_stopped`, …) under the `avp.*` namespace. See [`spec/trajectory/v0.1/trajectory.md`](spec/trajectory/v0.1/trajectory.md) §7 for the full catalog.
 - **Turn**: one `model_turn_started` / `model_turn_ended` pair where the model produced new output. The unit of model invocation accounting.
 
-**Resolver API** (see [`spec/v0.1/resolver.md`](spec/v0.1/resolver.md))
+**Resolver API** (see [`spec/resolver/v0.1-beta/resolver.md`](spec/resolver/v0.1-beta/resolver.md))
 
 - **Ref**: an opaque JSON value the supervisor put in `Commission.{mcp_servers,skills,subagents}[].ref`. AVP doesn't constrain its shape: string, object, hash, ARN, whatever the supervisor's resolver understands.
 - **Resolver service**: supervisor-stood-up JSON-RPC endpoint. The agent reads its location from `AVP_RESOLVER_URL` and calls `avp.resolve` (startup, once per ref) and `avp.spawn_subagent` (on-demand, when the model invokes a managed subagent).
@@ -60,7 +60,7 @@ The vocabulary below is the ubiquitous language of AVP. Every doc, type, and eve
 
 The protocol cares about wire shape, not packaging. But this repo packages two distinct things on top of the wire, and that distinction matters when you're answering "where does new code go" or "what does this package do":
 
-- **Agent**: owns the agent loop, reads a Commission, emits the trajectory, advertises an Agent Descriptor, dispatches tools, calls the resolver. An agent is what `spec/v0.1/` certifies as conforming. Examples: `python/agents/avp-claude-agent/` (a complete agent built on the Claude Agent SDK, which already ships a loop), and the reference agent at `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
+- **Agent**: owns the agent loop, reads a Commission, emits the trajectory, advertises an Agent Descriptor, dispatches tools, calls the resolver. An agent is what `spec/` certifies as conforming. Examples: `python/agents/avp-claude-agent/` (a complete agent built on the Claude Agent SDK, which already ships a loop), and the reference agent at `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
 - **SDK adapter**: translates one raw API / client surface to AVP. Ships a `ModelDriver` (turn-by-turn translation that plugs into `AVPAgent`), a `TracedClient` (drop-in observability over an existing SDK loop), and Commission-to-API translators. Ships NO agent loop and NO built-in tools, because the upstream API doesn't have them. Agents wrap the adapter. Example: `python/sdks/avp-anthropic/` for the Anthropic Messages API.
 
 Rule of thumb: if the upstream SDK ships its own agent loop and tools, package the integration as a complete agent under `python/agents/`. If the upstream is a raw HTTP client, package it as an SDK adapter under `python/sdks/` and let a separate agent (in examples or a downstream package) wrap it.
@@ -96,7 +96,7 @@ The reference is `python/agents/avp-claude-agent/src/avp_claude_agent/translator
 2. Translate resolved material into the SDK's setup parameters (e.g. Claude Agent SDK's `mcp_servers` / `agents`).
 3. Subscribe to the SDK's lifecycle (turn-start, turn-end, tool-use, tool-result, completion).
 4. Translate each lifecycle event into the corresponding AVP event using `avp.types.*` Pydantic models.
-5. Maintain a local `RunStateSnapshot` for cost/token accounting per `spec/v0.1/trajectory.md` §3.3.
+5. Maintain a local `RunStateSnapshot` for cost/token accounting per `spec/trajectory/v0.1/trajectory.md` §3.3.
 
 See `python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py` (audited Claude Code session) and `07_claude_agent_traced_client.py` (drop-in instrumentation over an existing `ClaudeSDKClient`).
 
@@ -119,7 +119,7 @@ The pattern: build a `Commission` (`avp.types.Commission`) with the supervisor p
 | What it produces | `output_schema` | JSON schema. |
 | What it runs | `prompt`, `system_prompt`, `model` | Standard agent-plane fields. |
 
-See `spec/v0.1/examples/commission.json` for a wire-format equivalent and `python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py` for managed subagents.
+See `spec/examples/commission.json` for a wire-format equivalent and `python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py` for managed subagents.
 
 ## Two classes of trajectory facts
 
@@ -134,7 +134,7 @@ Whatever you build, the trajectory carries two distinct kinds of facts. Surface 
 
 The agent's workspace is the **agent's current working directory**. Tool inputs containing relative paths resolve there. The supervisor's deployment layer (whatever stages the agent: git checkout, container, tmpdir) is responsible for making referenced files exist in that directory before the run starts.
 
-Workspace provisioning, secret injection, resolver hosting, agent placement, and OS-level sandboxing are all **outside AVP's scope**. See [`spec/v0.1/README.md`](spec/v0.1/README.md) §6 (deployment scope). AVP defines the wire, not the deployment topology. If a user asks about any of these and treats AVP as the answer, redirect them to the deployment layer instead.
+Workspace provisioning, secret injection, resolver hosting, agent placement, and OS-level sandboxing are all **outside AVP's scope**. See [`spec/README.md`](spec/README.md) §6 (deployment scope). AVP defines the wire, not the deployment topology. If a user asks about any of these and treats AVP as the answer, redirect them to the deployment layer instead.
 
 ## What the supervisor is NOT allowed to do
 
@@ -145,14 +145,14 @@ Common temptations to push back on:
 
 ## When in doubt, read these (in this order)
 
-1. `spec/v0.1/README.md`: umbrella entry point indexing the four specs (trajectory, commission, agent-descriptor, resolver) plus shared concerns (foundations, transports, deployment scope, versioning).
+1. `spec/README.md`: umbrella entry point indexing the four specs (trajectory, commission, agent-descriptor, resolver) plus shared concerns (foundations, transports, deployment scope, versioning).
 2. The relevant spec for your question:
-   - **Event stream / loop / cost rules / event catalog** → `spec/v0.1/trajectory.md`
-   - **Run-config / allowlists / refs-only assets** → `spec/v0.1/commission.md`
-   - **Agent self-description / capabilities** → `spec/v0.1/agent-descriptor.md`
-   - **JSON-RPC methods, bootstrap, error handling** → `spec/v0.1/resolver.md`
-3. `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape. `spec/v0.1/avp.schema.json` is the bundled `oneOf`.
-4. `conformance/v0.1/cases/`: executable test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
+   - **Event stream / loop / cost rules / event catalog** → `spec/trajectory/v0.1/trajectory.md`
+   - **Run-config / allowlists / refs-only assets** → `spec/commission/v0.1-beta/commission.md`
+   - **Agent self-description / capabilities** → `spec/agent-descriptor/v0.1/agent-descriptor.md`
+   - **JSON-RPC methods, bootstrap, error handling** → `spec/resolver/v0.1-beta/resolver.md`
+3. `spec/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape. `spec/avp.schema.json` is the bundled `oneOf`.
+4. `conformance/cases/`: executable test cases that pin down behavior. Read these as worked examples of "what's the right answer when...".
 5. `python/avp/src/avp/types.py`: Pydantic models that mirror the schemas. Authoritative Python surface. Scoped re-exports: `avp.trajectory`, `avp.commission`, `avp.descriptor`, `avp.resolver`.
 6. `python/avp/src/avp/agent/agent.py`: the canonical agent loop in working code.
 7. `python/sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API. Ships a `ModelDriver`, a `TracedClient`, and Commission-to-API translators; the agent loop and tool catalog live in agents that wrap it. See `python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` for a reference agent built on top.
@@ -162,7 +162,7 @@ Common temptations to push back on:
 
 1. Identify which of Tasks A / B / C they're asking about (or which combination).
 2. Read the closest match in `python/supervisors/simple-supervisor-example/examples/` (numbered 01–07, narrative format) first to ground yourself in current shape.
-3. Cross-reference with the specs: [`resolver.md`](spec/v0.1/resolver.md) (Resolver API), [`commission.md`](spec/v0.1/commission.md) §4 (built-in allowlists), [`trajectory.md`](spec/v0.1/trajectory.md) §3 (the loop) and §4 (tool dispatch).
-4. For runtime correctness questions, the conformance cases under `conformance/v0.1/cases/` are precedent. Find the case that matches the situation.
+3. Cross-reference with the specs: [`resolver.md`](spec/resolver/v0.1-beta/resolver.md) (Resolver API), [`commission.md`](spec/commission/v0.1-beta/commission.md) §4 (built-in allowlists), [`trajectory.md`](spec/trajectory/v0.1/trajectory.md) §3 (the loop) and §4 (tool dispatch).
+4. For runtime correctness questions, the conformance cases under `conformance/cases/` are precedent. Find the case that matches the situation.
 5. Generate code that imports from `avp.types`, `avp.agent`, `avp.io`. Do NOT inline-redefine the wire types.
 6. If asked about a behavior the spec doesn't cover, say so explicitly and propose a path that doesn't violate any of the existing conformance cases.

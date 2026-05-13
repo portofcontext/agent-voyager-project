@@ -69,7 +69,7 @@ def test_known_event_type_returns_pydantic_model() -> None:
 
 
 def test_unknown_event_type_passes_through_as_dict() -> None:
-    """spec/v0.1/README.md §4: custom event types MUST pass through. Implementations
+    """spec/README.md §4: custom event types MUST pass through. Implementations
     SHOULD use reverse-DNS types like 'com.example.something' to avoid
     future conflicts with `avp.*`. Consumers MUST NOT raise on unknown types."""
     payload = _envelope(

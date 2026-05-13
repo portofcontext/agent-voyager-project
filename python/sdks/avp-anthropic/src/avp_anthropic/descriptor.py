@@ -11,7 +11,7 @@ knows how to parse, the `thinking` capability the driver emits as
 Use it from your agent's `describe` entry point and from the
 `agent_described` event your agent emits between `run_requested` and
 `agent_started`. Both surfaces MUST agree per
-`spec/v0.1/agent-descriptor.md` so pre-flight introspection matches the
+`spec/agent-descriptor/v0.1/agent-descriptor.md` so pre-flight introspection matches the
 on-wire trajectory.
 """
 
@@ -50,7 +50,7 @@ def build_descriptor(
     `agent_builtin_tools` when constructing `AVPAgent`). Pass MCP-shaped
     entries (`name`, `description`, `inputSchema`) plus the AVP
     extension `avp.dispatch_target` per
-    `spec/v0.1/agent-descriptor.md` §4. Either `inputSchema` (camelCase)
+    `spec/agent-descriptor/v0.1/agent-descriptor.md` §4. Either `inputSchema` (camelCase)
     or `input_schema` (Anthropic API form) is accepted at the boundary.
 
     `include_hosted_tools` (default True) appends the Anthropic API's

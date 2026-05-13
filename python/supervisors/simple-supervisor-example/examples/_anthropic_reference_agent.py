@@ -322,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # When the supervisor stands up a resolver service and sets
     # `AVP_RESOLVER_URL` on the agent's env, this dials it via HTTP/JSON-RPC
-    # per `spec/v0.1/resolver.md`. AVPAgent calls `avp.resolve` for each
+    # per `spec/resolver/v0.1-beta/resolver.md`. AVPAgent calls `avp.resolve` for each
     # Commission-managed asset at startup; after resolution succeeds, the
     # AVPAgent hands the connection material to the driver via
     # `set_resolved_assets`, which translates managed MCP servers into

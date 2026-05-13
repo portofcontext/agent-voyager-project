@@ -1,0 +1,61 @@
+{
+  "id": "reasoning-emitted-from-thinking-blocks",
+  "title": "Reasoning blocks in a turn emit avp.reasoning_emitted with text + signature, ordered before text_emitted",
+  "description": "When a model turn contains reasoning/thinking blocks (Anthropic extended thinking, OpenAI o-series reasoning, etc.), the agent MUST emit one avp.reasoning_emitted event per block carrying avp.reasoning.text and (if the provider gives one) avp.reasoning.signature. The events MUST come AFTER avp.model_turn_ended and BEFORE avp.text_emitted \u2014 the wire reconstructs as 'thought, then spoke'. Distinct from text_emitted so consumers can collapse / redact chain-of-thought from displays without losing it from the audit log.",
+  "spec_refs": [
+    "spec/trajectory/v0.1/trajectory.md#7-event-reference",
+    "spec/avp.schema.json#/$defs/ReasoningEmittedEvent"
+  ],
+  "applies_to": [
+    "agent"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "reasoning-pair",
+    "model": "test/mock"
+  },
+  "scripted_model": [
+    {
+      "tokens_input": 10,
+      "tokens_output": 20,
+      "cost_usd": 0.0001,
+      "duration_ms": 1,
+      "text": "the answer is 4",
+      "reasoning_blocks": [
+        {
+          "text": "let me add 2 + 2 carefully",
+          "signature": "sig-abc",
+          "redacted": false
+        }
+      ],
+      "converged": true
+    }
+  ],
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "avp.model_turn_ended"
+        }
+      },
+      {
+        "match": {
+          "type": "avp.reasoning_emitted",
+          "data": {
+            "avp.reasoning.text": "let me add 2 + 2 carefully",
+            "avp.reasoning.signature": "sig-abc"
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.text_emitted",
+          "data": {
+            "avp.text": "the answer is 4"
+          }
+        }
+      }
+    ]
+  }
+}
