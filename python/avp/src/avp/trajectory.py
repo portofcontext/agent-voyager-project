@@ -53,12 +53,14 @@ from avp._envelope import (
     new_trace_id,
     now_iso,
 )
+from avp.commission import Commission
 from avp.descriptor import (
     AgentDescriptor,
-    _ResourceDecl,
-    _SkillDecl,
-    _SubagentDecl,
-    _ToolDecl,
+    McpServerDecl,
+    ResourceDecl,
+    SkillDecl,
+    SubagentDecl,
+    ToolDecl,
 )
 
 # Reverse-DNS event types per CloudEvents convention. All AVP-defined types
@@ -155,7 +157,7 @@ class RunRequestedData(_SpanData):
 
     avp_supervisor_name: str = Field(min_length=1, alias="avp.supervisor.name")
     avp_supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
-    avp_commission: dict[str, Any] = Field(alias="avp.commission")
+    avp_commission: Commission | None = Field(default=None, alias="avp.commission")
 
 
 class AgentDescribedData(_SpanData):
@@ -179,9 +181,10 @@ class AgentStartedData(_SpanData):
     gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
     prompt: str | None = None
     system_prompt: str | None = None
-    tools: list[_ToolDecl] | None = None
-    skills: list[_SkillDecl] | None = None
-    subagents: list[_SubagentDecl] | None = None
+    tools: list[ToolDecl] | None = None
+    mcp_servers: list[McpServerDecl] | None = None
+    skills: list[SkillDecl] | None = None
+    subagents: list[SubagentDecl] | None = None
     avp_thread_id: str | None = Field(default=None, alias="avp.thread_id")
     avp_session_id: str | None = Field(default=None, alias="avp.session_id")
     avp_tags: list[str] | None = Field(default=None, alias="avp.tags")
@@ -477,17 +480,18 @@ class McpServerConnectedData(_SpanData):
     # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
     # agent emits a stub event (e.g. the reference agent; its
     # mcp_server_connected events are placeholders without live transport).
-    # Each entry is the same `_ToolDecl` shape used on
-    # `agent_started.data.tools`, with `avp.dispatch_target=mcp_server`
-    # and `avp.mcp_server_id` matching this event's server id.
-    avp_mcp_tools: list[_ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
+    # Each entry is the same `ToolDecl` shape used on
+    # `agent_started.data.tools`. Dispatch target is implicit "mcp_server"
+    # by virtue of being nested under this event; the server's id is on
+    # this event's own `avp.mcp.server_id` — no need to repeat per-tool.
+    avp_mcp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
     # Live resource catalog from MCP's `resources/list`. Parallel to
     # `avp.mcp.tools`. Populated by agents that drive the MCP handshake;
     # null on stub emitters. Skills declared in `Commission.skills[]` with
     # `avp.source = "mcp://<server-id>/<resource-path>"` resolve against
     # this catalog: the agent calls `resources/read` on the named server
     # before turn 1 to pull the SKILL.md body into the model's context.
-    avp_mcp_resources: list[_ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
+    avp_mcp_resources: list[ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
     # SDK-reported connection status, mirroring the Claude Agent SDK's
     # McpServerStatus.status enum. Default null because pre-live-transport
     # stub emitters didn't have this signal.

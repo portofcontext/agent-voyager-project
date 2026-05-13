@@ -138,23 +138,28 @@ class Commission(BaseModel):
     skills: list[SkillRef] | None = None
     subagents: list[SubagentRef] | None = None
 
-    # Allow-lists over the agent's manifest-published built-ins. Each list
-    # gates the parallel `manifest.built_in_*` surface for this run.
+    # Allow-lists over the agent's Descriptor-declared surface. Each list
+    # gates the parallel `descriptor.*` field for this run.
     #
-    #   - None (absent) → every built-in of that kind is exposed (default).
-    #   - []            → no built-in of that kind is exposed.
-    #   - [n1, n2, …]   → only the listed names are exposed; the agent
+    #   - None (absent) → every descriptor entry of that kind is exposed
+    #                     (default).
+    #   - []            → none are exposed.
+    #   - [n1, n2, …]   → only the listed names/ids are exposed; the agent
     #                     hides the rest from the model and runtime-blocks
     #                     any hallucinated invocation with `tool_failed` /
     #                     `subagent_failed`.
     #
-    # Names MUST appear in the corresponding manifest list at startup or
+    # Names MUST appear in the corresponding descriptor field at startup or
     # the agent emits `error_occurred(code: "commission_collision")` and
-    # stops with `reason=error`. Has no effect on supervisor-managed
-    # assets (those are gated by being-in-the-Commission).
+    # stops with `reason=error`. Subtractive-only: these have no effect on
+    # supervisor-managed assets (those are gated by being-in-the-Commission).
+    # `enabled_builtin_mcp_servers` filters `descriptor.mcp_servers[].id`;
+    # disabling a server prevents the agent from dialing it, so its tools
+    # are unavailable for the run.
     enabled_builtin_tools: list[str] | None = None
     enabled_builtin_subagents: list[str] | None = None
     enabled_builtin_skills: list[str] | None = None
+    enabled_builtin_mcp_servers: list[str] | None = None
 
     output_schema: dict[str, Any] | None = None
 

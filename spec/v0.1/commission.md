@@ -59,9 +59,10 @@ A Commission is a single JSON document validating against [`commission.schema.js
     { "id": "researcher", "ref": "sk_subagent_abc123" }
   ],
 
-  "enabled_builtin_tools":     ["Read", "Grep", "Glob"],
-  "enabled_builtin_subagents": null,
-  "enabled_builtin_skills":    null,
+  "enabled_builtin_tools":       ["Read", "Grep", "Glob"],
+  "enabled_builtin_subagents":   null,
+  "enabled_builtin_skills":      null,
+  "enabled_builtin_mcp_servers": null,
 
   "thread_id":     "session-xyz",
   "tags":          ["auth", "refactor"],
@@ -83,14 +84,15 @@ A Commission is a single JSON document validating against [`commission.schema.js
 
 | Field | Type | Notes |
 |---|---|---|
-| `supervisor` | `{ name: string, version?: string }` | Attribution for `run_requested`. Agents emit `name="unknown"` when absent. |
-| `system_prompt` | string | Prepended to the model's system context. |
+| `supervisor` | `{ name: string, version?: string }` | Attribution for `run_requested`. When absent, the corresponding `avp.supervisor.*` fields on `run_requested` are omitted (absence is the canonical signal; the prior `"unknown"` placeholder is superseded). |
+| `system_prompt` | string | The agent's system context. Overrides `descriptor.system_prompt` when both are set. |
 | `mcp_servers` | `Array<{ id: string, ref: JsonValue }>` | Managed MCP server refs. See §3. |
 | `skills` | `Array<{ id: string, ref: JsonValue }>` | Managed Agent Skill refs. See §3. |
 | `subagents` | `Array<{ id: string, ref: JsonValue }>` | Managed subagent refs. See §3. |
-| `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.built_in_tools[].name`. See §4. |
-| `enabled_builtin_subagents` | `string[] \| null` | Allowlist over `descriptor.built_in_subagents[].name`. See §4. |
-| `enabled_builtin_skills` | `string[] \| null` | Allowlist over `descriptor.built_in_skills[].name`. See §4. |
+| `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.tools[].name`. See §4. |
+| `enabled_builtin_subagents` | `string[] \| null` | Allowlist over `descriptor.subagents[].name`. See §4. |
+| `enabled_builtin_skills` | `string[] \| null` | Allowlist over `descriptor.skills[].name`. See §4. |
+| `enabled_builtin_mcp_servers` | `string[] \| null` | Allowlist over `descriptor.mcp_servers[].id`. Disabling a server prevents the agent from dialing it, so the tools that server would have surfaced are also unavailable for the run. See §4. |
 | `thread_id` | string | Free-form correlation id (multi-turn conversation, parent context, etc.). |
 | `tags` | `string[]` | Free-form labels. |
 | `meta` | `object` | Free-form key/value bag. |
@@ -117,11 +119,12 @@ If a Commission carries any non-empty asset list, the agent MUST be configured w
 
 The agent MUST detect the following at startup and fail with `error_occurred(code: "commission_collision")` followed by `agent_stopped(reason: "error")`:
 
-- `Commission.subagents[].id` matching a Descriptor-declared `built_in_tools[].name`.
-- `Commission.subagents[].id` matching a Descriptor-declared `built_in_subagents[].name`.
-- `Commission.mcp_servers[].id` matching a Descriptor-declared `built_in_subagents[].name`.
+- `Commission.mcp_servers[].id` matching `descriptor.mcp_servers[].id`.
+- `Commission.skills[].id` matching `descriptor.skills[].name`.
+- `Commission.subagents[].id` matching `descriptor.subagents[].name`.
+- `Commission.subagents[].id` matching `descriptor.tools[].name` (subagents surface to the model as tools).
 
-These collisions are configuration errors; the supervisor referenced an id the agent reserves. Fail-fast surfaces the conflict before any model turn.
+These collisions are configuration errors; the supervisor referenced an id the agent already declares. Fail-fast surfaces the conflict before any model turn.
 
 Tool-name collisions across distinct MCP servers (e.g. agent-internal `github_v1` and Commission-managed `github_v2` both exposing `list_prs`) are an agent-runtime concern outside AVP's wire. The agent's MCP client surfaces names to the model however it normally does.
 
@@ -129,21 +132,24 @@ Tool-name collisions across distinct MCP servers (e.g. agent-internal `github_v1
 
 ## 4. Built-in surface allowlists
 
-`Commission` carries three optional allowlists that gate which agent **built-ins** surface to the model for the run:
+`Commission` carries four optional allowlists that gate which entries from the agent's [Descriptor](./agent-descriptor.md) surface to the model for the run:
 
 | Field | Gates | Source of truth |
 |---|---|---|
-| `enabled_builtin_tools` | `descriptor.built_in_tools[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
-| `enabled_builtin_subagents` | `descriptor.built_in_subagents[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
-| `enabled_builtin_skills` | `descriptor.built_in_skills[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
+| `enabled_builtin_tools` | `descriptor.tools[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
+| `enabled_builtin_subagents` | `descriptor.subagents[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
+| `enabled_builtin_skills` | `descriptor.skills[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
+| `enabled_builtin_mcp_servers` | `descriptor.mcp_servers[].id` | The agent's [Agent Descriptor](./agent-descriptor.md) |
 
-Semantics, identical across all three:
+Semantics, identical across all four:
 
-- **Absent (null)** → every built-in of that kind is exposed (default; backwards-compatible).
-- **`[]`** → no built-in of that kind is exposed.
+- **Absent (null)** → every descriptor entry of that kind is exposed (default; backwards-compatible).
+- **`[]`** → none are exposed.
 - **`[n1, n2, …]`** → only the listed names are exposed; the rest are hidden from the model and runtime-blocked if invoked.
 
-These fields gate **agent built-ins only**. Supervisor-managed assets (`mcp_servers`, `skills`, `subagents` refs) are gated by their presence/absence in the Commission and are never affected. Tools surfaced post-handshake by a managed MCP server are controlled by which MCP server the supervisor declared.
+**Subtractive-only over the descriptor.** These fields gate the *agent's own* declarations (the Descriptor). Supervisor-managed assets carried in `Commission.{mcp_servers,skills,subagents}` are always active by virtue of being present in the Commission, and are never affected by these allowlists. Tools surfaced post-handshake by a Commission-managed MCP server are similarly controlled by whether the supervisor declared the server.
+
+**Effect on MCP-surfaced tools.** Descriptor `tools[]` is locally-dispatched only (see [agent-descriptor.md §2.3](./agent-descriptor.md)); MCP server tools are not duplicated there. Disabling an `mcp_servers` entry via `enabled_builtin_mcp_servers` prevents the agent from dialing it, so the tools that server would have surfaced never become available for the run. `enabled_builtin_tools` separately gates only the local catalog.
 
 ### 4.1 Validation at startup (MUST)
 
@@ -182,6 +188,6 @@ A supervisor (or any Commission producer) is conforming to the Commission Spec i
 2. `schema_version` equals `"0.1"`.
 3. `run_id` is unique within the supervisor's namespace.
 4. If `mcp_servers` / `skills` / `subagents` are non-empty, the supervisor stands up a resolver service per [`resolver.md`](./resolver.md) and configures `AVP_RESOLVER_URL` in the agent's environment.
-5. Every name in `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` matches a corresponding entry in the target agent's Descriptor. (When the supervisor cannot pre-validate against the Descriptor, the agent will catch mismatches at startup and emit `error_occurred(code: "commission_collision")`.)
+5. Every name in `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` / `enabled_builtin_mcp_servers` matches a corresponding entry in the target agent's Descriptor (by `name` for tools/subagents/skills, by `id` for mcp_servers). When the supervisor cannot pre-validate against the Descriptor, the agent catches mismatches at startup and emits `error_occurred(code: "commission_collision")`.
 
 An agent that consumes Commissions and composes with the Trajectory Spec MUST additionally enforce §3.1 (collisions) and §4 (allowlists) at startup; see the corresponding conformance criteria in [`trajectory.md`](./trajectory.md) §8 and the Resolver API's R1–R4 in [`resolver.md`](./resolver.md).

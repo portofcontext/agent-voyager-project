@@ -39,38 +39,44 @@ The Trajectory Spec explicitly does **not** define:
 
 ## 2. The trajectory
 
-The agent's stdout is the **canonical trajectory**. Every event is a CloudEvents 1.0 envelope. The `source` attribute is a URI that identifies the producer:
-
-- **`source: "avp://agent"`** is the overwhelming majority of events: the agent emitting facts about what it did.
-- **`source: "avp://supervisor"`** appears only on the trajectory's opening `avp.run_requested` event (agent-relayed from `Commission.supervisor`; see §2.1). v0.1 has no supervisor → agent push channel; supervisors do not directly emit events.
+The agent's stdout is the **canonical trajectory**. Every event is a CloudEvents 1.0 envelope with `source: "avp://agent"`: the agent is the sole producer on the wire. Supervisor attribution, when applicable, lives in `run_requested.data["avp.commission"]` and `data["avp.supervisor.*"]` (see §2.1); v0.1 has no supervisor → agent push channel and supervisors do not directly emit events.
 
 Every event's `data` payload carries an OpenTelemetry **span triple**: `trace_id` (16 random bytes, 32 lowercase hex chars), `span_id` (8 random bytes, 16 hex chars), and `parent_span_id` (or 16 zeros for the root). The agent span is the run; turn / tool / managed-ref-resolution spans nest inside it. Consumers reconstruct the trajectory as a span tree.
 
 ### 2.1 Run prelude
 
-Every conforming trajectory opens with three events, in this exact order:
+A conforming trajectory opens with the **prelude**: a fixed-pair head, then optional resolver / connect / load events for managed and dialed assets, then a closing `agent_started` snapshot of the merged runtime state.
 
 ```
-1. avp.run_requested      source=avp://supervisor   (agent-relayed)
-2. avp.agent_described    source=avp://agent
-3. avp.agent_started      source=avp://agent
+1. avp.run_requested
+2. avp.agent_described
+3. [avp.managed_ref_resolved]*    one per Commission-declared ref
+4. [avp.mcp_server_connected]*    one per dialed server (descriptor's + Commission's)
+5. [avp.skill_loaded]*            one per eager skill, after body enters context
+6. avp.agent_started              merged-state snapshot
 ```
 
-These are distinct facts the wire records before the agent runs:
+These are distinct facts the wire records before the agent's first model turn:
 
-- **`avp.run_requested`** anchors the run. The agent emits it from `Commission.supervisor` with `source: avp://supervisor` (agent-relayed; the agent stamps the source URI to attribute the run to the originating supervisor build). `data["avp.commission"]` carries the full Commission snapshot the supervisor handed in (refs included verbatim, since they are opaque to the agent), so an auditor reading the trajectory can re-derive the run's input surface without an external Commission registry. `data["avp.supervisor.name"]` and the optional `data["avp.supervisor.version"]` complete the attribution. See [`commission.md`](./commission.md) for the snapshot's shape.
+- **`avp.run_requested`** anchors the run. When relaying a Commission, the event carries the full Commission snapshot under `data["avp.commission"]` (refs verbatim, opaque to the agent) plus `data["avp.supervisor.name"]` (+ optional `version`) for attribution — making the trajectory self-contained for audit. Without a Commission (e.g. an agent invoked as a library by an application that does not adopt the Commission spec), those fields are absent; the event still anchors the run via `subject = run_id` and the span triple, and the agent's baked-in invocation surface is advertised on `agent_described.data["avp.descriptor"]` instead. See [`commission.md`](./commission.md) and [`agent-descriptor.md`](./agent-descriptor.md).
 
-- **`avp.agent_described`** is the agent's self-published [Agent Descriptor](./agent-descriptor.md) of everything triggerable without supervisor configuration: SDK preset tools, runtime-bundled subagents, runtime-bundled skills, plus the agent's name, version, and supported AVP spec version. The payload (`data["avp.descriptor"]`) MUST equal what `<agent> describe` prints to stdout for the same agent build. This makes the audit trail and pre-flight introspection two views of the same fact. v0.1-conforming agents implicitly speak the Resolver API; capability is implied by `avp_spec_version: "0.1"` rather than carried as a separate flag.
+- **`avp.agent_described`** is the agent's self-published [Agent Descriptor](./agent-descriptor.md) of everything triggerable without supervisor configuration: SDK preset tools, runtime-bundled subagents, runtime-bundled skills, MCP servers it dials internally, plus the agent's name, version, and supported AVP spec version. The payload (`data["avp.descriptor"]`) MUST equal what `<agent> describe` prints to stdout for the same agent build. This makes the audit trail and pre-flight introspection two views of the same fact. v0.1-conforming agents implicitly speak the Resolver API; capability is implied by `avp_spec_version: "0.1"` rather than carried as a separate flag.
 
-- **`avp.agent_started`** is the merged-view event, listing what the model will actually see for this specific run: the agent's internal contribution combined with the supervisor's managed assets after they have been resolved (per [`resolver.md`](./resolver.md)).
+- **`avp.managed_ref_resolved`** fires once per Commission-declared managed ref (`Commission.mcp_servers[]`, `Commission.skills[]`, `Commission.subagents[]`), recording that the resolver round-trip happened. Descriptor entries are agent-internal — no ref, no round-trip, no event. See [`resolver.md`](./resolver.md).
 
-`run_requested` and `agent_described` are root-level in the span tree (`parent_span_id = ZERO`). They do NOT pair (each owns its own span); `agent_started` owns the agent span that all subsequent run events nest under.
+- **`avp.mcp_server_connected`** fires once per MCP server the agent dials at startup (both descriptor's and Commission-managed). Carries the live tool catalog from MCP's `tools/list` under `data["avp.mcp.tools"]`. See §4.
 
-An agent that cannot identify itself (no Descriptor available) MUST NOT skip the prelude. Instead, emit `agent_described` with the smallest valid Descriptor it can publish (its own package name, version, and `avp_spec_version`). A supervisor that omits `Commission.supervisor` MUST still see `run_requested` emitted, with `avp.supervisor.name="unknown"`.
+- **`avp.skill_loaded`** fires per skill whose body the agent injects into context at startup (eager pattern only). Progressive-disclosure agents emit it during turns instead. See §6.
 
-### 2.2 Managed-ref resolution events
+- **`avp.agent_started`** is the **merged-state snapshot**: what the run will actually use, after the descriptor's catalog is filtered by Commission's `enabled_builtin_*` allowlists and combined with Commission's managed refs. `data` carries the settled `prompt` / `system_prompt` / `model` and the merged lists `tools[]` (descriptor's local tools, post-allowlist), `mcp_servers[]` (descriptor's filtered ∪ Commission's, identity only), `skills[]`, `subagents[]`. Per-server tool catalogs from MCP servers stay on the corresponding `mcp_server_connected` events; `agent_started.data.mcp_servers[]` carries server identity only. Consumers join the two by id for the full per-server view.
 
-Between `agent_started` and the first `model_turn_started`, the agent MUST resolve every managed asset declared in the Commission (per [`resolver.md`](./resolver.md)). Each successful resolution emits one `avp.managed_ref_resolved` event; any failure emits one `avp.managed_ref_resolve_failed` event followed by `agent_stopped(reason: "error")`. These events do not re-record the opaque ref material; `run_requested.data["avp.commission"]` already carries it. The resolution events record only that the round-trip happened.
+**Span tree.** `run_requested` and `agent_described` are root-level (`parent_span_id = ZERO`). Each `managed_ref_resolved`, `mcp_server_connected`, and `skill_loaded` event in the prelude is also root-level — they record startup operations that happen before the agent's run span begins. `agent_started` opens the agent run span, which all subsequent run events nest under.
+
+An agent that cannot identify itself (no Descriptor available) MUST NOT skip the prelude. Instead, emit `agent_described` with the smallest valid Descriptor it can publish (its own package name, version, and `avp_spec_version`). A Commission whose `supervisor` is omitted MUST still produce a `run_requested` with `data["avp.commission"]` present and `data["avp.supervisor.*"]` absent (absence, not `"unknown"`, is the canonical signal).
+
+### 2.2 Resolution failures
+
+If a managed-ref resolution fails (resolver unreachable, ref not understood by the resolver, content malformed), the agent MUST emit `avp.managed_ref_resolve_failed` for the failing entry and then `avp.agent_stopped(reason: "error")`. No further prelude events fire and no model turn runs. Resolution events do not re-record the opaque ref material; `run_requested.data["avp.commission"]` already carries it. Both success (`managed_ref_resolved`) and failure (`managed_ref_resolve_failed`) events record only that the round-trip happened (and how).
 
 ---
 
@@ -89,20 +95,23 @@ The agent maintains a `RunStateSnapshot` (see [`trajectory.schema.json`](./traje
 ### 3.2 The loop
 
 ```
-read commission from stdin
-emit run_requested  (source=avp://supervisor, agent-relayed)
+read commission from stdin (or in-process equivalent; may be absent)
+emit run_requested
 emit agent_described
-emit agent_started
 
-# Startup resolve (Resolver API)
+# Startup resolve (Resolver API) — only Commission-declared refs.
+# Descriptor entries are agent-internal and skip this step.
 for each entry in commission.mcp_servers + commission.skills + commission.subagents:
     call avp.resolve(...)
     on success: emit managed_ref_resolved
     on failure: emit managed_ref_resolve_failed; emit agent_stopped("error"); return
 
-# Materialize the resolved environment
-for each mcp_server: dial; emit mcp_server_connected
-for each skill:      load content; emit skill_loaded (if eager)
+# Materialize the resolved environment.
+# MCP servers from both descriptor and Commission are dialed here.
+for each mcp_server (descriptor's + Commission's): dial; emit mcp_server_connected
+for each skill (descriptor's + Commission's): load content; emit skill_loaded (if eager)
+
+emit agent_started   # merged-state snapshot of everything above
 
 loop:
     state.total_turns += 1
@@ -144,13 +153,13 @@ loop:
 
 v0.1 has two paths for any tool the model can call:
 
-1. **Agent built-in.** Compiled into the agent package; declared on the agent's [Agent Descriptor](./agent-descriptor.md) under `built_in_tools`. Surfaced on `agent_started.data.tools[]` with `avp.tool.dispatch_target = "local"`. The agent runs them directly.
-2. **MCP server.** Declared by the supervisor in `Commission.mcp_servers[]` as `{id, ref}`. The agent resolves the ref (Resolver API), dials the resolved endpoint, runs MCP's `tools/list`, and dispatches calls via MCP's `tools/call`. Surfaced on `mcp_server_connected.data["avp.mcp.tools"]` (live tool catalog) and on `agent_started.data.tools[]` with `avp.tool.dispatch_target = "mcp_server"` and `avp.mcp_server_id` matching the Commission entry's `id`.
+1. **Local.** Compiled into the agent package; declared on the agent's [Agent Descriptor](./agent-descriptor.md) under `tools`. The agent runs them directly. Surfaced on `agent_started.data.tools[]` (post-`enabled_builtin_tools` filter).
+2. **MCP server.** A server the agent dials at startup — either declared on the descriptor (`descriptor.mcp_servers[]`) or by the supervisor (`Commission.mcp_servers[]` as opaque `{id, ref}` pairs). The agent resolves Commission refs via the Resolver API, dials each server, runs MCP's `tools/list`, and dispatches calls via MCP's `tools/call`. Per-server tool catalogs surface on `mcp_server_connected.data["avp.mcp.tools"]`; the server's identity (`{id, description?}`) appears on `agent_started.data.mcp_servers[]`. MCP-surfaced tools are **not** duplicated on `agent_started.data.tools[]`.
 
 Wire flow:
 
 1. Model calls a tool. Agent emits `avp.tool_invoked`.
-2. Agent dispatches: locally for built-ins, via MCP for MCP-server tools.
+2. Agent dispatches: locally for tools listed in `descriptor.tools`; via MCP for tools surfaced by a connected MCP server.
 3. Agent emits `avp.tool_returned` (or `avp.tool_failed`).
 
 There is no AVP-flavored RPC channel for tool dispatch. Supervisors that want to expose Python (or shell, or HTTP-backed) tools wrap them in an MCP server, declare the server's ref in `Commission.mcp_servers[]`, and have their resolver return the connection material when asked.
@@ -159,16 +168,16 @@ There is no AVP-flavored RPC channel for tool dispatch. Supervisors that want to
 
 | Value | Meaning |
 |---|---|
-| `local` | Tool ran in the agent's own process: code compiled into the agent package. |
-| `mcp_server` | Tool was dispatched by an MCP server. The event also carries `avp.mcp_server_id` matching a `Commission.mcp_servers[].id`. |
+| `local` | Tool ran in the agent's own process: code compiled into the agent package (`descriptor.tools`). |
+| `mcp_server` | Tool was dispatched by an MCP server. The event also carries `avp.mcp_server_id` matching an entry in `agent_started.data.mcp_servers[]` (from either `descriptor.mcp_servers` or `Commission.mcp_servers`). |
 
-### 4.1 Merge semantics: agent-internal ∪ Commission-managed
+### 4.1 Merge semantics: descriptor ∪ Commission
 
-The agent's loop dispatches against a single bag of tools, regardless of whether each entry was baked into the agent or resolved from a Commission ref. The agent's runtime layer constructs the bag at startup:
+The agent's loop dispatches against a single bag of tools, regardless of whether each entry came from the descriptor or from a Commission-managed MCP server. The agent's runtime layer constructs the bag at startup:
 
-1. Start with the agent's internal tools (the Descriptor's `built_in_tools`).
-2. For each `Commission.mcp_servers[]` ref, resolve, connect, and add the server's `tools/list` output.
-3. If any `id` collision exists between an agent-internal MCP server and a Commission-declared one, emit `error_occurred` with `data["avp.error.code"]: "commission_collision"` and stop. Configuration errors fail-fast.
+1. Start with the agent's local tools (`descriptor.tools`, filtered by `Commission.enabled_builtin_tools`).
+2. For each MCP server in `descriptor.mcp_servers` (filtered by `Commission.enabled_builtin_mcp_servers`) and `Commission.mcp_servers`, dial (resolve via Resolver API first for Commission refs), connect, and add the server's `tools/list` output to the dispatch table.
+3. If any `id` collision exists between a descriptor-declared MCP server and a Commission-declared one, emit `error_occurred` with `data["avp.error.code"]: "commission_collision"` and stop. Configuration errors fail-fast.
 
 Tool-name collisions across distinct MCP servers (e.g. agent-internal `github_v1` and Commission-managed `github_v2` both exposing `list_prs`) are an agent-runtime concern outside AVP's wire. The agent's MCP client surfaces names to the model however it normally does (most clients namespace by server id, e.g. `github_v1__list_prs`); AVP records the name the agent dispatched on in `tool_invoked.data["gen_ai.tool.name"]`.
 
@@ -205,7 +214,7 @@ The `avp.skill_loaded` event means **the SKILL.md body content has been added to
 
 Two emission patterns differentiated by an agent's `descriptor.capabilities`:
 
-- **`skills:eager`**: agent injects all resolved SKILL.md bodies at startup (typically as a system_prompt suffix). Emit `skill_loaded` once per skill, `step=0`, after `agent_started` and before turn 1.
+- **`skills:eager`**: agent injects all resolved SKILL.md bodies at startup (typically as a system_prompt suffix). Emit `skill_loaded` once per skill, `step=0`, during the prelude (after the matching `managed_ref_resolved` for Commission-declared skills; immediately for descriptor-declared ones) and before `agent_started`. By the time `agent_started` fires, all eager skills are already in context.
 
 - **`skills:progressive`**: model decides per-turn which skill bodies to pull into context. Emit `skill_loaded` when the body actually enters context, with `step=N` matching the turn it loaded in. MAY fire multiple times for the same skill (e.g., re-load after compaction).
 
@@ -223,11 +232,11 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 
 | Type | Source(s) | One-line semantics |
 |---|---|---|
-| `avp.run_requested` | `avp://supervisor` | First event. Agent-relayed; supervisor-attributed. Anchors the run with `avp.commission` (full Commission snapshot) + `avp.supervisor.name`. See §2.1. |
+| `avp.run_requested` | `avp://agent` | First event. Anchors the run. With a Commission: carries `avp.commission` (full snapshot) + optional `avp.supervisor.*` for attribution. Without one: those fields absent. See §2.1. |
 | `avp.agent_described` | `avp://agent` | Second event. The agent's self-published Descriptor (`avp.descriptor`); same payload `<agent> describe` prints. See §2.1. |
-| `avp.agent_started` | `avp://agent` | Third event. Merged view: what the model will actually see, after Commission × resolution × SDK enrichment. |
+| `avp.agent_started` | `avp://agent` | Closes the prelude. Merged-state snapshot: settled `prompt` / `system_prompt` / `model` plus merged `tools[]` (local) / `mcp_servers[]` (identity) / `skills[]` / `subagents[]`. Per-server tool catalogs stay on the corresponding `mcp_server_connected` events. See §2.1. |
 | `avp.agent_stopped` | `avp://agent` | Run has ended; last event of the trajectory. |
-| `avp.managed_ref_resolved` | `avp://agent` | One per Commission-declared managed ref the agent successfully resolved at startup. |
+| `avp.managed_ref_resolved` | `avp://agent` | One per Commission-declared managed ref the agent successfully resolved at startup. Descriptor entries are agent-internal and do NOT produce this event. |
 | `avp.managed_ref_resolve_failed` | `avp://agent` | Resolver returned an error or could not be reached for one of the Commission's managed refs. Agent stops fail-fast. |
 | `avp.model_turn_started` | `avp://agent` | About to call the model. |
 | `avp.model_turn_ended` | `avp://agent` | Model response received. Carries OTel `gen_ai.usage.*`. |
@@ -243,7 +252,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.cost_recorded` | `avp://agent` | Cumulative `RunStateSnapshot` snapshot. May carry `avp.cost.source="reported"` on the reconciliation event when the API/SDK hands back an authoritative cost total. |
 | `avp.skill_loaded` | `avp://agent` | SKILL.md loaded into context. |
 | `avp.error_occurred` | `avp://agent` | Non-tool error. |
-| `avp.mcp_server_connected` | `avp://agent` | Connection established to an MCP server (resolved from a `Commission.mcp_servers[].ref`). |
+| `avp.mcp_server_connected` | `avp://agent` | Connection established to an MCP server — either declared on the descriptor or resolved from `Commission.mcp_servers[].ref`. Carries the live tool catalog under `data["avp.mcp.tools"]`. |
 | `avp.mcp_server_disconnected` | `avp://agent` | Connection to an MCP server closed. |
 
 Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/trajectory.py`).
@@ -258,8 +267,8 @@ Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.js
 
 An agent is conforming to the Trajectory Spec if and only if all of the following hold:
 
-1. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`). All v0.1 events EXCEPT `avp.run_requested` MUST set `source: "avp://agent"`. `avp.run_requested` is the only event with `source: "avp://supervisor"` (agent-relayed; the agent stamps the source URI from `Commission.supervisor` when [Commission](./commission.md) is in use).
-2. The trajectory MUST open with the prelude defined in §2.1: `avp.run_requested`, then `avp.agent_described`, then `avp.agent_started`, in that exact order. `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of the Commission the supervisor handed in (including managed refs verbatim). `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` MUST include `prompt` when available. The `data.tools` field MUST list the EFFECTIVE tool surface: agent built-in tools plus any MCP-server tools surfaced after `mcp_server_connected`.
+1. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`) and MUST set `source: "avp://agent"`. The agent is the sole producer on the wire; supervisor attribution lives in `run_requested.data["avp.commission"]` and `data["avp.supervisor.*"]` when a Commission is in use, per [Commission](./commission.md).
+2. The trajectory MUST open with the prelude defined in §2.1, in this order: `avp.run_requested`, `avp.agent_described`, then any `avp.managed_ref_resolved` (one per Commission-declared ref), any `avp.mcp_server_connected` (one per dialed server, descriptor's + Commission's), any eager `avp.skill_loaded`, and finally `avp.agent_started`. When relaying a Commission, `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of it (managed refs verbatim); otherwise `data["avp.commission"]` and `data["avp.supervisor.*"]` MUST be absent. `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` is the merged-state snapshot: `data.tools[]` MUST list the agent's local tool catalog (`descriptor.tools` filtered by `Commission.enabled_builtin_tools`); `data.mcp_servers[]` MUST list the merged MCP server identities (descriptor's filtered ∪ Commission's resolved); `data.skills[]` and `data.subagents[]` MUST list the merged skill / subagent decls. MCP-surfaced tool catalogs MUST NOT be duplicated on `data.tools[]`; they live on each `mcp_server_connected.data["avp.mcp.tools"]`. `prompt` MUST be included on `agent_started` when available.
 3. For every model inference, it MUST emit `avp.model_turn_started` immediately before the request and `avp.model_turn_ended` immediately after the response.
 4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.
 5. It MUST emit `avp.cost_recorded` at least once per turn. The `data["avp.state"]` field MUST validate against `RunStateSnapshot`.

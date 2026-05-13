@@ -7,25 +7,22 @@
 
 target-version = "py311"
 line-length = 100
-extend-exclude = [
-    ".venv",
-    ".pytest_cache",
-]
+extend-exclude = [".venv", ".pytest_cache"]
 
 [lint]
 # Curated ruleset: catch unused imports / unused vars / common bugs / style.
 # Keep aggressive rules off (D for docstrings, ANN for annotations) — too noisy for this stage.
 select = [
-    "F",     # pyflakes (unused imports, unused vars, undefined names)
-    "E",     # pycodestyle errors
-    "W",     # pycodestyle warnings
-    "I",     # isort (import sorting)
-    "UP",    # pyupgrade (modern Python idioms)
-    "B",     # bugbear (likely bugs)
-    "SIM",   # flake8-simplify
-    "C4",    # flake8-comprehensions
-    "RUF",   # ruff-specific lints
-    "PIE",   # flake8-pie (misc improvements)
+    "F",   # pyflakes (unused imports, unused vars, undefined names)
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modern Python idioms)
+    "B",   # bugbear (likely bugs)
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "RUF", # ruff-specific lints
+    "PIE", # flake8-pie (misc improvements)
 ]
 ignore = [
     "E501",   # line-too-long — let formatter handle; allow long strings
@@ -44,7 +41,7 @@ ignore = [
 "avp/src/avp/conformance/harness.py" = ["SLF001"]
 
 [lint.isort]
-known-first-party = ["avp", "avp_anthropic", "avp_claude_agent"]
+known-first-party = ["avp", "avp_anthropic", "avp_claude_agent_sdk"]
 
 [format]
 quote-style = "double"

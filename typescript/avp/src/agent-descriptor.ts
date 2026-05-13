@@ -10,24 +10,28 @@ export type AgentVersion = string;
 export type AvpSpecVersion = "0.1";
 export type DefaultModel = string | null;
 export type SupportedModels = string[] | null;
-export type BuiltInTools = _ToolDecl[] | null;
-export type Name = string;
+export type SystemPrompt = string | null;
+export type Prompt = string | null;
+export type McpServers = McpServerDecl[] | null;
+export type Id = string;
 export type Description = string | null;
+export type Tools = ToolDecl[] | null;
+export type Name = string;
+export type Description1 = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
-export type AvpDispatchTarget = ("mcp_server" | "local") | null;
-export type AvpMcpServerId = string | null;
-export type BuiltInSubagents = _SubagentDecl[] | null;
+export type Subagents = SubagentDecl[] | null;
 export type Name1 = string;
-export type Description1 = string | null;
+export type Description2 = string | null;
 export type Inputschema1 = {
   [k: string]: unknown;
 } | null;
 export type AvpAgentType = string | null;
-export type BuiltInSkills = _SkillDecl[] | null;
+export type Skills = SkillDecl[] | null;
 export type Name2 = string;
-export type Description2 = string | null;
+export type Description3 = string | null;
+export type Version = string | null;
 export type AvpSource = string | null;
 export type Capabilities = string[] | null;
 
@@ -40,23 +44,53 @@ export interface AVPV01AgentDescriptor {
   avp_spec_version: AvpSpecVersion;
   default_model?: DefaultModel;
   supported_models?: SupportedModels;
-  built_in_tools?: BuiltInTools;
-  built_in_subagents?: BuiltInSubagents;
-  built_in_skills?: BuiltInSkills;
+  system_prompt?: SystemPrompt;
+  prompt?: Prompt;
+  mcp_servers?: McpServers;
+  tools?: Tools;
+  subagents?: Subagents;
+  skills?: Skills;
   capabilities?: Capabilities;
 }
 /**
- * Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields.
+ * MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.
+ *
+ * Connection material (URLs, auth, command-lines) stays inside the agent
+ * process and is NOT carried on the descriptor wire. The descriptor
+ * records only the server's id and an optional description; the tools
+ * the server surfaces are NOT enumerated on the descriptor — they appear
+ * at runtime on `mcp_server_connected.data["avp.mcp.tools"]`. The id-pattern
+ * mirrors `Commission.McpServerRef.id` so cross-source id-collision
+ * detection at startup is straight string
+ * equality.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
- * via the `definition` "_ToolDecl".
+ * via the `definition` "McpServerDecl".
  */
-export interface _ToolDecl {
-  name: Name;
+export interface McpServerDecl {
+  id: Id;
   description?: Description;
+  [k: string]: unknown;
+}
+/**
+ * Tool descriptor used by `AgentDescriptor.tools`,
+ * `agent_started.data.tools`, and `mcp_server_connected.data.avp.mcp.tools`.
+ *
+ * MCP-shaped: `name` plus optional `description` and `inputSchema`. The
+ * decl describes a single tool's model-facing identity; how the tool is
+ * *dispatched* (local vs MCP server) is implicit from where the decl
+ * appears on the wire — `descriptor.tools` and `agent_started.data.tools`
+ * are local-only; entries under `mcp_server_connected.data.avp.mcp.tools`
+ * are MCP-dispatched by virtue of being nested under a server. The
+ * per-invocation discriminator lives on `tool_invoked.data["avp.tool.dispatch_target"]`.
+ *
+ * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
+ * via the `definition` "ToolDecl".
+ */
+export interface ToolDecl {
+  name: Name;
+  description?: Description1;
   inputSchema?: Inputschema;
-  "avp.dispatch_target"?: AvpDispatchTarget;
-  "avp.mcp_server_id"?: AvpMcpServerId;
   [k: string]: unknown;
 }
 /**
@@ -65,42 +99,44 @@ export interface _ToolDecl {
  * triple (`name`, `description`, `inputSchema`) tools use, so adapters
  * can render subagents to the model's tool list with no translation.
  *
- * `description` is optional to match `_ToolDecl`: when surfacing a
+ * `description` is optional to match `ToolDecl`: when surfacing a
  * agent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)
  * the agent has authoritative knowledge of the name but not the prose
  * description. Honest-null beats authored-prose-that-drifts.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
- * via the `definition` "_SubagentDecl".
+ * via the `definition` "SubagentDecl".
  */
-export interface _SubagentDecl {
+export interface SubagentDecl {
   name: Name1;
-  description?: Description1;
+  description?: Description2;
   inputSchema?: Inputschema1;
   "avp.agent_type"?: AvpAgentType;
   [k: string]: unknown;
 }
 /**
- * Skill descriptor in `agent_started.data.skills`: name plus
- * optional metadata about each skill loaded for the run.
+ * Skill descriptor in `AgentDescriptor.skills` and
+ * `agent_started.data.skills`: name plus optional metadata about each
+ * skill the agent ships with or has loaded for the run.
  *
  * Replaces the v0.1-prototype `list[str]` shape (names-only) with a
- * structured decl matching `_ToolDecl` / `_SubagentDecl`. Description
+ * structured decl matching `ToolDecl` / `SubagentDecl`. Description
  * comes from the SKILL.md frontmatter when the agent surfaces it
  * (e.g. via `ClaudeSDKClient.get_context_usage()` which returns a
- * `skills` breakdown including frontmatter); `avp.source` is the
- * SKILL.md path / URI when known.
+ * `skills` breakdown including frontmatter); `version` is the skill's
+ * own version when known; `avp.source` is the SKILL.md path / URI.
  *
  * All fields except `name` are optional so agents that only know
  * the name (Commission-declared without enrichment) still emit valid
  * decls.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
- * via the `definition` "_SkillDecl".
+ * via the `definition` "SkillDecl".
  */
-export interface _SkillDecl {
+export interface SkillDecl {
   name: Name2;
-  description?: Description2;
+  description?: Description3;
+  version?: Version;
   "avp.source"?: AvpSource;
   [k: string]: unknown;
 }

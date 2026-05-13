@@ -1,9 +1,14 @@
 """Shared pricing for AVP agents.
 
 Why this lives in `avp` core, not per-agent:
-- Both `avp-anthropic` and `avp-claude-agent-sdk` need the same model-price
-  lookup. Two copies drift the moment Anthropic ships new pricing.
-- The price table is data, not policy — agents load it at startup,
+- Anthropic models are reachable through nearly every mainstream agent
+  SDK: the raw Anthropic SDK, the Claude Agent SDK, LangChain /
+  LangGraph, LlamaIndex, Pydantic AI, the OpenAI-compatible surfaces on
+  Bedrock and Vertex, plus the long tail of provider-agnostic
+  frameworks. Every AVP adapter that wraps one of these SDKs needs the
+  same model-price lookup; a per-adapter copy drifts the moment
+  Anthropic ships new pricing.
+- The price table is data, not policy. Adapters load it at startup,
   users can override via the public `PriceTable` type, and the on-wire
   cost number is tagged with `avp.cost.source` so downstreams can tell
   a locally-computed number from a provider-reported one (or unknown).
@@ -27,9 +32,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 from importlib import resources
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 CostSource = Literal["computed", "reported", "unknown"]
 
@@ -38,14 +44,15 @@ COST_SOURCE_REPORTED: CostSource = "reported"
 COST_SOURCE_UNKNOWN: CostSource = "unknown"
 
 
-@dataclass(frozen=True)
-class ModelPrice:
+class ModelPrice(BaseModel):
     """Per-1M-token pricing in USD."""
 
-    input: float
-    output: float
-    cache_read: float = 0.0
-    cache_write: float = 0.0
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input: float = Field(ge=0)
+    output: float = Field(ge=0)
+    cache_read: float = Field(default=0.0, ge=0)
+    cache_write: float = Field(default=0.0, ge=0)
 
 
 PriceTable = Mapping[str, ModelPrice]
@@ -61,12 +68,7 @@ def load_default_prices() -> dict[str, ModelPrice]:
     raw = resources.files("avp.data").joinpath("prices.json").read_text()
     parsed = json.loads(raw)
     return {
-        model: ModelPrice(
-            input=float(spec["input"]),
-            output=float(spec["output"]),
-            cache_read=float(spec.get("cache_read", 0.0)),
-            cache_write=float(spec.get("cache_write", 0.0)),
-        )
+        model: ModelPrice.model_validate(spec)
         for model, spec in parsed.get("models", {}).items()
     }
 

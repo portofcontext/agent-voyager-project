@@ -23,6 +23,7 @@ export type Id2 = string;
 export type EnabledBuiltinTools = string[] | null;
 export type EnabledBuiltinSubagents = string[] | null;
 export type EnabledBuiltinSkills = string[] | null;
+export type EnabledBuiltinMcpServers = string[] | null;
 export type OutputSchema = {
   [k: string]: unknown;
 } | null;
@@ -48,6 +49,7 @@ export interface AVPV01Commission {
   enabled_builtin_tools?: EnabledBuiltinTools;
   enabled_builtin_subagents?: EnabledBuiltinSubagents;
   enabled_builtin_skills?: EnabledBuiltinSkills;
+  enabled_builtin_mcp_servers?: EnabledBuiltinMcpServers;
   output_schema?: OutputSchema;
   prompt?: Prompt;
   system_prompt?: SystemPrompt;

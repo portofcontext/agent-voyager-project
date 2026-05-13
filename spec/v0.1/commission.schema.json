@@ -207,6 +207,21 @@
       "default": null,
       "title": "Enabled Builtin Skills"
     },
+    "enabled_builtin_mcp_servers": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enabled Builtin Mcp Servers"
+    },
     "output_schema": {
       "anyOf": [
         {
