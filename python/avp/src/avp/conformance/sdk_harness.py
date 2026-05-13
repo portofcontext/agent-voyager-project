@@ -189,6 +189,45 @@ def _find_workspace_root(start: Path | None = None) -> Path | None:
         cur = cur.parent
 
 
+def make_translator_cli(
+    *,
+    translator_cls: Callable[..., Any],
+    prog: str,
+    description: str | None = None,
+    skip_flags: dict[str, str] | None = None,
+) -> Callable[[list[str] | None], int]:
+    """Build a CLI for a per-SDK harness that wraps a translator with the
+    canonical constructor signature.
+
+    `translator_cls(commission=..., on_event=..., resolver=..., descriptor=...)`
+    must be the call shape, with a `.run()` method that drives the SDK and
+    invokes `on_event` for every emitted event.
+
+    `skip_flags` maps case-dict keys to skip reasons; when any listed key is
+    truthy in the case, the runner raises `SkipCase(reason)`. Use this for
+    cases that require a deterministic-model harness (`scripted_only`) and
+    therefore can't be exercised against a live LLM.
+    """
+    flags = skip_flags or {}
+
+    def _run_one(case: dict[str, Any]) -> list[BaseModel]:
+        for key, reason in flags.items():
+            if case.get(key):
+                raise SkipCase(reason)
+        commission = build_commission(case)
+        events: list[BaseModel] = []
+        translator = translator_cls(
+            commission=commission,
+            on_event=events.append,
+            resolver=build_resolver(case, commission),
+            descriptor=build_descriptor(case),
+        )
+        translator.run()
+        return events
+
+    return make_cli(runner=_run_one, prog=prog, description=description)
+
+
 def make_cli(
     *, runner: CaseRunner, prog: str, description: str | None = None
 ) -> Callable[[list[str] | None], int]:

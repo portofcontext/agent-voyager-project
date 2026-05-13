@@ -62,9 +62,9 @@ Write live-friendly by default. Match the wire SHAPE, not specific content. Use 
 
 ## How the harness is wired
 
-`translator.run()` is the single public entry point. The harness wires resolver / descriptor / commission from the case (via `avp.conformance.sdk_harness.build_*` helpers), runs `translator.run()` against the real SDK, and returns the events the translator emitted. The framework (`avp.conformance.sdk_harness`) handles case loading, expectation evaluation, `scripted_only` skipping (`SkipCase` exception), CaseResult construction, and the CLI.
+`translator.run()` is the single public entry point. The framework (`avp.conformance.sdk_harness.make_translator_cli`) handles case loading, commission / descriptor / resolver building (via the `build_*` helpers), `scripted_only` skipping (declared in `skip_flags`), `translator.run()` invocation, expectation evaluation, CaseResult construction, and the CLI.
 
-The full per-SDK harness lives in [`conformance.py`](src/avp_claude_agent/conformance.py) and is ~60 lines.
+The full per-SDK harness is the [`conformance.py`](src/avp_claude_agent/conformance.py) wiring file: it names the translator class, the console-script `prog`, and the skip flags. Everything else is reused from the framework.
 
 ## Production wire order
 
