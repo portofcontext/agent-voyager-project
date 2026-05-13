@@ -29,7 +29,7 @@ from avp.trajectory import (
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
-from avp_claude_agent import ClaudeAgentTranslator
+from avp_claude_agent_sdk import ClaudeAgentTranslator
 
 # ── Lightweight fakes for the SDK surface ─────────────────────────────────────
 

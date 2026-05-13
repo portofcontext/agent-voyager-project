@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 
 from simple_supervisor import build_commission, render, summarize
 
-from avp_claude_agent import ClaudeAgentTranslator
+from avp_claude_agent_sdk import ClaudeAgentTranslator
 
 
 def main() -> int:

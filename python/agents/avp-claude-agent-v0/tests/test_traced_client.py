@@ -42,7 +42,7 @@ from avp.trajectory import (
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
-from avp_claude_agent import TracedClaudeSDKClient
+from avp_claude_agent_sdk import TracedClaudeSDKClient
 
 # ── Lightweight SDK fakes ─────────────────────────────────────────────────────
 
@@ -464,7 +464,7 @@ def test_factory_requires_active_tracer() -> None:
     raises a clear error pointing at the missing context."""
     import pytest
 
-    from avp_claude_agent import traced_claude_sdk_client
+    from avp_claude_agent_sdk import traced_claude_sdk_client
 
     with pytest.raises(RuntimeError, match="active AVPTracer"):
         traced_claude_sdk_client()
@@ -475,7 +475,7 @@ def test_factory_pulls_config_and_on_event_from_active_tracer() -> None:
     constructs a TracedClaudeSDKClient that emits events through the
     same `publish` callback. No need to repeat config / on_event."""
     from avp.tracer import AVPTracer
-    from avp_claude_agent import traced_claude_sdk_client
+    from avp_claude_agent_sdk import traced_claude_sdk_client
 
     cfg = _basic_config()
     out: list = []
@@ -512,7 +512,7 @@ def test_factory_translator_shares_trace_id_with_active_tracer() -> None:
     trace_id, not a fresh one. Without this, consumers reconstruct two
     disjoint trees instead of one."""
     from avp.tracer import AVPTracer
-    from avp_claude_agent import traced_claude_sdk_client
+    from avp_claude_agent_sdk import traced_claude_sdk_client
 
     cfg = _basic_config()
     out: list = []
@@ -545,7 +545,7 @@ def test_factory_suppresses_translator_lifecycle_emission() -> None:
     in delegated mode — the outer AVPTracer already did. Two of either
     on the wire under the same trace_id is malformed."""
     from avp.tracer import AVPTracer
-    from avp_claude_agent import traced_claude_sdk_client
+    from avp_claude_agent_sdk import traced_claude_sdk_client
 
     out: list = []
 
@@ -601,7 +601,7 @@ def test_factory_pushes_per_turn_spend_into_parent_tracer_state() -> None:
     Pinning this with a scripted run so a future refactor that drops
     the push fails this test before failing `make smoke`."""
     from avp.tracer import AVPTracer
-    from avp_claude_agent import traced_claude_sdk_client
+    from avp_claude_agent_sdk import traced_claude_sdk_client
 
     cfg = _basic_config()
     out: list = []

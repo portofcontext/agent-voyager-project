@@ -29,24 +29,27 @@ docstring so users with mixed-stdout concerns pass a file-backed sink).
 
 ## Run prelude (spec §2.1) — emit before consuming any SDK message
 
-Three events, in order. There's no real Commission/Descriptor in a bare
-`query()` call, so we synthesize the smallest valid forms.
+Three events, in order. There's no Commission in a bare `query()` call
+(it's the library-invocation path), so `run_requested` omits the
+Commission/supervisor attribution fields per spec §2.1; the agent's
+invocation surface is advertised on `agent_described` instead.
 
-- [ ] `avp.run_requested` (source `avp://supervisor`). Synthesize a
-  full-options projection Commission snapshot from `prompt` +
-  `ClaudeAgentOptions`. Project: `model`, `system_prompt`, `cwd`,
-  `permission_mode`, `allowed_tools`, `disallowed_tools`, `mcp_servers`,
-  `setting_sources`, `max_thinking_tokens`, plus the `prompt`. Set
-  `avp.supervisor.name = "unknown"` per spec §2.1 fallback. Fresh
-  `trace_id`, `parent_span_id = ZERO`.
-- [ ] `avp.agent_described`. Minimal `AgentDescriptor` with
+- [x] `avp.run_requested` (source `avp://agent`). No Commission → omit
+  both `data["avp.commission"]` and `data["avp.supervisor.*"]` entirely
+  (per spec §2.1, absence — not `"unknown"` — is the canonical signal).
+  The event still anchors the run via `subject = run_id` and a fresh
+  span triple (`parent_span_id = ZERO`). Run-config details (`cwd`,
+  `permission_mode`, `allowed_tools`, etc.) stay agent-internal; they
+  don't ride on the wire.
+- [x] `avp.agent_described`. Minimal `AgentDescriptor` with
   `name = "avp-claude-agent-sdk"`, `version` from `pyproject.toml`,
   `avp_spec_version = "0.1"`. `parent_span_id = ZERO`.
-- [ ] `avp.agent_started`. Open the agent span (`span_id` here is the
+- [x] `avp.agent_started`. Open the agent span (`span_id` here is the
   parent for every subsequent event). Populate:
   - `gen_ai.provider.name = "anthropic"`, `gen_ai.request.model` from options
   - `prompt` (str form when available)
-  - `system_prompt`
+  - `system_prompt` (resolve `SystemPromptFile` → file body; preset →
+    omit, since the preset name isn't the literal prompt)
   - `tools[]` (start empty; appended after MCP `tools/list` lands if we
     ever see one)
 
@@ -205,6 +208,9 @@ These are the hard MUSTs to satisfy before declaring the wrapper
    defaulting to `avp.agent.stdio_sink` (NDJSON to stdout).
 2. **Per-turn cost** — `compute_cost()` from `avp.pricing`, stamping
    `avp.cost.source` as `computed` / `unknown` / `reported`.
-3. **Commission snapshot** — full options projection.
+3. **No Commission on `run_requested`** — `query()` is the
+   library-invocation path; per spec §2.1, omit `avp.commission` and
+   `avp.supervisor.*`. A separate Commission-aware entry point (for
+   AVP supervisors) is the place to relay a snapshot.
 4. **Task tool** — modeled as `avp.subagent_invoked` /
    `subagent_returned` (`avp.subagent.run_id` stays `None`).

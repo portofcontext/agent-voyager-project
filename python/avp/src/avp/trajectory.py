@@ -143,19 +143,16 @@ class RunStateSnapshot(BaseModel):
 class RunRequestedData(_SpanData):
     """Payload of avp.run_requested events.
 
-    Anchors the trajectory: the supervisor's assertion that this run was
-    requested with this Commission. Agent-relayed (the agent emits the
-    event with `source: avp://supervisor` based on `Commission.supervisor`),
-    so no I/O contract change beyond Commission, but attribution is the
-    supervisor's, not the agent's.
-
-    `avp.commission` is the full Commission snapshot the supervisor handed
-    in. Carrying it on the wire makes the trajectory self-contained: an
-    auditor can replay (or re-validate) the run from the trajectory
-    alone, without an external Commission registry.
+    Anchors the trajectory. When relaying a Commission, carries the full
+    snapshot under `avp.commission` plus `avp.supervisor.*` for attribution,
+    making the trajectory self-contained for audit. Without a Commission
+    (library-invocation path), those fields are absent — per spec §2.1,
+    absence (not `"unknown"`) is the canonical signal.
     """
 
-    avp_supervisor_name: str = Field(min_length=1, alias="avp.supervisor.name")
+    avp_supervisor_name: str | None = Field(
+        default=None, min_length=1, alias="avp.supervisor.name"
+    )
     avp_supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
     avp_commission: Commission | None = Field(default=None, alias="avp.commission")
 

@@ -29,7 +29,7 @@ from avp.tracer import (
     AVPTracer,
     print_event,
 )
-from avp_claude_agent import traced_claude_sdk_client
+from avp_claude_agent_sdk import traced_claude_sdk_client
 
 
 def main() -> int:
