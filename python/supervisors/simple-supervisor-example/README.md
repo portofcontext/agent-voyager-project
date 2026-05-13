@@ -1,6 +1,6 @@
 # simple-supervisor-example
 
-A worked example of an AVP v0.1 supervisor. Builds Commissions from category profiles, runs them against an AVP agent, observes the streamed trajectory, and surfaces the trajectory classes [`spec/v0.1/trajectory.md` §1](../../../spec/v0.1/trajectory.md) calls out:
+A worked example of an AVP v0.1 supervisor. Builds Commissions from category profiles, runs them against an AVP agent, observes the streamed trajectory, and surfaces the trajectory classes [`spec/trajectory/v0.1/trajectory.md` §1](../../../spec/trajectory/v0.1/trajectory.md) calls out:
 
 - **What the agent did** — model turns, tool calls, subagent invocations
 - **What the run cost** — cumulative cost / tokens / duration

@@ -523,7 +523,7 @@ class ClaudeAgentTranslator:
         # the audit fact, independent of whether the SDK ever spun up.
         self._emit_run_prelude()
 
-        # Resolver gate (spec/v0.1/resolver.md). When the Commission carries any managed
+        # Resolver gate (spec/resolver/v0.1-beta/resolver.md). When the Commission carries any managed
         # assets, the agent MUST dereference each ref before any model
         # turn. Failure to resolve is fatal — fail-fast before the SDK
         # spins up.
@@ -629,7 +629,7 @@ class ClaudeAgentTranslator:
             async for message in client.receive_response():
                 self._on_sdk_message(message)
 
-    # ── Resolver protocol (spec/v0.1/resolver.md) ────────────────────────────────────────
+    # ── Resolver protocol (spec/resolver/v0.1-beta/resolver.md) ────────────────────────────────────────
 
     def _has_managed_assets(self) -> bool:
         c = self.commission
@@ -638,7 +638,7 @@ class ClaudeAgentTranslator:
     def _validate_resolver_present(self) -> bool:
         """If the Commission carries managed assets but no ResolverDriver
         was supplied (and AVP_RESOLVER_URL was not bootstrapped into one),
-        fail-fast with `resolver_not_configured` (spec/v0.1/resolver.md §2)."""
+        fail-fast with `resolver_not_configured` (spec/resolver/v0.1-beta/resolver.md §2)."""
         if not self._has_managed_assets():
             return True
         if self._resolver is not None:
@@ -653,7 +653,7 @@ class ClaudeAgentTranslator:
                         "avp.error.message": (
                             "Commission carries managed assets but no ResolverDriver "
                             "was supplied to ClaudeAgentTranslator (and AVP_RESOLVER_URL "
-                            "was not bootstrapped). Configure a resolver service per `spec/v0.1/resolver.md` §2."
+                            "was not bootstrapped). Configure a resolver service per `spec/resolver/v0.1-beta/resolver.md` §2."
                         ),
                     },
                 ),

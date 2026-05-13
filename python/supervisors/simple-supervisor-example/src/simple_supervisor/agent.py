@@ -39,7 +39,7 @@ def run_subprocess(
     or `["avp-claude-agent"]`) with Commission piped on stdin.
 
     Returns the trajectory as parsed Pydantic events. Custom event types pass
-    through as raw dicts (per `spec/v0.1/README.md` §4).
+    through as raw dicts (per `spec/README.md` §4).
 
     `rpc_responder` is an optional callback the supervisor uses to service
     tool_exec_request events: it receives the request dict and returns either

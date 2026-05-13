@@ -1,5 +1,5 @@
 """`agent_started.data.tools` reflects the effective tool surface the
-model sees, and `Commission.enabled_builtin_tools` (spec/v0.1/commission.md §4 allowlist)
+model sees, and `Commission.enabled_builtin_tools` (spec/commission/v0.1-beta/commission.md §4 allowlist)
 maps to the Claude Agent SDK's `tools` parameter.
 
 Three Commission shapes, three behaviors:

@@ -5,7 +5,7 @@ calls `ResolverDriver.spawn_subagent` and emits the subagent_invoked /
 subagent_returned (or _failed) lifecycle. This file is a small smoke
 verifying the wiring at the AVPAgent layer; the wire-format guarantees
 are pinned by the conformance suite under
-conformance/v0.1/cases/subagent/.
+conformance/cases/subagent/.
 """
 
 from __future__ import annotations

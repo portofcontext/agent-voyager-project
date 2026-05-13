@@ -109,7 +109,7 @@ def _drive(
 def test_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
     """Startup + streaming + single-turn run. Trajectory opens with the
     run prelude (run_requested + agent_described) before agent_started
-    per `spec/v0.1/trajectory.md` §2.1."""
+    per `spec/trajectory/v0.1/trajectory.md` §2.1."""
     client = _SequencedClient(
         [_resp(text="hello and DONE", stop_reason="end_turn", input_tokens=40, output_tokens=8)]
     )
@@ -136,7 +136,7 @@ def test_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_ndjson_envelope_one_event_per_line(monkeypatch: pytest.MonkeyPatch) -> None:
     """NDJSON: one JSON object per line. No pretty-printing, no batching.
-    `spec/v0.1/README.md` §3.1."""
+    `spec/README.md` §3.1."""
     client = _SequencedClient(
         [_resp(text="ok", stop_reason="end_turn", input_tokens=10, output_tokens=2)]
     )
@@ -190,7 +190,7 @@ def test_tool_call_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_bad_schema_version_emits_error_then_stop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`spec/v0.1/README.md` §7: a Commission with an unsupported
+    """`spec/README.md` §7: a Commission with an unsupported
     schema_version MUST yield error_occurred (code='unknown') followed
     by agent_stopped (reason='error')."""
     bad = {"schema_version": "0.2", "run_id": "bad-version", "model": "x"}

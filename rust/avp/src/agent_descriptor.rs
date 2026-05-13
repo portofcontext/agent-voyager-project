@@ -167,15 +167,15 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
             })
     }
 }
-#[doc = "The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md."]
+#[doc = "The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/agent-descriptor/v0.1/agent-descriptor.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/agent-descriptor.schema.json\","]
-#[doc = "  \"title\": \"AVP v0.1 Agent Descriptor\","]
-#[doc = "  \"description\": \"The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md.\","]
+#[doc = "  \"$id\": \"https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/spec/agent-descriptor/v0.1/agent-descriptor.schema.json\","]
+#[doc = "  \"title\": \"AVP Agent Descriptor\","]
+#[doc = "  \"description\": \"The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/agent-descriptor/v0.1/agent-descriptor.md.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"agent_name\","]
@@ -286,7 +286,7 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct AvpV01AgentDescriptor {
+pub struct AvpAgentDescriptor {
     pub agent_name: AgentName,
     pub agent_version: AgentVersion,
     pub avp_spec_version: ::std::string::String,

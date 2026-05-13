@@ -20,7 +20,7 @@ dev = ["pytest>=7", "ruff>=0.6"]
 simple-supervisor = "simple_supervisor.cli:main"
 
 [project.urls]
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/simple_supervisor"]

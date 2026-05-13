@@ -12,7 +12,7 @@ export type Version = string | null;
 export type McpServers = McpServerRef[] | null;
 export type Id = string;
 /**
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * This interface was referenced by `AVPCommissionBeta`'s JSON-Schema
  * via the `definition` "JsonValue".
  */
 export type JsonValue = unknown;
@@ -36,9 +36,9 @@ export type Meta = {
 } | null;
 
 /**
- * Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md.
+ * Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/commission/v0.1-beta/commission.md.
  */
-export interface AVPV01Commission {
+export interface AVPCommissionBeta {
   schema_version: SchemaVersion;
   run_id: RunId;
   supervisor?: SupervisorPreamble | null;
@@ -71,7 +71,7 @@ export interface AVPV01Commission {
  * and lets auditors correlate a run with the exact supervisor build
  * that requested it.
  *
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * This interface was referenced by `AVPCommissionBeta`'s JSON-Schema
  * via the `definition` "SupervisorPreamble".
  */
 export interface SupervisorPreamble {
@@ -85,10 +85,10 @@ export interface SupervisorPreamble {
  * `{kind: "mcp_server", id, ref}`. The resolver returns the connection
  * material (transport, URL, auth, etc.) the agent uses to dial the actual
  * MCP server. Per-`kind` result schemas are pinned in the Resolver API
- * spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
+ * spec (`spec/resolver/v0.1-beta/resolver.md` §3.2). Auth and transport are deployment
  * concerns; AVP does not constrain them.
  *
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * This interface was referenced by `AVPCommissionBeta`'s JSON-Schema
  * via the `definition` "McpServerRef".
  */
 export interface McpServerRef {
@@ -104,7 +104,7 @@ export interface McpServerRef {
  * model still applies; the resolver just hands the content back from
  * whatever store the supervisor uses.
  *
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * This interface was referenced by `AVPCommissionBeta`'s JSON-Schema
  * via the `definition` "SkillRef".
  */
 export interface SkillRef {
@@ -123,7 +123,7 @@ export interface SkillRef {
  * trajectory; the parent's `subagent_invoked.data["avp.subagent.run_id"]`
  * references it.
  *
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * This interface was referenced by `AVPCommissionBeta`'s JSON-Schema
  * via the `definition` "SubagentRef".
  */
 export interface SubagentRef {

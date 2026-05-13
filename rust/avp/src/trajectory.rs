@@ -2169,15 +2169,15 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
             })
     }
 }
-#[doc = "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md."]
+#[doc = "Agent → observer event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/trajectory/v0.1/trajectory.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/trajectory.schema.json\","]
-#[doc = "  \"title\": \"AVP v0.1 Trajectory (Event)\","]
-#[doc = "  \"description\": \"Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md.\","]
+#[doc = "  \"$id\": \"https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/spec/trajectory/v0.1/trajectory.schema.json\","]
+#[doc = "  \"title\": \"AVP Trajectory\","]
+#[doc = "  \"description\": \"Agent → observer event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/trajectory/v0.1/trajectory.md.\","]
 #[doc = "  \"oneOf\": ["]
 #[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/RunRequestedEvent\""]
@@ -2278,7 +2278,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(untagged)]
-pub enum AvpV01TrajectoryEvent {
+pub enum AvpTrajectory {
     RunRequestedEvent(RunRequestedEvent),
     AgentDescribedEvent(AgentDescribedEvent),
     AgentStartedEvent(AgentStartedEvent),
@@ -2302,112 +2302,112 @@ pub enum AvpV01TrajectoryEvent {
     ManagedRefResolvedEvent(ManagedRefResolvedEvent),
     ManagedRefResolveFailedEvent(ManagedRefResolveFailedEvent),
 }
-impl ::std::convert::From<RunRequestedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<RunRequestedEvent> for AvpTrajectory {
     fn from(value: RunRequestedEvent) -> Self {
         Self::RunRequestedEvent(value)
     }
 }
-impl ::std::convert::From<AgentDescribedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<AgentDescribedEvent> for AvpTrajectory {
     fn from(value: AgentDescribedEvent) -> Self {
         Self::AgentDescribedEvent(value)
     }
 }
-impl ::std::convert::From<AgentStartedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<AgentStartedEvent> for AvpTrajectory {
     fn from(value: AgentStartedEvent) -> Self {
         Self::AgentStartedEvent(value)
     }
 }
-impl ::std::convert::From<AgentStoppedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<AgentStoppedEvent> for AvpTrajectory {
     fn from(value: AgentStoppedEvent) -> Self {
         Self::AgentStoppedEvent(value)
     }
 }
-impl ::std::convert::From<ModelTurnStartedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ModelTurnStartedEvent> for AvpTrajectory {
     fn from(value: ModelTurnStartedEvent) -> Self {
         Self::ModelTurnStartedEvent(value)
     }
 }
-impl ::std::convert::From<ModelTurnEndedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ModelTurnEndedEvent> for AvpTrajectory {
     fn from(value: ModelTurnEndedEvent) -> Self {
         Self::ModelTurnEndedEvent(value)
     }
 }
-impl ::std::convert::From<ToolInvokedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ToolInvokedEvent> for AvpTrajectory {
     fn from(value: ToolInvokedEvent) -> Self {
         Self::ToolInvokedEvent(value)
     }
 }
-impl ::std::convert::From<ToolReturnedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ToolReturnedEvent> for AvpTrajectory {
     fn from(value: ToolReturnedEvent) -> Self {
         Self::ToolReturnedEvent(value)
     }
 }
-impl ::std::convert::From<ToolFailedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ToolFailedEvent> for AvpTrajectory {
     fn from(value: ToolFailedEvent) -> Self {
         Self::ToolFailedEvent(value)
     }
 }
-impl ::std::convert::From<SubagentInvokedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<SubagentInvokedEvent> for AvpTrajectory {
     fn from(value: SubagentInvokedEvent) -> Self {
         Self::SubagentInvokedEvent(value)
     }
 }
-impl ::std::convert::From<SubagentReturnedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<SubagentReturnedEvent> for AvpTrajectory {
     fn from(value: SubagentReturnedEvent) -> Self {
         Self::SubagentReturnedEvent(value)
     }
 }
-impl ::std::convert::From<SubagentFailedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<SubagentFailedEvent> for AvpTrajectory {
     fn from(value: SubagentFailedEvent) -> Self {
         Self::SubagentFailedEvent(value)
     }
 }
-impl ::std::convert::From<TextEmittedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<TextEmittedEvent> for AvpTrajectory {
     fn from(value: TextEmittedEvent) -> Self {
         Self::TextEmittedEvent(value)
     }
 }
-impl ::std::convert::From<ReasoningEmittedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ReasoningEmittedEvent> for AvpTrajectory {
     fn from(value: ReasoningEmittedEvent) -> Self {
         Self::ReasoningEmittedEvent(value)
     }
 }
-impl ::std::convert::From<RefusalRecordedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<RefusalRecordedEvent> for AvpTrajectory {
     fn from(value: RefusalRecordedEvent) -> Self {
         Self::RefusalRecordedEvent(value)
     }
 }
-impl ::std::convert::From<CostRecordedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<CostRecordedEvent> for AvpTrajectory {
     fn from(value: CostRecordedEvent) -> Self {
         Self::CostRecordedEvent(value)
     }
 }
-impl ::std::convert::From<SkillLoadedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<SkillLoadedEvent> for AvpTrajectory {
     fn from(value: SkillLoadedEvent) -> Self {
         Self::SkillLoadedEvent(value)
     }
 }
-impl ::std::convert::From<ErrorOccurredEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ErrorOccurredEvent> for AvpTrajectory {
     fn from(value: ErrorOccurredEvent) -> Self {
         Self::ErrorOccurredEvent(value)
     }
 }
-impl ::std::convert::From<McpServerConnectedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<McpServerConnectedEvent> for AvpTrajectory {
     fn from(value: McpServerConnectedEvent) -> Self {
         Self::McpServerConnectedEvent(value)
     }
 }
-impl ::std::convert::From<McpServerDisconnectedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<McpServerDisconnectedEvent> for AvpTrajectory {
     fn from(value: McpServerDisconnectedEvent) -> Self {
         Self::McpServerDisconnectedEvent(value)
     }
 }
-impl ::std::convert::From<ManagedRefResolvedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ManagedRefResolvedEvent> for AvpTrajectory {
     fn from(value: ManagedRefResolvedEvent) -> Self {
         Self::ManagedRefResolvedEvent(value)
     }
 }
-impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01TrajectoryEvent {
+impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpTrajectory {
     fn from(value: ManagedRefResolveFailedEvent) -> Self {
         Self::ManagedRefResolveFailedEvent(value)
     }
@@ -3382,14 +3382,14 @@ impl<'de> ::serde::Deserialize<'de> for Id {
             })
     }
 }
-#[doc = "The resolver returned an error or could not be reached for one of\nthe Commission's managed-asset refs. The agent MUST stop with\n`agent_stopped(reason: \"error\")` after emitting this event. Startup\nresolution is fail-fast (see `spec/v0.1/resolver.md` §5)."]
+#[doc = "The resolver returned an error or could not be reached for one of\nthe Commission's managed-asset refs. The agent MUST stop with\n`agent_stopped(reason: \"error\")` after emitting this event. Startup\nresolution is fail-fast (see `spec/resolver/v0.1-beta/resolver.md` §5)."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ManagedRefResolveFailedData\","]
-#[doc = "  \"description\": \"The resolver returned an error or could not be reached for one of\\nthe Commission's managed-asset refs. The agent MUST stop with\\n`agent_stopped(reason: \\\"error\\\")` after emitting this event. Startup\\nresolution is fail-fast (see `spec/v0.1/resolver.md` §5).\","]
+#[doc = "  \"description\": \"The resolver returned an error or could not be reached for one of\\nthe Commission's managed-asset refs. The agent MUST stop with\\n`agent_stopped(reason: \\\"error\\\")` after emitting this event. Startup\\nresolution is fail-fast (see `spec/resolver/v0.1-beta/resolver.md` §5).\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.managed.id\","]

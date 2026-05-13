@@ -24,7 +24,7 @@ avp-conformance = "avp.conformance.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/portofcontext/agent-voyager-project"
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp"]

@@ -29,15 +29,15 @@ pub mod error {
         }
     }
 }
-#[doc = "Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md."]
+#[doc = "Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/commission/v0.1-beta/commission.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/commission.schema.json\","]
-#[doc = "  \"title\": \"AVP v0.1 Commission\","]
-#[doc = "  \"description\": \"Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md.\","]
+#[doc = "  \"$id\": \"https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/spec/commission/v0.1-beta/commission.schema.json\","]
+#[doc = "  \"title\": \"AVP Commission (Beta)\","]
+#[doc = "  \"description\": \"Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/commission/v0.1-beta/commission.md.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"run_id\","]
@@ -237,7 +237,7 @@ pub mod error {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct AvpV01Commission {
+pub struct AvpCommissionBeta {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub enabled_builtin_skills: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -372,14 +372,14 @@ impl ::std::convert::From<::serde_json::Value> for JsonValue {
         Self(value)
     }
 }
-#[doc = "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\nconcerns; AVP does not constrain them."]
+#[doc = "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\nspec (`spec/resolver/v0.1-beta/resolver.md` §3.2). Auth and transport are deployment\nconcerns; AVP does not constrain them."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"McpServerRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed MCP server.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"mcp_server\\\", id, ref}`. The resolver returns the connection\\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\\nconcerns; AVP does not constrain them.\","]
+#[doc = "  \"description\": \"Reference to a supervisor-managed MCP server.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"mcp_server\\\", id, ref}`. The resolver returns the connection\\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\\nspec (`spec/resolver/v0.1-beta/resolver.md` §3.2). Auth and transport are deployment\\nconcerns; AVP does not constrain them.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\","]

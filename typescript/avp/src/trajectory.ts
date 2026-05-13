@@ -6,9 +6,9 @@
  */
 
 /**
- * Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md.
+ * Agent → observer event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/trajectory/v0.1/trajectory.md.
  */
-export type AVPV01TrajectoryEvent =
+export type AVPTrajectory =
   | RunRequestedEvent
   | AgentDescribedEvent
   | AgentStartedEvent
@@ -1243,7 +1243,7 @@ export interface ManagedRefResolveFailedEvent {
  * The resolver returned an error or could not be reached for one of
  * the Commission's managed-asset refs. The agent MUST stop with
  * `agent_stopped(reason: "error")` after emitting this event. Startup
- * resolution is fail-fast (see `spec/v0.1/resolver.md` §5).
+ * resolution is fail-fast (see `spec/resolver/v0.1-beta/resolver.md` §5).
  */
 export interface ManagedRefResolveFailedData {
   trace_id: TraceId21;

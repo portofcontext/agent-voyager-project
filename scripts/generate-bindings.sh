@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Regenerate the Rust + TypeScript bindings for AVP wire types from the
-# canonical JSON Schemas under `spec/v0.1/`.
+# canonical JSON Schemas under `spec/`.
 #
 # Single source of truth chain:
 #   python/avp/src/avp/types.py (Pydantic, hand-written)
-#     -> spec/v0.1/*.schema.json (auto-generated; scripts/generate-schemas.py)
+#     -> spec/*.schema.json (auto-generated; scripts/generate-schemas.py)
 #       -> rust/avp/src/*.rs       (generated here, via cargo-typify)
 #       -> typescript/avp/src/*.ts (generated here, via json-schema-to-typescript)
 #
@@ -32,9 +32,15 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SPEC="$REPO/spec/v0.1"
+SPEC="$REPO/spec"
 RUST_OUT="$REPO/rust/avp/src"
 TS_OUT="$REPO/typescript/avp/src"
+
+# Per-spec schema locations. Bump versions here when a spec version
+# changes; the rest of this script is version-agnostic.
+COMMISSION_SCHEMA="$SPEC/commission/v0.1-beta/commission.schema.json"
+TRAJECTORY_SCHEMA="$SPEC/trajectory/v0.1/trajectory.schema.json"
+AGENT_DESCRIPTOR_SCHEMA="$SPEC/agent-descriptor/v0.1/agent-descriptor.schema.json"
 
 # Tools
 command -v cargo-typify >/dev/null 2>&1 || {
@@ -91,9 +97,9 @@ generate_ts() {
 }
 
 echo "Generating Rust bindings (cargo-typify)…"
-generate_rust "commission" "$SPEC/commission.schema.json"
-generate_rust "trajectory" "$SPEC/trajectory.schema.json"
-generate_rust "agent_descriptor" "$SPEC/agent-descriptor.schema.json"
+generate_rust "commission" "$COMMISSION_SCHEMA"
+generate_rust "trajectory" "$TRAJECTORY_SCHEMA"
+generate_rust "agent_descriptor" "$AGENT_DESCRIPTOR_SCHEMA"
 
 # Old generated files from previous schema/spec names; clean up to avoid
 # stale code drifting in tree.
@@ -102,9 +108,9 @@ rm -f "$TS_OUT/event.ts" "$TS_OUT/supervisor-message.ts"
 
 echo
 echo "Generating TypeScript bindings (json-schema-to-typescript)…"
-generate_ts "commission" "$SPEC/commission.schema.json"
-generate_ts "trajectory" "$SPEC/trajectory.schema.json"
-generate_ts "agent-descriptor" "$SPEC/agent-descriptor.schema.json"
+generate_ts "commission" "$COMMISSION_SCHEMA"
+generate_ts "trajectory" "$TRAJECTORY_SCHEMA"
+generate_ts "agent-descriptor" "$AGENT_DESCRIPTOR_SCHEMA"
 
 echo
 echo "Done."

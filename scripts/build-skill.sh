@@ -6,7 +6,7 @@
 #   scripts/build-skill.sh /tmp/out       # builds /tmp/out/avp.skill
 #
 # What goes in the bundle:
-#   SKILL.md, spec/v0.1/, conformance/v0.1/, python/avp/,
+#   SKILL.md, spec/, conformance/, python/avp/,
 #   plus README.md and LICENSE for context.
 #
 # Worked example Configs live at python/supervisors/simple-supervisor-example/
@@ -35,9 +35,9 @@ trap cleanup EXIT
 # Stage the bundle under a directory named "avp" so the .skill extracts into ~/.claude/skills/avp
 mkdir -p "$STAGE"
 cp "$REPO/SKILL.md" "$REPO/README.md" "$REPO/LICENSE" "$STAGE/"
-mkdir -p "$STAGE/spec" "$STAGE/conformance" "$STAGE/python"
-cp -r "$REPO/spec/v0.1" "$STAGE/spec/"
-cp -r "$REPO/conformance/v0.1" "$STAGE/conformance/"
+mkdir -p "$STAGE/python"
+cp -r "$REPO/spec" "$STAGE/spec"
+cp -r "$REPO/conformance" "$STAGE/conformance"
 cp -r "$REPO/python/avp" "$STAGE/python/"
 
 # Strip build artifacts

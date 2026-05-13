@@ -8,7 +8,7 @@ Story: a supervisor declares ONE managed subagent — a `summarizer` whose
 job is to turn a passage into a couple of bullets. The Commission carries
 just an opaque ref for the subagent; an in-process `ScriptedResolver`
 stands in for what a production supervisor would wire as an HTTP service
-(per `spec/v0.1/resolver.md`). The parent agent runs against Claude, calls
+(per `spec/resolver/v0.1-beta/resolver.md`). The parent agent runs against Claude, calls
 `avp.spawn_subagent` when the model invokes the subagent, and emits the
 expected lifecycle on the wire.
 

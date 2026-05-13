@@ -250,7 +250,7 @@ class ResolverDriver(Protocol):
       `Commission.{mcp_servers,skills,subagents}[]` entry. Returns the
       connection material / content / metadata the supervisor wants the
       agent to use. The result shape varies by `kind` (see
-      `spec/v0.1/resolver.md` §3.2); the agent's runtime layer interprets
+      `spec/resolver/v0.1-beta/resolver.md` §3.2); the agent's runtime layer interprets
       it.
     - `spawn_subagent(...)` — on-demand. Called when the parent's model
       invokes a Commission-declared subagent. Returns the child run id

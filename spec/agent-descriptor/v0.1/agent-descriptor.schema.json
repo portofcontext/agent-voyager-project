@@ -1,0 +1,278 @@
+{
+  "$defs": {
+    "_SkillDecl": {
+      "additionalProperties": true,
+      "description": "Skill descriptor in `agent_started.data.skills`: name plus\noptional metadata about each skill loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `avp.source` is the\nSKILL.md path / URI when known.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "avp.source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Source"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "_SkillDecl",
+      "type": "object"
+    },
+    "_SubagentDecl": {
+      "additionalProperties": true,
+      "description": "Subagent descriptor in `agent_started.data.subagents`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        },
+        "avp.agent_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Agent Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "_SubagentDecl",
+      "type": "object"
+    },
+    "_ToolDecl": {
+      "additionalProperties": true,
+      "description": "Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "inputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inputschema"
+        },
+        "avp.dispatch_target": {
+          "anyOf": [
+            {
+              "enum": [
+                "mcp_server",
+                "local"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Dispatch Target"
+        },
+        "avp.mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Mcp Server Id"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "_ToolDecl",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/agent-descriptor/v0.1/agent-descriptor.md.",
+  "properties": {
+    "agent_name": {
+      "minLength": 1,
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "agent_version": {
+      "minLength": 1,
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "avp_spec_version": {
+      "const": "0.1",
+      "title": "Avp Spec Version",
+      "type": "string"
+    },
+    "default_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Model"
+    },
+    "supported_models": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supported Models"
+    },
+    "built_in_tools": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/_ToolDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Built In Tools"
+    },
+    "built_in_subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/_SubagentDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Built In Subagents"
+    },
+    "built_in_skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/_SkillDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Built In Skills"
+    },
+    "capabilities": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Capabilities"
+    }
+  },
+  "required": [
+    "agent_name",
+    "agent_version",
+    "avp_spec_version"
+  ],
+  "title": "AVP Agent Descriptor",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/portofcontext/agent-voyager-project/main/spec/agent-descriptor/v0.1/agent-descriptor.schema.json"
+}

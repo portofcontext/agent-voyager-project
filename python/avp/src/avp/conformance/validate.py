@@ -26,18 +26,11 @@ def _load(p: Path) -> dict:
         return json.load(f)
 
 
-def _build_registry(spec_dir: Path, test_case_schema_path: Path) -> Registry:
-    """Register the v0.1 AVP schemas plus the test-case schema by their $id URIs
-    so jsonschema can resolve $refs across the bundle."""
+def _build_registry(spec_schema_files: list[Path], test_case_schema_path: Path) -> Registry:
+    """Register the per-spec AVP schemas plus the test-case schema by their
+    $id URIs so jsonschema can resolve $refs across them."""
     registry: Registry = Registry()
-    schema_files = [
-        spec_dir / "avp.schema.json",
-        spec_dir / "commission.schema.json",
-        spec_dir / "trajectory.schema.json",
-        spec_dir / "agent-descriptor.schema.json",
-        test_case_schema_path,
-    ]
-    for sf in schema_files:
+    for sf in [*spec_schema_files, test_case_schema_path]:
         doc = _load(sf)
         registry = registry.with_resource(uri=doc["$id"], resource=Resource.from_contents(doc))
     return registry
@@ -46,10 +39,13 @@ def _build_registry(spec_dir: Path, test_case_schema_path: Path) -> Registry:
 def validate_suite(
     *,
     suite_dir: Path,
-    spec_dir: Path,
+    spec_schema_files: list[Path],
     test_case_schema_path: Path,
 ) -> tuple[list[Path], list[ValidationFailure]]:
     """Validate every *.json under suite_dir against the test-case schema.
+
+    `spec_schema_files` is the list of per-spec schema files to register
+    with the validator (one per AVP spec that ships a schema).
 
     Returns (all_cases, failures). all_cases is the full list found;
     failures is empty iff every case validated.
@@ -57,10 +53,13 @@ def validate_suite(
     test_case_schema = _load(test_case_schema_path)
     Draft202012Validator.check_schema(test_case_schema)
 
-    registry = _build_registry(spec_dir, test_case_schema_path)
+    registry = _build_registry(spec_schema_files, test_case_schema_path)
     validator = Draft202012Validator(test_case_schema, registry=registry)
 
-    cases = sorted(suite_dir.rglob("*.json"))
+    # Only treat files under a `cases/` segment as conformance cases; this
+    # skips schema files, examples, READMEs, and anything else that lives
+    # alongside the cases under conformance/.
+    cases = sorted(p for p in suite_dir.rglob("*.json") if "cases" in p.parts)
     failures: list[ValidationFailure] = []
 
     for path in cases:

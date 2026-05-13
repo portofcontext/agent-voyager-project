@@ -294,6 +294,12 @@ def run_case(path: Path) -> CaseResult:
 
 
 def run_suite(cases_dir: Path) -> list[CaseResult]:
-    """Execute every *.json case under cases_dir, recursively."""
-    paths = sorted(cases_dir.rglob("*.json"))
+    """Execute every *.json case under cases_dir, recursively.
+
+    Only files under a `cases/` path segment are picked up, so the same
+    `cases_dir` can be `conformance/` (the umbrella) or a specific
+    spec's `conformance/<spec>/<version>/cases/` directory without
+    sweeping in schema files or examples.
+    """
+    paths = sorted(p for p in cases_dir.rglob("*.json") if "cases" in p.parts)
     return [run_case(p) for p in paths]
