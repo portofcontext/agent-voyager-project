@@ -431,11 +431,51 @@ class OllamaTranslator:
         return {"backend": self.backend_identity, "model": self.model}
 
     def _post(self, event: dict[str, Any]) -> None:
+        """Append `event` to the trajectory at the next local seq, with
+        retry-on-409 to handle supervisor-side concurrent inserts (e.g.,
+        the supervisor's `avp.run_resumed` bracket landing at our
+        next-free seq while we're mid-stream). On 409, re-query the
+        authoritative `next_seq` from the supervisor, bump our local
+        counter past it, and retry.
+
+        Bounded retries: 3 total. Beyond that we log and give up — the
+        trajectory has the event in a more authoritative form (the
+        supervisor's own append), and any consumer scanning by type
+        will still find the right event."""
+        max_attempts = 3
         seq = self._next_seq()
-        try:
-            self.client.append_event(self.run_id, seq, event)
-        except httpx.HTTPError as e:
-            logger.warning("event post failed (seq=%d, type=%s): %s", seq, event.get("type"), e)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.client.append_event(self.run_id, seq, event)
+                return
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 409 or attempt == max_attempts:
+                    logger.warning(
+                        "event post failed (seq=%d, type=%s, attempt=%d/%d): %s",
+                        seq, event.get("type"), attempt, max_attempts, e,
+                    )
+                    return
+                # 409 → the supervisor (or someone) took this seq.
+                # Re-discover the next-free seq and try again.
+                try:
+                    fresh = self.client.next_seq(self.run_id)
+                except httpx.HTTPError as fetch_err:
+                    logger.warning(
+                        "next_seq re-fetch after 409 failed: %s", fetch_err
+                    )
+                    return
+                logger.info(
+                    "seq=%d collided (type=%s); retrying at seq=%d",
+                    seq, event.get("type"), fresh,
+                )
+                seq = fresh
+                # Keep our local counter ahead of the just-discovered
+                # supervisor-side max so subsequent _next_seq calls
+                # don't immediately collide again.
+                self.state.seq = max(self.state.seq, seq + 1)
+            except httpx.HTTPError as e:
+                logger.warning("event post failed (seq=%d, type=%s): %s", seq, event.get("type"), e)
+                return
 
     def _inherit_agent_span(self) -> None:
         """Look up the original `agent_started` event the prior runner
