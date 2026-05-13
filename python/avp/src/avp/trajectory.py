@@ -35,6 +35,7 @@ under the `avp.*` attribute namespace. See `FOUNDATIONS.md` and
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -59,7 +60,6 @@ from avp.descriptor import (
     _SubagentDecl,
     _ToolDecl,
 )
-from avp.enums import ErrorCode, StopReason
 
 # Reverse-DNS event types per CloudEvents convention. All AVP-defined types
 # live under the `avp.` namespace.
@@ -85,6 +85,32 @@ T_SUBAGENT_RETURNED = "avp.subagent_returned"
 T_SUBAGENT_FAILED = "avp.subagent_failed"
 T_MANAGED_REF_RESOLVED = "avp.managed_ref_resolved"
 T_MANAGED_REF_RESOLVE_FAILED = "avp.managed_ref_resolve_failed"
+
+
+class StopReason(StrEnum):
+    """Why a run terminated. v0.1 keeps the enum tight: model said done,
+    model declined, agent crashed, or operator interrupted. Cap-driven
+    stop reasons (turn / token / cost / duration limits) are not part of
+    v0.1; agents that need bounded execution wire it externally
+    (subprocess timeouts, supervisor SIGKILL)."""
+
+    converged = "converged"
+    error = "error"
+    interrupted = "interrupted"
+    refused = "refused"
+
+
+class ErrorCode(StrEnum):
+    rate_limit = "rate_limit"
+    context_limit = "context_limit"
+    auth_error = "auth_error"
+    agent_crash = "agent_crash"
+    accounting_reset = "accounting_reset"
+    unsupported_model = "unsupported_model"
+    # Commission-managed-asset / resolver-protocol error codes (v0.1).
+    resolver_not_configured = "resolver_not_configured"
+    commission_collision = "commission_collision"
+    unknown = "unknown"
 
 
 class RunStateSnapshot(BaseModel):
