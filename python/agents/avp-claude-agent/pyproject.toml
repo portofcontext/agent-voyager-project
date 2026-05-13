@@ -16,6 +16,7 @@ dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.scripts]
 avp-claude-agent = "avp_claude_agent.cli:main"
+avp-claude-agent-conformance = "avp_claude_agent.conformance:main"
 
 [project.urls]
 Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"

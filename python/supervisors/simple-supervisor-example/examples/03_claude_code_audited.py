@@ -42,7 +42,7 @@ def main() -> int:
     # Tool names here are Claude Code's (Read / Write / Bash / Edit / Glob).
     # The supervisor narrows the surface to a read-only audit; the SDK enforces
     # it via the `tools` parameter the translator passes through.
-    config = build_commission(
+    commission = build_commission(
         run_id=run_id,
         prompt="Read the README.md and tell me what this project demonstrates. End with 'DONE'.",
         profile="read-only",
@@ -50,12 +50,12 @@ def main() -> int:
     ).model_copy(update={"enabled_builtin_tools": ["Read"]})
 
     print("== Commission (compiled from profile='read-only', re-targeted at Claude Code tools) ==")
-    print(config.model_dump_json(indent=2, exclude_none=True))
+    print(commission.model_dump_json(indent=2, exclude_none=True))
     print()
     print("== Live trajectory ==")
 
     events: list = []
-    translator = ClaudeAgentTranslator(config, on_event=events.append)
+    translator = ClaudeAgentTranslator(commission, on_event=events.append)
     translator.run()
 
     for ev in events:

@@ -36,6 +36,21 @@ class CaseResult:
     failures: list[CaseFailure] = field(default_factory=list)
     trajectory: list[dict[str, Any]] = field(default_factory=list)
     duration_ms: int = 0
+    # When True, the case wasn't run — the harness skipped it (e.g.
+    # `scripted_only: true` against a live harness). Counted as passing
+    # for CI gating; rendered as SKIP in CLI output.
+    skipped: bool = False
+    skip_reason: str = ""
+
+
+class SkipCase(Exception):
+    """Raised by a `CaseRunner` to mark this case as skipped rather
+    than failed. The framework catches it, produces a `CaseResult`
+    with `skipped=True`, and the CLI renders SKIP."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 # ── Trajectory helpers ────────────────────────────────────────────────────────

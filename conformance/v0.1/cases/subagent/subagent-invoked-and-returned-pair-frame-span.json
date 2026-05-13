@@ -9,6 +9,7 @@
   "applies_to": [
     "agent"
   ],
+  "scripted_only": true,
   "commission": {
     "schema_version": "0.1",
     "run_id": "subagent-pair",

@@ -185,7 +185,12 @@ def test_build_sdk_options_maps_config_fields() -> None:
     assert "PostToolUse" in kw["hooks"]
 
 
-def test_assistant_message_emits_turn_started_text_ended_cost() -> None:
+def test_assistant_message_emits_turn_then_cost_then_text() -> None:
+    """Per trajectory.md §7 the order within a turn is
+    model_turn_started → model_turn_ended → cost_recorded →
+    (reasoning_emitted)* → text_emitted. Text follows the turn's
+    bookkeeping events so audit consumers reconstruct as "thought,
+    then spoke" — matches AVPAgent."""
     t, out = _new_translator()
     msg = AssistantMessage(
         content=[TextBlock("hi there")],
@@ -196,18 +201,18 @@ def test_assistant_message_emits_turn_started_text_ended_cost() -> None:
     types = [type(ev).__name__ for ev in out]
     assert types == [
         "ModelTurnStartedEvent",
-        "TextEmittedEvent",
         "ModelTurnEndedEvent",
         "CostRecordedEvent",
+        "TextEmittedEvent",
     ]
     assert isinstance(out[0], ModelTurnStartedEvent)
-    assert isinstance(out[1], TextEmittedEvent) and out[1].data.avp_text == "hi there"
-    assert isinstance(out[2], ModelTurnEndedEvent)
-    assert out[2].data.gen_ai_usage_input_tokens == 100
-    assert out[2].data.gen_ai_usage_output_tokens == 25
-    assert out[2].data.avp_cost_usd > 0
-    assert isinstance(out[3], CostRecordedEvent)
-    assert out[3].data.avp_state.total_turns == 1
+    assert isinstance(out[1], ModelTurnEndedEvent)
+    assert out[1].data.gen_ai_usage_input_tokens == 100
+    assert out[1].data.gen_ai_usage_output_tokens == 25
+    assert out[1].data.avp_cost_usd > 0
+    assert isinstance(out[2], CostRecordedEvent)
+    assert out[2].data.avp_state.total_turns == 1
+    assert isinstance(out[3], TextEmittedEvent) and out[3].data.avp_text == "hi there"
 
 
 def test_cumulative_usage_yields_per_turn_deltas() -> None:
@@ -271,12 +276,12 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
 
     pre_input = {
         "tool_use_id": "c1",
-        "tool_name": "bash",
+        "tool_name": "Bash",
         "tool_input": {"command": "ls"},
     }
     post_input = {
         "tool_use_id": "c1",
-        "tool_name": "bash",
+        "tool_name": "Bash",
         "tool_response": "file1\nfile2",
     }
     asyncio.run(t._on_pre_tool_use_hook(pre_input, "c1", None))
@@ -284,7 +289,7 @@ def test_pre_and_post_tool_use_hooks_emit_invoked_and_returned() -> None:
 
     assert isinstance(out[0], ToolInvokedEvent)
     assert out[0].data.gen_ai_tool_call_id == "c1"
-    assert out[0].data.gen_ai_tool_name == "bash"
+    assert out[0].data.gen_ai_tool_name == "Bash"
     assert out[0].data.gen_ai_tool_call_arguments == {"command": "ls"}
     assert isinstance(out[1], ToolReturnedEvent)
     assert out[1].data.avp_tool_result_text == "file1\nfile2"

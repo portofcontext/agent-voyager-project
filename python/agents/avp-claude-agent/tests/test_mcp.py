@@ -121,7 +121,12 @@ def test_no_mcp_servers_produces_no_kwarg() -> None:
 # ── Resolver protocol: managed_ref_resolved fires on success ──────────────
 
 
-def test_resolve_managed_assets_emits_managed_ref_resolved() -> None:
+def test_resolve_managed_assets_silently_then_replays_managed_ref_resolved() -> None:
+    """Resolution is two-phase: silent (does the resolver work, no
+    emission) and replay (emits managed_ref_resolved). This split exists
+    so agent_started can fire BEFORE managed_ref_resolved per
+    trajectory.md §2.1/§2.2 while still letting agent_started reflect
+    resolved material."""
     cfg = Commission(
         schema_version="0.1",
         run_id="resolve-ok",
@@ -136,14 +141,18 @@ def test_resolve_managed_assets_emits_managed_ref_resolved() -> None:
         }
     )
     t, out = _make_translator(cfg, resolver=resolver)
-    assert t._resolve_managed_assets() is True
+    # Silent phase: no managed_ref_resolved on the wire yet.
+    assert t._resolve_managed_assets_silently() is True
+    assert [e for e in out if type(e).__name__ == "ManagedRefResolvedEvent"] == []
+    # Replay phase emits the event.
+    t._emit_resolution_events()
     resolved_events = [e for e in out if type(e).__name__ == "ManagedRefResolvedEvent"]
     assert len(resolved_events) == 1
     assert resolved_events[0].data.avp_managed_kind == "mcp_server"
     assert resolved_events[0].data.avp_managed_id == "github"
 
 
-def test_resolve_managed_assets_emits_managed_ref_resolve_failed() -> None:
+def test_resolve_managed_assets_silently_records_failure_for_replay() -> None:
     cfg = Commission(
         schema_version="0.1",
         run_id="resolve-bad",
@@ -154,7 +163,10 @@ def test_resolve_managed_assets_emits_managed_ref_resolve_failed() -> None:
         resolutions={"mcp_server:github": {"error": "boom", "error_code": "not_found"}}
     )
     t, out = _make_translator(cfg, resolver=resolver)
-    assert t._resolve_managed_assets() is False
+    assert t._resolve_managed_assets_silently() is False
+    # Failure recorded, not yet emitted.
+    assert [e for e in out if type(e).__name__ == "ManagedRefResolveFailedEvent"] == []
+    t._emit_resolution_events()
     failed = [e for e in out if type(e).__name__ == "ManagedRefResolveFailedEvent"]
     assert len(failed) == 1
     assert failed[0].data.avp_managed_id == "github"

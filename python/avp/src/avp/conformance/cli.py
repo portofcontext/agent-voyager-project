@@ -76,8 +76,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
 
     fails = 0
+    skipped = 0
     for r in results:
-        if r.passed:
+        if r.skipped:
+            skipped += 1
+            reason = f" — {r.skip_reason}" if r.skip_reason else ""
+            print(f"SKIP  {r.case_id}{reason}")
+        elif r.passed:
             print(f"PASS  {r.case_id}  ({r.duration_ms}ms)")
         else:
             fails += 1
@@ -89,7 +94,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 for ev in r.trajectory[-30:]:
                     print(f"        {ev.get('source', '?'):>10}  {ev.get('type', '?')}  {ev}")
     print()
-    print(f"{len(results) - fails} / {len(results)} cases passed")
+    total = len(results)
+    msg = f"{total - fails - skipped} / {total} cases passed"
+    if skipped:
+        msg += f" ({skipped} skipped)"
+    print(msg)
     return 0 if fails == 0 else 1
 
 

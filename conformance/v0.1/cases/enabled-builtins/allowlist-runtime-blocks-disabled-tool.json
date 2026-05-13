@@ -1,13 +1,14 @@
 {
   "id": "allowlist-runtime-blocks-disabled-tool",
-  "title": "Model invoking a disabled built-in MUST emit tool_invoked → tool_failed and not execute",
-  "description": "defense-in-depth. The visibility layer hides disabled built-ins from agent_started.data.tools[], but if the model invokes a disabled name anyway (hallucination, prompt injection from earlier tool output, prior-context leakage), the agent MUST emit tool_invoked first (the attempt is on the wire) and tool_failed second (refusing to execute). The model receives an `Error: …` tool_result so the next turn can react.",
+  "title": "Model invoking a disabled built-in MUST emit tool_invoked \u2192 tool_failed and not execute",
+  "description": "defense-in-depth. The visibility layer hides disabled built-ins from agent_started.data.tools[], but if the model invokes a disabled name anyway (hallucination, prompt injection from earlier tool output, prior-context leakage), the agent MUST emit tool_invoked first (the attempt is on the wire) and tool_failed second (refusing to execute). The model receives an `Error: \u2026` tool_result so the next turn can react.",
   "spec_refs": [
     "spec/v0.1/commission.md#4-built-in-surface-allowlists"
   ],
   "applies_to": [
     "agent"
   ],
+  "scripted_only": true,
   "commission": {
     "schema_version": "0.1",
     "run_id": "allowlist-runtime-block",
@@ -89,7 +90,7 @@
             "gen_ai.tool.name": "Bash"
           }
         },
-        "label": "tool_invoked still fires — the attempt is recorded"
+        "label": "tool_invoked still fires \u2014 the attempt is recorded"
       },
       {
         "match": {

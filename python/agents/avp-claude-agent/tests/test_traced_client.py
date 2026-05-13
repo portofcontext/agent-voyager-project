@@ -286,7 +286,7 @@ def test_pre_post_tool_use_hooks_fire_emitting_tool_lifecycle() -> None:
             await traced._translator._on_pre_tool_use_hook(
                 {
                     "tool_use_id": "tu-1",
-                    "tool_name": "bash",
+                    "tool_name": "Bash",
                     "tool_input": {"command": "ls"},
                 },
                 None,
@@ -295,7 +295,7 @@ def test_pre_post_tool_use_hooks_fire_emitting_tool_lifecycle() -> None:
             await traced._translator._on_post_tool_use_hook(
                 {
                     "tool_use_id": "tu-1",
-                    "tool_name": "bash",
+                    "tool_name": "Bash",
                     "tool_response": "file1\nfile2\n",
                 },
                 None,
@@ -305,7 +305,7 @@ def test_pre_post_tool_use_hooks_fire_emitting_tool_lifecycle() -> None:
     asyncio.run(_run())
     inv = _by_type(out, ToolInvokedEvent)[0]
     ret = _by_type(out, ToolReturnedEvent)[0]
-    assert inv.data.gen_ai_tool_name == "bash"
+    assert inv.data.gen_ai_tool_name == "Bash"
     assert ret.data.avp_tool_result_text == "file1\nfile2\n"
     assert inv.data.span_id == ret.data.span_id, "tool span paired"
 
