@@ -113,6 +113,10 @@ T_MANAGED_REF_RESOLVE_FAILED = "avp.managed_ref_resolve_failed"
 # Supervisor-sourced bracket event marking a mid-run execution-backend
 # swap (trajectory.md §7.3). Peer event; does not restart the span tree.
 T_RUN_RESCUED = "avp.run_rescued"
+# Phase 2 (warm rescue). Supervisor-sourced bracket fired right after
+# the rescued runner emits its first agent-sourced event. Paired with
+# `run_rescued` to make the swap unambiguous in the trajectory.
+T_RUN_RESUMED = "avp.run_resumed"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept
@@ -867,6 +871,95 @@ class RunRescuedData(BaseModel):
     last_completed_seq: int = Field(ge=0)
 
 
+class RunResumedData(BaseModel):
+    """`avp.run_resumed` payload. Phase-2 warm-rescue companion to
+    `avp.run_rescued` — fired by the supervisor right after the rescued
+    runner emits its first agent-sourced event. The bracket pair
+    (`run_rescued` → … runner events … → `run_resumed`) makes the swap
+    unambiguous in the trajectory. See trajectory.md §7.3 / §7.5 and
+    commission.md §2.3."""
+
+    model_config = _STRICT
+    resumed_from_seq: int = Field(ge=0)
+    from_endpoint: RunRescuedEndpoint = Field(alias="from")
+    to_endpoint: RunRescuedEndpoint = Field(alias="to")
+
+
+# ── Commission.resume (phase 2 warm rescue) ──────────────────────────────────
+
+
+class ResumeMessage(BaseModel):
+    """One reconstructed conversation message in `ResumeBlock.context.messages`.
+    Mirrors the OpenAI / Anthropic chat-message shape every current
+    runner SDK speaks."""
+
+    model_config = _STRICT
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+
+
+class ResumeContext(BaseModel):
+    model_config = _STRICT
+    messages: list[ResumeMessage] = Field(default_factory=list)
+
+
+class ToolCacheFailure(BaseModel):
+    """Failure payload for a `ToolCacheEntry` whose original invocation
+    produced a `tool_failed` event."""
+
+    model_config = _STRICT
+    message: str
+    code: str | None = None
+
+
+class ToolCacheEntry(BaseModel):
+    """One entry in `ResumeBlock.tool_cache`. The runner matches its
+    model-emitted `tool_invoked` against these by `tool_name +
+    canonical-equal args`; on match, the runner emits `tool_returned`
+    (or `tool_failed`) using the cached payload instead of dispatching
+    the tool. See commission.md §2.3."""
+
+    model_config = _STRICT
+    tool_name: str = Field(min_length=1)
+    args: Any
+    # Set iff the original invocation produced a tool_returned.
+    result: Any | None = None
+    # Set iff the original invocation produced a tool_failed.
+    failure: ToolCacheFailure | None = None
+    tier: Literal["idempotent", "replay_only", "needs_approval"] = "replay_only"
+    original_span_id: str
+
+
+class InFlightToolCall(BaseModel):
+    """The most recent `tool_invoked` from the prior runner that had
+    no matching `tool_returned` / `tool_failed`. v0.1 informational
+    only — the runner sees it and decides whether to re-invoke or
+    skip. Phase 2.x adds true mid-tool resumption."""
+
+    model_config = _STRICT
+    tool_name: str = Field(min_length=1)
+    args: Any
+    span_id: str = Field(min_length=1)
+    invoked_at: Iso8601
+
+
+class ResumeBlock(BaseModel):
+    """Optional `Commission.resume` field. Set by the supervisor when
+    re-dispatching a run after a mid-trajectory rescue. Carries
+    everything the new runner needs to continue without restarting
+    from `prompt`. Absent on fresh dispatches.
+
+    See commission.md §2.3 + §2.4 (determinism contract) and
+    trajectory.md §7.3."""
+
+    model_config = _STRICT
+    from_seq: int = Field(ge=0)
+    replay_policy: Literal["context_only", "skip_completed"] = "context_only"
+    context: ResumeContext = Field(default_factory=ResumeContext)
+    tool_cache: list[ToolCacheEntry] = Field(default_factory=list)
+    in_flight_tool_call: InFlightToolCall | None = None
+
+
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
 #
 # Each event is a CloudEvent. `type` discriminates the union. `source` is the
@@ -1047,6 +1140,16 @@ class RunRescuedEvent(_CloudEventBase):
     data: RunRescuedData
 
 
+class RunResumedEvent(_CloudEventBase):
+    """Supervisor-sourced peer event marking the rescued runner showing
+    its first sign of life. Companion to `RunRescuedEvent`; the pair
+    brackets the swap in the trajectory. Phase 2 warm-rescue."""
+
+    type: Literal["avp.run_resumed"] = T_RUN_RESUMED
+    source: Literal["avp://supervisor"] = SOURCE_SUPERVISOR
+    data: RunResumedData
+
+
 # ── Discriminated unions ──────────────────────────────────────────────────────
 
 
@@ -1074,6 +1177,7 @@ _AGENT_EVENT_TYPES = (
     ManagedRefResolvedEvent,
     ManagedRefResolveFailedEvent,
     RunRescuedEvent,
+    RunResumedEvent,
 )
 
 Event = Annotated[
@@ -1099,7 +1203,8 @@ Event = Annotated[
     | McpServerDisconnectedEvent
     | ManagedRefResolvedEvent
     | ManagedRefResolveFailedEvent
-    | RunRescuedEvent,
+    | RunRescuedEvent
+    | RunResumedEvent,
     Field(discriminator="type"),
 ]
 

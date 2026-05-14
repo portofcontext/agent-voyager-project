@@ -95,6 +95,74 @@ A Commission is a single JSON document validating against [`commission.schema.js
 | `tags` | `string[]` | Free-form labels. |
 | `meta` | `object` | Free-form key/value bag. |
 | `output_schema` | `object \| null` | A JSON Schema the supervisor wants the agent's final output to validate against. Agents that don't support structured output ignore it. |
+| `resume` | `ResumeBlock \| null` | Set by the supervisor when re-dispatching a run after a mid-trajectory rescue (see [`trajectory.md`](./trajectory.md) §7.3, §7.5). Absent on fresh dispatches. Agents that ignore it degrade to cold-rescue semantics — they restart the conversation from `prompt` and re-execute any side-effecting tools. Agents that honor it pick up at `from_seq + 1`. Full shape in §2.3 below. |
+
+### 2.3 `ResumeBlock`
+
+Optional Commission field set by the supervisor when re-dispatching a rescued run. Carries everything the new runner needs to continue the trajectory without restarting from scratch.
+
+```jsonc
+{
+  "from_seq":      <integer ≥ 0>,
+  "replay_policy": "context_only" | "skip_completed",
+  "context":       { "messages": [ {"role": "<string>", "content": "<string>"}, ... ] },
+  "tool_cache":    [ ToolCacheEntry, ... ],
+  "in_flight_tool_call": <InFlightToolCall | null>
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `from_seq` | yes | The rescued runner MUST NOT emit any event with `seq <= from_seq`. Equal to the highest `seq` the supervisor persisted before the rescue. |
+| `replay_policy` | yes | `context_only` (default — runner seeds its model call with `context.messages`, no other enforcement) or `skip_completed` (stricter: runner asserts every emitted event has `seq > from_seq`). |
+| `context.messages` | yes | Reconstructed conversation messages in chronological order. Each entry is `{role, content}` where `role ∈ {"system","user","assistant","tool"}`. The runner SHOULD use this as the seed for its model call rather than rebuilding from `prompt`. |
+| `tool_cache` | yes | List of prior tool invocations. The runner matches its model-emitted `tool_invoked` events against entries by `tool_name + canonical-equal args`. On match: emit `tool_returned` (or `tool_failed`) from the cache instead of dispatching to the tool. |
+| `in_flight_tool_call` | optional | The most recent `tool_invoked` from the prior runner that had no matching `tool_returned` / `tool_failed`. v0.1 is informational: the runner sees it and decides whether to re-invoke or skip. |
+
+#### `ToolCacheEntry`
+
+```jsonc
+{
+  "tool_name":        "<string>",
+  "args":             <JsonValue>,        // canonical form (whitespace + key-order normalized)
+  "result":           <JsonValue | null>, // present iff the original tool_invoked produced a tool_returned
+  "failure":          <{message: string, code?: string} | null>, // present iff produced tool_failed
+  "tier":             "idempotent" | "replay_only" | "needs_approval",
+  "original_span_id": "<string>"
+}
+```
+
+`tier` governs cache-miss behavior (the model invokes a tool whose `tool_name + args` *doesn't* match any cache entry):
+
+| Tier | On cache miss |
+|---|---|
+| `idempotent` | Re-execute the tool. Safe for reads / deterministic transforms. |
+| `replay_only` | Emit `tool_failed` with `code: "replay_required_cache_missed"`. The model sees the failure and adapts. **Default for unclassified tools.** |
+| `needs_approval` | Block on the existing `approval_requested` RPC before re-executing. Human-in-the-loop. |
+
+#### `InFlightToolCall`
+
+```jsonc
+{
+  "tool_name":   "<string>",
+  "args":        <JsonValue>,
+  "span_id":     "<string>",   // original tool_invoked's span_id
+  "invoked_at":  "<ISO 8601>"
+}
+```
+
+### 2.4 Determinism contract for rescued runners
+
+A conforming runner that receives a Commission with `resume` set:
+
+1. MUST NOT emit any event whose `seq <= resume.from_seq`.
+2. MUST skip the prelude (`avp.run_requested`, `avp.agent_described`, `avp.agent_started`) — those events already exist in the trajectory from the prior runner. The new runner inherits the agent span opened by the original `agent_started` (see [`trajectory.md`](./trajectory.md) §7.3).
+3. MUST seed its model call with `resume.context.messages` rather than rebuilding the conversation from `prompt` alone.
+4. When the model emits a `tool_invoked` that matches a `resume.tool_cache[N]` by `tool_name + canonical-equal args`, the runner MUST emit `tool_returned` (or `tool_failed`) with the cached payload rather than dispatching to the tool.
+5. Cache-miss behavior is governed by the tier (see `ToolCacheEntry.tier` above).
+6. The new runner SHOULD attempt to resume `resume.in_flight_tool_call` if present, but v0.1 treats it as informational — the runner MAY re-invoke or skip.
+
+Runners that don't implement this contract degrade gracefully to cold rescue: they restart the conversation, re-fire any side-effecting tools, and the rescue still completes — just with the user-visible problems that warm rescue exists to solve.
 
 ---
 
