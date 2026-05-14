@@ -22,10 +22,10 @@ translator at construction.
   - `reported`: the API/SDK handed us the number directly
   - `unknown`: no price found and no provider report (cost reported as 0.0)
 
-The agent stamps `avp.cost.source` on `model_turn_ended` and
-`cost_recorded` events so trajectory consumers can filter / weight by
-provenance — e.g. an audit pipeline that trusts reported numbers but
-flags computed numbers from a stale price table.
+The agent stamps `avp.cost.source` on each `model_turn_ended` event so
+trajectory consumers can filter / weight by provenance, e.g. an audit
+pipeline that trusts reported numbers but flags computed numbers from a
+stale price table.
 """
 
 from __future__ import annotations

@@ -39,7 +39,7 @@ You own the `messages.create` / `chat.completions.create` loop. AVP slots in aro
 
 ### Phase 1 — drop in tracing
 
-Wrap your existing SDK client. Every model call emits the per-turn AVP events (`model_turn_started` / `_ended`, `text_emitted`, `tool_invoked`, `cost_recorded`). Your loop body is unchanged. The Commission is treated as a label: `run_id`, `model`, `prompt` get recorded, but supervisor-managed config doesn't apply yet.
+Wrap your existing SDK client. Every model call emits the per-turn AVP events (`model_turn_started` / `_ended`, `text_emitted`, `tool_invoked`). Cost / token totals come from reducing `model_turn_ended` deltas at the consumer (spec §7.1). Your loop body is unchanged. The Commission is treated as a label: `run_id`, `model`, `prompt` get recorded, but supervisor-managed config doesn't apply yet.
 
 **Composition.**
 

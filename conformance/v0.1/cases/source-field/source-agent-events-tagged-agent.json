@@ -46,12 +46,6 @@
       },
       {
         "match": {
-          "type": "avp.cost_recorded",
-          "source": "avp://agent"
-        }
-      },
-      {
-        "match": {
           "type": "avp.agent_stopped",
           "source": "avp://agent"
         }

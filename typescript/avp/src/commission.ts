@@ -61,11 +61,12 @@ export interface AVPV01Commission {
 /**
  * Identifies the supervisor that is requesting the run.
  *
- * Carried inside `Commission.supervisor` and stamped onto the
- * `run_requested` event the agent emits as the first event of the
- * trajectory (with `source: avp://supervisor`). Lets a trajectory
- * consumer attribute the run to the originating supervisor without an
- * out-of-band lookup.
+ * Carried inside `Commission.supervisor` and projected onto the
+ * `run_requested` event's `data` (`avp.supervisor.name` +
+ * `avp.supervisor.version`) so a trajectory consumer can attribute the
+ * run to the originating supervisor without an out-of-band lookup. The
+ * event's `source` is `avp://agent` (the agent is the sole producer on
+ * the wire); supervisor attribution lives inside `data`.
  *
  * `name` SHOULD be a stable identifier for the supervisor implementation
  * or instance (e.g. `"simple-supervisor-example"`, `"acme.scheduler"`).

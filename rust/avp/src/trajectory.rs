@@ -1191,34 +1191,22 @@ impl<'de> ::serde::Deserialize<'de> for AgentStartedEventSubject {
             })
     }
 }
-#[doc = "`AgentStoppedData`"]
+#[doc = "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.\n\nReconciliation against an SDK-reported authoritative final cost goes\nthrough `error_occurred(code=\"cost_reconciliation_drift\")` before\n`agent_stopped`, not as a separate \"alternative total\" field on the\nterminator. That keeps the wire invariant \"totals = sum of per-turn\ndeltas\" intact and pushes the corner case (SDK reports a final total\nthat disagrees with the derived sum) into the error channel where\nit belongs."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AgentStoppedData\","]
+#[doc = "  \"description\": \"Payload of avp.agent_stopped events. Terminator of the trajectory.\\n\\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\\npayload. The agent does NOT publish cumulative totals on this event.\\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\\nthe stream to compute totals.\\n\\nReconciliation against an SDK-reported authoritative final cost goes\\nthrough `error_occurred(code=\\\"cost_reconciliation_drift\\\")` before\\n`agent_stopped`, not as a separate \\\"alternative total\\\" field on the\\nterminator. That keeps the wire invariant \\\"totals = sum of per-turn\\ndeltas\\\" intact and pushes the corner case (SDK reports a final total\\nthat disagrees with the derived sum) into the error channel where\\nit belongs.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.reason\","]
-#[doc = "    \"avp.state\","]
 #[doc = "    \"parent_span_id\","]
 #[doc = "    \"span_id\","]
 #[doc = "    \"trace_id\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"avp.duration_ms\": {"]
-#[doc = "      \"title\": \"Avp.Duration Ms\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
 #[doc = "    \"avp.output\": {"]
 #[doc = "      \"title\": \"Avp.Output\","]
 #[doc = "      \"anyOf\": ["]
@@ -1230,45 +1218,6 @@ impl<'de> ::serde::Deserialize<'de> for AgentStartedEventSubject {
 #[doc = "    },"]
 #[doc = "    \"avp.reason\": {"]
 #[doc = "      \"$ref\": \"#/$defs/StopReason\""]
-#[doc = "    },"]
-#[doc = "    \"avp.state\": {"]
-#[doc = "      \"$ref\": \"#/$defs/RunStateSnapshot\""]
-#[doc = "    },"]
-#[doc = "    \"avp.total_cost_usd\": {"]
-#[doc = "      \"title\": \"Avp.Total Cost Usd\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"number\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.total_tokens\": {"]
-#[doc = "      \"title\": \"Avp.Total Tokens\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.total_turns\": {"]
-#[doc = "      \"title\": \"Avp.Total Turns\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"parent_span_id\": {"]
 #[doc = "      \"title\": \"Parent Span Id\","]
@@ -1299,12 +1248,6 @@ impl<'de> ::serde::Deserialize<'de> for AgentStartedEventSubject {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AgentStoppedData {
     #[serde(
-        rename = "avp.duration_ms",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_duration_ms: ::std::option::Option<u64>,
-    #[serde(
         rename = "avp.output",
         default,
         skip_serializing_if = "::std::option::Option::is_none"
@@ -1312,26 +1255,6 @@ pub struct AgentStoppedData {
     pub avp_output: ::std::option::Option<::serde_json::Value>,
     #[serde(rename = "avp.reason")]
     pub avp_reason: StopReason,
-    #[serde(rename = "avp.state")]
-    pub avp_state: RunStateSnapshot,
-    #[serde(
-        rename = "avp.total_cost_usd",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_total_cost_usd: ::std::option::Option<f64>,
-    #[serde(
-        rename = "avp.total_tokens",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_total_tokens: ::std::option::Option<u64>,
-    #[serde(
-        rename = "avp.total_turns",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_total_turns: ::std::option::Option<u64>,
     pub parent_span_id: ParentSpanId,
     pub span_id: SpanId,
     pub trace_id: TraceId,
@@ -2158,75 +2081,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
             })
     }
 }
-#[doc = "`AvpSupervisorName`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Avp.Supervisor.Name\","]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AvpSupervisorName(::std::string::String);
-impl ::std::ops::Deref for AvpSupervisorName {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AvpSupervisorName> for ::std::string::String {
-    fn from(value: AvpSupervisorName) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AvpSupervisorName {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for AvpSupervisorName {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AvpSupervisorName {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AvpSupervisorName {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
 #[doc = "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -2283,9 +2137,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
 #[doc = "      \"$ref\": \"#/$defs/RefusalRecordedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/CostRecordedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/SkillLoadedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -2309,7 +2160,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSupervisorName {
 #[doc = "      \"avp.agent_described\": \"#/$defs/AgentDescribedEvent\","]
 #[doc = "      \"avp.agent_started\": \"#/$defs/AgentStartedEvent\","]
 #[doc = "      \"avp.agent_stopped\": \"#/$defs/AgentStoppedEvent\","]
-#[doc = "      \"avp.cost_recorded\": \"#/$defs/CostRecordedEvent\","]
 #[doc = "      \"avp.error_occurred\": \"#/$defs/ErrorOccurredEvent\","]
 #[doc = "      \"avp.managed_ref_resolve_failed\": \"#/$defs/ManagedRefResolveFailedEvent\","]
 #[doc = "      \"avp.managed_ref_resolved\": \"#/$defs/ManagedRefResolvedEvent\","]
@@ -2352,7 +2202,6 @@ pub enum AvpV01TrajectoryEvent {
     TextEmittedEvent(TextEmittedEvent),
     ReasoningEmittedEvent(ReasoningEmittedEvent),
     RefusalRecordedEvent(RefusalRecordedEvent),
-    CostRecordedEvent(CostRecordedEvent),
     SkillLoadedEvent(SkillLoadedEvent),
     ErrorOccurredEvent(ErrorOccurredEvent),
     McpServerConnectedEvent(McpServerConnectedEvent),
@@ -2433,11 +2282,6 @@ impl ::std::convert::From<ReasoningEmittedEvent> for AvpV01TrajectoryEvent {
 impl ::std::convert::From<RefusalRecordedEvent> for AvpV01TrajectoryEvent {
     fn from(value: RefusalRecordedEvent) -> Self {
         Self::RefusalRecordedEvent(value)
-    }
-}
-impl ::std::convert::From<CostRecordedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: CostRecordedEvent) -> Self {
-        Self::CostRecordedEvent(value)
     }
 }
 impl ::std::convert::From<SkillLoadedEvent> for AvpV01TrajectoryEvent {
@@ -2726,414 +2570,6 @@ pub struct Commission {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub thread_id: ::std::option::Option<::std::string::String>,
 }
-#[doc = "`CostRecordedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"CostRecordedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.state\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.cost.source\": {"]
-#[doc = "      \"title\": \"Avp.Cost.Source\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"enum\": ["]
-#[doc = "            \"computed\","]
-#[doc = "            \"reported\","]
-#[doc = "            \"unknown\""]
-#[doc = "          ]"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.state\": {"]
-#[doc = "      \"$ref\": \"#/$defs/RunStateSnapshot\""]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct CostRecordedData {
-    #[serde(
-        rename = "avp.cost.source",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_cost_source: ::std::option::Option<CostRecordedDataAvpCostSource>,
-    #[serde(rename = "avp.state")]
-    pub avp_state: RunStateSnapshot,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`CostRecordedDataAvpCostSource`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"computed\","]
-#[doc = "    \"reported\","]
-#[doc = "    \"unknown\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum CostRecordedDataAvpCostSource {
-    #[serde(rename = "computed")]
-    Computed,
-    #[serde(rename = "reported")]
-    Reported,
-    #[serde(rename = "unknown")]
-    Unknown,
-}
-impl ::std::fmt::Display for CostRecordedDataAvpCostSource {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Computed => f.write_str("computed"),
-            Self::Reported => f.write_str("reported"),
-            Self::Unknown => f.write_str("unknown"),
-        }
-    }
-}
-impl ::std::str::FromStr for CostRecordedDataAvpCostSource {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "computed" => Ok(Self::Computed),
-            "reported" => Ok(Self::Reported),
-            "unknown" => Ok(Self::Unknown),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for CostRecordedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for CostRecordedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for CostRecordedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-#[doc = "`CostRecordedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"CostRecordedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/CostRecordedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.cost_recorded\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.cost_recorded\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct CostRecordedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<CostRecordedEventAvpCorrelationId>,
-    pub data: CostRecordedData,
-    #[serde(default = "defaults::cost_recorded_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::cost_recorded_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::cost_recorded_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<CostRecordedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::cost_recorded_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`CostRecordedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct CostRecordedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for CostRecordedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<CostRecordedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: CostRecordedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for CostRecordedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for CostRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for CostRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for CostRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for CostRecordedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`CostRecordedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct CostRecordedEventSubject(::std::string::String);
-impl ::std::ops::Deref for CostRecordedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<CostRecordedEventSubject> for ::std::string::String {
-    fn from(value: CostRecordedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for CostRecordedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for CostRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for CostRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for CostRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for CostRecordedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
 #[doc = "`ErrorCode`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -3149,6 +2585,7 @@ impl<'de> ::serde::Deserialize<'de> for CostRecordedEventSubject {
 #[doc = "    \"agent_crash\","]
 #[doc = "    \"accounting_reset\","]
 #[doc = "    \"unsupported_model\","]
+#[doc = "    \"cost_reconciliation_drift\","]
 #[doc = "    \"resolver_not_configured\","]
 #[doc = "    \"commission_collision\","]
 #[doc = "    \"unknown\""]
@@ -3181,6 +2618,8 @@ pub enum ErrorCode {
     AccountingReset,
     #[serde(rename = "unsupported_model")]
     UnsupportedModel,
+    #[serde(rename = "cost_reconciliation_drift")]
+    CostReconciliationDrift,
     #[serde(rename = "resolver_not_configured")]
     ResolverNotConfigured,
     #[serde(rename = "commission_collision")]
@@ -3197,6 +2636,7 @@ impl ::std::fmt::Display for ErrorCode {
             Self::AgentCrash => f.write_str("agent_crash"),
             Self::AccountingReset => f.write_str("accounting_reset"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
+            Self::CostReconciliationDrift => f.write_str("cost_reconciliation_drift"),
             Self::ResolverNotConfigured => f.write_str("resolver_not_configured"),
             Self::CommissionCollision => f.write_str("commission_collision"),
             Self::Unknown => f.write_str("unknown"),
@@ -3213,6 +2653,7 @@ impl ::std::str::FromStr for ErrorCode {
             "agent_crash" => Ok(Self::AgentCrash),
             "accounting_reset" => Ok(Self::AccountingReset),
             "unsupported_model" => Ok(Self::UnsupportedModel),
+            "cost_reconciliation_drift" => Ok(Self::CostReconciliationDrift),
             "resolver_not_configured" => Ok(Self::ResolverNotConfigured),
             "commission_collision" => Ok(Self::CommissionCollision),
             "unknown" => Ok(Self::Unknown),
@@ -7296,17 +6737,16 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
             })
     }
 }
-#[doc = "Payload of avp.run_requested events.\n\nAnchors the trajectory: the supervisor's assertion that this run was\nrequested with this Commission. Agent-relayed (the agent emits the\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\nso no I/O contract change beyond Commission, but attribution is the\nsupervisor's, not the agent's.\n\n`avp.commission` is the full Commission snapshot the supervisor handed\nin. Carrying it on the wire makes the trajectory self-contained: an\nauditor can replay (or re-validate) the run from the trajectory\nalone, without an external Commission registry."]
+#[doc = "Payload of avp.run_requested events.\n\nAnchors the trajectory. When relaying a Commission, carries the full\nsnapshot under `avp.commission` plus `avp.supervisor.*` for attribution,\nmaking the trajectory self-contained for audit. Without a Commission\n(library-invocation path), those fields are absent — per spec §2.1,\nabsence (not `\"unknown\"`) is the canonical signal."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"RunRequestedData\","]
-#[doc = "  \"description\": \"Payload of avp.run_requested events.\\n\\nAnchors the trajectory: the supervisor's assertion that this run was\\nrequested with this Commission. Agent-relayed (the agent emits the\\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\\nso no I/O contract change beyond Commission, but attribution is the\\nsupervisor's, not the agent's.\\n\\n`avp.commission` is the full Commission snapshot the supervisor handed\\nin. Carrying it on the wire makes the trajectory self-contained: an\\nauditor can replay (or re-validate) the run from the trajectory\\nalone, without an external Commission registry.\","]
+#[doc = "  \"description\": \"Payload of avp.run_requested events.\\n\\nAnchors the trajectory. When relaying a Commission, carries the full\\nsnapshot under `avp.commission` plus `avp.supervisor.*` for attribution,\\nmaking the trajectory self-contained for audit. Without a Commission\\n(library-invocation path), those fields are absent — per spec §2.1,\\nabsence (not `\\\"unknown\\\"`) is the canonical signal.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"avp.supervisor.name\","]
 #[doc = "    \"parent_span_id\","]
 #[doc = "    \"span_id\","]
 #[doc = "    \"trace_id\""]
@@ -7324,8 +6764,15 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
 #[doc = "    },"]
 #[doc = "    \"avp.supervisor.name\": {"]
 #[doc = "      \"title\": \"Avp.Supervisor.Name\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"avp.supervisor.version\": {"]
 #[doc = "      \"title\": \"Avp.Supervisor.Version\","]
@@ -7372,8 +6819,12 @@ pub struct RunRequestedData {
         skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub avp_commission: ::std::option::Option<Commission>,
-    #[serde(rename = "avp.supervisor.name")]
-    pub avp_supervisor_name: AvpSupervisorName,
+    #[serde(
+        rename = "avp.supervisor.name",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_supervisor_name: ::std::option::Option<RunRequestedDataAvpSupervisorName>,
     #[serde(
         rename = "avp.supervisor.version",
         default,
@@ -7384,14 +6835,82 @@ pub struct RunRequestedData {
     pub span_id: SpanId,
     pub trace_id: TraceId,
 }
-#[doc = "First event of the trajectory. Agent-relayed but supervisor-attributed:\nthe agent emits it from `Commission.supervisor` with `source: avp://supervisor`,\nso a downstream consumer reading the wire sees the supervisor as the\nasserter of \"this run was requested with this Commission.\" Same relay\npattern as `tool_exec_resolved`."]
+#[doc = "`RunRequestedDataAvpSupervisorName`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct RunRequestedDataAvpSupervisorName(::std::string::String);
+impl ::std::ops::Deref for RunRequestedDataAvpSupervisorName {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<RunRequestedDataAvpSupervisorName> for ::std::string::String {
+    fn from(value: RunRequestedDataAvpSupervisorName) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for RunRequestedDataAvpSupervisorName {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for RunRequestedDataAvpSupervisorName {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for RunRequestedDataAvpSupervisorName {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for RunRequestedDataAvpSupervisorName {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for RunRequestedDataAvpSupervisorName {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "First event of the trajectory. The agent is the sole producer on the\nwire (spec §8 conformance #1), so `source` is `avp://agent`. Supervisor\nattribution, when a Commission is in use, lives inside `data` as\n`avp.supervisor.*` plus the full `avp.commission` snapshot — that's what\nmakes the trajectory self-contained for audit without resort to the\nenvelope's `source` field."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"RunRequestedEvent\","]
-#[doc = "  \"description\": \"First event of the trajectory. Agent-relayed but supervisor-attributed:\\nthe agent emits it from `Commission.supervisor` with `source: avp://supervisor`,\\nso a downstream consumer reading the wire sees the supervisor as the\\nasserter of \\\"this run was requested with this Commission.\\\" Same relay\\npattern as `tool_exec_resolved`.\","]
+#[doc = "  \"description\": \"First event of the trajectory. The agent is the sole producer on the\\nwire (spec §8 conformance #1), so `source` is `avp://agent`. Supervisor\\nattribution, when a Commission is in use, lives inside `data` as\\n`avp.supervisor.*` plus the full `avp.commission` snapshot — that's what\\nmakes the trajectory self-contained for audit without resort to the\\nenvelope's `source` field.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"data\""]
@@ -7442,9 +6961,9 @@ pub struct RunRequestedData {
 #[doc = "    },"]
 #[doc = "    \"source\": {"]
 #[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://supervisor\","]
+#[doc = "      \"default\": \"avp://agent\","]
 #[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://supervisor\""]
+#[doc = "      \"const\": \"avp://agent\""]
 #[doc = "    },"]
 #[doc = "    \"specversion\": {"]
 #[doc = "      \"title\": \"Specversion\","]
@@ -7641,147 +7160,6 @@ impl<'de> ::serde::Deserialize<'de> for RunRequestedEventSubject {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
     }
-}
-#[doc = "Cumulative run-state used in cost_recorded and agent_stopped data.\nOpen model: supervisor SDKs can carry implementation-specific fields."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"RunStateSnapshot\","]
-#[doc = "  \"description\": \"Cumulative run-state used in cost_recorded and agent_stopped data.\\nOpen model: supervisor SDKs can carry implementation-specific fields.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"total_cost_usd\","]
-#[doc = "    \"total_tokens\","]
-#[doc = "    \"total_turns\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"duration_ms\": {"]
-#[doc = "      \"title\": \"Duration Ms\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"started_at\": {"]
-#[doc = "      \"title\": \"Started At\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"tokens_cache_read_total\": {"]
-#[doc = "      \"title\": \"Tokens Cache Read Total\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"tokens_cache_write_total\": {"]
-#[doc = "      \"title\": \"Tokens Cache Write Total\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"tokens_input_total\": {"]
-#[doc = "      \"title\": \"Tokens Input Total\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"tokens_output_total\": {"]
-#[doc = "      \"title\": \"Tokens Output Total\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"tools_invoked\": {"]
-#[doc = "      \"title\": \"Tools Invoked\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": {"]
-#[doc = "            \"type\": \"integer\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"total_cost_usd\": {"]
-#[doc = "      \"title\": \"Total Cost Usd\","]
-#[doc = "      \"type\": \"number\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"total_tokens\": {"]
-#[doc = "      \"title\": \"Total Tokens\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"total_turns\": {"]
-#[doc = "      \"title\": \"Total Turns\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct RunStateSnapshot {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub duration_ms: ::std::option::Option<u64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub started_at: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub tokens_cache_read_total: ::std::option::Option<u64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub tokens_cache_write_total: ::std::option::Option<u64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub tokens_input_total: ::std::option::Option<u64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub tokens_output_total: ::std::option::Option<u64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub tools_invoked:
-        ::std::option::Option<::std::collections::HashMap<::std::string::String, i64>>,
-    pub total_cost_usd: f64,
-    pub total_tokens: u64,
-    pub total_turns: u64,
 }
 #[doc = "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data.skills`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls."]
 #[doc = r""]
@@ -9300,20 +8678,19 @@ pub struct SubagentRef {
     #[serde(rename = "ref")]
     pub ref_: JsonValue,
 }
-#[doc = "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them. `avp.subagent.usage`\nrolls up the subagent's own consumption (cost, tokens, turns); this\nrollup is also reflected in the parent run's cumulative state, but the\nbreakdown is preserved here so consumers can attribute spend to the\nsubagent that incurred it."]
+#[doc = "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SubagentReturnedData\","]
-#[doc = "  \"description\": \"Closes the subagent's frame. `span_id` matches the corresponding\\n`subagent_invoked` event so consumers can pair them. `avp.subagent.usage`\\nrolls up the subagent's own consumption (cost, tokens, turns); this\\nrollup is also reflected in the parent run's cumulative state, but the\\nbreakdown is preserved here so consumers can attribute spend to the\\nsubagent that incurred it.\","]
+#[doc = "  \"description\": \"Closes the subagent's frame. `span_id` matches the corresponding\\n`subagent_invoked` event so consumers can pair them.\\n\\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\\nfallback: parent agents whose SDK black-boxes the child loop (no\\nper-turn AssistantMessages exposed to the parent) carry the child's\\ntotals here as the only signal the supervisor receives of the child's\\nspend. Agents that emit the child's per-turn events into the parent's\\ntrajectory with proper span parentage (`parent_span_id` = this event's\\n`span_id`) MUST omit this field; the supervisor reconstructs from the\\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\\nMUST also omit it; the supervisor reads the child's trajectory.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.subagent.invocation_id\","]
 #[doc = "    \"avp.subagent.reason\","]
 #[doc = "    \"avp.subagent.result.text\","]
-#[doc = "    \"avp.subagent.usage\","]
 #[doc = "    \"duration_ms\","]
 #[doc = "    \"gen_ai.agent.name\","]
 #[doc = "    \"parent_span_id\","]
@@ -9344,7 +8721,14 @@ pub struct SubagentRef {
 #[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
 #[doc = "    \"avp.subagent.usage\": {"]
-#[doc = "      \"$ref\": \"#/$defs/RunStateSnapshot\""]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/SubagentUsage\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"duration_ms\": {"]
 #[doc = "      \"title\": \"Duration Ms\","]
@@ -9400,8 +8784,12 @@ pub struct SubagentReturnedData {
     pub avp_subagent_result_structured: ::std::option::Option<::serde_json::Value>,
     #[serde(rename = "avp.subagent.result.text")]
     pub avp_subagent_result_text: ::std::string::String,
-    #[serde(rename = "avp.subagent.usage")]
-    pub avp_subagent_usage: RunStateSnapshot,
+    #[serde(
+        rename = "avp.subagent.usage",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_subagent_usage: ::std::option::Option<SubagentUsage>,
     pub duration_ms: u64,
     #[serde(rename = "gen_ai.agent.name")]
     pub gen_ai_agent_name: ::std::string::String,
@@ -9667,14 +9055,62 @@ impl<'de> ::serde::Deserialize<'de> for SubagentReturnedEventSubject {
             })
     }
 }
-#[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and stamped onto the\n`run_requested` event the agent emits as the first event of the\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\nconsumer attribute the run to the originating supervisor without an\nout-of-band lookup.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
+#[doc = "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events\n(e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`\nwith `TaskUsage` and never exposes per-turn AssistantMessages for the\nchild). In that fallback case this is the only signal the supervisor\nreceives of the child's spend.\n\nManaged subagents (separate `run_id`, separate trajectory the supervisor\nreads) MUST NOT use this; the supervisor reads the child's trajectory\ndirectly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md)."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SubagentUsage\","]
+#[doc = "  \"description\": \"Narrow totals carrier for the in-process subagent rollup.\\n\\nUsed ONLY on `subagent_returned.data[\\\"avp.subagent.usage\\\"]` when the\\nparent agent's SDK does not expose the child's per-turn events\\n(e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`\\nwith `TaskUsage` and never exposes per-turn AssistantMessages for the\\nchild). In that fallback case this is the only signal the supervisor\\nreceives of the child's spend.\\n\\nManaged subagents (separate `run_id`, separate trajectory the supervisor\\nreads) MUST NOT use this; the supervisor reads the child's trajectory\\ndirectly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md).\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"cost_usd\","]
+#[doc = "    \"tokens_input\","]
+#[doc = "    \"tokens_output\","]
+#[doc = "    \"turns\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"cost_usd\": {"]
+#[doc = "      \"title\": \"Cost Usd\","]
+#[doc = "      \"type\": \"number\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"tokens_input\": {"]
+#[doc = "      \"title\": \"Tokens Input\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"tokens_output\": {"]
+#[doc = "      \"title\": \"Tokens Output\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"turns\": {"]
+#[doc = "      \"title\": \"Turns\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SubagentUsage {
+    pub cost_usd: f64,
+    pub tokens_input: u64,
+    pub tokens_output: u64,
+    pub turns: u64,
+}
+#[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and projected onto the\n`run_requested` event's `data` (`avp.supervisor.name` +\n`avp.supervisor.version`) so a trajectory consumer can attribute the\nrun to the originating supervisor without an out-of-band lookup. The\nevent's `source` is `avp://agent` (the agent is the sole producer on\nthe wire); supervisor attribution lives inside `data`.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SupervisorPreamble\","]
-#[doc = "  \"description\": \"Identifies the supervisor that is requesting the run.\\n\\nCarried inside `Commission.supervisor` and stamped onto the\\n`run_requested` event the agent emits as the first event of the\\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\\nconsumer attribute the run to the originating supervisor without an\\nout-of-band lookup.\\n\\n`name` SHOULD be a stable identifier for the supervisor implementation\\nor instance (e.g. `\\\"simple-supervisor-example\\\"`, `\\\"acme.scheduler\\\"`).\\n`version` is optional but recommended; it travels with the trajectory\\nand lets auditors correlate a run with the exact supervisor build\\nthat requested it.\","]
+#[doc = "  \"description\": \"Identifies the supervisor that is requesting the run.\\n\\nCarried inside `Commission.supervisor` and projected onto the\\n`run_requested` event's `data` (`avp.supervisor.name` +\\n`avp.supervisor.version`) so a trajectory consumer can attribute the\\nrun to the originating supervisor without an out-of-band lookup. The\\nevent's `source` is `avp://agent` (the agent is the sole producer on\\nthe wire); supervisor attribution lives inside `data`.\\n\\n`name` SHOULD be a stable identifier for the supervisor implementation\\nor instance (e.g. `\\\"simple-supervisor-example\\\"`, `\\\"acme.scheduler\\\"`).\\n`version` is optional but recommended; it travels with the trajectory\\nand lets auditors correlate a run with the exact supervisor build\\nthat requested it.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
@@ -11438,19 +10874,6 @@ pub mod defaults {
     pub(super) fn agent_stopped_event_type() -> ::std::string::String {
         "avp.agent_stopped".to_string()
     }
-    pub(super) fn cost_recorded_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn cost_recorded_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn cost_recorded_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn cost_recorded_event_type() -> ::std::string::String {
-        "avp.cost_recorded".to_string()
-    }
     pub(super) fn error_occurred_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
         ::std::option::Option::Some("application/json".to_string())
@@ -11573,7 +10996,7 @@ pub mod defaults {
         ::std::option::Option::Some("application/json".to_string())
     }
     pub(super) fn run_requested_event_source() -> ::std::string::String {
-        "avp://supervisor".to_string()
+        "avp://agent".to_string()
     }
     pub(super) fn run_requested_event_specversion() -> ::std::string::String {
         "1.0".to_string()

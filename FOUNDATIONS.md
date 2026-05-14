@@ -506,10 +506,10 @@ problems:
 | **Unit** | One JSON document per run | A stream of events during a run |
 | **Lifecycle** | Post-hoc artifact (written after the run completes) | Live (emitted as the run executes) |
 | **Primary consumer** | SFT/RL training pipelines, replay, debugging | Supervisors observing/auditing runs in real time |
-| **Step granularity** | One step per LLM call (user/system/agent turn) | Multiple events per turn (`model_turn_started`, `text_emitted`, `tool_invoked/returned`, `cost_recorded`, `model_turn_ended`) |
+| **Step granularity** | One step per LLM call (user/system/agent turn) | Multiple events per turn (`model_turn_started`, `text_emitted`, `tool_invoked/returned`, `model_turn_ended`) |
 | **Time model** | Optional ISO timestamps per step | Strict event ordering, CloudEvents `time` per event |
 | **Identifiers** | `session_id` (run) + `trajectory_id` (document) | OTel `trace_id` / `span_id` / `parent_span_id` |
-| **Cost** | Absolute per step, totals in `final_metrics` | Monotonic-cumulative on each `cost_recorded` |
+| **Cost** | Absolute per step, totals in `final_metrics` | Per-turn deltas on `model_turn_ended`; consumer reduces to totals |
 | **Subagents** | Inline-embed full child trajectories or external file ref | Correlate by `avp.subagent.run_id` (child has its own event stream) |
 | **Standards anchoring** | Bespoke schema | CloudEvents 1.0 + OTel GenAI + OTel spans |
 | **RL/SFT extras** | Logprobs, token IDs, `reasoning_effort` | Out of scope |

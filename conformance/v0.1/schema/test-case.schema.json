@@ -244,13 +244,12 @@
         "usage": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Subagent's RunStateSnapshot rollup. Reflected on subagent_returned.data.avp.subagent.usage AND added to the parent's cumulative state.",
+          "description": "In-process SubagentUsage rollup, set on subagent_returned.data.avp.subagent.usage when the parent's SDK does not expose the child's per-turn events. Managed subagents (separate trajectory) MUST omit this; supervisors reduce the child's deltas instead.",
           "properties": {
-            "total_cost_usd": { "type": "number", "minimum": 0 },
-            "total_tokens":   { "type": "integer", "minimum": 0 },
-            "total_turns":    { "type": "integer", "minimum": 0 },
-            "tokens_input_total":  { "type": "integer", "minimum": 0 },
-            "tokens_output_total": { "type": "integer", "minimum": 0 }
+            "cost_usd":     { "type": "number",  "minimum": 0 },
+            "tokens_input":  { "type": "integer", "minimum": 0 },
+            "tokens_output": { "type": "integer", "minimum": 0 },
+            "turns":         { "type": "integer", "minimum": 0 }
           }
         },
         "error": {

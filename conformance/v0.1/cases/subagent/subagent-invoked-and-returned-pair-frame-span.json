@@ -49,11 +49,10 @@
         "reason": "converged",
         "duration_ms": 50,
         "usage": {
-          "total_cost_usd": 0.0008,
-          "total_tokens": 75,
-          "total_turns": 1,
-          "tokens_input_total": 50,
-          "tokens_output_total": 25
+          "cost_usd": 0.0008,
+          "tokens_input": 50,
+          "tokens_output": 25,
+          "turns": 1
         }
       }
     }

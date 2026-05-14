@@ -79,7 +79,7 @@ The reference is `python/avp/src/avp/agent/agent.py` (the canonical loop) plus `
 
 1. Read a `Commission` from input. Validate against `avp.commission.Commission`.
 2. Construct an `AVPAgent` with `model: ModelDriver`, `tools: ToolDriver`, `supervisor: SupervisorDriver`, and (when the Commission may carry managed assets) `resolver=http_resolver_from_env()`.
-3. The agent emits the full lifecycle: `run_requested`, `agent_described`, `agent_started`, `managed_ref_resolved` (per asset), `mcp_server_connected` (per resolved MCP), `skill_loaded` (per resolved skill), `model_turn_started/ended`, `tool_invoked/returned`, `cost_recorded`, `agent_stopped`. Every event is a CloudEvents 1.0 envelope.
+3. The agent emits the full lifecycle: `run_requested`, `agent_described`, `agent_started`, `managed_ref_resolved` (per asset), `mcp_server_connected` (per resolved MCP), `skill_loaded` (per resolved skill), `model_turn_started/ended`, `tool_invoked/returned`, `agent_stopped`. Every event is a CloudEvents 1.0 envelope. Per-turn cost / token deltas ride on `model_turn_ended`; the supervisor reduces them to compute totals (spec §7.1).
 4. The driver's only jobs are translating one model turn (`ModelDriver.step(history) -> ModelResponse`) and, optionally, implementing `set_resolved_assets(...)` so the agent can stage resolved MCP connection material into provider-side API params.
 
 See `python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py` for a minimal end-to-end run, `05_anthropic_subagent_delegation.py` for managed-subagent delegation through the resolver, or `06_anthropic_traced_client.py` if the user already has an Anthropic SDK loop and wants drop-in instrumentation. See `python/sdks/avp-anthropic/src/avp_anthropic/driver.py` for the complete driver.
@@ -96,7 +96,7 @@ The reference is `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/transl
 2. Translate resolved material into the SDK's setup parameters (e.g. Claude Agent SDK's `mcp_servers` / `agents`).
 3. Subscribe to the SDK's lifecycle (turn-start, turn-end, tool-use, tool-result, completion).
 4. Translate each lifecycle event into the corresponding AVP event using the Pydantic models in `avp.trajectory` (events / data classes) and `avp.commission` / `avp.descriptor` where they apply.
-5. Maintain a local `RunStateSnapshot` for cost/token accounting per `spec/v0.1/trajectory.md` §3.3.
+5. Emit per-turn cost / token deltas on `model_turn_ended` per `spec/v0.1/trajectory.md` §3.3. The agent does NOT maintain a cumulative accumulator; the supervisor reduces the delta stream. If the SDK hands back an authoritative final cost differing from the sum of deltas, emit `error_occurred(code="cost_reconciliation_drift")` with `data["avp.cost.delta_usd"]` carrying the signed variance.
 
 See `python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py` (audited Claude Code session) and `07_claude_agent_traced_client.py` (drop-in instrumentation over an existing `ClaudeSDKClient`).
 
@@ -128,7 +128,7 @@ Whatever you build, the trajectory carries two distinct kinds of facts. Surface 
 | Class              | Event types                                                                                                                                        | Semantics                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `text_emitted` | Mechanical actions                |
-| What the run cost  | `cost_recorded`, `model_turn_ended.data["gen_ai.usage.*"]`                                                                                         | Resource accounting (OTel-shaped) |
+| What the run cost  | `model_turn_ended.data["gen_ai.usage.*"]`, `model_turn_ended.data["avp.cost_usd"]`. SDK-reconciliation drift goes through `error_occurred(code="cost_reconciliation_drift")`. | Resource accounting (per-turn deltas; consumer reduces) |
 
 ## Workspace and deployment scope
 

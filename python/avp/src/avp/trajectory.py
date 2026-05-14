@@ -1,17 +1,15 @@
 """avp.trajectory — Pydantic types for the AVP Trajectory Spec.
 
 Defines the agent-emitted event stream: CloudEvents envelopes, typed
-`data` payloads (one per event type), `RunStateSnapshot`, the
-`Event` discriminated union, and the `parse_event` / `event_to_wire`
-helpers. This module mirrors the
-[Trajectory spec](../../../../spec/v0.1/trajectory.md).
+`data` payloads (one per event type), the `Event` discriminated union,
+and the `parse_event` / `event_to_wire` helpers. This module mirrors
+the [Trajectory spec](../../../../spec/v0.1/trajectory.md).
 
 Consumers wanting only the event stream can:
 
     from avp.trajectory import (
         AgentStartedEvent,
         ModelTurnEndedEvent,
-        RunStateSnapshot,
         parse_event,
     )
 
@@ -38,13 +36,12 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from avp._envelope import (
     _OPEN,
     SOURCE_AGENT,
     ZERO_SPAN_ID,
-    Iso8601,
     _CloudEventBase,
     _SpanData,
     new_event_id,
@@ -76,7 +73,6 @@ T_TOOL_FAILED = "avp.tool_failed"
 T_TEXT_EMITTED = "avp.text_emitted"
 T_REASONING_EMITTED = "avp.reasoning_emitted"
 T_REFUSAL_RECORDED = "avp.refusal_recorded"
-T_COST_RECORDED = "avp.cost_recorded"
 T_SKILL_LOADED = "avp.skill_loaded"
 T_ERROR_OCCURRED = "avp.error_occurred"
 T_MCP_SERVER_CONNECTED = "avp.mcp_server_connected"
@@ -108,27 +104,39 @@ class ErrorCode(StrEnum):
     agent_crash = "agent_crash"
     accounting_reset = "accounting_reset"
     unsupported_model = "unsupported_model"
+    # Translator-pattern drift: SDK / API hands back an authoritative final
+    # cost that disagrees with the sum of per-turn `avp.cost_usd` deltas.
+    # The agent emits this with `data["avp.cost.delta_usd"]` carrying the
+    # signed variance (reported - derived); the supervisor learns about the
+    # discrepancy without the agent publishing a second "alternative total"
+    # on the wire.
+    cost_reconciliation_drift = "cost_reconciliation_drift"
     # Commission-managed-asset / resolver-protocol error codes (v0.1).
     resolver_not_configured = "resolver_not_configured"
     commission_collision = "commission_collision"
     unknown = "unknown"
 
 
-class RunStateSnapshot(BaseModel):
-    """Cumulative run-state used in cost_recorded and agent_stopped data.
-    Open model: supervisor SDKs can carry implementation-specific fields."""
+class SubagentUsage(BaseModel):
+    """Narrow totals carrier for the in-process subagent rollup.
+
+    Used ONLY on `subagent_returned.data["avp.subagent.usage"]` when the
+    parent agent's SDK does not expose the child's per-turn events
+    (e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`
+    with `TaskUsage` and never exposes per-turn AssistantMessages for the
+    child). In that fallback case this is the only signal the supervisor
+    receives of the child's spend.
+
+    Managed subagents (separate `run_id`, separate trajectory the supervisor
+    reads) MUST NOT use this; the supervisor reads the child's trajectory
+    directly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md).
+    """
 
     model_config = _OPEN
-    total_cost_usd: float = Field(ge=0)
-    total_tokens: int = Field(ge=0)
-    total_turns: int = Field(ge=0)
-    tokens_input_total: int | None = Field(default=None, ge=0)
-    tokens_output_total: int | None = Field(default=None, ge=0)
-    tokens_cache_read_total: int | None = Field(default=None, ge=0)
-    tokens_cache_write_total: int | None = Field(default=None, ge=0)
-    tools_invoked: dict[str, int] | None = None
-    started_at: Iso8601 | None = None
-    duration_ms: int | None = Field(default=None, ge=0)
+    cost_usd: float = Field(ge=0)
+    tokens_input: int = Field(ge=0)
+    tokens_output: int = Field(ge=0)
+    turns: int = Field(ge=0)
 
 
 # ── Data payloads (per-event-type) ────────────────────────────────────────────
@@ -187,44 +195,24 @@ class AgentStartedData(_SpanData):
 
 
 class AgentStoppedData(_SpanData):
-    avp_reason: StopReason = Field(alias="avp.reason")
-    avp_state: RunStateSnapshot = Field(alias="avp.state")
-    # Convenience aliases. When non-null these MUST equal the matching
-    # field on `avp.state` (validator below enforces). Existed historically
-    # as one-hop reads for consumers who only want the headline numbers
-    # from the terminator event. New consumers SHOULD read `avp.state.*`
-    # instead; it's the canonical surface and the same shape that ships
-    # on every `cost_recorded` event. Marked for removal in v0.2.
-    avp_total_tokens: int | None = Field(default=None, ge=0, alias="avp.total_tokens")
-    avp_total_cost_usd: float | None = Field(default=None, ge=0, alias="avp.total_cost_usd")
-    avp_total_turns: int | None = Field(default=None, ge=0, alias="avp.total_turns")
-    avp_duration_ms: int | None = Field(default=None, ge=0, alias="avp.duration_ms")
-    avp_output: Any | None = Field(default=None, alias="avp.output")
+    """Payload of avp.agent_stopped events. Terminator of the trajectory.
 
-    @model_validator(mode="after")
-    def _convenience_aliases_match_state(self) -> AgentStoppedData:
-        """The top-level convenience fields MUST agree with `avp.state.*`
-        when populated. Catches drift at construction time (so an agent
-        that forgets to keep them in sync fails its own validation rather
-        than shipping inconsistent events the supervisor has to reconcile)."""
-        pairs = [
-            ("avp.total_tokens", self.avp_total_tokens, self.avp_state.total_tokens),
-            ("avp.total_cost_usd", self.avp_total_cost_usd, self.avp_state.total_cost_usd),
-            ("avp.total_turns", self.avp_total_turns, self.avp_state.total_turns),
-            ("avp.duration_ms", self.avp_duration_ms, self.avp_state.duration_ms),
-        ]
-        for alias, top, snap in pairs:
-            if top is None or snap is None:
-                continue
-            if top != snap:
-                raise ValueError(
-                    f"agent_stopped.{alias}={top!r} disagrees with "
-                    f"avp.state.{alias.removeprefix('avp.')}={snap!r}; "
-                    "the top-level field MUST equal the snapshot field "
-                    "(see spec/v0.1/trajectory.md §7.1). Either populate from the snapshot or "
-                    "leave the top-level None."
-                )
-        return self
+    Carries `avp.reason` (why the run ended) and an optional `avp.output`
+    payload. The agent does NOT publish cumulative totals on this event.
+    Per-turn deltas live on each `model_turn_ended`; consumers reduce
+    the stream to compute totals.
+
+    Reconciliation against an SDK-reported authoritative final cost goes
+    through `error_occurred(code="cost_reconciliation_drift")` before
+    `agent_stopped`, not as a separate "alternative total" field on the
+    terminator. That keeps the wire invariant "totals = sum of per-turn
+    deltas" intact and pushes the corner case (SDK reports a final total
+    that disagrees with the derived sum) into the error channel where
+    it belongs.
+    """
+
+    avp_reason: StopReason = Field(alias="avp.reason")
+    avp_output: Any | None = Field(default=None, alias="avp.output")
 
 
 class ModelTurnStartedData(_SpanData):
@@ -322,11 +310,18 @@ class SubagentInvokedData(_SpanData):
 
 class SubagentReturnedData(_SpanData):
     """Closes the subagent's frame. `span_id` matches the corresponding
-    `subagent_invoked` event so consumers can pair them. `avp.subagent.usage`
-    rolls up the subagent's own consumption (cost, tokens, turns); this
-    rollup is also reflected in the parent run's cumulative state, but the
-    breakdown is preserved here so consumers can attribute spend to the
-    subagent that incurred it."""
+    `subagent_invoked` event so consumers can pair them.
+
+    `avp.subagent.usage` is OPTIONAL and intended only for the in-process
+    fallback: parent agents whose SDK black-boxes the child loop (no
+    per-turn AssistantMessages exposed to the parent) carry the child's
+    totals here as the only signal the supervisor receives of the child's
+    spend. Agents that emit the child's per-turn events into the parent's
+    trajectory with proper span parentage (`parent_span_id` = this event's
+    `span_id`) MUST omit this field; the supervisor reconstructs from the
+    raw stream. Managed subagents (separate `run_id`, separate trajectory)
+    MUST also omit it; the supervisor reads the child's trajectory.
+    """
 
     step: int = Field(ge=0)
     gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
@@ -337,7 +332,7 @@ class SubagentReturnedData(_SpanData):
         default=None, alias="avp.subagent.result.structured"
     )
     avp_subagent_reason: StopReason = Field(alias="avp.subagent.reason")
-    avp_subagent_usage: RunStateSnapshot = Field(alias="avp.subagent.usage")
+    avp_subagent_usage: SubagentUsage | None = Field(default=None, alias="avp.subagent.usage")
 
 
 class SubagentFailedData(_SpanData):
@@ -413,20 +408,6 @@ class ReasoningEmittedData(_SpanData):
     avp_reasoning_text: str = Field(alias="avp.reasoning.text")
     avp_reasoning_signature: str | None = Field(default=None, alias="avp.reasoning.signature")
     avp_reasoning_redacted: bool | None = Field(default=None, alias="avp.reasoning.redacted")
-
-
-class CostRecordedData(_SpanData):
-    avp_state: RunStateSnapshot = Field(alias="avp.state")
-    # Provenance of the snapshot's running cost total. Set to `reported`
-    # on the reconciliation event an agent emits after the API/SDK hands
-    # back an authoritative total (Claude Agent SDK's
-    # ResultMessage.total_cost_usd, etc.). Per-turn cost_recorded events
-    # leave it unset because the running total is a mix of per-turn
-    # numbers; `avp.cost.source` on each `model_turn_ended` event is
-    # the authoritative tag for individual turn costs.
-    avp_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
-        default=None, alias="avp.cost.source"
-    )
 
 
 class SkillLoadedData(_SpanData):
@@ -649,12 +630,6 @@ class RefusalRecordedEvent(_CloudEventBase):
     data: RefusalRecordedData
 
 
-class CostRecordedEvent(_CloudEventBase):
-    type: Literal["avp.cost_recorded"] = T_COST_RECORDED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: CostRecordedData
-
-
 class SkillLoadedEvent(_CloudEventBase):
     type: Literal["avp.skill_loaded"] = T_SKILL_LOADED
     source: Literal["avp://agent"] = SOURCE_AGENT
@@ -710,7 +685,6 @@ _AGENT_EVENT_TYPES = (
     TextEmittedEvent,
     ReasoningEmittedEvent,
     RefusalRecordedEvent,
-    CostRecordedEvent,
     SkillLoadedEvent,
     ErrorOccurredEvent,
     McpServerConnectedEvent,
@@ -735,7 +709,6 @@ Event = Annotated[
     | TextEmittedEvent
     | ReasoningEmittedEvent
     | RefusalRecordedEvent
-    | CostRecordedEvent
     | SkillLoadedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
@@ -791,7 +764,6 @@ __all__ = [
     "T_AGENT_DESCRIBED",
     "T_AGENT_STARTED",
     "T_AGENT_STOPPED",
-    "T_COST_RECORDED",
     "T_ERROR_OCCURRED",
     "T_MANAGED_REF_RESOLVED",
     "T_MANAGED_REF_RESOLVE_FAILED",
@@ -817,8 +789,6 @@ __all__ = [
     "AgentStartedEvent",
     "AgentStoppedData",
     "AgentStoppedEvent",
-    "CostRecordedData",
-    "CostRecordedEvent",
     "ErrorOccurredData",
     "ErrorOccurredEvent",
     "Event",
@@ -841,7 +811,6 @@ __all__ = [
     "RefusalRecordedEvent",
     "RunRequestedData",
     "RunRequestedEvent",
-    "RunStateSnapshot",
     "SkillLoadedData",
     "SkillLoadedEvent",
     "SubagentFailedData",
@@ -850,6 +819,7 @@ __all__ = [
     "SubagentInvokedEvent",
     "SubagentReturnedData",
     "SubagentReturnedEvent",
+    "SubagentUsage",
     "TextEmittedData",
     "TextEmittedEvent",
     "ToolFailedData",

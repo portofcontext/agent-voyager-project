@@ -3,6 +3,25 @@
 > Read this before adding code. Claude Code (and the user) will load it
 > automatically; the rules below are how AVP stays correct over time.
 
+> [!IMPORTANT]
+> ## v0.1 is a work in progress. Breaking changes are allowed.
+>
+> AVP is in active design iteration. The wire format, event types,
+> Commission / Descriptor shape, conformance criteria, and any of the
+> Pydantic source-of-truth models in `python/avp/src/avp/` may change
+> without backwards-compatibility shims while we are on v0.1.x. There is
+> no deprecation cycle, no compatibility layer, no "keep the old name
+> too." A change lands cleanly, sweeps every dependent surface in the
+> repo (schemas, generated bindings, conformance cases, in-tree agents
+> and adapters, examples, prose docs), and that is the new shape.
+>
+> When something on the wire looks wrong, push back on it directly.
+> When a design choice feels like a burden on agent implementors
+> (e.g. agent-side accumulators, snapshot duplication, fields that
+> are reconstructable from raw events), propose dropping or restructuring
+> it; do not preserve it out of momentum. v0.2 will lock the shape;
+> until then, nothing here is load-bearing for compatibility.
+
 ## What AVP is
 
 AVP = **Agent Voyager Project**, an open-source collection of specs for the

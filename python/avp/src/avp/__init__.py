@@ -13,7 +13,6 @@ the module that owns them:
     from avp.trajectory import (
         AgentStartedEvent,
         Event,
-        RunStateSnapshot,
         parse_event,
         event_to_wire,
     )

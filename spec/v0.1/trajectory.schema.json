@@ -591,6 +591,7 @@
     },
     "AgentStoppedData": {
       "additionalProperties": true,
+      "description": "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.\n\nReconciliation against an SDK-reported authoritative final cost goes\nthrough `error_occurred(code=\"cost_reconciliation_drift\")` before\n`agent_stopped`, not as a separate \"alternative total\" field on the\nterminator. That keeps the wire invariant \"totals = sum of per-turn\ndeltas\" intact and pushes the corner case (SDK reports a final total\nthat disagrees with the derived sum) into the error channel where\nit belongs.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -616,61 +617,6 @@
         "avp.reason": {
           "$ref": "#/$defs/StopReason"
         },
-        "avp.state": {
-          "$ref": "#/$defs/RunStateSnapshot"
-        },
-        "avp.total_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Total Tokens"
-        },
-        "avp.total_cost_usd": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Total Cost Usd"
-        },
-        "avp.total_turns": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Total Turns"
-        },
-        "avp.duration_ms": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Duration Ms"
-        },
         "avp.output": {
           "anyOf": [
             {},
@@ -686,8 +632,7 @@
         "trace_id",
         "span_id",
         "parent_span_id",
-        "avp.reason",
-        "avp.state"
+        "avp.reason"
       ],
       "title": "AgentStoppedData",
       "type": "object"
@@ -1009,150 +954,6 @@
       "title": "Commission",
       "type": "object"
     },
-    "CostRecordedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.state": {
-          "$ref": "#/$defs/RunStateSnapshot"
-        },
-        "avp.cost.source": {
-          "anyOf": [
-            {
-              "enum": [
-                "computed",
-                "reported",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Cost.Source"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.state"
-      ],
-      "title": "CostRecordedData",
-      "type": "object"
-    },
-    "CostRecordedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.cost_recorded",
-          "default": "avp.cost_recorded",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/CostRecordedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "CostRecordedEvent",
-      "type": "object"
-    },
     "ErrorCode": {
       "enum": [
         "rate_limit",
@@ -1161,6 +962,7 @@
         "agent_crash",
         "accounting_reset",
         "unsupported_model",
+        "cost_reconciliation_drift",
         "resolver_not_configured",
         "commission_collision",
         "unknown"
@@ -3001,126 +2803,6 @@
       "title": "RunRequestedEvent",
       "type": "object"
     },
-    "RunStateSnapshot": {
-      "additionalProperties": true,
-      "description": "Cumulative run-state used in cost_recorded and agent_stopped data.\nOpen model: supervisor SDKs can carry implementation-specific fields.",
-      "properties": {
-        "total_cost_usd": {
-          "minimum": 0,
-          "title": "Total Cost Usd",
-          "type": "number"
-        },
-        "total_tokens": {
-          "minimum": 0,
-          "title": "Total Tokens",
-          "type": "integer"
-        },
-        "total_turns": {
-          "minimum": 0,
-          "title": "Total Turns",
-          "type": "integer"
-        },
-        "tokens_input_total": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tokens Input Total"
-        },
-        "tokens_output_total": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tokens Output Total"
-        },
-        "tokens_cache_read_total": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tokens Cache Read Total"
-        },
-        "tokens_cache_write_total": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tokens Cache Write Total"
-        },
-        "tools_invoked": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "integer"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tools Invoked"
-        },
-        "started_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Started At"
-        },
-        "duration_ms": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Duration Ms"
-        }
-      },
-      "required": [
-        "total_cost_usd",
-        "total_tokens",
-        "total_turns"
-      ],
-      "title": "RunStateSnapshot",
-      "type": "object"
-    },
     "SkillDecl": {
       "additionalProperties": true,
       "description": "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data.skills`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
@@ -3768,7 +3450,7 @@
     },
     "SubagentReturnedData": {
       "additionalProperties": true,
-      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them. `avp.subagent.usage`\nrolls up the subagent's own consumption (cost, tokens, turns); this\nrollup is also reflected in the parent run's cumulative state, but the\nbreakdown is preserved here so consumers can attribute spend to the\nsubagent that incurred it.",
+      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3828,7 +3510,15 @@
           "$ref": "#/$defs/StopReason"
         },
         "avp.subagent.usage": {
-          "$ref": "#/$defs/RunStateSnapshot"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubagentUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3840,8 +3530,7 @@
         "avp.subagent.invocation_id",
         "duration_ms",
         "avp.subagent.result.text",
-        "avp.subagent.reason",
-        "avp.subagent.usage"
+        "avp.subagent.reason"
       ],
       "title": "SubagentReturnedData",
       "type": "object"
@@ -3934,6 +3623,40 @@
         "data"
       ],
       "title": "SubagentReturnedEvent",
+      "type": "object"
+    },
+    "SubagentUsage": {
+      "additionalProperties": true,
+      "description": "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events\n(e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`\nwith `TaskUsage` and never exposes per-turn AssistantMessages for the\nchild). In that fallback case this is the only signal the supervisor\nreceives of the child's spend.\n\nManaged subagents (separate `run_id`, separate trajectory the supervisor\nreads) MUST NOT use this; the supervisor reads the child's trajectory\ndirectly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md).",
+      "properties": {
+        "cost_usd": {
+          "minimum": 0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "tokens_input": {
+          "minimum": 0,
+          "title": "Tokens Input",
+          "type": "integer"
+        },
+        "tokens_output": {
+          "minimum": 0,
+          "title": "Tokens Output",
+          "type": "integer"
+        },
+        "turns": {
+          "minimum": 0,
+          "title": "Turns",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cost_usd",
+        "tokens_input",
+        "tokens_output",
+        "turns"
+      ],
+      "title": "SubagentUsage",
       "type": "object"
     },
     "SupervisorPreamble": {
@@ -4648,7 +4371,6 @@
       "avp.agent_described": "#/$defs/AgentDescribedEvent",
       "avp.agent_started": "#/$defs/AgentStartedEvent",
       "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
-      "avp.cost_recorded": "#/$defs/CostRecordedEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
       "avp.managed_ref_resolve_failed": "#/$defs/ManagedRefResolveFailedEvent",
       "avp.managed_ref_resolved": "#/$defs/ManagedRefResolvedEvent",
@@ -4715,9 +4437,6 @@
     },
     {
       "$ref": "#/$defs/RefusalRecordedEvent"
-    },
-    {
-      "$ref": "#/$defs/CostRecordedEvent"
     },
     {
       "$ref": "#/$defs/SkillLoadedEvent"
