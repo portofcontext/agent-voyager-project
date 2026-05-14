@@ -9,7 +9,7 @@ from typing import Any
 from avp._envelope import new_trace_id
 from avp.agent.sink import EventSink, stdio_sink
 from avp.commission import Commission
-from avp_claude_agent_sdk._patches import apply_patches
+from avp_claude_agent_sdk._patches import _ensure_patched
 from avp_claude_agent_sdk._runstate import RunState, reset_run, set_run
 
 
@@ -23,7 +23,7 @@ async def run_avp_agent(
     Stage 0 skeleton: patches + runstate only. Stage 1 adds prelude
     emission and per-message handlers; Stage 4 wires Commission fields.
     """
-    apply_patches()
+    _ensure_patched()
     state = RunState(
         trace_id=new_trace_id(),
         run_id=str(uuid.uuid4()),

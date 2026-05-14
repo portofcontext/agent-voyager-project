@@ -6,7 +6,7 @@ import asyncio
 
 import claude_agent_sdk
 
-from avp_claude_agent_sdk._patches import _AVP_WRAPPED, apply_patches, restore_patches
+from avp_claude_agent_sdk._patches import _AVP_WRAPPED, _restore_patches, setup_avp
 from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
 
 # ---------------------------------------------------------------------------
@@ -29,33 +29,33 @@ def _make_state(run_id: str = "run-0", trace_id_char: str = "a") -> RunState:
 
 class TestPatches:
     def setup_method(self) -> None:
-        restore_patches()
+        _restore_patches()
 
     def teardown_method(self) -> None:
-        restore_patches()
+        _restore_patches()
 
     def test_apply_replaces_query(self) -> None:
         original = claude_agent_sdk.query
-        apply_patches()
+        setup_avp()
         assert claude_agent_sdk.query is not original
         assert getattr(claude_agent_sdk.query, _AVP_WRAPPED, False)
 
     def test_apply_is_idempotent(self) -> None:
-        apply_patches()
+        setup_avp()
         wrapped_first = claude_agent_sdk.query
-        apply_patches()
+        setup_avp()
         assert claude_agent_sdk.query is wrapped_first
 
     def test_restore_undoes_apply(self) -> None:
         original = claude_agent_sdk.query
-        apply_patches()
-        restore_patches()
+        setup_avp()
+        _restore_patches()
         assert claude_agent_sdk.query is original
 
     def test_restore_is_idempotent(self) -> None:
-        apply_patches()
-        restore_patches()
-        restore_patches()  # must not raise
+        setup_avp()
+        _restore_patches()
+        _restore_patches()  # must not raise
 
 
 # ---------------------------------------------------------------------------

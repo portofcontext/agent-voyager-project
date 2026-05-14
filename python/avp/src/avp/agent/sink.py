@@ -11,6 +11,7 @@ per line. Convenient for local runs, examples, and conformance smoke
 tests.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 
 from avp.agent.base import AVPAgent
@@ -41,4 +42,4 @@ async def stdio_sink(event: Event) -> None:
     Uses ``by_alias=True`` so dotted CloudEvents / AVP wire keys
     (``avp.correlation_id`` etc.) round-trip in their canonical form.
     """
-    print(event.model_dump_json(by_alias=True), flush=True)
+    print(json.dumps(event.model_dump(by_alias=True, exclude_none=True, mode="json")), flush=True)

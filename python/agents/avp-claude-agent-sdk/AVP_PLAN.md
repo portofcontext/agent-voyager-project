@@ -17,7 +17,6 @@ Reference how it is implemented in this in `/Users/elias/code/scratch/wrap-claud
 
 - Monkeypatch `claude_agent_sdk.query` with a tee'd async generator. Same shape as wrap-claude-agent-sdk-python's `_create_query_wrapper_function`, minus span work.
 - Reuse existing prelude emit code from current `query.py` (`run_requested` → `agent_described` → `agent_started`).
------------- STOP FOR REVIEW -------------
 - Per-message emissions:
   - First content block of an `AssistantMessage` → `model_turn_started`
   - `TextBlock` → `text_emitted`
@@ -28,6 +27,8 @@ Reference how it is implemented in this in `/Users/elias/code/scratch/wrap-claud
     Reset handling (`cum < prev`) silently rebases the baseline — no error event.
   - `ResultMessage` → `agent_stopped("converged")`. `ResultMessage.total_cost_usd`
     is discarded; wire total = sum of per-turn `avp.cost_usd` deltas, period.
+------------ STOP FOR REVIEW -------------
+
 - Cumulative-state tracker lives in `_runstate.py`: `prev_cum = {input, output,
   cache_read, cache_creation, cost_usd}`. Each `AssistantMessage.usage` updates
   it. Hook `PreCompact` / `SubagentStart` if accessible to anticipate resets;

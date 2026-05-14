@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import contextvars
 import dataclasses
-from collections.abc import Awaitable, Callable
 
-from avp.trajectory import Event
-
-EventSink = Callable[[Event], Awaitable[None]]
+from avp.agent.sink import EventSink
 
 
 @dataclasses.dataclass

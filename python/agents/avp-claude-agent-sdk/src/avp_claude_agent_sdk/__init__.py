@@ -1,11 +1,11 @@
-"""AVP-compliant facade over `claude_agent_sdk`.
+"""AVP instrumentation for `claude_agent_sdk`.
 
-Swap `from claude_agent_sdk import query` for
-`from avp_claude_agent_sdk import query` to get AVP trajectory emission
-with the same call surface. Use `run_avp_agent` for the monkeypatch path.
+Call `setup_avp()` once (with an optional `sink`) to instrument
+`claude_agent_sdk.query` in place. All subsequent calls to
+`claude_agent_sdk.query` emit a conforming AVP trajectory.
 """
 
 from avp_claude_agent_sdk._agent import run_avp_agent
-from avp_claude_agent_sdk.query import query
+from avp_claude_agent_sdk._patches import setup_avp
 
-__all__ = ["query", "run_avp_agent"]
+__all__ = ["run_avp_agent", "setup_avp"]
