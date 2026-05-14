@@ -388,9 +388,7 @@ export type ErrorCode =
   | "context_limit"
   | "auth_error"
   | "agent_crash"
-  | "accounting_reset"
   | "unsupported_model"
-  | "cost_reconciliation_drift"
   | "resolver_not_configured"
   | "commission_collision"
   | "unknown";
@@ -804,14 +802,6 @@ export interface AgentStoppedEvent {
  * payload. The agent does NOT publish cumulative totals on this event.
  * Per-turn deltas live on each `model_turn_ended`; consumers reduce
  * the stream to compute totals.
- *
- * Reconciliation against an SDK-reported authoritative final cost goes
- * through `error_occurred(code="cost_reconciliation_drift")` before
- * `agent_stopped`, not as a separate "alternative total" field on the
- * terminator. That keeps the wire invariant "totals = sum of per-turn
- * deltas" intact and pushes the corner case (SDK reports a final total
- * that disagrees with the derived sum) into the error channel where
- * it belongs.
  */
 export interface AgentStoppedData {
   trace_id: TraceId3;

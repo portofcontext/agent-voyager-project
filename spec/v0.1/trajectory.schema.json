@@ -591,7 +591,7 @@
     },
     "AgentStoppedData": {
       "additionalProperties": true,
-      "description": "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.\n\nReconciliation against an SDK-reported authoritative final cost goes\nthrough `error_occurred(code=\"cost_reconciliation_drift\")` before\n`agent_stopped`, not as a separate \"alternative total\" field on the\nterminator. That keeps the wire invariant \"totals = sum of per-turn\ndeltas\" intact and pushes the corner case (SDK reports a final total\nthat disagrees with the derived sum) into the error channel where\nit belongs.",
+      "description": "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -960,9 +960,7 @@
         "context_limit",
         "auth_error",
         "agent_crash",
-        "accounting_reset",
         "unsupported_model",
-        "cost_reconciliation_drift",
         "resolver_not_configured",
         "commission_collision",
         "unknown"

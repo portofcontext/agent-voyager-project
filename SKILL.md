@@ -96,7 +96,7 @@ The reference is `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/transl
 2. Translate resolved material into the SDK's setup parameters (e.g. Claude Agent SDK's `mcp_servers` / `agents`).
 3. Subscribe to the SDK's lifecycle (turn-start, turn-end, tool-use, tool-result, completion).
 4. Translate each lifecycle event into the corresponding AVP event using the Pydantic models in `avp.trajectory` (events / data classes) and `avp.commission` / `avp.descriptor` where they apply.
-5. Emit per-turn cost / token deltas on `model_turn_ended` per `spec/v0.1/trajectory.md` §3.3. The agent does NOT maintain a cumulative accumulator; the supervisor reduces the delta stream. If the SDK hands back an authoritative final cost differing from the sum of deltas, emit `error_occurred(code="cost_reconciliation_drift")` with `data["avp.cost.delta_usd"]` carrying the signed variance.
+5. Emit per-turn cost / token deltas on `model_turn_ended` per `spec/v0.1/trajectory.md` §3.3. The agent does NOT maintain a cumulative accumulator; the supervisor reduces the delta stream.
 
 See `python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py` (audited Claude Code session) and `07_claude_agent_traced_client.py` (drop-in instrumentation over an existing `ClaudeSDKClient`).
 
@@ -128,7 +128,7 @@ Whatever you build, the trajectory carries two distinct kinds of facts. Surface 
 | Class              | Event types                                                                                                                                        | Semantics                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | What the agent did | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `text_emitted` | Mechanical actions                |
-| What the run cost  | `model_turn_ended.data["gen_ai.usage.*"]`, `model_turn_ended.data["avp.cost_usd"]`. SDK-reconciliation drift goes through `error_occurred(code="cost_reconciliation_drift")`. | Resource accounting (per-turn deltas; consumer reduces) |
+| What the run cost  | `model_turn_ended.data["gen_ai.usage.*"]`, `model_turn_ended.data["avp.cost_usd"]` | Resource accounting (per-turn deltas; consumer reduces) |
 
 ## Workspace and deployment scope
 

@@ -19,7 +19,7 @@ The trajectory holds two semantically distinct kinds of facts:
 | Class | Event types | Semantics |
 |---|---|---|
 | **What the agent did** | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `skill_loaded`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
-| **What the run cost** | `model_turn_ended.gen_ai.usage.*`, `model_turn_ended.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). SDK-derived drift goes through `error_occurred(code="cost_reconciliation_drift")`, not a separate "alternative total" field. |
+| **What the run cost** | `model_turn_ended.gen_ai.usage.*`, `model_turn_ended.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
 
 Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected") is a post-hoc concern: annotation of saved trajectories, not a runtime event class. v0.1 deliberately leaves this out of the wire.
 
@@ -90,7 +90,7 @@ A **turn** in AVP is exactly one `model_turn_started` / `model_turn_ended` pair 
 
 This matters most for translator-pattern agents wrapping SDKs that emit "assistant message" objects for things that aren't fresh model calls (e.g., follow-up wrappers around tool results). Translator agents MUST count an event as a turn only when the SDK-reported usage carries non-zero new output tokens (delta-output > 0), or (if the SDK doesn't report per-call usage) when the message includes content the model itself produced.
 
-The agent does NOT maintain a cumulative run-state on the wire. Each `model_turn_ended` carries per-turn deltas (`gen_ai.usage.*_tokens`, `avp.cost_usd`); consumers reduce the stream to compute totals. v0.1 does not specify caps the agent must enforce. If an SDK / API hands back an authoritative final cost that differs from the sum of per-turn `avp.cost_usd` deltas, the agent emits `error_occurred(code="cost_reconciliation_drift")` with `data["avp.cost.delta_usd"]` carrying the signed variance (reported minus derived) before `agent_stopped`. The wire invariant "totals = sum of per-turn deltas" stays intact; the error channel carries the corner-case signal.
+The agent does NOT maintain a cumulative run-state on the wire. Each `model_turn_ended` carries per-turn deltas (`gen_ai.usage.*_tokens`, `avp.cost_usd`); consumers reduce the stream to compute totals. v0.1 does not specify caps the agent must enforce.
 
 ### 3.2 The loop
 
@@ -131,19 +131,16 @@ loop:
         emit tool_returned(call_id, output)
 
     if model converged:
-        # if SDK reports an authoritative final cost differing from sum of deltas,
-        # emit error_occurred(code="cost_reconciliation_drift", delta_usd=<signed variance>)
         emit agent_stopped("converged"); return
 ```
 
 ### 3.3 Cost / token accounting rules (normative)
 
-- `avp.cost_usd` on `model_turn_ended` is the per-turn BILLABLE cost (post-cache-discount). Cumulative totals are not on the wire; consumers reduce the stream.
+- `avp.cost_usd` on `model_turn_ended` is the per-turn billable cost (post-cache-discount). Cumulative totals are not on the wire; consumers reduce the stream.
 - `gen_ai.usage.input_tokens` on `model_turn_ended` is the total input tokens INCLUDING cache-read tokens.
 - `gen_ai.usage.cache_read.input_tokens` and `gen_ai.usage.cache_creation.input_tokens` are informational and already accounted for inside `input_tokens`; consumers MUST NOT double-count them when summing.
 - Per-turn deltas (`avp.cost_usd`, `gen_ai.usage.*_tokens`) are non-negative.
-- **Reconciliation drift.** When the upstream SDK / API hands back an authoritative final cost (e.g. Claude Agent SDK's `ResultMessage.total_cost_usd`) that differs from the sum of per-turn `avp.cost_usd` deltas the agent emitted, the agent emits `error_occurred(code="cost_reconciliation_drift")` before `agent_stopped`. The error event's `data["avp.cost.delta_usd"]` carries the signed variance (reported minus derived). The wire invariant "run total = sum of `model_turn_ended.avp.cost_usd`" stays intact; the corner case lives in the error channel where it belongs.
-- **Translator agents over cumulative-usage SDKs.** Some SDKs (notably the Claude Agent SDK) report usage as a running session total per message rather than as a per-call delta. Translators MUST derive deltas (subtract previous cumulative) to populate per-turn `gen_ai.usage.*_tokens` and `avp.cost_usd` correctly. When the SDK's cumulative drops without warning (`cum < prev`), the translator MUST emit `error_occurred` with `code: "accounting_reset"` rather than silently clamping; consumers cannot distinguish a swallowed delta from a legitimate quiet turn otherwise. SDKs that signal context compaction or sub-agent dispatch via lifecycle events SHOULD be hooked so the translator resets its baselines deliberately, not via the error path.
+- Translator agents wrapping cumulative-usage SDKs (notably the Claude Agent SDK, which reports running session totals per message) derive per-turn deltas by subtracting the previous cumulative. Reset handling (e.g. cumulative drops after compaction or sub-agent dispatch) is an implementation detail of the translator; no specific error code is mandated.
 
 ---
 
@@ -258,7 +255,7 @@ Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.js
 
 The agent does NOT publish cumulative totals on the wire. Per-turn deltas live on each `model_turn_ended` (`avp.cost_usd`, `gen_ai.usage.*_tokens`); tool invocation counts come from `tool_invoked` events; run duration is `agent_stopped.time` minus `agent_started.time`. Consumers (supervisors, audit pipelines, dashboards) reduce the event stream to compute totals. The reasons for this split are (1) one source of truth on the wire, (2) no agent-side accumulator to drift, and (3) translator-pattern agents already derive per-turn deltas from cumulative-usage SDKs; making them then re-accumulate to broadcast cumulative state is busywork without value.
 
-The wire invariant is "run total = sum of per-turn `model_turn_ended.avp.cost_usd`." When that invariant breaks because the upstream SDK / API hands back an authoritative final cost the agent cannot retro-fit into the per-turn deltas, the agent emits `error_occurred(code="cost_reconciliation_drift")` carrying the signed variance on `data["avp.cost.delta_usd"]`. No "alternative total" lives on the terminator.
+The wire invariant is "run total = sum of per-turn `model_turn_ended.avp.cost_usd`." Per-turn `avp.cost_usd` is the translator's best observation at turn end; reconciliation against external billing systems is a consumer concern.
 
 ---
 
@@ -270,7 +267,7 @@ An agent is conforming to the Trajectory Spec if and only if all of the followin
 2. The trajectory MUST open with the prelude defined in §2.1, in this order: `avp.run_requested`, `avp.agent_described`, then any `avp.managed_ref_resolved` (one per Commission-declared ref), any `avp.mcp_server_connected` (one per dialed server, descriptor's + Commission's), any eager `avp.skill_loaded`, and finally `avp.agent_started`. When relaying a Commission, `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of it (managed refs verbatim); otherwise `data["avp.commission"]` and `data["avp.supervisor.*"]` MUST be absent. `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` is the merged-state snapshot: `data.tools[]` MUST list the agent's local tool catalog (`descriptor.tools` filtered by `Commission.enabled_builtin_tools`); `data.mcp_servers[]` MUST list the merged MCP server identities (descriptor's filtered ∪ Commission's resolved); `data.skills[]` and `data.subagents[]` MUST list the merged skill / subagent decls. MCP-surfaced tool catalogs MUST NOT be duplicated on `data.tools[]`; they live on each `mcp_server_connected.data["avp.mcp.tools"]`. `prompt` MUST be included on `agent_started` when available.
 3. For every model inference, it MUST emit `avp.model_turn_started` immediately before the request and `avp.model_turn_ended` immediately after the response.
 4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.
-5. Each `avp.model_turn_ended` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire. When the upstream SDK / API hands back an authoritative final cost that differs from the sum of per-turn `avp.cost_usd` deltas, the agent MUST emit `error_occurred(code="cost_reconciliation_drift")` with `data["avp.cost.delta_usd"]` carrying the signed variance (reported minus derived) before `agent_stopped`.
+5. Each `avp.model_turn_ended` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire.
 6. The last event it emits MUST be `avp.agent_stopped` (source=`avp://agent`). After emitting `agent_stopped`, the agent MUST NOT emit additional events.
 7. All emitted events MUST validate against `trajectory.schema.json`.
 

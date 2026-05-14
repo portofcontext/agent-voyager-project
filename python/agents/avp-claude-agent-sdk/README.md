@@ -108,21 +108,17 @@ flagging for whoever picks up the next round of translator work:
 ### 1. Cumulative usage drops without a PreCompact / SubagentStart signal
 
 The translator hooks `PreCompact` and `SubagentStart` to anticipate
-SDK-side cumulative-counter resets gracefully (see
-`_on_baseline_reset_hook`). In practice we observe additional cumulative
-drops that fire neither hook — usually within a single "turn" between
-multiple AssistantMessages. The translator handles these correctly per
-[`spec/v0.1/trajectory.md` §3.3](../../../spec/v0.1/trajectory.md#33-cost--token-accounting-rules-normative): emits `error_occurred` with `code: "accounting_reset"` and
-adopts the new cumulative as a fresh baseline so subsequent deltas are
-still computable.
+SDK-side cumulative-counter resets. In practice we observe additional
+cumulative drops that fire neither hook — usually within a single "turn"
+between multiple AssistantMessages. Per [`spec/v0.1/trajectory.md` §3.3](../../../spec/v0.1/trajectory.md#33-cost--token-accounting-rules-normative)
+reset handling is a translator implementation detail; the translator
+adopts the new cumulative as a fresh baseline so subsequent deltas
+remain computable. The supervisor treats reduced totals as a lower bound.
 
 What's open: identify the SDK lifecycle event (if any) that signals these
-internal resets so we can convert the error into a graceful baseline-reset
-hook subscription. Candidates worth checking: `Notification` hook,
-`PostToolUseFailure`, undocumented internal CLI events. If no signal
-exists, current behavior is the correct end state — the trajectory tells
-the supervisor "treat totals as a lower bound" rather than silently
-swallowing usage.
+internal resets so we can hook baseline-reset explicitly. Candidates
+worth checking: `Notification` hook, `PostToolUseFailure`, undocumented
+internal CLI events.
 
 ### 2. Duplicate `PreToolUse` for a single tool dispatch
 

@@ -102,15 +102,7 @@ class ErrorCode(StrEnum):
     context_limit = "context_limit"
     auth_error = "auth_error"
     agent_crash = "agent_crash"
-    accounting_reset = "accounting_reset"
     unsupported_model = "unsupported_model"
-    # Translator-pattern drift: SDK / API hands back an authoritative final
-    # cost that disagrees with the sum of per-turn `avp.cost_usd` deltas.
-    # The agent emits this with `data["avp.cost.delta_usd"]` carrying the
-    # signed variance (reported - derived); the supervisor learns about the
-    # discrepancy without the agent publishing a second "alternative total"
-    # on the wire.
-    cost_reconciliation_drift = "cost_reconciliation_drift"
     # Commission-managed-asset / resolver-protocol error codes (v0.1).
     resolver_not_configured = "resolver_not_configured"
     commission_collision = "commission_collision"
@@ -201,14 +193,6 @@ class AgentStoppedData(_SpanData):
     payload. The agent does NOT publish cumulative totals on this event.
     Per-turn deltas live on each `model_turn_ended`; consumers reduce
     the stream to compute totals.
-
-    Reconciliation against an SDK-reported authoritative final cost goes
-    through `error_occurred(code="cost_reconciliation_drift")` before
-    `agent_stopped`, not as a separate "alternative total" field on the
-    terminator. That keeps the wire invariant "totals = sum of per-turn
-    deltas" intact and pushes the corner case (SDK reports a final total
-    that disagrees with the derived sum) into the error channel where
-    it belongs.
     """
 
     avp_reason: StopReason = Field(alias="avp.reason")

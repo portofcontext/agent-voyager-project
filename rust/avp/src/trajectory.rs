@@ -1191,14 +1191,14 @@ impl<'de> ::serde::Deserialize<'de> for AgentStartedEventSubject {
             })
     }
 }
-#[doc = "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.\n\nReconciliation against an SDK-reported authoritative final cost goes\nthrough `error_occurred(code=\"cost_reconciliation_drift\")` before\n`agent_stopped`, not as a separate \"alternative total\" field on the\nterminator. That keeps the wire invariant \"totals = sum of per-turn\ndeltas\" intact and pushes the corner case (SDK reports a final total\nthat disagrees with the derived sum) into the error channel where\nit belongs."]
+#[doc = "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AgentStoppedData\","]
-#[doc = "  \"description\": \"Payload of avp.agent_stopped events. Terminator of the trajectory.\\n\\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\\npayload. The agent does NOT publish cumulative totals on this event.\\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\\nthe stream to compute totals.\\n\\nReconciliation against an SDK-reported authoritative final cost goes\\nthrough `error_occurred(code=\\\"cost_reconciliation_drift\\\")` before\\n`agent_stopped`, not as a separate \\\"alternative total\\\" field on the\\nterminator. That keeps the wire invariant \\\"totals = sum of per-turn\\ndeltas\\\" intact and pushes the corner case (SDK reports a final total\\nthat disagrees with the derived sum) into the error channel where\\nit belongs.\","]
+#[doc = "  \"description\": \"Payload of avp.agent_stopped events. Terminator of the trajectory.\\n\\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\\npayload. The agent does NOT publish cumulative totals on this event.\\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\\nthe stream to compute totals.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.reason\","]
@@ -2583,9 +2583,7 @@ pub struct Commission {
 #[doc = "    \"context_limit\","]
 #[doc = "    \"auth_error\","]
 #[doc = "    \"agent_crash\","]
-#[doc = "    \"accounting_reset\","]
 #[doc = "    \"unsupported_model\","]
-#[doc = "    \"cost_reconciliation_drift\","]
 #[doc = "    \"resolver_not_configured\","]
 #[doc = "    \"commission_collision\","]
 #[doc = "    \"unknown\""]
@@ -2614,12 +2612,8 @@ pub enum ErrorCode {
     AuthError,
     #[serde(rename = "agent_crash")]
     AgentCrash,
-    #[serde(rename = "accounting_reset")]
-    AccountingReset,
     #[serde(rename = "unsupported_model")]
     UnsupportedModel,
-    #[serde(rename = "cost_reconciliation_drift")]
-    CostReconciliationDrift,
     #[serde(rename = "resolver_not_configured")]
     ResolverNotConfigured,
     #[serde(rename = "commission_collision")]
@@ -2634,9 +2628,7 @@ impl ::std::fmt::Display for ErrorCode {
             Self::ContextLimit => f.write_str("context_limit"),
             Self::AuthError => f.write_str("auth_error"),
             Self::AgentCrash => f.write_str("agent_crash"),
-            Self::AccountingReset => f.write_str("accounting_reset"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
-            Self::CostReconciliationDrift => f.write_str("cost_reconciliation_drift"),
             Self::ResolverNotConfigured => f.write_str("resolver_not_configured"),
             Self::CommissionCollision => f.write_str("commission_collision"),
             Self::Unknown => f.write_str("unknown"),
@@ -2651,9 +2643,7 @@ impl ::std::str::FromStr for ErrorCode {
             "context_limit" => Ok(Self::ContextLimit),
             "auth_error" => Ok(Self::AuthError),
             "agent_crash" => Ok(Self::AgentCrash),
-            "accounting_reset" => Ok(Self::AccountingReset),
             "unsupported_model" => Ok(Self::UnsupportedModel),
-            "cost_reconciliation_drift" => Ok(Self::CostReconciliationDrift),
             "resolver_not_configured" => Ok(Self::ResolverNotConfigured),
             "commission_collision" => Ok(Self::CommissionCollision),
             "unknown" => Ok(Self::Unknown),

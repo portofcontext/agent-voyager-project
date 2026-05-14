@@ -66,8 +66,9 @@ SDK reports usage cumulatively, so the wrapper MUST derive deltas.
   reference agent).
 - [ ] Track cumulative usage state in the wrapper: `prev_cum = {input,
   output, cache_read, cache_creation, cost_usd}`. After each
-  `AssistantMessage.usage`, compute deltas. If `cum < prev`, emit
-  `avp.error_occurred(code="accounting_reset")` per spec §3.3.
+  `AssistantMessage.usage`, compute deltas. Per spec §3.3, reset
+  handling (e.g. `cum < prev` after compaction or sub-agent dispatch)
+  is a translator implementation detail; rebase the baseline silently.
 - [ ] `avp.model_turn_ended` at the end of each turn. Map:
   - `gen_ai.usage.input_tokens` = delta input (incl. cache reads, per §3.3)
   - `gen_ai.usage.output_tokens` = delta output
