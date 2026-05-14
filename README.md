@@ -3,9 +3,7 @@
   <h1>Agent Voyager Project (AVP)</h1>
 </div>
 
-Build an AI agent today and the framework decides what its trajectory looks like: Anthropic emits one shape of telemetry, OpenAI another, your custom loop a third. Audit pipelines and orchestration platforms that watch agents end up writing one adapter per framework.
-
-AVP is an open standard for the wire those tools read. Agents that speak it emit a uniform event stream (model calls, tool uses, costs, errors), so an observer reads the same shape across every agent. AVP also defines how supervisors trigger and provision agents, keeping secrets and connection material off the wire.
+AI agents are hard to evaluate and hard to move between platforms. Every framework emits different telemetry, so every observer writes its own adapter. AVP standardizes the wire: a uniform event stream (model calls, tool uses, costs, outcomes) that any agent can emit and any platform can read.
 
 > **(v0.1):** AVP Trajectory · AVP Agent Descriptor
 
