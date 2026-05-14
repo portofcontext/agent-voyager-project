@@ -287,10 +287,12 @@ class OllamaTranslator:
         self.num_predict = (
             int(env_predict) if env_predict and env_predict.strip() else 0
         )
-        # httpx timeout. Default 300s — slow CPU inference (esp. with
-        # long prompts) routinely exceeds the old 120s ceiling without
-        # actually being broken. Override via OLLAMA_HTTP_TIMEOUT.
-        timeout = float(os.environ.get("OLLAMA_HTTP_TIMEOUT") or 300.0)
+        # httpx timeout. Default 600s — slow CPU inference on a long
+        # multi-turn warm-rescue conversation can spend 4-5 minutes per
+        # turn (each turn's prompt grows as context accumulates).
+        # The old 120s was way too tight; even 300s wasn't enough after
+        # 3-4 turns of context. Override via OLLAMA_HTTP_TIMEOUT.
+        timeout = float(os.environ.get("OLLAMA_HTTP_TIMEOUT") or 600.0)
         self.state = _RunState(run_id=run_id)
         self._http = httpx.Client(timeout=timeout)
 

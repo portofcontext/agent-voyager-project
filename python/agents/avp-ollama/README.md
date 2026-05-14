@@ -105,7 +105,7 @@ Configuration env vars:
 | `RESCUE_FAIL_AT` | Failure injection (see above) | unset |
 | `OLLAMA_MAX_TURNS` | Safety cap | `8` |
 | `OLLAMA_NUM_PREDICT` | Cap on output tokens per turn (passed as `options.num_predict` to `/api/chat`). `0`/unset = no cap. On CPU-only Ollama, long prompts can blow past the HTTP timeout — set ≥128 to keep turn latency bounded. | `0` |
-| `OLLAMA_HTTP_TIMEOUT` | httpx timeout (seconds) for calls to Ollama. Bump for slow CPU hosts. | `300` |
+| `OLLAMA_HTTP_TIMEOUT` | httpx timeout (seconds) for calls to Ollama. Bump for slow CPU hosts. | `600` |
 
 ## Quick start
 
