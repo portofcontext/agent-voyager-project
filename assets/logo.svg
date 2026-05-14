@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 154 202" width="154" height="202">
+  <!--
+    AVP ship logo — monospace ASCII art
+    Colors: mast #e6eef3 · sail #f3d28a · hull #c98b4a · keel #8a5b2c
+    Font: any monospace at 16px, 9.6px char width, 18.4px line height
+  -->
+  <g font-family="'JetBrains Mono','Fira Code','SF Mono',Menlo,Consolas,monospace"
+     font-size="16"
+     font-weight="bold">
+
+    <!-- row 1:           _ -->
+    <text x="105.6" y="16" fill="#f3d28a">_</text>
+
+    <!-- row 2:         |&lt;avp&gt; -->
+    <text y="34.4">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">&lt;avp&gt;</tspan>
+    </text>
+
+    <!-- row 3:         |  ‾ -->
+    <text y="52.8">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan x="105.6" fill="#f3d28a">&#x203e;</tspan>
+    </text>
+
+    <!-- row 4:         |\ -->
+    <text y="71.2">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">\</tspan>
+    </text>
+
+    <!-- row 5:         |_\ -->
+    <text y="89.6">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">_\</tspan>
+    </text>
+
+    <!-- row 6:         |__\ -->
+    <text y="108">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">__\</tspan>
+    </text>
+
+    <!-- row 7:         |___\ -->
+    <text y="126.4">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">___\</tspan>
+    </text>
+
+    <!-- row 8:         |____\ -->
+    <text y="144.8">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">____\</tspan>
+    </text>
+
+    <!-- row 9:         |_____\ -->
+    <text y="163.2">
+      <tspan x="76.8" fill="#e6eef3">|</tspan><tspan fill="#f3d28a">_____\</tspan>
+    </text>
+
+    <!-- row 10: \______________/ -->
+    <text x="0" y="181.6" fill="#c98b4a">\______________/</text>
+
+    <!-- row 11:  \____________/ -->
+    <text x="9.6" y="200" fill="#8a5b2c">\____________/</text>
+
+  </g>
+</svg>
