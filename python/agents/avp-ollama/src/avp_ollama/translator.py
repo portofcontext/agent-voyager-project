@@ -276,8 +276,23 @@ class OllamaTranslator:
         # Test instrumentation (demo + smoke). Parsed once at construction.
         self.inject_user_message = InjectUserMessageAt.from_env()
         self.inject_tool_call = InjectToolCallAt.from_env()
+        # Cap output length per turn. Without this, the model decides
+        # when to stop, which on CPU-only Ollama with a long warm-rescue
+        # prompt can run for minutes per turn and blow past the HTTP
+        # timeout (we'd see runner-side `execution_backend_failure`s
+        # that look like "rescue cascade" but are really "model is
+        # too slow"). `0` / unset keeps the original model-decides
+        # behavior for users on faster hardware.
+        env_predict = os.environ.get("OLLAMA_NUM_PREDICT")
+        self.num_predict = (
+            int(env_predict) if env_predict and env_predict.strip() else 0
+        )
+        # httpx timeout. Default 300s — slow CPU inference (esp. with
+        # long prompts) routinely exceeds the old 120s ceiling without
+        # actually being broken. Override via OLLAMA_HTTP_TIMEOUT.
+        timeout = float(os.environ.get("OLLAMA_HTTP_TIMEOUT") or 300.0)
         self.state = _RunState(run_id=run_id)
-        self._http = httpx.Client(timeout=120.0)
+        self._http = httpx.Client(timeout=timeout)
 
     # ── public driver ────────────────────────────────────────────────────
 
@@ -590,8 +605,15 @@ class OllamaTranslator:
             )
         )
 
-        # Call Ollama.
-        body = {"model": self.model, "messages": messages, "stream": False}
+        # Call Ollama. `options.num_predict` caps output tokens when
+        # configured — bounds per-turn latency on slow (CPU-only) hosts.
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+        }
+        if self.num_predict > 0:
+            body["options"] = {"num_predict": self.num_predict}
         try:
             resp = self._http.post(f"{self.ollama_host}/api/chat", json=body)
             resp.raise_for_status()
