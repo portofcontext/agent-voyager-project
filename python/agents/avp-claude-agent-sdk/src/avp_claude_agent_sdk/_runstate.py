@@ -17,6 +17,12 @@ class RunState:
     sink: EventSink
     agent_span_id: str | None = None
     current_turn_span_id: str | None = None
+    step: int = 0
+    # Set when a UserMessage with ToolResultBlock arrives; cleared when the
+    # next AssistantMessage opens a fresh turn. Guards the merge gate in
+    # handle_message: consecutive AssistantMessages without an intervening
+    # tool result belong to the same LLM call (e.g. thinking + text blocks).
+    tool_result_arrived: bool = False
     # tool_use_id → span_id; populated in Stage 2
     tool_spans: dict[str, str] = dataclasses.field(default_factory=dict)
 

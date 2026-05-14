@@ -14,11 +14,11 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import claude_agent_sdk
-from claude_agent_sdk.types import AssistantMessage, ClaudeAgentOptions
+from claude_agent_sdk.types import ClaudeAgentOptions
 
 from avp._envelope import new_trace_id
 from avp.agent.sink import EventSink, stdio_sink
-from avp_claude_agent_sdk._emit import emit_model_turn_started, emit_prelude
+from avp_claude_agent_sdk._emit import emit_prelude, handle_message
 from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
 
 _AVP_WRAPPED = "_avp_wrapped"
@@ -63,7 +63,7 @@ def _restore_patches() -> None:
 
 
 def _wrap_query(original: Any) -> Any:
-    """Tee'd async generator: emits AVP prelude + per-turn events, passes messages through."""
+    """Tee'd async generator: emits AVP prelude then dispatches each message."""
 
     async def wrapped(**kwargs: Any) -> AsyncGenerator[Any, None]:
         prompt_raw = kwargs.get("prompt")
@@ -82,11 +82,8 @@ def _wrap_query(original: Any) -> Any:
 
         try:
             await emit_prelude(state, prompt_text, options)
-            step = 0
             async for message in original(**kwargs):
-                if isinstance(message, AssistantMessage):
-                    step += 1
-                    await emit_model_turn_started(state, step)
+                await handle_message(state, message)
                 yield message
         finally:
             if token is not None:
