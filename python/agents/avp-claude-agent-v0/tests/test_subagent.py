@@ -29,6 +29,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from avp_claude_agent import ClaudeAgentTranslator
+
 from avp.commission import (
     Commission,
     SubagentRef,
@@ -40,7 +42,6 @@ from avp.trajectory import (
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
-from avp_claude_agent import ClaudeAgentTranslator
 
 
 @dataclass

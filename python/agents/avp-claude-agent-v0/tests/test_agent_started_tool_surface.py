@@ -19,13 +19,14 @@ for descriptions is Claude Code documentation, not us.
 
 from __future__ import annotations
 
-from avp.commission import Commission
-from avp.trajectory import AgentStartedEvent
 from avp_claude_agent.translator import (
     _CLAUDE_CODE_PRESET_TOOLS,
     ClaudeAgentTranslator,
     _make_builtin_tool_decl,
 )
+
+from avp.commission import Commission
+from avp.trajectory import AgentStartedEvent
 
 from .test_translator import _FakeHookMatcher, _FakeOptions
 

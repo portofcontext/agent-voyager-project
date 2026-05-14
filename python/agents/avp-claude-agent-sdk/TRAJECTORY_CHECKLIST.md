@@ -20,10 +20,10 @@ the drop-in is preserved as long as callers don't print Messages to
 stdout (the default sink writes NDJSON to stdout — note this in the
 docstring so users with mixed-stdout concerns pass a file-backed sink).
 
-- [ ] Extend the wrapper signature: `async def query(*, prompt, options=None,
+- [x] Extend the wrapper signature: `async def query(*, prompt, options=None,
   transport=None, sink: EventSink | None = None) -> AsyncIterator[Message]`.
   Import `EventSink` and `stdio_sink` from `avp.agent`.
-- [ ] Inside `query()`, construct a per-call `AVPAgentSink(sink or stdio_sink)`
+- [x] Inside `query()`, construct a per-call `AVPAgentSink(sink or stdio_sink)`
   and pass it through the translator state. Per-call construction (not
   module state) keeps concurrent `query()` invocations from cross-firing.
 
@@ -60,7 +60,7 @@ this rule: a turn is one `AssistantMessage` that carries new model
 output. Per spec §3.1 + §3.3 + the docstring on `ResultMessage`, the
 SDK reports usage cumulatively, so the wrapper MUST derive deltas.
 
-- [ ] Open a turn span when an `AssistantMessage` arrives. Emit
+- [x] Open a turn span when an `AssistantMessage` arrives. Emit
   `avp.model_turn_started(step=N)` with `parent_span_id =
   agent_span_id`. Track `step` 0-indexed (or 1-indexed — match the
   reference agent).

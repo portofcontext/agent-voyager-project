@@ -1,7 +1,7 @@
 {
   "id": "run-requested-emitted-first-with-commission-snapshot",
   "title": "run_requested opens the trajectory, carries supervisor identity + full Commission snapshot",
-  "description": "The trajectory MUST open with a agent-relayed run_requested event tagged source=avp://supervisor. Its data carries avp.supervisor.name (from Commission.supervisor.name), the optional avp.supervisor.version, and avp.config \u2014 a faithful snapshot of the Commission the supervisor handed in. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone.",
+  "description": "The trajectory MUST open with a run_requested event tagged source=avp://agent (the agent is the sole producer on the wire, per spec \u00a78 conformance #1). Its data carries avp.supervisor.name (from Commission.supervisor.name), the optional avp.supervisor.version, and avp.commission \u2014 a faithful snapshot of the Commission the supervisor handed in. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone.",
   "spec_refs": [
     "spec/v0.1/trajectory.md#2-1-run-prelude",
     "spec/v0.1/trajectory.schema.json#/$defs/RunRequestedEvent"
@@ -42,7 +42,7 @@
         "label": "run_requested is the very first event",
         "match": {
           "type": "avp.run_requested",
-          "source": "avp://supervisor",
+          "source": "avp://agent",
           "subject": "prelude-run-requested",
           "data": {
             "parent_span_id": "0000000000000000",

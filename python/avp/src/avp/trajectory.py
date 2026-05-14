@@ -43,7 +43,6 @@ from pydantic import BaseModel, Field, model_validator
 from avp._envelope import (
     _OPEN,
     SOURCE_AGENT,
-    SOURCE_SUPERVISOR,
     ZERO_SPAN_ID,
     Iso8601,
     _CloudEventBase,
@@ -150,9 +149,7 @@ class RunRequestedData(_SpanData):
     absence (not `"unknown"`) is the canonical signal.
     """
 
-    avp_supervisor_name: str | None = Field(
-        default=None, min_length=1, alias="avp.supervisor.name"
-    )
+    avp_supervisor_name: str | None = Field(default=None, min_length=1, alias="avp.supervisor.name")
     avp_supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
     avp_commission: Commission | None = Field(default=None, alias="avp.commission")
 
@@ -549,15 +546,16 @@ class ManagedRefResolveFailedData(_SpanData):
 
 
 class RunRequestedEvent(_CloudEventBase):
-    """First event of the trajectory. Agent-relayed but supervisor-attributed:
-    the agent emits it from `Commission.supervisor` with `source: avp://supervisor`,
-    so a downstream consumer reading the wire sees the supervisor as the
-    asserter of "this run was requested with this Commission." Same relay
-    pattern as `tool_exec_resolved`.
+    """First event of the trajectory. The agent is the sole producer on the
+    wire (spec §8 conformance #1), so `source` is `avp://agent`. Supervisor
+    attribution, when a Commission is in use, lives inside `data` as
+    `avp.supervisor.*` plus the full `avp.commission` snapshot — that's what
+    makes the trajectory self-contained for audit without resort to the
+    envelope's `source` field.
     """
 
     type: Literal["avp.run_requested"] = T_RUN_REQUESTED
-    source: Literal["avp://supervisor"] = SOURCE_SUPERVISOR
+    source: Literal["avp://agent"] = SOURCE_AGENT
     data: RunRequestedData
 
 
@@ -790,7 +788,6 @@ def event_to_wire(event: BaseModel) -> dict[str, Any]:
 
 __all__ = [
     "SOURCE_AGENT",
-    "SOURCE_SUPERVISOR",
     "T_AGENT_DESCRIBED",
     "T_AGENT_STARTED",
     "T_AGENT_STOPPED",

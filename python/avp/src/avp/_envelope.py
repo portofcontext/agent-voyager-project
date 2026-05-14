@@ -10,8 +10,10 @@ spec module:
 - CloudEvents 1.0 envelope (`_CloudEventBase`).
 - OTel span identification carried on every event's `data`
   (`_SpanData`).
-- Source URIs (`SOURCE_AGENT`, `SOURCE_SUPERVISOR`) used by every
-  event type.
+- Source URI (`SOURCE_AGENT`) used by every event type. The agent is
+  the sole producer on the wire (spec §8 conformance #1); supervisor
+  attribution lives in `run_requested.data` (`avp.commission` +
+  `avp.supervisor.*`), not in the envelope's `source` field.
 - Pydantic `model_config` presets (`_STRICT`, `_OPEN`) used by every
   spec model.
 - ID / timestamp generators used as Pydantic field defaults
@@ -58,13 +60,11 @@ def new_span_id() -> str:
 ZERO_SPAN_ID = "0" * 16
 
 
-# Source URIs (CloudEvents reverse-DNS).
+# Source URI (CloudEvents reverse-DNS). The agent is the sole producer on
+# the wire (spec §8 conformance #1); every event carries `avp://agent`.
+# Supervisor attribution, when applicable, rides inside
+# `run_requested.data` (`avp.commission` + `avp.supervisor.*`).
 SOURCE_AGENT = "avp://agent"
-# `avp://supervisor` is used by the agent-relayed `run_requested` event;
-# the agent stamps that source URI on the wire to attribute the run to
-# the originating supervisor build (see Commission.supervisor). Supervisors
-# do NOT directly emit events into the trajectory in v0.1.
-SOURCE_SUPERVISOR = "avp://supervisor"
 
 
 # Pydantic model_config presets. `populate_by_name=True` lets parsers accept

@@ -1,7 +1,7 @@
 {
   "id": "source-agent-events-tagged-agent",
-  "title": "Every agent-emitted event in a baseline run carries source='agent'",
-  "description": "Source-field discipline. Without supervisor messages, every event in the trajectory MUST be tagged source='agent'. No event MAY be missing the source field, and no agent-emitted event MAY be tagged source='supervisor'.",
+  "title": "Every event in a baseline run carries source='avp://agent'",
+  "description": "Source-field discipline. The agent is the sole producer on the wire (spec §8 conformance #1), so every event in the trajectory MUST be tagged source='avp://agent'. No event MAY be missing the source field, and no event MAY be tagged source='avp://supervisor' (supervisor attribution lives in run_requested.data, not in the envelope).",
   "spec_refs": [
     "spec/v0.1/trajectory.md",
     "spec/v0.1/avp.schema.json#/$defs/EventBase"
@@ -59,7 +59,7 @@
     ],
     "forbidden_events": [
       {
-        "label": "no agent-emitted event may carry source=supervisor in a baseline run",
+        "label": "no event may carry source=avp://supervisor (agent is sole producer)",
         "match": {
           "source": "avp://supervisor"
         }

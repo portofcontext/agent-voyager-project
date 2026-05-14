@@ -20,12 +20,6 @@ import json
 from typing import Any
 
 import pytest
-
-from avp.commission import Commission
-from avp.trajectory import (
-    AgentDescribedEvent,
-    RunRequestedEvent,
-)
 from avp_claude_agent import (
     CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
     CLAUDE_CODE_PRESET_TOOLS,
@@ -34,6 +28,12 @@ from avp_claude_agent import (
 from avp_claude_agent import cli as cli_module
 from avp_claude_agent import (
     descriptor as build_descriptor,
+)
+
+from avp.commission import Commission
+from avp.trajectory import (
+    AgentDescribedEvent,
+    RunRequestedEvent,
 )
 
 
@@ -93,7 +93,7 @@ def test_translator_emits_run_prelude_when_descriptor_supplied() -> None:
     t._emit_run_prelude()
 
     assert isinstance(out[0], RunRequestedEvent)
-    assert out[0].source == "avp://supervisor"
+    assert out[0].source == "avp://agent"
     assert out[0].data.avp_supervisor_name == "test-supervisor"
     assert out[0].data.avp_commission["run_id"] == "descriptor-seam"
 

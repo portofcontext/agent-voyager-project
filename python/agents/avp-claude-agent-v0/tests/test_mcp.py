@@ -18,12 +18,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from avp_claude_agent import ClaudeAgentTranslator
+
 from avp.agent.mock import ScriptedResolver
 from avp.commission import (
     Commission,
     McpServerRef,
 )
-from avp_claude_agent import ClaudeAgentTranslator
 
 
 @dataclass

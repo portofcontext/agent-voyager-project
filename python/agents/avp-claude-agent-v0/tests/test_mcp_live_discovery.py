@@ -23,9 +23,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from avp_claude_agent.translator import ClaudeAgentTranslator
+
 from avp.commission import Commission
 from avp.trajectory import McpServerConnectedEvent
-from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from .test_translator import _FakeHookMatcher, _FakeOptions
 

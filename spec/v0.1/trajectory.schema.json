@@ -2842,7 +2842,7 @@
     },
     "RunRequestedData": {
       "additionalProperties": true,
-      "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory: the supervisor's assertion that this run was\nrequested with this Commission. Agent-relayed (the agent emits the\nevent with `source: avp://supervisor` based on `Commission.supervisor`),\nso no I/O contract change beyond Commission, but attribution is the\nsupervisor's, not the agent's.\n\n`avp.commission` is the full Commission snapshot the supervisor handed\nin. Carrying it on the wire makes the trajectory self-contained: an\nauditor can replay (or re-validate) the run from the trajectory\nalone, without an external Commission registry.",
+      "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory. When relaying a Commission, carries the full\nsnapshot under `avp.commission` plus `avp.supervisor.*` for attribution,\nmaking the trajectory self-contained for audit. Without a Commission\n(library-invocation path), those fields are absent — per spec §2.1,\nabsence (not `\"unknown\"`) is the canonical signal.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -2866,9 +2866,17 @@
           "type": "string"
         },
         "avp.supervisor.name": {
-          "minLength": 1,
-          "title": "Avp.Supervisor.Name",
-          "type": "string"
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Supervisor.Name"
         },
         "avp.supervisor.version": {
           "anyOf": [
@@ -2897,15 +2905,14 @@
       "required": [
         "trace_id",
         "span_id",
-        "parent_span_id",
-        "avp.supervisor.name"
+        "parent_span_id"
       ],
       "title": "RunRequestedData",
       "type": "object"
     },
     "RunRequestedEvent": {
       "additionalProperties": false,
-      "description": "First event of the trajectory. Agent-relayed but supervisor-attributed:\nthe agent emits it from `Commission.supervisor` with `source: avp://supervisor`,\nso a downstream consumer reading the wire sees the supervisor as the\nasserter of \"this run was requested with this Commission.\" Same relay\npattern as `tool_exec_resolved`.",
+      "description": "First event of the trajectory. The agent is the sole producer on the\nwire (spec §8 conformance #1), so `source` is `avp://agent`. Supervisor\nattribution, when a Commission is in use, lives inside `data` as\n`avp.supervisor.*` plus the full `avp.commission` snapshot — that's what\nmakes the trajectory self-contained for audit without resort to the\nenvelope's `source` field.",
       "properties": {
         "specversion": {
           "const": "1.0",
@@ -2979,8 +2986,8 @@
           "type": "string"
         },
         "source": {
-          "const": "avp://supervisor",
-          "default": "avp://supervisor",
+          "const": "avp://agent",
+          "default": "avp://agent",
           "title": "Source",
           "type": "string"
         },
@@ -3931,7 +3938,7 @@
     },
     "SupervisorPreamble": {
       "additionalProperties": false,
-      "description": "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and stamped onto the\n`run_requested` event the agent emits as the first event of the\ntrajectory (with `source: avp://supervisor`). Lets a trajectory\nconsumer attribute the run to the originating supervisor without an\nout-of-band lookup.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it.",
+      "description": "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and projected onto the\n`run_requested` event's `data` (`avp.supervisor.name` +\n`avp.supervisor.version`) so a trajectory consumer can attribute the\nrun to the originating supervisor without an out-of-band lookup. The\nevent's `source` is `avp://agent` (the agent is the sole producer on\nthe wire); supervisor attribution lives inside `data`.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it.",
       "properties": {
         "name": {
           "minLength": 1,

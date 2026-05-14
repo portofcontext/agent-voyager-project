@@ -16,15 +16,16 @@ Commission semantics (v0.1 refs-only):
 
 from __future__ import annotations
 
+from avp_claude_agent.translator import (
+    _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
+    ClaudeAgentTranslator,
+)
+
 from avp.commission import (
     Commission,
     SubagentRef,
 )
 from avp.trajectory import AgentStartedEvent
-from avp_claude_agent.translator import (
-    _CLAUDE_AGENT_SDK_BUILTIN_SUBAGENTS,
-    ClaudeAgentTranslator,
-)
 
 from .test_translator import _FakeHookMatcher, _FakeOptions
 

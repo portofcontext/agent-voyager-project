@@ -22,12 +22,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from avp_claude_agent import ClaudeAgentTranslator
+from avp_claude_agent.local_tools_bridge import _wrap, to_sdk_mcp_server
+
 from avp.agent.drivers import ToolOutcome
 from avp.agent.local_tools import LocalTools
 from avp.commission import Commission
 from avp.trajectory import ToolInvokedEvent
-from avp_claude_agent import ClaudeAgentTranslator
-from avp_claude_agent.local_tools_bridge import _wrap, to_sdk_mcp_server
 
 # ── Bridge function: shape conversion ─────────────────────────────────────
 

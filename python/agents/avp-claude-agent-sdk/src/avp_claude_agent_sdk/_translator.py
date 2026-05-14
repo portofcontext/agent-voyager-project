@@ -89,8 +89,7 @@ def _subagents(options: ClaudeAgentOptions) -> list[SubagentDecl] | None:
     if not agents:
         return None
     return [
-        SubagentDecl(name=name, description=defn["description"])
-        for name, defn in agents.items()
+        SubagentDecl(name=name, description=defn["description"]) for name, defn in agents.items()
     ]
 
 

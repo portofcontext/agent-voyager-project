@@ -74,9 +74,11 @@ for HTTP, MQTT, Kafka, AMQP, NATS, so any AVP trajectory can be transported
 on standard event infrastructure without re-encoding.
 
 **What AVP takes:** the event envelope. Every AVP event is a valid CloudEvent.
-`type` is reverse-DNS (`avp.model_turn_ended`); `source` is a URI
-(`avp://agent` or `avp://supervisor`); `subject` carries `run_id`; `time`
-carries the timestamp; `data` carries the AVP-specific payload.
+`type` is reverse-DNS (`avp.model_turn_ended`); `source` is `avp://agent`
+(the agent is the sole producer on the wire — supervisor attribution lives
+inside `run_requested.data`, not in the envelope); `subject` carries
+`run_id`; `time` carries the timestamp; `data` carries the AVP-specific
+payload.
 
 **What AVP does NOT take:** the binary mode, datacontentencoding, or any
 specific transport binding. Our base transport is stdio NDJSON; HTTP/SSE is

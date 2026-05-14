@@ -53,7 +53,7 @@ The vocabulary below is the ubiquitous language of AVP. Every doc, type, and eve
 **Wire-format vocabulary**
 
 - **The wire**: the protocol/format level. "On the wire" means "as bytes a consumer parses." Distinct from the trajectory (the logical sequence) and the audit trail (the use case).
-- **Source**: the producer URI on each event. Either `avp://agent` (most events) or `avp://supervisor` (only on the agent-relayed `run_requested`).
+- **Source**: the producer URI on each event. Always `avp://agent` — the agent is the sole producer on the wire (spec §8 conformance #1). Supervisor attribution rides inside `run_requested.data` (`avp.supervisor.*` + `avp.commission`), never on the envelope's `source`.
 - **Span**: OTel trace identification (`trace_id`, `span_id`, `parent_span_id`) carried on every event's `data`. Lets the trajectory reconstruct as a span tree.
 
 **Packaging (how implementations are organized in this repo)**
@@ -141,7 +141,7 @@ Workspace provisioning, secret injection, resolver hosting, agent placement, and
 Common temptations to push back on:
 
 - **No mid-run push to the agent.** Once the Commission is sent, the supervisor only observes the trajectory. If the user needs runtime gating, build it as a managed MCP server (the agent calls it; the supervisor's MCP server decides). The rule lives in Commission, not in a callback.
-- **No supervisor-emitted runtime events.** The agent emits everything. The supervisor's only on-wire fact is the agent-relayed `run_requested` (the agent stamps `source: avp://supervisor` to attribute the run).
+- **No supervisor-emitted runtime events.** The agent emits everything (source=`avp://agent` on every event). Supervisor attribution rides inside `run_requested.data` as `avp.supervisor.*` + the full `avp.commission` snapshot — not on the envelope's `source`.
 
 ## When in doubt, read these (in this order)
 

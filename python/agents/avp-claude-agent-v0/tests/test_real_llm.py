@@ -27,6 +27,7 @@ import os
 import shutil
 
 import pytest
+from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from avp.commission import Commission
 from avp.enums import StopReason
@@ -37,7 +38,6 @@ from avp.trajectory import (
     ModelTurnEndedEvent,
     TextEmittedEvent,
 )
-from avp_claude_agent.translator import ClaudeAgentTranslator
 
 _HAS_SDK = importlib.util.find_spec("claude_agent_sdk") is not None
 _HAS_CLI = shutil.which("claude") is not None

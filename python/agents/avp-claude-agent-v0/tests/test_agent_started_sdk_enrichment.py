@@ -21,13 +21,14 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from avp_claude_agent.translator import ClaudeAgentTranslator
+
 from avp.commission import (
     Commission,
     SkillRef,
     SubagentRef,
 )
 from avp.trajectory import AgentStartedEvent
-from avp_claude_agent.translator import ClaudeAgentTranslator
 
 from .test_translator import _FakeHookMatcher, _FakeOptions
 

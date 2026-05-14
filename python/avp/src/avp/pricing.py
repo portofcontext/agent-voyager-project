@@ -68,8 +68,7 @@ def load_default_prices() -> dict[str, ModelPrice]:
     raw = resources.files("avp.data").joinpath("prices.json").read_text()
     parsed = json.loads(raw)
     return {
-        model: ModelPrice.model_validate(spec)
-        for model, spec in parsed.get("models", {}).items()
+        model: ModelPrice.model_validate(spec) for model, spec in parsed.get("models", {}).items()
     }
 
 
