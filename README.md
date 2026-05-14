@@ -13,17 +13,15 @@ We're rolling it out in two stages.
 
 **Stage 1: standardize the journey.** Stable at v0.1. The [Trajectory Spec](spec/trajectory/v0.1/trajectory.md) defines the event stream every agent emits as it runs. The [Agent Descriptor Spec](spec/agent-descriptor/v0.1/agent-descriptor.md) defines what an agent advertises about itself. Together they make any agent observable the same way, regardless of which SDK or model it runs on.
 
-**Stage 2: standardize how we pack the ships.** Beta at v0.1-beta. The [Commission Spec](spec/commission/v0.1-beta/commission.md) defines the run-config a supervisor hands an agent at startup. The [Resolver API](spec/resolver/v0.1-beta/resolver.md) defines the JSON-RPC channel the agent uses to dereference Commission refs at runtime. Together they describe a portable protocol for supervisor-driven runs: secrets and MCP connection material stay in the supervisor's resolver service, the agent dereferences refs at startup, and every round-trip is recorded on the trajectory.
+**Stage 2: standardize how we pack the ships.** Beta at v0.1-beta. The [Commission Spec](spec/commission/v0.1-beta/commission.md) defines the run-config the orchestrating system hands an agent at startup. The [Resolver API](spec/resolver/v0.1-beta/resolver.md) defines the JSON-RPC channel the agent uses to look up resources at runtime. Together they describe a portable launch protocol: secrets and connection material stay server-side, the agent fetches what it needs at startup, and every round-trip is recorded on the trajectory.
 
 AVP does not invent new wire formats when good ones already exist. It reuses [CloudEvents](https://cloudevents.io/) for event envelopes, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [JSON-RPC](https://www.jsonrpc.org/specification) for the resolver, [MCP](https://modelcontextprotocol.io/) for tool dispatch, and [Agent Skills](https://agentskills.io/specification) for skill files. The work AVP does on top is small and focused. See [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping and where related work (such as Harbor's ATIF format) fits.
-
-AVP is built and maintained by the [Port of Context](https://github.com/portofcontext) team and is licensed under MIT.
 
 ---
 
 ## To start using AVP
 
-quickstart
+quickstart todo
 
 For a complete walk through that builds a Commission, runs an agent, and prints the trajectory, see [`python/supervisors/simple-supervisor-example/`](python/supervisors/simple-supervisor-example/). The example suite is the fastest way to see AVP end to end.
 
