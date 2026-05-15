@@ -73,7 +73,7 @@ def main() -> int:
                 f"  [turn {ev.data.avp_step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
             )
         elif type_name == "ToolReturnedEvent":
-            head = ev.data.avp_tool_result_text.replace("\n", " ")[:60]
+            head = ev.data.avp_tool_result.content[0].text.replace("\n", " ")[:60]
             print(f"  [turn {ev.data.avp_step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
         elif type_name == "AgentStoppedEvent":
             print(f"  STOPPED reason={ev.data.avp_reason}")

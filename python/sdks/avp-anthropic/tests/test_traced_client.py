@@ -245,7 +245,7 @@ def test_tool_context_manager_emits_tool_invoked_and_returned() -> None:
     inv = _by_type(out, ToolInvokedEvent)[0]
     ret = _by_type(out, ToolReturnedEvent)[0]
     assert inv.data.gen_ai_tool_name == "bash"
-    assert ret.data.avp_tool_result_text == "file1\nfile2"
+    assert ret.data.avp_tool_result.content[0].text == "file1\nfile2"
     assert inv.data.span_id == ret.data.span_id
 
 
@@ -466,7 +466,7 @@ def test_module_level_tool_helper_works_with_wrap_anthropic() -> None:
             t.record("ok")
 
     assert _by_type(out, ToolInvokedEvent)[0].data.gen_ai_tool_name == "bash"
-    assert _by_type(out, ToolReturnedEvent)[0].data.avp_tool_result_text == "ok"
+    assert _by_type(out, ToolReturnedEvent)[0].data.avp_tool_result.content[0].text == "ok"
 
 
 # ── Async surface ────────────────────────────────────────────────────────────

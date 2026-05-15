@@ -23,7 +23,7 @@ conformance/v0.1/
     ├── skills/                  (managed_ref_resolved for skill refs; agent_started.data.skills[] registration)
     ├── source-field/            (source=agent vs supervisor discipline)
     ├── subagent/                (subagent_invoked / subagent_returned bracketing, avp.subagent.run_id)
-    ├── tools/                   (built-in tool surface on agent_started, tool_failed semantics)
+    ├── tools/                   (built-in tool surface on agent_started, tool_returned isError semantics)
     └── text/                    (text_emitted shape)
 ```
 

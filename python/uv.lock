@@ -67,6 +67,7 @@ version = "0.1.0"
 source = { editable = "avp" }
 dependencies = [
     { name = "jsonschema" },
+    { name = "mcp" },
     { name = "pydantic" },
     { name = "referencing" },
 ]
@@ -84,6 +85,7 @@ interop = [
 requires-dist = [
     { name = "cloudevents", marker = "extra == 'interop'", specifier = ">=1.10" },
     { name = "jsonschema", specifier = ">=4.18" },
+    { name = "mcp", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.6,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "referencing", specifier = ">=0.30" },

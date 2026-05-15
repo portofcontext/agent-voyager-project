@@ -8,7 +8,7 @@ both the `query` patch and the `ClaudeSDKClient` patch (Stage 3).
 
 Stage 1: prelude, assistant_message, agent_stopped, merge gate.
 Stage 1 (post-review): text_emitted, reasoning_emitted.
-Stage 2: tool_invoked, tool_returned, tool_failed, subagent_invoked/returned.
+Stage 2: tool_invoked, tool_returned, subagent_invoked/returned.
 """
 
 from __future__ import annotations

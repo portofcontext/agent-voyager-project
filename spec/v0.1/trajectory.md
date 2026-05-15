@@ -18,7 +18,7 @@ The trajectory holds two semantically distinct kinds of facts:
 
 | Class | Event types | Semantics |
 |---|---|---|
-| **What the agent did** | `assistant_message`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
+| **What the agent did** | `assistant_message`, `tool_invoked`, `tool_returned`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
 | **What the run cost** | `assistant_message.gen_ai.usage.*`, `assistant_message.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
 
 Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected") is a post-hoc concern: annotation of saved trajectories, not a runtime event class. v0.1 deliberately leaves this out of the wire.
@@ -153,7 +153,9 @@ Wire flow:
 
 1. Model calls a tool. Agent emits `avp.tool_invoked`.
 2. Agent dispatches: locally for tools listed in `descriptor.tools`; via MCP for tools surfaced by a connected MCP server.
-3. Agent emits `avp.tool_returned` (or `avp.tool_failed`).
+3. Agent emits `avp.tool_returned` (`avp.tool_result.isError` discriminates success, rejection, and execution errors).
+
+**Tool result shape.** The `avp.tool_result` field on `tool_returned` follows the [MCP `ToolResultContent`](https://spec.modelcontextprotocol.io) data shape: `toolUseId`, `content: list[ContentBlock]`, `structuredContent`, and `isError`. AVP does not redefine this type; implementors MUST use the MCP SDK's `ToolResultContent` model directly. `avp.tool_result.isError` discriminates all outcomes: `false` (or absent) for success, `true` for rejections (tool declined by the agent) or execution errors, with the reason in `content[0].text`.
 
 There is no AVP-flavored RPC channel for tool dispatch. Supervisors that want to expose Python (or shell, or HTTP-backed) tools wrap them in an MCP server, declare the server's ref in `Commission.mcp_servers[]`, and have their resolver return the connection material when asked.
 
@@ -223,8 +225,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.managed_ref_resolve_failed` | `avp://agent` | Resolver returned an error or could not be reached for one of the Commission's managed refs. Agent stops fail-fast. |
 | `avp.assistant_message` | `avp://agent` | Model produced output. Carries per-inference token deltas and cost. |
 | `avp.tool_invoked` | `avp://agent` | Model invoked a tool. |
-| `avp.tool_returned` | `avp://agent` | Tool produced a result (or was rejected). |
-| `avp.tool_failed` | `avp://agent` | Tool raised an execution error. |
+| `avp.tool_returned` | `avp://agent` | Tool produced a result. `avp.tool_result.isError` discriminates success, rejection, and execution error. |
 | `avp.subagent_invoked` | `avp://agent` | Parent agent delegated to a declared subagent. Frame span opens. Carries `avp.subagent.run_id` for managed subagents. |
 | `avp.subagent_returned` | `avp://agent` | Subagent returned to its parent. Frame span closes; pairs with `subagent_invoked` by `span_id`. |
 | `avp.subagent_failed` | `avp://agent` | Subagent invocation errored; the model receives an `Error: …` tool_result. |
@@ -252,7 +253,7 @@ An agent is conforming to the Trajectory Spec if and only if all of the followin
 1. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`) and MUST set `source: "avp://agent"`. The agent is the sole producer on the wire; supervisor attribution lives in `run_requested.data["avp.commission"]` and `data["avp.supervisor.*"]` when a Commission is in use, per [Commission](./commission.md).
 2. The trajectory MUST open with the prelude defined in §2.1, in this order: `avp.run_requested`, `avp.agent_described`, then any `avp.managed_ref_resolved` (one per Commission-declared ref), any `avp.mcp_server_connected` (one per dialed server, descriptor's + Commission's), and finally `avp.agent_started`. When relaying a Commission, `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of it (managed refs verbatim); otherwise `data["avp.commission"]` and `data["avp.supervisor.*"]` MUST be absent. `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` is the merged-state snapshot: `data["avp.tools"]` MUST list the agent's local tool catalog (`descriptor.tools` filtered by `Commission.enabled_builtin_tools`); `data["avp.mcp_servers"]` MUST list the merged MCP server identities (descriptor's filtered ∪ Commission's resolved); `data["avp.skills"]` and `data["avp.subagents"]` MUST list the merged skill / subagent decls. MCP-surfaced tool catalogs MUST NOT be duplicated on `data["avp.tools"]`; they live on each `mcp_server_connected.data["avp.mcp.tools"]`. `avp.prompt` MUST be included on `agent_started` when available.
 3. For every model inference, it MUST emit `avp.assistant_message` after the model returns output.
-4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.
+4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and then `avp.tool_returned` (with `avp.tool_result.isError` set appropriately for success, rejection, or execution error) afterward.
 5. Each `avp.assistant_message` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire.
 6. The last event it emits MUST be `avp.agent_stopped` (source=`avp://agent`). After emitting `agent_stopped`, the agent MUST NOT emit additional events.
 7. All emitted events MUST validate against `trajectory.schema.json`.

@@ -25,8 +25,8 @@ from avp.enums import StopReason
 from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    AssistantMessageEvent,
     AssistantMessageData,
+    AssistantMessageEvent,
     CostRecordedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
@@ -64,11 +64,12 @@ def _make_state(*, cost: float, tokens: int, turns: int) -> dict:
 
 
 def test_summarize_classifies_fact_classes() -> None:
+    from mcp.types import TextContent, ToolResultContent
+
     from avp.trajectory import (
         ZERO_SPAN_ID,
         AgentStartedData,
         AgentStoppedData,
-        AssistantMessageData,
         CostRecordedData,
         ToolInvokedData,
         ToolReturnedData,
@@ -124,10 +125,14 @@ def test_summarize_classifies_fact_classes() -> None:
                 **span(tool_span, turn_span),
                 avp_step=1,
                 avp_duration_ms=1,
+                avp_tool_result=ToolResultContent(
+                    type="tool_result",
+                    toolUseId="c1",
+                    content=[TextContent(type="text", text="ok")],
+                ),
                 **{
                     "gen_ai.tool.call.id": "c1",
                     "gen_ai.tool.name": "bash",
-                    "avp.tool.result.text": "ok",
                 },
             ),
         ),

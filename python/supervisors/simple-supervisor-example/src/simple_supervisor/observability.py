@@ -3,7 +3,7 @@
 `spec/v0.1/trajectory.md` §1 splits trajectory events into two semantically
 distinct kinds in v0.1:
 
-  1. What the agent did    — assistant_message, tool_invoked/returned/failed, text_emitted
+  1. What the agent did    — assistant_message, tool_invoked/returned, text_emitted
   2. What the run cost     — cost_recorded, assistant_message.usage
 
 A real supervisor framework will surface these on separate UI tracks. This
@@ -23,7 +23,6 @@ from avp.trajectory import (
     AssistantMessageEvent,
     CostRecordedEvent,
     ErrorOccurredEvent,
-    ToolFailedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
@@ -73,12 +72,11 @@ def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
             tool = ev.data.gen_ai_tool_name
             usage = s.tools.setdefault(tool, ToolUsage(name=tool))
             usage.invocations += 1
-        elif isinstance(ev, ToolFailedEvent):
-            tool = ev.data.gen_ai_tool_name
-            usage = s.tools.setdefault(tool, ToolUsage(name=tool))
-            usage.failures += 1
         elif isinstance(ev, ToolReturnedEvent):
-            pass  # invocation already counted on ToolInvoked
+            if ev.data.avp_tool_result.isError:
+                tool = ev.data.gen_ai_tool_name
+                usage = s.tools.setdefault(tool, ToolUsage(name=tool))
+                usage.failures += 1
         elif isinstance(ev, CostRecordedEvent):
             # Snapshot wins — last-write semantics
             snap = ev.data.avp_state

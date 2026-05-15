@@ -71,7 +71,7 @@ class _DictTools(ToolDriver):
 
 
 class _ErroringTools(ToolDriver):
-    """ToolDriver where invoke() always fails. Used to pin the tool_failed
+    """ToolDriver where invoke() always fails. Used to pin the tool-error
     history-shape fix: failures MUST still record a tool_result so the next
     model call has a matching tool_use ↔ tool_result pair."""
 
@@ -219,7 +219,7 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
     assert any(
         isinstance(ev, ToolReturnedEvent)
         and ev.data.gen_ai_tool_name == "read_file"
-        and ev.data.avp_tool_result_text == "hello"
+        and ev.data.avp_tool_result.content[0].text == "hello"
         for ev in agent.trajectory
     )
     assert any(
@@ -335,10 +335,9 @@ def test_tool_failure_records_tool_result_in_history_so_next_turn_validates() ->
     assistant tool_use with no matching tool_result, and the API rejects:
     'tool_use ids were found without tool_result blocks immediately after'.
 
-    Pre-fix: the agent emitted tool_failed and `return`ed without history
-    update — exactly the bug we hit running example 04 (read_file on a
-    directory path returned IsADirectoryError → tool_failed → next turn
-    400'd at the API).
+    Pre-fix: the agent returned without history update — exactly the bug we
+    hit running example 04 (read_file on a directory path returned
+    IsADirectoryError → next turn 400'd at the API).
     """
     # Turn 1: assistant calls a tool that will fail. Turn 2: assistant
     # acknowledges and converges. The interesting check is on the SECOND
@@ -400,10 +399,13 @@ def test_tool_failure_records_tool_result_in_history_so_next_turn_validates() ->
     # The error string should be the user-visible content of that tool_result.
     assert "IsADirectoryError" in matching[0]["content"]
 
-    # Trajectory: tool_failed event was emitted (not tool_returned).
+    # Trajectory: tool_returned event was emitted with isError=True.
     types = [type(ev).__name__ for ev in agent.trajectory]
-    assert "ToolFailedEvent" in types
-    assert "ToolReturnedEvent" not in types
+    assert "ToolReturnedEvent" in types
+    assert any(
+        isinstance(ev, ToolReturnedEvent) and ev.data.avp_tool_result.isError
+        for ev in agent.trajectory
+    )
 
 
 def test_unused_imports_silenced() -> None:

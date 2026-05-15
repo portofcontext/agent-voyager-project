@@ -1647,6 +1647,138 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
             })
     }
 }
+#[doc = "`Annotations`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Annotations\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"audience\": {"]
+#[doc = "      \"title\": \"Audience\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"type\": \"string\","]
+#[doc = "            \"enum\": ["]
+#[doc = "              \"user\","]
+#[doc = "              \"assistant\""]
+#[doc = "            ]"]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"priority\": {"]
+#[doc = "      \"title\": \"Priority\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"number\","]
+#[doc = "          \"maximum\": 1.0,"]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct Annotations {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub audience: ::std::option::Option<::std::vec::Vec<AnnotationsAudienceItem>>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub priority: ::std::option::Option<f64>,
+}
+impl ::std::default::Default for Annotations {
+    fn default() -> Self {
+        Self {
+            audience: Default::default(),
+            priority: Default::default(),
+        }
+    }
+}
+#[doc = "`AnnotationsAudienceItem`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"user\","]
+#[doc = "    \"assistant\""]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AnnotationsAudienceItem {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "assistant")]
+    Assistant,
+}
+impl ::std::fmt::Display for AnnotationsAudienceItem {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::User => f.write_str("user"),
+            Self::Assistant => f.write_str("assistant"),
+        }
+    }
+}
+impl ::std::str::FromStr for AnnotationsAudienceItem {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "user" => Ok(Self::User),
+            "assistant" => Ok(Self::Assistant),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AnnotationsAudienceItem {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AnnotationsAudienceItem {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AnnotationsAudienceItem {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 #[doc = "`AssistantMessageData`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -2252,6 +2384,77 @@ impl<'de> ::serde::Deserialize<'de> for AssistantMessageEventSubject {
             })
     }
 }
+#[doc = "Audio content for a message."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"AudioContent\","]
+#[doc = "  \"description\": \"Audio content for a message.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"data\","]
+#[doc = "    \"mimeType\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"annotations\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"data\": {"]
+#[doc = "      \"title\": \"Data\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"audio\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AudioContent {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub annotations: ::std::option::Option<Annotations>,
+    pub data: ::std::string::String,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(rename = "mimeType")]
+    pub mime_type: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
 #[doc = "`AvpManagedId`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -2780,9 +2983,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"$ref\": \"#/$defs/ToolReturnedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ToolFailedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/SubagentInvokedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -2834,7 +3034,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"avp.subagent_invoked\": \"#/$defs/SubagentInvokedEvent\","]
 #[doc = "      \"avp.subagent_returned\": \"#/$defs/SubagentReturnedEvent\","]
 #[doc = "      \"avp.text_emitted\": \"#/$defs/TextEmittedEvent\","]
-#[doc = "      \"avp.tool_failed\": \"#/$defs/ToolFailedEvent\","]
 #[doc = "      \"avp.tool_invoked\": \"#/$defs/ToolInvokedEvent\","]
 #[doc = "      \"avp.tool_returned\": \"#/$defs/ToolReturnedEvent\""]
 #[doc = "    },"]
@@ -2853,7 +3052,6 @@ pub enum AvpV01TrajectoryEvent {
     AssistantMessageEvent(AssistantMessageEvent),
     ToolInvokedEvent(ToolInvokedEvent),
     ToolReturnedEvent(ToolReturnedEvent),
-    ToolFailedEvent(ToolFailedEvent),
     SubagentInvokedEvent(SubagentInvokedEvent),
     SubagentReturnedEvent(SubagentReturnedEvent),
     SubagentFailedEvent(SubagentFailedEvent),
@@ -2899,11 +3097,6 @@ impl ::std::convert::From<ToolInvokedEvent> for AvpV01TrajectoryEvent {
 impl ::std::convert::From<ToolReturnedEvent> for AvpV01TrajectoryEvent {
     fn from(value: ToolReturnedEvent) -> Self {
         Self::ToolReturnedEvent(value)
-    }
-}
-impl ::std::convert::From<ToolFailedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: ToolFailedEvent) -> Self {
-        Self::ToolFailedEvent(value)
     }
 }
 impl ::std::convert::From<SubagentInvokedEvent> for AvpV01TrajectoryEvent {
@@ -2960,6 +3153,75 @@ impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01TrajectoryEven
     fn from(value: ManagedRefResolveFailedEvent) -> Self {
         Self::ManagedRefResolveFailedEvent(value)
     }
+}
+#[doc = "Binary contents of a resource."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"BlobResourceContents\","]
+#[doc = "  \"description\": \"Binary contents of a resource.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"blob\","]
+#[doc = "    \"uri\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"blob\": {"]
+#[doc = "      \"title\": \"Blob\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"uri\": {"]
+#[doc = "      \"title\": \"Uri\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"format\": \"uri\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct BlobResourceContents {
+    pub blob: ::std::string::String,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(
+        rename = "mimeType",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub mime_type: ::std::option::Option<::std::string::String>,
+    pub uri: ::std::string::String,
 }
 #[doc = "Supervisor's declaration of the supervisor-managed environment slice.\n\nAll asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs\nresolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).\nThe\nsupervisor never embeds connection material, file paths, or inline\nasset definitions on the wire; those land in `run_requested.data`\non the trajectory and would leak secrets to consumers.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills, internally-defined subagents) is invisible to AVP and the\nCommission entirely. The agent's own contribution surfaces in\n`agent_described.data[\"avp.descriptor\"]` so consumers can audit what the\nagent showed up with. The agent's runtime layer merges its internal\ncontribution with the resolved managed assets into one bag the loop\ndispatches against; collisions on `id` are a startup error."]
 #[doc = r""]
@@ -3216,6 +3478,137 @@ pub struct Commission {
     pub tags: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub thread_id: ::std::option::Option<::std::string::String>,
+}
+#[doc = "`ContentItem`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"anyOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/TextContent\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ImageContent\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/AudioContent\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ResourceLink\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/EmbeddedResource\""]
+#[doc = "    }"]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum ContentItem {
+    TextContent(TextContent),
+    ImageContent(ImageContent),
+    AudioContent(AudioContent),
+    ResourceLink(ResourceLink),
+    EmbeddedResource(EmbeddedResource),
+}
+impl ::std::convert::From<TextContent> for ContentItem {
+    fn from(value: TextContent) -> Self {
+        Self::TextContent(value)
+    }
+}
+impl ::std::convert::From<ImageContent> for ContentItem {
+    fn from(value: ImageContent) -> Self {
+        Self::ImageContent(value)
+    }
+}
+impl ::std::convert::From<AudioContent> for ContentItem {
+    fn from(value: AudioContent) -> Self {
+        Self::AudioContent(value)
+    }
+}
+impl ::std::convert::From<ResourceLink> for ContentItem {
+    fn from(value: ResourceLink) -> Self {
+        Self::ResourceLink(value)
+    }
+}
+impl ::std::convert::From<EmbeddedResource> for ContentItem {
+    fn from(value: EmbeddedResource) -> Self {
+        Self::EmbeddedResource(value)
+    }
+}
+#[doc = "The contents of a resource, embedded into a prompt or tool call result.\n\nIt is up to the client how best to render embedded resources for the benefit\nof the LLM and/or the user."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"EmbeddedResource\","]
+#[doc = "  \"description\": \"The contents of a resource, embedded into a prompt or tool call result.\\n\\nIt is up to the client how best to render embedded resources for the benefit\\nof the LLM and/or the user.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"resource\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"annotations\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"resource\": {"]
+#[doc = "      \"title\": \"Resource\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/TextResourceContents\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/BlobResourceContents\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"resource\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct EmbeddedResource {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub annotations: ::std::option::Option<Annotations>,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    pub resource: Resource,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
 }
 #[doc = "`ErrorCode`"]
 #[doc = r""]
@@ -3724,6 +4117,65 @@ impl<'de> ::serde::Deserialize<'de> for GenAiToolCallId {
             })
     }
 }
+#[doc = "An icon for display in user interfaces."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Icon\","]
+#[doc = "  \"description\": \"An icon for display in user interfaces.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"src\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"sizes\": {"]
+#[doc = "      \"title\": \"Sizes\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"src\": {"]
+#[doc = "      \"title\": \"Src\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct Icon {
+    #[serde(
+        rename = "mimeType",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub mime_type: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub sizes: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub src: ::std::string::String,
+}
 #[doc = "`Id`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -3792,6 +4244,77 @@ impl<'de> ::serde::Deserialize<'de> for Id {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
     }
+}
+#[doc = "Image content for a message."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ImageContent\","]
+#[doc = "  \"description\": \"Image content for a message.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"data\","]
+#[doc = "    \"mimeType\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"annotations\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"data\": {"]
+#[doc = "      \"title\": \"Data\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"image\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ImageContent {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub annotations: ::std::option::Option<Annotations>,
+    pub data: ::std::string::String,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(rename = "mimeType")]
+    pub mime_type: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
 }
 #[doc = "`JsonValue`"]
 #[doc = r""]
@@ -6442,6 +6965,40 @@ impl<'de> ::serde::Deserialize<'de> for RefusalRecordedEventSubject {
             })
     }
 }
+#[doc = "`Resource`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Resource\","]
+#[doc = "  \"anyOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/TextResourceContents\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/BlobResourceContents\""]
+#[doc = "    }"]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum Resource {
+    TextResourceContents(TextResourceContents),
+    BlobResourceContents(BlobResourceContents),
+}
+impl ::std::convert::From<TextResourceContents> for Resource {
+    fn from(value: TextResourceContents) -> Self {
+        Self::TextResourceContents(value)
+    }
+}
+impl ::std::convert::From<BlobResourceContents> for Resource {
+    fn from(value: BlobResourceContents) -> Self {
+        Self::BlobResourceContents(value)
+    }
+}
 #[doc = "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -6511,6 +7068,150 @@ pub struct ResourceDecl {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
     pub uri: Uri,
+}
+#[doc = "A resource that the server is capable of reading, included in a prompt or tool call result.\n\nNote: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ResourceLink\","]
+#[doc = "  \"description\": \"A resource that the server is capable of reading, included in a prompt or tool call result.\\n\\nNote: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"name\","]
+#[doc = "    \"type\","]
+#[doc = "    \"uri\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"annotations\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"description\": {"]
+#[doc = "      \"title\": \"Description\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"icons\": {"]
+#[doc = "      \"title\": \"Icons\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/Icon\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"name\": {"]
+#[doc = "      \"title\": \"Name\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"size\": {"]
+#[doc = "      \"title\": \"Size\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"title\": {"]
+#[doc = "      \"title\": \"Title\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"resource_link\""]
+#[doc = "    },"]
+#[doc = "    \"uri\": {"]
+#[doc = "      \"title\": \"Uri\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"format\": \"uri\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ResourceLink {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub annotations: ::std::option::Option<Annotations>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub description: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub icons: ::std::option::Option<::std::vec::Vec<Icon>>,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(
+        rename = "mimeType",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub mime_type: ::std::option::Option<::std::string::String>,
+    pub name: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub size: ::std::option::Option<i64>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub title: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+    pub uri: ::std::string::String,
 }
 #[doc = "`RunId`"]
 #[doc = r""]
@@ -8734,6 +9435,70 @@ pub struct SupervisorPreamble {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub version: ::std::option::Option<::std::string::String>,
 }
+#[doc = "Text content for a message."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"TextContent\","]
+#[doc = "  \"description\": \"Text content for a message.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"text\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"annotations\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"text\": {"]
+#[doc = "      \"title\": \"Text\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"text\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct TextContent {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub annotations: ::std::option::Option<Annotations>,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    pub text: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
 #[doc = "`TextEmittedData`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -9071,6 +9836,75 @@ impl<'de> ::serde::Deserialize<'de> for TextEmittedEventSubject {
             })
     }
 }
+#[doc = "Text contents of a resource."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"TextResourceContents\","]
+#[doc = "  \"description\": \"Text contents of a resource.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"text\","]
+#[doc = "    \"uri\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"mimeType\": {"]
+#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"text\": {"]
+#[doc = "      \"title\": \"Text\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"uri\": {"]
+#[doc = "      \"title\": \"Uri\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"format\": \"uri\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct TextResourceContents {
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(
+        rename = "mimeType",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub mime_type: ::std::option::Option<::std::string::String>,
+    pub text: ::std::string::String,
+    pub uri: ::std::string::String,
+}
 #[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -9128,375 +9962,6 @@ pub struct ToolDecl {
     pub input_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
-}
-#[doc = "`ToolFailedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ToolFailedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"avp.tool.error\","]
-#[doc = "    \"gen_ai.tool.call.id\","]
-#[doc = "    \"gen_ai.tool.name\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.error\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Error\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.error.code\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Error.Code\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.tool.call.id\": {"]
-#[doc = "      \"title\": \"Gen Ai.Tool.Call.Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.tool.name\": {"]
-#[doc = "      \"title\": \"Gen Ai.Tool.Name\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ToolFailedData {
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    #[serde(rename = "avp.tool.error")]
-    pub avp_tool_error: ::std::string::String,
-    #[serde(
-        rename = "avp.tool.error.code",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_tool_error_code: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "gen_ai.tool.call.id")]
-    pub gen_ai_tool_call_id: GenAiToolCallId,
-    #[serde(rename = "gen_ai.tool.name")]
-    pub gen_ai_tool_name: ::std::string::String,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`ToolFailedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ToolFailedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/ToolFailedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.tool_failed\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.tool_failed\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct ToolFailedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<ToolFailedEventAvpCorrelationId>,
-    pub data: ToolFailedData,
-    #[serde(default = "defaults::tool_failed_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::tool_failed_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::tool_failed_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<ToolFailedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::tool_failed_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`ToolFailedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ToolFailedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for ToolFailedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ToolFailedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: ToolFailedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ToolFailedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ToolFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ToolFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ToolFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ToolFailedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`ToolFailedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ToolFailedEventSubject(::std::string::String);
-impl ::std::ops::Deref for ToolFailedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ToolFailedEventSubject> for ::std::string::String {
-    fn from(value: ToolFailedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ToolFailedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ToolFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ToolFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ToolFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ToolFailedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 #[doc = "`ToolInvokedData`"]
 #[doc = r""]
@@ -9944,18 +10409,134 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
             })
     }
 }
-#[doc = "`ToolReturnedData`"]
+#[doc = "Content representing the result of a tool execution.\n\nThis content type appears in user messages as a response to a ToolUseContent\nfrom the assistant. It contains the output of executing the requested tool."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ToolResultContent\","]
+#[doc = "  \"description\": \"Content representing the result of a tool execution.\\n\\nThis content type appears in user messages as a response to a ToolUseContent\\nfrom the assistant. It contains the output of executing the requested tool.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"toolUseId\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"_meta\": {"]
+#[doc = "      \"title\": \"Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"content\": {"]
+#[doc = "      \"title\": \"Content\","]
+#[doc = "      \"default\": [],"]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"anyOf\": ["]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/TextContent\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ImageContent\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/AudioContent\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ResourceLink\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/EmbeddedResource\""]
+#[doc = "          }"]
+#[doc = "        ]"]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"isError\": {"]
+#[doc = "      \"title\": \"Iserror\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"boolean\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"structuredContent\": {"]
+#[doc = "      \"title\": \"Structuredcontent\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"toolUseId\": {"]
+#[doc = "      \"title\": \"Tooluseid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"tool_result\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ToolResultContent {
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub content: ::std::vec::Vec<ContentItem>,
+    #[serde(
+        rename = "isError",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub is_error: ::std::option::Option<bool>,
+    #[serde(
+        rename = "_meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(
+        rename = "structuredContent",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub structured_content:
+        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(rename = "toolUseId")]
+    pub tool_use_id: ::std::string::String,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
+}
+#[doc = "Tool result sent back to the model.\n\n`avp.tool_result` follows the MCP `ToolResultContent` shape:\n`toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.\nRejections are `isError=True` with the reason in `content[0].text`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ToolReturnedData\","]
+#[doc = "  \"description\": \"Tool result sent back to the model.\\n\\n`avp.tool_result` follows the MCP `ToolResultContent` shape:\\n`toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.\\nRejections are `isError=True` with the reason in `content[0].text`.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.duration_ms\","]
 #[doc = "    \"avp.step\","]
-#[doc = "    \"avp.tool.result.text\","]
+#[doc = "    \"avp.tool_result\","]
 #[doc = "    \"gen_ai.tool.call.id\","]
 #[doc = "    \"gen_ai.tool.name\","]
 #[doc = "    \"parent_span_id\","]
@@ -9985,40 +10566,8 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
 #[doc = "      \"type\": \"integer\","]
 #[doc = "      \"minimum\": 0.0"]
 #[doc = "    },"]
-#[doc = "    \"avp.tool.rejected\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Rejected\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"boolean\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.rejection_reason\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Rejection Reason\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.result.structured\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Result.Structured\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {},"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.tool.result.text\": {"]
-#[doc = "      \"title\": \"Avp.Tool.Result.Text\","]
-#[doc = "      \"type\": \"string\""]
+#[doc = "    \"avp.tool_result\": {"]
+#[doc = "      \"$ref\": \"#/$defs/ToolResultContent\""]
 #[doc = "    },"]
 #[doc = "    \"gen_ai.tool.call.id\": {"]
 #[doc = "      \"title\": \"Gen Ai.Tool.Call.Id\","]
@@ -10068,26 +10617,8 @@ pub struct ToolReturnedData {
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     #[serde(rename = "avp.step")]
     pub avp_step: u64,
-    #[serde(
-        rename = "avp.tool.rejected",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_tool_rejected: ::std::option::Option<bool>,
-    #[serde(
-        rename = "avp.tool.rejection_reason",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_tool_rejection_reason: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "avp.tool.result.structured",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_tool_result_structured: ::std::option::Option<::serde_json::Value>,
-    #[serde(rename = "avp.tool.result.text")]
-    pub avp_tool_result_text: ::std::string::String,
+    #[serde(rename = "avp.tool_result")]
+    pub avp_tool_result: ToolResultContent,
     #[serde(rename = "gen_ai.tool.call.id")]
     pub gen_ai_tool_call_id: GenAiToolCallId,
     #[serde(rename = "gen_ai.tool.name")]
@@ -10716,19 +11247,6 @@ pub mod defaults {
     }
     pub(super) fn text_emitted_event_type() -> ::std::string::String {
         "avp.text_emitted".to_string()
-    }
-    pub(super) fn tool_failed_event_datacontenttype() -> ::std::option::Option<::std::string::String>
-    {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn tool_failed_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn tool_failed_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn tool_failed_event_type() -> ::std::string::String {
-        "avp.tool_failed".to_string()
     }
     pub(super) fn tool_invoked_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {

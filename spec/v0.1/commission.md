@@ -158,7 +158,7 @@ The agent MUST validate every name in each allowlist against the corresponding D
 ### 4.2 Two-layer enforcement (MUST)
 
 - **Visibility (primary).** When the agent constructs `agent_started.data.tools[]` / `data.subagents[]` / `data.skills[]` from its built-in surface, entries not in the allowlist MUST be omitted. The model literally doesn't see disabled built-ins.
-- **Runtime block (defense in depth).** If the model invokes a built-in name that's been allow-listed out (hallucination, prompt injection from tool output, prior-context leakage), the agent MUST emit `tool_failed` (or `subagent_failed`) after `tool_invoked` (or `subagent_invoked`) and not execute the built-in. The trajectory faithfully records the attempt.
+- **Runtime block (defense in depth).** If the model invokes a built-in name that's been allow-listed out (hallucination, prompt injection from tool output, prior-context leakage), the agent MUST emit `tool_returned` (with `isError: true`) after `tool_invoked` (or `subagent_failed` after `subagent_invoked`) and not execute the built-in. The trajectory faithfully records the attempt.
 
 ### 4.3 Common patterns
 

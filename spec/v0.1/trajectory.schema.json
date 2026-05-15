@@ -753,6 +753,46 @@
       "title": "AgentStoppedEvent",
       "type": "object"
     },
+    "Annotations": {
+      "additionalProperties": true,
+      "properties": {
+        "audience": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "user",
+                  "assistant"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
+        }
+      },
+      "title": "Annotations",
+      "type": "object"
+    },
     "AssistantMessageData": {
       "additionalProperties": true,
       "properties": {
@@ -1039,6 +1079,103 @@
       "title": "AssistantMessageEvent",
       "type": "object"
     },
+    "AudioContent": {
+      "additionalProperties": true,
+      "description": "Audio content for a message.",
+      "properties": {
+        "type": {
+          "const": "audio",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "title": "Data",
+          "type": "string"
+        },
+        "mimeType": {
+          "title": "Mimetype",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Annotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "type",
+        "data",
+        "mimeType"
+      ],
+      "title": "AudioContent",
+      "type": "object"
+    },
+    "BlobResourceContents": {
+      "additionalProperties": true,
+      "description": "Binary contents of a resource.",
+      "properties": {
+        "uri": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mimetype"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        },
+        "blob": {
+          "title": "Blob",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "blob"
+      ],
+      "title": "BlobResourceContents",
+      "type": "object"
+    },
     "Commission": {
       "additionalProperties": false,
       "description": "Supervisor's declaration of the supervisor-managed environment slice.\n\nAll asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs\nresolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).\nThe\nsupervisor never embeds connection material, file paths, or inline\nasset definitions on the wire; those land in `run_requested.data`\non the trajectory and would leak secrets to consumers.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills, internally-defined subagents) is invisible to AVP and the\nCommission entirely. The agent's own contribution surfaces in\n`agent_described.data[\"avp.descriptor\"]` so consumers can audit what the\nagent showed up with. The agent's runtime layer merges its internal\ncontribution with the resolved managed assets into one bag the loop\ndispatches against; collisions on `id` are a startup error.",
@@ -1266,6 +1403,58 @@
       "title": "Commission",
       "type": "object"
     },
+    "EmbeddedResource": {
+      "additionalProperties": true,
+      "description": "The contents of a resource, embedded into a prompt or tool call result.\n\nIt is up to the client how best to render embedded resources for the benefit\nof the LLM and/or the user.",
+      "properties": {
+        "type": {
+          "const": "resource",
+          "title": "Type",
+          "type": "string"
+        },
+        "resource": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextResourceContents"
+            },
+            {
+              "$ref": "#/$defs/BlobResourceContents"
+            }
+          ],
+          "title": "Resource"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Annotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "type",
+        "resource"
+      ],
+      "title": "EmbeddedResource",
+      "type": "object"
+    },
     "ErrorCode": {
       "enum": [
         "rate_limit",
@@ -1423,6 +1612,98 @@
         "data"
       ],
       "title": "ErrorOccurredEvent",
+      "type": "object"
+    },
+    "Icon": {
+      "additionalProperties": true,
+      "description": "An icon for display in user interfaces.",
+      "properties": {
+        "src": {
+          "title": "Src",
+          "type": "string"
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mimetype"
+        },
+        "sizes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sizes"
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "title": "Icon",
+      "type": "object"
+    },
+    "ImageContent": {
+      "additionalProperties": true,
+      "description": "Image content for a message.",
+      "properties": {
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "title": "Data",
+          "type": "string"
+        },
+        "mimeType": {
+          "title": "Mimetype",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Annotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "type",
+        "data",
+        "mimeType"
+      ],
+      "title": "ImageContent",
       "type": "object"
     },
     "JsonValue": {},
@@ -2616,6 +2897,121 @@
       "title": "ResourceDecl",
       "type": "object"
     },
+    "ResourceLink": {
+      "additionalProperties": true,
+      "description": "A resource that the server is capable of reading, included in a prompt or tool call result.\n\nNote: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "uri": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mimetype"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "icons": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Icon"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icons"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Annotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        },
+        "type": {
+          "const": "resource_link",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "uri",
+        "type"
+      ],
+      "title": "ResourceLink",
+      "type": "object"
+    },
     "RunRequestedData": {
       "additionalProperties": true,
       "description": "Payload of avp.run_requested events.\n\nAnchors the trajectory. When relaying a Commission, carries the full\nsnapshot under `avp.commission` plus `avp.supervisor.*` for attribution,\nmaking the trajectory self-contained for audit. Without a Commission\n(library-invocation path), those fields are absent — per spec §2.1,\nabsence (not `\"unknown\"`) is the canonical signal.",
@@ -3566,6 +3962,51 @@
       "title": "SupervisorPreamble",
       "type": "object"
     },
+    "TextContent": {
+      "additionalProperties": true,
+      "description": "Text content for a message.",
+      "properties": {
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Annotations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "title": "TextContent",
+      "type": "object"
+    },
     "TextEmittedData": {
       "additionalProperties": true,
       "properties": {
@@ -3713,6 +4154,53 @@
       "title": "TextEmittedEvent",
       "type": "object"
     },
+    "TextResourceContents": {
+      "additionalProperties": true,
+      "description": "Text contents of a resource.",
+      "properties": {
+        "uri": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mimetype"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "text"
+      ],
+      "title": "TextResourceContents",
+      "type": "object"
+    },
     "ToolDecl": {
       "additionalProperties": true,
       "description": "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`.",
@@ -3751,176 +4239,6 @@
         "name"
       ],
       "title": "ToolDecl",
-      "type": "object"
-    },
-    "ToolFailedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.step": {
-          "minimum": 0,
-          "title": "Avp.Step",
-          "type": "integer"
-        },
-        "gen_ai.tool.call.id": {
-          "minLength": 1,
-          "title": "Gen Ai.Tool.Call.Id",
-          "type": "string"
-        },
-        "gen_ai.tool.name": {
-          "title": "Gen Ai.Tool.Name",
-          "type": "string"
-        },
-        "avp.tool.error": {
-          "title": "Avp.Tool.Error",
-          "type": "string"
-        },
-        "avp.tool.error.code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Tool.Error.Code"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.step",
-        "gen_ai.tool.call.id",
-        "gen_ai.tool.name",
-        "avp.tool.error"
-      ],
-      "title": "ToolFailedData",
-      "type": "object"
-    },
-    "ToolFailedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.tool_failed",
-          "default": "avp.tool_failed",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ToolFailedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ToolFailedEvent",
       "type": "object"
     },
     "ToolInvokedData": {
@@ -4098,8 +4416,92 @@
       "title": "ToolInvokedEvent",
       "type": "object"
     },
+    "ToolResultContent": {
+      "additionalProperties": true,
+      "description": "Content representing the result of a tool execution.\n\nThis content type appears in user messages as a response to a ToolUseContent\nfrom the assistant. It contains the output of executing the requested tool.",
+      "properties": {
+        "type": {
+          "const": "tool_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "toolUseId": {
+          "title": "Tooluseid",
+          "type": "string"
+        },
+        "content": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TextContent"
+              },
+              {
+                "$ref": "#/$defs/ImageContent"
+              },
+              {
+                "$ref": "#/$defs/AudioContent"
+              },
+              {
+                "$ref": "#/$defs/ResourceLink"
+              },
+              {
+                "$ref": "#/$defs/EmbeddedResource"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "structuredContent": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structuredcontent"
+        },
+        "isError": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Iserror"
+        },
+        "_meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "type",
+        "toolUseId"
+      ],
+      "title": "ToolResultContent",
+      "type": "object"
+    },
     "ToolReturnedData": {
       "additionalProperties": true,
+      "description": "Tool result sent back to the model.\n\n`avp.tool_result` follows the MCP `ToolResultContent` shape:\n`toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.\nRejections are `isError=True` with the reason in `content[0].text`.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -4154,43 +4556,8 @@
           "title": "Avp.Duration Ms",
           "type": "integer"
         },
-        "avp.tool.result.text": {
-          "title": "Avp.Tool.Result.Text",
-          "type": "string"
-        },
-        "avp.tool.result.structured": {
-          "anyOf": [
-            {},
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Tool.Result.Structured"
-        },
-        "avp.tool.rejected": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Tool.Rejected"
-        },
-        "avp.tool.rejection_reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Tool.Rejection Reason"
+        "avp.tool_result": {
+          "$ref": "#/$defs/ToolResultContent"
         }
       },
       "required": [
@@ -4201,7 +4568,7 @@
         "gen_ai.tool.call.id",
         "gen_ai.tool.name",
         "avp.duration_ms",
-        "avp.tool.result.text"
+        "avp.tool_result"
       ],
       "title": "ToolReturnedData",
       "type": "object"
@@ -4315,7 +4682,6 @@
       "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
       "avp.subagent_returned": "#/$defs/SubagentReturnedEvent",
       "avp.text_emitted": "#/$defs/TextEmittedEvent",
-      "avp.tool_failed": "#/$defs/ToolFailedEvent",
       "avp.tool_invoked": "#/$defs/ToolInvokedEvent",
       "avp.tool_returned": "#/$defs/ToolReturnedEvent"
     },
@@ -4342,9 +4708,6 @@
     },
     {
       "$ref": "#/$defs/ToolReturnedEvent"
-    },
-    {
-      "$ref": "#/$defs/ToolFailedEvent"
     },
     {
       "$ref": "#/$defs/SubagentInvokedEvent"

@@ -36,6 +36,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
+from mcp.types import ToolResultContent
 from pydantic import BaseModel, Field
 
 from avp._envelope import (
@@ -68,7 +69,6 @@ T_AGENT_STOPPED = "avp.agent_stopped"
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_TOOL_INVOKED = "avp.tool_invoked"
 T_TOOL_RETURNED = "avp.tool_returned"
-T_TOOL_FAILED = "avp.tool_failed"
 T_TEXT_EMITTED = "avp.text_emitted"
 T_REASONING_EMITTED = "avp.reasoning_emitted"
 T_REFUSAL_RECORDED = "avp.refusal_recorded"
@@ -236,22 +236,18 @@ class ToolInvokedData(_SpanData):
 
 
 class ToolReturnedData(_SpanData):
+    """Tool result sent back to the model.
+
+    `avp.tool_result` follows the MCP `ToolResultContent` shape:
+    `toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.
+    Rejections are `isError=True` with the reason in `content[0].text`.
+    """
+
     avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_tool_result_text: str = Field(alias="avp.tool.result.text")
-    avp_tool_result_structured: Any | None = Field(default=None, alias="avp.tool.result.structured")
-    avp_tool_rejected: bool | None = Field(default=None, alias="avp.tool.rejected")
-    avp_tool_rejection_reason: str | None = Field(default=None, alias="avp.tool.rejection_reason")
-
-
-class ToolFailedData(_SpanData):
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
-    gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
-    avp_tool_error: str = Field(alias="avp.tool.error")
-    avp_tool_error_code: str | None = Field(default=None, alias="avp.tool.error.code")
+    avp_tool_result: ToolResultContent = Field(alias="avp.tool_result")
 
 
 class SubagentInvokedData(_SpanData):
@@ -528,12 +524,6 @@ class ToolReturnedEvent(_CloudEventBase):
     data: ToolReturnedData
 
 
-class ToolFailedEvent(_CloudEventBase):
-    type: Literal["avp.tool_failed"] = T_TOOL_FAILED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ToolFailedData
-
-
 class SubagentInvokedEvent(_CloudEventBase):
     type: Literal["avp.subagent_invoked"] = T_SUBAGENT_INVOKED
     source: Literal["avp://agent"] = SOURCE_AGENT
@@ -611,7 +601,6 @@ _AGENT_EVENT_TYPES = (
     AssistantMessageEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
-    ToolFailedEvent,
     SubagentInvokedEvent,
     SubagentReturnedEvent,
     SubagentFailedEvent,
@@ -633,7 +622,6 @@ Event = Annotated[
     | AssistantMessageEvent
     | ToolInvokedEvent
     | ToolReturnedEvent
-    | ToolFailedEvent
     | SubagentInvokedEvent
     | SubagentReturnedEvent
     | SubagentFailedEvent
@@ -707,7 +695,6 @@ __all__ = [
     "T_SUBAGENT_INVOKED",
     "T_SUBAGENT_RETURNED",
     "T_TEXT_EMITTED",
-    "T_TOOL_FAILED",
     "T_TOOL_INVOKED",
     "T_TOOL_RETURNED",
     "ZERO_SPAN_ID",
@@ -746,8 +733,6 @@ __all__ = [
     "SubagentUsage",
     "TextEmittedData",
     "TextEmittedEvent",
-    "ToolFailedData",
-    "ToolFailedEvent",
     "ToolInvokedData",
     "ToolInvokedEvent",
     "ToolReturnedData",

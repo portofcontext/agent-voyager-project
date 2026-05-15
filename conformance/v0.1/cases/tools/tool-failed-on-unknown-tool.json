@@ -1,7 +1,7 @@
 {
   "id": "tool-failed-on-unknown-tool",
-  "title": "Model invocation of an unknown tool emits tool_invoked → tool_failed",
-  "description": "when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_failed with an error message. The model receives an `Error: …` tool_result so the next turn can react. The wire stays well-formed; tool_returned MUST NOT fire.",
+  "title": "Model invocation of an unknown tool emits tool_invoked → tool_returned (isError: true)",
+  "description": "when the model invokes a tool name that is not in the agent's effective bag (no built-in match, no MCP-server match, no managed subagent), the agent MUST emit tool_invoked first, then tool_returned with avp.tool_result.isError set to true and an error message in content. The model receives an `Error: …` tool_result so the next turn can react. The wire stays well-formed; tool_failed MUST NOT fire.",
   "spec_refs": [
     "spec/v0.1/trajectory.md#4-tool-dispatch",
     "spec/v0.1/trajectory.md#8-conformance"
@@ -53,9 +53,12 @@
       },
       {
         "match": {
-          "type": "avp.tool_failed",
+          "type": "avp.tool_returned",
           "data": {
-            "gen_ai.tool.name": "does_not_exist"
+            "gen_ai.tool.name": "does_not_exist",
+            "avp.tool_result": {
+              "isError": true
+            }
           }
         }
       },
@@ -70,9 +73,9 @@
     ],
     "forbidden_events": [
       {
-        "label": "tool_returned MUST NOT fire for an unknown tool",
+        "label": "tool_failed MUST NOT fire; tool_returned with isError covers all outcomes",
         "match": {
-          "type": "avp.tool_returned",
+          "type": "avp.tool_failed",
           "data": {
             "gen_ai.tool.name": "does_not_exist"
           }

@@ -183,7 +183,7 @@ def test_tool_call_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     returned = next(e for e in events if e["type"] == "avp.tool_returned")
     assert returned["data"]["gen_ai.tool.call.id"] == "tu1"
     assert returned["data"]["gen_ai.tool.name"] == "bash"
-    assert "hi" in returned["data"]["avp.tool.result.text"]
+    assert "hi" in returned["data"]["avp.tool_result"]["content"][0]["text"]
 
 
 def test_bad_schema_version_emits_error_then_stop(

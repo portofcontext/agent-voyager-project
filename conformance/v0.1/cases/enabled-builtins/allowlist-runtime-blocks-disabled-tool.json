@@ -1,7 +1,7 @@
 {
   "id": "allowlist-runtime-blocks-disabled-tool",
-  "title": "Model invoking a disabled built-in MUST emit tool_invoked → tool_failed and not execute",
-  "description": "defense-in-depth. The visibility layer hides disabled built-ins from agent_started.data.tools[], but if the model invokes a disabled name anyway (hallucination, prompt injection from earlier tool output, prior-context leakage), the agent MUST emit tool_invoked first (the attempt is on the wire) and tool_failed second (refusing to execute). The model receives an `Error: …` tool_result so the next turn can react.",
+  "title": "Model invoking a disabled built-in MUST emit tool_invoked → tool_returned (isError: true) and not execute",
+  "description": "defense-in-depth. The visibility layer hides disabled built-ins from agent_started.data.tools[], but if the model invokes a disabled name anyway (hallucination, prompt injection from earlier tool output, prior-context leakage), the agent MUST emit tool_invoked first (the attempt is on the wire) and tool_returned with avp.tool_result.isError set to true (refusing to execute). The model receives an `Error: …` tool_result so the next turn can react.",
   "spec_refs": [
     "spec/v0.1/commission.md#4-built-in-surface-allowlists"
   ],
@@ -93,12 +93,15 @@
       },
       {
         "match": {
-          "type": "avp.tool_failed",
+          "type": "avp.tool_returned",
           "data": {
-            "gen_ai.tool.name": "Bash"
+            "gen_ai.tool.name": "Bash",
+            "avp.tool_result": {
+              "isError": true
+            }
           }
         },
-        "label": "tool_failed records the runtime block"
+        "label": "tool_returned with isError: true records the runtime block"
       },
       {
         "match": {
@@ -111,9 +114,9 @@
     ],
     "forbidden_events": [
       {
-        "label": "tool_returned MUST NOT fire for a disabled built-in (it never executed)",
+        "label": "tool_failed MUST NOT fire; tool_returned with isError covers all outcomes",
         "match": {
-          "type": "avp.tool_returned",
+          "type": "avp.tool_failed",
           "data": {
             "gen_ai.tool.name": "Bash"
           }
