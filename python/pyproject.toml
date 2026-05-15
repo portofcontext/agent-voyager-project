@@ -22,6 +22,7 @@ dependencies = [
     "avp",
     "avp-anthropic",
     "avp-claude-agent",
+    "avp-openai-agent",
     "simple-supervisor-example",
 ]
 
@@ -37,6 +38,7 @@ members = [
     "avp",
     "sdks/avp-anthropic",
     "agents/avp-claude-agent",
+    "agents/avp-openai-agent",
     "supervisors/simple-supervisor-example",
 ]
 
@@ -48,6 +50,7 @@ members = [
 avp                       = { workspace = true }
 avp-anthropic             = { workspace = true }
 avp-claude-agent          = { workspace = true }
+avp-openai-agent          = { workspace = true }
 simple-supervisor-example = { workspace = true }
 
 [tool.uv]

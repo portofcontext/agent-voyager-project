@@ -24,19 +24,37 @@ TEST_PKGS := \
 	python/avp \
 	python/sdks/avp-anthropic \
 	python/agents/avp-claude-agent \
+	python/agents/avp-openai-agent \
 	python/supervisors/simple-supervisor-example
 
-# All examples. Each script self-detects missing preflight (API key,
-# claude_agent_sdk, the `claude` CLI) and exits 2. The run-an-example
-# loop treats exit 2 as a skip rather than a failure, so a run on a
-# workstation without the Claude Code CLI still completes the Anthropic-
-# only examples cleanly.
-EXAMPLES := \
+# Examples, numbered so each provider has its own decade: 01-09 for
+# Anthropic / Claude Code, 10-19 for OpenAI, leaving room for more in
+# each lane without renumbering. A single-provider smoke run is
+# obvious from the file layout. Each script self-detects missing
+# preflight (API key, SDK package, CLI binary) and exits 2; the
+# run-an-example loop treats exit 2 as a skip rather than a failure,
+# so a workstation with only one provider key set still completes
+# the relevant subset cleanly.
+EXAMPLES_ANTHROPIC := \
 	python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
 	python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
 	python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
 	python/supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
 	python/supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
+EXAMPLES_OPENAI := \
+	python/supervisors/simple-supervisor-example/examples/10_openai_agents_audited.py \
+	python/supervisors/simple-supervisor-example/examples/11_openai_agents_traced_client.py
+EXAMPLES := $(EXAMPLES_ANTHROPIC) $(EXAMPLES_OPENAI)
+
+# Real-LLM test packages, grouped by which provider key they need.
+# Each test file self-skips when its required key is missing, so the
+# loop iterates the whole list and pytest does the gating.
+REAL_LLM_PKGS_ANTHROPIC := \
+	python/sdks/avp-anthropic \
+	python/agents/avp-claude-agent
+REAL_LLM_PKGS_OPENAI := \
+	python/agents/avp-openai-agent
+REAL_LLM_PKGS := $(REAL_LLM_PKGS_ANTHROPIC) $(REAL_LLM_PKGS_OPENAI)
 
 
 .PHONY: help
@@ -55,10 +73,16 @@ help:
 	@echo "    make bindings-test   cargo test (rust/avp) + npm test (typescript/avp)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
 	@echo ""
-	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make test-real-llm   real-LLM smoke tests for both agents"
-	@echo "    make examples        all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
-	@echo "    make smoke           check + bindings-test + test-real-llm + examples (full sanity)"
+	@echo "  Paid targets (cost real money; require an API key for the targeted provider):"
+	@echo "    make test-real-llm [anthropic|openai]   real-LLM smoke tests"
+	@echo "    make examples      [anthropic|openai]   all examples (others self-skip)"
+	@echo "    make smoke         [anthropic|openai]   full sanity matrix"
+	@echo ""
+	@echo "    The optional second word scopes the run to one provider; omit"
+	@echo "    it for the full matrix. Examples:"
+	@echo "      make smoke              # check + bindings-test + every provider"
+	@echo "      make smoke anthropic    # check + bindings-test + Anthropic only"
+	@echo "      make smoke openai       # check + bindings-test + OpenAI only"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace at python/"
@@ -137,7 +161,10 @@ bindings-check:
 .PHONY: bindings-test
 bindings-test:
 	@cd rust/avp && cargo test --quiet
-	@cd typescript/avp && npm test --silent
+	@# node_modules/ and package-lock.json are gitignored, so a fresh
+	@# clone has neither. Install on demand so `make smoke` works without
+	@# a separate "npm install" step.
+	@cd typescript/avp && { [ -d node_modules ] || npm install --silent; } && npm test --silent
 
 
 .PHONY: check
@@ -146,17 +173,45 @@ check: format-check lint test conformance bindings-check
 
 
 # ── Paid targets (real LLM) ───────────────────────────────────────────────────
+#
+# Provider scoping: the paid targets accept an optional positional second
+# word — `make smoke anthropic`, `make examples openai`, etc. The
+# implementation reads MAKECMDGOALS and picks `anthropic` or `openai`
+# from it (firstword wins, in case both appear). To prevent Make from
+# erroring on the bare provider word as a goal it doesn't recognize, we
+# declare `anthropic` and `openai` as no-op .PHONY targets.
+#
+# Smoke chains check + bindings-test + test-real-llm + examples by
+# re-invoking $(MAKE) so each child sees the current PROVIDER value
+# through MAKECMDGOALS. Direct dependencies wouldn't work because Make's
+# command-line goals don't propagate across sub-makes.
+
+PROVIDER := $(firstword $(filter anthropic openai,$(MAKECMDGOALS)))
+
+.PHONY: anthropic openai
+anthropic openai:
+	@:
 
 
 .PHONY: test-real-llm
 test-real-llm:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
-	fi
-	@failed=""; \
-	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent; do \
-		echo ""; echo "==== $$pkg (real-LLM) ===="; \
-		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
+	@case "$(PROVIDER)" in \
+	  anthropic) \
+	    if [ -z "$$ANTHROPIC_API_KEY" ]; then echo "error: ANTHROPIC_API_KEY not set"; exit 2; fi; \
+	    pkgs="$(REAL_LLM_PKGS_ANTHROPIC)" ;; \
+	  openai) \
+	    if [ -z "$$OPENAI_API_KEY" ]; then echo "error: OPENAI_API_KEY not set"; exit 2; fi; \
+	    pkgs="$(REAL_LLM_PKGS_OPENAI)" ;; \
+	  *) \
+	    if [ -z "$$ANTHROPIC_API_KEY" ] && [ -z "$$OPENAI_API_KEY" ]; then \
+	      echo "error: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set; real-LLM tests require at least one"; exit 2; \
+	    fi; \
+	    pkgs="$(REAL_LLM_PKGS)" ;; \
+	esac; \
+	failed=""; \
+	for pkg in $$pkgs; do \
+	  echo ""; echo "==== $$pkg (real-LLM) ===="; \
+	  (cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
 	if [ -n "$$failed" ]; then echo ""; echo "FAILED packages:$$failed"; exit 1; fi; \
 	echo ""; echo "All real-LLM tests passed."
@@ -164,7 +219,7 @@ test-real-llm:
 
 # Common run-an-example macro. Distinguishes:
 #   exit 0 → pass
-#   exit 2 → preflight skip (missing API key / SDK / CLI); we report it but don't fail
+#   exit 2 → preflight skip (missing API key / SDK / CLI); reported, not failed
 #   anything else → fail
 define run_examples
 	@failed=""; skipped=""; \
@@ -187,15 +242,31 @@ endef
 
 .PHONY: examples
 examples:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set"; exit 2; \
-	fi
+	@case "$(PROVIDER)" in \
+	  anthropic) \
+	    if [ -z "$$ANTHROPIC_API_KEY" ]; then echo "error: ANTHROPIC_API_KEY not set"; exit 2; fi ;; \
+	  openai) \
+	    if [ -z "$$OPENAI_API_KEY" ]; then echo "error: OPENAI_API_KEY not set"; exit 2; fi ;; \
+	  *) \
+	    if [ -z "$$ANTHROPIC_API_KEY" ] && [ -z "$$OPENAI_API_KEY" ]; then \
+	      echo "error: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set"; exit 2; \
+	    fi ;; \
+	esac
+ifeq ($(PROVIDER),anthropic)
+	$(call run_examples,$(EXAMPLES_ANTHROPIC))
+else ifeq ($(PROVIDER),openai)
+	$(call run_examples,$(EXAMPLES_OPENAI))
+else
 	$(call run_examples,$(EXAMPLES))
+endif
 
 
 .PHONY: smoke
-smoke: check bindings-test test-real-llm examples
-	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + all examples passed."
+smoke:
+	@$(MAKE) --no-print-directory check bindings-test
+	@$(MAKE) --no-print-directory test-real-llm $(PROVIDER)
+	@$(MAKE) --no-print-directory examples $(PROVIDER)
+	@echo ""; echo "✓ smoke complete (provider=$(if $(PROVIDER),$(PROVIDER),all)): free checks + bindings tests + real-LLM tests + examples passed."
 
 
 # ── Other ─────────────────────────────────────────────────────────────────────

@@ -326,6 +326,52 @@ def test_format_event_covers_lifecycle_events() -> None:
     assert "AgentStoppedEvent" in visible_types
 
 
+def test_format_event_reasoning_renders_text_or_redacted_marker() -> None:
+    """`format_event(ReasoningEmittedEvent)` MUST surface either the
+    summary text or a `<redacted>` marker, NOT fall through to the bare
+    class name. The fall-through was confusing in real output: a
+    redacted reasoning event followed by a real text_emitted looked
+    like one event with two unrelated lines."""
+    from avp import (
+        ZERO_SPAN_ID,
+        ReasoningEmittedData,
+        ReasoningEmittedEvent,
+        format_event,
+        new_span_id,
+        new_trace_id,
+    )
+
+    tid = new_trace_id()
+    plain = ReasoningEmittedEvent(
+        subject="r",
+        data=ReasoningEmittedData(
+            trace_id=tid,
+            span_id=new_span_id(),
+            parent_span_id=ZERO_SPAN_ID,
+            step=1,
+            **{
+                "avp.reasoning.text": "thinking out loud about the plan",
+                "avp.reasoning.redacted": False,
+            },
+        ),
+    )
+    redacted = ReasoningEmittedEvent(
+        subject="r",
+        data=ReasoningEmittedData(
+            trace_id=tid,
+            span_id=new_span_id(),
+            parent_span_id=ZERO_SPAN_ID,
+            step=1,
+            **{"avp.reasoning.text": "", "avp.reasoning.redacted": True},
+        ),
+    )
+    assert "thinking out loud" in format_event(plain)
+    assert "<redacted>" in format_event(redacted)
+    # Neither line should be the bare class name (the regression we fixed).
+    assert "ReasoningEmittedEvent" not in format_event(plain)
+    assert "ReasoningEmittedEvent" not in format_event(redacted)
+
+
 def test_print_event_writes_to_stdout(capsys) -> None:
     """`print_event(ev)` writes a one-line summary to stdout. Use as
     `on_event=print_event` for examples / debugging without writing
