@@ -73,7 +73,6 @@ T_TOOL_FAILED = "avp.tool_failed"
 T_TEXT_EMITTED = "avp.text_emitted"
 T_REASONING_EMITTED = "avp.reasoning_emitted"
 T_REFUSAL_RECORDED = "avp.refusal_recorded"
-T_SKILL_LOADED = "avp.skill_loaded"
 T_ERROR_OCCURRED = "avp.error_occurred"
 T_MCP_SERVER_CONNECTED = "avp.mcp_server_connected"
 T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
@@ -394,35 +393,6 @@ class ReasoningEmittedData(_SpanData):
     avp_reasoning_redacted: bool | None = Field(default=None, alias="avp.reasoning.redacted")
 
 
-class SkillLoadedData(_SpanData):
-    """Payload of `avp.skill_loaded` events.
-
-    Semantics: emitted when the SKILL.md body content has been added to
-    the model's active context window. NOT a registration acknowledgment
-    (the registration view is `agent_started.data.skills[]`).
-
-    Two emission patterns, differentiated by the agent's
-    `manifest.capabilities`:
-
-      - `skills:eager`: agent injects all declared SKILL.md bodies at
-        startup (e.g., as system_prompt suffix). Emit once per skill at
-        `step=0`, after `agent_started` and `mcp_server_connected`.
-      - `skills:progressive`: model decides per-turn which skill bodies
-        to pull in (Anthropic Skills, Claude Code progressive disclosure).
-        Emit when the body actually enters context, with `step=N` matching
-        the turn it loaded in. MAY fire multiple times for the same
-        skill (e.g., re-load after compaction).
-
-    Agents whose SDK does not expose progressive-disclosure load events
-    SHOULD NOT emit `skill_loaded` at all; `agent_started.data.skills[]`
-    still records the registration. Honest-silent beats fabricated events.
-    """
-
-    step: int = Field(ge=0)
-    avp_skill_name: str = Field(alias="avp.skill.name")
-    avp_skill_source: str | None = Field(default=None, alias="avp.skill.source")
-
-
 class ErrorOccurredData(_SpanData):
     avp_error_code: ErrorCode = Field(alias="avp.error.code")
     avp_error_message: str = Field(alias="avp.error.message")
@@ -614,12 +584,6 @@ class RefusalRecordedEvent(_CloudEventBase):
     data: RefusalRecordedData
 
 
-class SkillLoadedEvent(_CloudEventBase):
-    type: Literal["avp.skill_loaded"] = T_SKILL_LOADED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: SkillLoadedData
-
-
 class ErrorOccurredEvent(_CloudEventBase):
     type: Literal["avp.error_occurred"] = T_ERROR_OCCURRED
     source: Literal["avp://agent"] = SOURCE_AGENT
@@ -669,7 +633,6 @@ _AGENT_EVENT_TYPES = (
     TextEmittedEvent,
     ReasoningEmittedEvent,
     RefusalRecordedEvent,
-    SkillLoadedEvent,
     ErrorOccurredEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
@@ -693,7 +656,6 @@ Event = Annotated[
     | TextEmittedEvent
     | ReasoningEmittedEvent
     | RefusalRecordedEvent
-    | SkillLoadedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
     | McpServerDisconnectedEvent
@@ -795,8 +757,6 @@ __all__ = [
     "RefusalRecordedEvent",
     "RunRequestedData",
     "RunRequestedEvent",
-    "SkillLoadedData",
-    "SkillLoadedEvent",
     "SubagentFailedData",
     "SubagentFailedEvent",
     "SubagentInvokedData",

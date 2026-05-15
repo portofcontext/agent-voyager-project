@@ -1,7 +1,7 @@
 {
   "id": "managed-skill-resolves-and-loads-content",
-  "title": "Resolved managed skill emits managed_ref_resolved + skill_loaded with the content from the resolver",
-  "description": "when the resolver returns SKILL.md content for a Commission.skills[] ref, the agent MUST emit managed_ref_resolved (kind=skill), inject the content into the model's context, and emit skill_loaded (step=0) so consumers see the registration AND the load. The resolver's `name` field is informational; the agent uses Commission.skills[].id as the model-facing name.",
+  "title": "Resolved managed skill emits managed_ref_resolved and agent_started lists the skill",
+  "description": "when the resolver returns SKILL.md content for a Commission.skills[] ref, the agent MUST emit managed_ref_resolved (kind=skill) and list the skill on agent_started.data.skills[]. No skill_loaded event exists on the wire; how the content enters the model's context is an agent implementation detail.",
   "spec_refs": [
     "spec/v0.1/resolver.md#3-the-avpresolve-method",
     "spec/v0.1/trajectory.md#6-skills"
@@ -53,19 +53,6 @@
     "ordering": "in_order_subsequence",
     "events": [
       {
-        "label": "agent_started lists the managed skill by id",
-        "match": {
-          "type": "avp.agent_started",
-          "data": {
-            "skills": [
-              {
-                "name": "style-guide"
-              }
-            ]
-          }
-        }
-      },
-      {
         "match": {
           "type": "avp.managed_ref_resolved",
           "data": {
@@ -75,11 +62,15 @@
         }
       },
       {
+        "label": "agent_started lists the managed skill by id",
         "match": {
-          "type": "avp.skill_loaded",
+          "type": "avp.agent_started",
           "data": {
-            "avp.skill.name": "style-guide",
-            "step": 0
+            "skills": [
+              {
+                "name": "style-guide"
+              }
+            ]
           }
         }
       },

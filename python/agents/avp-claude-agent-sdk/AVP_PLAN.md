@@ -119,5 +119,6 @@ Final acceptance: cassettes + live CLI run produce schema-valid trajectories.
 ## Out of scope
 
 - `query()` wrapper -- no pre-run lifecycle, cannot produce conformant `agent_started`
-- `mcp_server_connected` / `skill_loaded` synthesis -- deferred to v0.2
+- `mcp_server_connected` synthesis -- deferred to v0.2 (SDK dials MCP CLI-side; no discrete connect signal exposed to the observer layer)
+- `skill_loaded` -- removed from the v0.1 spec; no wire event exists for it
 - Hook callback instrumentation -- not in v0.1 event catalog

@@ -20,7 +20,7 @@ conformance/v0.1/
     ├── reasoning/               (avp.reasoning.* attributes on model_turn_ended)
     ├── refusal/                 (refusal_recorded provenance)
     ├── resolver/                (resolver_not_configured / commission_collision gates)
-    ├── skills/                  (skill_loaded + managed_ref_resolved for skill refs)
+    ├── skills/                  (managed_ref_resolved for skill refs; agent_started.data.skills[] registration)
     ├── source-field/            (source=agent vs supervisor discipline)
     ├── subagent/                (subagent_invoked / subagent_returned bracketing, avp.subagent.run_id)
     ├── tools/                   (built-in tool surface on agent_started, tool_failed semantics)

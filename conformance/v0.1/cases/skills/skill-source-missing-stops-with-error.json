@@ -71,12 +71,6 @@
         "match": {
           "type": "avp.model_turn_started"
         }
-      },
-      {
-        "label": "skill_loaded MUST NOT fire for a skill that never resolved",
-        "match": {
-          "type": "avp.skill_loaded"
-        }
       }
     ]
   }

@@ -2852,153 +2852,6 @@
       "title": "SkillDecl",
       "type": "object"
     },
-    "SkillLoadedData": {
-      "additionalProperties": true,
-      "description": "Payload of `avp.skill_loaded` events.\n\nSemantics: emitted when the SKILL.md body content has been added to\nthe model's active context window. NOT a registration acknowledgment\n(the registration view is `agent_started.data.skills[]`).\n\nTwo emission patterns, differentiated by the agent's\n`manifest.capabilities`:\n\n  - `skills:eager`: agent injects all declared SKILL.md bodies at\n    startup (e.g., as system_prompt suffix). Emit once per skill at\n    `step=0`, after `agent_started` and `mcp_server_connected`.\n  - `skills:progressive`: model decides per-turn which skill bodies\n    to pull in (Anthropic Skills, Claude Code progressive disclosure).\n    Emit when the body actually enters context, with `step=N` matching\n    the turn it loaded in. MAY fire multiple times for the same\n    skill (e.g., re-load after compaction).\n\nAgents whose SDK does not expose progressive-disclosure load events\nSHOULD NOT emit `skill_loaded` at all; `agent_started.data.skills[]`\nstill records the registration. Honest-silent beats fabricated events.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "step": {
-          "minimum": 0,
-          "title": "Step",
-          "type": "integer"
-        },
-        "avp.skill.name": {
-          "title": "Avp.Skill.Name",
-          "type": "string"
-        },
-        "avp.skill.source": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Skill.Source"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "step",
-        "avp.skill.name"
-      ],
-      "title": "SkillLoadedData",
-      "type": "object"
-    },
-    "SkillLoadedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.skill_loaded",
-          "default": "avp.skill_loaded",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/SkillLoadedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "SkillLoadedEvent",
-      "type": "object"
-    },
     "SkillRef": {
       "additionalProperties": false,
       "description": "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads); agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses.",
@@ -4379,7 +4232,6 @@
       "avp.reasoning_emitted": "#/$defs/ReasoningEmittedEvent",
       "avp.refusal_recorded": "#/$defs/RefusalRecordedEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
-      "avp.skill_loaded": "#/$defs/SkillLoadedEvent",
       "avp.subagent_failed": "#/$defs/SubagentFailedEvent",
       "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
       "avp.subagent_returned": "#/$defs/SubagentReturnedEvent",
@@ -4435,9 +4287,6 @@
     },
     {
       "$ref": "#/$defs/RefusalRecordedEvent"
-    },
-    {
-      "$ref": "#/$defs/SkillLoadedEvent"
     },
     {
       "$ref": "#/$defs/ErrorOccurredEvent"
