@@ -81,12 +81,12 @@ async def emit_prelude(
                 gen_ai_provider_name="anthropic",
                 gen_ai_operation_name="invoke_agent",
                 gen_ai_request_model=descriptor.default_model,
-                prompt=descriptor.prompt,
-                system_prompt=descriptor.system_prompt,
-                tools=descriptor.tools,
-                mcp_servers=descriptor.mcp_servers,
-                skills=descriptor.skills,
-                subagents=descriptor.subagents,
+                avp_prompt=descriptor.prompt,
+                avp_system_prompt=descriptor.system_prompt,
+                avp_tools=descriptor.tools,
+                avp_mcp_servers=descriptor.mcp_servers,
+                avp_skills=descriptor.skills,
+                avp_subagents=descriptor.subagents,
             ),
         )
     )
@@ -108,7 +108,7 @@ async def emit_model_turn_started(state: RunState, step: int) -> None:
                 trace_id=state.trace_id,
                 span_id=span_id,
                 parent_span_id=state.agent_span_id,
-                step=step,
+                avp_step=step,
                 gen_ai_request_stream=True,
             ),
         )

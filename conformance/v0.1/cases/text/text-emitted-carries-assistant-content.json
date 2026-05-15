@@ -30,7 +30,7 @@
         "match": {
           "type": "avp.model_turn_started",
           "data": {
-            "step": 1
+            "avp.step": 1
           }
         }
       },
@@ -38,7 +38,7 @@
         "match": {
           "type": "avp.model_turn_ended",
           "data": {
-            "step": 1
+            "avp.step": 1
           }
         }
       },
@@ -46,7 +46,7 @@
         "match": {
           "type": "avp.text_emitted",
           "data": {
-            "step": 1,
+            "avp.step": 1,
             "avp.text": "the answer is 42. DONE."
           }
         }

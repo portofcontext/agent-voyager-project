@@ -233,7 +233,7 @@ def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
     assert starts[0].data.span_id != starts[1].data.span_id
     assert starts[0].data.span_id == ends[0].data.span_id
     assert starts[1].data.span_id == ends[1].data.span_id
-    assert starts[0].data.step == 1 and starts[1].data.step == 2
+    assert starts[0].data.avp_step == 1 and starts[1].data.avp_step == 2
 
 
 # ── Tool / subagent context managers (delegate to the internal tracer) ──────
@@ -314,7 +314,7 @@ def test_agent_started_emits_subagents_when_declared() -> None:
     with AnthropicTracedClient(fake, commission=cfg, on_event=out.append):
         pass
     started = _by_type(out, AgentStartedEvent)[0]
-    assert started.data.subagents and started.data.subagents[0].name == "planner"
+    assert started.data.avp_subagents and started.data.avp_subagents[0].name == "planner"
 
 
 # ── Beta surface (widened coverage) ──────────────────────────────────────────

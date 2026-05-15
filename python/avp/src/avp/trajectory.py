@@ -172,16 +172,15 @@ class AgentStartedData(_SpanData):
         default=None, alias="gen_ai.operation.name"
     )
     gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
-    prompt: str | None = None
-    system_prompt: str | None = None
-    tools: list[ToolDecl] | None = None
-    mcp_servers: list[McpServerDecl] | None = None
-    skills: list[SkillDecl] | None = None
-    subagents: list[SubagentDecl] | None = None
+    avp_prompt: str | None = Field(default=None, alias="avp.prompt")
+    avp_system_prompt: str | None = Field(default=None, alias="avp.system_prompt")
+    avp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.tools")
+    avp_mcp_servers: list[McpServerDecl] | None = Field(default=None, alias="avp.mcp_servers")
+    avp_skills: list[SkillDecl] | None = Field(default=None, alias="avp.skills")
+    avp_subagents: list[SubagentDecl] | None = Field(default=None, alias="avp.subagents")
     avp_thread_id: str | None = Field(default=None, alias="avp.thread_id")
     avp_session_id: str | None = Field(default=None, alias="avp.session_id")
     avp_tags: list[str] | None = Field(default=None, alias="avp.tags")
-    avp_meta: dict[str, Any] | None = Field(default=None, alias="avp.meta")
     avp_schema_version: Literal["0.1"] = Field(default="0.1", alias="avp.schema_version")
 
 
@@ -199,14 +198,14 @@ class AgentStoppedData(_SpanData):
 
 
 class ModelTurnStartedData(_SpanData):
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     avp_context_messages: int | None = Field(default=None, ge=0, alias="avp.context_messages")
     gen_ai_request_stream: bool | None = Field(default=None, alias="gen_ai.request.stream")
 
 
 class ModelTurnEndedData(_SpanData):
-    step: int = Field(ge=0)
-    duration_ms: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
+    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     gen_ai_provider_name: str | None = Field(default=None, alias="gen_ai.provider.name")
     gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
     gen_ai_response_model: str | None = Field(default=None, alias="gen_ai.response.model")
@@ -234,7 +233,7 @@ class ModelTurnEndedData(_SpanData):
 
 
 class ToolInvokedData(_SpanData):
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     gen_ai_tool_call_arguments: dict[str, Any] = Field(alias="gen_ai.tool.call.arguments")
@@ -244,10 +243,10 @@ class ToolInvokedData(_SpanData):
 
 
 class ToolReturnedData(_SpanData):
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
-    duration_ms: int = Field(ge=0)
+    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     avp_tool_result_text: str = Field(alias="avp.tool.result.text")
     avp_tool_result_structured: Any | None = Field(default=None, alias="avp.tool.result.structured")
     avp_tool_rejected: bool | None = Field(default=None, alias="avp.tool.rejected")
@@ -255,7 +254,7 @@ class ToolReturnedData(_SpanData):
 
 
 class ToolFailedData(_SpanData):
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     avp_tool_error: str = Field(alias="avp.tool.error")
@@ -280,7 +279,7 @@ class SubagentInvokedData(_SpanData):
     is the same process as the subagent's loop).
     """
 
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
     gen_ai_agent_description: str | None = Field(default=None, alias="gen_ai.agent.description")
     gen_ai_operation_name: Literal["invoke_agent"] = Field(
@@ -306,10 +305,10 @@ class SubagentReturnedData(_SpanData):
     MUST also omit it; the supervisor reads the child's trajectory.
     """
 
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
     avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    duration_ms: int = Field(ge=0)
+    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     avp_subagent_result_text: str = Field(alias="avp.subagent.result.text")
     avp_subagent_result_structured: Any | None = Field(
         default=None, alias="avp.subagent.result.structured"
@@ -323,16 +322,16 @@ class SubagentFailedData(_SpanData):
     tool-call failure: the model receives an `Error: ...` string in place
     of the result and may retry or proceed."""
 
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
     avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    duration_ms: int = Field(ge=0)
+    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     avp_subagent_error: str = Field(alias="avp.subagent.error")
     avp_subagent_error_code: str | None = Field(default=None, alias="avp.subagent.error.code")
 
 
 class TextEmittedData(_SpanData):
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     avp_text: str = Field(alias="avp.text")
 
 
@@ -363,7 +362,7 @@ class RefusalRecordedData(_SpanData):
     supervisor may choose to reset history and retry.
     """
 
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     avp_refusal_reason: str = Field(min_length=1, alias="avp.refusal.reason")
     avp_refusal_message: str | None = Field(default=None, alias="avp.refusal.message")
     avp_refusal_category: str | None = Field(default=None, alias="avp.refusal.category")
@@ -387,7 +386,7 @@ class ReasoningEmittedData(_SpanData):
     occurrence so audit consumers can count thinking turns.
     """
 
-    step: int = Field(ge=0)
+    avp_step: int = Field(ge=0, alias="avp.step")
     avp_reasoning_text: str = Field(alias="avp.reasoning.text")
     avp_reasoning_signature: str | None = Field(default=None, alias="avp.reasoning.signature")
     avp_reasoning_redacted: bool | None = Field(default=None, alias="avp.reasoning.redacted")
@@ -459,7 +458,7 @@ class ManagedRefResolvedData(_SpanData):
 
     avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
     avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
-    duration_ms: int = Field(ge=0)
+    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
 
 
 class ManagedRefResolveFailedData(_SpanData):
@@ -720,7 +719,6 @@ __all__ = [
     "T_REASONING_EMITTED",
     "T_REFUSAL_RECORDED",
     "T_RUN_REQUESTED",
-    "T_SKILL_LOADED",
     "T_SUBAGENT_FAILED",
     "T_SUBAGENT_INVOKED",
     "T_SUBAGENT_RETURNED",

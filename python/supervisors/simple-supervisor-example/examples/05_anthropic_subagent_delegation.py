@@ -129,7 +129,7 @@ def main() -> int:
             print(f"  resolved {ev.data.avp_managed_kind}:{ev.data.avp_managed_id}")
         elif type_name == "ModelTurnEndedEvent":
             print(
-                f"  [turn {ev.data.step}] cost=${ev.data.avp_cost_usd:.5f} "
+                f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f} "
                 f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
             )
         elif type_name == "SubagentInvokedEvent":
@@ -142,7 +142,7 @@ def main() -> int:
             print(f"  <- subagent returned: {preview!r}")
         elif type_name == "TextEmittedEvent":
             preview = ev.data.avp_text.replace("\n", " ")[:120]
-            print(f"  [turn {ev.data.step}] text: {preview!r}")
+            print(f"  [turn {ev.data.avp_step}] text: {preview!r}")
         elif type_name == "AgentStoppedEvent":
             print(f"  STOPPED reason={ev.data.avp_reason}")
 

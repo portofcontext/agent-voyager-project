@@ -84,7 +84,7 @@
         "match": {
           "type": "avp.agent_started",
           "data": {
-            "tools": [
+            "avp.tools": [
               {
                 "name": "Read",
                 "avp.dispatch_target": "local"

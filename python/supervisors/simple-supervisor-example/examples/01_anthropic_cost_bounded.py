@@ -74,16 +74,16 @@ def main() -> int:
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
         if type_name == "model_turn_ended":
             print(
-                f"  [turn {ev.data.step}] tokens_in={ev.data.gen_ai_usage_input_tokens} tokens_out={ev.data.gen_ai_usage_output_tokens} "
+                f"  [turn {ev.data.avp_step}] tokens_in={ev.data.gen_ai_usage_input_tokens} tokens_out={ev.data.gen_ai_usage_output_tokens} "
                 f"cost=${ev.data.avp_cost_usd:.5f}"
             )
         elif type_name == "tool_invoked":
             print(
-                f"  [turn {ev.data.step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+                f"  [turn {ev.data.avp_step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
             )
         elif type_name == "tool_returned":
             head = ev.data.avp_tool_result_text.replace("\n", " ")[:60]
-            print(f"  [turn {ev.data.step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
+            print(f"  [turn {ev.data.avp_step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
         elif type_name == "agent_stopped":
             print(f"  STOPPED reason={ev.data.avp_reason}")
 

@@ -96,8 +96,8 @@ def test_summarize_classifies_fact_classes() -> None:
             subject="r-summary",
             data=ModelTurnEndedData(
                 **span(turn_span, agent_span),
-                step=1,
-                duration_ms=10,
+                avp_step=1,
+                avp_duration_ms=10,
                 **{
                     "gen_ai.usage.input_tokens": 10,
                     "gen_ai.usage.output_tokens": 5,
@@ -109,7 +109,7 @@ def test_summarize_classifies_fact_classes() -> None:
             subject="r-summary",
             data=ToolInvokedData(
                 **span(tool_span, turn_span),
-                step=1,
+                avp_step=1,
                 **{
                     "gen_ai.tool.call.id": "c1",
                     "gen_ai.tool.name": "bash",
@@ -121,8 +121,8 @@ def test_summarize_classifies_fact_classes() -> None:
             subject="r-summary",
             data=ToolReturnedData(
                 **span(tool_span, turn_span),
-                step=1,
-                duration_ms=1,
+                avp_step=1,
+                avp_duration_ms=1,
                 **{
                     "gen_ai.tool.call.id": "c1",
                     "gen_ai.tool.name": "bash",

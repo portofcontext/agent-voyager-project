@@ -18,7 +18,7 @@ Implementors building an `agent_described` event construct
     )
 
 The decl types are also reused by `avp.trajectory` for events that share
-the same shape (`agent_started.data.tools`,
+the same shape (`agent_started.data["avp.tools"]`,
 `mcp_server_connected.data.avp.mcp.tools`,
 `mcp_server_connected.data.avp.mcp.resources`).
 
@@ -37,12 +37,12 @@ from avp._envelope import _OPEN, _STRICT
 
 class ToolDecl(BaseModel):
     """Tool descriptor used by `AgentDescriptor.tools`,
-    `agent_started.data.tools`, and `mcp_server_connected.data.avp.mcp.tools`.
+    `agent_started.data["avp.tools"]`, and `mcp_server_connected.data.avp.mcp.tools`.
 
     MCP-shaped: `name` plus optional `description` and `inputSchema`. The
     decl describes a single tool's model-facing identity; how the tool is
     *dispatched* (local vs MCP server) is implicit from where the decl
-    appears on the wire — `descriptor.tools` and `agent_started.data.tools`
+    appears on the wire — `descriptor.tools` and `agent_started.data["avp.tools"]`
     are local-only; entries under `mcp_server_connected.data.avp.mcp.tools`
     are MCP-dispatched by virtue of being nested under a server. The
     per-invocation discriminator lives on `tool_invoked.data["avp.tool.dispatch_target"]`."""
@@ -54,7 +54,7 @@ class ToolDecl(BaseModel):
 
 
 class SubagentDecl(BaseModel):
-    """Subagent descriptor in `agent_started.data.subagents`: what the
+    """Subagent descriptor in `agent_started.data["avp.subagents"]`: what the
     parent model sees when deciding whether to delegate. Same MCP-shaped
     triple (`name`, `description`, `inputSchema`) tools use, so adapters
     can render subagents to the model's tool list with no translation.
@@ -73,7 +73,7 @@ class SubagentDecl(BaseModel):
 
 class SkillDecl(BaseModel):
     """Skill descriptor in `AgentDescriptor.skills` and
-    `agent_started.data.skills`: name plus optional metadata about each
+    `agent_started.data["avp.skills"]`: name plus optional metadata about each
     skill the agent ships with or has loaded for the run.
 
     Replaces the v0.1-prototype `list[str]` shape (names-only) with a

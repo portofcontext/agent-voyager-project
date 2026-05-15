@@ -112,10 +112,10 @@ def test_prelude_order_and_passthrough() -> None:
     agent_span_id = agent_started.data.span_id
     turn = next(ev for ev in events if ev.type == "avp.model_turn_started")
     assert turn.data.parent_span_id == agent_span_id
-    assert turn.data.step == 1
+    assert turn.data.avp_step == 1
     assert turn.data.gen_ai_request_stream is True
     assert agent_started.data.gen_ai_request_model == "claude-haiku-4-5-20251001"
-    assert agent_started.data.prompt == "ping"
+    assert agent_started.data.avp_prompt == "ping"
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ def test_prelude_order_and_passthrough() -> None:
 def test_consecutive_assistant_messages_merge_into_one_turn() -> None:
     """Thinking block + text block (no UserMessage between) = one turn."""
     events, _ = asyncio.run(_run([_assistant("thinking..."), _assistant("answer")]))
-    steps = [ev.data.step for ev in events if ev.type == "avp.model_turn_started"]
+    steps = [ev.data.avp_step for ev in events if ev.type == "avp.model_turn_started"]
     assert steps == [1]
 
 
@@ -133,7 +133,7 @@ def test_tool_result_boundary_opens_new_turn() -> None:
     """AssistantMessage → UserMessage(ToolResult) → AssistantMessage = two turns."""
     messages = [_assistant("calling tool"), _user_tool_result(), _assistant("done")]
     events, _ = asyncio.run(_run(messages))
-    steps = [ev.data.step for ev in events if ev.type == "avp.model_turn_started"]
+    steps = [ev.data.avp_step for ev in events if ev.type == "avp.model_turn_started"]
     assert steps == [1, 2]
 
 

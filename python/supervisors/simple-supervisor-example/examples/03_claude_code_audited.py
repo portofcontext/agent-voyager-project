@@ -62,19 +62,19 @@ def main() -> int:
         type_name = type(ev).__name__
         if type_name == "ModelTurnEndedEvent":
             print(
-                f"  [turn {ev.data.step}] cost=${ev.data.avp_cost_usd:.5f}  "
+                f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f}  "
                 f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
             )
         elif type_name == "TextEmittedEvent":
             preview = ev.data.avp_text.replace("\n", " ")[:80]
-            print(f"  [turn {ev.data.step}] text: {preview!r}")
+            print(f"  [turn {ev.data.avp_step}] text: {preview!r}")
         elif type_name == "ToolInvokedEvent":
             print(
-                f"  [turn {ev.data.step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+                f"  [turn {ev.data.avp_step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
             )
         elif type_name == "ToolReturnedEvent":
             head = ev.data.avp_tool_result_text.replace("\n", " ")[:60]
-            print(f"  [turn {ev.data.step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
+            print(f"  [turn {ev.data.avp_step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
         elif type_name == "AgentStoppedEvent":
             print(f"  STOPPED reason={ev.data.avp_reason}")
 
