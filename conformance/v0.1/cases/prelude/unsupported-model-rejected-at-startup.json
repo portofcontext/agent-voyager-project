@@ -79,7 +79,7 @@
       {
         "label": "no model turn runs when supported_models rejects the commission",
         "match": {
-          "type": "avp.model_turn_started"
+          "type": "avp.assistant_message"
         }
       },
       {

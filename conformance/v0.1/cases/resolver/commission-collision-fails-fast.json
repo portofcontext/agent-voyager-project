@@ -68,7 +68,7 @@
       {
         "label": "no model turn runs when an id collision is detected",
         "match": {
-          "type": "avp.model_turn_started"
+          "type": "avp.assistant_message"
         }
       },
       {

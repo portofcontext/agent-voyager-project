@@ -1,13 +1,13 @@
 """Stateless AVP event emitters and SDK message dispatcher.
 
-Low-level emitters (`emit_prelude`, `emit_model_turn_started`, ...) take a
+Low-level emitters (`emit_prelude`, `emit_assistant_message`, ...) take a
 `RunState` and emit exactly the events their name implies, mutating state as
 needed. `handle_message` is the single entry point for the SDK stream: it
 dispatches each raw SDK message to the right emitter and is reusable across
 both the `query` patch and the `ClaudeSDKClient` patch (Stage 3).
 
-Stage 1: prelude, model_turn_started, agent_stopped, merge gate.
-Stage 1 (post-review): text_emitted, reasoning_emitted, model_turn_ended.
+Stage 1: prelude, assistant_message, agent_stopped, merge gate.
+Stage 1 (post-review): text_emitted, reasoning_emitted.
 Stage 2: tool_invoked, tool_returned, tool_failed, subagent_invoked/returned.
 """
 
@@ -25,8 +25,8 @@ from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
-    ModelTurnStartedData,
-    ModelTurnStartedEvent,
+    AssistantMessageData,
+    AssistantMessageEvent,
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
@@ -97,19 +97,22 @@ async def emit_prelude(
 # ---------------------------------------------------------------------------
 
 
-async def emit_model_turn_started(state: RunState, step: int) -> None:
-    """Emit model_turn_started and update state.current_turn_span_id."""
+async def emit_assistant_message(state: RunState, step: int) -> None:
+    """Emit assistant_message and update state.current_turn_span_id."""
     span_id = new_span_id()
     state.current_turn_span_id = span_id
     await state.sink(
-        ModelTurnStartedEvent(
+        AssistantMessageEvent(
             subject=state.run_id,
-            data=ModelTurnStartedData(
+            data=AssistantMessageData(
                 trace_id=state.trace_id,
                 span_id=span_id,
                 parent_span_id=state.agent_span_id,
                 avp_step=step,
-                gen_ai_request_stream=True,
+                avp_duration_ms=0,
+                gen_ai_usage_input_tokens=0,
+                gen_ai_usage_output_tokens=0,
+                avp_cost_usd=0.0,
             ),
         )
     )
@@ -149,7 +152,7 @@ async def _on_assistant(state: RunState, _message: Any) -> None:
         return
     state.step += 1
     state.tool_result_arrived = False
-    await emit_model_turn_started(state, state.step)
+    await emit_assistant_message(state, state.step)
 
 
 async def _on_user(state: RunState, message: Any) -> None:

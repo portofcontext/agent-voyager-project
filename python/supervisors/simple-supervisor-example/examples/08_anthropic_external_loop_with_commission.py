@@ -23,7 +23,7 @@ What this demonstrates concretely:
     to the system prompt — the model adopts the skill without the agent
     hardcoding it.
   - `wrap_anthropic` proxies `messages.create` so every turn emits
-    `model_turn_started / _ended`, `text_emitted`, `tool_invoked`, and
+    `assistant_message`, `text_emitted`, `tool_invoked`, and
     `cost_recorded` events. The active `AVPTracer` is found via
     contextvar.
   - Tool dispatch is wrapped with `tracer.tool(...)` so AVP records the

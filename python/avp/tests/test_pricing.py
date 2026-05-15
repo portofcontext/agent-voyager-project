@@ -1,6 +1,6 @@
 """Pricing helper: loader fresh-copy semantics and compute_cost math.
 
-Wire-shape tests for `avp.cost.source` on `model_turn_ended` live with
+Wire-shape tests for `avp.cost.source` on `assistant_message` live with
 the agent packages that emit those events; this module covers only the
 pure pricing API.
 """

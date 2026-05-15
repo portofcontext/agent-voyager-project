@@ -126,8 +126,7 @@ def test_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> 
     assert types[0] == "avp.run_requested"
     assert types[1] == "avp.agent_described"
     assert types[2] == "avp.agent_started"
-    assert "avp.model_turn_started" in types
-    assert "avp.model_turn_ended" in types
+    assert "avp.assistant_message" in types
     assert "avp.text_emitted" in types
     assert "avp.cost_recorded" in types
     assert types[-1] == "avp.agent_stopped"

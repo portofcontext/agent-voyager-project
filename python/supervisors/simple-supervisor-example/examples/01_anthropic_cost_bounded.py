@@ -72,7 +72,7 @@ def main() -> int:
         events.append(ev)
         # One-line preview of each event as it arrives
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
-        if type_name == "model_turn_ended":
+        if type_name == "assistant_message":
             print(
                 f"  [turn {ev.data.avp_step}] tokens_in={ev.data.gen_ai_usage_input_tokens} tokens_out={ev.data.gen_ai_usage_output_tokens} "
                 f"cost=${ev.data.avp_cost_usd:.5f}"

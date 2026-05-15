@@ -9,7 +9,7 @@ Consumers wanting only the event stream can:
 
     from avp.trajectory import (
         AgentStartedEvent,
-        ModelTurnEndedEvent,
+        AssistantMessageEvent,
         parse_event,
     )
 
@@ -65,8 +65,7 @@ T_RUN_REQUESTED = "avp.run_requested"
 T_AGENT_DESCRIBED = "avp.agent_described"
 T_AGENT_STARTED = "avp.agent_started"
 T_AGENT_STOPPED = "avp.agent_stopped"
-T_MODEL_TURN_STARTED = "avp.model_turn_started"
-T_MODEL_TURN_ENDED = "avp.model_turn_ended"
+T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_TOOL_INVOKED = "avp.tool_invoked"
 T_TOOL_RETURNED = "avp.tool_returned"
 T_TOOL_FAILED = "avp.tool_failed"
@@ -189,7 +188,7 @@ class AgentStoppedData(_SpanData):
 
     Carries `avp.reason` (why the run ended) and an optional `avp.output`
     payload. The agent does NOT publish cumulative totals on this event.
-    Per-turn deltas live on each `model_turn_ended`; consumers reduce
+    Per-turn deltas live on each `assistant_message`; consumers reduce
     the stream to compute totals.
     """
 
@@ -197,13 +196,7 @@ class AgentStoppedData(_SpanData):
     avp_output: Any | None = Field(default=None, alias="avp.output")
 
 
-class ModelTurnStartedData(_SpanData):
-    avp_step: int = Field(ge=0, alias="avp.step")
-    avp_context_messages: int | None = Field(default=None, ge=0, alias="avp.context_messages")
-    gen_ai_request_stream: bool | None = Field(default=None, alias="gen_ai.request.stream")
-
-
-class ModelTurnEndedData(_SpanData):
+class AssistantMessageData(_SpanData):
     avp_step: int = Field(ge=0, alias="avp.step")
     avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     gen_ai_provider_name: str | None = Field(default=None, alias="gen_ai.provider.name")
@@ -517,16 +510,10 @@ class AgentStoppedEvent(_CloudEventBase):
     data: AgentStoppedData
 
 
-class ModelTurnStartedEvent(_CloudEventBase):
-    type: Literal["avp.model_turn_started"] = T_MODEL_TURN_STARTED
+class AssistantMessageEvent(_CloudEventBase):
+    type: Literal["avp.assistant_message"] = T_ASSISTANT_MESSAGE
     source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ModelTurnStartedData
-
-
-class ModelTurnEndedEvent(_CloudEventBase):
-    type: Literal["avp.model_turn_ended"] = T_MODEL_TURN_ENDED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ModelTurnEndedData
+    data: AssistantMessageData
 
 
 class ToolInvokedEvent(_CloudEventBase):
@@ -621,8 +608,7 @@ _AGENT_EVENT_TYPES = (
     AgentDescribedEvent,
     AgentStartedEvent,
     AgentStoppedEvent,
-    ModelTurnStartedEvent,
-    ModelTurnEndedEvent,
+    AssistantMessageEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
     ToolFailedEvent,
@@ -644,8 +630,7 @@ Event = Annotated[
     | AgentDescribedEvent
     | AgentStartedEvent
     | AgentStoppedEvent
-    | ModelTurnStartedEvent
-    | ModelTurnEndedEvent
+    | AssistantMessageEvent
     | ToolInvokedEvent
     | ToolReturnedEvent
     | ToolFailedEvent
@@ -709,13 +694,12 @@ __all__ = [
     "T_AGENT_DESCRIBED",
     "T_AGENT_STARTED",
     "T_AGENT_STOPPED",
+    "T_ASSISTANT_MESSAGE",
     "T_ERROR_OCCURRED",
     "T_MANAGED_REF_RESOLVED",
     "T_MANAGED_REF_RESOLVE_FAILED",
     "T_MCP_SERVER_CONNECTED",
     "T_MCP_SERVER_DISCONNECTED",
-    "T_MODEL_TURN_ENDED",
-    "T_MODEL_TURN_STARTED",
     "T_REASONING_EMITTED",
     "T_REFUSAL_RECORDED",
     "T_RUN_REQUESTED",
@@ -733,6 +717,8 @@ __all__ = [
     "AgentStartedEvent",
     "AgentStoppedData",
     "AgentStoppedEvent",
+    "AssistantMessageData",
+    "AssistantMessageEvent",
     "ErrorOccurredData",
     "ErrorOccurredEvent",
     "Event",
@@ -745,10 +731,6 @@ __all__ = [
     "McpServerConnectedEvent",
     "McpServerDisconnectedData",
     "McpServerDisconnectedEvent",
-    "ModelTurnEndedData",
-    "ModelTurnEndedEvent",
-    "ModelTurnStartedData",
-    "ModelTurnStartedEvent",
     "ReasoningEmittedData",
     "ReasoningEmittedEvent",
     "RefusalRecordedData",

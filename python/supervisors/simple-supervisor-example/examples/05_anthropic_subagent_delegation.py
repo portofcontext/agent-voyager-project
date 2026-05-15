@@ -127,7 +127,7 @@ def main() -> int:
         type_name = type(ev).__name__
         if type_name == "ManagedRefResolvedEvent":
             print(f"  resolved {ev.data.avp_managed_kind}:{ev.data.avp_managed_id}")
-        elif type_name == "ModelTurnEndedEvent":
+        elif type_name == "AssistantMessageEvent":
             print(
                 f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f} "
                 f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"

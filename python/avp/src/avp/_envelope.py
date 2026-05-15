@@ -82,7 +82,7 @@ class _SpanData(BaseModel):
     verbatim. Spec-defined attributes are validated; unknown keys pass through.
     """
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = _OPEN
     trace_id: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
     span_id: str = Field(min_length=16, max_length=16, pattern=r"^[0-9a-f]{16}$")
     parent_span_id: str = Field(min_length=16, max_length=16, pattern=r"^[0-9a-f]{16}$")

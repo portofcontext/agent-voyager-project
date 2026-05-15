@@ -13,8 +13,7 @@ export type AVPV01TrajectoryEvent =
   | AgentDescribedEvent
   | AgentStartedEvent
   | AgentStoppedEvent
-  | ModelTurnStartedEvent
-  | ModelTurnEndedEvent
+  | AssistantMessageEvent
   | ToolInvokedEvent
   | ToolReturnedEvent
   | ToolFailedEvent
@@ -174,7 +173,7 @@ export type Subject4 = string | null;
 export type Datacontenttype4 = string | null;
 export type Dataschema4 = string | null;
 export type AvpCorrelationId4 = string | null;
-export type Type4 = "avp.model_turn_started";
+export type Type4 = "avp.assistant_message";
 export type Source4 = "avp://agent";
 export type TraceId4 = string;
 export type SpanId4 = string;
@@ -183,24 +182,6 @@ export type AvpMeta4 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep = number;
-export type AvpContextMessages = number | null;
-export type GenAiRequestStream = boolean | null;
-export type Specversion5 = "1.0";
-export type Id9 = string;
-export type Time5 = string;
-export type Subject5 = string | null;
-export type Datacontenttype5 = string | null;
-export type Dataschema5 = string | null;
-export type AvpCorrelationId5 = string | null;
-export type Type5 = "avp.model_turn_ended";
-export type Source5 = "avp://agent";
-export type TraceId5 = string;
-export type SpanId5 = string;
-export type ParentSpanId5 = string;
-export type AvpMeta5 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep1 = number;
 export type AvpDurationMs = number;
 export type GenAiProviderName1 = string | null;
 export type GenAiRequestModel1 = string | null;
@@ -214,6 +195,25 @@ export type GenAiUsageCacheCreationInputTokens = number | null;
 export type GenAiUsageReasoningOutputTokens = number | null;
 export type AvpCostUsd = number;
 export type AvpCostSource = ("computed" | "reported" | "unknown") | null;
+export type Specversion5 = "1.0";
+export type Id9 = string;
+export type Time5 = string;
+export type Subject5 = string | null;
+export type Datacontenttype5 = string | null;
+export type Dataschema5 = string | null;
+export type AvpCorrelationId5 = string | null;
+export type Type5 = "avp.tool_invoked";
+export type Source5 = "avp://agent";
+export type TraceId5 = string;
+export type SpanId5 = string;
+export type ParentSpanId5 = string;
+export type AvpMeta5 = {
+  [k: string]: unknown;
+} | null;
+export type AvpStep1 = number;
+export type GenAiToolCallId = string;
+export type GenAiToolName = string;
+export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
 export type Specversion6 = "1.0";
 export type Id10 = string;
 export type Time6 = string;
@@ -221,7 +221,7 @@ export type Subject6 = string | null;
 export type Datacontenttype6 = string | null;
 export type Dataschema6 = string | null;
 export type AvpCorrelationId6 = string | null;
-export type Type6 = "avp.tool_invoked";
+export type Type6 = "avp.tool_returned";
 export type Source6 = "avp://agent";
 export type TraceId6 = string;
 export type SpanId6 = string;
@@ -230,9 +230,12 @@ export type AvpMeta6 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep2 = number;
-export type GenAiToolCallId = string;
-export type GenAiToolName = string;
-export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
+export type GenAiToolCallId1 = string;
+export type GenAiToolName1 = string;
+export type AvpDurationMs1 = number;
+export type AvpToolResultText = string;
+export type AvpToolRejected = boolean | null;
+export type AvpToolRejectionReason = string | null;
 export type Specversion7 = "1.0";
 export type Id11 = string;
 export type Time7 = string;
@@ -240,7 +243,7 @@ export type Subject7 = string | null;
 export type Datacontenttype7 = string | null;
 export type Dataschema7 = string | null;
 export type AvpCorrelationId7 = string | null;
-export type Type7 = "avp.tool_returned";
+export type Type7 = "avp.tool_failed";
 export type Source7 = "avp://agent";
 export type TraceId7 = string;
 export type SpanId7 = string;
@@ -249,12 +252,10 @@ export type AvpMeta7 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep3 = number;
-export type GenAiToolCallId1 = string;
-export type GenAiToolName1 = string;
-export type AvpDurationMs1 = number;
-export type AvpToolResultText = string;
-export type AvpToolRejected = boolean | null;
-export type AvpToolRejectionReason = string | null;
+export type GenAiToolCallId2 = string;
+export type GenAiToolName2 = string;
+export type AvpToolError = string;
+export type AvpToolErrorCode = string | null;
 export type Specversion8 = "1.0";
 export type Id12 = string;
 export type Time8 = string;
@@ -262,7 +263,7 @@ export type Subject8 = string | null;
 export type Datacontenttype8 = string | null;
 export type Dataschema8 = string | null;
 export type AvpCorrelationId8 = string | null;
-export type Type8 = "avp.tool_failed";
+export type Type8 = "avp.subagent_invoked";
 export type Source8 = "avp://agent";
 export type TraceId8 = string;
 export type SpanId8 = string;
@@ -271,10 +272,11 @@ export type AvpMeta8 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep4 = number;
-export type GenAiToolCallId2 = string;
-export type GenAiToolName2 = string;
-export type AvpToolError = string;
-export type AvpToolErrorCode = string | null;
+export type GenAiAgentName = string;
+export type GenAiAgentDescription = string | null;
+export type GenAiOperationName1 = "invoke_agent";
+export type AvpSubagentInvocationId = string;
+export type AvpSubagentRunId = string | null;
 export type Specversion9 = "1.0";
 export type Id13 = string;
 export type Time9 = string;
@@ -282,7 +284,7 @@ export type Subject9 = string | null;
 export type Datacontenttype9 = string | null;
 export type Dataschema9 = string | null;
 export type AvpCorrelationId9 = string | null;
-export type Type9 = "avp.subagent_invoked";
+export type Type9 = "avp.subagent_returned";
 export type Source9 = "avp://agent";
 export type TraceId9 = string;
 export type SpanId9 = string;
@@ -291,27 +293,6 @@ export type AvpMeta9 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep5 = number;
-export type GenAiAgentName = string;
-export type GenAiAgentDescription = string | null;
-export type GenAiOperationName1 = "invoke_agent";
-export type AvpSubagentInvocationId = string;
-export type AvpSubagentRunId = string | null;
-export type Specversion10 = "1.0";
-export type Id14 = string;
-export type Time10 = string;
-export type Subject10 = string | null;
-export type Datacontenttype10 = string | null;
-export type Dataschema10 = string | null;
-export type AvpCorrelationId10 = string | null;
-export type Type10 = "avp.subagent_returned";
-export type Source10 = "avp://agent";
-export type TraceId10 = string;
-export type SpanId10 = string;
-export type ParentSpanId10 = string;
-export type AvpMeta10 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep6 = number;
 export type GenAiAgentName1 = string;
 export type AvpSubagentInvocationId1 = string;
 export type AvpDurationMs2 = number;
@@ -320,6 +301,27 @@ export type CostUsd = number;
 export type TokensInput = number;
 export type TokensOutput = number;
 export type Turns = number;
+export type Specversion10 = "1.0";
+export type Id14 = string;
+export type Time10 = string;
+export type Subject10 = string | null;
+export type Datacontenttype10 = string | null;
+export type Dataschema10 = string | null;
+export type AvpCorrelationId10 = string | null;
+export type Type10 = "avp.subagent_failed";
+export type Source10 = "avp://agent";
+export type TraceId10 = string;
+export type SpanId10 = string;
+export type ParentSpanId10 = string;
+export type AvpMeta10 = {
+  [k: string]: unknown;
+} | null;
+export type AvpStep6 = number;
+export type GenAiAgentName2 = string;
+export type AvpSubagentInvocationId2 = string;
+export type AvpDurationMs3 = number;
+export type AvpSubagentError = string;
+export type AvpSubagentErrorCode = string | null;
 export type Specversion11 = "1.0";
 export type Id15 = string;
 export type Time11 = string;
@@ -327,7 +329,7 @@ export type Subject11 = string | null;
 export type Datacontenttype11 = string | null;
 export type Dataschema11 = string | null;
 export type AvpCorrelationId11 = string | null;
-export type Type11 = "avp.subagent_failed";
+export type Type11 = "avp.text_emitted";
 export type Source11 = "avp://agent";
 export type TraceId11 = string;
 export type SpanId11 = string;
@@ -336,11 +338,7 @@ export type AvpMeta11 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep7 = number;
-export type GenAiAgentName2 = string;
-export type AvpSubagentInvocationId2 = string;
-export type AvpDurationMs3 = number;
-export type AvpSubagentError = string;
-export type AvpSubagentErrorCode = string | null;
+export type AvpText = string;
 export type Specversion12 = "1.0";
 export type Id16 = string;
 export type Time12 = string;
@@ -348,7 +346,7 @@ export type Subject12 = string | null;
 export type Datacontenttype12 = string | null;
 export type Dataschema12 = string | null;
 export type AvpCorrelationId12 = string | null;
-export type Type12 = "avp.text_emitted";
+export type Type12 = "avp.reasoning_emitted";
 export type Source12 = "avp://agent";
 export type TraceId12 = string;
 export type SpanId12 = string;
@@ -357,7 +355,9 @@ export type AvpMeta12 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep8 = number;
-export type AvpText = string;
+export type AvpReasoningText = string;
+export type AvpReasoningSignature = string | null;
+export type AvpReasoningRedacted = boolean | null;
 export type Specversion13 = "1.0";
 export type Id17 = string;
 export type Time13 = string;
@@ -365,7 +365,7 @@ export type Subject13 = string | null;
 export type Datacontenttype13 = string | null;
 export type Dataschema13 = string | null;
 export type AvpCorrelationId13 = string | null;
-export type Type13 = "avp.reasoning_emitted";
+export type Type13 = "avp.refusal_recorded";
 export type Source13 = "avp://agent";
 export type TraceId13 = string;
 export type SpanId13 = string;
@@ -374,9 +374,10 @@ export type AvpMeta13 = {
   [k: string]: unknown;
 } | null;
 export type AvpStep9 = number;
-export type AvpReasoningText = string;
-export type AvpReasoningSignature = string | null;
-export type AvpReasoningRedacted = boolean | null;
+export type AvpRefusalReason = string;
+export type AvpRefusalMessage = string | null;
+export type AvpRefusalCategory = string | null;
+export type AvpRefusalProvider = string | null;
 export type Specversion14 = "1.0";
 export type Id18 = string;
 export type Time14 = string;
@@ -384,32 +385,12 @@ export type Subject14 = string | null;
 export type Datacontenttype14 = string | null;
 export type Dataschema14 = string | null;
 export type AvpCorrelationId14 = string | null;
-export type Type14 = "avp.refusal_recorded";
+export type Type14 = "avp.error_occurred";
 export type Source14 = "avp://agent";
 export type TraceId14 = string;
 export type SpanId14 = string;
 export type ParentSpanId14 = string;
 export type AvpMeta14 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep10 = number;
-export type AvpRefusalReason = string;
-export type AvpRefusalMessage = string | null;
-export type AvpRefusalCategory = string | null;
-export type AvpRefusalProvider = string | null;
-export type Specversion15 = "1.0";
-export type Id19 = string;
-export type Time15 = string;
-export type Subject15 = string | null;
-export type Datacontenttype15 = string | null;
-export type Dataschema15 = string | null;
-export type AvpCorrelationId15 = string | null;
-export type Type15 = "avp.error_occurred";
-export type Source15 = "avp://agent";
-export type TraceId15 = string;
-export type SpanId15 = string;
-export type ParentSpanId15 = string;
-export type AvpMeta15 = {
   [k: string]: unknown;
 } | null;
 export type ErrorCode =
@@ -422,19 +403,19 @@ export type ErrorCode =
   | "commission_collision"
   | "unknown";
 export type AvpErrorMessage = string;
-export type Specversion16 = "1.0";
-export type Id20 = string;
-export type Time16 = string;
-export type Subject16 = string | null;
-export type Datacontenttype16 = string | null;
-export type Dataschema16 = string | null;
-export type AvpCorrelationId16 = string | null;
-export type Type16 = "avp.mcp_server_connected";
-export type Source16 = "avp://agent";
-export type TraceId16 = string;
-export type SpanId16 = string;
-export type ParentSpanId16 = string;
-export type AvpMeta16 = {
+export type Specversion15 = "1.0";
+export type Id19 = string;
+export type Time15 = string;
+export type Subject15 = string | null;
+export type Datacontenttype15 = string | null;
+export type Dataschema15 = string | null;
+export type AvpCorrelationId15 = string | null;
+export type Type15 = "avp.mcp_server_connected";
+export type Source15 = "avp://agent";
+export type TraceId15 = string;
+export type SpanId15 = string;
+export type ParentSpanId15 = string;
+export type AvpMeta15 = {
   [k: string]: unknown;
 } | null;
 export type AvpMcpServerId = string;
@@ -450,6 +431,24 @@ export type Description4 = string | null;
 export type Mimetype = string | null;
 export type AvpMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
 export type AvpMcpError = string | null;
+export type Specversion16 = "1.0";
+export type Id20 = string;
+export type Time16 = string;
+export type Subject16 = string | null;
+export type Datacontenttype16 = string | null;
+export type Dataschema16 = string | null;
+export type AvpCorrelationId16 = string | null;
+export type Type16 = "avp.mcp_server_disconnected";
+export type Source16 = "avp://agent";
+export type TraceId16 = string;
+export type SpanId16 = string;
+export type ParentSpanId16 = string;
+export type AvpMeta16 = {
+  [k: string]: unknown;
+} | null;
+export type AvpMcpServerId1 = string;
+export type AvpMcpDisconnectReason = "clean" | "error";
+export type AvpMcpDisconnectMessage = string | null;
 export type Specversion17 = "1.0";
 export type Id21 = string;
 export type Time17 = string;
@@ -457,7 +456,7 @@ export type Subject17 = string | null;
 export type Datacontenttype17 = string | null;
 export type Dataschema17 = string | null;
 export type AvpCorrelationId17 = string | null;
-export type Type17 = "avp.mcp_server_disconnected";
+export type Type17 = "avp.managed_ref_resolved";
 export type Source17 = "avp://agent";
 export type TraceId17 = string;
 export type SpanId17 = string;
@@ -465,9 +464,9 @@ export type ParentSpanId17 = string;
 export type AvpMeta17 = {
   [k: string]: unknown;
 } | null;
-export type AvpMcpServerId1 = string;
-export type AvpMcpDisconnectReason = "clean" | "error";
-export type AvpMcpDisconnectMessage = string | null;
+export type AvpManagedKind = "mcp_server" | "skill" | "subagent";
+export type AvpManagedId = string;
+export type AvpDurationMs4 = number;
 export type Specversion18 = "1.0";
 export type Id22 = string;
 export type Time18 = string;
@@ -475,30 +474,12 @@ export type Subject18 = string | null;
 export type Datacontenttype18 = string | null;
 export type Dataschema18 = string | null;
 export type AvpCorrelationId18 = string | null;
-export type Type18 = "avp.managed_ref_resolved";
+export type Type18 = "avp.managed_ref_resolve_failed";
 export type Source18 = "avp://agent";
 export type TraceId18 = string;
 export type SpanId18 = string;
 export type ParentSpanId18 = string;
 export type AvpMeta18 = {
-  [k: string]: unknown;
-} | null;
-export type AvpManagedKind = "mcp_server" | "skill" | "subagent";
-export type AvpManagedId = string;
-export type AvpDurationMs4 = number;
-export type Specversion19 = "1.0";
-export type Id23 = string;
-export type Time19 = string;
-export type Subject19 = string | null;
-export type Datacontenttype19 = string | null;
-export type Dataschema19 = string | null;
-export type AvpCorrelationId19 = string | null;
-export type Type19 = "avp.managed_ref_resolve_failed";
-export type Source19 = "avp://agent";
-export type TraceId19 = string;
-export type SpanId19 = string;
-export type ParentSpanId19 = string;
-export type AvpMeta19 = {
   [k: string]: unknown;
 } | null;
 export type AvpManagedKind1 = "mcp_server" | "skill" | "subagent";
@@ -843,7 +824,7 @@ export interface AgentStoppedEvent {
  *
  * Carries `avp.reason` (why the run ended) and an optional `avp.output`
  * payload. The agent does NOT publish cumulative totals on this event.
- * Per-turn deltas live on each `model_turn_ended`; consumers reduce
+ * Per-turn deltas live on each `assistant_message`; consumers reduce
  * the stream to compute totals.
  */
 export interface AgentStoppedData {
@@ -855,7 +836,7 @@ export interface AgentStoppedData {
   "avp.output"?: unknown;
   [k: string]: unknown;
 }
-export interface ModelTurnStartedEvent {
+export interface AssistantMessageEvent {
   specversion?: Specversion4;
   id?: Id8;
   time?: Time4;
@@ -865,36 +846,14 @@ export interface ModelTurnStartedEvent {
   "avp.correlation_id"?: AvpCorrelationId4;
   type?: Type4;
   source?: Source4;
-  data: ModelTurnStartedData;
+  data: AssistantMessageData;
 }
-export interface ModelTurnStartedData {
+export interface AssistantMessageData {
   trace_id: TraceId4;
   span_id: SpanId4;
   parent_span_id: ParentSpanId4;
   "avp.meta"?: AvpMeta4;
   "avp.step": AvpStep;
-  "avp.context_messages"?: AvpContextMessages;
-  "gen_ai.request.stream"?: GenAiRequestStream;
-  [k: string]: unknown;
-}
-export interface ModelTurnEndedEvent {
-  specversion?: Specversion5;
-  id?: Id9;
-  time?: Time5;
-  subject?: Subject5;
-  datacontenttype?: Datacontenttype5;
-  dataschema?: Dataschema5;
-  "avp.correlation_id"?: AvpCorrelationId5;
-  type?: Type5;
-  source?: Source5;
-  data: ModelTurnEndedData;
-}
-export interface ModelTurnEndedData {
-  trace_id: TraceId5;
-  span_id: SpanId5;
-  parent_span_id: ParentSpanId5;
-  "avp.meta"?: AvpMeta5;
-  "avp.step": AvpStep1;
   "avp.duration_ms": AvpDurationMs;
   "gen_ai.provider.name"?: GenAiProviderName1;
   "gen_ai.request.model"?: GenAiRequestModel1;
@@ -911,23 +870,23 @@ export interface ModelTurnEndedData {
   [k: string]: unknown;
 }
 export interface ToolInvokedEvent {
-  specversion?: Specversion6;
-  id?: Id10;
-  time?: Time6;
-  subject?: Subject6;
-  datacontenttype?: Datacontenttype6;
-  dataschema?: Dataschema6;
-  "avp.correlation_id"?: AvpCorrelationId6;
-  type?: Type6;
-  source?: Source6;
+  specversion?: Specversion5;
+  id?: Id9;
+  time?: Time5;
+  subject?: Subject5;
+  datacontenttype?: Datacontenttype5;
+  dataschema?: Dataschema5;
+  "avp.correlation_id"?: AvpCorrelationId5;
+  type?: Type5;
+  source?: Source5;
   data: ToolInvokedData;
 }
 export interface ToolInvokedData {
-  trace_id: TraceId6;
-  span_id: SpanId6;
-  parent_span_id: ParentSpanId6;
-  "avp.meta"?: AvpMeta6;
-  "avp.step": AvpStep2;
+  trace_id: TraceId5;
+  span_id: SpanId5;
+  parent_span_id: ParentSpanId5;
+  "avp.meta"?: AvpMeta5;
+  "avp.step": AvpStep1;
   "gen_ai.tool.call.id": GenAiToolCallId;
   "gen_ai.tool.name": GenAiToolName;
   "gen_ai.tool.call.arguments": GenAiToolCallArguments;
@@ -938,23 +897,23 @@ export interface GenAiToolCallArguments {
   [k: string]: unknown;
 }
 export interface ToolReturnedEvent {
-  specversion?: Specversion7;
-  id?: Id11;
-  time?: Time7;
-  subject?: Subject7;
-  datacontenttype?: Datacontenttype7;
-  dataschema?: Dataschema7;
-  "avp.correlation_id"?: AvpCorrelationId7;
-  type?: Type7;
-  source?: Source7;
+  specversion?: Specversion6;
+  id?: Id10;
+  time?: Time6;
+  subject?: Subject6;
+  datacontenttype?: Datacontenttype6;
+  dataschema?: Dataschema6;
+  "avp.correlation_id"?: AvpCorrelationId6;
+  type?: Type6;
+  source?: Source6;
   data: ToolReturnedData;
 }
 export interface ToolReturnedData {
-  trace_id: TraceId7;
-  span_id: SpanId7;
-  parent_span_id: ParentSpanId7;
-  "avp.meta"?: AvpMeta7;
-  "avp.step": AvpStep3;
+  trace_id: TraceId6;
+  span_id: SpanId6;
+  parent_span_id: ParentSpanId6;
+  "avp.meta"?: AvpMeta6;
+  "avp.step": AvpStep2;
   "gen_ai.tool.call.id": GenAiToolCallId1;
   "gen_ai.tool.name": GenAiToolName1;
   "avp.duration_ms": AvpDurationMs1;
@@ -965,6 +924,30 @@ export interface ToolReturnedData {
   [k: string]: unknown;
 }
 export interface ToolFailedEvent {
+  specversion?: Specversion7;
+  id?: Id11;
+  time?: Time7;
+  subject?: Subject7;
+  datacontenttype?: Datacontenttype7;
+  dataschema?: Dataschema7;
+  "avp.correlation_id"?: AvpCorrelationId7;
+  type?: Type7;
+  source?: Source7;
+  data: ToolFailedData;
+}
+export interface ToolFailedData {
+  trace_id: TraceId7;
+  span_id: SpanId7;
+  parent_span_id: ParentSpanId7;
+  "avp.meta"?: AvpMeta7;
+  "avp.step": AvpStep3;
+  "gen_ai.tool.call.id": GenAiToolCallId2;
+  "gen_ai.tool.name": GenAiToolName2;
+  "avp.tool.error": AvpToolError;
+  "avp.tool.error.code"?: AvpToolErrorCode;
+  [k: string]: unknown;
+}
+export interface SubagentInvokedEvent {
   specversion?: Specversion8;
   id?: Id12;
   time?: Time8;
@@ -974,30 +957,6 @@ export interface ToolFailedEvent {
   "avp.correlation_id"?: AvpCorrelationId8;
   type?: Type8;
   source?: Source8;
-  data: ToolFailedData;
-}
-export interface ToolFailedData {
-  trace_id: TraceId8;
-  span_id: SpanId8;
-  parent_span_id: ParentSpanId8;
-  "avp.meta"?: AvpMeta8;
-  "avp.step": AvpStep4;
-  "gen_ai.tool.call.id": GenAiToolCallId2;
-  "gen_ai.tool.name": GenAiToolName2;
-  "avp.tool.error": AvpToolError;
-  "avp.tool.error.code"?: AvpToolErrorCode;
-  [k: string]: unknown;
-}
-export interface SubagentInvokedEvent {
-  specversion?: Specversion9;
-  id?: Id13;
-  time?: Time9;
-  subject?: Subject9;
-  datacontenttype?: Datacontenttype9;
-  dataschema?: Dataschema9;
-  "avp.correlation_id"?: AvpCorrelationId9;
-  type?: Type9;
-  source?: Source9;
   data: SubagentInvokedData;
 }
 /**
@@ -1018,11 +977,11 @@ export interface SubagentInvokedEvent {
  * is the same process as the subagent's loop).
  */
 export interface SubagentInvokedData {
-  trace_id: TraceId9;
-  span_id: SpanId9;
-  parent_span_id: ParentSpanId9;
-  "avp.meta"?: AvpMeta9;
-  "avp.step": AvpStep5;
+  trace_id: TraceId8;
+  span_id: SpanId8;
+  parent_span_id: ParentSpanId8;
+  "avp.meta"?: AvpMeta8;
+  "avp.step": AvpStep4;
   "gen_ai.agent.name": GenAiAgentName;
   "gen_ai.agent.description"?: GenAiAgentDescription;
   "gen_ai.operation.name"?: GenAiOperationName1;
@@ -1035,15 +994,15 @@ export interface AvpSubagentInput {
   [k: string]: unknown;
 }
 export interface SubagentReturnedEvent {
-  specversion?: Specversion10;
-  id?: Id14;
-  time?: Time10;
-  subject?: Subject10;
-  datacontenttype?: Datacontenttype10;
-  dataschema?: Dataschema10;
-  "avp.correlation_id"?: AvpCorrelationId10;
-  type?: Type10;
-  source?: Source10;
+  specversion?: Specversion9;
+  id?: Id13;
+  time?: Time9;
+  subject?: Subject9;
+  datacontenttype?: Datacontenttype9;
+  dataschema?: Dataschema9;
+  "avp.correlation_id"?: AvpCorrelationId9;
+  type?: Type9;
+  source?: Source9;
   data: SubagentReturnedData;
 }
 /**
@@ -1061,11 +1020,11 @@ export interface SubagentReturnedEvent {
  * MUST also omit it; the supervisor reads the child's trajectory.
  */
 export interface SubagentReturnedData {
-  trace_id: TraceId10;
-  span_id: SpanId10;
-  parent_span_id: ParentSpanId10;
-  "avp.meta"?: AvpMeta10;
-  "avp.step": AvpStep6;
+  trace_id: TraceId9;
+  span_id: SpanId9;
+  parent_span_id: ParentSpanId9;
+  "avp.meta"?: AvpMeta9;
+  "avp.step": AvpStep5;
   "gen_ai.agent.name": GenAiAgentName1;
   "avp.subagent.invocation_id": AvpSubagentInvocationId1;
   "avp.duration_ms": AvpDurationMs2;
@@ -1097,6 +1056,36 @@ export interface SubagentUsage {
   [k: string]: unknown;
 }
 export interface SubagentFailedEvent {
+  specversion?: Specversion10;
+  id?: Id14;
+  time?: Time10;
+  subject?: Subject10;
+  datacontenttype?: Datacontenttype10;
+  dataschema?: Dataschema10;
+  "avp.correlation_id"?: AvpCorrelationId10;
+  type?: Type10;
+  source?: Source10;
+  data: SubagentFailedData;
+}
+/**
+ * Subagent invocation errored. The parent treats the error as a
+ * tool-call failure: the model receives an `Error: ...` string in place
+ * of the result and may retry or proceed.
+ */
+export interface SubagentFailedData {
+  trace_id: TraceId10;
+  span_id: SpanId10;
+  parent_span_id: ParentSpanId10;
+  "avp.meta"?: AvpMeta10;
+  "avp.step": AvpStep6;
+  "gen_ai.agent.name": GenAiAgentName2;
+  "avp.subagent.invocation_id": AvpSubagentInvocationId2;
+  "avp.duration_ms": AvpDurationMs3;
+  "avp.subagent.error": AvpSubagentError;
+  "avp.subagent.error.code"?: AvpSubagentErrorCode;
+  [k: string]: unknown;
+}
+export interface TextEmittedEvent {
   specversion?: Specversion11;
   id?: Id15;
   time?: Time11;
@@ -1106,27 +1095,18 @@ export interface SubagentFailedEvent {
   "avp.correlation_id"?: AvpCorrelationId11;
   type?: Type11;
   source?: Source11;
-  data: SubagentFailedData;
+  data: TextEmittedData;
 }
-/**
- * Subagent invocation errored. The parent treats the error as a
- * tool-call failure: the model receives an `Error: ...` string in place
- * of the result and may retry or proceed.
- */
-export interface SubagentFailedData {
+export interface TextEmittedData {
   trace_id: TraceId11;
   span_id: SpanId11;
   parent_span_id: ParentSpanId11;
   "avp.meta"?: AvpMeta11;
   "avp.step": AvpStep7;
-  "gen_ai.agent.name": GenAiAgentName2;
-  "avp.subagent.invocation_id": AvpSubagentInvocationId2;
-  "avp.duration_ms": AvpDurationMs3;
-  "avp.subagent.error": AvpSubagentError;
-  "avp.subagent.error.code"?: AvpSubagentErrorCode;
+  "avp.text": AvpText;
   [k: string]: unknown;
 }
-export interface TextEmittedEvent {
+export interface ReasoningEmittedEvent {
   specversion?: Specversion12;
   id?: Id16;
   time?: Time12;
@@ -1136,27 +1116,6 @@ export interface TextEmittedEvent {
   "avp.correlation_id"?: AvpCorrelationId12;
   type?: Type12;
   source?: Source12;
-  data: TextEmittedData;
-}
-export interface TextEmittedData {
-  trace_id: TraceId12;
-  span_id: SpanId12;
-  parent_span_id: ParentSpanId12;
-  "avp.meta"?: AvpMeta12;
-  "avp.step": AvpStep8;
-  "avp.text": AvpText;
-  [k: string]: unknown;
-}
-export interface ReasoningEmittedEvent {
-  specversion?: Specversion13;
-  id?: Id17;
-  time?: Time13;
-  subject?: Subject13;
-  datacontenttype?: Datacontenttype13;
-  dataschema?: Dataschema13;
-  "avp.correlation_id"?: AvpCorrelationId13;
-  type?: Type13;
-  source?: Source13;
   data: ReasoningEmittedData;
 }
 /**
@@ -1176,26 +1135,26 @@ export interface ReasoningEmittedEvent {
  * occurrence so audit consumers can count thinking turns.
  */
 export interface ReasoningEmittedData {
-  trace_id: TraceId13;
-  span_id: SpanId13;
-  parent_span_id: ParentSpanId13;
-  "avp.meta"?: AvpMeta13;
-  "avp.step": AvpStep9;
+  trace_id: TraceId12;
+  span_id: SpanId12;
+  parent_span_id: ParentSpanId12;
+  "avp.meta"?: AvpMeta12;
+  "avp.step": AvpStep8;
   "avp.reasoning.text": AvpReasoningText;
   "avp.reasoning.signature"?: AvpReasoningSignature;
   "avp.reasoning.redacted"?: AvpReasoningRedacted;
   [k: string]: unknown;
 }
 export interface RefusalRecordedEvent {
-  specversion?: Specversion14;
-  id?: Id18;
-  time?: Time14;
-  subject?: Subject14;
-  datacontenttype?: Datacontenttype14;
-  dataschema?: Dataschema14;
-  "avp.correlation_id"?: AvpCorrelationId14;
-  type?: Type14;
-  source?: Source14;
+  specversion?: Specversion13;
+  id?: Id17;
+  time?: Time13;
+  subject?: Subject13;
+  datacontenttype?: Datacontenttype13;
+  dataschema?: Dataschema13;
+  "avp.correlation_id"?: AvpCorrelationId13;
+  type?: Type13;
+  source?: Source13;
   data: RefusalRecordedData;
 }
 /**
@@ -1225,11 +1184,11 @@ export interface RefusalRecordedEvent {
  * supervisor may choose to reset history and retry.
  */
 export interface RefusalRecordedData {
-  trace_id: TraceId14;
-  span_id: SpanId14;
-  parent_span_id: ParentSpanId14;
-  "avp.meta"?: AvpMeta14;
-  "avp.step": AvpStep10;
+  trace_id: TraceId13;
+  span_id: SpanId13;
+  parent_span_id: ParentSpanId13;
+  "avp.meta"?: AvpMeta13;
+  "avp.step": AvpStep9;
   "avp.refusal.reason": AvpRefusalReason;
   "avp.refusal.message"?: AvpRefusalMessage;
   "avp.refusal.category"?: AvpRefusalCategory;
@@ -1237,6 +1196,27 @@ export interface RefusalRecordedData {
   [k: string]: unknown;
 }
 export interface ErrorOccurredEvent {
+  specversion?: Specversion14;
+  id?: Id18;
+  time?: Time14;
+  subject?: Subject14;
+  datacontenttype?: Datacontenttype14;
+  dataschema?: Dataschema14;
+  "avp.correlation_id"?: AvpCorrelationId14;
+  type?: Type14;
+  source?: Source14;
+  data: ErrorOccurredData;
+}
+export interface ErrorOccurredData {
+  trace_id: TraceId14;
+  span_id: SpanId14;
+  parent_span_id: ParentSpanId14;
+  "avp.meta"?: AvpMeta14;
+  "avp.error.code": ErrorCode;
+  "avp.error.message": AvpErrorMessage;
+  [k: string]: unknown;
+}
+export interface McpServerConnectedEvent {
   specversion?: Specversion15;
   id?: Id19;
   time?: Time15;
@@ -1246,34 +1226,13 @@ export interface ErrorOccurredEvent {
   "avp.correlation_id"?: AvpCorrelationId15;
   type?: Type15;
   source?: Source15;
-  data: ErrorOccurredData;
+  data: McpServerConnectedData;
 }
-export interface ErrorOccurredData {
+export interface McpServerConnectedData {
   trace_id: TraceId15;
   span_id: SpanId15;
   parent_span_id: ParentSpanId15;
   "avp.meta"?: AvpMeta15;
-  "avp.error.code": ErrorCode;
-  "avp.error.message": AvpErrorMessage;
-  [k: string]: unknown;
-}
-export interface McpServerConnectedEvent {
-  specversion?: Specversion16;
-  id?: Id20;
-  time?: Time16;
-  subject?: Subject16;
-  datacontenttype?: Datacontenttype16;
-  dataschema?: Dataschema16;
-  "avp.correlation_id"?: AvpCorrelationId16;
-  type?: Type16;
-  source?: Source16;
-  data: McpServerConnectedData;
-}
-export interface McpServerConnectedData {
-  trace_id: TraceId16;
-  span_id: SpanId16;
-  parent_span_id: ParentSpanId16;
-  "avp.meta"?: AvpMeta16;
   "avp.mcp.server_id": AvpMcpServerId;
   "avp.mcp.protocol_version": AvpMcpProtocolVersion;
   "avp.mcp.tool_count": AvpMcpToolCount;
@@ -1302,6 +1261,28 @@ export interface ResourceDecl {
   [k: string]: unknown;
 }
 export interface McpServerDisconnectedEvent {
+  specversion?: Specversion16;
+  id?: Id20;
+  time?: Time16;
+  subject?: Subject16;
+  datacontenttype?: Datacontenttype16;
+  dataschema?: Dataschema16;
+  "avp.correlation_id"?: AvpCorrelationId16;
+  type?: Type16;
+  source?: Source16;
+  data: McpServerDisconnectedData;
+}
+export interface McpServerDisconnectedData {
+  trace_id: TraceId16;
+  span_id: SpanId16;
+  parent_span_id: ParentSpanId16;
+  "avp.meta"?: AvpMeta16;
+  "avp.mcp.server_id": AvpMcpServerId1;
+  "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
+  "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;
+  [k: string]: unknown;
+}
+export interface ManagedRefResolvedEvent {
   specversion?: Specversion17;
   id?: Id21;
   time?: Time17;
@@ -1311,28 +1292,6 @@ export interface McpServerDisconnectedEvent {
   "avp.correlation_id"?: AvpCorrelationId17;
   type?: Type17;
   source?: Source17;
-  data: McpServerDisconnectedData;
-}
-export interface McpServerDisconnectedData {
-  trace_id: TraceId17;
-  span_id: SpanId17;
-  parent_span_id: ParentSpanId17;
-  "avp.meta"?: AvpMeta17;
-  "avp.mcp.server_id": AvpMcpServerId1;
-  "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
-  "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;
-  [k: string]: unknown;
-}
-export interface ManagedRefResolvedEvent {
-  specversion?: Specversion18;
-  id?: Id22;
-  time?: Time18;
-  subject?: Subject18;
-  datacontenttype?: Datacontenttype18;
-  dataschema?: Dataschema18;
-  "avp.correlation_id"?: AvpCorrelationId18;
-  type?: Type18;
-  source?: Source18;
   data: ManagedRefResolvedData;
 }
 /**
@@ -1348,25 +1307,25 @@ export interface ManagedRefResolvedEvent {
  * event records only that the round-trip happened.
  */
 export interface ManagedRefResolvedData {
-  trace_id: TraceId18;
-  span_id: SpanId18;
-  parent_span_id: ParentSpanId18;
-  "avp.meta"?: AvpMeta18;
+  trace_id: TraceId17;
+  span_id: SpanId17;
+  parent_span_id: ParentSpanId17;
+  "avp.meta"?: AvpMeta17;
   "avp.managed.kind": AvpManagedKind;
   "avp.managed.id": AvpManagedId;
   "avp.duration_ms": AvpDurationMs4;
   [k: string]: unknown;
 }
 export interface ManagedRefResolveFailedEvent {
-  specversion?: Specversion19;
-  id?: Id23;
-  time?: Time19;
-  subject?: Subject19;
-  datacontenttype?: Datacontenttype19;
-  dataschema?: Dataschema19;
-  "avp.correlation_id"?: AvpCorrelationId19;
-  type?: Type19;
-  source?: Source19;
+  specversion?: Specversion18;
+  id?: Id22;
+  time?: Time18;
+  subject?: Subject18;
+  datacontenttype?: Datacontenttype18;
+  dataschema?: Dataschema18;
+  "avp.correlation_id"?: AvpCorrelationId18;
+  type?: Type18;
+  source?: Source18;
   data: ManagedRefResolveFailedData;
 }
 /**
@@ -1376,10 +1335,10 @@ export interface ManagedRefResolveFailedEvent {
  * resolution is fail-fast (see `spec/v0.1/resolver.md` §5).
  */
 export interface ManagedRefResolveFailedData {
-  trace_id: TraceId19;
-  span_id: SpanId19;
-  parent_span_id: ParentSpanId19;
-  "avp.meta"?: AvpMeta19;
+  trace_id: TraceId18;
+  span_id: SpanId18;
+  parent_span_id: ParentSpanId18;
+  "avp.meta"?: AvpMeta18;
   "avp.managed.kind": AvpManagedKind1;
   "avp.managed.id": AvpManagedId1;
   "avp.resolve.error": AvpResolveError;

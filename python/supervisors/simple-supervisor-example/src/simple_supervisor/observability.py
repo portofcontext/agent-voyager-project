@@ -3,8 +3,8 @@
 `spec/v0.1/trajectory.md` §1 splits trajectory events into two semantically
 distinct kinds in v0.1:
 
-  1. What the agent did    — model_turn_*, tool_invoked/returned/failed, text_emitted
-  2. What the run cost     — cost_recorded, model_turn_ended.usage
+  1. What the agent did    — assistant_message, tool_invoked/returned/failed, text_emitted
+  2. What the run cost     — cost_recorded, assistant_message.usage
 
 A real supervisor framework will surface these on separate UI tracks. This
 module ships a `Summary` dataclass that holds them split, plus a renderer
@@ -20,9 +20,9 @@ from pydantic import BaseModel
 
 from avp.trajectory import (
     AgentStoppedEvent,
+    AssistantMessageEvent,
     CostRecordedEvent,
     ErrorOccurredEvent,
-    ModelTurnEndedEvent,
     ToolFailedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
@@ -67,7 +67,7 @@ def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
         if isinstance(ev, dict):
             continue  # custom event passthrough; ignored here
 
-        if isinstance(ev, ModelTurnEndedEvent):
+        if isinstance(ev, AssistantMessageEvent):
             s.total_turns += 1
         elif isinstance(ev, ToolInvokedEvent):
             tool = ev.data.gen_ai_tool_name

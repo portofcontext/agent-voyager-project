@@ -1,7 +1,7 @@
 {
   "id": "reasoning-emitted-from-thinking-blocks",
   "title": "Reasoning blocks in a turn emit avp.reasoning_emitted with text + signature, ordered before text_emitted",
-  "description": "When a model turn contains reasoning/thinking blocks (Anthropic extended thinking, OpenAI o-series reasoning, etc.), the agent MUST emit one avp.reasoning_emitted event per block carrying avp.reasoning.text and (if the provider gives one) avp.reasoning.signature. The events MUST come AFTER avp.model_turn_ended and BEFORE avp.text_emitted \u2014 the wire reconstructs as 'thought, then spoke'. Distinct from text_emitted so consumers can collapse / redact chain-of-thought from displays without losing it from the audit log.",
+  "description": "When a model turn contains reasoning/thinking blocks (Anthropic extended thinking, OpenAI o-series reasoning, etc.), the agent MUST emit one avp.reasoning_emitted event per block carrying avp.reasoning.text and (if the provider gives one) avp.reasoning.signature. The events MUST come AFTER avp.assistant_message and BEFORE avp.text_emitted \u2014 the wire reconstructs as 'thought, then spoke'. Distinct from text_emitted so consumers can collapse / redact chain-of-thought from displays without losing it from the audit log.",
   "spec_refs": [
     "spec/v0.1/trajectory.md#7-event-reference",
     "spec/v0.1/avp.schema.json#/$defs/ReasoningEmittedEvent"
@@ -36,7 +36,7 @@
     "events": [
       {
         "match": {
-          "type": "avp.model_turn_ended"
+          "type": "avp.assistant_message"
         }
       },
       {

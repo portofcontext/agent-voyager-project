@@ -604,7 +604,7 @@
     },
     "AgentStoppedData": {
       "additionalProperties": true,
-      "description": "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals.",
+      "description": "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `assistant_message`; consumers reduce\nthe stream to compute totals.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -751,6 +751,292 @@
         "data"
       ],
       "title": "AgentStoppedEvent",
+      "type": "object"
+    },
+    "AssistantMessageData": {
+      "additionalProperties": true,
+      "properties": {
+        "trace_id": {
+          "maxLength": 32,
+          "minLength": 32,
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "maxLength": 16,
+          "minLength": 16,
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Parent Span Id",
+          "type": "string"
+        },
+        "avp.meta": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Meta"
+        },
+        "avp.step": {
+          "minimum": 0,
+          "title": "Avp.Step",
+          "type": "integer"
+        },
+        "avp.duration_ms": {
+          "minimum": 0,
+          "title": "Avp.Duration Ms",
+          "type": "integer"
+        },
+        "gen_ai.provider.name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Provider.Name"
+        },
+        "gen_ai.request.model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Request.Model"
+        },
+        "gen_ai.response.model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Model"
+        },
+        "gen_ai.response.finish_reasons": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Finish Reasons"
+        },
+        "gen_ai.response.time_to_first_chunk": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Response.Time To First Chunk"
+        },
+        "gen_ai.usage.input_tokens": {
+          "minimum": 0,
+          "title": "Gen Ai.Usage.Input Tokens",
+          "type": "integer"
+        },
+        "gen_ai.usage.output_tokens": {
+          "minimum": 0,
+          "title": "Gen Ai.Usage.Output Tokens",
+          "type": "integer"
+        },
+        "gen_ai.usage.cache_read.input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Cache Read.Input Tokens"
+        },
+        "gen_ai.usage.cache_creation.input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Cache Creation.Input Tokens"
+        },
+        "gen_ai.usage.reasoning.output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gen Ai.Usage.Reasoning.Output Tokens"
+        },
+        "avp.cost_usd": {
+          "minimum": 0,
+          "title": "Avp.Cost Usd",
+          "type": "number"
+        },
+        "avp.cost.source": {
+          "anyOf": [
+            {
+              "enum": [
+                "computed",
+                "reported",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Cost.Source"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "avp.step",
+        "avp.duration_ms",
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "avp.cost_usd"
+      ],
+      "title": "AssistantMessageData",
+      "type": "object"
+    },
+    "AssistantMessageEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "specversion": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Specversion",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "title": "Time",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "datacontenttype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "application/json",
+          "title": "Datacontenttype"
+        },
+        "dataschema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataschema"
+        },
+        "avp.correlation_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Correlation Id"
+        },
+        "type": {
+          "const": "avp.assistant_message",
+          "default": "avp.assistant_message",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "const": "avp://agent",
+          "default": "avp://agent",
+          "title": "Source",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AssistantMessageData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AssistantMessageEvent",
       "type": "object"
     },
     "Commission": {
@@ -1919,459 +2205,6 @@
         "ref"
       ],
       "title": "McpServerRef",
-      "type": "object"
-    },
-    "ModelTurnEndedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.step": {
-          "minimum": 0,
-          "title": "Avp.Step",
-          "type": "integer"
-        },
-        "avp.duration_ms": {
-          "minimum": 0,
-          "title": "Avp.Duration Ms",
-          "type": "integer"
-        },
-        "gen_ai.provider.name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Provider.Name"
-        },
-        "gen_ai.request.model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Request.Model"
-        },
-        "gen_ai.response.model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Response.Model"
-        },
-        "gen_ai.response.finish_reasons": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Response.Finish Reasons"
-        },
-        "gen_ai.response.time_to_first_chunk": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Response.Time To First Chunk"
-        },
-        "gen_ai.usage.input_tokens": {
-          "minimum": 0,
-          "title": "Gen Ai.Usage.Input Tokens",
-          "type": "integer"
-        },
-        "gen_ai.usage.output_tokens": {
-          "minimum": 0,
-          "title": "Gen Ai.Usage.Output Tokens",
-          "type": "integer"
-        },
-        "gen_ai.usage.cache_read.input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Cache Read.Input Tokens"
-        },
-        "gen_ai.usage.cache_creation.input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Cache Creation.Input Tokens"
-        },
-        "gen_ai.usage.reasoning.output_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Reasoning.Output Tokens"
-        },
-        "avp.cost_usd": {
-          "minimum": 0,
-          "title": "Avp.Cost Usd",
-          "type": "number"
-        },
-        "avp.cost.source": {
-          "anyOf": [
-            {
-              "enum": [
-                "computed",
-                "reported",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Cost.Source"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.step",
-        "avp.duration_ms",
-        "gen_ai.usage.input_tokens",
-        "gen_ai.usage.output_tokens",
-        "avp.cost_usd"
-      ],
-      "title": "ModelTurnEndedData",
-      "type": "object"
-    },
-    "ModelTurnEndedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.model_turn_ended",
-          "default": "avp.model_turn_ended",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ModelTurnEndedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ModelTurnEndedEvent",
-      "type": "object"
-    },
-    "ModelTurnStartedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.step": {
-          "minimum": 0,
-          "title": "Avp.Step",
-          "type": "integer"
-        },
-        "avp.context_messages": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Context Messages"
-        },
-        "gen_ai.request.stream": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Request.Stream"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.step"
-      ],
-      "title": "ModelTurnStartedData",
-      "type": "object"
-    },
-    "ModelTurnStartedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.model_turn_started",
-          "default": "avp.model_turn_started",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ModelTurnStartedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ModelTurnStartedEvent",
       "type": "object"
     },
     "ReasoningEmittedData": {
@@ -4469,13 +4302,12 @@
       "avp.agent_described": "#/$defs/AgentDescribedEvent",
       "avp.agent_started": "#/$defs/AgentStartedEvent",
       "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
+      "avp.assistant_message": "#/$defs/AssistantMessageEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
       "avp.managed_ref_resolve_failed": "#/$defs/ManagedRefResolveFailedEvent",
       "avp.managed_ref_resolved": "#/$defs/ManagedRefResolvedEvent",
       "avp.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
       "avp.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
-      "avp.model_turn_ended": "#/$defs/ModelTurnEndedEvent",
-      "avp.model_turn_started": "#/$defs/ModelTurnStartedEvent",
       "avp.reasoning_emitted": "#/$defs/ReasoningEmittedEvent",
       "avp.refusal_recorded": "#/$defs/RefusalRecordedEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
@@ -4503,10 +4335,7 @@
       "$ref": "#/$defs/AgentStoppedEvent"
     },
     {
-      "$ref": "#/$defs/ModelTurnStartedEvent"
-    },
-    {
-      "$ref": "#/$defs/ModelTurnEndedEvent"
+      "$ref": "#/$defs/AssistantMessageEvent"
     },
     {
       "$ref": "#/$defs/ToolInvokedEvent"

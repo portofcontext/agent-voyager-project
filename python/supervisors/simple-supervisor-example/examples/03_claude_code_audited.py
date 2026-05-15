@@ -60,7 +60,7 @@ def main() -> int:
 
     for ev in events:
         type_name = type(ev).__name__
-        if type_name == "ModelTurnEndedEvent":
+        if type_name == "AssistantMessageEvent":
             print(
                 f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f}  "
                 f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"

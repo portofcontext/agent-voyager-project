@@ -17,7 +17,7 @@ conformance/v0.1/
     ├── enabled-builtins/        (Commission.enabled_builtin_* allowlist gating)
     ├── mcp/                     (mcp_server_connected lifecycle, dispatch_target tagging)
     ├── prelude/                 (run_requested → agent_described → agent_started ordering)
-    ├── reasoning/               (avp.reasoning.* attributes on model_turn_ended)
+    ├── reasoning/               (avp.reasoning.* attributes on assistant_message)
     ├── refusal/                 (refusal_recorded provenance)
     ├── resolver/                (resolver_not_configured / commission_collision gates)
     ├── skills/                  (managed_ref_resolved for skill refs; agent_started.data.skills[] registration)

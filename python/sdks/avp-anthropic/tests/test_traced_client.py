@@ -37,8 +37,7 @@ from avp.enums import StopReason
 from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    ModelTurnEndedEvent,
-    ModelTurnStartedEvent,
+    AssistantMessageEvent,
     SubagentInvokedEvent,
     SubagentReturnedEvent,
     TextEmittedEvent,
@@ -138,15 +137,14 @@ def test_enter_exit_emit_full_lifecycle_around_a_single_create_call() -> None:
     assert stopped.data.avp_reason == StopReason.converged
 
 
-def test_create_call_emits_one_turn_pair() -> None:
+def test_create_call_emits_one_assistant_message() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="hello", input_tokens=40, output_tokens=8)])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
 
-    assert len(_by_type(out, ModelTurnStartedEvent)) == 1
-    assert len(_by_type(out, ModelTurnEndedEvent)) == 1
+    assert len(_by_type(out, AssistantMessageEvent)) == 1
     text_events = _by_type(out, TextEmittedEvent)
     assert len(text_events) == 1 and text_events[0].data.avp_text == "hello"
 
@@ -180,13 +178,13 @@ def test_token_extraction_matches_anthropic_model_driver_convention() -> None:
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
-    ended = _by_type(out, ModelTurnEndedEvent)[0]
+    msg = _by_type(out, AssistantMessageEvent)[0]
     # 100 fresh + 30 cache_read + 10 cache_write = 140
-    assert ended.data.gen_ai_usage_input_tokens == 140
-    assert ended.data.gen_ai_usage_output_tokens == 20
-    assert ended.data.gen_ai_usage_cache_read_input_tokens == 30
-    assert ended.data.gen_ai_usage_cache_creation_input_tokens == 10
-    assert ended.data.avp_cost_usd > 0
+    assert msg.data.gen_ai_usage_input_tokens == 140
+    assert msg.data.gen_ai_usage_output_tokens == 20
+    assert msg.data.gen_ai_usage_cache_read_input_tokens == 30
+    assert msg.data.gen_ai_usage_cache_creation_input_tokens == 10
+    assert msg.data.avp_cost_usd > 0
 
 
 def test_cost_zero_for_unknown_model() -> None:
@@ -201,8 +199,8 @@ def test_cost_zero_for_unknown_model() -> None:
         with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
             client.messages.create(model="some-unknown-model", messages=[])
             client.converged()
-    ended = _by_type(out, ModelTurnEndedEvent)[0]
-    assert ended.data.avp_cost_usd == 0.0
+    msg = _by_type(out, AssistantMessageEvent)[0]
+    assert msg.data.avp_cost_usd == 0.0
 
 
 def test_wrapper_records_finish_reason_from_stop_reason() -> None:
@@ -211,8 +209,8 @@ def test_wrapper_records_finish_reason_from_stop_reason() -> None:
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
-    ended = _by_type(out, ModelTurnEndedEvent)[0]
-    assert ended.data.gen_ai_response_finish_reasons == ["tool_use"]
+    msg = _by_type(out, AssistantMessageEvent)[0]
+    assert msg.data.gen_ai_response_finish_reasons == ["tool_use"]
 
 
 def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
@@ -227,13 +225,10 @@ def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
-    starts = _by_type(out, ModelTurnStartedEvent)
-    ends = _by_type(out, ModelTurnEndedEvent)
-    assert len(starts) == 2 and len(ends) == 2
-    assert starts[0].data.span_id != starts[1].data.span_id
-    assert starts[0].data.span_id == ends[0].data.span_id
-    assert starts[1].data.span_id == ends[1].data.span_id
-    assert starts[0].data.avp_step == 1 and starts[1].data.avp_step == 2
+    msgs = _by_type(out, AssistantMessageEvent)
+    assert len(msgs) == 2
+    assert msgs[0].data.span_id != msgs[1].data.span_id
+    assert msgs[0].data.avp_step == 1 and msgs[1].data.avp_step == 2
 
 
 # ── Tool / subagent context managers (delegate to the internal tracer) ──────
@@ -352,7 +347,7 @@ def test_beta_messages_create_is_instrumented() -> None:
         resp = client.beta.messages.create(model="claude-sonnet-4-6", messages=[])
         assert resp.content[0].text == "from beta"
         client.converged()
-    assert len(_by_type(out, ModelTurnEndedEvent)) == 1
+    assert len(_by_type(out, AssistantMessageEvent)) == 1
     assert _by_type(out, TextEmittedEvent)[0].data.avp_text == "from beta"
 
 
@@ -373,8 +368,7 @@ def test_wrap_anthropic_returns_proxy_that_emits_to_active_tracer() -> None:
         resp = client.messages.create(model="claude-sonnet-4-6", messages=[])
         assert resp.content[0].text == "hello"
     types = _types(out)
-    assert "ModelTurnStartedEvent" in types
-    assert "ModelTurnEndedEvent" in types
+    assert "AssistantMessageEvent" in types
 
 
 def test_wrap_anthropic_is_idempotent() -> None:
@@ -515,5 +509,5 @@ def test_wrap_anthropic_handles_async_client() -> None:
             assert resp.content[0].text == "async hello"
 
     asyncio.run(_run())
-    assert _by_type(out, ModelTurnEndedEvent)
+    assert _by_type(out, AssistantMessageEvent)
     assert _by_type(out, TextEmittedEvent)[0].data.avp_text == "async hello"

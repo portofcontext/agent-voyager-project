@@ -25,8 +25,9 @@ from avp.enums import StopReason
 from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
+    AssistantMessageEvent,
+    AssistantMessageData,
     CostRecordedEvent,
-    ModelTurnEndedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
@@ -67,8 +68,8 @@ def test_summarize_classifies_fact_classes() -> None:
         ZERO_SPAN_ID,
         AgentStartedData,
         AgentStoppedData,
+        AssistantMessageData,
         CostRecordedData,
-        ModelTurnEndedData,
         ToolInvokedData,
         ToolReturnedData,
         new_span_id,
@@ -92,9 +93,9 @@ def test_summarize_classifies_fact_classes() -> None:
                 **{"gen_ai.request.model": "m"},
             ),
         ),
-        ModelTurnEndedEvent(
+        AssistantMessageEvent(
             subject="r-summary",
-            data=ModelTurnEndedData(
+            data=AssistantMessageData(
                 **span(turn_span, agent_span),
                 avp_step=1,
                 avp_duration_ms=10,
@@ -234,7 +235,7 @@ def test_run_subprocess_drives_a_real_agent_end_to_end(tmp_path) -> None:
 
     types = [getattr(ev, "type", None) for ev in events if hasattr(ev, "type")]
     assert "avp.agent_started" in types
-    assert "avp.model_turn_started" in types
+    assert "avp.assistant_message" in types
     assert "avp.tool_invoked" in types
     assert "avp.tool_returned" in types
     assert "avp.agent_stopped" in types

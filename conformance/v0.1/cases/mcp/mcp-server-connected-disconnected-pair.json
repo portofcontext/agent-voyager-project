@@ -103,7 +103,7 @@
       },
       {
         "match": {
-          "type": "avp.model_turn_started"
+          "type": "avp.assistant_message"
         }
       },
       {

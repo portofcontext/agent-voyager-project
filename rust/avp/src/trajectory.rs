@@ -1234,14 +1234,14 @@ impl<'de> ::serde::Deserialize<'de> for AgentStartedEventSubject {
             })
     }
 }
-#[doc = "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\nthe stream to compute totals."]
+#[doc = "Payload of avp.agent_stopped events. Terminator of the trajectory.\n\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\npayload. The agent does NOT publish cumulative totals on this event.\nPer-turn deltas live on each `assistant_message`; consumers reduce\nthe stream to compute totals."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AgentStoppedData\","]
-#[doc = "  \"description\": \"Payload of avp.agent_stopped events. Terminator of the trajectory.\\n\\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\\npayload. The agent does NOT publish cumulative totals on this event.\\nPer-turn deltas live on each `model_turn_ended`; consumers reduce\\nthe stream to compute totals.\","]
+#[doc = "  \"description\": \"Payload of avp.agent_stopped events. Terminator of the trajectory.\\n\\nCarries `avp.reason` (why the run ended) and an optional `avp.output`\\npayload. The agent does NOT publish cumulative totals on this event.\\nPer-turn deltas live on each `assistant_message`; consumers reduce\\nthe stream to compute totals.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.reason\","]
@@ -1636,6 +1636,611 @@ impl ::std::convert::TryFrom<::std::string::String> for AgentVersion {
     }
 }
 impl<'de> ::serde::Deserialize<'de> for AgentVersion {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`AssistantMessageData`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"AssistantMessageData\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"avp.cost_usd\","]
+#[doc = "    \"avp.duration_ms\","]
+#[doc = "    \"avp.step\","]
+#[doc = "    \"gen_ai.usage.input_tokens\","]
+#[doc = "    \"gen_ai.usage.output_tokens\","]
+#[doc = "    \"parent_span_id\","]
+#[doc = "    \"span_id\","]
+#[doc = "    \"trace_id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.cost.source\": {"]
+#[doc = "      \"title\": \"Avp.Cost.Source\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"enum\": ["]
+#[doc = "            \"computed\","]
+#[doc = "            \"reported\","]
+#[doc = "            \"unknown\""]
+#[doc = "          ]"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"avp.cost_usd\": {"]
+#[doc = "      \"title\": \"Avp.Cost Usd\","]
+#[doc = "      \"type\": \"number\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"avp.duration_ms\": {"]
+#[doc = "      \"title\": \"Avp.Duration Ms\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"avp.meta\": {"]
+#[doc = "      \"title\": \"Avp.Meta\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"avp.step\": {"]
+#[doc = "      \"title\": \"Avp.Step\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.provider.name\": {"]
+#[doc = "      \"title\": \"Gen Ai.Provider.Name\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.request.model\": {"]
+#[doc = "      \"title\": \"Gen Ai.Request.Model\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.response.finish_reasons\": {"]
+#[doc = "      \"title\": \"Gen Ai.Response.Finish Reasons\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.response.model\": {"]
+#[doc = "      \"title\": \"Gen Ai.Response.Model\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.response.time_to_first_chunk\": {"]
+#[doc = "      \"title\": \"Gen Ai.Response.Time To First Chunk\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"number\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.usage.cache_creation.input_tokens\": {"]
+#[doc = "      \"title\": \"Gen Ai.Usage.Cache Creation.Input Tokens\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.usage.cache_read.input_tokens\": {"]
+#[doc = "      \"title\": \"Gen Ai.Usage.Cache Read.Input Tokens\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.usage.input_tokens\": {"]
+#[doc = "      \"title\": \"Gen Ai.Usage.Input Tokens\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.usage.output_tokens\": {"]
+#[doc = "      \"title\": \"Gen Ai.Usage.Output Tokens\","]
+#[doc = "      \"type\": \"integer\","]
+#[doc = "      \"minimum\": 0.0"]
+#[doc = "    },"]
+#[doc = "    \"gen_ai.usage.reasoning.output_tokens\": {"]
+#[doc = "      \"title\": \"Gen Ai.Usage.Reasoning.Output Tokens\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"parent_span_id\": {"]
+#[doc = "      \"title\": \"Parent Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"span_id\": {"]
+#[doc = "      \"title\": \"Span Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 16,"]
+#[doc = "      \"minLength\": 16,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
+#[doc = "    },"]
+#[doc = "    \"trace_id\": {"]
+#[doc = "      \"title\": \"Trace Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"maxLength\": 32,"]
+#[doc = "      \"minLength\": 32,"]
+#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct AssistantMessageData {
+    #[serde(
+        rename = "avp.cost.source",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_cost_source: ::std::option::Option<AssistantMessageDataAvpCostSource>,
+    #[serde(rename = "avp.cost_usd")]
+    pub avp_cost_usd: f64,
+    #[serde(rename = "avp.duration_ms")]
+    pub avp_duration_ms: u64,
+    #[serde(
+        rename = "avp.meta",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_meta:
+        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(rename = "avp.step")]
+    pub avp_step: u64,
+    #[serde(
+        rename = "gen_ai.provider.name",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_provider_name: ::std::option::Option<::std::string::String>,
+    #[serde(
+        rename = "gen_ai.request.model",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_request_model: ::std::option::Option<::std::string::String>,
+    #[serde(
+        rename = "gen_ai.response.finish_reasons",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_response_finish_reasons:
+        ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    #[serde(
+        rename = "gen_ai.response.model",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_response_model: ::std::option::Option<::std::string::String>,
+    #[serde(
+        rename = "gen_ai.response.time_to_first_chunk",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_response_time_to_first_chunk: ::std::option::Option<f64>,
+    #[serde(
+        rename = "gen_ai.usage.cache_creation.input_tokens",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_usage_cache_creation_input_tokens: ::std::option::Option<u64>,
+    #[serde(
+        rename = "gen_ai.usage.cache_read.input_tokens",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_usage_cache_read_input_tokens: ::std::option::Option<u64>,
+    #[serde(rename = "gen_ai.usage.input_tokens")]
+    pub gen_ai_usage_input_tokens: u64,
+    #[serde(rename = "gen_ai.usage.output_tokens")]
+    pub gen_ai_usage_output_tokens: u64,
+    #[serde(
+        rename = "gen_ai.usage.reasoning.output_tokens",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub gen_ai_usage_reasoning_output_tokens: ::std::option::Option<u64>,
+    pub parent_span_id: ParentSpanId,
+    pub span_id: SpanId,
+    pub trace_id: TraceId,
+}
+#[doc = "`AssistantMessageDataAvpCostSource`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"computed\","]
+#[doc = "    \"reported\","]
+#[doc = "    \"unknown\""]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum AssistantMessageDataAvpCostSource {
+    #[serde(rename = "computed")]
+    Computed,
+    #[serde(rename = "reported")]
+    Reported,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+impl ::std::fmt::Display for AssistantMessageDataAvpCostSource {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Computed => f.write_str("computed"),
+            Self::Reported => f.write_str("reported"),
+            Self::Unknown => f.write_str("unknown"),
+        }
+    }
+}
+impl ::std::str::FromStr for AssistantMessageDataAvpCostSource {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "computed" => Ok(Self::Computed),
+            "reported" => Ok(Self::Reported),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for AssistantMessageDataAvpCostSource {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AssistantMessageDataAvpCostSource {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AssistantMessageDataAvpCostSource {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+#[doc = "`AssistantMessageEvent`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"AssistantMessageEvent\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"data\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"avp.correlation_id\": {"]
+#[doc = "      \"title\": \"Avp.Correlation Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"data\": {"]
+#[doc = "      \"$ref\": \"#/$defs/AssistantMessageData\""]
+#[doc = "    },"]
+#[doc = "    \"datacontenttype\": {"]
+#[doc = "      \"title\": \"Datacontenttype\","]
+#[doc = "      \"default\": \"application/json\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"dataschema\": {"]
+#[doc = "      \"title\": \"Dataschema\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"default\": \"avp://agent\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp://agent\""]
+#[doc = "    },"]
+#[doc = "    \"specversion\": {"]
+#[doc = "      \"title\": \"Specversion\","]
+#[doc = "      \"default\": \"1.0\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"1.0\""]
+#[doc = "    },"]
+#[doc = "    \"subject\": {"]
+#[doc = "      \"title\": \"Subject\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"minLength\": 1"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"time\": {"]
+#[doc = "      \"title\": \"Time\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"avp.assistant_message\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"avp.assistant_message\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct AssistantMessageEvent {
+    #[serde(
+        rename = "avp.correlation_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_correlation_id: ::std::option::Option<AssistantMessageEventAvpCorrelationId>,
+    pub data: AssistantMessageData,
+    #[serde(default = "defaults::assistant_message_event_datacontenttype")]
+    pub datacontenttype: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub dataschema: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: ::std::option::Option<Id>,
+    #[serde(default = "defaults::assistant_message_event_source")]
+    pub source: ::std::string::String,
+    #[serde(default = "defaults::assistant_message_event_specversion")]
+    pub specversion: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub subject: ::std::option::Option<AssistantMessageEventSubject>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub time: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type", default = "defaults::assistant_message_event_type")]
+    pub type_: ::std::string::String,
+}
+#[doc = "`AssistantMessageEventAvpCorrelationId`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct AssistantMessageEventAvpCorrelationId(::std::string::String);
+impl ::std::ops::Deref for AssistantMessageEventAvpCorrelationId {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<AssistantMessageEventAvpCorrelationId> for ::std::string::String {
+    fn from(value: AssistantMessageEventAvpCorrelationId) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for AssistantMessageEventAvpCorrelationId {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for AssistantMessageEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AssistantMessageEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AssistantMessageEventAvpCorrelationId {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for AssistantMessageEventAvpCorrelationId {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "`AssistantMessageEventSubject`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct AssistantMessageEventSubject(::std::string::String);
+impl ::std::ops::Deref for AssistantMessageEventSubject {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<AssistantMessageEventSubject> for ::std::string::String {
+    fn from(value: AssistantMessageEventSubject) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for AssistantMessageEventSubject {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for AssistantMessageEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for AssistantMessageEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for AssistantMessageEventSubject {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for AssistantMessageEventSubject {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
     where
         D: ::serde::Deserializer<'de>,
@@ -2166,10 +2771,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"$ref\": \"#/$defs/AgentStoppedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ModelTurnStartedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ModelTurnEndedEvent\""]
+#[doc = "      \"$ref\": \"#/$defs/AssistantMessageEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/ToolInvokedEvent\""]
@@ -2219,13 +2821,12 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"avp.agent_described\": \"#/$defs/AgentDescribedEvent\","]
 #[doc = "      \"avp.agent_started\": \"#/$defs/AgentStartedEvent\","]
 #[doc = "      \"avp.agent_stopped\": \"#/$defs/AgentStoppedEvent\","]
+#[doc = "      \"avp.assistant_message\": \"#/$defs/AssistantMessageEvent\","]
 #[doc = "      \"avp.error_occurred\": \"#/$defs/ErrorOccurredEvent\","]
 #[doc = "      \"avp.managed_ref_resolve_failed\": \"#/$defs/ManagedRefResolveFailedEvent\","]
 #[doc = "      \"avp.managed_ref_resolved\": \"#/$defs/ManagedRefResolvedEvent\","]
 #[doc = "      \"avp.mcp_server_connected\": \"#/$defs/McpServerConnectedEvent\","]
 #[doc = "      \"avp.mcp_server_disconnected\": \"#/$defs/McpServerDisconnectedEvent\","]
-#[doc = "      \"avp.model_turn_ended\": \"#/$defs/ModelTurnEndedEvent\","]
-#[doc = "      \"avp.model_turn_started\": \"#/$defs/ModelTurnStartedEvent\","]
 #[doc = "      \"avp.reasoning_emitted\": \"#/$defs/ReasoningEmittedEvent\","]
 #[doc = "      \"avp.refusal_recorded\": \"#/$defs/RefusalRecordedEvent\","]
 #[doc = "      \"avp.run_requested\": \"#/$defs/RunRequestedEvent\","]
@@ -2249,8 +2850,7 @@ pub enum AvpV01TrajectoryEvent {
     AgentDescribedEvent(AgentDescribedEvent),
     AgentStartedEvent(AgentStartedEvent),
     AgentStoppedEvent(AgentStoppedEvent),
-    ModelTurnStartedEvent(ModelTurnStartedEvent),
-    ModelTurnEndedEvent(ModelTurnEndedEvent),
+    AssistantMessageEvent(AssistantMessageEvent),
     ToolInvokedEvent(ToolInvokedEvent),
     ToolReturnedEvent(ToolReturnedEvent),
     ToolFailedEvent(ToolFailedEvent),
@@ -2286,14 +2886,9 @@ impl ::std::convert::From<AgentStoppedEvent> for AvpV01TrajectoryEvent {
         Self::AgentStoppedEvent(value)
     }
 }
-impl ::std::convert::From<ModelTurnStartedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: ModelTurnStartedEvent) -> Self {
-        Self::ModelTurnStartedEvent(value)
-    }
-}
-impl ::std::convert::From<ModelTurnEndedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: ModelTurnEndedEvent) -> Self {
-        Self::ModelTurnEndedEvent(value)
+impl ::std::convert::From<AssistantMessageEvent> for AvpV01TrajectoryEvent {
+    fn from(value: AssistantMessageEvent) -> Self {
+        Self::AssistantMessageEvent(value)
     }
 }
 impl ::std::convert::From<ToolInvokedEvent> for AvpV01TrajectoryEvent {
@@ -4936,976 +5531,6 @@ pub struct McpServerRef {
     pub id: Id,
     #[serde(rename = "ref")]
     pub ref_: JsonValue,
-}
-#[doc = "`ModelTurnEndedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ModelTurnEndedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.cost_usd\","]
-#[doc = "    \"avp.duration_ms\","]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"gen_ai.usage.input_tokens\","]
-#[doc = "    \"gen_ai.usage.output_tokens\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.cost.source\": {"]
-#[doc = "      \"title\": \"Avp.Cost.Source\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"enum\": ["]
-#[doc = "            \"computed\","]
-#[doc = "            \"reported\","]
-#[doc = "            \"unknown\""]
-#[doc = "          ]"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.cost_usd\": {"]
-#[doc = "      \"title\": \"Avp.Cost Usd\","]
-#[doc = "      \"type\": \"number\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.duration_ms\": {"]
-#[doc = "      \"title\": \"Avp.Duration Ms\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.provider.name\": {"]
-#[doc = "      \"title\": \"Gen Ai.Provider.Name\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.request.model\": {"]
-#[doc = "      \"title\": \"Gen Ai.Request.Model\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.response.finish_reasons\": {"]
-#[doc = "      \"title\": \"Gen Ai.Response.Finish Reasons\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.response.model\": {"]
-#[doc = "      \"title\": \"Gen Ai.Response.Model\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.response.time_to_first_chunk\": {"]
-#[doc = "      \"title\": \"Gen Ai.Response.Time To First Chunk\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"number\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.usage.cache_creation.input_tokens\": {"]
-#[doc = "      \"title\": \"Gen Ai.Usage.Cache Creation.Input Tokens\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.usage.cache_read.input_tokens\": {"]
-#[doc = "      \"title\": \"Gen Ai.Usage.Cache Read.Input Tokens\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.usage.input_tokens\": {"]
-#[doc = "      \"title\": \"Gen Ai.Usage.Input Tokens\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.usage.output_tokens\": {"]
-#[doc = "      \"title\": \"Gen Ai.Usage.Output Tokens\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.usage.reasoning.output_tokens\": {"]
-#[doc = "      \"title\": \"Gen Ai.Usage.Reasoning.Output Tokens\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ModelTurnEndedData {
-    #[serde(
-        rename = "avp.cost.source",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_cost_source: ::std::option::Option<ModelTurnEndedDataAvpCostSource>,
-    #[serde(rename = "avp.cost_usd")]
-    pub avp_cost_usd: f64,
-    #[serde(rename = "avp.duration_ms")]
-    pub avp_duration_ms: u64,
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    #[serde(
-        rename = "gen_ai.provider.name",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_provider_name: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "gen_ai.request.model",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_request_model: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "gen_ai.response.finish_reasons",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_response_finish_reasons:
-        ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-    #[serde(
-        rename = "gen_ai.response.model",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_response_model: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "gen_ai.response.time_to_first_chunk",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_response_time_to_first_chunk: ::std::option::Option<f64>,
-    #[serde(
-        rename = "gen_ai.usage.cache_creation.input_tokens",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_usage_cache_creation_input_tokens: ::std::option::Option<u64>,
-    #[serde(
-        rename = "gen_ai.usage.cache_read.input_tokens",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_usage_cache_read_input_tokens: ::std::option::Option<u64>,
-    #[serde(rename = "gen_ai.usage.input_tokens")]
-    pub gen_ai_usage_input_tokens: u64,
-    #[serde(rename = "gen_ai.usage.output_tokens")]
-    pub gen_ai_usage_output_tokens: u64,
-    #[serde(
-        rename = "gen_ai.usage.reasoning.output_tokens",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_usage_reasoning_output_tokens: ::std::option::Option<u64>,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`ModelTurnEndedDataAvpCostSource`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"computed\","]
-#[doc = "    \"reported\","]
-#[doc = "    \"unknown\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum ModelTurnEndedDataAvpCostSource {
-    #[serde(rename = "computed")]
-    Computed,
-    #[serde(rename = "reported")]
-    Reported,
-    #[serde(rename = "unknown")]
-    Unknown,
-}
-impl ::std::fmt::Display for ModelTurnEndedDataAvpCostSource {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Computed => f.write_str("computed"),
-            Self::Reported => f.write_str("reported"),
-            Self::Unknown => f.write_str("unknown"),
-        }
-    }
-}
-impl ::std::str::FromStr for ModelTurnEndedDataAvpCostSource {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "computed" => Ok(Self::Computed),
-            "reported" => Ok(Self::Reported),
-            "unknown" => Ok(Self::Unknown),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ModelTurnEndedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ModelTurnEndedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ModelTurnEndedDataAvpCostSource {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-#[doc = "`ModelTurnEndedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ModelTurnEndedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/ModelTurnEndedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.model_turn_ended\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.model_turn_ended\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct ModelTurnEndedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<ModelTurnEndedEventAvpCorrelationId>,
-    pub data: ModelTurnEndedData,
-    #[serde(default = "defaults::model_turn_ended_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::model_turn_ended_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::model_turn_ended_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<ModelTurnEndedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::model_turn_ended_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`ModelTurnEndedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ModelTurnEndedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for ModelTurnEndedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ModelTurnEndedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: ModelTurnEndedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ModelTurnEndedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ModelTurnEndedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ModelTurnEndedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ModelTurnEndedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ModelTurnEndedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`ModelTurnEndedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ModelTurnEndedEventSubject(::std::string::String);
-impl ::std::ops::Deref for ModelTurnEndedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ModelTurnEndedEventSubject> for ::std::string::String {
-    fn from(value: ModelTurnEndedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ModelTurnEndedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ModelTurnEndedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ModelTurnEndedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ModelTurnEndedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ModelTurnEndedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`ModelTurnStartedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ModelTurnStartedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.context_messages\": {"]
-#[doc = "      \"title\": \"Avp.Context Messages\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\","]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"gen_ai.request.stream\": {"]
-#[doc = "      \"title\": \"Gen Ai.Request.Stream\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"boolean\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ModelTurnStartedData {
-    #[serde(
-        rename = "avp.context_messages",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_context_messages: ::std::option::Option<u64>,
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    #[serde(
-        rename = "gen_ai.request.stream",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub gen_ai_request_stream: ::std::option::Option<bool>,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`ModelTurnStartedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ModelTurnStartedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/ModelTurnStartedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.model_turn_started\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.model_turn_started\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct ModelTurnStartedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<ModelTurnStartedEventAvpCorrelationId>,
-    pub data: ModelTurnStartedData,
-    #[serde(default = "defaults::model_turn_started_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::model_turn_started_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::model_turn_started_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<ModelTurnStartedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::model_turn_started_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`ModelTurnStartedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ModelTurnStartedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for ModelTurnStartedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ModelTurnStartedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: ModelTurnStartedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ModelTurnStartedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ModelTurnStartedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ModelTurnStartedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ModelTurnStartedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ModelTurnStartedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`ModelTurnStartedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ModelTurnStartedEventSubject(::std::string::String);
-impl ::std::ops::Deref for ModelTurnStartedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ModelTurnStartedEventSubject> for ::std::string::String {
-    fn from(value: ModelTurnStartedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ModelTurnStartedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ModelTurnStartedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ModelTurnStartedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ModelTurnStartedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ModelTurnStartedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 #[doc = "`Name`"]
 #[doc = r""]
@@ -10920,6 +10545,19 @@ pub mod defaults {
     pub(super) fn agent_stopped_event_type() -> ::std::string::String {
         "avp.agent_stopped".to_string()
     }
+    pub(super) fn assistant_message_event_datacontenttype(
+    ) -> ::std::option::Option<::std::string::String> {
+        ::std::option::Option::Some("application/json".to_string())
+    }
+    pub(super) fn assistant_message_event_source() -> ::std::string::String {
+        "avp://agent".to_string()
+    }
+    pub(super) fn assistant_message_event_specversion() -> ::std::string::String {
+        "1.0".to_string()
+    }
+    pub(super) fn assistant_message_event_type() -> ::std::string::String {
+        "avp.assistant_message".to_string()
+    }
     pub(super) fn error_occurred_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
         ::std::option::Option::Some("application/json".to_string())
@@ -10984,32 +10622,6 @@ pub mod defaults {
     }
     pub(super) fn mcp_server_disconnected_event_type() -> ::std::string::String {
         "avp.mcp_server_disconnected".to_string()
-    }
-    pub(super) fn model_turn_ended_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn model_turn_ended_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn model_turn_ended_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn model_turn_ended_event_type() -> ::std::string::String {
-        "avp.model_turn_ended".to_string()
-    }
-    pub(super) fn model_turn_started_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn model_turn_started_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn model_turn_started_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn model_turn_started_event_type() -> ::std::string::String {
-        "avp.model_turn_started".to_string()
     }
     pub(super) fn reasoning_emitted_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {

@@ -59,7 +59,7 @@
       {
         "label": "no model turn runs when no resolver is wired",
         "match": {
-          "type": "avp.model_turn_started"
+          "type": "avp.assistant_message"
         }
       },
       {

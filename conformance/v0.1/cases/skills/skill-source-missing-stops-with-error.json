@@ -69,7 +69,7 @@
       {
         "label": "no model turn runs when a managed ref fails to resolve",
         "match": {
-          "type": "avp.model_turn_started"
+          "type": "avp.assistant_message"
         }
       }
     ]

@@ -18,8 +18,8 @@ The trajectory holds two semantically distinct kinds of facts:
 
 | Class | Event types | Semantics |
 |---|---|---|
-| **What the agent did** | `model_turn_*`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
-| **What the run cost** | `model_turn_ended.gen_ai.usage.*`, `model_turn_ended.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
+| **What the agent did** | `assistant_message`, `tool_invoked`, `tool_returned`, `tool_failed`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
+| **What the run cost** | `assistant_message.gen_ai.usage.*`, `assistant_message.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
 
 Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected") is a post-hoc concern: annotation of saved trajectories, not a runtime event class. v0.1 deliberately leaves this out of the wire.
 
@@ -87,11 +87,11 @@ A conforming agent MUST behave as if executing the following algorithm. (The age
 
 ### 3.1 Run state and the definition of a turn
 
-A **turn** in AVP is exactly one `model_turn_started` / `model_turn_ended` pair where the model produced new output (either text or tool calls or both). Continuations and SDK-internal restatements that do not represent a fresh model call MUST NOT be counted as turns.
+A **turn** in AVP is exactly one `assistant_message` event where the model produced new output (either text or tool calls or both). Continuations and SDK-internal restatements that do not represent a fresh model call MUST NOT be counted as turns.
 
 This matters most for translator-pattern agents wrapping SDKs that emit "assistant message" objects for things that aren't fresh model calls (e.g., follow-up wrappers around tool results). Translator agents MUST count an event as a turn only when the SDK-reported usage carries non-zero new output tokens (delta-output > 0), or (if the SDK doesn't report per-call usage) when the message includes content the model itself produced.
 
-The agent does NOT maintain a cumulative run-state on the wire. Each `model_turn_ended` carries per-turn deltas (`gen_ai.usage.*_tokens`, `avp.cost_usd`); consumers reduce the stream to compute totals. v0.1 does not specify caps the agent must enforce.
+The agent does NOT maintain a cumulative run-state on the wire. Each `assistant_message` carries per-turn deltas (`gen_ai.usage.*_tokens`, `avp.cost_usd`); consumers reduce the stream to compute totals. v0.1 does not specify caps the agent must enforce.
 
 ### 3.2 The loop
 
@@ -113,9 +113,8 @@ for each mcp_server (descriptor's + Commission's): dial; emit mcp_server_connect
 emit agent_started   # merged-state snapshot of everything above
 
 loop:
-    emit model_turn_started(step)
     response = call_model()
-    emit model_turn_ended(step, tokens_delta, cost_delta, ...)
+    emit assistant_message(step, tokens_delta, cost_delta, ...)
 
     for tool_call in response.tool_calls:
         emit tool_invoked(call_id, tool, input)
@@ -135,8 +134,8 @@ loop:
 
 ### 3.3 Cost / token accounting rules (normative)
 
-- `avp.cost_usd` on `model_turn_ended` is the per-turn billable cost (post-cache-discount). Cumulative totals are not on the wire; consumers reduce the stream.
-- `gen_ai.usage.input_tokens` on `model_turn_ended` is the total input tokens INCLUDING cache-read tokens.
+- `avp.cost_usd` on `assistant_message` is the per-turn billable cost (post-cache-discount). Cumulative totals are not on the wire; consumers reduce the stream.
+- `gen_ai.usage.input_tokens` on `assistant_message` is the total input tokens INCLUDING cache-read tokens.
 - `gen_ai.usage.cache_read.input_tokens` and `gen_ai.usage.cache_creation.input_tokens` are informational and already accounted for inside `input_tokens`; consumers MUST NOT double-count them when summing.
 - Per-turn deltas (`avp.cost_usd`, `gen_ai.usage.*_tokens`) are non-negative.
 - Translator agents wrapping cumulative-usage SDKs (notably the Claude Agent SDK, which reports running session totals per message) derive per-turn deltas by subtracting the previous cumulative. Reset handling (e.g. cumulative drops after compaction or sub-agent dispatch) is an implementation detail of the translator; no specific error code is mandated.
@@ -222,8 +221,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.agent_stopped` | `avp://agent` | Run has ended; last event of the trajectory. |
 | `avp.managed_ref_resolved` | `avp://agent` | One per Commission-declared managed ref the agent successfully resolved at startup. Descriptor entries are agent-internal and do NOT produce this event. |
 | `avp.managed_ref_resolve_failed` | `avp://agent` | Resolver returned an error or could not be reached for one of the Commission's managed refs. Agent stops fail-fast. |
-| `avp.model_turn_started` | `avp://agent` | About to call the model. |
-| `avp.model_turn_ended` | `avp://agent` | Model response received. Carries OTel `gen_ai.usage.*`. |
+| `avp.assistant_message` | `avp://agent` | Model produced output. Carries per-inference token deltas and cost. |
 | `avp.tool_invoked` | `avp://agent` | Model invoked a tool. |
 | `avp.tool_returned` | `avp://agent` | Tool produced a result (or was rejected). |
 | `avp.tool_failed` | `avp://agent` | Tool raised an execution error. |
@@ -241,9 +239,9 @@ Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.js
 
 ### 7.1 Cumulative state is the consumer's responsibility
 
-The agent does NOT publish cumulative totals on the wire. Per-turn deltas live on each `model_turn_ended` (`avp.cost_usd`, `gen_ai.usage.*_tokens`); tool invocation counts come from `tool_invoked` events; run duration is `agent_stopped.time` minus `agent_started.time`. Consumers (supervisors, audit pipelines, dashboards) reduce the event stream to compute totals. The reasons for this split are (1) one source of truth on the wire, (2) no agent-side accumulator to drift, and (3) translator-pattern agents already derive per-turn deltas from cumulative-usage SDKs; making them then re-accumulate to broadcast cumulative state is busywork without value.
+The agent does NOT publish cumulative totals on the wire. Per-turn deltas live on each `assistant_message` (`avp.cost_usd`, `gen_ai.usage.*_tokens`); tool invocation counts come from `tool_invoked` events; run duration is `agent_stopped.time` minus `agent_started.time`. Consumers (supervisors, audit pipelines, dashboards) reduce the event stream to compute totals. The reasons for this split are (1) one source of truth on the wire, (2) no agent-side accumulator to drift, and (3) translator-pattern agents already derive per-turn deltas from cumulative-usage SDKs; making them then re-accumulate to broadcast cumulative state is busywork without value.
 
-The wire invariant is "run total = sum of per-turn `model_turn_ended.avp.cost_usd`." Per-turn `avp.cost_usd` is the translator's best observation at turn end; reconciliation against external billing systems is a consumer concern.
+The wire invariant is "run total = sum of per-turn `assistant_message.avp.cost_usd`." Per-turn `avp.cost_usd` is the translator's best observation at turn end; reconciliation against external billing systems is a consumer concern.
 
 ---
 
@@ -253,9 +251,9 @@ An agent is conforming to the Trajectory Spec if and only if all of the followin
 
 1. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`) and MUST set `source: "avp://agent"`. The agent is the sole producer on the wire; supervisor attribution lives in `run_requested.data["avp.commission"]` and `data["avp.supervisor.*"]` when a Commission is in use, per [Commission](./commission.md).
 2. The trajectory MUST open with the prelude defined in §2.1, in this order: `avp.run_requested`, `avp.agent_described`, then any `avp.managed_ref_resolved` (one per Commission-declared ref), any `avp.mcp_server_connected` (one per dialed server, descriptor's + Commission's), and finally `avp.agent_started`. When relaying a Commission, `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of it (managed refs verbatim); otherwise `data["avp.commission"]` and `data["avp.supervisor.*"]` MUST be absent. `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` is the merged-state snapshot: `data["avp.tools"]` MUST list the agent's local tool catalog (`descriptor.tools` filtered by `Commission.enabled_builtin_tools`); `data["avp.mcp_servers"]` MUST list the merged MCP server identities (descriptor's filtered ∪ Commission's resolved); `data["avp.skills"]` and `data["avp.subagents"]` MUST list the merged skill / subagent decls. MCP-surfaced tool catalogs MUST NOT be duplicated on `data["avp.tools"]`; they live on each `mcp_server_connected.data["avp.mcp.tools"]`. `avp.prompt` MUST be included on `agent_started` when available.
-3. For every model inference, it MUST emit `avp.model_turn_started` immediately before the request and `avp.model_turn_ended` immediately after the response.
+3. For every model inference, it MUST emit `avp.assistant_message` after the model returns output.
 4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and either `avp.tool_returned` (success or rejection) or `avp.tool_failed` (execution error) afterward.
-5. Each `avp.model_turn_ended` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire.
+5. Each `avp.assistant_message` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire.
 6. The last event it emits MUST be `avp.agent_stopped` (source=`avp://agent`). After emitting `agent_stopped`, the agent MUST NOT emit additional events.
 7. All emitted events MUST validate against `trajectory.schema.json`.
 

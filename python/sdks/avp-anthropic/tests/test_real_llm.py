@@ -94,7 +94,7 @@ def test_unmanaged_commission_smoke_runs_against_real_model(
     events = _run_agent(commission, monkeypatch)
     types = [e["type"] for e in events]
     assert "avp.agent_started" in types
-    assert "avp.model_turn_started" in types
+    assert "avp.assistant_message" in types
     assert "avp.text_emitted" in types
     assert types[-1] == "avp.agent_stopped"
     assert events[-1]["data"]["avp.reason"] == "converged"
@@ -122,5 +122,5 @@ def test_managed_commission_without_resolver_fails_fast(
     assert "avp.error_occurred" in types
     err = next(e for e in events if e["type"] == "avp.error_occurred")
     assert err["data"]["avp.error.code"] == "resolver_not_configured"
-    assert "avp.model_turn_started" not in types
+    assert "avp.assistant_message" not in types
     assert events[-1]["data"]["avp.reason"] == "error"

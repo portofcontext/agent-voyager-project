@@ -54,7 +54,7 @@
     "forbidden_events": [
       {
         "label": "no model turn runs when the allowlist names a non-existent built-in",
-        "match": { "type": "avp.model_turn_started" }
+        "match": { "type": "avp.assistant_message" }
       }
     ]
   }

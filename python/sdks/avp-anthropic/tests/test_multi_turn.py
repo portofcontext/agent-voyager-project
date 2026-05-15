@@ -24,7 +24,7 @@ from avp.enums import StopReason
 from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
-    ModelTurnEndedEvent,
+    AssistantMessageEvent,
     TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
@@ -202,8 +202,7 @@ def test_tool_use_then_text_round_trip_preserves_history() -> None:
     # ── Assertion 3: the trajectory has the expected event sequence ──────────
     types = [type(ev).__name__ for ev in agent.trajectory]
     assert types[0] == "AgentStartedEvent"
-    assert "ModelTurnStartedEvent" in types
-    assert "ModelTurnEndedEvent" in types
+    assert "AssistantMessageEvent" in types
     assert "ToolInvokedEvent" in types
     assert "ToolReturnedEvent" in types
     assert "TextEmittedEvent" in types
@@ -413,7 +412,7 @@ def test_unused_imports_silenced() -> None:
     _ = (
         AgentStartedEvent,
         AgentStoppedEvent,
-        ModelTurnEndedEvent,
+        AssistantMessageEvent,
         TextEmittedEvent,
         ToolInvokedEvent,
         ToolReturnedEvent,

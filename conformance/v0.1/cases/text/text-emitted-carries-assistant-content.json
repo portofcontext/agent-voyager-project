@@ -28,15 +28,7 @@
     "events": [
       {
         "match": {
-          "type": "avp.model_turn_started",
-          "data": {
-            "avp.step": 1
-          }
-        }
-      },
-      {
-        "match": {
-          "type": "avp.model_turn_ended",
+          "type": "avp.assistant_message",
           "data": {
             "avp.step": 1
           }

@@ -34,13 +34,7 @@
       },
       {
         "match": {
-          "type": "avp.model_turn_started",
-          "source": "avp://agent"
-        }
-      },
-      {
-        "match": {
-          "type": "avp.model_turn_ended",
+          "type": "avp.assistant_message",
           "source": "avp://agent"
         }
       },
