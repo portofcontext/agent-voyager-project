@@ -2,8 +2,19 @@
 
 Goals:
 * Make the claude-agent-sdk AVP compliant (../../spec/v0.1)
-* Allow users to simply change the imports from `claude_agent_sdk` to `avp_claude_agent_sdk` when they are using the 2 primary exports: `query()` and `ClaudeSDKClient` and recieve AVP trajectories out of the box. An alternative is also creating a monkeypatch function like Braintrust `setup_claude_agent_sdk`.
-* expose an entry point for a AVP supervisor to trigger the agent with a Commision.
+* Wrap `ClaudeSDKClient` (not `query()`) as the primary AVP surface. `query()` is out of scope for v0.1: it has no pre-run lifecycle hook, so an accurate `AgentDescriptor` (tool list via `get_mcp_status()`) and a conformant `agent_started` event are impossible without a `connect()` phase.
+* Expose `AVPClaudeSDKClient` as a drop-in subclass/wrapper of `ClaudeSDKClient` that emits a full AVP trajectory: `agent_started` (with real tool list) → model/tool events → `agent_stopped`.
+* Expose an entry point for an AVP supervisor to trigger the agent with a Commission.
+
+## Patching approach
+
+`ClaudeSDKClient` is wrapped, not monkeypatched at the module level:
+
+* `AVPClaudeSDKClient` subclasses (or delegates to) `ClaudeSDKClient`.
+* `connect()` is overridden: calls `super().connect()`, then `get_mcp_status()` to build the `AgentDescriptor`, then emits `agent_started`.
+* `query()` is overridden: tees the message stream through AVP event emission before yielding each message.
+* `disconnect()` is overridden: emits `agent_stopped`, then calls `super().disconnect()`.
+* A `setup_avp()` monkeypatch remains available for users who cannot change their import, but it replaces `claude_agent_sdk.ClaudeSDKClient` with `AVPClaudeSDKClient`, not `query()`.
 
 ## Code best practices
 * always use `uv` CLI when adding / updating dependencies
