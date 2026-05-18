@@ -18,8 +18,9 @@ The trajectory holds two semantically distinct kinds of facts:
 
 | Class | Event types | Semantics |
 |---|---|---|
-| **What the agent did** | `assistant_message`, `tool_invoked`, `tool_returned`, `text_emitted`, `reasoning_emitted`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `refusal_recorded`, `error_occurred` | Mechanical actions the agent took |
+| **What the agent did** | `assistant_message` (carries `avp.content`, the model's content-block array for the turn), `tool_invoked`, `tool_returned`, `subagent_*`, `managed_ref_resolved`, `managed_ref_resolve_failed`, `mcp_server_connected`, `mcp_server_disconnected`, `error_occurred` | Mechanical actions the agent took |
 | **What the run cost** | `assistant_message.gen_ai.usage.*`, `assistant_message.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
+| **What the model output** | `assistant_message.avp.content: list[AVPContentBlock]` | Provider-agnostic content blocks (`text`, `thinking`, `tool_use`, `image`, `document`, `audio`, `video`, `refusal`, `server_tool_use`, `server_tool_result`). Reconstructing a provider message array is a direct read of this field per turn, paired with the `avp.tool_result` blocks on intervening `tool_returned` events to form the user-role tool-result messages. Block taxonomy: [`avp.content`](../../python/avp/src/avp/content.py). |
 
 Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected") is a post-hoc concern: annotation of saved trajectories, not a runtime event class. v0.1 deliberately leaves this out of the wire.
 
@@ -114,7 +115,7 @@ emit agent_started   # merged-state snapshot of everything above
 
 loop:
     response = call_model()
-    emit assistant_message(step, tokens_delta, cost_delta, ...)
+    emit assistant_message(step, content=response.content_blocks, tokens_delta, cost_delta, ...)
 
     for tool_call in response.tool_calls:
         emit tool_invoked(call_id, tool, input)
@@ -155,7 +156,7 @@ Wire flow:
 2. Agent dispatches: locally for tools listed in `descriptor.tools`; via MCP for tools surfaced by a connected MCP server.
 3. Agent emits `avp.tool_returned` (`avp.tool_result.isError` discriminates success, rejection, and execution errors).
 
-**Tool result shape.** The `avp.tool_result` field on `tool_returned` follows the [MCP `ToolResultContent`](https://spec.modelcontextprotocol.io) data shape: `toolUseId`, `content: list[ContentBlock]`, `structuredContent`, and `isError`. AVP does not redefine this type; implementors MUST use the MCP SDK's `ToolResultContent` model directly. `avp.tool_result.isError` discriminates all outcomes: `false` (or absent) for success, `true` for rejections (tool declined by the agent) or execution errors, with the reason in `content[0].text`.
+**Tool result shape.** The `avp.tool_result` field on `tool_returned` is an AVP [`ToolResultBlock`](../../python/avp/src/avp/content.py): `tool_use_id`, `content` (a string or a list of nested `text` / `image` / `document` blocks for providers that permit them), `structured_content` (an optional programmatic payload alongside the human-readable content, mirroring MCP's `structuredContent` / Gemini `function_response.response` / Bedrock `toolResult.content.json`), and `is_error`. `is_error` discriminates all outcomes: `false` (or absent) for success, `true` for rejections (tool declined by the agent) or execution errors, with the reason in `content[0].text`. During reconstruction this block becomes one entry of the next user-role message's content array.
 
 There is no AVP-flavored RPC channel for tool dispatch. Supervisors that want to expose Python (or shell, or HTTP-backed) tools wrap them in an MCP server, declare the server's ref in `Commission.mcp_servers[]`, and have their resolver return the connection material when asked.
 
@@ -223,15 +224,12 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.agent_stopped` | `avp://agent` | Run has ended; last event of the trajectory. |
 | `avp.managed_ref_resolved` | `avp://agent` | One per Commission-declared managed ref the agent successfully resolved at startup. Descriptor entries are agent-internal and do NOT produce this event. |
 | `avp.managed_ref_resolve_failed` | `avp://agent` | Resolver returned an error or could not be reached for one of the Commission's managed refs. Agent stops fail-fast. |
-| `avp.assistant_message` | `avp://agent` | Model produced output. Carries per-inference token deltas and cost. |
+| `avp.assistant_message` | `avp://agent` | Model produced output. Carries `avp.content` (the full content-block array for the turn: `text`, `thinking`, `tool_use`, `refusal`, multimodal blocks, server-tool blocks), per-inference token deltas, and cost. Refusal: refusal text appears as a `refusal` (or `text`) block in `avp.content`; the upstream finish-reason surfaces on `gen_ai.response.finish_reasons`; the provider's safety category (when given) surfaces on `avp.refusal.category`. |
 | `avp.tool_invoked` | `avp://agent` | Model invoked a tool. |
-| `avp.tool_returned` | `avp://agent` | Tool produced a result. `avp.tool_result.isError` discriminates success, rejection, and execution error. |
+| `avp.tool_returned` | `avp://agent` | Tool produced a result. `avp.tool_result.is_error` discriminates success, rejection, and execution error. |
 | `avp.subagent_invoked` | `avp://agent` | Parent agent delegated to a declared subagent. Frame span opens. Carries `avp.subagent.run_id` for managed subagents. |
 | `avp.subagent_returned` | `avp://agent` | Subagent returned to its parent. Frame span closes; pairs with `subagent_invoked` by `span_id`. |
 | `avp.subagent_failed` | `avp://agent` | Subagent invocation errored; the model receives an `Error: …` tool_result. |
-| `avp.text_emitted` | `avp://agent` | Assistant text content. |
-| `avp.reasoning_emitted` | `avp://agent` | Reasoning / thinking block (extended thinking, o-series reasoning). Distinct from text so consumers can filter chain-of-thought. |
-| `avp.refusal_recorded` | `avp://agent` | Model declined the turn. Run terminates with `avp.agent_stopped.avp.reason="refused"`. |
 | `avp.error_occurred` | `avp://agent` | Non-tool error. |
 | `avp.mcp_server_connected` | `avp://agent` | Connection established to an MCP server — either declared on the descriptor or resolved from `Commission.mcp_servers[].ref`. Carries the live tool catalog under `data["avp.mcp.tools"]`. |
 | `avp.mcp_server_disconnected` | `avp://agent` | Connection to an MCP server closed. |
@@ -252,8 +250,8 @@ An agent is conforming to the Trajectory Spec if and only if all of the followin
 
 1. Every event it emits MUST conform to the CloudEvents 1.0 envelope shape (`specversion`, `id`, `source`, `type`, `time`, `data`) and MUST set `source: "avp://agent"`. The agent is the sole producer on the wire; supervisor attribution lives in `run_requested.data["avp.commission"]` and `data["avp.supervisor.*"]` when a Commission is in use, per [Commission](./commission.md).
 2. The trajectory MUST open with the prelude defined in §2.1, in this order: `avp.run_requested`, `avp.agent_described`, then any `avp.managed_ref_resolved` (one per Commission-declared ref), any `avp.mcp_server_connected` (one per dialed server, descriptor's + Commission's), and finally `avp.agent_started`. When relaying a Commission, `avp.run_requested.data["avp.commission"]` MUST carry a faithful snapshot of it (managed refs verbatim); otherwise `data["avp.commission"]` and `data["avp.supervisor.*"]` MUST be absent. `avp.agent_described.data["avp.descriptor"]` MUST equal the [Agent Descriptor](./agent-descriptor.md) payload the agent publishes via its pre-flight `describe` surface for the same agent build. `avp.agent_started` is the merged-state snapshot: `data["avp.tools"]` MUST list the agent's local tool catalog (`descriptor.tools` filtered by `Commission.enabled_builtin_tools`); `data["avp.mcp_servers"]` MUST list the merged MCP server identities (descriptor's filtered ∪ Commission's resolved); `data["avp.skills"]` and `data["avp.subagents"]` MUST list the merged skill / subagent decls. MCP-surfaced tool catalogs MUST NOT be duplicated on `data["avp.tools"]`; they live on each `mcp_server_connected.data["avp.mcp.tools"]`. `avp.prompt` MUST be included on `agent_started` when available.
-3. For every model inference, it MUST emit `avp.assistant_message` after the model returns output.
-4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and then `avp.tool_returned` (with `avp.tool_result.isError` set appropriately for success, rejection, or execution error) afterward.
+3. For every model inference, it MUST emit `avp.assistant_message` after the model returns output. `data["avp.content"]` MUST carry a faithful `list[AVPContentBlock]` of the blocks the model produced this turn (text, thinking, tool_use, refusal, multimodal, server-tool); reconstructing a provider message array from the trajectory MUST be a direct read of this field per turn, paired with the `avp.tool_result` blocks on intervening `tool_returned` events.
+4. For every tool call, it MUST emit `avp.tool_invoked` before invocation and then `avp.tool_returned` (with `avp.tool_result.is_error` set appropriately for success, rejection, or execution error) afterward.
 5. Each `avp.assistant_message` MUST carry the per-turn billable cost (`avp.cost_usd`) and per-turn token deltas (`gen_ai.usage.*_tokens`). The agent MUST NOT publish cumulative totals on the wire.
 6. The last event it emits MUST be `avp.agent_stopped` (source=`avp://agent`). After emitting `agent_stopped`, the agent MUST NOT emit additional events.
 7. All emitted events MUST validate against `trajectory.schema.json`.

@@ -1647,147 +1647,17 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
             })
     }
 }
-#[doc = "`Annotations`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Annotations\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"audience\": {"]
-#[doc = "      \"title\": \"Audience\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\","]
-#[doc = "            \"enum\": ["]
-#[doc = "              \"user\","]
-#[doc = "              \"assistant\""]
-#[doc = "            ]"]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"priority\": {"]
-#[doc = "      \"title\": \"Priority\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"number\","]
-#[doc = "          \"maximum\": 1.0,"]
-#[doc = "          \"minimum\": 0.0"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct Annotations {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub audience: ::std::option::Option<::std::vec::Vec<AnnotationsAudienceItem>>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub priority: ::std::option::Option<f64>,
-}
-impl ::std::default::Default for Annotations {
-    fn default() -> Self {
-        Self {
-            audience: Default::default(),
-            priority: Default::default(),
-        }
-    }
-}
-#[doc = "`AnnotationsAudienceItem`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"user\","]
-#[doc = "    \"assistant\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum AnnotationsAudienceItem {
-    #[serde(rename = "user")]
-    User,
-    #[serde(rename = "assistant")]
-    Assistant,
-}
-impl ::std::fmt::Display for AnnotationsAudienceItem {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::User => f.write_str("user"),
-            Self::Assistant => f.write_str("assistant"),
-        }
-    }
-}
-impl ::std::str::FromStr for AnnotationsAudienceItem {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "user" => Ok(Self::User),
-            "assistant" => Ok(Self::Assistant),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for AnnotationsAudienceItem {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AnnotationsAudienceItem {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AnnotationsAudienceItem {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-#[doc = "`AssistantMessageData`"]
+#[doc = "Payload of avp.assistant_message events.\n\nCarries the full content the model produced this turn under\n`avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost\ndeltas. Reconstructing a provider message array is a direct read of\n`avp.content` per turn, paired with the `avp.tool_result` blocks from\nintervening `tool_returned` events to form the user-role tool-result\nmessages.\n\nRefusal metadata: when the provider declined the turn, the refusal\ntext appears as a `RefusalBlock` (or `TextBlock` for providers that\ndon't typify it) inside `avp.content`, the upstream finish-reason\nstring surfaces on `gen_ai.response.finish_reasons`, and the\nprovider's safety category (when given, free-form because every\nprovider names them differently) surfaces on `avp.refusal.category`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AssistantMessageData\","]
+#[doc = "  \"description\": \"Payload of avp.assistant_message events.\\n\\nCarries the full content the model produced this turn under\\n`avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost\\ndeltas. Reconstructing a provider message array is a direct read of\\n`avp.content` per turn, paired with the `avp.tool_result` blocks from\\nintervening `tool_returned` events to form the user-role tool-result\\nmessages.\\n\\nRefusal metadata: when the provider declined the turn, the refusal\\ntext appears as a `RefusalBlock` (or `TextBlock` for providers that\\ndon't typify it) inside `avp.content`, the upstream finish-reason\\nstring surfaces on `gen_ai.response.finish_reasons`, and the\\nprovider's safety category (when given, free-form because every\\nprovider names them differently) surfaces on `avp.refusal.category`.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
+#[doc = "    \"avp.content\","]
 #[doc = "    \"avp.cost_usd\","]
 #[doc = "    \"avp.duration_ms\","]
 #[doc = "    \"avp.step\","]
@@ -1798,6 +1668,63 @@ impl ::std::convert::TryFrom<::std::string::String> for AnnotationsAudienceItem 
 #[doc = "    \"trace_id\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"avp.content\": {"]
+#[doc = "      \"title\": \"Avp.Content\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"oneOf\": ["]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/TextBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ThinkingBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ImageBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/AudioBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/VideoBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/DocumentBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ToolUseBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ToolResultBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ServerToolUseBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ServerToolResultBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/RefusalBlock\""]
+#[doc = "          }"]
+#[doc = "        ],"]
+#[doc = "        \"discriminator\": {"]
+#[doc = "          \"mapping\": {"]
+#[doc = "            \"audio\": \"#/$defs/AudioBlock\","]
+#[doc = "            \"document\": \"#/$defs/DocumentBlock\","]
+#[doc = "            \"image\": \"#/$defs/ImageBlock\","]
+#[doc = "            \"refusal\": \"#/$defs/RefusalBlock\","]
+#[doc = "            \"server_tool_result\": \"#/$defs/ServerToolResultBlock\","]
+#[doc = "            \"server_tool_use\": \"#/$defs/ServerToolUseBlock\","]
+#[doc = "            \"text\": \"#/$defs/TextBlock\","]
+#[doc = "            \"thinking\": \"#/$defs/ThinkingBlock\","]
+#[doc = "            \"tool_result\": \"#/$defs/ToolResultBlock\","]
+#[doc = "            \"tool_use\": \"#/$defs/ToolUseBlock\","]
+#[doc = "            \"video\": \"#/$defs/VideoBlock\""]
+#[doc = "          },"]
+#[doc = "          \"propertyName\": \"type\""]
+#[doc = "        }"]
+#[doc = "      }"]
+#[doc = "    },"]
 #[doc = "    \"avp.cost.source\": {"]
 #[doc = "      \"title\": \"Avp.Cost.Source\","]
 #[doc = "      \"anyOf\": ["]
@@ -1830,6 +1757,17 @@ impl ::std::convert::TryFrom<::std::string::String> for AnnotationsAudienceItem 
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
 #[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"avp.refusal.category\": {"]
+#[doc = "      \"title\": \"Avp.Refusal.Category\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -1974,6 +1912,8 @@ impl ::std::convert::TryFrom<::std::string::String> for AnnotationsAudienceItem 
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AssistantMessageData {
+    #[serde(rename = "avp.content")]
+    pub avp_content: ::std::vec::Vec<AvpContentItem>,
     #[serde(
         rename = "avp.cost.source",
         default,
@@ -1991,6 +1931,12 @@ pub struct AssistantMessageData {
     )]
     pub avp_meta:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(
+        rename = "avp.refusal.category",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_refusal_category: ::std::option::Option<::std::string::String>,
     #[serde(rename = "avp.step")]
     pub avp_step: u64,
     #[serde(
@@ -2384,53 +2330,55 @@ impl<'de> ::serde::Deserialize<'de> for AssistantMessageEventSubject {
             })
     }
 }
-#[doc = "Audio content for a message."]
+#[doc = "Audio content. OpenAI `input_audio` (input) and `audio` (output),\nGemini `inline_data` audio, Bedrock `audio`. `transcript` carries\nOpenAI's output-audio transcript when present."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"AudioContent\","]
-#[doc = "  \"description\": \"Audio content for a message.\","]
+#[doc = "  \"title\": \"AudioBlock\","]
+#[doc = "  \"description\": \"Audio content. OpenAI `input_audio` (input) and `audio` (output),\\nGemini `inline_data` audio, Bedrock `audio`. `transcript` carries\\nOpenAI's output-audio transcript when present.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"data\","]
-#[doc = "    \"mimeType\","]
-#[doc = "    \"type\""]
+#[doc = "    \"source\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"oneOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Base64Source\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/FileSource\""]
+#[doc = "        }"]
+#[doc = "      ],"]
+#[doc = "      \"discriminator\": {"]
+#[doc = "        \"mapping\": {"]
+#[doc = "          \"base64\": \"#/$defs/Base64Source\","]
+#[doc = "          \"file\": \"#/$defs/FileSource\","]
+#[doc = "          \"url\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        \"propertyName\": \"type\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"transcript\": {"]
+#[doc = "      \"title\": \"Transcript\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"type\": \"string\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"annotations\": {"]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"title\": \"Data\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"audio\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"const\": \"audio\""]
 #[doc = "    }"]
@@ -2440,20 +2388,142 @@ impl<'de> ::serde::Deserialize<'de> for AssistantMessageEventSubject {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct AudioContent {
+pub struct AudioBlock {
+    pub source: Source,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub annotations: ::std::option::Option<Annotations>,
-    pub data: ::std::string::String,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "mimeType")]
-    pub mime_type: ::std::string::String,
-    #[serde(rename = "type")]
+    pub transcript: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type", default = "defaults::audio_block_type")]
     pub type_: ::std::string::String,
+}
+#[doc = "`AvpContentItem`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"oneOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/TextBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ThinkingBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ImageBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/AudioBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/VideoBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/DocumentBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ToolUseBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ToolResultBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ServerToolUseBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ServerToolResultBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/RefusalBlock\""]
+#[doc = "    }"]
+#[doc = "  ],"]
+#[doc = "  \"discriminator\": {"]
+#[doc = "    \"mapping\": {"]
+#[doc = "      \"audio\": \"#/$defs/AudioBlock\","]
+#[doc = "      \"document\": \"#/$defs/DocumentBlock\","]
+#[doc = "      \"image\": \"#/$defs/ImageBlock\","]
+#[doc = "      \"refusal\": \"#/$defs/RefusalBlock\","]
+#[doc = "      \"server_tool_result\": \"#/$defs/ServerToolResultBlock\","]
+#[doc = "      \"server_tool_use\": \"#/$defs/ServerToolUseBlock\","]
+#[doc = "      \"text\": \"#/$defs/TextBlock\","]
+#[doc = "      \"thinking\": \"#/$defs/ThinkingBlock\","]
+#[doc = "      \"tool_result\": \"#/$defs/ToolResultBlock\","]
+#[doc = "      \"tool_use\": \"#/$defs/ToolUseBlock\","]
+#[doc = "      \"video\": \"#/$defs/VideoBlock\""]
+#[doc = "    },"]
+#[doc = "    \"propertyName\": \"type\""]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum AvpContentItem {
+    TextBlock(TextBlock),
+    ThinkingBlock(ThinkingBlock),
+    ImageBlock(ImageBlock),
+    AudioBlock(AudioBlock),
+    VideoBlock(VideoBlock),
+    DocumentBlock(DocumentBlock),
+    ToolUseBlock(ToolUseBlock),
+    ToolResultBlock(ToolResultBlock),
+    ServerToolUseBlock(ServerToolUseBlock),
+    ServerToolResultBlock(ServerToolResultBlock),
+    RefusalBlock(RefusalBlock),
+}
+impl ::std::convert::From<TextBlock> for AvpContentItem {
+    fn from(value: TextBlock) -> Self {
+        Self::TextBlock(value)
+    }
+}
+impl ::std::convert::From<ThinkingBlock> for AvpContentItem {
+    fn from(value: ThinkingBlock) -> Self {
+        Self::ThinkingBlock(value)
+    }
+}
+impl ::std::convert::From<ImageBlock> for AvpContentItem {
+    fn from(value: ImageBlock) -> Self {
+        Self::ImageBlock(value)
+    }
+}
+impl ::std::convert::From<AudioBlock> for AvpContentItem {
+    fn from(value: AudioBlock) -> Self {
+        Self::AudioBlock(value)
+    }
+}
+impl ::std::convert::From<VideoBlock> for AvpContentItem {
+    fn from(value: VideoBlock) -> Self {
+        Self::VideoBlock(value)
+    }
+}
+impl ::std::convert::From<DocumentBlock> for AvpContentItem {
+    fn from(value: DocumentBlock) -> Self {
+        Self::DocumentBlock(value)
+    }
+}
+impl ::std::convert::From<ToolUseBlock> for AvpContentItem {
+    fn from(value: ToolUseBlock) -> Self {
+        Self::ToolUseBlock(value)
+    }
+}
+impl ::std::convert::From<ToolResultBlock> for AvpContentItem {
+    fn from(value: ToolResultBlock) -> Self {
+        Self::ToolResultBlock(value)
+    }
+}
+impl ::std::convert::From<ServerToolUseBlock> for AvpContentItem {
+    fn from(value: ServerToolUseBlock) -> Self {
+        Self::ServerToolUseBlock(value)
+    }
+}
+impl ::std::convert::From<ServerToolResultBlock> for AvpContentItem {
+    fn from(value: ServerToolResultBlock) -> Self {
+        Self::ServerToolResultBlock(value)
+    }
+}
+impl ::std::convert::From<RefusalBlock> for AvpContentItem {
+    fn from(value: RefusalBlock) -> Self {
+        Self::RefusalBlock(value)
+    }
 }
 #[doc = "`AvpManagedId`"]
 #[doc = r""]
@@ -2744,75 +2814,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpMcpServerId {
             })
     }
 }
-#[doc = "`AvpRefusalReason`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Avp.Refusal.Reason\","]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AvpRefusalReason(::std::string::String);
-impl ::std::ops::Deref for AvpRefusalReason {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AvpRefusalReason> for ::std::string::String {
-    fn from(value: AvpRefusalReason) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AvpRefusalReason {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for AvpRefusalReason {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AvpRefusalReason {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AvpRefusalReason {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for AvpRefusalReason {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
 #[doc = "`AvpResolveError`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -2992,15 +2993,6 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"$ref\": \"#/$defs/SubagentFailedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/TextEmittedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ReasoningEmittedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/RefusalRecordedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/ErrorOccurredEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -3027,13 +3019,10 @@ impl<'de> ::serde::Deserialize<'de> for AvpSubagentInvocationId {
 #[doc = "      \"avp.managed_ref_resolved\": \"#/$defs/ManagedRefResolvedEvent\","]
 #[doc = "      \"avp.mcp_server_connected\": \"#/$defs/McpServerConnectedEvent\","]
 #[doc = "      \"avp.mcp_server_disconnected\": \"#/$defs/McpServerDisconnectedEvent\","]
-#[doc = "      \"avp.reasoning_emitted\": \"#/$defs/ReasoningEmittedEvent\","]
-#[doc = "      \"avp.refusal_recorded\": \"#/$defs/RefusalRecordedEvent\","]
 #[doc = "      \"avp.run_requested\": \"#/$defs/RunRequestedEvent\","]
 #[doc = "      \"avp.subagent_failed\": \"#/$defs/SubagentFailedEvent\","]
 #[doc = "      \"avp.subagent_invoked\": \"#/$defs/SubagentInvokedEvent\","]
 #[doc = "      \"avp.subagent_returned\": \"#/$defs/SubagentReturnedEvent\","]
-#[doc = "      \"avp.text_emitted\": \"#/$defs/TextEmittedEvent\","]
 #[doc = "      \"avp.tool_invoked\": \"#/$defs/ToolInvokedEvent\","]
 #[doc = "      \"avp.tool_returned\": \"#/$defs/ToolReturnedEvent\""]
 #[doc = "    },"]
@@ -3055,9 +3044,6 @@ pub enum AvpV01TrajectoryEvent {
     SubagentInvokedEvent(SubagentInvokedEvent),
     SubagentReturnedEvent(SubagentReturnedEvent),
     SubagentFailedEvent(SubagentFailedEvent),
-    TextEmittedEvent(TextEmittedEvent),
-    ReasoningEmittedEvent(ReasoningEmittedEvent),
-    RefusalRecordedEvent(RefusalRecordedEvent),
     ErrorOccurredEvent(ErrorOccurredEvent),
     McpServerConnectedEvent(McpServerConnectedEvent),
     McpServerDisconnectedEvent(McpServerDisconnectedEvent),
@@ -3114,21 +3100,6 @@ impl ::std::convert::From<SubagentFailedEvent> for AvpV01TrajectoryEvent {
         Self::SubagentFailedEvent(value)
     }
 }
-impl ::std::convert::From<TextEmittedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: TextEmittedEvent) -> Self {
-        Self::TextEmittedEvent(value)
-    }
-}
-impl ::std::convert::From<ReasoningEmittedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: ReasoningEmittedEvent) -> Self {
-        Self::ReasoningEmittedEvent(value)
-    }
-}
-impl ::std::convert::From<RefusalRecordedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: RefusalRecordedEvent) -> Self {
-        Self::RefusalRecordedEvent(value)
-    }
-}
 impl ::std::convert::From<ErrorOccurredEvent> for AvpV01TrajectoryEvent {
     fn from(value: ErrorOccurredEvent) -> Self {
         Self::ErrorOccurredEvent(value)
@@ -3154,38 +3125,61 @@ impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01TrajectoryEven
         Self::ManagedRefResolveFailedEvent(value)
     }
 }
-#[doc = "Binary contents of a resource."]
+#[doc = "Inline base64-encoded media. Anthropic `source.type=base64`, Gemini\n`inline_data`, Bedrock `source.bytes`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"BlobResourceContents\","]
-#[doc = "  \"description\": \"Binary contents of a resource.\","]
+#[doc = "  \"title\": \"Base64Source\","]
+#[doc = "  \"description\": \"Inline base64-encoded media. Anthropic `source.type=base64`, Gemini\\n`inline_data`, Bedrock `source.bytes`.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"blob\","]
-#[doc = "    \"uri\""]
+#[doc = "    \"data\","]
+#[doc = "    \"media_type\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"blob\": {"]
-#[doc = "      \"title\": \"Blob\","]
+#[doc = "    \"data\": {"]
+#[doc = "      \"title\": \"Data\","]
 #[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
+#[doc = "    \"media_type\": {"]
+#[doc = "      \"title\": \"Media Type\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"base64\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"base64\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct Base64Source {
+    pub data: ::std::string::String,
+    pub media_type: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::base64_source_type")]
+    pub type_: ::std::string::String,
+}
+#[doc = "Span-anchored attribution on a text or document block. Unifies\nAnthropic citations (`char_location`, `page_location`,\n`content_block_location`), OpenAI annotations (`url_citation`,\n`file_citation`, `file_path`), and Gemini grounding chunks. `type`\ncarries the provider's raw citation kind verbatim so downstream\nconsumers can normalize without re-deriving it."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Citation\","]
+#[doc = "  \"description\": \"Span-anchored attribution on a text or document block. Unifies\\nAnthropic citations (`char_location`, `page_location`,\\n`content_block_location`), OpenAI annotations (`url_citation`,\\n`file_citation`, `file_path`), and Gemini grounding chunks. `type`\\ncarries the provider's raw citation kind verbatim so downstream\\nconsumers can normalize without re-deriving it.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"cited_text\": {"]
+#[doc = "      \"title\": \"Cited Text\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"string\""]
@@ -3195,11 +3189,66 @@ impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01TrajectoryEven
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"uri\": {"]
-#[doc = "      \"title\": \"Uri\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"format\": \"uri\","]
-#[doc = "      \"minLength\": 1"]
+#[doc = "    \"end_index\": {"]
+#[doc = "      \"title\": \"End Index\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"source_id\": {"]
+#[doc = "      \"title\": \"Source Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"source_title\": {"]
+#[doc = "      \"title\": \"Source Title\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"source_url\": {"]
+#[doc = "      \"title\": \"Source Url\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"start_index\": {"]
+#[doc = "      \"title\": \"Start Index\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\""]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -3207,21 +3256,21 @@ impl ::std::convert::From<ManagedRefResolveFailedEvent> for AvpV01TrajectoryEven
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct BlobResourceContents {
-    pub blob: ::std::string::String,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "mimeType",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub mime_type: ::std::option::Option<::std::string::String>,
-    pub uri: ::std::string::String,
+pub struct Citation {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub cited_text: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub end_index: ::std::option::Option<u64>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub source_id: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub source_title: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub source_url: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub start_index: ::std::option::Option<u64>,
+    #[serde(rename = "type")]
+    pub type_: ::std::string::String,
 }
 #[doc = "Supervisor's declaration of the supervisor-managed environment slice.\n\nAll asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs\nresolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).\nThe\nsupervisor never embeds connection material, file paths, or inline\nasset definitions on the wire; those land in `run_requested.data`\non the trajectory and would leak secrets to consumers.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills, internally-defined subagents) is invisible to AVP and the\nCommission entirely. The agent's own contribution surfaces in\n`agent_described.data[\"avp.descriptor\"]` so consumers can audit what the\nagent showed up with. The agent's runtime layer merges its internal\ncontribution with the resolved managed assets into one bag the loop\ndispatches against; collisions on `id` are a startup error."]
 #[doc = r""]
@@ -3479,27 +3528,40 @@ pub struct Commission {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub thread_id: ::std::option::Option<::std::string::String>,
 }
-#[doc = "`ContentItem`"]
+#[doc = "`Content`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
+#[doc = "  \"title\": \"Content\","]
 #[doc = "  \"anyOf\": ["]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/TextContent\""]
+#[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ImageContent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/AudioContent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/ResourceLink\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/EmbeddedResource\""]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"oneOf\": ["]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/TextBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/ImageBlock\""]
+#[doc = "          },"]
+#[doc = "          {"]
+#[doc = "            \"$ref\": \"#/$defs/DocumentBlock\""]
+#[doc = "          }"]
+#[doc = "        ],"]
+#[doc = "        \"discriminator\": {"]
+#[doc = "          \"mapping\": {"]
+#[doc = "            \"document\": \"#/$defs/DocumentBlock\","]
+#[doc = "            \"image\": \"#/$defs/ImageBlock\","]
+#[doc = "            \"text\": \"#/$defs/TextBlock\""]
+#[doc = "          },"]
+#[doc = "          \"propertyName\": \"type\""]
+#[doc = "        }"]
+#[doc = "      }"]
 #[doc = "    }"]
 #[doc = "  ]"]
 #[doc = "}"]
@@ -3507,89 +3569,141 @@ pub struct Commission {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(untagged)]
-pub enum ContentItem {
-    TextContent(TextContent),
-    ImageContent(ImageContent),
-    AudioContent(AudioContent),
-    ResourceLink(ResourceLink),
-    EmbeddedResource(EmbeddedResource),
+pub enum Content {
+    String(::std::string::String),
+    Array(::std::vec::Vec<ContentArrayItem>),
 }
-impl ::std::convert::From<TextContent> for ContentItem {
-    fn from(value: TextContent) -> Self {
-        Self::TextContent(value)
+impl ::std::convert::From<::std::vec::Vec<ContentArrayItem>> for Content {
+    fn from(value: ::std::vec::Vec<ContentArrayItem>) -> Self {
+        Self::Array(value)
     }
 }
-impl ::std::convert::From<ImageContent> for ContentItem {
-    fn from(value: ImageContent) -> Self {
-        Self::ImageContent(value)
-    }
-}
-impl ::std::convert::From<AudioContent> for ContentItem {
-    fn from(value: AudioContent) -> Self {
-        Self::AudioContent(value)
-    }
-}
-impl ::std::convert::From<ResourceLink> for ContentItem {
-    fn from(value: ResourceLink) -> Self {
-        Self::ResourceLink(value)
-    }
-}
-impl ::std::convert::From<EmbeddedResource> for ContentItem {
-    fn from(value: EmbeddedResource) -> Self {
-        Self::EmbeddedResource(value)
-    }
-}
-#[doc = "The contents of a resource, embedded into a prompt or tool call result.\n\nIt is up to the client how best to render embedded resources for the benefit\nof the LLM and/or the user."]
+#[doc = "`ContentArrayItem`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"EmbeddedResource\","]
-#[doc = "  \"description\": \"The contents of a resource, embedded into a prompt or tool call result.\\n\\nIt is up to the client how best to render embedded resources for the benefit\\nof the LLM and/or the user.\","]
+#[doc = "  \"oneOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/TextBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/ImageBlock\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/DocumentBlock\""]
+#[doc = "    }"]
+#[doc = "  ],"]
+#[doc = "  \"discriminator\": {"]
+#[doc = "    \"mapping\": {"]
+#[doc = "      \"document\": \"#/$defs/DocumentBlock\","]
+#[doc = "      \"image\": \"#/$defs/ImageBlock\","]
+#[doc = "      \"text\": \"#/$defs/TextBlock\""]
+#[doc = "    },"]
+#[doc = "    \"propertyName\": \"type\""]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum ContentArrayItem {
+    TextBlock(TextBlock),
+    ImageBlock(ImageBlock),
+    DocumentBlock(DocumentBlock),
+}
+impl ::std::convert::From<TextBlock> for ContentArrayItem {
+    fn from(value: TextBlock) -> Self {
+        Self::TextBlock(value)
+    }
+}
+impl ::std::convert::From<ImageBlock> for ContentArrayItem {
+    fn from(value: ImageBlock) -> Self {
+        Self::ImageBlock(value)
+    }
+}
+impl ::std::convert::From<DocumentBlock> for ContentArrayItem {
+    fn from(value: DocumentBlock) -> Self {
+        Self::DocumentBlock(value)
+    }
+}
+#[doc = "Document / file content (typically PDFs). Anthropic `document`\n(with citation support), OpenAI `input_file`, Gemini `file_data`,\nBedrock `document`. `title` is the document name used as the\ncitation target; `context` is supplementary metadata Anthropic\nsurfaces alongside the document for the model."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"DocumentBlock\","]
+#[doc = "  \"description\": \"Document / file content (typically PDFs). Anthropic `document`\\n(with citation support), OpenAI `input_file`, Gemini `file_data`,\\nBedrock `document`. `title` is the document name used as the\\ncitation target; `context` is supplementary metadata Anthropic\\nsurfaces alongside the document for the model.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"resource\","]
-#[doc = "    \"type\""]
+#[doc = "    \"source\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
+#[doc = "    \"citations\": {"]
+#[doc = "      \"title\": \"Citations\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/Citation\""]
+#[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"annotations\": {"]
+#[doc = "    \"context\": {"]
+#[doc = "      \"title\": \"Context\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "          \"type\": \"string\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"resource\": {"]
-#[doc = "      \"title\": \"Resource\","]
-#[doc = "      \"anyOf\": ["]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"oneOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/TextResourceContents\""]
+#[doc = "          \"$ref\": \"#/$defs/Base64Source\""]
 #[doc = "        },"]
 #[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/BlobResourceContents\""]
+#[doc = "          \"$ref\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/FileSource\""]
+#[doc = "        }"]
+#[doc = "      ],"]
+#[doc = "      \"discriminator\": {"]
+#[doc = "        \"mapping\": {"]
+#[doc = "          \"base64\": \"#/$defs/Base64Source\","]
+#[doc = "          \"file\": \"#/$defs/FileSource\","]
+#[doc = "          \"url\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        \"propertyName\": \"type\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"title\": {"]
+#[doc = "      \"title\": \"Title\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"document\","]
 #[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"resource\""]
+#[doc = "      \"const\": \"document\""]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -3597,17 +3711,15 @@ impl ::std::convert::From<EmbeddedResource> for ContentItem {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct EmbeddedResource {
+pub struct DocumentBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub annotations: ::std::option::Option<Annotations>,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    pub resource: Resource,
-    #[serde(rename = "type")]
+    pub citations: ::std::option::Option<::std::vec::Vec<Citation>>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub context: ::std::option::Option<::std::string::String>,
+    pub source: Source,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub title: ::std::option::Option<::std::string::String>,
+    #[serde(rename = "type", default = "defaults::document_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`ErrorCode`"]
@@ -4048,6 +4160,40 @@ impl<'de> ::serde::Deserialize<'de> for ErrorOccurredEventSubject {
             })
     }
 }
+#[doc = "Provider-hosted file reference. OpenAI Files API `file_id`, Anthropic\nFiles API `file_id`, Gemini `file_data.file_uri` (Files API URI)."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"FileSource\","]
+#[doc = "  \"description\": \"Provider-hosted file reference. OpenAI Files API `file_id`, Anthropic\\nFiles API `file_id`, Gemini `file_data.file_uri` (Files API URI).\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"file_id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"file_id\": {"]
+#[doc = "      \"title\": \"File Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"file\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"file\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct FileSource {
+    pub file_id: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::file_source_type")]
+    pub type_: ::std::string::String,
+}
 #[doc = "`GenAiToolCallId`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -4116,65 +4262,6 @@ impl<'de> ::serde::Deserialize<'de> for GenAiToolCallId {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
     }
-}
-#[doc = "An icon for display in user interfaces."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Icon\","]
-#[doc = "  \"description\": \"An icon for display in user interfaces.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"src\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"sizes\": {"]
-#[doc = "      \"title\": \"Sizes\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"src\": {"]
-#[doc = "      \"title\": \"Src\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct Icon {
-    #[serde(
-        rename = "mimeType",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub mime_type: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub sizes: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-    pub src: ::std::string::String,
 }
 #[doc = "`Id`"]
 #[doc = r""]
@@ -4245,53 +4332,44 @@ impl<'de> ::serde::Deserialize<'de> for Id {
             })
     }
 }
-#[doc = "Image content for a message."]
+#[doc = "Image content. Anthropic `image`, OpenAI `image_url` /\n`input_image`, Gemini `inline_data` / `file_data` image, Bedrock\n`image`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"ImageContent\","]
-#[doc = "  \"description\": \"Image content for a message.\","]
+#[doc = "  \"title\": \"ImageBlock\","]
+#[doc = "  \"description\": \"Image content. Anthropic `image`, OpenAI `image_url` /\\n`input_image`, Gemini `inline_data` / `file_data` image, Bedrock\\n`image`.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"data\","]
-#[doc = "    \"mimeType\","]
-#[doc = "    \"type\""]
+#[doc = "    \"source\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
-#[doc = "      \"anyOf\": ["]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"oneOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"$ref\": \"#/$defs/Base64Source\""]
 #[doc = "        },"]
 #[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"annotations\": {"]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "          \"$ref\": \"#/$defs/UrlSource\""]
 #[doc = "        },"]
 #[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
+#[doc = "          \"$ref\": \"#/$defs/FileSource\""]
 #[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"title\": \"Data\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"type\": \"string\""]
+#[doc = "      ],"]
+#[doc = "      \"discriminator\": {"]
+#[doc = "        \"mapping\": {"]
+#[doc = "          \"base64\": \"#/$defs/Base64Source\","]
+#[doc = "          \"file\": \"#/$defs/FileSource\","]
+#[doc = "          \"url\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        \"propertyName\": \"type\""]
+#[doc = "      }"]
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"image\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"const\": \"image\""]
 #[doc = "    }"]
@@ -4301,19 +4379,9 @@ impl<'de> ::serde::Deserialize<'de> for Id {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ImageContent {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub annotations: ::std::option::Option<Annotations>,
-    pub data: ::std::string::String,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "mimeType")]
-    pub mime_type: ::std::string::String,
-    #[serde(rename = "type")]
+pub struct ImageBlock {
+    pub source: Source,
+    #[serde(rename = "type", default = "defaults::image_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`JsonValue`"]
@@ -6203,86 +6271,28 @@ impl<'de> ::serde::Deserialize<'de> for ParentSpanId {
             })
     }
 }
-#[doc = "The model produced a reasoning / thinking block during this turn.\n\nDistinct from `text_emitted`: reasoning is not user-facing output;\nit's the model's internal chain-of-thought that some providers\nexpose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,\netc.). Consumers can filter on this event type to redact / collapse\nchain-of-thought from displays without losing it from the audit log.\n\n`avp.reasoning.signature` rides along when the provider returns a\ncryptographic signature on the thinking block (Anthropic does this\nfor redacted_thinking blocks); empty when the provider doesn't.\n`avp.reasoning.redacted` flags blocks the provider has returned in\nencrypted-only form (no plaintext); the wire still records the\noccurrence so audit consumers can count thinking turns."]
+#[doc = "Structured refusal distinct from generated text. OpenAI assistant\nmessage `refusal` field and Responses `output_refusal` item. Other\nproviders emit refusals as plain text plus a finish reason; this\nblock represents only providers that ship a typed refusal."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"ReasoningEmittedData\","]
-#[doc = "  \"description\": \"The model produced a reasoning / thinking block during this turn.\\n\\nDistinct from `text_emitted`: reasoning is not user-facing output;\\nit's the model's internal chain-of-thought that some providers\\nexpose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,\\netc.). Consumers can filter on this event type to redact / collapse\\nchain-of-thought from displays without losing it from the audit log.\\n\\n`avp.reasoning.signature` rides along when the provider returns a\\ncryptographic signature on the thinking block (Anthropic does this\\nfor redacted_thinking blocks); empty when the provider doesn't.\\n`avp.reasoning.redacted` flags blocks the provider has returned in\\nencrypted-only form (no plaintext); the wire still records the\\noccurrence so audit consumers can count thinking turns.\","]
+#[doc = "  \"title\": \"RefusalBlock\","]
+#[doc = "  \"description\": \"Structured refusal distinct from generated text. OpenAI assistant\\nmessage `refusal` field and Responses `output_refusal` item. Other\\nproviders emit refusals as plain text plus a finish reason; this\\nblock represents only providers that ship a typed refusal.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"avp.reasoning.text\","]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
+#[doc = "    \"refusal\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.reasoning.redacted\": {"]
-#[doc = "      \"title\": \"Avp.Reasoning.Redacted\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"boolean\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.reasoning.signature\": {"]
-#[doc = "      \"title\": \"Avp.Reasoning.Signature\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.reasoning.text\": {"]
-#[doc = "      \"title\": \"Avp.Reasoning.Text\","]
+#[doc = "    \"refusal\": {"]
+#[doc = "      \"title\": \"Refusal\","]
 #[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"refusal\","]
 #[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
+#[doc = "      \"const\": \"refusal\""]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -6290,714 +6300,10 @@ impl<'de> ::serde::Deserialize<'de> for ParentSpanId {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ReasoningEmittedData {
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "avp.reasoning.redacted",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_reasoning_redacted: ::std::option::Option<bool>,
-    #[serde(
-        rename = "avp.reasoning.signature",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_reasoning_signature: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "avp.reasoning.text")]
-    pub avp_reasoning_text: ::std::string::String,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`ReasoningEmittedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ReasoningEmittedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/ReasoningEmittedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.reasoning_emitted\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.reasoning_emitted\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct ReasoningEmittedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<ReasoningEmittedEventAvpCorrelationId>,
-    pub data: ReasoningEmittedData,
-    #[serde(default = "defaults::reasoning_emitted_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::reasoning_emitted_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::reasoning_emitted_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<ReasoningEmittedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::reasoning_emitted_event_type")]
+pub struct RefusalBlock {
+    pub refusal: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::refusal_block_type")]
     pub type_: ::std::string::String,
-}
-#[doc = "`ReasoningEmittedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ReasoningEmittedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for ReasoningEmittedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ReasoningEmittedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: ReasoningEmittedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ReasoningEmittedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ReasoningEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ReasoningEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ReasoningEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ReasoningEmittedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`ReasoningEmittedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct ReasoningEmittedEventSubject(::std::string::String);
-impl ::std::ops::Deref for ReasoningEmittedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<ReasoningEmittedEventSubject> for ::std::string::String {
-    fn from(value: ReasoningEmittedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for ReasoningEmittedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for ReasoningEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ReasoningEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ReasoningEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for ReasoningEmittedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "The model declined to generate a response or had its output filtered.\n\nCommon across providers but each exposes a different slice:\n  - Anthropic:  `stop_reason=\"refusal\"` (or `\"sensitive\"`), no\n                structured category, sometimes a refusal-flavored\n                text block.\n  - OpenAI:     `finish_reason=\"content_filter\"` plus a dedicated\n                `refusal` field on the assistant message containing\n                the model's refusal text.\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\n                per-category `safetyRatings`.\n\nAVP normalizes to a provider-agnostic shape: `reason` is the\nprovider's raw code (verbatim, so audit pipelines can match exact\nupstream strings), `message` is the model's refusal text when given,\n`category` is the provider's safety category (free-form because\nevery provider names them differently), `provider` lets downstream\nconsumers normalize the reason code without context-guessing.\n\nA refusal terminates the turn; the model produced no useful text or\ntool call. Whether the *run* terminates is an agent decision (the\nreference agent stops with `StopReason.refused`); a higher-level\nsupervisor may choose to reset history and retry."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"RefusalRecordedData\","]
-#[doc = "  \"description\": \"The model declined to generate a response or had its output filtered.\\n\\nCommon across providers but each exposes a different slice:\\n  - Anthropic:  `stop_reason=\\\"refusal\\\"` (or `\\\"sensitive\\\"`), no\\n                structured category, sometimes a refusal-flavored\\n                text block.\\n  - OpenAI:     `finish_reason=\\\"content_filter\\\"` plus a dedicated\\n                `refusal` field on the assistant message containing\\n                the model's refusal text.\\n  - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,\\n                `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus\\n                per-category `safetyRatings`.\\n\\nAVP normalizes to a provider-agnostic shape: `reason` is the\\nprovider's raw code (verbatim, so audit pipelines can match exact\\nupstream strings), `message` is the model's refusal text when given,\\n`category` is the provider's safety category (free-form because\\nevery provider names them differently), `provider` lets downstream\\nconsumers normalize the reason code without context-guessing.\\n\\nA refusal terminates the turn; the model produced no useful text or\\ntool call. Whether the *run* terminates is an agent decision (the\\nreference agent stops with `StopReason.refused`); a higher-level\\nsupervisor may choose to reset history and retry.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.refusal.reason\","]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.refusal.category\": {"]
-#[doc = "      \"title\": \"Avp.Refusal.Category\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.refusal.message\": {"]
-#[doc = "      \"title\": \"Avp.Refusal.Message\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.refusal.provider\": {"]
-#[doc = "      \"title\": \"Avp.Refusal.Provider\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.refusal.reason\": {"]
-#[doc = "      \"title\": \"Avp.Refusal.Reason\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct RefusalRecordedData {
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "avp.refusal.category",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_refusal_category: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "avp.refusal.message",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_refusal_message: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "avp.refusal.provider",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_refusal_provider: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "avp.refusal.reason")]
-    pub avp_refusal_reason: AvpRefusalReason,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`RefusalRecordedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"RefusalRecordedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/RefusalRecordedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.refusal_recorded\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.refusal_recorded\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct RefusalRecordedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<RefusalRecordedEventAvpCorrelationId>,
-    pub data: RefusalRecordedData,
-    #[serde(default = "defaults::refusal_recorded_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::refusal_recorded_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::refusal_recorded_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<RefusalRecordedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::refusal_recorded_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`RefusalRecordedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct RefusalRecordedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for RefusalRecordedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<RefusalRecordedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: RefusalRecordedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for RefusalRecordedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for RefusalRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for RefusalRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for RefusalRecordedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for RefusalRecordedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`RefusalRecordedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct RefusalRecordedEventSubject(::std::string::String);
-impl ::std::ops::Deref for RefusalRecordedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<RefusalRecordedEventSubject> for ::std::string::String {
-    fn from(value: RefusalRecordedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for RefusalRecordedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for RefusalRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for RefusalRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for RefusalRecordedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for RefusalRecordedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`Resource`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Resource\","]
-#[doc = "  \"anyOf\": ["]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/TextResourceContents\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/BlobResourceContents\""]
-#[doc = "    }"]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(untagged)]
-pub enum Resource {
-    TextResourceContents(TextResourceContents),
-    BlobResourceContents(BlobResourceContents),
-}
-impl ::std::convert::From<TextResourceContents> for Resource {
-    fn from(value: TextResourceContents) -> Self {
-        Self::TextResourceContents(value)
-    }
-}
-impl ::std::convert::From<BlobResourceContents> for Resource {
-    fn from(value: BlobResourceContents) -> Self {
-        Self::BlobResourceContents(value)
-    }
 }
 #[doc = "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog."]
 #[doc = r""]
@@ -7068,150 +6374,6 @@ pub struct ResourceDecl {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
     pub uri: Uri,
-}
-#[doc = "A resource that the server is capable of reading, included in a prompt or tool call result.\n\nNote: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ResourceLink\","]
-#[doc = "  \"description\": \"A resource that the server is capable of reading, included in a prompt or tool call result.\\n\\nNote: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"name\","]
-#[doc = "    \"type\","]
-#[doc = "    \"uri\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"annotations\": {"]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"description\": {"]
-#[doc = "      \"title\": \"Description\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"icons\": {"]
-#[doc = "      \"title\": \"Icons\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/Icon\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"name\": {"]
-#[doc = "      \"title\": \"Name\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"size\": {"]
-#[doc = "      \"title\": \"Size\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"integer\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"title\": {"]
-#[doc = "      \"title\": \"Title\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"resource_link\""]
-#[doc = "    },"]
-#[doc = "    \"uri\": {"]
-#[doc = "      \"title\": \"Uri\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"format\": \"uri\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ResourceLink {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub annotations: ::std::option::Option<Annotations>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub description: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub icons: ::std::option::Option<::std::vec::Vec<Icon>>,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "mimeType",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub mime_type: ::std::option::Option<::std::string::String>,
-    pub name: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub size: ::std::option::Option<i64>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub title: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type")]
-    pub type_: ::std::string::String,
-    pub uri: ::std::string::String,
 }
 #[doc = "`RunId`"]
 #[doc = r""]
@@ -7725,6 +6887,111 @@ impl<'de> ::serde::Deserialize<'de> for RunRequestedEventSubject {
             })
     }
 }
+#[doc = "Result of a provider-executed built-in tool. Pairs with\n`ServerToolUseBlock`. Anthropic `web_search_tool_result`, OpenAI\nResponses `*_call_output`, Gemini `code_execution_result`.\n`content` is provider-shaped (search-result rows, code stdout,\ncomputer-use screenshots, ...)."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ServerToolResultBlock\","]
+#[doc = "  \"description\": \"Result of a provider-executed built-in tool. Pairs with\\n`ServerToolUseBlock`. Anthropic `web_search_tool_result`, OpenAI\\nResponses `*_call_output`, Gemini `code_execution_result`.\\n`content` is provider-shaped (search-result rows, code stdout,\\ncomputer-use screenshots, ...).\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"content\","]
+#[doc = "    \"name\","]
+#[doc = "    \"tool_use_id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"content\": {"]
+#[doc = "      \"title\": \"Content\""]
+#[doc = "    },"]
+#[doc = "    \"is_error\": {"]
+#[doc = "      \"title\": \"Is Error\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"boolean\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"name\": {"]
+#[doc = "      \"title\": \"Name\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"tool_use_id\": {"]
+#[doc = "      \"title\": \"Tool Use Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"server_tool_result\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"server_tool_result\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ServerToolResultBlock {
+    pub content: ::serde_json::Value,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub is_error: ::std::option::Option<bool>,
+    pub name: ::std::string::String,
+    pub tool_use_id: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::server_tool_result_block_type")]
+    pub type_: ::std::string::String,
+}
+#[doc = "Built-in tool executed by the provider rather than the agent.\nAnthropic `server_tool_use` (web_search, code_execution), OpenAI\nResponses `web_search_call` / `file_search_call` / `computer_call` /\n`code_interpreter_call`, Gemini `executable_code` / `google_search`.\n`name` carries the tool kind (e.g. \"web_search\", \"code_interpreter\",\n\"computer_use\", \"google_search\"). Distinct from `tool_use` because\nthe agent never dispatches these; they are observability of a\nprovider-side action."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ServerToolUseBlock\","]
+#[doc = "  \"description\": \"Built-in tool executed by the provider rather than the agent.\\nAnthropic `server_tool_use` (web_search, code_execution), OpenAI\\nResponses `web_search_call` / `file_search_call` / `computer_call` /\\n`code_interpreter_call`, Gemini `executable_code` / `google_search`.\\n`name` carries the tool kind (e.g. \\\"web_search\\\", \\\"code_interpreter\\\",\\n\\\"computer_use\\\", \\\"google_search\\\"). Distinct from `tool_use` because\\nthe agent never dispatches these; they are observability of a\\nprovider-side action.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"id\","]
+#[doc = "    \"input\","]
+#[doc = "    \"name\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"input\": {"]
+#[doc = "      \"title\": \"Input\","]
+#[doc = "      \"type\": \"object\","]
+#[doc = "      \"additionalProperties\": true"]
+#[doc = "    },"]
+#[doc = "    \"name\": {"]
+#[doc = "      \"title\": \"Name\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"server_tool_use\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"server_tool_use\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ServerToolUseBlock {
+    pub id: ::std::string::String,
+    pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    pub name: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::server_tool_use_block_type")]
+    pub type_: ::std::string::String,
+}
 #[doc = "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data[\"avp.skills\"]`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -7828,6 +7095,57 @@ pub struct SkillRef {
     pub id: Id,
     #[serde(rename = "ref")]
     pub ref_: JsonValue,
+}
+#[doc = "`Source`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Source\","]
+#[doc = "  \"oneOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/Base64Source\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/UrlSource\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/FileSource\""]
+#[doc = "    }"]
+#[doc = "  ],"]
+#[doc = "  \"discriminator\": {"]
+#[doc = "    \"mapping\": {"]
+#[doc = "      \"base64\": \"#/$defs/Base64Source\","]
+#[doc = "      \"file\": \"#/$defs/FileSource\","]
+#[doc = "      \"url\": \"#/$defs/UrlSource\""]
+#[doc = "    },"]
+#[doc = "    \"propertyName\": \"type\""]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum Source {
+    Base64Source(Base64Source),
+    UrlSource(UrlSource),
+    FileSource(FileSource),
+}
+impl ::std::convert::From<Base64Source> for Source {
+    fn from(value: Base64Source) -> Self {
+        Self::Base64Source(value)
+    }
+}
+impl ::std::convert::From<UrlSource> for Source {
+    fn from(value: UrlSource) -> Self {
+        Self::UrlSource(value)
+    }
+}
+impl ::std::convert::From<FileSource> for Source {
+    fn from(value: FileSource) -> Self {
+        Self::FileSource(value)
+    }
 }
 #[doc = "`SpanId`"]
 #[doc = r""]
@@ -9435,36 +8753,27 @@ pub struct SupervisorPreamble {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub version: ::std::option::Option<::std::string::String>,
 }
-#[doc = "Text content for a message."]
+#[doc = "Plain text content. Anthropic `text`, OpenAI `text` /\n`output_text` / `input_text`, Gemini text part, Bedrock `text`,\nCohere `text`, Mistral `text`. `citations` carries Anthropic citations,\nOpenAI annotations, and Gemini grounding spans anchored into this text."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"TextContent\","]
-#[doc = "  \"description\": \"Text content for a message.\","]
+#[doc = "  \"title\": \"TextBlock\","]
+#[doc = "  \"description\": \"Plain text content. Anthropic `text`, OpenAI `text` /\\n`output_text` / `input_text`, Gemini text part, Bedrock `text`,\\nCohere `text`, Mistral `text`. `citations` carries Anthropic citations,\\nOpenAI annotations, and Gemini grounding spans anchored into this text.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"text\","]
-#[doc = "    \"type\""]
+#[doc = "    \"text\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
+#[doc = "    \"citations\": {"]
+#[doc = "      \"title\": \"Citations\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"annotations\": {"]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"$ref\": \"#/$defs/Annotations\""]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/Citation\""]
+#[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -9477,6 +8786,7 @@ pub struct SupervisorPreamble {
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"text\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"const\": \"text\""]
 #[doc = "    }"]
@@ -9486,129 +8796,39 @@ pub struct SupervisorPreamble {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct TextContent {
+pub struct TextBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub annotations: ::std::option::Option<Annotations>,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    pub citations: ::std::option::Option<::std::vec::Vec<Citation>>,
     pub text: ::std::string::String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "defaults::text_block_type")]
     pub type_: ::std::string::String,
 }
-#[doc = "`TextEmittedData`"]
+#[doc = "Reasoning / chain-of-thought emitted by the model.\n\nAnthropic extended thinking, OpenAI o-series `reasoning` items,\nGemini `thought` parts, Bedrock `reasoningContent`, Mistral thinking.\n`signature` is the opaque blob the provider requires echoed back on\nthe next turn for continued reasoning: Anthropic's cryptographic\nsignature, OpenAI's `encrypted_content`, or Gemini's\n`thought_signature`. `redacted` flags blocks whose plaintext is\nunavailable (encrypted-only form)."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"TextEmittedData\","]
+#[doc = "  \"title\": \"ThinkingBlock\","]
+#[doc = "  \"description\": \"Reasoning / chain-of-thought emitted by the model.\\n\\nAnthropic extended thinking, OpenAI o-series `reasoning` items,\\nGemini `thought` parts, Bedrock `reasoningContent`, Mistral thinking.\\n`signature` is the opaque blob the provider requires echoed back on\\nthe next turn for continued reasoning: Anthropic's cryptographic\\nsignature, OpenAI's `encrypted_content`, or Gemini's\\n`thought_signature`. `redacted` flags blocks whose plaintext is\\nunavailable (encrypted-only form).\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"avp.text\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
+#[doc = "    \"thinking\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
+#[doc = "    \"redacted\": {"]
+#[doc = "      \"title\": \"Redacted\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"type\": \"boolean\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.text\": {"]
-#[doc = "      \"title\": \"Avp.Text\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct TextEmittedData {
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    #[serde(rename = "avp.text")]
-    pub avp_text: ::std::string::String,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`TextEmittedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"TextEmittedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/TextEmittedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
+#[doc = "    \"signature\": {"]
+#[doc = "      \"title\": \"Signature\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"string\""]
@@ -9618,270 +8838,15 @@ pub struct TextEmittedData {
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
+#[doc = "    \"thinking\": {"]
+#[doc = "      \"title\": \"Thinking\","]
 #[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.text_emitted\","]
+#[doc = "      \"default\": \"thinking\","]
 #[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.text_emitted\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct TextEmittedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<TextEmittedEventAvpCorrelationId>,
-    pub data: TextEmittedData,
-    #[serde(default = "defaults::text_emitted_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::text_emitted_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::text_emitted_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<TextEmittedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", default = "defaults::text_emitted_event_type")]
-    pub type_: ::std::string::String,
-}
-#[doc = "`TextEmittedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct TextEmittedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for TextEmittedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<TextEmittedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: TextEmittedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for TextEmittedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for TextEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for TextEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for TextEmittedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for TextEmittedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`TextEmittedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct TextEmittedEventSubject(::std::string::String);
-impl ::std::ops::Deref for TextEmittedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<TextEmittedEventSubject> for ::std::string::String {
-    fn from(value: TextEmittedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for TextEmittedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for TextEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for TextEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for TextEmittedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for TextEmittedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "Text contents of a resource."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"TextResourceContents\","]
-#[doc = "  \"description\": \"Text contents of a resource.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"text\","]
-#[doc = "    \"uri\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"text\": {"]
-#[doc = "      \"title\": \"Text\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"uri\": {"]
-#[doc = "      \"title\": \"Uri\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"format\": \"uri\","]
-#[doc = "      \"minLength\": 1"]
+#[doc = "      \"const\": \"thinking\""]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -9889,21 +8854,14 @@ impl<'de> ::serde::Deserialize<'de> for TextEmittedEventSubject {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct TextResourceContents {
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "mimeType",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub mime_type: ::std::option::Option<::std::string::String>,
-    pub text: ::std::string::String,
-    pub uri: ::std::string::String,
+pub struct ThinkingBlock {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub redacted: ::std::option::Option<bool>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub signature: ::std::option::Option<::std::string::String>,
+    pub thinking: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::thinking_block_type")]
+    pub type_: ::std::string::String,
 }
 #[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
 #[doc = r""]
@@ -10409,58 +9367,54 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
             })
     }
 }
-#[doc = "Content representing the result of a tool execution.\n\nThis content type appears in user messages as a response to a ToolUseContent\nfrom the assistant. It contains the output of executing the requested tool."]
+#[doc = "Result of a client-dispatched tool call. Anthropic `tool_result`,\nOpenAI `function_call_output` / tool-role message, Gemini\n`function_response`, Bedrock `toolResult`. Anthropic permits nested\ntext/image/document content blocks; other providers serialize a\nflat string. `structured_content` carries a programmatic payload\nalongside the human-readable `content` (MCP's `structuredContent`,\nGemini `function_response.response`, Bedrock `toolResult.content.json`);\nthe two channels are complementary, not alternatives. `is_error`\nflags rejections."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"ToolResultContent\","]
-#[doc = "  \"description\": \"Content representing the result of a tool execution.\\n\\nThis content type appears in user messages as a response to a ToolUseContent\\nfrom the assistant. It contains the output of executing the requested tool.\","]
+#[doc = "  \"title\": \"ToolResultBlock\","]
+#[doc = "  \"description\": \"Result of a client-dispatched tool call. Anthropic `tool_result`,\\nOpenAI `function_call_output` / tool-role message, Gemini\\n`function_response`, Bedrock `toolResult`. Anthropic permits nested\\ntext/image/document content blocks; other providers serialize a\\nflat string. `structured_content` carries a programmatic payload\\nalongside the human-readable `content` (MCP's `structuredContent`,\\nGemini `function_response.response`, Bedrock `toolResult.content.json`);\\nthe two channels are complementary, not alternatives. `is_error`\\nflags rejections.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"toolUseId\","]
-#[doc = "    \"type\""]
+#[doc = "    \"content\","]
+#[doc = "    \"tool_use_id\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"_meta\": {"]
-#[doc = "      \"title\": \"Meta\","]
+#[doc = "    \"content\": {"]
+#[doc = "      \"title\": \"Content\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"type\": \"string\""]
 #[doc = "        },"]
 #[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"oneOf\": ["]
+#[doc = "              {"]
+#[doc = "                \"$ref\": \"#/$defs/TextBlock\""]
+#[doc = "              },"]
+#[doc = "              {"]
+#[doc = "                \"$ref\": \"#/$defs/ImageBlock\""]
+#[doc = "              },"]
+#[doc = "              {"]
+#[doc = "                \"$ref\": \"#/$defs/DocumentBlock\""]
+#[doc = "              }"]
+#[doc = "            ],"]
+#[doc = "            \"discriminator\": {"]
+#[doc = "              \"mapping\": {"]
+#[doc = "                \"document\": \"#/$defs/DocumentBlock\","]
+#[doc = "                \"image\": \"#/$defs/ImageBlock\","]
+#[doc = "                \"text\": \"#/$defs/TextBlock\""]
+#[doc = "              },"]
+#[doc = "              \"propertyName\": \"type\""]
+#[doc = "            }"]
+#[doc = "          }"]
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"content\": {"]
-#[doc = "      \"title\": \"Content\","]
-#[doc = "      \"default\": [],"]
-#[doc = "      \"type\": \"array\","]
-#[doc = "      \"items\": {"]
-#[doc = "        \"anyOf\": ["]
-#[doc = "          {"]
-#[doc = "            \"$ref\": \"#/$defs/TextContent\""]
-#[doc = "          },"]
-#[doc = "          {"]
-#[doc = "            \"$ref\": \"#/$defs/ImageContent\""]
-#[doc = "          },"]
-#[doc = "          {"]
-#[doc = "            \"$ref\": \"#/$defs/AudioContent\""]
-#[doc = "          },"]
-#[doc = "          {"]
-#[doc = "            \"$ref\": \"#/$defs/ResourceLink\""]
-#[doc = "          },"]
-#[doc = "          {"]
-#[doc = "            \"$ref\": \"#/$defs/EmbeddedResource\""]
-#[doc = "          }"]
-#[doc = "        ]"]
-#[doc = "      }"]
-#[doc = "    },"]
-#[doc = "    \"isError\": {"]
-#[doc = "      \"title\": \"Iserror\","]
+#[doc = "    \"is_error\": {"]
+#[doc = "      \"title\": \"Is Error\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"boolean\""]
@@ -10470,8 +9424,8 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"structuredContent\": {"]
-#[doc = "      \"title\": \"Structuredcontent\","]
+#[doc = "    \"structured_content\": {"]
+#[doc = "      \"title\": \"Structured Content\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
@@ -10482,12 +9436,13 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
-#[doc = "    \"toolUseId\": {"]
-#[doc = "      \"title\": \"Tooluseid\","]
+#[doc = "    \"tool_use_id\": {"]
+#[doc = "      \"title\": \"Tool Use Id\","]
 #[doc = "      \"type\": \"string\""]
 #[doc = "    },"]
 #[doc = "    \"type\": {"]
 #[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"tool_result\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"const\": \"tool_result\""]
 #[doc = "    }"]
@@ -10497,41 +9452,25 @@ impl<'de> ::serde::Deserialize<'de> for ToolInvokedEventSubject {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ToolResultContent {
-    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
-    pub content: ::std::vec::Vec<ContentItem>,
-    #[serde(
-        rename = "isError",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
+pub struct ToolResultBlock {
+    pub content: Content,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub is_error: ::std::option::Option<bool>,
-    #[serde(
-        rename = "_meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(
-        rename = "structuredContent",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub structured_content:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "toolUseId")]
     pub tool_use_id: ::std::string::String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "defaults::tool_result_block_type")]
     pub type_: ::std::string::String,
 }
-#[doc = "Tool result sent back to the model.\n\n`avp.tool_result` follows the MCP `ToolResultContent` shape:\n`toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.\nRejections are `isError=True` with the reason in `content[0].text`."]
+#[doc = "Tool result sent back to the model.\n\n`avp.tool_result` is a `content.ToolResultBlock` carrying\n`tool_use_id`, `content` (string or nested text/image/document\nblocks), and `is_error`. Rejections set `is_error=True` with the\nreason in `content[0].text`. During reconstruction this block\nbecomes one entry of the next user-role message's content array."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ToolReturnedData\","]
-#[doc = "  \"description\": \"Tool result sent back to the model.\\n\\n`avp.tool_result` follows the MCP `ToolResultContent` shape:\\n`toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.\\nRejections are `isError=True` with the reason in `content[0].text`.\","]
+#[doc = "  \"description\": \"Tool result sent back to the model.\\n\\n`avp.tool_result` is a `content.ToolResultBlock` carrying\\n`tool_use_id`, `content` (string or nested text/image/document\\nblocks), and `is_error`. Rejections set `is_error=True` with the\\nreason in `content[0].text`. During reconstruction this block\\nbecomes one entry of the next user-role message's content array.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.duration_ms\","]
@@ -10567,7 +9506,7 @@ pub struct ToolResultContent {
 #[doc = "      \"minimum\": 0.0"]
 #[doc = "    },"]
 #[doc = "    \"avp.tool_result\": {"]
-#[doc = "      \"$ref\": \"#/$defs/ToolResultContent\""]
+#[doc = "      \"$ref\": \"#/$defs/ToolResultBlock\""]
 #[doc = "    },"]
 #[doc = "    \"gen_ai.tool.call.id\": {"]
 #[doc = "      \"title\": \"Gen Ai.Tool.Call.Id\","]
@@ -10618,7 +9557,7 @@ pub struct ToolReturnedData {
     #[serde(rename = "avp.step")]
     pub avp_step: u64,
     #[serde(rename = "avp.tool_result")]
-    pub avp_tool_result: ToolResultContent,
+    pub avp_tool_result: ToolResultBlock,
     #[serde(rename = "gen_ai.tool.call.id")]
     pub gen_ai_tool_call_id: GenAiToolCallId,
     #[serde(rename = "gen_ai.tool.name")]
@@ -10884,6 +9823,53 @@ impl<'de> ::serde::Deserialize<'de> for ToolReturnedEventSubject {
             })
     }
 }
+#[doc = "Model invokes a client-dispatched tool. Anthropic `tool_use`,\nOpenAI `function_call` / `tool_calls`, Gemini `function_call`,\nBedrock `toolUse`, Cohere tool_calls, Mistral tool_calls."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"ToolUseBlock\","]
+#[doc = "  \"description\": \"Model invokes a client-dispatched tool. Anthropic `tool_use`,\\nOpenAI `function_call` / `tool_calls`, Gemini `function_call`,\\nBedrock `toolUse`, Cohere tool_calls, Mistral tool_calls.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"id\","]
+#[doc = "    \"input\","]
+#[doc = "    \"name\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"input\": {"]
+#[doc = "      \"title\": \"Input\","]
+#[doc = "      \"type\": \"object\","]
+#[doc = "      \"additionalProperties\": true"]
+#[doc = "    },"]
+#[doc = "    \"name\": {"]
+#[doc = "      \"title\": \"Name\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"tool_use\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"tool_use\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct ToolUseBlock {
+    pub id: ::std::string::String,
+    pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    pub name: ::std::string::String,
+    #[serde(rename = "type", default = "defaults::tool_use_block_type")]
+    pub type_: ::std::string::String,
+}
 #[doc = "`TraceId`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
@@ -11032,6 +10018,92 @@ impl<'de> ::serde::Deserialize<'de> for Uri {
             })
     }
 }
+#[doc = "External URL. Anthropic `source.type=url`, OpenAI `image_url`,\nGemini `file_data` (when `file_uri` is a public URL)."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"UrlSource\","]
+#[doc = "  \"description\": \"External URL. Anthropic `source.type=url`, OpenAI `image_url`,\\nGemini `file_data` (when `file_uri` is a public URL).\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"url\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"url\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"url\""]
+#[doc = "    },"]
+#[doc = "    \"url\": {"]
+#[doc = "      \"title\": \"Url\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct UrlSource {
+    #[serde(rename = "type", default = "defaults::url_source_type")]
+    pub type_: ::std::string::String,
+    pub url: ::std::string::String,
+}
+#[doc = "Video content. Gemini `inline_data` / `file_data` video, Bedrock\n`video`."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"VideoBlock\","]
+#[doc = "  \"description\": \"Video content. Gemini `inline_data` / `file_data` video, Bedrock\\n`video`.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"source\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"source\": {"]
+#[doc = "      \"title\": \"Source\","]
+#[doc = "      \"oneOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Base64Source\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/FileSource\""]
+#[doc = "        }"]
+#[doc = "      ],"]
+#[doc = "      \"discriminator\": {"]
+#[doc = "        \"mapping\": {"]
+#[doc = "          \"base64\": \"#/$defs/Base64Source\","]
+#[doc = "          \"file\": \"#/$defs/FileSource\","]
+#[doc = "          \"url\": \"#/$defs/UrlSource\""]
+#[doc = "        },"]
+#[doc = "        \"propertyName\": \"type\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"video\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"video\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct VideoBlock {
+    pub source: Source,
+    #[serde(rename = "type", default = "defaults::video_block_type")]
+    pub type_: ::std::string::String,
+}
 #[doc = r" Generation of default values for serde."]
 pub mod defaults {
     pub(super) fn agent_described_event_datacontenttype(
@@ -11089,6 +10161,15 @@ pub mod defaults {
     pub(super) fn assistant_message_event_type() -> ::std::string::String {
         "avp.assistant_message".to_string()
     }
+    pub(super) fn audio_block_type() -> ::std::string::String {
+        "audio".to_string()
+    }
+    pub(super) fn base64_source_type() -> ::std::string::String {
+        "base64".to_string()
+    }
+    pub(super) fn document_block_type() -> ::std::string::String {
+        "document".to_string()
+    }
     pub(super) fn error_occurred_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
         ::std::option::Option::Some("application/json".to_string())
@@ -11101,6 +10182,12 @@ pub mod defaults {
     }
     pub(super) fn error_occurred_event_type() -> ::std::string::String {
         "avp.error_occurred".to_string()
+    }
+    pub(super) fn file_source_type() -> ::std::string::String {
+        "file".to_string()
+    }
+    pub(super) fn image_block_type() -> ::std::string::String {
+        "image".to_string()
     }
     pub(super) fn managed_ref_resolve_failed_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
@@ -11154,31 +10241,8 @@ pub mod defaults {
     pub(super) fn mcp_server_disconnected_event_type() -> ::std::string::String {
         "avp.mcp_server_disconnected".to_string()
     }
-    pub(super) fn reasoning_emitted_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn reasoning_emitted_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn reasoning_emitted_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn reasoning_emitted_event_type() -> ::std::string::String {
-        "avp.reasoning_emitted".to_string()
-    }
-    pub(super) fn refusal_recorded_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn refusal_recorded_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn refusal_recorded_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn refusal_recorded_event_type() -> ::std::string::String {
-        "avp.refusal_recorded".to_string()
+    pub(super) fn refusal_block_type() -> ::std::string::String {
+        "refusal".to_string()
     }
     pub(super) fn run_requested_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
@@ -11192,6 +10256,12 @@ pub mod defaults {
     }
     pub(super) fn run_requested_event_type() -> ::std::string::String {
         "avp.run_requested".to_string()
+    }
+    pub(super) fn server_tool_result_block_type() -> ::std::string::String {
+        "server_tool_result".to_string()
+    }
+    pub(super) fn server_tool_use_block_type() -> ::std::string::String {
+        "server_tool_use".to_string()
     }
     pub(super) fn subagent_failed_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
@@ -11235,18 +10305,11 @@ pub mod defaults {
     pub(super) fn subagent_returned_event_type() -> ::std::string::String {
         "avp.subagent_returned".to_string()
     }
-    pub(super) fn text_emitted_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
+    pub(super) fn text_block_type() -> ::std::string::String {
+        "text".to_string()
     }
-    pub(super) fn text_emitted_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn text_emitted_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn text_emitted_event_type() -> ::std::string::String {
-        "avp.text_emitted".to_string()
+    pub(super) fn thinking_block_type() -> ::std::string::String {
+        "thinking".to_string()
     }
     pub(super) fn tool_invoked_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
@@ -11261,6 +10324,9 @@ pub mod defaults {
     pub(super) fn tool_invoked_event_type() -> ::std::string::String {
         "avp.tool_invoked".to_string()
     }
+    pub(super) fn tool_result_block_type() -> ::std::string::String {
+        "tool_result".to_string()
+    }
     pub(super) fn tool_returned_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {
         ::std::option::Option::Some("application/json".to_string())
@@ -11273,5 +10339,14 @@ pub mod defaults {
     }
     pub(super) fn tool_returned_event_type() -> ::std::string::String {
         "avp.tool_returned".to_string()
+    }
+    pub(super) fn tool_use_block_type() -> ::std::string::String {
+        "tool_use".to_string()
+    }
+    pub(super) fn url_source_type() -> ::std::string::String {
+        "url".to_string()
+    }
+    pub(super) fn video_block_type() -> ::std::string::String {
+        "video".to_string()
     }
 }

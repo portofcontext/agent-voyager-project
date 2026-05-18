@@ -19,9 +19,6 @@ export type AVPV01TrajectoryEvent =
   | SubagentInvokedEvent
   | SubagentReturnedEvent
   | SubagentFailedEvent
-  | TextEmittedEvent
-  | ReasoningEmittedEvent
-  | RefusalRecordedEvent
   | ErrorOccurredEvent
   | McpServerConnectedEvent
   | McpServerDisconnectedEvent
@@ -182,6 +179,71 @@ export type AvpMeta4 = {
 } | null;
 export type AvpStep = number;
 export type AvpDurationMs = number;
+export type Type5 = "text";
+export type Text = string;
+export type Citations = Citation[] | null;
+export type Type6 = string;
+export type CitedText = string | null;
+export type StartIndex = number | null;
+export type EndIndex = number | null;
+export type SourceId = string | null;
+export type SourceUrl = string | null;
+export type SourceTitle = string | null;
+export type Type7 = "thinking";
+export type Thinking = string;
+export type Signature = string | null;
+export type Redacted = boolean | null;
+export type Type8 = "image";
+export type Source5 = Base64Source | UrlSource | FileSource;
+export type Type9 = "base64";
+export type MediaType = string;
+export type Data = string;
+export type Type10 = "url";
+export type Url = string;
+export type Type11 = "file";
+export type FileId = string;
+export type Type12 = "audio";
+export type Source6 = Base64Source | UrlSource | FileSource;
+export type Transcript = string | null;
+export type Type13 = "video";
+export type Source7 = Base64Source | UrlSource | FileSource;
+export type Type14 = "document";
+export type Source8 = Base64Source | UrlSource | FileSource;
+export type Title = string | null;
+export type Context = string | null;
+export type Citations1 = Citation[] | null;
+export type Type15 = "tool_use";
+export type Id9 = string;
+export type Name4 = string;
+export type Type16 = "tool_result";
+export type ToolUseId = string;
+export type Content = string | (TextBlock | ImageBlock | DocumentBlock)[];
+export type StructuredContent = {
+  [k: string]: unknown;
+} | null;
+export type IsError = boolean | null;
+export type Type17 = "server_tool_use";
+export type Id10 = string;
+export type Name5 = string;
+export type Type18 = "server_tool_result";
+export type ToolUseId1 = string;
+export type Name6 = string;
+export type IsError1 = boolean | null;
+export type Type19 = "refusal";
+export type Refusal = string;
+export type AvpContent = (
+  | TextBlock
+  | ThinkingBlock
+  | ImageBlock
+  | AudioBlock
+  | VideoBlock
+  | DocumentBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ServerToolUseBlock
+  | ServerToolResultBlock
+  | RefusalBlock
+)[];
 export type GenAiProviderName1 = string | null;
 export type GenAiRequestModel1 = string | null;
 export type GenAiResponseModel = string | null;
@@ -194,15 +256,16 @@ export type GenAiUsageCacheCreationInputTokens = number | null;
 export type GenAiUsageReasoningOutputTokens = number | null;
 export type AvpCostUsd = number;
 export type AvpCostSource = ("computed" | "reported" | "unknown") | null;
+export type AvpRefusalCategory = string | null;
 export type Specversion5 = "1.0";
-export type Id9 = string;
+export type Id11 = string;
 export type Time5 = string;
 export type Subject5 = string | null;
 export type Datacontenttype5 = string | null;
 export type Dataschema5 = string | null;
 export type AvpCorrelationId5 = string | null;
-export type Type5 = "avp.tool_invoked";
-export type Source5 = "avp://agent";
+export type Type20 = "avp.tool_invoked";
+export type Source9 = "avp://agent";
 export type TraceId5 = string;
 export type SpanId5 = string;
 export type ParentSpanId5 = string;
@@ -214,14 +277,14 @@ export type GenAiToolCallId = string;
 export type GenAiToolName = string;
 export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
 export type Specversion6 = "1.0";
-export type Id10 = string;
+export type Id12 = string;
 export type Time6 = string;
 export type Subject6 = string | null;
 export type Datacontenttype6 = string | null;
 export type Dataschema6 = string | null;
 export type AvpCorrelationId6 = string | null;
-export type Type6 = "avp.tool_returned";
-export type Source6 = "avp://agent";
+export type Type21 = "avp.tool_returned";
+export type Source10 = "avp://agent";
 export type TraceId6 = string;
 export type SpanId6 = string;
 export type ParentSpanId6 = string;
@@ -232,75 +295,15 @@ export type AvpStep2 = number;
 export type GenAiToolCallId1 = string;
 export type GenAiToolName1 = string;
 export type AvpDurationMs1 = number;
-export type Type7 = "tool_result";
-export type Tooluseid = string;
-export type Type8 = "text";
-export type Text = string;
-export type Audience = ("user" | "assistant")[] | null;
-export type Priority = number | null;
-export type Meta1 = {
-  [k: string]: unknown;
-} | null;
-export type Type9 = "image";
-export type Data = string;
-export type Mimetype = string;
-export type Meta2 = {
-  [k: string]: unknown;
-} | null;
-export type Type10 = "audio";
-export type Data1 = string;
-export type Mimetype1 = string;
-export type Meta3 = {
-  [k: string]: unknown;
-} | null;
-export type Name4 = string;
-export type Title = string | null;
-export type Uri = string;
-export type Description4 = string | null;
-export type Mimetype2 = string | null;
-export type Size = number | null;
-export type Icons = Icon[] | null;
-export type Src = string;
-export type Mimetype3 = string | null;
-export type Sizes = string[] | null;
-export type Meta4 = {
-  [k: string]: unknown;
-} | null;
-export type Type11 = "resource_link";
-export type Type12 = "resource";
-export type Resource = TextResourceContents | BlobResourceContents;
-export type Uri1 = string;
-export type Mimetype4 = string | null;
-export type Meta5 = {
-  [k: string]: unknown;
-} | null;
-export type Text1 = string;
-export type Uri2 = string;
-export type Mimetype5 = string | null;
-export type Meta6 = {
-  [k: string]: unknown;
-} | null;
-export type Blob = string;
-export type Meta7 = {
-  [k: string]: unknown;
-} | null;
-export type Content = (TextContent | ImageContent | AudioContent | ResourceLink | EmbeddedResource)[];
-export type Structuredcontent = {
-  [k: string]: unknown;
-} | null;
-export type Iserror = boolean | null;
-export type Meta8 = {
-  [k: string]: unknown;
-} | null;
 export type Specversion7 = "1.0";
-export type Id11 = string;
+export type Id13 = string;
 export type Time7 = string;
 export type Subject7 = string | null;
 export type Datacontenttype7 = string | null;
 export type Dataschema7 = string | null;
 export type AvpCorrelationId7 = string | null;
-export type Type13 = "avp.subagent_invoked";
-export type Source7 = "avp://agent";
+export type Type22 = "avp.subagent_invoked";
+export type Source11 = "avp://agent";
 export type TraceId7 = string;
 export type SpanId7 = string;
 export type ParentSpanId7 = string;
@@ -314,14 +317,14 @@ export type GenAiOperationName1 = "invoke_agent";
 export type AvpSubagentInvocationId = string;
 export type AvpSubagentRunId = string | null;
 export type Specversion8 = "1.0";
-export type Id12 = string;
+export type Id14 = string;
 export type Time8 = string;
 export type Subject8 = string | null;
 export type Datacontenttype8 = string | null;
 export type Dataschema8 = string | null;
 export type AvpCorrelationId8 = string | null;
-export type Type14 = "avp.subagent_returned";
-export type Source8 = "avp://agent";
+export type Type23 = "avp.subagent_returned";
+export type Source12 = "avp://agent";
 export type TraceId8 = string;
 export type SpanId8 = string;
 export type ParentSpanId8 = string;
@@ -338,14 +341,14 @@ export type TokensInput = number;
 export type TokensOutput = number;
 export type Turns = number;
 export type Specversion9 = "1.0";
-export type Id13 = string;
+export type Id15 = string;
 export type Time9 = string;
 export type Subject9 = string | null;
 export type Datacontenttype9 = string | null;
 export type Dataschema9 = string | null;
 export type AvpCorrelationId9 = string | null;
-export type Type15 = "avp.subagent_failed";
-export type Source9 = "avp://agent";
+export type Type24 = "avp.subagent_failed";
+export type Source13 = "avp://agent";
 export type TraceId9 = string;
 export type SpanId9 = string;
 export type ParentSpanId9 = string;
@@ -359,74 +362,18 @@ export type AvpDurationMs3 = number;
 export type AvpSubagentError = string;
 export type AvpSubagentErrorCode = string | null;
 export type Specversion10 = "1.0";
-export type Id14 = string;
+export type Id16 = string;
 export type Time10 = string;
 export type Subject10 = string | null;
 export type Datacontenttype10 = string | null;
 export type Dataschema10 = string | null;
 export type AvpCorrelationId10 = string | null;
-export type Type16 = "avp.text_emitted";
-export type Source10 = "avp://agent";
+export type Type25 = "avp.error_occurred";
+export type Source14 = "avp://agent";
 export type TraceId10 = string;
 export type SpanId10 = string;
 export type ParentSpanId10 = string;
 export type AvpMeta10 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep6 = number;
-export type AvpText = string;
-export type Specversion11 = "1.0";
-export type Id15 = string;
-export type Time11 = string;
-export type Subject11 = string | null;
-export type Datacontenttype11 = string | null;
-export type Dataschema11 = string | null;
-export type AvpCorrelationId11 = string | null;
-export type Type17 = "avp.reasoning_emitted";
-export type Source11 = "avp://agent";
-export type TraceId11 = string;
-export type SpanId11 = string;
-export type ParentSpanId11 = string;
-export type AvpMeta11 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep7 = number;
-export type AvpReasoningText = string;
-export type AvpReasoningSignature = string | null;
-export type AvpReasoningRedacted = boolean | null;
-export type Specversion12 = "1.0";
-export type Id16 = string;
-export type Time12 = string;
-export type Subject12 = string | null;
-export type Datacontenttype12 = string | null;
-export type Dataschema12 = string | null;
-export type AvpCorrelationId12 = string | null;
-export type Type18 = "avp.refusal_recorded";
-export type Source12 = "avp://agent";
-export type TraceId12 = string;
-export type SpanId12 = string;
-export type ParentSpanId12 = string;
-export type AvpMeta12 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep8 = number;
-export type AvpRefusalReason = string;
-export type AvpRefusalMessage = string | null;
-export type AvpRefusalCategory = string | null;
-export type AvpRefusalProvider = string | null;
-export type Specversion13 = "1.0";
-export type Id17 = string;
-export type Time13 = string;
-export type Subject13 = string | null;
-export type Datacontenttype13 = string | null;
-export type Dataschema13 = string | null;
-export type AvpCorrelationId13 = string | null;
-export type Type19 = "avp.error_occurred";
-export type Source13 = "avp://agent";
-export type TraceId13 = string;
-export type SpanId13 = string;
-export type ParentSpanId13 = string;
-export type AvpMeta13 = {
   [k: string]: unknown;
 } | null;
 export type ErrorCode =
@@ -439,19 +386,19 @@ export type ErrorCode =
   | "commission_collision"
   | "unknown";
 export type AvpErrorMessage = string;
-export type Specversion14 = "1.0";
-export type Id18 = string;
-export type Time14 = string;
-export type Subject14 = string | null;
-export type Datacontenttype14 = string | null;
-export type Dataschema14 = string | null;
-export type AvpCorrelationId14 = string | null;
-export type Type20 = "avp.mcp_server_connected";
-export type Source14 = "avp://agent";
-export type TraceId14 = string;
-export type SpanId14 = string;
-export type ParentSpanId14 = string;
-export type AvpMeta14 = {
+export type Specversion11 = "1.0";
+export type Id17 = string;
+export type Time11 = string;
+export type Subject11 = string | null;
+export type Datacontenttype11 = string | null;
+export type Dataschema11 = string | null;
+export type AvpCorrelationId11 = string | null;
+export type Type26 = "avp.mcp_server_connected";
+export type Source15 = "avp://agent";
+export type TraceId11 = string;
+export type SpanId11 = string;
+export type ParentSpanId11 = string;
+export type AvpMeta11 = {
   [k: string]: unknown;
 } | null;
 export type AvpMcpServerId = string;
@@ -461,61 +408,61 @@ export type AvpMcpServerName = string | null;
 export type AvpMcpServerVersion = string | null;
 export type AvpMcpTools = ToolDecl[] | null;
 export type AvpMcpResources = ResourceDecl[] | null;
-export type Uri3 = string;
-export type Name5 = string | null;
-export type Description5 = string | null;
-export type Mimetype6 = string | null;
+export type Uri = string;
+export type Name7 = string | null;
+export type Description4 = string | null;
+export type Mimetype = string | null;
 export type AvpMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
 export type AvpMcpError = string | null;
-export type Specversion15 = "1.0";
-export type Id19 = string;
-export type Time15 = string;
-export type Subject15 = string | null;
-export type Datacontenttype15 = string | null;
-export type Dataschema15 = string | null;
-export type AvpCorrelationId15 = string | null;
-export type Type21 = "avp.mcp_server_disconnected";
-export type Source15 = "avp://agent";
-export type TraceId15 = string;
-export type SpanId15 = string;
-export type ParentSpanId15 = string;
-export type AvpMeta15 = {
+export type Specversion12 = "1.0";
+export type Id18 = string;
+export type Time12 = string;
+export type Subject12 = string | null;
+export type Datacontenttype12 = string | null;
+export type Dataschema12 = string | null;
+export type AvpCorrelationId12 = string | null;
+export type Type27 = "avp.mcp_server_disconnected";
+export type Source16 = "avp://agent";
+export type TraceId12 = string;
+export type SpanId12 = string;
+export type ParentSpanId12 = string;
+export type AvpMeta12 = {
   [k: string]: unknown;
 } | null;
 export type AvpMcpServerId1 = string;
 export type AvpMcpDisconnectReason = "clean" | "error";
 export type AvpMcpDisconnectMessage = string | null;
-export type Specversion16 = "1.0";
-export type Id20 = string;
-export type Time16 = string;
-export type Subject16 = string | null;
-export type Datacontenttype16 = string | null;
-export type Dataschema16 = string | null;
-export type AvpCorrelationId16 = string | null;
-export type Type22 = "avp.managed_ref_resolved";
-export type Source16 = "avp://agent";
-export type TraceId16 = string;
-export type SpanId16 = string;
-export type ParentSpanId16 = string;
-export type AvpMeta16 = {
+export type Specversion13 = "1.0";
+export type Id19 = string;
+export type Time13 = string;
+export type Subject13 = string | null;
+export type Datacontenttype13 = string | null;
+export type Dataschema13 = string | null;
+export type AvpCorrelationId13 = string | null;
+export type Type28 = "avp.managed_ref_resolved";
+export type Source17 = "avp://agent";
+export type TraceId13 = string;
+export type SpanId13 = string;
+export type ParentSpanId13 = string;
+export type AvpMeta13 = {
   [k: string]: unknown;
 } | null;
 export type AvpManagedKind = "mcp_server" | "skill" | "subagent";
 export type AvpManagedId = string;
 export type AvpDurationMs4 = number;
-export type Specversion17 = "1.0";
-export type Id21 = string;
-export type Time17 = string;
-export type Subject17 = string | null;
-export type Datacontenttype17 = string | null;
-export type Dataschema17 = string | null;
-export type AvpCorrelationId17 = string | null;
-export type Type23 = "avp.managed_ref_resolve_failed";
-export type Source17 = "avp://agent";
-export type TraceId17 = string;
-export type SpanId17 = string;
-export type ParentSpanId17 = string;
-export type AvpMeta17 = {
+export type Specversion14 = "1.0";
+export type Id20 = string;
+export type Time14 = string;
+export type Subject14 = string | null;
+export type Datacontenttype14 = string | null;
+export type Dataschema14 = string | null;
+export type AvpCorrelationId14 = string | null;
+export type Type29 = "avp.managed_ref_resolve_failed";
+export type Source18 = "avp://agent";
+export type TraceId14 = string;
+export type SpanId14 = string;
+export type ParentSpanId14 = string;
+export type AvpMeta14 = {
   [k: string]: unknown;
 } | null;
 export type AvpManagedKind1 = "mcp_server" | "skill" | "subagent";
@@ -884,6 +831,23 @@ export interface AssistantMessageEvent {
   source?: Source4;
   data: AssistantMessageData;
 }
+/**
+ * Payload of avp.assistant_message events.
+ *
+ * Carries the full content the model produced this turn under
+ * `avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost
+ * deltas. Reconstructing a provider message array is a direct read of
+ * `avp.content` per turn, paired with the `avp.tool_result` blocks from
+ * intervening `tool_returned` events to form the user-role tool-result
+ * messages.
+ *
+ * Refusal metadata: when the provider declined the turn, the refusal
+ * text appears as a `RefusalBlock` (or `TextBlock` for providers that
+ * don't typify it) inside `avp.content`, the upstream finish-reason
+ * string surfaces on `gen_ai.response.finish_reasons`, and the
+ * provider's safety category (when given, free-form because every
+ * provider names them differently) surfaces on `avp.refusal.category`.
+ */
 export interface AssistantMessageData {
   trace_id: TraceId4;
   span_id: SpanId4;
@@ -891,6 +855,7 @@ export interface AssistantMessageData {
   "avp.meta"?: AvpMeta4;
   "avp.step": AvpStep;
   "avp.duration_ms": AvpDurationMs;
+  "avp.content": AvpContent;
   "gen_ai.provider.name"?: GenAiProviderName1;
   "gen_ai.request.model"?: GenAiRequestModel1;
   "gen_ai.response.model"?: GenAiResponseModel;
@@ -903,18 +868,223 @@ export interface AssistantMessageData {
   "gen_ai.usage.reasoning.output_tokens"?: GenAiUsageReasoningOutputTokens;
   "avp.cost_usd": AvpCostUsd;
   "avp.cost.source"?: AvpCostSource;
+  "avp.refusal.category"?: AvpRefusalCategory;
+  [k: string]: unknown;
+}
+/**
+ * Plain text content. Anthropic `text`, OpenAI `text` /
+ * `output_text` / `input_text`, Gemini text part, Bedrock `text`,
+ * Cohere `text`, Mistral `text`. `citations` carries Anthropic citations,
+ * OpenAI annotations, and Gemini grounding spans anchored into this text.
+ */
+export interface TextBlock {
+  type?: Type5;
+  text: Text;
+  citations?: Citations;
+  [k: string]: unknown;
+}
+/**
+ * Span-anchored attribution on a text or document block. Unifies
+ * Anthropic citations (`char_location`, `page_location`,
+ * `content_block_location`), OpenAI annotations (`url_citation`,
+ * `file_citation`, `file_path`), and Gemini grounding chunks. `type`
+ * carries the provider's raw citation kind verbatim so downstream
+ * consumers can normalize without re-deriving it.
+ */
+export interface Citation {
+  type: Type6;
+  cited_text?: CitedText;
+  start_index?: StartIndex;
+  end_index?: EndIndex;
+  source_id?: SourceId;
+  source_url?: SourceUrl;
+  source_title?: SourceTitle;
+  [k: string]: unknown;
+}
+/**
+ * Reasoning / chain-of-thought emitted by the model.
+ *
+ * Anthropic extended thinking, OpenAI o-series `reasoning` items,
+ * Gemini `thought` parts, Bedrock `reasoningContent`, Mistral thinking.
+ * `signature` is the opaque blob the provider requires echoed back on
+ * the next turn for continued reasoning: Anthropic's cryptographic
+ * signature, OpenAI's `encrypted_content`, or Gemini's
+ * `thought_signature`. `redacted` flags blocks whose plaintext is
+ * unavailable (encrypted-only form).
+ */
+export interface ThinkingBlock {
+  type?: Type7;
+  thinking: Thinking;
+  signature?: Signature;
+  redacted?: Redacted;
+  [k: string]: unknown;
+}
+/**
+ * Image content. Anthropic `image`, OpenAI `image_url` /
+ * `input_image`, Gemini `inline_data` / `file_data` image, Bedrock
+ * `image`.
+ */
+export interface ImageBlock {
+  type?: Type8;
+  source: Source5;
+  [k: string]: unknown;
+}
+/**
+ * Inline base64-encoded media. Anthropic `source.type=base64`, Gemini
+ * `inline_data`, Bedrock `source.bytes`.
+ */
+export interface Base64Source {
+  type?: Type9;
+  media_type: MediaType;
+  data: Data;
+  [k: string]: unknown;
+}
+/**
+ * External URL. Anthropic `source.type=url`, OpenAI `image_url`,
+ * Gemini `file_data` (when `file_uri` is a public URL).
+ */
+export interface UrlSource {
+  type?: Type10;
+  url: Url;
+  [k: string]: unknown;
+}
+/**
+ * Provider-hosted file reference. OpenAI Files API `file_id`, Anthropic
+ * Files API `file_id`, Gemini `file_data.file_uri` (Files API URI).
+ */
+export interface FileSource {
+  type?: Type11;
+  file_id: FileId;
+  [k: string]: unknown;
+}
+/**
+ * Audio content. OpenAI `input_audio` (input) and `audio` (output),
+ * Gemini `inline_data` audio, Bedrock `audio`. `transcript` carries
+ * OpenAI's output-audio transcript when present.
+ */
+export interface AudioBlock {
+  type?: Type12;
+  source: Source6;
+  transcript?: Transcript;
+  [k: string]: unknown;
+}
+/**
+ * Video content. Gemini `inline_data` / `file_data` video, Bedrock
+ * `video`.
+ */
+export interface VideoBlock {
+  type?: Type13;
+  source: Source7;
+  [k: string]: unknown;
+}
+/**
+ * Document / file content (typically PDFs). Anthropic `document`
+ * (with citation support), OpenAI `input_file`, Gemini `file_data`,
+ * Bedrock `document`. `title` is the document name used as the
+ * citation target; `context` is supplementary metadata Anthropic
+ * surfaces alongside the document for the model.
+ */
+export interface DocumentBlock {
+  type?: Type14;
+  source: Source8;
+  title?: Title;
+  context?: Context;
+  citations?: Citations1;
+  [k: string]: unknown;
+}
+/**
+ * Model invokes a client-dispatched tool. Anthropic `tool_use`,
+ * OpenAI `function_call` / `tool_calls`, Gemini `function_call`,
+ * Bedrock `toolUse`, Cohere tool_calls, Mistral tool_calls.
+ */
+export interface ToolUseBlock {
+  type?: Type15;
+  id: Id9;
+  name: Name4;
+  input: Input;
+  [k: string]: unknown;
+}
+export interface Input {
+  [k: string]: unknown;
+}
+/**
+ * Result of a client-dispatched tool call. Anthropic `tool_result`,
+ * OpenAI `function_call_output` / tool-role message, Gemini
+ * `function_response`, Bedrock `toolResult`. Anthropic permits nested
+ * text/image/document content blocks; other providers serialize a
+ * flat string. `structured_content` carries a programmatic payload
+ * alongside the human-readable `content` (MCP's `structuredContent`,
+ * Gemini `function_response.response`, Bedrock `toolResult.content.json`);
+ * the two channels are complementary, not alternatives. `is_error`
+ * flags rejections.
+ */
+export interface ToolResultBlock {
+  type?: Type16;
+  tool_use_id: ToolUseId;
+  content: Content;
+  structured_content?: StructuredContent;
+  is_error?: IsError;
+  [k: string]: unknown;
+}
+/**
+ * Built-in tool executed by the provider rather than the agent.
+ * Anthropic `server_tool_use` (web_search, code_execution), OpenAI
+ * Responses `web_search_call` / `file_search_call` / `computer_call` /
+ * `code_interpreter_call`, Gemini `executable_code` / `google_search`.
+ * `name` carries the tool kind (e.g. "web_search", "code_interpreter",
+ * "computer_use", "google_search"). Distinct from `tool_use` because
+ * the agent never dispatches these; they are observability of a
+ * provider-side action.
+ */
+export interface ServerToolUseBlock {
+  type?: Type17;
+  id: Id10;
+  name: Name5;
+  input: Input1;
+  [k: string]: unknown;
+}
+export interface Input1 {
+  [k: string]: unknown;
+}
+/**
+ * Result of a provider-executed built-in tool. Pairs with
+ * `ServerToolUseBlock`. Anthropic `web_search_tool_result`, OpenAI
+ * Responses `*_call_output`, Gemini `code_execution_result`.
+ * `content` is provider-shaped (search-result rows, code stdout,
+ * computer-use screenshots, ...).
+ */
+export interface ServerToolResultBlock {
+  type?: Type18;
+  tool_use_id: ToolUseId1;
+  name: Name6;
+  content: Content1;
+  is_error?: IsError1;
+  [k: string]: unknown;
+}
+export interface Content1 {
+  [k: string]: unknown;
+}
+/**
+ * Structured refusal distinct from generated text. OpenAI assistant
+ * message `refusal` field and Responses `output_refusal` item. Other
+ * providers emit refusals as plain text plus a finish reason; this
+ * block represents only providers that ship a typed refusal.
+ */
+export interface RefusalBlock {
+  type?: Type19;
+  refusal: Refusal;
   [k: string]: unknown;
 }
 export interface ToolInvokedEvent {
   specversion?: Specversion5;
-  id?: Id9;
+  id?: Id11;
   time?: Time5;
   subject?: Subject5;
   datacontenttype?: Datacontenttype5;
   dataschema?: Dataschema5;
   "avp.correlation_id"?: AvpCorrelationId5;
-  type?: Type5;
-  source?: Source5;
+  type?: Type20;
+  source?: Source9;
   data: ToolInvokedData;
 }
 export interface ToolInvokedData {
@@ -934,22 +1104,24 @@ export interface GenAiToolCallArguments {
 }
 export interface ToolReturnedEvent {
   specversion?: Specversion6;
-  id?: Id10;
+  id?: Id12;
   time?: Time6;
   subject?: Subject6;
   datacontenttype?: Datacontenttype6;
   dataschema?: Dataschema6;
   "avp.correlation_id"?: AvpCorrelationId6;
-  type?: Type6;
-  source?: Source6;
+  type?: Type21;
+  source?: Source10;
   data: ToolReturnedData;
 }
 /**
  * Tool result sent back to the model.
  *
- * `avp.tool_result` follows the MCP `ToolResultContent` shape:
- * `toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.
- * Rejections are `isError=True` with the reason in `content[0].text`.
+ * `avp.tool_result` is a `content.ToolResultBlock` carrying
+ * `tool_use_id`, `content` (string or nested text/image/document
+ * blocks), and `is_error`. Rejections set `is_error=True` with the
+ * reason in `content[0].text`. During reconstruction this block
+ * becomes one entry of the next user-role message's content array.
  */
 export interface ToolReturnedData {
   trace_id: TraceId6;
@@ -960,131 +1132,19 @@ export interface ToolReturnedData {
   "gen_ai.tool.call.id": GenAiToolCallId1;
   "gen_ai.tool.name": GenAiToolName1;
   "avp.duration_ms": AvpDurationMs1;
-  "avp.tool_result": ToolResultContent;
-  [k: string]: unknown;
-}
-/**
- * Content representing the result of a tool execution.
- *
- * This content type appears in user messages as a response to a ToolUseContent
- * from the assistant. It contains the output of executing the requested tool.
- */
-export interface ToolResultContent {
-  type: Type7;
-  toolUseId: Tooluseid;
-  content?: Content;
-  structuredContent?: Structuredcontent;
-  isError?: Iserror;
-  _meta?: Meta8;
-  [k: string]: unknown;
-}
-/**
- * Text content for a message.
- */
-export interface TextContent {
-  type: Type8;
-  text: Text;
-  annotations?: Annotations | null;
-  _meta?: Meta1;
-  [k: string]: unknown;
-}
-export interface Annotations {
-  audience?: Audience;
-  priority?: Priority;
-  [k: string]: unknown;
-}
-/**
- * Image content for a message.
- */
-export interface ImageContent {
-  type: Type9;
-  data: Data;
-  mimeType: Mimetype;
-  annotations?: Annotations | null;
-  _meta?: Meta2;
-  [k: string]: unknown;
-}
-/**
- * Audio content for a message.
- */
-export interface AudioContent {
-  type: Type10;
-  data: Data1;
-  mimeType: Mimetype1;
-  annotations?: Annotations | null;
-  _meta?: Meta3;
-  [k: string]: unknown;
-}
-/**
- * A resource that the server is capable of reading, included in a prompt or tool call result.
- *
- * Note: resource links returned by tools are not guaranteed to appear in the results of `resources/list` requests.
- */
-export interface ResourceLink {
-  name: Name4;
-  title?: Title;
-  uri: Uri;
-  description?: Description4;
-  mimeType?: Mimetype2;
-  size?: Size;
-  icons?: Icons;
-  annotations?: Annotations | null;
-  _meta?: Meta4;
-  type: Type11;
-  [k: string]: unknown;
-}
-/**
- * An icon for display in user interfaces.
- */
-export interface Icon {
-  src: Src;
-  mimeType?: Mimetype3;
-  sizes?: Sizes;
-  [k: string]: unknown;
-}
-/**
- * The contents of a resource, embedded into a prompt or tool call result.
- *
- * It is up to the client how best to render embedded resources for the benefit
- * of the LLM and/or the user.
- */
-export interface EmbeddedResource {
-  type: Type12;
-  resource: Resource;
-  annotations?: Annotations | null;
-  _meta?: Meta7;
-  [k: string]: unknown;
-}
-/**
- * Text contents of a resource.
- */
-export interface TextResourceContents {
-  uri: Uri1;
-  mimeType?: Mimetype4;
-  _meta?: Meta5;
-  text: Text1;
-  [k: string]: unknown;
-}
-/**
- * Binary contents of a resource.
- */
-export interface BlobResourceContents {
-  uri: Uri2;
-  mimeType?: Mimetype5;
-  _meta?: Meta6;
-  blob: Blob;
+  "avp.tool_result": ToolResultBlock;
   [k: string]: unknown;
 }
 export interface SubagentInvokedEvent {
   specversion?: Specversion7;
-  id?: Id11;
+  id?: Id13;
   time?: Time7;
   subject?: Subject7;
   datacontenttype?: Datacontenttype7;
   dataschema?: Dataschema7;
   "avp.correlation_id"?: AvpCorrelationId7;
-  type?: Type13;
-  source?: Source7;
+  type?: Type22;
+  source?: Source11;
   data: SubagentInvokedData;
 }
 /**
@@ -1123,14 +1183,14 @@ export interface AvpSubagentInput {
 }
 export interface SubagentReturnedEvent {
   specversion?: Specversion8;
-  id?: Id12;
+  id?: Id14;
   time?: Time8;
   subject?: Subject8;
   datacontenttype?: Datacontenttype8;
   dataschema?: Dataschema8;
   "avp.correlation_id"?: AvpCorrelationId8;
-  type?: Type14;
-  source?: Source8;
+  type?: Type23;
+  source?: Source12;
   data: SubagentReturnedData;
 }
 /**
@@ -1185,14 +1245,14 @@ export interface SubagentUsage {
 }
 export interface SubagentFailedEvent {
   specversion?: Specversion9;
-  id?: Id13;
+  id?: Id15;
   time?: Time9;
   subject?: Subject9;
   datacontenttype?: Datacontenttype9;
   dataschema?: Dataschema9;
   "avp.correlation_id"?: AvpCorrelationId9;
-  type?: Type15;
-  source?: Source9;
+  type?: Type24;
+  source?: Source13;
   data: SubagentFailedData;
 }
 /**
@@ -1213,154 +1273,44 @@ export interface SubagentFailedData {
   "avp.subagent.error.code"?: AvpSubagentErrorCode;
   [k: string]: unknown;
 }
-export interface TextEmittedEvent {
+export interface ErrorOccurredEvent {
   specversion?: Specversion10;
-  id?: Id14;
+  id?: Id16;
   time?: Time10;
   subject?: Subject10;
   datacontenttype?: Datacontenttype10;
   dataschema?: Dataschema10;
   "avp.correlation_id"?: AvpCorrelationId10;
-  type?: Type16;
-  source?: Source10;
-  data: TextEmittedData;
+  type?: Type25;
+  source?: Source14;
+  data: ErrorOccurredData;
 }
-export interface TextEmittedData {
+export interface ErrorOccurredData {
   trace_id: TraceId10;
   span_id: SpanId10;
   parent_span_id: ParentSpanId10;
   "avp.meta"?: AvpMeta10;
-  "avp.step": AvpStep6;
-  "avp.text": AvpText;
-  [k: string]: unknown;
-}
-export interface ReasoningEmittedEvent {
-  specversion?: Specversion11;
-  id?: Id15;
-  time?: Time11;
-  subject?: Subject11;
-  datacontenttype?: Datacontenttype11;
-  dataschema?: Dataschema11;
-  "avp.correlation_id"?: AvpCorrelationId11;
-  type?: Type17;
-  source?: Source11;
-  data: ReasoningEmittedData;
-}
-/**
- * The model produced a reasoning / thinking block during this turn.
- *
- * Distinct from `text_emitted`: reasoning is not user-facing output;
- * it's the model's internal chain-of-thought that some providers
- * expose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,
- * etc.). Consumers can filter on this event type to redact / collapse
- * chain-of-thought from displays without losing it from the audit log.
- *
- * `avp.reasoning.signature` rides along when the provider returns a
- * cryptographic signature on the thinking block (Anthropic does this
- * for redacted_thinking blocks); empty when the provider doesn't.
- * `avp.reasoning.redacted` flags blocks the provider has returned in
- * encrypted-only form (no plaintext); the wire still records the
- * occurrence so audit consumers can count thinking turns.
- */
-export interface ReasoningEmittedData {
-  trace_id: TraceId11;
-  span_id: SpanId11;
-  parent_span_id: ParentSpanId11;
-  "avp.meta"?: AvpMeta11;
-  "avp.step": AvpStep7;
-  "avp.reasoning.text": AvpReasoningText;
-  "avp.reasoning.signature"?: AvpReasoningSignature;
-  "avp.reasoning.redacted"?: AvpReasoningRedacted;
-  [k: string]: unknown;
-}
-export interface RefusalRecordedEvent {
-  specversion?: Specversion12;
-  id?: Id16;
-  time?: Time12;
-  subject?: Subject12;
-  datacontenttype?: Datacontenttype12;
-  dataschema?: Dataschema12;
-  "avp.correlation_id"?: AvpCorrelationId12;
-  type?: Type18;
-  source?: Source12;
-  data: RefusalRecordedData;
-}
-/**
- * The model declined to generate a response or had its output filtered.
- *
- * Common across providers but each exposes a different slice:
- *   - Anthropic:  `stop_reason="refusal"` (or `"sensitive"`), no
- *                 structured category, sometimes a refusal-flavored
- *                 text block.
- *   - OpenAI:     `finish_reason="content_filter"` plus a dedicated
- *                 `refusal` field on the assistant message containing
- *                 the model's refusal text.
- *   - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,
- *                 `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus
- *                 per-category `safetyRatings`.
- *
- * AVP normalizes to a provider-agnostic shape: `reason` is the
- * provider's raw code (verbatim, so audit pipelines can match exact
- * upstream strings), `message` is the model's refusal text when given,
- * `category` is the provider's safety category (free-form because
- * every provider names them differently), `provider` lets downstream
- * consumers normalize the reason code without context-guessing.
- *
- * A refusal terminates the turn; the model produced no useful text or
- * tool call. Whether the *run* terminates is an agent decision (the
- * reference agent stops with `StopReason.refused`); a higher-level
- * supervisor may choose to reset history and retry.
- */
-export interface RefusalRecordedData {
-  trace_id: TraceId12;
-  span_id: SpanId12;
-  parent_span_id: ParentSpanId12;
-  "avp.meta"?: AvpMeta12;
-  "avp.step": AvpStep8;
-  "avp.refusal.reason": AvpRefusalReason;
-  "avp.refusal.message"?: AvpRefusalMessage;
-  "avp.refusal.category"?: AvpRefusalCategory;
-  "avp.refusal.provider"?: AvpRefusalProvider;
-  [k: string]: unknown;
-}
-export interface ErrorOccurredEvent {
-  specversion?: Specversion13;
-  id?: Id17;
-  time?: Time13;
-  subject?: Subject13;
-  datacontenttype?: Datacontenttype13;
-  dataschema?: Dataschema13;
-  "avp.correlation_id"?: AvpCorrelationId13;
-  type?: Type19;
-  source?: Source13;
-  data: ErrorOccurredData;
-}
-export interface ErrorOccurredData {
-  trace_id: TraceId13;
-  span_id: SpanId13;
-  parent_span_id: ParentSpanId13;
-  "avp.meta"?: AvpMeta13;
   "avp.error.code": ErrorCode;
   "avp.error.message": AvpErrorMessage;
   [k: string]: unknown;
 }
 export interface McpServerConnectedEvent {
-  specversion?: Specversion14;
-  id?: Id18;
-  time?: Time14;
-  subject?: Subject14;
-  datacontenttype?: Datacontenttype14;
-  dataschema?: Dataschema14;
-  "avp.correlation_id"?: AvpCorrelationId14;
-  type?: Type20;
-  source?: Source14;
+  specversion?: Specversion11;
+  id?: Id17;
+  time?: Time11;
+  subject?: Subject11;
+  datacontenttype?: Datacontenttype11;
+  dataschema?: Dataschema11;
+  "avp.correlation_id"?: AvpCorrelationId11;
+  type?: Type26;
+  source?: Source15;
   data: McpServerConnectedData;
 }
 export interface McpServerConnectedData {
-  trace_id: TraceId14;
-  span_id: SpanId14;
-  parent_span_id: ParentSpanId14;
-  "avp.meta"?: AvpMeta14;
+  trace_id: TraceId11;
+  span_id: SpanId11;
+  parent_span_id: ParentSpanId11;
+  "avp.meta"?: AvpMeta11;
   "avp.mcp.server_id": AvpMcpServerId;
   "avp.mcp.protocol_version": AvpMcpProtocolVersion;
   "avp.mcp.tool_count": AvpMcpToolCount;
@@ -1382,44 +1332,44 @@ export interface McpServerConnectedData {
  * in `Commission.skills[].avp.source` resolve through this catalog.
  */
 export interface ResourceDecl {
-  uri: Uri3;
-  name?: Name5;
-  description?: Description5;
-  mimeType?: Mimetype6;
+  uri: Uri;
+  name?: Name7;
+  description?: Description4;
+  mimeType?: Mimetype;
   [k: string]: unknown;
 }
 export interface McpServerDisconnectedEvent {
-  specversion?: Specversion15;
-  id?: Id19;
-  time?: Time15;
-  subject?: Subject15;
-  datacontenttype?: Datacontenttype15;
-  dataschema?: Dataschema15;
-  "avp.correlation_id"?: AvpCorrelationId15;
-  type?: Type21;
-  source?: Source15;
+  specversion?: Specversion12;
+  id?: Id18;
+  time?: Time12;
+  subject?: Subject12;
+  datacontenttype?: Datacontenttype12;
+  dataschema?: Dataschema12;
+  "avp.correlation_id"?: AvpCorrelationId12;
+  type?: Type27;
+  source?: Source16;
   data: McpServerDisconnectedData;
 }
 export interface McpServerDisconnectedData {
-  trace_id: TraceId15;
-  span_id: SpanId15;
-  parent_span_id: ParentSpanId15;
-  "avp.meta"?: AvpMeta15;
+  trace_id: TraceId12;
+  span_id: SpanId12;
+  parent_span_id: ParentSpanId12;
+  "avp.meta"?: AvpMeta12;
   "avp.mcp.server_id": AvpMcpServerId1;
   "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
   "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;
   [k: string]: unknown;
 }
 export interface ManagedRefResolvedEvent {
-  specversion?: Specversion16;
-  id?: Id20;
-  time?: Time16;
-  subject?: Subject16;
-  datacontenttype?: Datacontenttype16;
-  dataschema?: Dataschema16;
-  "avp.correlation_id"?: AvpCorrelationId16;
-  type?: Type22;
-  source?: Source16;
+  specversion?: Specversion13;
+  id?: Id19;
+  time?: Time13;
+  subject?: Subject13;
+  datacontenttype?: Datacontenttype13;
+  dataschema?: Dataschema13;
+  "avp.correlation_id"?: AvpCorrelationId13;
+  type?: Type28;
+  source?: Source17;
   data: ManagedRefResolvedData;
 }
 /**
@@ -1435,25 +1385,25 @@ export interface ManagedRefResolvedEvent {
  * event records only that the round-trip happened.
  */
 export interface ManagedRefResolvedData {
-  trace_id: TraceId16;
-  span_id: SpanId16;
-  parent_span_id: ParentSpanId16;
-  "avp.meta"?: AvpMeta16;
+  trace_id: TraceId13;
+  span_id: SpanId13;
+  parent_span_id: ParentSpanId13;
+  "avp.meta"?: AvpMeta13;
   "avp.managed.kind": AvpManagedKind;
   "avp.managed.id": AvpManagedId;
   "avp.duration_ms": AvpDurationMs4;
   [k: string]: unknown;
 }
 export interface ManagedRefResolveFailedEvent {
-  specversion?: Specversion17;
-  id?: Id21;
-  time?: Time17;
-  subject?: Subject17;
-  datacontenttype?: Datacontenttype17;
-  dataschema?: Dataschema17;
-  "avp.correlation_id"?: AvpCorrelationId17;
-  type?: Type23;
-  source?: Source17;
+  specversion?: Specversion14;
+  id?: Id20;
+  time?: Time14;
+  subject?: Subject14;
+  datacontenttype?: Datacontenttype14;
+  dataschema?: Dataschema14;
+  "avp.correlation_id"?: AvpCorrelationId14;
+  type?: Type29;
+  source?: Source18;
   data: ManagedRefResolveFailedData;
 }
 /**
@@ -1463,10 +1413,10 @@ export interface ManagedRefResolveFailedEvent {
  * resolution is fail-fast (see `spec/v0.1/resolver.md` §5).
  */
 export interface ManagedRefResolveFailedData {
-  trace_id: TraceId17;
-  span_id: SpanId17;
-  parent_span_id: ParentSpanId17;
-  "avp.meta"?: AvpMeta17;
+  trace_id: TraceId14;
+  span_id: SpanId14;
+  parent_span_id: ParentSpanId14;
+  "avp.meta"?: AvpMeta14;
   "avp.managed.kind": AvpManagedKind1;
   "avp.managed.id": AvpManagedId1;
   "avp.resolve.error": AvpResolveError;

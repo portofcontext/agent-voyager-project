@@ -36,7 +36,6 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from mcp.types import ToolResultContent
 from pydantic import BaseModel, Field
 
 from avp._envelope import (
@@ -51,6 +50,7 @@ from avp._envelope import (
     now_iso,
 )
 from avp.commission import Commission
+from avp.content import AVPContentBlock, ToolResultBlock
 from avp.descriptor import (
     AgentDescriptor,
     McpServerDecl,
@@ -69,9 +69,6 @@ T_AGENT_STOPPED = "avp.agent_stopped"
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_TOOL_INVOKED = "avp.tool_invoked"
 T_TOOL_RETURNED = "avp.tool_returned"
-T_TEXT_EMITTED = "avp.text_emitted"
-T_REASONING_EMITTED = "avp.reasoning_emitted"
-T_REFUSAL_RECORDED = "avp.refusal_recorded"
 T_ERROR_OCCURRED = "avp.error_occurred"
 T_MCP_SERVER_CONNECTED = "avp.mcp_server_connected"
 T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
@@ -197,8 +194,26 @@ class AgentStoppedData(_SpanData):
 
 
 class AssistantMessageData(_SpanData):
+    """Payload of avp.assistant_message events.
+
+    Carries the full content the model produced this turn under
+    `avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost
+    deltas. Reconstructing a provider message array is a direct read of
+    `avp.content` per turn, paired with the `avp.tool_result` blocks from
+    intervening `tool_returned` events to form the user-role tool-result
+    messages.
+
+    Refusal metadata: when the provider declined the turn, the refusal
+    text appears as a `RefusalBlock` (or `TextBlock` for providers that
+    don't typify it) inside `avp.content`, the upstream finish-reason
+    string surfaces on `gen_ai.response.finish_reasons`, and the
+    provider's safety category (when given, free-form because every
+    provider names them differently) surfaces on `avp.refusal.category`.
+    """
+
     avp_step: int = Field(ge=0, alias="avp.step")
     avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    avp_content: list[AVPContentBlock] = Field(alias="avp.content")
     gen_ai_provider_name: str | None = Field(default=None, alias="gen_ai.provider.name")
     gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
     gen_ai_response_model: str | None = Field(default=None, alias="gen_ai.response.model")
@@ -223,6 +238,7 @@ class AssistantMessageData(_SpanData):
     avp_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
         default=None, alias="avp.cost.source"
     )
+    avp_refusal_category: str | None = Field(default=None, alias="avp.refusal.category")
 
 
 class ToolInvokedData(_SpanData):
@@ -238,16 +254,18 @@ class ToolInvokedData(_SpanData):
 class ToolReturnedData(_SpanData):
     """Tool result sent back to the model.
 
-    `avp.tool_result` follows the MCP `ToolResultContent` shape:
-    `toolUseId`, `content: list[ContentBlock]`, `structuredContent`, `isError`.
-    Rejections are `isError=True` with the reason in `content[0].text`.
+    `avp.tool_result` is a `content.ToolResultBlock` carrying
+    `tool_use_id`, `content` (string or nested text/image/document
+    blocks), and `is_error`. Rejections set `is_error=True` with the
+    reason in `content[0].text`. During reconstruction this block
+    becomes one entry of the next user-role message's content array.
     """
 
     avp_step: int = Field(ge=0, alias="avp.step")
     gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
     gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
     avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_tool_result: ToolResultContent = Field(alias="avp.tool_result")
+    avp_tool_result: ToolResultBlock = Field(alias="avp.tool_result")
 
 
 class SubagentInvokedData(_SpanData):
@@ -317,68 +335,6 @@ class SubagentFailedData(_SpanData):
     avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
     avp_subagent_error: str = Field(alias="avp.subagent.error")
     avp_subagent_error_code: str | None = Field(default=None, alias="avp.subagent.error.code")
-
-
-class TextEmittedData(_SpanData):
-    avp_step: int = Field(ge=0, alias="avp.step")
-    avp_text: str = Field(alias="avp.text")
-
-
-class RefusalRecordedData(_SpanData):
-    """The model declined to generate a response or had its output filtered.
-
-    Common across providers but each exposes a different slice:
-      - Anthropic:  `stop_reason="refusal"` (or `"sensitive"`), no
-                    structured category, sometimes a refusal-flavored
-                    text block.
-      - OpenAI:     `finish_reason="content_filter"` plus a dedicated
-                    `refusal` field on the assistant message containing
-                    the model's refusal text.
-      - Gemini:     `finishReason` enum (`SAFETY`, `RECITATION`,
-                    `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`) plus
-                    per-category `safetyRatings`.
-
-    AVP normalizes to a provider-agnostic shape: `reason` is the
-    provider's raw code (verbatim, so audit pipelines can match exact
-    upstream strings), `message` is the model's refusal text when given,
-    `category` is the provider's safety category (free-form because
-    every provider names them differently), `provider` lets downstream
-    consumers normalize the reason code without context-guessing.
-
-    A refusal terminates the turn; the model produced no useful text or
-    tool call. Whether the *run* terminates is an agent decision (the
-    reference agent stops with `StopReason.refused`); a higher-level
-    supervisor may choose to reset history and retry.
-    """
-
-    avp_step: int = Field(ge=0, alias="avp.step")
-    avp_refusal_reason: str = Field(min_length=1, alias="avp.refusal.reason")
-    avp_refusal_message: str | None = Field(default=None, alias="avp.refusal.message")
-    avp_refusal_category: str | None = Field(default=None, alias="avp.refusal.category")
-    avp_refusal_provider: str | None = Field(default=None, alias="avp.refusal.provider")
-
-
-class ReasoningEmittedData(_SpanData):
-    """The model produced a reasoning / thinking block during this turn.
-
-    Distinct from `text_emitted`: reasoning is not user-facing output;
-    it's the model's internal chain-of-thought that some providers
-    expose (Anthropic extended thinking, OpenAI o1/o3 reasoning summaries,
-    etc.). Consumers can filter on this event type to redact / collapse
-    chain-of-thought from displays without losing it from the audit log.
-
-    `avp.reasoning.signature` rides along when the provider returns a
-    cryptographic signature on the thinking block (Anthropic does this
-    for redacted_thinking blocks); empty when the provider doesn't.
-    `avp.reasoning.redacted` flags blocks the provider has returned in
-    encrypted-only form (no plaintext); the wire still records the
-    occurrence so audit consumers can count thinking turns.
-    """
-
-    avp_step: int = Field(ge=0, alias="avp.step")
-    avp_reasoning_text: str = Field(alias="avp.reasoning.text")
-    avp_reasoning_signature: str | None = Field(default=None, alias="avp.reasoning.signature")
-    avp_reasoning_redacted: bool | None = Field(default=None, alias="avp.reasoning.redacted")
 
 
 class ErrorOccurredData(_SpanData):
@@ -542,24 +498,6 @@ class SubagentFailedEvent(_CloudEventBase):
     data: SubagentFailedData
 
 
-class TextEmittedEvent(_CloudEventBase):
-    type: Literal["avp.text_emitted"] = T_TEXT_EMITTED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: TextEmittedData
-
-
-class ReasoningEmittedEvent(_CloudEventBase):
-    type: Literal["avp.reasoning_emitted"] = T_REASONING_EMITTED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ReasoningEmittedData
-
-
-class RefusalRecordedEvent(_CloudEventBase):
-    type: Literal["avp.refusal_recorded"] = T_REFUSAL_RECORDED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: RefusalRecordedData
-
-
 class ErrorOccurredEvent(_CloudEventBase):
     type: Literal["avp.error_occurred"] = T_ERROR_OCCURRED
     source: Literal["avp://agent"] = SOURCE_AGENT
@@ -604,9 +542,6 @@ _AGENT_EVENT_TYPES = (
     SubagentInvokedEvent,
     SubagentReturnedEvent,
     SubagentFailedEvent,
-    TextEmittedEvent,
-    ReasoningEmittedEvent,
-    RefusalRecordedEvent,
     ErrorOccurredEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
@@ -625,9 +560,6 @@ Event = Annotated[
     | SubagentInvokedEvent
     | SubagentReturnedEvent
     | SubagentFailedEvent
-    | TextEmittedEvent
-    | ReasoningEmittedEvent
-    | RefusalRecordedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
     | McpServerDisconnectedEvent
@@ -688,13 +620,10 @@ __all__ = [
     "T_MANAGED_REF_RESOLVE_FAILED",
     "T_MCP_SERVER_CONNECTED",
     "T_MCP_SERVER_DISCONNECTED",
-    "T_REASONING_EMITTED",
-    "T_REFUSAL_RECORDED",
     "T_RUN_REQUESTED",
     "T_SUBAGENT_FAILED",
     "T_SUBAGENT_INVOKED",
     "T_SUBAGENT_RETURNED",
-    "T_TEXT_EMITTED",
     "T_TOOL_INVOKED",
     "T_TOOL_RETURNED",
     "ZERO_SPAN_ID",
@@ -718,10 +647,6 @@ __all__ = [
     "McpServerConnectedEvent",
     "McpServerDisconnectedData",
     "McpServerDisconnectedEvent",
-    "ReasoningEmittedData",
-    "ReasoningEmittedEvent",
-    "RefusalRecordedData",
-    "RefusalRecordedEvent",
     "RunRequestedData",
     "RunRequestedEvent",
     "SubagentFailedData",
@@ -731,8 +656,6 @@ __all__ = [
     "SubagentReturnedData",
     "SubagentReturnedEvent",
     "SubagentUsage",
-    "TextEmittedData",
-    "TextEmittedEvent",
     "ToolInvokedData",
     "ToolInvokedEvent",
     "ToolReturnedData",
