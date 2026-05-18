@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avp.dev/schema/v0.1/avp.schema.json",
+  "title": "Agent Voyager Project (AVP) v0.1",
+  "description": "Umbrella bundle for the AVP v0.1 wire format. Built on CloudEvents 1.0 (envelopes), OpenTelemetry GenAI semantic conventions and span identification (data attribute names), JSON-RPC 2.0 (Resolver API), MCP (tool descriptors and supervisor-side tool dispatch), Agent Skills (SKILL.md), and JSON Schema 2020-12 (this document). AVP-specific concepts — the no-mid-run-reach-in topology, the trajectory-as-source-of-truth contract — live under the `avp.*` attribute namespace. See FOUNDATIONS.md and the per-spec entry-point schemas: commission.schema.json, trajectory.schema.json, agent-descriptor.schema.json.",
+  "oneOf": [
+    {
+      "$ref": "commission.schema.json"
+    },
+    {
+      "$ref": "trajectory.schema.json"
+    },
+    {
+      "$ref": "agent-descriptor.schema.json"
+    }
+  ]
+}

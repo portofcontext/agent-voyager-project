@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.1",
+  "run_id": "auth-refactor-20260502-abc123",
+
+  "supervisor": {
+    "name": "simple-supervisor-example",
+    "version": "0.1.0"
+  },
+
+  "mcp_servers": [
+    { "id": "corp-directory", "ref": { "vault": "prod", "key": "corp-dir-mcp" } }
+  ],
+
+  "skills": [
+    { "id": "style-guide", "ref": { "type": "custom", "skill_id": "skill_styleguide_v3" } }
+  ],
+
+  "subagents": [
+    { "id": "researcher", "ref": "sk_subagent_researcher_v1" }
+  ],
+
+  "output_schema": null,
+
+  "prompt": "Refactor the auth module to use JWT.",
+  "system_prompt": "You are a senior Rust developer.",
+  "model": "claude-sonnet-4-6",
+
+  "thread_id": "session-xyz",
+  "tags": ["auth", "refactor"],
+  "meta": { "environment": "dev", "triggered_by": "ci" }
+}

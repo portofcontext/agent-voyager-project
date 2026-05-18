@@ -1,0 +1,105 @@
+"""Shared pricing for AVP agents.
+
+Why this lives in `avp` core, not per-agent:
+- Anthropic models are reachable through nearly every mainstream agent
+  SDK: the raw Anthropic SDK, the Claude Agent SDK, LangChain /
+  LangGraph, LlamaIndex, Pydantic AI, the OpenAI-compatible surfaces on
+  Bedrock and Vertex, plus the long tail of provider-agnostic
+  frameworks. Every AVP adapter that wraps one of these SDKs needs the
+  same model-price lookup; a per-adapter copy drifts the moment
+  Anthropic ships new pricing.
+- The price table is data, not policy. Adapters load it at startup,
+  users can override via the public `PriceTable` type, and the on-wire
+  cost number is tagged with `avp.cost.source` so downstreams can tell
+  a locally-computed number from a provider-reported one (or unknown).
+
+Default ships in `avp/data/prices.json`; `load_default_prices()` reads it
+fresh on each call. To override, pass a `PriceTable` to your driver /
+translator at construction.
+
+`COST_SOURCE_*` constants name the audit-source values:
+  - `computed`: we did the math locally from a price table
+  - `reported`: the API/SDK handed us the number directly
+  - `unknown`: no price found and no provider report (cost reported as 0.0)
+
+The agent stamps `avp.cost.source` on each `assistant_message` event so
+trajectory consumers can filter / weight by provenance, e.g. an audit
+pipeline that trusts reported numbers but flags computed numbers from a
+stale price table.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from importlib import resources
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+CostSource = Literal["computed", "reported", "unknown"]
+
+COST_SOURCE_COMPUTED: CostSource = "computed"
+COST_SOURCE_REPORTED: CostSource = "reported"
+COST_SOURCE_UNKNOWN: CostSource = "unknown"
+
+
+class ModelPrice(BaseModel):
+    """Per-1M-token pricing in USD."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input: float = Field(ge=0)
+    output: float = Field(ge=0)
+    cache_read: float = Field(default=0.0, ge=0)
+    cache_write: float = Field(default=0.0, ge=0)
+
+
+PriceTable = Mapping[str, ModelPrice]
+
+
+def load_default_prices() -> dict[str, ModelPrice]:
+    """Load the bundled default price table from `avp/data/prices.json`.
+
+    Reads on each call so users who patch the file in-place get fresh
+    numbers without restarting their process. Returns a fresh dict;
+    callers can mutate without side effects.
+    """
+    raw = resources.files("avp.data").joinpath("prices.json").read_text()
+    parsed = json.loads(raw)
+    return {
+        model: ModelPrice.model_validate(spec) for model, spec in parsed.get("models", {}).items()
+    }
+
+
+def compute_cost(
+    model: str,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read: int,
+    cache_write: int,
+    prices: PriceTable,
+) -> tuple[float, CostSource]:
+    """Compute billable USD cost from a turn's token counts.
+
+    Returns `(cost, source)` so callers can stamp `avp.cost.source` on
+    the wire alongside `avp.cost_usd`.
+
+    `input_tokens` here is the AVP convention (cache reads INCLUDED).
+    Cache reads / writes are billed at their own per-token rates; the
+    fresh portion gets the regular input rate. If the model isn't in
+    the table, returns `(0.0, "unknown")` — caller should warn so
+    silent under-counts don't ship.
+    """
+    p = prices.get(model)
+    if p is None:
+        return 0.0, COST_SOURCE_UNKNOWN
+    fresh = max(0, input_tokens - cache_read - cache_write)
+    cost = (
+        fresh * p.input / 1_000_000
+        + cache_read * p.cache_read / 1_000_000
+        + cache_write * p.cache_write / 1_000_000
+        + output_tokens * p.output / 1_000_000
+    )
+    return cost, COST_SOURCE_COMPUTED
