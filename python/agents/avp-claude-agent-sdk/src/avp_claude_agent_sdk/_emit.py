@@ -14,15 +14,33 @@ Stage 2: `tool_invoked` / `tool_returned`, `subagent_invoked` /
 
 from __future__ import annotations
 
+import json
 import time
-from typing import Any
+from typing import Any, Literal
 
-from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ContentBlock,
+    McpStatusResponse,
+    Message,
+    ResultMessage,
+    ServerToolResultBlock,
+    ServerToolUseBlock,
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 
 from avp._envelope import ZERO_SPAN_ID, new_span_id
 from avp.content import AVPContentBlock
+from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
+from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
 from avp.content import TextBlock as AVPTextBlock
 from avp.content import ThinkingBlock as AVPThinkingBlock
+from avp.content import ToolResultBlock as AVPToolResultBlock
 from avp.content import ToolUseBlock as AVPToolUseBlock
 from avp.pricing import compute_cost
 from avp.trajectory import (
@@ -37,9 +55,13 @@ from avp.trajectory import (
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
+    ToolInvokedData,
+    ToolInvokedEvent,
+    ToolReturnedData,
+    ToolReturnedEvent,
     Usage,
 )
-from avp_claude_agent_sdk._runstate import RunState
+from avp_claude_agent_sdk._runstate import RunState, ToolCallInfo
 from avp_claude_agent_sdk._translator import (
     descriptor_full,
     mcp_servers_connected,
@@ -149,9 +171,7 @@ async def emit_agent_started(
                 provider_name=_PROVIDER_NAME,
                 operation_name="invoke_agent",
                 request_model=(
-                    request_model_from_init(init_data, options)
-                    if init_data
-                    else options.model
+                    request_model_from_init(init_data, options) if init_data else options.model
                 ),
                 prompt=prompt,
                 system_prompt=resolve_system_prompt(options.system_prompt),
@@ -246,12 +266,13 @@ async def _close_turn(state: RunState) -> None:
         cache_write=delta["cache_creation"],
         prices=state.prices,
     )
+    turn_span_id = state.current_turn_span_id
     await state.sink(
         AssistantMessageEvent(
             subject=state.run_id,
             data=AssistantMessageData(
                 trace_id=state.trace_id,
-                span_id=state.current_turn_span_id,
+                span_id=turn_span_id,
                 parent_span_id=state.agent_span_id,
                 step=state.step,
                 duration_ms=duration_ms,
@@ -268,6 +289,40 @@ async def _close_turn(state: RunState) -> None:
             ),
         )
     )
+    # Walk the just-emitted content and bracket every tool use:
+    # `tool_invoked` for both local/MCP `ToolUseBlock`s (paired with the
+    # next `UserMessage(ToolResultBlock)`) and `ServerToolUseBlock`s,
+    # which are followed inline by their `ServerToolResultBlock` and so
+    # close out within the same turn.
+    for block in state.turn_content:
+        if isinstance(block, AVPToolUseBlock):
+            await _emit_tool_invoked(
+                state,
+                parent_span_id=turn_span_id,
+                tool_call_id=block.id,
+                tool_name=block.name,
+                tool_input=block.input,
+                dispatch_target=_dispatch_target(block.name),
+            )
+        elif isinstance(block, AVPServerToolUseBlock):
+            await _emit_tool_invoked(
+                state,
+                parent_span_id=turn_span_id,
+                tool_call_id=block.id,
+                tool_name=block.name,
+                tool_input=block.input,
+                dispatch_target="local",
+            )
+        elif isinstance(block, AVPServerToolResultBlock):
+            await _emit_tool_returned(
+                state,
+                tool_use_id=block.tool_use_id,
+                result=AVPToolResultBlock(
+                    tool_use_id=block.tool_use_id,
+                    content=_normalize_tool_result_content(block.content),
+                    is_error=block.is_error,
+                ),
+            )
     state.current_turn_span_id = None
 
 
@@ -276,23 +331,36 @@ async def _close_turn(state: RunState) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _translate_blocks(blocks: list[Any]) -> list[AVPContentBlock]:
+def _translate_blocks(blocks: list[ContentBlock]) -> list[AVPContentBlock]:
     """SDK content blocks → AVP content blocks. Drops unknown subtypes
-    (honest-silent beats fabricated). Server tool blocks land in Stage 2."""
+    (honest-silent beats fabricated). `ToolResultBlock` is handled in
+    `_on_user` (becomes a `tool_returned` event, not inline content).
+
+    The SDK's `ServerToolResultBlock` doesn't carry `name` (only its
+    paired `ServerToolUseBlock` does), so a single in-order pass tracks
+    the most recent server-tool name per `tool_use_id` and back-fills it
+    on the AVP result block.
+    """
     out: list[AVPContentBlock] = []
+    server_tool_names: dict[str, str] = {}
     for block in blocks or []:
-        kind = type(block).__name__
-        if kind == "TextBlock":
+        if isinstance(block, TextBlock):
             out.append(AVPTextBlock(text=block.text))
-        elif kind == "ThinkingBlock":
+        elif isinstance(block, ThinkingBlock):
+            out.append(AVPThinkingBlock(thinking=block.thinking, signature=block.signature))
+        elif isinstance(block, ToolUseBlock):
+            out.append(AVPToolUseBlock(id=block.id, name=block.name, input=block.input))
+        elif isinstance(block, ServerToolUseBlock):
+            server_tool_names[block.id] = block.name
+            out.append(AVPServerToolUseBlock(id=block.id, name=block.name, input=block.input))
+        elif isinstance(block, ServerToolResultBlock):
             out.append(
-                AVPThinkingBlock(
-                    thinking=block.thinking,
-                    signature=getattr(block, "signature", None),
+                AVPServerToolResultBlock(
+                    tool_use_id=block.tool_use_id,
+                    name=server_tool_names.get(block.tool_use_id, ""),
+                    content=block.content,
                 )
             )
-        elif kind == "ToolUseBlock":
-            out.append(AVPToolUseBlock(id=block.id, name=block.name, input=block.input))
     return out
 
 
@@ -319,11 +387,111 @@ def _update_usage(state: RunState, usage: dict[str, Any] | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tool bracketing
+# ---------------------------------------------------------------------------
+
+
+def _dispatch_target(tool_name: str) -> Literal["mcp_server", "local"]:
+    """Pick the wire discriminator for `tool_invoked`. Claude Agent SDK
+    namespaces MCP tools as `mcp__<server>__<tool>`; everything else is
+    a CLI built-in or local hook."""
+    return "mcp_server" if tool_name.startswith("mcp__") else "local"
+
+
+def _normalize_tool_result_content(content: Any) -> str | list[Any]:
+    """Coerce arbitrary tool-result payloads into AVP `ToolResultBlock.content`.
+
+    Anthropic permits nested text/image/document blocks but the Claude
+    Agent SDK surfaces them as opaque dicts; full block translation
+    lands later. For now: pass strings through, stringify `None` to ""
+    so the AVP block validates, and JSON-encode any other shape so the
+    payload survives the wire intact (lossily, but observably)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(content, default=str)
+    except (TypeError, ValueError):
+        return str(content)
+
+
+async def _emit_tool_invoked(
+    state: RunState,
+    *,
+    parent_span_id: str,
+    tool_call_id: str,
+    tool_name: str,
+    tool_input: dict[str, Any],
+    dispatch_target: Literal["mcp_server", "local"],
+) -> None:
+    """Emit `tool_invoked` and record the span for later pairing.
+
+    Parent is the open turn span; consumers tree `tool_returned` under
+    this span via `state.tool_spans[tool_call_id]`.
+    """
+    span_id = new_span_id()
+    state.tool_spans[tool_call_id] = ToolCallInfo(
+        span_id=span_id,
+        name=tool_name,
+        step=state.step,
+        started_at=time.monotonic(),
+    )
+    await state.sink(
+        ToolInvokedEvent(
+            subject=state.run_id,
+            data=ToolInvokedData(
+                trace_id=state.trace_id,
+                span_id=span_id,
+                parent_span_id=parent_span_id,
+                step=state.step,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                tool_input=tool_input,
+                tool_dispatch_target=dispatch_target,
+            ),
+        )
+    )
+
+
+async def _emit_tool_returned(
+    state: RunState,
+    *,
+    tool_use_id: str,
+    result: AVPToolResultBlock,
+) -> None:
+    """Emit `tool_returned`, paired against `state.tool_spans`.
+
+    Unmatched ids (no preceding `tool_invoked`) drop silently: emitting
+    a `tool_returned` without a pair would forge a span hierarchy.
+    """
+    info = state.tool_spans.pop(tool_use_id, None)
+    if info is None:
+        return
+    duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
+    await state.sink(
+        ToolReturnedEvent(
+            subject=state.run_id,
+            data=ToolReturnedData(
+                trace_id=state.trace_id,
+                span_id=new_span_id(),
+                parent_span_id=info.span_id,
+                step=info.step,
+                tool_call_id=tool_use_id,
+                tool_name=info.name,
+                duration_ms=duration_ms,
+                tool_result=result,
+            ),
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # Per-message handlers
 # ---------------------------------------------------------------------------
 
 
-async def _on_assistant(state: RunState, message: Any) -> None:
+async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     # Merge gate: a new turn opens only when no turn is open, OR a tool
     # result arrived since the last AssistantMessage. Consecutive
     # AssistantMessages within one LLM call (thinking + text) APPEND
@@ -334,37 +502,56 @@ async def _on_assistant(state: RunState, message: Any) -> None:
 
     state.turn_content.extend(_translate_blocks(message.content))
     if state.turn_response_model is None:
-        state.turn_response_model = getattr(message, "model", None)
-    stop_reason = getattr(message, "stop_reason", None)
-    if stop_reason:
-        state.turn_stop_reason = stop_reason
-    _update_usage(state, getattr(message, "usage", None))
+        state.turn_response_model = message.model
+    if message.stop_reason:
+        state.turn_stop_reason = message.stop_reason
+    _update_usage(state, message.usage)
 
 
-async def _on_user(state: RunState, message: Any) -> None:
-    content = getattr(message, "content", None) or []
-    has_tool_result = any(type(b).__name__ == "ToolResultBlock" for b in content)
-    if not has_tool_result:
+async def _on_user(state: RunState, message: UserMessage) -> None:
+    # UserMessage.content is `str | list[ContentBlock]`. A plain string
+    # carries no tool result, so only the list form is inspected.
+    content = message.content if isinstance(message.content, list) else []
+    tool_results = [b for b in content if isinstance(b, ToolResultBlock)]
+    if not tool_results:
         return
-    # Close the in-flight turn (emit its assistant_message) before the
-    # tool result is recorded. Stage 2 will emit tool_returned events
-    # here as well, parented to the saved tool span_ids.
+    # Close the in-flight turn (emit its assistant_message + bracketing
+    # tool_invoked events for blocks this turn produced) before the
+    # tool result events fire.
     if state.current_turn_span_id is not None:
         await _close_turn(state)
+    # `UserMessage.tool_use_result` is the SDK's structured-payload
+    # channel (e.g. Glob → `{filenames, numFiles, durationMs, truncated}`)
+    # paired with the human-readable `ToolResultBlock.content` string.
+    # It lives at the message level, not per-block, so attribution is
+    # only unambiguous when there's exactly one result; multi-result
+    # messages drop the structured channel to avoid mis-attribution.
+    structured = message.tool_use_result if len(tool_results) == 1 else None
+    for block in tool_results:
+        await _emit_tool_returned(
+            state,
+            tool_use_id=block.tool_use_id,
+            result=AVPToolResultBlock(
+                tool_use_id=block.tool_use_id,
+                content=_normalize_tool_result_content(block.content),
+                structured_content=structured,
+                is_error=block.is_error,
+            ),
+        )
     state.tool_result_arrived = True
 
 
-async def _on_result(state: RunState, message: Any) -> None:
+async def _on_result(state: RunState, message: ResultMessage) -> None:
     # Drain any pending turn before stopping.
     if state.current_turn_span_id is not None:
         await _close_turn(state)
-    if getattr(message, "is_error", False):
+    if message.is_error:
         reason = StopReason.error
-    elif getattr(message, "stop_reason", None) == "refusal":
+    elif message.stop_reason == "refusal":
         reason = StopReason.refused
     else:
         reason = StopReason.converged
-    await emit_agent_stopped(state, reason, output=getattr(message, "result", None))
+    await emit_agent_stopped(state, reason, output=message.result)
 
 
 # ---------------------------------------------------------------------------
@@ -372,17 +559,12 @@ async def _on_result(state: RunState, message: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def handle_message(state: RunState, message: Any) -> None:
-    """Dispatch one SDK message to the appropriate AVP emitter. Mutates state.
-
-    Class-name dispatch (`type(message).__name__`) keeps this decoupled
-    from SDK class identity / hierarchy changes.
-    """
-    msg_type = type(message).__name__
-    if msg_type == "AssistantMessage":
+async def handle_message(state: RunState, message: Message) -> None:
+    """Dispatch one SDK message to the appropriate AVP emitter. Mutates state."""
+    if isinstance(message, AssistantMessage):
         await _on_assistant(state, message)
-    elif msg_type == "UserMessage":
+    elif isinstance(message, UserMessage):
         await _on_user(state, message)
-    elif msg_type == "ResultMessage":
+    elif isinstance(message, ResultMessage):
         await _on_result(state, message)
     # SystemMessage, RateLimitEvent, StreamEvent: Stage 2+

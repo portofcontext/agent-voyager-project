@@ -11,6 +11,22 @@ from avp.pricing import ModelPrice
 
 
 @dataclasses.dataclass
+class ToolCallInfo:
+    """Bookkeeping for an in-flight tool call.
+
+    Recorded on `tool_invoked` emission and consumed on `tool_returned`
+    to: parent the result under the call's span, stamp `tool_name` (the
+    SDK's `ToolResultBlock` doesn't carry it), report `duration_ms`, and
+    keep the result on the same `step` as the call.
+    """
+
+    span_id: str
+    name: str
+    step: int
+    started_at: float
+
+
+@dataclasses.dataclass
 class RunState:
     """Flat per-run state. One instance per active run, stored in a context-var."""
 
@@ -26,8 +42,9 @@ class RunState:
     # handle_message: consecutive AssistantMessages without an intervening
     # tool result belong to the same LLM call (e.g. thinking + text blocks).
     tool_result_arrived: bool = False
-    # tool_use_id → span_id; populated in Stage 2
-    tool_spans: dict[str, str] = dataclasses.field(default_factory=dict)
+    # tool_use_id → ToolCallInfo. Populated on tool_invoked; popped on
+    # tool_returned (so an unmatched result is honestly dropped).
+    tool_spans: dict[str, ToolCallInfo] = dataclasses.field(default_factory=dict)
     # Double-stop guard. Flips on the first agent_stopped emit
     # (ResultMessage handler, exception handler, or disconnect() fallback);
     # later handlers no-op so the trajectory only ends once.

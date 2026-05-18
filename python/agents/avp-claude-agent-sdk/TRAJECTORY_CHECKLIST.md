@@ -131,15 +131,24 @@ exist in v0.1).
 - [x] `TextBlock` → `avp.content.TextBlock(text=block.text)`.
 - [x] `ThinkingBlock` → `avp.content.ThinkingBlock(thinking=block.thinking,
   signature=block.signature)`.
-- [ ] `ToolUseBlock` → `avp.content.ToolUseBlock(id=block.id,
+- [x] `ToolUseBlock` → `avp.content.ToolUseBlock(id=block.id,
   name=block.name, input=block.input)` lands in `avp.content` (done in
   Stage 1). Stage 2 ALSO emits a separate `avp.tool_invoked` event for
-  the bracketing pair, parented to `current_turn_span_id`; records
-  `block.id → span_id` in `state.tool_spans` to pair with the result.
-- [ ] `ServerToolUseBlock` / `ServerToolResultBlock` — map into the
-  corresponding AVP content block; tool dispatch target is
-  `"local"` (server-side execution). Same `tool_invoked` emission
-  rule as `ToolUseBlock`.
+  the bracketing pair, parented to the just-emitted `assistant_message`
+  span; records `block.id → ToolCallInfo(span_id, name, step, started_at)`
+  in `state.tool_spans` to pair with the result. `dispatch_target` is
+  `"mcp_server"` when the tool name has the `mcp__` prefix, else
+  `"local"`.
+- [x] `ServerToolUseBlock` / `ServerToolResultBlock` — map into the
+  corresponding AVP content block; tool dispatch target is `"local"`
+  (the agent never dispatches; the provider executes server-side).
+  Both events bracket within the same turn (the SDK delivers the use
+  + result in the same `AssistantMessage.content`); `_close_turn` walks
+  the content list in order, allocating a `tool_invoked` span for
+  `ServerToolUseBlock` and pairing `ServerToolResultBlock` against it.
+  The SDK's `ServerToolResultBlock` does not carry `name`; the
+  translator back-fills it from the matching `ServerToolUseBlock` in
+  the same turn.
 
 `ToolResultBlock` does NOT appear in `AssistantMessage.content`; it
 appears in `UserMessage.content` and is handled separately (below) as a
@@ -147,13 +156,15 @@ appears in `UserMessage.content` and is handled separately (below) as a
 
 ## Tool result events
 
-- [ ] `UserMessage(ToolResultBlock)` → `avp.tool_returned`. Look up
-  `tool_use_id` in `state.tool_spans` for `parent_span_id`. Payload
+- [x] `UserMessage(ToolResultBlock)` → `avp.tool_returned`. Look up
+  `tool_use_id` in `state.tool_spans` (pop on emission) for
+  `parent_span_id`, `tool_name`, `step`, and `duration_ms`. Payload
   carries `avp.tool_result` (an `avp.content.ToolResultBlock` with
   `tool_use_id`, `content`, `is_error`). Failures ride `is_error=True`
   inside the block; there is no separate `tool_failed` event in v0.1.
-  Also flips `state.tool_result_arrived = True` so the next
-  `AssistantMessage` opens a new turn.
+  Unmatched ids (no preceding `tool_invoked`) drop silently to avoid
+  forging a parent span. Also flips `state.tool_result_arrived = True`
+  so the next `AssistantMessage` opens a new turn.
 
 ## SystemMessage subtypes (subagent dispatch via Task tool)
 
@@ -198,8 +209,8 @@ appears in `UserMessage.content` and is handled separately (below) as a
 - [x] Span triple on every event; prelude at ZERO; turns under `agent_span_id`.
 - [x] Every model inference brackets with a single `assistant_message`
   carrying `avp.content`, `avp.usage`, `avp.cost_usd`, `avp.duration_ms`.
-- [ ] Every tool call brackets with `tool_invoked` / `tool_returned`
-  (failures via `tool_result.is_error`, no `tool_failed` type). (Stage 2.)
+- [x] Every tool call brackets with `tool_invoked` / `tool_returned`
+  (failures via `tool_result.is_error`, no `tool_failed` type).
 - [x] `ResultMessage` → `agent_stopped` with correct reason.
 - [x] Last event is always `agent_stopped`; exceptions handled; `disconnect()`
   fallback covers clean close without `ResultMessage`.

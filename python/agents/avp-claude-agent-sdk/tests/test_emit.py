@@ -9,15 +9,21 @@ gate, and agent_stopped reason mapping.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 from typing import Any
 
 from claude_agent_sdk.types import (
     AssistantMessage,
     ClaudeAgentOptions,
     McpStatusResponse,
+    ResultMessage,
+    ServerToolResultBlock,
+    ServerToolUseBlock,
+    SystemMessage,
     TextBlock,
     ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
 )
 
 from avp._envelope import new_trace_id
@@ -32,38 +38,27 @@ from avp_claude_agent_sdk._emit import (
 from avp_claude_agent_sdk._runstate import RunState
 
 # ---------------------------------------------------------------------------
-# Stand-in SDK message types whose class names match the dispatch strings.
-# Use these instead of the real SDK dataclasses when we want to control
-# specific fields without invoking the full SDK constructor.
+# Fixture builders. `_result()` fills the six required ResultMessage fields
+# with sensible defaults so tests can override just the bits they care about.
 # ---------------------------------------------------------------------------
 
 
-@dataclasses.dataclass
-class ToolResultBlock:
-    tool_use_id: str = "toolu_01"
-    content: str = "ok"
-    is_error: bool = False
-
-
-@dataclasses.dataclass
-class UserMessage:
-    content: list[Any] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass
-class ResultMessage:
-    result: str | None = "done"
-    is_error: bool = False
-    stop_reason: str | None = "end_turn"
-
-
-@dataclasses.dataclass
-class SystemMessage:
-    """Mimics `claude_agent_sdk.types.SystemMessage`: dispatcher uses
-    class-name + `subtype` so this stand-in is sufficient for tests."""
-
-    subtype: str
-    data: dict[str, Any] = dataclasses.field(default_factory=dict)
+def _result(
+    *,
+    result: str | None = "done",
+    is_error: bool = False,
+    stop_reason: str | None = "end_turn",
+) -> ResultMessage:
+    return ResultMessage(
+        subtype="success",
+        duration_ms=0,
+        duration_api_ms=0,
+        is_error=is_error,
+        num_turns=0,
+        session_id="test-session",
+        stop_reason=stop_reason,
+        result=result,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -107,8 +102,14 @@ def _assistant(
     )
 
 
-def _user_tool_result() -> UserMessage:
-    return UserMessage(content=[ToolResultBlock()])
+def _user_tool_result(
+    tool_use_id: str = "toolu_01",
+    content: str = "ok",
+    is_error: bool | None = None,
+) -> UserMessage:
+    return UserMessage(
+        content=[ToolResultBlock(tool_use_id=tool_use_id, content=content, is_error=is_error)]
+    )
 
 
 def _status(
@@ -344,7 +345,7 @@ def test_assistant_message_emits_on_result_with_content_and_usage() -> None:
                     input_tokens=10,
                     stop_reason="end_turn",
                 ),
-                ResultMessage(result="done"),
+                _result(result="done"),
             ]
         )
     )
@@ -373,7 +374,7 @@ def test_thinking_block_translates_to_avp_thinking() -> None:
                     output_tokens=8,
                     input_tokens=4,
                 ),
-                ResultMessage(),
+                _result(),
             ]
         )
     )
@@ -401,7 +402,7 @@ def test_consecutive_assistant_messages_merge_into_one_turn() -> None:
                     input_tokens=4,
                 ),
                 _assistant(TextBlock(text="speak"), output_tokens=6, input_tokens=4),
-                ResultMessage(),
+                _result(),
             ]
         )
     )
@@ -419,7 +420,7 @@ def test_tool_result_boundary_opens_new_turn() -> None:
                 _assistant(TextBlock(text="t1"), input_tokens=10, output_tokens=5),
                 _user_tool_result(),
                 _assistant(TextBlock(text="t2"), input_tokens=20, output_tokens=12),
-                ResultMessage(),
+                _result(),
             ]
         )
     )
@@ -440,7 +441,7 @@ def test_empty_output_turn_is_not_emitted() -> None:
         _drive(
             [
                 _assistant(TextBlock(text=""), input_tokens=5, output_tokens=0),
-                ResultMessage(),
+                _result(),
             ]
         )
     )
@@ -459,7 +460,7 @@ def test_result_message_emits_agent_stopped_converged() -> None:
         _drive(
             [
                 _assistant(TextBlock(text="hi"), output_tokens=2, input_tokens=2),
-                ResultMessage(result="done"),
+                _result(result="done"),
             ]
         )
     )
@@ -469,14 +470,14 @@ def test_result_message_emits_agent_stopped_converged() -> None:
 
 
 def test_result_message_is_error_emits_error_reason() -> None:
-    events = asyncio.run(_drive([ResultMessage(result=None, is_error=True, stop_reason="error")]))
+    events = asyncio.run(_drive([_result(result=None, is_error=True, stop_reason="error")]))
     stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
     assert stopped.data.reason == "error"
 
 
 def test_result_message_refusal_emits_refused_reason() -> None:
     events = asyncio.run(
-        _drive([ResultMessage(result=None, is_error=False, stop_reason="refusal")])
+        _drive([_result(result=None, is_error=False, stop_reason="refusal")])
     )
     stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
     assert stopped.data.reason == "refused"
@@ -484,7 +485,7 @@ def test_result_message_refusal_emits_refused_reason() -> None:
 
 def test_agent_stopped_is_idempotent() -> None:
     """ResultMessage handler fires once; a second call no-ops via state.stopped."""
-    events = asyncio.run(_drive([ResultMessage(), ResultMessage()]))
+    events = asyncio.run(_drive([_result(), _result()]))
     stops = [ev for ev in events if ev.type == "avp.agent_stopped"]
     assert len(stops) == 1
 
@@ -503,7 +504,7 @@ def test_usage_silent_rebase_when_cum_drops() -> None:
                 _assistant(TextBlock(text="t1"), input_tokens=100, output_tokens=50),
                 _user_tool_result(),
                 _assistant(TextBlock(text="t2"), input_tokens=10, output_tokens=7),
-                ResultMessage(),
+                _result(),
             ]
         )
     )
@@ -511,3 +512,190 @@ def test_usage_silent_rebase_when_cum_drops() -> None:
     assert len(msgs) == 2
     assert msgs[1].data.usage.input_tokens == 10
     assert msgs[1].data.usage.output_tokens == 7
+
+
+# ---------------------------------------------------------------------------
+# Tool bracketing (Stage 2 step 1)
+# ---------------------------------------------------------------------------
+
+
+def test_local_tool_use_emits_invoked_then_returned_paired_by_id() -> None:
+    """A `ToolUseBlock` in an assistant turn followed by a
+    `ToolResultBlock` in the next user message MUST produce a
+    `tool_invoked` (parented to the assistant_message span) and a
+    `tool_returned` (parented to the tool_invoked span). Both share
+    `tool_call_id` and `tool_name`."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="toolu_42", name="Read", input={"path": "/x"}),
+                    input_tokens=5,
+                    output_tokens=3,
+                ),
+                _user_tool_result(tool_use_id="toolu_42", content="contents"),
+                _result(),
+            ]
+        )
+    )
+    assistant_msgs = [ev for ev in events if ev.type == "avp.assistant_message"]
+    invoked = [ev for ev in events if ev.type == "avp.tool_invoked"]
+    returned = [ev for ev in events if ev.type == "avp.tool_returned"]
+    assert len(invoked) == 1
+    assert len(returned) == 1
+    assert invoked[0].data.tool_call_id == "toolu_42"
+    assert invoked[0].data.tool_name == "Read"
+    assert invoked[0].data.tool_input == {"path": "/x"}
+    assert invoked[0].data.tool_dispatch_target == "local"
+    assert invoked[0].data.parent_span_id == assistant_msgs[0].data.span_id
+    assert returned[0].data.tool_call_id == "toolu_42"
+    assert returned[0].data.tool_name == "Read"
+    assert returned[0].data.parent_span_id == invoked[0].data.span_id
+    assert returned[0].data.tool_result.content == "contents"
+    assert returned[0].data.tool_result.is_error is None
+
+
+def test_mcp_prefixed_tool_dispatch_target_is_mcp_server() -> None:
+    """Tool names matching `mcp__<server>__<tool>` MUST surface
+    `dispatch_target="mcp_server"` per spec §4."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="t1", name="mcp__demo__search", input={"q": "x"}),
+                    input_tokens=2,
+                    output_tokens=2,
+                ),
+                _user_tool_result(tool_use_id="t1"),
+                _result(),
+            ]
+        )
+    )
+    invoked = next(ev for ev in events if ev.type == "avp.tool_invoked")
+    assert invoked.data.tool_dispatch_target == "mcp_server"
+
+
+def test_tool_returned_carries_is_error_for_failed_results() -> None:
+    """Tool failures (permission denials, runtime errors) ride
+    `tool_result.is_error=True`; there is no `tool_failed` event."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="t1", name="Bash", input={"cmd": "ls"}),
+                    input_tokens=2,
+                    output_tokens=2,
+                ),
+                _user_tool_result(tool_use_id="t1", content="denied", is_error=True),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.tool_returned")
+    assert returned.data.tool_result.is_error is True
+    assert returned.data.tool_result.content == "denied"
+    assert "avp.tool_failed" not in {ev.type for ev in events}
+
+
+def test_unmatched_tool_result_is_dropped() -> None:
+    """A `ToolResultBlock` whose `tool_use_id` has no preceding
+    `tool_invoked` MUST NOT produce a `tool_returned`: emitting one
+    would forge a parent span."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(TextBlock(text="hi"), input_tokens=1, output_tokens=1),
+                _user_tool_result(tool_use_id="bogus"),
+                _result(),
+            ]
+        )
+    )
+    assert not [ev for ev in events if ev.type == "avp.tool_returned"]
+
+
+def test_server_tool_use_and_result_bracket_within_same_turn() -> None:
+    """Server-side tools (web_search, code execution) complete inline:
+    the SDK delivers `ServerToolUseBlock` and `ServerToolResultBlock`
+    in the same assistant turn. Both `tool_invoked` and `tool_returned`
+    MUST fire at turn close, and `dispatch_target` stays `local`
+    (the agent never dispatches; the provider executes server-side)."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ServerToolUseBlock(id="srv_1", name="web_search", input={"q": "avp"}),
+                    ServerToolResultBlock(
+                        tool_use_id="srv_1",
+                        content={"results": ["doc-1"]},
+                    ),
+                    input_tokens=3,
+                    output_tokens=4,
+                ),
+                _result(),
+            ]
+        )
+    )
+    invoked = [ev for ev in events if ev.type == "avp.tool_invoked"]
+    returned = [ev for ev in events if ev.type == "avp.tool_returned"]
+    assert len(invoked) == 1
+    assert len(returned) == 1
+    assert invoked[0].data.tool_dispatch_target == "local"
+    assert invoked[0].data.tool_name == "web_search"
+    assert returned[0].data.parent_span_id == invoked[0].data.span_id
+    # SDK ServerToolResultBlock carries content as a dict; the AVP
+    # tool_result coerces it to a JSON-string via _normalize_tool_result_content.
+    assert returned[0].data.tool_result.content == '{"results": ["doc-1"]}'
+
+
+def test_tool_returned_carries_structured_content_from_user_message() -> None:
+    """The SDK exposes a programmatic payload on `UserMessage.tool_use_result`
+    (e.g. Glob → `{filenames, numFiles, durationMs, truncated}`) paired
+    with the human-readable `content` string. When the user message has
+    exactly one tool result, that dict MUST surface on
+    `tool_returned.tool_result.structured_content` so consumers don't
+    have to re-parse the text channel."""
+    structured = {"filenames": ["a.md", "b.md"], "numFiles": 2}
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="t1", name="Glob", input={"pattern": "*.md"}),
+                    input_tokens=2,
+                    output_tokens=2,
+                ),
+                UserMessage(
+                    content=[ToolResultBlock(tool_use_id="t1", content="a.md\nb.md")],
+                    tool_use_result=structured,
+                ),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.tool_returned")
+    assert returned.data.tool_result.structured_content == structured
+    assert returned.data.tool_result.content == "a.md\nb.md"
+
+
+def test_tool_event_ordering_is_message_then_invoked_then_returned() -> None:
+    """Per spec §8 #4, `tool_invoked` MUST precede `tool_returned`.
+    `assistant_message` MUST precede `tool_invoked` since the model's
+    decision to call the tool is part of the closing turn."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="t1", name="Read", input={"path": "/x"}),
+                    input_tokens=2,
+                    output_tokens=2,
+                ),
+                _user_tool_result(tool_use_id="t1"),
+                _result(),
+            ]
+        )
+    )
+    tool_types = [
+        ev.type
+        for ev in events
+        if ev.type in {"avp.assistant_message", "avp.tool_invoked", "avp.tool_returned"}
+    ]
+    assert tool_types == ["avp.assistant_message", "avp.tool_invoked", "avp.tool_returned"]
