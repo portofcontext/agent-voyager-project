@@ -9,10 +9,15 @@ description = "Agent Voyager Protocol (AVP) — Python reference implementation.
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.6,<3", "jsonschema>=4.18", "referencing>=0.30"]
+dependencies = [
+    "pydantic>=2.6,<3",
+    "jsonschema>=4.18",
+    "referencing>=0.30",
+    "mcp>=1.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-asyncio>=0.23", "ruff>=0.6"]
+dev = ["pytest>=7", "ruff>=0.6"]
 interop = [
     # Cross-validation tests: confirm our wire format is parseable by the
     # canonical Python implementations of the specs we adopt.
@@ -30,5 +35,5 @@ Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0
 packages = ["src/avp"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
+norecursedirs = ["archive"] # tmp
