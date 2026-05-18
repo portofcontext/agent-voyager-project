@@ -1,10 +1,32 @@
-"""Translators from claude-agent-sdk types to AVP wire-shape models."""
+"""Translators from claude-agent-sdk types to AVP wire-shape models.
+
+Two distinct views fall out of the SDK:
+
+- The **static descriptor** (`descriptor_head`) is what the agent can
+  state about itself pre-flight: identity, package version, AVP spec
+  version, and the default model from `ClaudeAgentOptions`. It's the
+  payload of `agent_described` and is what `<agent> describe` would
+  print.
+- The **runtime-merged view** comes from the first
+  `SystemMessage(subtype="init")` the SDK emits. It carries the actual
+  tool catalog (CLI built-ins + MCP-namespaced names), live subagent /
+  skill lists, and the resolved model. Together with the filtered MCP
+  status, it populates `agent_started`.
+
+`get_mcp_status()` alone is not enough for `agent_started.tools`: when
+MCP servers are `needs-auth` / `pending` / `disabled`, their `tools/list`
+is empty, and CLI built-ins (`Task`, `Bash`, `Read`, ...) are never
+exposed by `get_mcp_status` regardless. The `init` message is the only
+authoritative source for the run's tool surface.
+"""
 
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
+from typing import Any
 
 from claude_agent_sdk.types import (
     ClaudeAgentOptions,
+    McpStatusResponse,
     SystemPromptFile,
     SystemPromptPreset,
 )
@@ -20,39 +42,119 @@ from avp.descriptor import (
 _AGENT_NAME = "avp-claude-agent-sdk"
 
 
-def descriptor_from_options(
-    prompt: str | None,
-    options: ClaudeAgentOptions,
-) -> AgentDescriptor:
-    """Build an AgentDescriptor reflecting a `query()` invocation surface.
+# ---------------------------------------------------------------------------
+# Static descriptor (phase A: emitted in connect())
+# ---------------------------------------------------------------------------
 
-    For the library-invocation path there's no Commission, so the descriptor
-    is the only wire view of what's triggerable: identity, the literal
-    system / user prompts, and the declared tools / MCP servers / subagents
-    / skills carried on the options.
+
+def descriptor_full(
+    options: ClaudeAgentOptions,
+    init_data: dict[str, Any] | None,
+    status: McpStatusResponse,
+    *,
+    prompt: str | None = None,
+) -> AgentDescriptor:
+    """Build the full pre-Commission descriptor for `agent_described`.
+
+    `init_data` comes from a probe-session `SystemMessage(subtype="init")`;
+    `status` from the probe's `get_mcp_status()`. When `init_data` is
+    `None` (probe unavailable / failed), `tools` / `subagents` / `skills`
+    are absent and the descriptor still validates -- the prelude stays
+    spec-conformant.
+
+    `prompt` is the autonomous-style prompt passed to `connect()` when the
+    agent is driven that way; for interactive `query()`-driven runs it
+    stays `None`. `system_prompt` is resolved from `options.system_prompt`
+    (literal string, file, or preset).
     """
     return AgentDescriptor(
         agent_name=_AGENT_NAME,
         agent_version=_pkg_version(_AGENT_NAME),
-        avp_spec_version="0.1",
-        default_model=options.model,
-        system_prompt=_resolve_system_prompt(options.system_prompt),
+        spec_version="0.1",
+        default_model=(
+            request_model_from_init(init_data, options) if init_data else options.model
+        ),
+        system_prompt=resolve_system_prompt(options.system_prompt),
         prompt=prompt,
-        tools=_tools(options),
-        mcp_servers=_mcp_servers(options),
-        subagents=_subagents(options),
-        skills=_skills(options),
+        tools=tools_from_init(init_data) if init_data else None,
+        subagents=subagents_from_init(init_data) if init_data else None,
+        skills=skills_from_init(init_data) if init_data else None,
+        mcp_servers=mcp_servers_connected(status),
     )
 
 
-def _resolve_system_prompt(
+# ---------------------------------------------------------------------------
+# Runtime-merged view (phase B: emitted on init SystemMessage)
+# ---------------------------------------------------------------------------
+
+
+def tools_from_init(init_data: dict[str, Any]) -> list[ToolDecl] | None:
+    """CLI built-in tool catalog from the `init` SystemMessage.
+
+    `init.tools` is a flat list of names that includes both CLI
+    built-ins (`Task`, `Bash`, `Edit`, ...) and MCP-namespaced
+    handles (`mcp__server__tool`). Per spec §8: MCP-surfaced tools
+    MUST NOT be duplicated on `agent_started.avp.tools`; they live
+    on each `mcp_server_connected.avp.mcp.tools` instead. We filter
+    the `mcp__*` prefix out here.
+    """
+    names = init_data.get("tools") or []
+    builtins = [n for n in names if not n.startswith("mcp__")]
+    return [ToolDecl(name=n) for n in builtins] or None
+
+
+def subagents_from_init(init_data: dict[str, Any]) -> list[SubagentDecl] | None:
+    """Subagent names from `init.agents`. SDK reports names only, no
+    descriptions; `SubagentDecl.description` stays None."""
+    names = init_data.get("agents") or []
+    return [SubagentDecl(name=n) for n in names] or None
+
+
+def skills_from_init(init_data: dict[str, Any]) -> list[SkillDecl] | None:
+    """Skill names from `init.skills`."""
+    names = init_data.get("skills") or []
+    return [SkillDecl(name=n) for n in names] or None
+
+
+def request_model_from_init(init_data: dict[str, Any], options: ClaudeAgentOptions) -> str | None:
+    """Resolved model the run will actually use. `init.model` is the
+    server-side resolved value (e.g. `claude-opus-4-7[1m]`); fall back
+    to `options.model` if absent."""
+    return init_data.get("model") or options.model
+
+
+def mcp_servers_connected(status: McpStatusResponse) -> list[McpServerDecl] | None:
+    """One `McpServerDecl` per `connected` server in the SDK's status.
+
+    `needs-auth` / `failed` / `disabled` / `pending` servers are NOT
+    callable as part of the current run, so they're filtered out (per
+    spec §2.1: `agent_started` is "what the run will actually use").
+    `id` is the SDK's stable `config.id` (e.g. `mcpsrv_011u…`) when
+    available, otherwise the display name; `name` carries the display.
+    """
+    decls: list[McpServerDecl] = []
+    for server in status.get("mcpServers", []):
+        if server.get("status") != "connected":
+            continue
+        display = server["name"]
+        server_id = server.get("config", {}).get("id") or display
+        decls.append(McpServerDecl(id=server_id, name=display))
+    return decls or None
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def resolve_system_prompt(
     system_prompt: str | SystemPromptPreset | SystemPromptFile | None,
 ) -> str | None:
-    """Resolve a SystemPrompt option to the literal text the model will see.
+    """Resolve a SystemPrompt option to the literal text the model sees.
 
-    `str` is verbatim, `SystemPromptFile` is best-effort read from disk
-    (None on OSError), `SystemPromptPreset` returns None (the preset name
-    isn't the literal prompt).
+    `str` is verbatim; `SystemPromptFile` is best-effort read from disk
+    (None on OSError); `SystemPromptPreset` returns None (the preset
+    name isn't the literal prompt).
     """
     if system_prompt is None or isinstance(system_prompt, str):
         return system_prompt
@@ -62,41 +164,3 @@ def _resolve_system_prompt(
         except OSError:
             return None
     return None
-
-
-def _tools(options: ClaudeAgentOptions) -> list[ToolDecl] | None:
-    """Project explicit tool names. `ToolsPreset` defers to CLI discovery."""
-    tools = options.tools
-    if not isinstance(tools, list) or not tools:
-        return None
-    return [ToolDecl(name=name) for name in tools]
-
-
-def _mcp_servers(options: ClaudeAgentOptions) -> list[McpServerDecl] | None:
-    """Project dict-form `mcp_servers` to identity-only descriptor entries.
-
-    Path/str forms reference an external CLI config file; not read here.
-    """
-    servers = options.mcp_servers
-    if not isinstance(servers, dict) or not servers:
-        return None
-    return [McpServerDecl(id=server_id) for server_id in servers]
-
-
-def _subagents(options: ClaudeAgentOptions) -> list[SubagentDecl] | None:
-    """Project `options.agents` (`AgentDefinition` per name) to SubagentDecl."""
-    agents = options.agents
-    if not agents:
-        return None
-    return [
-        SubagentDecl(name=name, description=defn["description"]) for name, defn in agents.items()
-    ]
-
-
-def _skills(options: ClaudeAgentOptions) -> list[SkillDecl] | None:
-    """Project the explicit-list form of `options.skills`. `"all"` is left
-    to runtime CLI discovery and isn't enumerable up-front."""
-    skills = options.skills
-    if not isinstance(skills, list) or not skills:
-        return None
-    return [SkillDecl(name=name) for name in skills]

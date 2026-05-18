@@ -94,23 +94,38 @@ class SkillDecl(BaseModel):
     source: str | None = Field(default=None, alias="avp.source")
 
 
-_MCP_SERVER_ID_PATTERN = r"^[a-z0-9_-]+$"
-
-
 class McpServerDecl(BaseModel):
     """MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.
 
     Connection material (URLs, auth, command-lines) stays inside the agent
     process and is NOT carried on the descriptor wire. The descriptor
-    records only the server's id and an optional description; the tools
-    the server surfaces are NOT enumerated on the descriptor — they appear
-    at runtime on `mcp_server_connected.data["avp.mcp.tools"]`. The id-pattern
-    mirrors `Commission.McpServerRef.id` so cross-source id-collision
-    detection at startup is straight string
-    equality."""
+    records only the server's id, optional display name, and optional
+    description; the tools the server surfaces are NOT enumerated on the
+    descriptor — they appear at runtime on
+    `mcp_server_connected.data["avp.mcp.tools"]`.
+
+    `id` is the agent's correlation key for this server across the wire
+    (descriptor entry, `mcp_server_connected` event, tool dispatch). It
+    is intentionally looser than `Commission.McpServerRef.id`: the
+    descriptor enumerates BOTH Commission-resolved servers (where `id` is
+    the supervisor-authored slug) AND agent-baked-in / environment-resident
+    servers (where `id` is whatever the environment names them, e.g.
+    `"claude.ai Dashboard Builder"`). Forcing a slug here would either
+    lose fidelity or require every agent to invent the same slugification
+    rule. Commission-authored ids stay slug-clean by virtue of
+    `Commission.McpServerRef.id`'s pattern; descriptor ids must only be
+    non-empty and must match the `avp.mcp.server_id` the agent later
+    surfaces on `mcp_server_connected` so consumers can correlate.
+
+    `name` is the display name when the environment provides one distinct
+    from `id` (typical for Commission-resolved servers: `id` is the
+    Commission slug, `name` is the human-readable label from the resolved
+    config). For environment-resident servers whose only identifier is
+    the display name, `id` carries that string and `name` is omitted."""
 
     model_config = _OPEN
-    id: str = Field(min_length=1, pattern=_MCP_SERVER_ID_PATTERN)
+    id: str = Field(min_length=1)
+    name: str | None = None
     description: str | None = None
 
 

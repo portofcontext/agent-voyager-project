@@ -139,7 +139,7 @@ This section names the lines so readers don't trip on them. A complete productio
 
 - The specs share a single umbrella version (v0.1). They MAY decouple in a future major version.
 - `Commission.schema_version` MUST equal `"0.1"`.
-- `agent_started.data["avp.schema_version"]` MUST equal `"0.1"`.
+- `AgentDescriptor.spec_version` MUST equal `"0.1"`. The `agent_described` event carries it on `data["avp.descriptor"].spec_version` and is the canonical AVP-version claim on the trajectory; `agent_started` does NOT re-carry it.
 - Future minor versions MAY add new event types, fields, or enum values. They MUST NOT remove or repurpose existing ones.
 - Future major versions MAY introduce breaking changes. Vendor-namespaced keys (`vendor.*`, `com.example.*`) inside `data` round-trip verbatim today (per §4), insulating extensions from spec drift.
 

@@ -202,7 +202,6 @@ class AgentStartedData(_SpanData):
     thread_id: str | None = Field(default=None, alias="avp.thread_id")
     session_id: str | None = Field(default=None, alias="avp.session_id")
     tags: list[str] | None = Field(default=None, alias="avp.tags")
-    schema_version: Literal["0.1"] = Field(default="0.1", alias="avp.schema_version")
 
 
 class AgentStoppedData(_SpanData):

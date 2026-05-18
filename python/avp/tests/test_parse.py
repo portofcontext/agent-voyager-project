@@ -63,7 +63,6 @@ def test_known_event_type_returns_pydantic_model() -> None:
             **_span(),
             "avp.request.model": "claude-sonnet-4-6",
             "avp.provider.name": "anthropic",
-            "avp.schema_version": "0.1",
         },
     )
     ev = parse_event(payload)
@@ -167,7 +166,6 @@ def test_event_round_trips_to_wire_form_with_dotted_aliases() -> None:
             **_span(),
             "avp.request.model": "claude-sonnet-4-6",
             "avp.provider.name": "anthropic",
-            "avp.schema_version": "0.1",
             "avp.thread_id": "t-1",
         },
     )
@@ -177,7 +175,6 @@ def test_event_round_trips_to_wire_form_with_dotted_aliases() -> None:
     assert "avp.request.model" in wire["data"]
     assert "avp.provider.name" in wire["data"]
     assert "avp.thread_id" in wire["data"]
-    assert "avp.schema_version" in wire["data"]
     # Python attribute names MUST NOT leak through
     assert "request_model" not in wire["data"]
     assert "thread_id" not in wire["data"]

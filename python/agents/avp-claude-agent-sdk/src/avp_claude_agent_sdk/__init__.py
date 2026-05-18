@@ -1,11 +1,14 @@
 """AVP instrumentation for `claude_agent_sdk`.
 
-Call `setup_avp()` once (with an optional `sink`) to instrument
-`claude_agent_sdk.query` in place. All subsequent calls to
-`claude_agent_sdk.query` emit a conforming AVP trajectory.
+Primary surface: `AVPClaudeSDKClient`, a subclass of
+`claude_agent_sdk.ClaudeSDKClient` that emits a conforming AVP
+trajectory across `connect()` / `receive_response()` / `disconnect()`.
+
+Stage 3 will add `run_avp_agent` (Commission-driven entry point) and
+`setup_avp` (module-level monkeypatch that swaps `ClaudeSDKClient` for
+`AVPClaudeSDKClient`).
 """
 
-from avp_claude_agent_sdk._agent import run_avp_agent
-from avp_claude_agent_sdk._patches import setup_avp
+from avp_claude_agent_sdk._client import AVPClaudeSDKClient
 
-__all__ = ["run_avp_agent", "setup_avp"]
+__all__ = ["AVPClaudeSDKClient"]
