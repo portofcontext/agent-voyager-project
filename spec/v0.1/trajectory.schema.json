@@ -156,9 +156,9 @@
           "title": "Agent Version",
           "type": "string"
         },
-        "avp_spec_version": {
+        "spec_version": {
           "const": "0.1",
-          "title": "Avp Spec Version",
+          "title": "Spec Version",
           "type": "string"
         },
         "default_model": {
@@ -291,7 +291,7 @@
       "required": [
         "agent_name",
         "agent_version",
-        "avp_spec_version"
+        "spec_version"
       ],
       "title": "AgentDescriptor",
       "type": "object"
@@ -334,7 +334,7 @@
           "default": null,
           "title": "Avp.Meta"
         },
-        "gen_ai.provider.name": {
+        "avp.provider.name": {
           "anyOf": [
             {
               "type": "string"
@@ -344,9 +344,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Provider.Name"
+          "title": "Avp.Provider.Name"
         },
-        "gen_ai.operation.name": {
+        "avp.operation.name": {
           "anyOf": [
             {
               "enum": [
@@ -360,9 +360,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Operation.Name"
+          "title": "Avp.Operation.Name"
         },
-        "gen_ai.request.model": {
+        "avp.request.model": {
           "anyOf": [
             {
               "type": "string"
@@ -372,7 +372,7 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Request.Model"
+          "title": "Avp.Request.Model"
         },
         "avp.prompt": {
           "anyOf": [
@@ -755,7 +755,7 @@
     },
     "AssistantMessageData": {
       "additionalProperties": true,
-      "description": "Payload of avp.assistant_message events.\n\nCarries the full content the model produced this turn under\n`avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost\ndeltas. Reconstructing a provider message array is a direct read of\n`avp.content` per turn, paired with the `avp.tool_result` blocks from\nintervening `tool_returned` events to form the user-role tool-result\nmessages.\n\nRefusal metadata: when the provider declined the turn, the refusal\ntext appears as a `RefusalBlock` (or `TextBlock` for providers that\ndon't typify it) inside `avp.content`, the upstream finish-reason\nstring surfaces on `gen_ai.response.finish_reasons`, and the\nprovider's safety category (when given, free-form because every\nprovider names them differently) surfaces on `avp.refusal.category`.",
+      "description": "Payload of avp.assistant_message events.\n\nCarries the full content the model produced this turn under\n`avp.content` (a `list[AVPContentBlock]`) plus per-turn token / cost\ndeltas. Reconstructing a provider message array is a direct read of\n`avp.content` per turn, paired with the `avp.tool_result` blocks from\nintervening `tool_returned` events to form the user-role tool-result\nmessages.\n\nRefusal metadata: when the provider declined the turn, the refusal\ntext appears as a `RefusalBlock` (or `TextBlock` for providers that\ndon't typify it) inside `avp.content`, the upstream finish-reason\nstring surfaces on `avp.response.finish_reasons`, and the\nprovider's safety category (when given, free-form because every\nprovider names them differently) surfaces on `avp.refusal.category`.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -858,7 +858,7 @@
           "title": "Avp.Content",
           "type": "array"
         },
-        "gen_ai.provider.name": {
+        "avp.provider.name": {
           "anyOf": [
             {
               "type": "string"
@@ -868,9 +868,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Provider.Name"
+          "title": "Avp.Provider.Name"
         },
-        "gen_ai.request.model": {
+        "avp.request.model": {
           "anyOf": [
             {
               "type": "string"
@@ -880,9 +880,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Request.Model"
+          "title": "Avp.Request.Model"
         },
-        "gen_ai.response.model": {
+        "avp.response.model": {
           "anyOf": [
             {
               "type": "string"
@@ -892,9 +892,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Response.Model"
+          "title": "Avp.Response.Model"
         },
-        "gen_ai.response.finish_reasons": {
+        "avp.response.finish_reasons": {
           "anyOf": [
             {
               "items": {
@@ -907,9 +907,9 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Response.Finish Reasons"
+          "title": "Avp.Response.Finish Reasons"
         },
-        "gen_ai.response.time_to_first_chunk": {
+        "avp.response.time_to_first_chunk": {
           "anyOf": [
             {
               "minimum": 0,
@@ -920,56 +920,10 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Response.Time To First Chunk"
+          "title": "Avp.Response.Time To First Chunk"
         },
-        "gen_ai.usage.input_tokens": {
-          "minimum": 0,
-          "title": "Gen Ai.Usage.Input Tokens",
-          "type": "integer"
-        },
-        "gen_ai.usage.output_tokens": {
-          "minimum": 0,
-          "title": "Gen Ai.Usage.Output Tokens",
-          "type": "integer"
-        },
-        "gen_ai.usage.cache_read.input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Cache Read.Input Tokens"
-        },
-        "gen_ai.usage.cache_creation.input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Cache Creation.Input Tokens"
-        },
-        "gen_ai.usage.reasoning.output_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Gen Ai.Usage.Reasoning.Output Tokens"
+        "avp.usage": {
+          "$ref": "#/$defs/Usage"
         },
         "avp.cost_usd": {
           "minimum": 0,
@@ -1013,8 +967,7 @@
         "avp.step",
         "avp.duration_ms",
         "avp.content",
-        "gen_ai.usage.input_tokens",
-        "gen_ai.usage.output_tokens",
+        "avp.usage",
         "avp.cost_usd"
       ],
       "title": "AssistantMessageData",
@@ -3081,8 +3034,8 @@
           "title": "Avp.Step",
           "type": "integer"
         },
-        "gen_ai.agent.name": {
-          "title": "Gen Ai.Agent.Name",
+        "avp.subagent.name": {
+          "title": "Avp.Subagent.Name",
           "type": "string"
         },
         "avp.subagent.invocation_id": {
@@ -3117,7 +3070,7 @@
         "span_id",
         "parent_span_id",
         "avp.step",
-        "gen_ai.agent.name",
+        "avp.subagent.name",
         "avp.subagent.invocation_id",
         "avp.duration_ms",
         "avp.subagent.error"
@@ -3217,7 +3170,7 @@
     },
     "SubagentInvokedData": {
       "additionalProperties": true,
-      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is\n`invoke_agent` and `gen_ai.agent.name` carries the subagent's declared\nname.\n\n`avp.subagent.run_id` is set when the subagent is supervisor-managed:\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\n`run_id` of the subagent's separate, independently-trajectoried run.\nConsumers correlate the parent and child trajectories via this field.\nAbsent (or null) when the subagent runs in-process (the parent's loop\nis the same process as the subagent's loop).",
+      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is set when the subagent is supervisor-managed:\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\n`run_id` of the subagent's separate, independently-trajectoried run.\nConsumers correlate the parent and child trajectories via this field.\nAbsent (or null) when the subagent runs in-process (the parent's loop\nis the same process as the subagent's loop).",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3258,11 +3211,11 @@
           "title": "Avp.Step",
           "type": "integer"
         },
-        "gen_ai.agent.name": {
-          "title": "Gen Ai.Agent.Name",
+        "avp.subagent.name": {
+          "title": "Avp.Subagent.Name",
           "type": "string"
         },
-        "gen_ai.agent.description": {
+        "avp.subagent.description": {
           "anyOf": [
             {
               "type": "string"
@@ -3272,13 +3225,7 @@
             }
           ],
           "default": null,
-          "title": "Gen Ai.Agent.Description"
-        },
-        "gen_ai.operation.name": {
-          "const": "invoke_agent",
-          "default": "invoke_agent",
-          "title": "Gen Ai.Operation.Name",
-          "type": "string"
+          "title": "Avp.Subagent.Description"
         },
         "avp.subagent.invocation_id": {
           "minLength": 1,
@@ -3309,7 +3256,7 @@
         "span_id",
         "parent_span_id",
         "avp.step",
-        "gen_ai.agent.name",
+        "avp.subagent.name",
         "avp.subagent.invocation_id",
         "avp.subagent.input"
       ],
@@ -3470,8 +3417,8 @@
           "title": "Avp.Step",
           "type": "integer"
         },
-        "gen_ai.agent.name": {
-          "title": "Gen Ai.Agent.Name",
+        "avp.subagent.name": {
+          "title": "Avp.Subagent.Name",
           "type": "string"
         },
         "avp.subagent.invocation_id": {
@@ -3518,7 +3465,7 @@
         "span_id",
         "parent_span_id",
         "avp.step",
-        "gen_ai.agent.name",
+        "avp.subagent.name",
         "avp.subagent.invocation_id",
         "avp.duration_ms",
         "avp.subagent.result.text",
@@ -3842,18 +3789,18 @@
           "title": "Avp.Step",
           "type": "integer"
         },
-        "gen_ai.tool.call.id": {
+        "avp.tool.call_id": {
           "minLength": 1,
-          "title": "Gen Ai.Tool.Call.Id",
+          "title": "Avp.Tool.Call Id",
           "type": "string"
         },
-        "gen_ai.tool.name": {
-          "title": "Gen Ai.Tool.Name",
+        "avp.tool.name": {
+          "title": "Avp.Tool.Name",
           "type": "string"
         },
-        "gen_ai.tool.call.arguments": {
+        "avp.tool.input": {
           "additionalProperties": true,
-          "title": "Gen Ai.Tool.Call.Arguments",
+          "title": "Avp.Tool.Input",
           "type": "object"
         },
         "avp.tool.dispatch_target": {
@@ -3878,9 +3825,9 @@
         "span_id",
         "parent_span_id",
         "avp.step",
-        "gen_ai.tool.call.id",
-        "gen_ai.tool.name",
-        "gen_ai.tool.call.arguments"
+        "avp.tool.call_id",
+        "avp.tool.name",
+        "avp.tool.input"
       ],
       "title": "ToolInvokedData",
       "type": "object"
@@ -4097,13 +4044,13 @@
           "title": "Avp.Step",
           "type": "integer"
         },
-        "gen_ai.tool.call.id": {
+        "avp.tool.call_id": {
           "minLength": 1,
-          "title": "Gen Ai.Tool.Call.Id",
+          "title": "Avp.Tool.Call Id",
           "type": "string"
         },
-        "gen_ai.tool.name": {
-          "title": "Gen Ai.Tool.Name",
+        "avp.tool.name": {
+          "title": "Avp.Tool.Name",
           "type": "string"
         },
         "avp.duration_ms": {
@@ -4120,8 +4067,8 @@
         "span_id",
         "parent_span_id",
         "avp.step",
-        "gen_ai.tool.call.id",
-        "gen_ai.tool.name",
+        "avp.tool.call_id",
+        "avp.tool.name",
         "avp.duration_ms",
         "avp.tool_result"
       ],
@@ -4269,6 +4216,67 @@
         "url"
       ],
       "title": "UrlSource",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": true,
+      "description": "Per-turn token accounting carried on `assistant_message.avp.usage`.\n\n`input_tokens` is the total input tokens for the turn, INCLUDING\ncache-read tokens. `cache_read_input_tokens` and\n`cache_creation_input_tokens` are informational breakdowns already\naccounted for inside `input_tokens`; consumers MUST NOT double-count\nthem when summing. `reasoning_output_tokens` is the subset of\n`output_tokens` the provider attributes to internal reasoning (o-series\nreasoning tokens, Anthropic extended-thinking output).\n\n`extra=\"allow\"` so provider-specific token categories the spec\ndoesn't enumerate (vision tokens, audio output tokens, ...) round-trip\nthrough `avp.usage` verbatim without requiring spec churn.",
+      "properties": {
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Input Tokens"
+        },
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Creation Input Tokens"
+        },
+        "reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Output Tokens"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "Usage",
       "type": "object"
     },
     "VideoBlock": {

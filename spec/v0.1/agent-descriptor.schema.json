@@ -186,9 +186,9 @@
       "title": "Agent Version",
       "type": "string"
     },
-    "avp_spec_version": {
+    "spec_version": {
       "const": "0.1",
-      "title": "Avp Spec Version",
+      "title": "Spec Version",
       "type": "string"
     },
     "default_model": {
@@ -321,7 +321,7 @@
   "required": [
     "agent_name",
     "agent_version",
-    "avp_spec_version"
+    "spec_version"
   ],
   "title": "AVP v0.1 Agent Descriptor",
   "type": "object",
