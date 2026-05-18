@@ -36,7 +36,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from avp._envelope import (
     _OPEN,
@@ -528,6 +528,25 @@ class ManagedRefResolveFailedEvent(_CloudEventBase):
     data: ManagedRefResolveFailedData
 
 
+class UnknownEvent(_CloudEventBase):
+    """Catch-all for CloudEvents whose `type` is not in the AVP-defined
+    union. Validates the CloudEvents 1.0 envelope plus the AVP span
+    triple on `data`; the rest of `data` is free-form. Consumers MUST
+    pass through unknown event types without error (spec §4), so any
+    well-formed CloudEvent — forward-compat AVP additions, vendor-
+    namespaced events under `acme.*`, etc. — round-trips through here.
+
+    `id` and `time` are re-declared without `default_factory` so missing
+    envelope fields error rather than silently getting fabricated values.
+    """
+
+    id: str = Field(min_length=1)
+    time: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    data: _SpanData
+
+
 # ── Discriminated unions ──────────────────────────────────────────────────────
 
 
@@ -568,36 +587,22 @@ Event = Annotated[
     Field(discriminator="type"),
 ]
 
-_TYPE_TO_MODEL: dict[str, type[BaseModel]] = {}
-for _cls in _AGENT_EVENT_TYPES:
-    _TYPE_TO_MODEL[_cls.model_fields["type"].default] = _cls
 
-
-# Required CloudEvents-envelope fields every parsed event MUST carry, even
-# unknown (custom) event types. Per CloudEvents §1.
-_REQUIRED_ENVELOPE_FIELDS = ("specversion", "id", "source", "type", "time", "data")
-
-
-def parse_event(payload: dict[str, Any]) -> BaseModel | dict[str, Any]:
+def parse_event(payload: dict[str, Any]) -> Event | UnknownEvent:
     """Parse an agent-emitted event payload.
 
-    Known types validate against their Pydantic model. Unknown types pass
-    through as a dict (per spec/v0.1/README.md §4: consumers MUST pass through unknown
-    types without error), provided they carry the CloudEvents-required
-    envelope fields.
+    Known types validate via the `Event` discriminated-union TypeAdapter.
+    Unknown types validate as `UnknownEvent`: envelope + span triple are
+    enforced; the rest of `data` is opaque. Per spec/v0.1/README.md §4,
+    consumers MUST pass through unknown types without error.
     """
-    t = payload.get("type")
-    if not isinstance(t, str):
-        raise ValueError("event payload missing required 'type' string")
-    cls = _TYPE_TO_MODEL.get(t)
-    if cls is None:
-        for required in _REQUIRED_ENVELOPE_FIELDS:
-            if required not in payload:
-                raise ValueError(
-                    f"custom event {t!r} missing required CloudEvents field {required!r}"
-                )
-        return dict(payload)
-    return cls.model_validate(payload)
+    _adapter = TypeAdapter(Event)
+    try:
+        return _adapter.validate_python(payload)
+    except ValidationError as e:
+        if any(err.get("type") == "union_tag_invalid" for err in e.errors()):
+            return UnknownEvent.model_validate(payload)
+        raise
 
 
 def event_to_wire(event: BaseModel) -> dict[str, Any]:
@@ -660,6 +665,7 @@ __all__ = [
     "ToolInvokedEvent",
     "ToolReturnedData",
     "ToolReturnedEvent",
+    "UnknownEvent",
     "event_to_wire",
     "new_event_id",
     "new_span_id",
