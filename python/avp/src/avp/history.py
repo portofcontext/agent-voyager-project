@@ -59,25 +59,25 @@ def to_messages(events: Iterable[Event]) -> list[Message]:
 
     for event in events:
         if isinstance(event, AgentStartedEvent):
-            if event.data.avp_system_prompt:
+            if event.data.system_prompt:
                 messages.append(
                     Message(
                         role="system",
-                        content=[TextBlock(text=event.data.avp_system_prompt)],
+                        content=[TextBlock(text=event.data.system_prompt)],
                     )
                 )
-            if event.data.avp_prompt:
+            if event.data.prompt:
                 messages.append(
                     Message(
                         role="user",
-                        content=[TextBlock(text=event.data.avp_prompt)],
+                        content=[TextBlock(text=event.data.prompt)],
                     )
                 )
         elif isinstance(event, AssistantMessageEvent):
             flush()
-            messages.append(Message(role="assistant", content=list(event.data.avp_content)))
+            messages.append(Message(role="assistant", content=list(event.data.content)))
         elif isinstance(event, ToolReturnedEvent):
-            pending.append(event.data.avp_tool_result)
+            pending.append(event.data.tool_result)
 
     flush()
     return messages

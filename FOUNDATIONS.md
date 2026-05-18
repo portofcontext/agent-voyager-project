@@ -38,8 +38,9 @@ compose into a single trajectory.
   Specializes existing specs (AVP wraps these for the agent case):
   ──────────────────────────────────────────────────────────────────
   CloudEvents 1.0        Event envelopes (every AVP event IS a CloudEvent)
-  OTel GenAI sem-conv    Token / cost / model attribute naming
   OTel spans (OTLP)      Run lifecycle as parent-child span hierarchy
+  OTel GenAI sem-conv    Projection target only (see § OTel GenAI projection);
+                         not carried on the wire
   JSON-RPC 2.0           Resolver protocol (avp.resolve, avp.spawn_subagent)
   MCP                    Supervisor-side tool dispatch (resolved from refs)
   Agent Skills           SKILL.md format (content resolved from refs)
@@ -84,50 +85,59 @@ payload.
 specific transport binding. Our base transport is stdio NDJSON; HTTP/SSE is
 v0.2.
 
-### OpenTelemetry: GenAI semantic conventions
+### OpenTelemetry GenAI semantic conventions (projection target, not wire)
 
 [OTel semantic conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
-define standard attribute names for LLM telemetry. Adopting these means
-trajectories are immediately ingestable by any OTel-aware backend
-(Datadog, Honeycomb, Tempo, Langfuse, Helicone, Arize, ...) with no custom
-adapter.
+define standard attribute names for LLM telemetry. AVP's `data` payload
+is **not** an OTel-attributed span — the envelope is CloudEvents and the
+primary consumer is AVP-aware tooling, which reads `avp.*` names. To
+realize OTel-native interop you translate CloudEvent → OTel span anyway;
+at that point a flat `avp.*` → `gen_ai.*` rename is a localized concern,
+not something the wire needs to bake in.
 
-The conventions AVP adopts (verified against the upstream
-`open-telemetry/semantic-conventions` repo):
+So AVP owns its attribute namespace (`avp.*` for every defined field
+except the OTel span triple) and ships an **AVP → OTel-attribute
+projection** for consumers that want to forward into an OTel-native
+backend. Recommended mapping:
 
-| Attribute | What it is |
-|---|---|
-| `gen_ai.provider.name` | Provider id: `anthropic`, `openai`, `aws.bedrock`, `gcp.gemini`, etc. (renamed from the older `gen_ai.system`) |
-| `gen_ai.operation.name` | Operation kind: `chat`, `invoke_agent`, `embeddings`, ... |
-| `gen_ai.request.model` / `gen_ai.response.model` | Request / response model id |
-| `gen_ai.usage.input_tokens` | Total input tokens for the call. Per the spec: "should encompass all input token types, including cached ones", exactly AVP's convention today. |
-| `gen_ai.usage.output_tokens` | Output tokens for the call |
-| `gen_ai.usage.cache_read.input_tokens` | Cache-read portion of input (note dotted form, not underscore) |
-| `gen_ai.usage.cache_creation.input_tokens` | Cache-creation portion of input |
-| `gen_ai.usage.reasoning.output_tokens` | Reasoning-model output tokens (Claude thinking, o-series). Recommended when applicable. |
-| `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.tool.call.arguments` | Tool dispatch attributes |
-| `gen_ai.agent.name`, `gen_ai.agent.description` | Subagent identity attributes (used on `subagent_invoked` / `subagent_returned`); per OTel GenAI agent-spans semconv. |
-| `gen_ai.response.finish_reasons` | Termination reasons array |
-| `gen_ai.request.stream`, `gen_ai.response.time_to_first_chunk` | Streaming-specific attributes |
+| AVP wire field | OTel GenAI attribute | Notes |
+|---|---|---|
+| `avp.provider.name` | `gen_ai.provider.name` | `anthropic`, `openai`, `aws.bedrock`, `gcp.gemini`, ... |
+| `avp.operation.name` | `gen_ai.operation.name` | `chat`, `invoke_agent`, `embeddings`, ... |
+| `avp.request.model` | `gen_ai.request.model` | Model id the agent requested |
+| `avp.response.model` | `gen_ai.response.model` | Model id the provider reports |
+| `avp.usage.input_tokens` | `gen_ai.usage.input_tokens` | Includes cache-read tokens, per OTel convention |
+| `avp.usage.output_tokens` | `gen_ai.usage.output_tokens` | |
+| `avp.usage.cache_read_input_tokens` | `gen_ai.usage.cache_read.input_tokens` | Underscore-flattened on the wire; re-dotted on projection |
+| `avp.usage.cache_creation_input_tokens` | `gen_ai.usage.cache_creation.input_tokens` | |
+| `avp.usage.reasoning_output_tokens` | `gen_ai.usage.reasoning.output_tokens` | Reasoning-model output (Claude thinking, o-series) |
+| `avp.tool.name` | `gen_ai.tool.name` | On `tool_invoked` / `tool_returned` |
+| `avp.tool.call_id` | `gen_ai.tool.call.id` | |
+| `avp.tool.input` | `gen_ai.tool.call.arguments` | |
+| `avp.subagent.name` | `gen_ai.agent.name` | On `subagent_invoked` / `subagent_returned` / `subagent_failed` |
+| `avp.subagent.description` | `gen_ai.agent.description` | |
+| `avp.response.finish_reasons` | `gen_ai.response.finish_reasons` | |
+| `avp.response.time_to_first_chunk` | `gen_ai.response.time_to_first_chunk` | |
 
-**What AVP takes:** the attribute namespace. Our token/model/tool fields
-are renamed to match. AVP's run-level span uses `gen_ai.operation.name: "invoke_agent"`
-(the conventions define both CLIENT and INTERNAL invoke_agent spans).
-New per-event attributes that don't have a GenAI equivalent (most
-notably **cost** and AVP-specific lifecycle concepts) get the `avp.*`
-namespace.
+Implicit on projection: every `subagent_invoked` adds
+`gen_ai.operation.name: "invoke_agent"` (the event type itself encodes
+this; AVP does not duplicate it on the wire).
 
-**What AVP does NOT take:** experimental conventions still flagged as
-unstable. The GenAI conventions overall are still under the
-`gen_ai_latest_experimental` stability flag (consumers opt in via
-`OTEL_SEMCONV_STABILITY_OPT_IN`); the AVP specs pin a specific
-upstream commit and only adopt attributes whose names have stabilized.
+**No equivalent in OTel today:** `avp.cost_usd`, `avp.refusal.category`,
+`avp.content` (the model's content-block array), and every AVP-specific
+lifecycle field (`avp.subagent.run_id`, `avp.commission`, `avp.descriptor`,
+`avp.tool.dispatch_target`, ...). These stay `avp.*` on projection too.
 
-**On cost specifically:** OTel has not standardized a cost attribute as
-of this writing (verified against the live spec repo). AVP keeps cost
-in the `avp.*` namespace as `avp.cost_usd`. When upstream standardizes
-a name (e.g., `gen_ai.usage.cost`), AVP adopts it in the next minor
-version and aliases the old field for one release.
+**Why this split:** OTel GenAI semconv is still under the
+`gen_ai_latest_experimental` stability flag; pinning a specific revision
+on the wire would mean AVP either drifts implicitly when OTel renames or
+breaks consumers on every revision bump. With the projection model, the
+OTel revision is a property of the *projector*, not the wire spec, and
+different consumers can target different semconv versions independently.
+
+**When upstream standardizes cost** (e.g., a future `gen_ai.usage.cost`),
+the projection table grows one row; the wire field (`avp.cost_usd`) stays
+put. AVP does not break callers when OTel evolves.
 
 ### OpenTelemetry: OTLP / spans
 
@@ -295,7 +305,7 @@ lifecycle event), not by a controller pushing in unilateral decisions.
 
 ## How the layers compose: one event walked through
 
-A `model_turn_ended` event illustrates every layer:
+An `assistant_message` event illustrates every layer:
 
 ```jsonc
 {
@@ -303,7 +313,7 @@ A `model_turn_ended` event illustrates every layer:
   "specversion": "1.0",
   "id": "ev-7f3a-0042",
   "source": "avp://agent",
-  "type": "avp.model_turn_ended",
+  "type": "avp.assistant_message",
   "subject": "auth-refactor-20260502-abc123",      // run_id
   "time": "2026-05-06T14:32:01.428Z",
   "datacontenttype": "application/json",
@@ -314,21 +324,19 @@ A `model_turn_ended` event illustrates every layer:
     "span_id": "eee19b7ec3c1b173",
     "parent_span_id": "0000000000000001",          // top-level run span
 
-    // OTel GenAI semantic conventions, recognizable to any GenAI backend
-    "gen_ai.provider.name": "anthropic",
-    "gen_ai.operation.name": "chat",
-    "gen_ai.request.model": "claude-haiku-4-5-20251001",
-    "gen_ai.response.model": "claude-haiku-4-5-20251001",
-    "gen_ai.usage.input_tokens": 628,                       // includes cache reads/writes
-    "gen_ai.usage.output_tokens": 71,
-    "gen_ai.usage.cache_read.input_tokens": 0,              // dotted, per spec
-    "gen_ai.usage.cache_creation.input_tokens": 0,
-    "gen_ai.usage.reasoning.output_tokens": 0,              // recommended when applicable
-
-    // AVP-specific (no upstream equivalent)
-    "step": 3,
-    "duration_ms": 1430,
-    "avp.cost_usd": 0.00098                                 // OTel GenAI hasn't standardized cost as of this writing
+    // AVP-defined attributes — single namespace, no OTel-semconv mixing
+    "avp.step": 3,
+    "avp.duration_ms": 1430,
+    "avp.content": [ /* AVPContentBlock[] for the turn */ ],
+    "avp.provider.name": "anthropic",
+    "avp.request.model": "claude-haiku-4-5-20251001",
+    "avp.response.model": "claude-haiku-4-5-20251001",
+    "avp.usage.input_tokens": 628,                  // includes cache reads/writes
+    "avp.usage.output_tokens": 71,
+    "avp.usage.cache_read_input_tokens": 0,
+    "avp.usage.cache_creation_input_tokens": 0,
+    "avp.usage.reasoning_output_tokens": 0,
+    "avp.cost_usd": 0.00098
   }
 }
 ```
@@ -336,11 +344,16 @@ A `model_turn_ended` event illustrates every layer:
 A consumer who has never heard of AVP can still:
 - Validate the envelope as a CloudEvent (any CloudEvents library).
 - Reconstruct the span tree via `trace_id` / `span_id` / `parent_span_id`.
-- Read token usage with the same code that handles OpenAI, Gemini, Bedrock telemetry. `gen_ai.provider.name` identifies the backend, `gen_ai.usage.*` carries token counts in the upstream-standard naming.
-- Treat unknown `avp.*` attributes as opaque extensions (cost, AVP-specific lifecycle).
 
-A consumer who DOES know AVP gets, on top: the no-mid-run-reach-in
-promise and the trajectory's two-class structure.
+A consumer that wants OTel-native ingestion runs the AVP → OTel
+projection (see § *OpenTelemetry GenAI semantic conventions* above): a
+flat rename from `avp.usage.input_tokens` → `gen_ai.usage.input_tokens`,
+`avp.tool.name` → `gen_ai.tool.name`, and so on, before forwarding to
+its OTel pipeline. The projection is localized translator code, not a
+property of the wire.
+
+A consumer who knows AVP gets, on top: the no-mid-run-reach-in promise
+and the trajectory's two-class structure.
 
 ---
 
@@ -506,12 +519,12 @@ problems:
 | **Unit** | One JSON document per run | A stream of events during a run |
 | **Lifecycle** | Post-hoc artifact (written after the run completes) | Live (emitted as the run executes) |
 | **Primary consumer** | SFT/RL training pipelines, replay, debugging | Supervisors observing/auditing runs in real time |
-| **Step granularity** | One step per LLM call (user/system/agent turn) | Multiple events per turn (`model_turn_started`, `text_emitted`, `tool_invoked/returned`, `model_turn_ended`) |
+| **Step granularity** | One step per LLM call (user/system/agent turn) | Multiple events per turn (`assistant_message`, `tool_invoked/returned`, ...) |
 | **Time model** | Optional ISO timestamps per step | Strict event ordering, CloudEvents `time` per event |
 | **Identifiers** | `session_id` (run) + `trajectory_id` (document) | OTel `trace_id` / `span_id` / `parent_span_id` |
-| **Cost** | Absolute per step, totals in `final_metrics` | Per-turn deltas on `model_turn_ended`; consumer reduces to totals |
+| **Cost** | Absolute per step, totals in `final_metrics` | Per-turn deltas on `assistant_message`; consumer reduces to totals |
 | **Subagents** | Inline-embed full child trajectories or external file ref | Correlate by `avp.subagent.run_id` (child has its own event stream) |
-| **Standards anchoring** | Bespoke schema | CloudEvents 1.0 + OTel GenAI + OTel spans |
+| **Standards anchoring** | Bespoke schema | CloudEvents 1.0 + OTel spans (GenAI semconv is a projection target, not on the wire) |
 | **RL/SFT extras** | Logprobs, token IDs, `reasoning_effort` | Out of scope |
 
 ATIF and AVP Trajectory are **complementary**. ATIF is a great format
@@ -531,14 +544,12 @@ specs we build on have their own versions, pinned in the specs and
 the umbrella [`spec/v0.1/README.md`](spec/v0.1/README.md):
 
 - CloudEvents: 1.0
-- OpenTelemetry GenAI semantic conventions: pinned to a specific upstream
-  commit. The conventions are gated by `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`
-  in OTel implementations and remain experimental as of v0.1; AVP adopts
-  only the attributes that have stabilized (`gen_ai.provider.name`, the
-  full `gen_ai.usage.*` family, `gen_ai.tool.*`, `gen_ai.request.model` /
-  `gen_ai.response.model`, `gen_ai.operation.name`). When OTel marks
-  these stable, AVP drops the "experimental upstream" caveat without a
-  wire change.
+- OpenTelemetry GenAI semantic conventions: not on the wire. AVP owns
+  its attribute namespace (`avp.*`); the AVP → OTel-attribute projection
+  table in this document is the integration point and tracks upstream
+  separately from the wire. The OTel conventions remain under the
+  `gen_ai_latest_experimental` stability flag as of v0.1; keeping them
+  off-wire means AVP doesn't break when OTel renames or restructures.
 - JSON-RPC: 2.0
 - MCP: latest stable as of v0.1 cut date
 - Agent Skills: SKILL.md format v1

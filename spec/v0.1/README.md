@@ -24,8 +24,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 AVP specializes (it does not reinvent) the following industry specs:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry GenAI semantic conventions** for token / cost / model / tool attribute names inside `data` (e.g., `gen_ai.usage.input_tokens`, `gen_ai.tool.name`).
-- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree.
+- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../FOUNDATIONS.md).
 - **JSON-RPC 2.0** for the AVP Resolver API. Agent → resolver service calls (`avp.resolve`, `avp.spawn_subagent`) that dereference opaque refs in the Commission.
 - **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` are opaque refs the agent resolves into MCP connection material; the agent then runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
 - **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries are refs; the resolver returns SKILL.md content (or a location to fetch).

@@ -86,7 +86,7 @@ class _SpanData(BaseModel):
     trace_id: str = Field(min_length=32, max_length=32, pattern=r"^[0-9a-f]{32}$")
     span_id: str = Field(min_length=16, max_length=16, pattern=r"^[0-9a-f]{16}$")
     parent_span_id: str = Field(min_length=16, max_length=16, pattern=r"^[0-9a-f]{16}$")
-    avp_meta: dict[str, Any] | None = Field(default=None, alias="avp.meta")
+    meta: dict[str, Any] | None = Field(default=None, alias="avp.meta")
 
 
 class _CloudEventBase(BaseModel):
@@ -105,4 +105,4 @@ class _CloudEventBase(BaseModel):
     subject: str | None = Field(default=None, min_length=1)  # run_id
     datacontenttype: str | None = "application/json"
     dataschema: str | None = None
-    avp_correlation_id: str | None = Field(default=None, min_length=1, alias="avp.correlation_id")
+    correlation_id: str | None = Field(default=None, min_length=1, alias="avp.correlation_id")

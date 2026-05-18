@@ -20,15 +20,16 @@ The wire format is built on:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`,
   `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry GenAI** semantic conventions for token / cost / model /
-  tool attribute names inside `data` (e.g., `gen_ai.usage.input_tokens`).
 - **OpenTelemetry span identification** (`trace_id`, `span_id`,
   `parent_span_id`) so downstream consumers reconstruct the run's span
   tree.
 
-AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
-under the `avp.*` attribute namespace. See `FOUNDATIONS.md` and
-`spec/v0.1/trajectory.md` for the normative mapping.
+All AVP-defined `data` attributes (token / cost / model / tool /
+subagent / refusal / step / content) live under the single `avp.*`
+namespace. OpenTelemetry GenAI semantic conventions are NOT carried on
+the wire; an AVP → OTel-attribute projection is documented in
+`FOUNDATIONS.md` for consumers translating into OTel-native backends.
+See `spec/v0.1/trajectory.md` for the normative attribute reference.
 """
 
 from __future__ import annotations
@@ -104,6 +105,30 @@ class ErrorCode(StrEnum):
     unknown = "unknown"
 
 
+class Usage(BaseModel):
+    """Per-turn token accounting carried on `assistant_message.avp.usage`.
+
+    `input_tokens` is the total input tokens for the turn, INCLUDING
+    cache-read tokens. `cache_read_input_tokens` and
+    `cache_creation_input_tokens` are informational breakdowns already
+    accounted for inside `input_tokens`; consumers MUST NOT double-count
+    them when summing. `reasoning_output_tokens` is the subset of
+    `output_tokens` the provider attributes to internal reasoning (o-series
+    reasoning tokens, Anthropic extended-thinking output).
+
+    `extra="allow"` so provider-specific token categories the spec
+    doesn't enumerate (vision tokens, audio output tokens, ...) round-trip
+    through `avp.usage` verbatim without requiring spec churn.
+    """
+
+    model_config = _OPEN
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cache_read_input_tokens: int | None = Field(default=None, ge=0)
+    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
+    reasoning_output_tokens: int | None = Field(default=None, ge=0)
+
+
 class SubagentUsage(BaseModel):
     """Narrow totals carrier for the in-process subagent rollup.
 
@@ -144,9 +169,9 @@ class RunRequestedData(_SpanData):
     absence (not `"unknown"`) is the canonical signal.
     """
 
-    avp_supervisor_name: str | None = Field(default=None, min_length=1, alias="avp.supervisor.name")
-    avp_supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
-    avp_commission: Commission | None = Field(default=None, alias="avp.commission")
+    supervisor_name: str | None = Field(default=None, min_length=1, alias="avp.supervisor.name")
+    supervisor_version: str | None = Field(default=None, alias="avp.supervisor.version")
+    commission: Commission | None = Field(default=None, alias="avp.commission")
 
 
 class AgentDescribedData(_SpanData):
@@ -157,27 +182,27 @@ class AgentDescribedData(_SpanData):
     `<agent> describe` prints to stdout for the same agent build.
     """
 
-    avp_descriptor: AgentDescriptor = Field(alias="avp.descriptor")
+    descriptor: AgentDescriptor = Field(alias="avp.descriptor")
 
 
 class AgentStartedData(_SpanData):
     """Payload of avp.agent_started events."""
 
-    gen_ai_provider_name: str | None = Field(default=None, alias="gen_ai.provider.name")
-    gen_ai_operation_name: Literal["invoke_agent", "chat"] | None = Field(
-        default=None, alias="gen_ai.operation.name"
+    provider_name: str | None = Field(default=None, alias="avp.provider.name")
+    operation_name: Literal["invoke_agent", "chat"] | None = Field(
+        default=None, alias="avp.operation.name"
     )
-    gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
-    avp_prompt: str | None = Field(default=None, alias="avp.prompt")
-    avp_system_prompt: str | None = Field(default=None, alias="avp.system_prompt")
-    avp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.tools")
-    avp_mcp_servers: list[McpServerDecl] | None = Field(default=None, alias="avp.mcp_servers")
-    avp_skills: list[SkillDecl] | None = Field(default=None, alias="avp.skills")
-    avp_subagents: list[SubagentDecl] | None = Field(default=None, alias="avp.subagents")
-    avp_thread_id: str | None = Field(default=None, alias="avp.thread_id")
-    avp_session_id: str | None = Field(default=None, alias="avp.session_id")
-    avp_tags: list[str] | None = Field(default=None, alias="avp.tags")
-    avp_schema_version: Literal["0.1"] = Field(default="0.1", alias="avp.schema_version")
+    request_model: str | None = Field(default=None, alias="avp.request.model")
+    prompt: str | None = Field(default=None, alias="avp.prompt")
+    system_prompt: str | None = Field(default=None, alias="avp.system_prompt")
+    tools: list[ToolDecl] | None = Field(default=None, alias="avp.tools")
+    mcp_servers: list[McpServerDecl] | None = Field(default=None, alias="avp.mcp_servers")
+    skills: list[SkillDecl] | None = Field(default=None, alias="avp.skills")
+    subagents: list[SubagentDecl] | None = Field(default=None, alias="avp.subagents")
+    thread_id: str | None = Field(default=None, alias="avp.thread_id")
+    session_id: str | None = Field(default=None, alias="avp.session_id")
+    tags: list[str] | None = Field(default=None, alias="avp.tags")
+    schema_version: Literal["0.1"] = Field(default="0.1", alias="avp.schema_version")
 
 
 class AgentStoppedData(_SpanData):
@@ -189,8 +214,8 @@ class AgentStoppedData(_SpanData):
     the stream to compute totals.
     """
 
-    avp_reason: StopReason = Field(alias="avp.reason")
-    avp_output: Any | None = Field(default=None, alias="avp.output")
+    reason: StopReason = Field(alias="avp.reason")
+    output: Any | None = Field(default=None, alias="avp.output")
 
 
 class AssistantMessageData(_SpanData):
@@ -206,47 +231,37 @@ class AssistantMessageData(_SpanData):
     Refusal metadata: when the provider declined the turn, the refusal
     text appears as a `RefusalBlock` (or `TextBlock` for providers that
     don't typify it) inside `avp.content`, the upstream finish-reason
-    string surfaces on `gen_ai.response.finish_reasons`, and the
+    string surfaces on `avp.response.finish_reasons`, and the
     provider's safety category (when given, free-form because every
     provider names them differently) surfaces on `avp.refusal.category`.
     """
 
-    avp_step: int = Field(ge=0, alias="avp.step")
-    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_content: list[AVPContentBlock] = Field(alias="avp.content")
-    gen_ai_provider_name: str | None = Field(default=None, alias="gen_ai.provider.name")
-    gen_ai_request_model: str | None = Field(default=None, alias="gen_ai.request.model")
-    gen_ai_response_model: str | None = Field(default=None, alias="gen_ai.response.model")
-    gen_ai_response_finish_reasons: list[str] | None = Field(
-        default=None, alias="gen_ai.response.finish_reasons"
+    step: int = Field(ge=0, alias="avp.step")
+    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    content: list[AVPContentBlock] = Field(alias="avp.content")
+    provider_name: str | None = Field(default=None, alias="avp.provider.name")
+    request_model: str | None = Field(default=None, alias="avp.request.model")
+    response_model: str | None = Field(default=None, alias="avp.response.model")
+    response_finish_reasons: list[str] | None = Field(
+        default=None, alias="avp.response.finish_reasons"
     )
-    gen_ai_response_time_to_first_chunk: float | None = Field(
-        default=None, ge=0, alias="gen_ai.response.time_to_first_chunk"
+    response_time_to_first_chunk: float | None = Field(
+        default=None, ge=0, alias="avp.response.time_to_first_chunk"
     )
-    gen_ai_usage_input_tokens: int = Field(ge=0, alias="gen_ai.usage.input_tokens")
-    gen_ai_usage_output_tokens: int = Field(ge=0, alias="gen_ai.usage.output_tokens")
-    gen_ai_usage_cache_read_input_tokens: int | None = Field(
-        default=None, ge=0, alias="gen_ai.usage.cache_read.input_tokens"
-    )
-    gen_ai_usage_cache_creation_input_tokens: int | None = Field(
-        default=None, ge=0, alias="gen_ai.usage.cache_creation.input_tokens"
-    )
-    gen_ai_usage_reasoning_output_tokens: int | None = Field(
-        default=None, ge=0, alias="gen_ai.usage.reasoning.output_tokens"
-    )
-    avp_cost_usd: float = Field(ge=0, alias="avp.cost_usd")
-    avp_cost_source: Literal["computed", "reported", "unknown"] | None = Field(
+    usage: Usage = Field(alias="avp.usage")
+    cost_usd: float = Field(ge=0, alias="avp.cost_usd")
+    cost_source: Literal["computed", "reported", "unknown"] | None = Field(
         default=None, alias="avp.cost.source"
     )
-    avp_refusal_category: str | None = Field(default=None, alias="avp.refusal.category")
+    refusal_category: str | None = Field(default=None, alias="avp.refusal.category")
 
 
 class ToolInvokedData(_SpanData):
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
-    gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
-    gen_ai_tool_call_arguments: dict[str, Any] = Field(alias="gen_ai.tool.call.arguments")
-    avp_tool_dispatch_target: Literal["mcp_server", "local"] | None = Field(
+    step: int = Field(ge=0, alias="avp.step")
+    tool_call_id: str = Field(min_length=1, alias="avp.tool.call_id")
+    tool_name: str = Field(alias="avp.tool.name")
+    tool_input: dict[str, Any] = Field(alias="avp.tool.input")
+    tool_dispatch_target: Literal["mcp_server", "local"] | None = Field(
         default=None, alias="avp.tool.dispatch_target"
     )
 
@@ -261,11 +276,11 @@ class ToolReturnedData(_SpanData):
     becomes one entry of the next user-role message's content array.
     """
 
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_tool_call_id: str = Field(min_length=1, alias="gen_ai.tool.call.id")
-    gen_ai_tool_name: str = Field(alias="gen_ai.tool.name")
-    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_tool_result: ToolResultBlock = Field(alias="avp.tool_result")
+    step: int = Field(ge=0, alias="avp.step")
+    tool_call_id: str = Field(min_length=1, alias="avp.tool.call_id")
+    tool_name: str = Field(alias="avp.tool.name")
+    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    tool_result: ToolResultBlock = Field(alias="avp.tool_result")
 
 
 class SubagentInvokedData(_SpanData):
@@ -274,9 +289,9 @@ class SubagentInvokedData(_SpanData):
     The event's `span_id` IS the subagent's frame span. Events emitted by
     the subagent's sub-loop set `parent_span_id` to this frame (or chain
     through descendants of it), so the trajectory reconstructs as a nested
-    tree. Per OTel GenAI semconv §invoke_agent, `gen_ai.operation.name` is
-    `invoke_agent` and `gen_ai.agent.name` carries the subagent's declared
-    name.
+    tree. The subagent's declared name surfaces on `avp.subagent.name`;
+    the event type itself signals an `invoke_agent`-style operation, so no
+    separate operation-name field is carried on the wire.
 
     `avp.subagent.run_id` is set when the subagent is supervisor-managed:
     the parent's runtime calls `avp.spawn_subagent` and receives the child
@@ -286,15 +301,12 @@ class SubagentInvokedData(_SpanData):
     is the same process as the subagent's loop).
     """
 
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
-    gen_ai_agent_description: str | None = Field(default=None, alias="gen_ai.agent.description")
-    gen_ai_operation_name: Literal["invoke_agent"] = Field(
-        default="invoke_agent", alias="gen_ai.operation.name"
-    )
-    avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    avp_subagent_input: dict[str, Any] = Field(alias="avp.subagent.input")
-    avp_subagent_run_id: str | None = Field(default=None, min_length=1, alias="avp.subagent.run_id")
+    step: int = Field(ge=0, alias="avp.step")
+    subagent_name: str = Field(alias="avp.subagent.name")
+    subagent_description: str | None = Field(default=None, alias="avp.subagent.description")
+    subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
+    subagent_input: dict[str, Any] = Field(alias="avp.subagent.input")
+    subagent_run_id: str | None = Field(default=None, min_length=1, alias="avp.subagent.run_id")
 
 
 class SubagentReturnedData(_SpanData):
@@ -312,16 +324,16 @@ class SubagentReturnedData(_SpanData):
     MUST also omit it; the supervisor reads the child's trajectory.
     """
 
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
-    avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_subagent_result_text: str = Field(alias="avp.subagent.result.text")
-    avp_subagent_result_structured: Any | None = Field(
+    step: int = Field(ge=0, alias="avp.step")
+    subagent_name: str = Field(alias="avp.subagent.name")
+    subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
+    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    subagent_result_text: str = Field(alias="avp.subagent.result.text")
+    subagent_result_structured: Any | None = Field(
         default=None, alias="avp.subagent.result.structured"
     )
-    avp_subagent_reason: StopReason = Field(alias="avp.subagent.reason")
-    avp_subagent_usage: SubagentUsage | None = Field(default=None, alias="avp.subagent.usage")
+    subagent_reason: StopReason = Field(alias="avp.subagent.reason")
+    subagent_usage: SubagentUsage | None = Field(default=None, alias="avp.subagent.usage")
 
 
 class SubagentFailedData(_SpanData):
@@ -329,25 +341,25 @@ class SubagentFailedData(_SpanData):
     tool-call failure: the model receives an `Error: ...` string in place
     of the result and may retry or proceed."""
 
-    avp_step: int = Field(ge=0, alias="avp.step")
-    gen_ai_agent_name: str = Field(alias="gen_ai.agent.name")
-    avp_subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    avp_subagent_error: str = Field(alias="avp.subagent.error")
-    avp_subagent_error_code: str | None = Field(default=None, alias="avp.subagent.error.code")
+    step: int = Field(ge=0, alias="avp.step")
+    subagent_name: str = Field(alias="avp.subagent.name")
+    subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
+    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    subagent_error: str = Field(alias="avp.subagent.error")
+    subagent_error_code: str | None = Field(default=None, alias="avp.subagent.error.code")
 
 
 class ErrorOccurredData(_SpanData):
-    avp_error_code: ErrorCode = Field(alias="avp.error.code")
-    avp_error_message: str = Field(alias="avp.error.message")
+    error_code: ErrorCode = Field(alias="avp.error.code")
+    error_message: str = Field(alias="avp.error.message")
 
 
 class McpServerConnectedData(_SpanData):
-    avp_mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
-    avp_mcp_protocol_version: str = Field(alias="avp.mcp.protocol_version")
-    avp_mcp_tool_count: int = Field(ge=0, alias="avp.mcp.tool_count")
-    avp_mcp_server_name: str | None = Field(default=None, alias="avp.mcp.server_name")
-    avp_mcp_server_version: str | None = Field(default=None, alias="avp.mcp.server_version")
+    mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
+    mcp_protocol_version: str = Field(alias="avp.mcp.protocol_version")
+    mcp_tool_count: int = Field(ge=0, alias="avp.mcp.tool_count")
+    mcp_server_name: str | None = Field(default=None, alias="avp.mcp.server_name")
+    mcp_server_version: str | None = Field(default=None, alias="avp.mcp.server_version")
     # Per-server tool list, populated by agents that actually drive the
     # MCP handshake (e.g. avp-claude-agent-sdk calling
     # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
@@ -357,29 +369,29 @@ class McpServerConnectedData(_SpanData):
     # `agent_started.data.tools`. Dispatch target is implicit "mcp_server"
     # by virtue of being nested under this event; the server's id is on
     # this event's own `avp.mcp.server_id` — no need to repeat per-tool.
-    avp_mcp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
+    mcp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
     # Live resource catalog from MCP's `resources/list`. Parallel to
     # `avp.mcp.tools`. Populated by agents that drive the MCP handshake;
     # null on stub emitters. Skills declared in `Commission.skills[]` with
     # `avp.source = "mcp://<server-id>/<resource-path>"` resolve against
     # this catalog: the agent calls `resources/read` on the named server
     # before turn 1 to pull the SKILL.md body into the model's context.
-    avp_mcp_resources: list[ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
+    mcp_resources: list[ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
     # SDK-reported connection status, mirroring the Claude Agent SDK's
     # McpServerStatus.status enum. Default null because pre-live-transport
     # stub emitters didn't have this signal.
-    avp_mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = (
+    mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = (
         Field(default=None, alias="avp.mcp.status")
     )
     # Error message when status indicates failure (failed / needs-auth).
     # Surfaces the SDK's `error` field verbatim. Null on healthy connects.
-    avp_mcp_error: str | None = Field(default=None, alias="avp.mcp.error")
+    mcp_error: str | None = Field(default=None, alias="avp.mcp.error")
 
 
 class McpServerDisconnectedData(_SpanData):
-    avp_mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
-    avp_mcp_disconnect_reason: Literal["clean", "error"] = Field(alias="avp.mcp.disconnect_reason")
-    avp_mcp_disconnect_message: str | None = Field(default=None, alias="avp.mcp.disconnect_message")
+    mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
+    mcp_disconnect_reason: Literal["clean", "error"] = Field(alias="avp.mcp.disconnect_reason")
+    mcp_disconnect_message: str | None = Field(default=None, alias="avp.mcp.disconnect_message")
 
 
 # Kinds of asset the AVP resolver protocol can dereference. Carried on
@@ -401,9 +413,9 @@ class ManagedRefResolvedData(_SpanData):
     event records only that the round-trip happened.
     """
 
-    avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
-    avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
-    avp_duration_ms: int = Field(ge=0, alias="avp.duration_ms")
+    managed_kind: ManagedKind = Field(alias="avp.managed.kind")
+    managed_id: str = Field(min_length=1, alias="avp.managed.id")
+    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
 
 
 class ManagedRefResolveFailedData(_SpanData):
@@ -412,10 +424,10 @@ class ManagedRefResolveFailedData(_SpanData):
     `agent_stopped(reason: "error")` after emitting this event. Startup
     resolution is fail-fast (see `spec/v0.1/resolver.md` §5)."""
 
-    avp_managed_kind: ManagedKind = Field(alias="avp.managed.kind")
-    avp_managed_id: str = Field(min_length=1, alias="avp.managed.id")
-    avp_resolve_error: str = Field(min_length=1, alias="avp.resolve.error")
-    avp_resolve_error_code: str | None = Field(default=None, alias="avp.resolve.error.code")
+    managed_kind: ManagedKind = Field(alias="avp.managed.kind")
+    managed_id: str = Field(min_length=1, alias="avp.managed.id")
+    resolve_error: str = Field(min_length=1, alias="avp.resolve.error")
+    resolve_error_code: str | None = Field(default=None, alias="avp.resolve.error.code")
 
 
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
@@ -608,7 +620,7 @@ def parse_event(payload: dict[str, Any]) -> Event | UnknownEvent:
 def event_to_wire(event: BaseModel) -> dict[str, Any]:
     """Serialize an event Pydantic model to the wire-form dict.
 
-    Always uses aliases (the dotted forms like `gen_ai.usage.input_tokens`)
+    Always uses aliases (the dotted forms like `avp.usage.input_tokens`)
     so the output is what consumers see on the wire.
     """
     return event.model_dump(by_alias=True, exclude_none=True, mode="json")
@@ -666,6 +678,7 @@ __all__ = [
     "ToolReturnedData",
     "ToolReturnedEvent",
     "UnknownEvent",
+    "Usage",
     "event_to_wire",
     "new_event_id",
     "new_span_id",

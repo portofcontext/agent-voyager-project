@@ -84,10 +84,12 @@ change MUST stay compatible with the upstream spec it's anchored to:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`,
   `type`, `subject`, `time`, `data`)
-- **OpenTelemetry GenAI semantic conventions** for token / cost / model / tool
-  attribute names inside `data` (`gen_ai.usage.input_tokens`, `gen_ai.tool.name`)
 - **OTel span identification**: `trace_id` / `span_id` / `parent_span_id` on
   every event's `data`
+- **OpenTelemetry GenAI semantic conventions** are NOT on the wire. AVP
+  owns its attribute namespace (`avp.usage.input_tokens`, `avp.tool.name`,
+  ...) and ships a documented AVP → `gen_ai.*` projection in
+  `FOUNDATIONS.md` for consumers forwarding into OTel-native backends.
 - **JSON-RPC 2.0** for the AVP Resolver API. Agent calls `avp.resolve`
   and `avp.spawn_subagent` against a supervisor-stood-up service to dereference
   opaque refs in `Commission.{mcp_servers,skills,subagents}[].ref`

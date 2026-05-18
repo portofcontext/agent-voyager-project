@@ -13,7 +13,7 @@ Implementors building an `agent_described` event construct
     AgentDescriptor(
         agent_name="my-agent",
         agent_version="1.0.0",
-        avp_spec_version="0.1",
+        spec_version="0.1",
         tools=[ToolDecl(name="Read")],
     )
 
@@ -68,7 +68,7 @@ class SubagentDecl(BaseModel):
     name: str
     description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
-    avp_agent_type: str | None = Field(default=None, alias="avp.agent_type")
+    agent_type: str | None = Field(default=None, alias="avp.agent_type")
 
 
 class SkillDecl(BaseModel):
@@ -91,7 +91,7 @@ class SkillDecl(BaseModel):
     name: str
     description: str | None = None
     version: str | None = None
-    avp_source: str | None = Field(default=None, alias="avp.source")
+    source: str | None = Field(default=None, alias="avp.source")
 
 
 _MCP_SERVER_ID_PATTERN = r"^[a-z0-9_-]+$"
@@ -157,7 +157,7 @@ class AgentDescriptor(BaseModel):
     model_config = _STRICT
     agent_name: str = Field(min_length=1)
     agent_version: str = Field(min_length=1)
-    avp_spec_version: Literal["0.1"]
+    spec_version: Literal["0.1"]
     default_model: str | None = None
     # Optional whitelist of models the agent's driver / wrapped SDK can run.
     # Each entry is a glob pattern matched against `Commission.model`
