@@ -5,7 +5,7 @@ Conformance suite: [`conformance/v0.1/`](../../conformance/v0.1/)
 
 This package ships:
 
-- **Wire types** (`avp.types`) — Pydantic v2 models for every Commission, Event, and AgentDescriptor variant in v0.1, with discriminated unions on `type`. Also surfaced as spec-scoped re-exports under `avp.trajectory`, `avp.commission`, `avp.descriptor`, and `avp.resolver` for consumers that want a narrow import.
+- **Wire types** — Pydantic v2 models for every Commission, Event, and AgentDescriptor variant in v0.1, with discriminated unions on `type`. Defined in spec-scoped modules: `avp.commission`, `avp.descriptor`, `avp.trajectory`, `avp.resolver`. The top-level `avp` package re-exports them for `from avp import Commission` ergonomics.
 - **NDJSON IO** (`avp.io`) — line-buffered stdio readers and writers for the Commission (in) + Event trajectory (out).
 - **Reference agent** (`avp.agent`) — implements the normative loop in [`trajectory.md` §3.2](../../spec/v0.1/trajectory.md#32-the-loop). Pluggable model and tool drivers (mock drivers ship with the package for testing).
 - **Conformance harness** (`avp.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference agent with scripted model / tools / resolver, asserts captured trajectory against the expectations. CLI: `avp-conformance run` (subcommands `run` / `validate` / `check-coverage`).

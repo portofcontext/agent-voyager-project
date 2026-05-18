@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate JSON Schema 2020-12 files from the Pydantic v2 models in `avp.types`.
+"""Generate JSON Schema 2020-12 files from the AVP Pydantic v2 models.
 
-The Pydantic models in `python/avp/src/avp/types.py` are the source of truth
-for the wire format. This script regenerates the canonical schema files
-under `spec/v0.1/` so they cannot drift from the implementation.
+The Pydantic models under `python/avp/src/avp/` (`avp.commission`,
+`avp.descriptor`, `avp.trajectory`) are the source of truth for the wire
+format. This script regenerates the canonical schema files under
+`spec/v0.1/` so they cannot drift from the implementation.
 
 Run from repo root:
 
@@ -27,15 +28,18 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "python" / "avp" / "src"))
 
+from avp.commission import Commission  # noqa: E402
+from avp.descriptor import AgentDescriptor  # noqa: E402
+from avp.trajectory import Event  # noqa: E402
 from pydantic import TypeAdapter  # noqa: E402
-
-from avp.types import AgentDescriptor, Commission, Event  # noqa: E402
 
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_BASE = "https://avp.dev/schema/v0.1"
 
 
-def render(adapter: TypeAdapter, *, schema_id: str, title: str, description: str) -> dict[str, Any]:
+def render(
+    adapter: TypeAdapter, *, schema_id: str, title: str, description: str
+) -> dict[str, Any]:
     schema = adapter.json_schema(by_alias=True, ref_template="#/$defs/{model}")
     schema["$schema"] = SCHEMA_DRAFT
     schema["$id"] = schema_id
@@ -45,7 +49,9 @@ def render(adapter: TypeAdapter, *, schema_id: str, title: str, description: str
 
 
 def write_json(path: Path, doc: dict[str, Any]) -> None:
-    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"  wrote {path.relative_to(ROOT)}")
 
 

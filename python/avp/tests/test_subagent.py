@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from avp.types import Commission, SubagentRef
+from avp.commission import Commission, SubagentRef
 
 
 def test_subagent_ref_accepts_string_ref() -> None:
