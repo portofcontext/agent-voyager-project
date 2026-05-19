@@ -171,8 +171,7 @@ Called when the parent agent's model invokes a managed subagent. Unlike `avp.res
     "result": {
       "text":       "<subagent's final result text>",
       "structured": <optional structured result>,
-      "reason":     "<StopReason>",
-      "usage":      <RunStateSnapshot of the subagent's spend>
+      "reason":     "<StopReason>"
     }
   }
 }
@@ -232,7 +231,7 @@ A resolver client is conforming if and only if (when consuming a Commission with
 R1. It reads `AVP_RESOLVER_URL` from its environment. If absent or empty, it emits `error_occurred(code: "resolver_not_configured")` + `agent_stopped(reason: "error")` before any model turn.
 R2. It calls `avp.resolve` once per `Commission.{mcp_servers, skills, subagents}[]` entry, between `agent_started` and the first `model_turn_started`.
 R3. On any resolver error, it emits `managed_ref_resolve_failed` and `agent_stopped(reason: "error")` before any model turn.
-R4. For supervisor-managed subagent invocations, it calls `avp.spawn_subagent`, sets `subagent_invoked.data["avp.subagent.run_id"]` to the returned child `run_id`, and rolls the child's `usage` into the parent's `RunStateSnapshot`.
+R4. For supervisor-managed subagent invocations, it calls `avp.spawn_subagent` and sets `subagent_invoked.data["avp.subagent.run_id"]` to the returned child `run_id`. The supervisor reads the child's trajectory directly (cost / token totals come from reducing the child's `model_turn_ended` deltas); the parent MUST NOT publish a cumulative rollup on the wire.
 
 ---
 

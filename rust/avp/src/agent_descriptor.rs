@@ -180,7 +180,7 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = "  \"required\": ["]
 #[doc = "    \"agent_name\","]
 #[doc = "    \"agent_version\","]
-#[doc = "    \"avp_spec_version\""]
+#[doc = "    \"spec_version\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
 #[doc = "    \"agent_name\": {"]
@@ -192,53 +192,6 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = "      \"title\": \"Agent Version\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"avp_spec_version\": {"]
-#[doc = "      \"title\": \"Avp Spec Version\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"0.1\""]
-#[doc = "    },"]
-#[doc = "    \"built_in_skills\": {"]
-#[doc = "      \"title\": \"Built In Skills\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/_SkillDecl\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"built_in_subagents\": {"]
-#[doc = "      \"title\": \"Built In Subagents\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/_SubagentDecl\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"built_in_tools\": {"]
-#[doc = "      \"title\": \"Built In Tools\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/_ToolDecl\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"capabilities\": {"]
 #[doc = "      \"title\": \"Capabilities\","]
@@ -265,6 +218,64 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = "        }"]
 #[doc = "      ]"]
 #[doc = "    },"]
+#[doc = "    \"mcp_servers\": {"]
+#[doc = "      \"title\": \"Mcp Servers\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/McpServerDecl\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"prompt\": {"]
+#[doc = "      \"title\": \"Prompt\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"skills\": {"]
+#[doc = "      \"title\": \"Skills\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/SkillDecl\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"spec_version\": {"]
+#[doc = "      \"title\": \"Spec Version\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"0.1\""]
+#[doc = "    },"]
+#[doc = "    \"subagents\": {"]
+#[doc = "      \"title\": \"Subagents\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/SubagentDecl\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"supported_models\": {"]
 #[doc = "      \"title\": \"Supported Models\","]
 #[doc = "      \"anyOf\": ["]
@@ -272,6 +283,31 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = "          \"type\": \"array\","]
 #[doc = "          \"items\": {"]
 #[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"system_prompt\": {"]
+#[doc = "      \"title\": \"System Prompt\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"tools\": {"]
+#[doc = "      \"title\": \"Tools\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"$ref\": \"#/$defs/ToolDecl\""]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -289,28 +325,156 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 pub struct AvpV01AgentDescriptor {
     pub agent_name: AgentName,
     pub agent_version: AgentVersion,
-    pub avp_spec_version: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub built_in_skills: ::std::option::Option<::std::vec::Vec<SkillDecl>>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub built_in_subagents: ::std::option::Option<::std::vec::Vec<SubagentDecl>>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub built_in_tools: ::std::option::Option<::std::vec::Vec<ToolDecl>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub capabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub default_model: ::std::option::Option<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub mcp_servers: ::std::option::Option<::std::vec::Vec<McpServerDecl>>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub prompt: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub skills: ::std::option::Option<::std::vec::Vec<SkillDecl>>,
+    pub spec_version: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub subagents: ::std::option::Option<::std::vec::Vec<SubagentDecl>>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub supported_models: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub system_prompt: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub tools: ::std::option::Option<::std::vec::Vec<ToolDecl>>,
 }
-#[doc = "Skill descriptor in `agent_started.data.skills`: name plus\noptional metadata about each skill loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `avp.source` is the\nSKILL.md path / URI when known.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls."]
+#[doc = "`Id`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"_SkillDecl\","]
-#[doc = "  \"description\": \"Skill descriptor in `agent_started.data.skills`: name plus\\noptional metadata about each skill loaded for the run.\\n\\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\\ncomes from the SKILL.md frontmatter when the agent surfaces it\\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\\n`skills` breakdown including frontmatter); `avp.source` is the\\nSKILL.md path / URI when known.\\n\\nAll fields except `name` are optional so agents that only know\\nthe name (Commission-declared without enrichment) still emit valid\\ndecls.\","]
+#[doc = "  \"title\": \"Id\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct Id(::std::string::String);
+impl ::std::ops::Deref for Id {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<Id> for ::std::string::String {
+    fn from(value: Id) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for Id {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for Id {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for Id {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for Id {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for Id {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
+}
+#[doc = "MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords only the server's id, optional display name, and optional\ndescription; the tools the server surfaces are NOT enumerated on the\ndescriptor — they appear at runtime on\n`mcp_server_connected.data[\"avp.mcp.tools\"]`.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\nis intentionally looser than `Commission.McpServerRef.id`: the\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\nservers (where `id` is whatever the environment names them, e.g.\n`\"claude.ai Dashboard Builder\"`). Forcing a slug here would either\nlose fidelity or require every agent to invent the same slugification\nrule. Commission-authored ids stay slug-clean by virtue of\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\nnon-empty and must match the `avp.mcp.server_id` the agent later\nsurfaces on `mcp_server_connected` so consumers can correlate.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"McpServerDecl\","]
+#[doc = "  \"description\": \"MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\\n\\nConnection material (URLs, auth, command-lines) stays inside the agent\\nprocess and is NOT carried on the descriptor wire. The descriptor\\nrecords only the server's id, optional display name, and optional\\ndescription; the tools the server surfaces are NOT enumerated on the\\ndescriptor — they appear at runtime on\\n`mcp_server_connected.data[\\\"avp.mcp.tools\\\"]`.\\n\\n`id` is the agent's correlation key for this server across the wire\\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\\nis intentionally looser than `Commission.McpServerRef.id`: the\\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\\nservers (where `id` is whatever the environment names them, e.g.\\n`\\\"claude.ai Dashboard Builder\\\"`). Forcing a slug here would either\\nlose fidelity or require every agent to invent the same slugification\\nrule. Commission-authored ids stay slug-clean by virtue of\\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\\nnon-empty and must match the `avp.mcp.server_id` the agent later\\nsurfaces on `mcp_server_connected` so consumers can correlate.\\n\\n`name` is the display name when the environment provides one distinct\\nfrom `id` (typical for Commission-resolved servers: `id` is the\\nCommission slug, `name` is the human-readable label from the resolved\\nconfig). For environment-resident servers whose only identifier is\\nthe display name, `id` carries that string and `name` is omitted.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"description\": {"]
+#[doc = "      \"title\": \"Description\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
+#[doc = "    },"]
+#[doc = "    \"name\": {"]
+#[doc = "      \"title\": \"Name\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": true"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct McpServerDecl {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub description: ::std::option::Option<::std::string::String>,
+    pub id: Id,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub name: ::std::option::Option<::std::string::String>,
+}
+#[doc = "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data[\"avp.skills\"]`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SkillDecl\","]
+#[doc = "  \"description\": \"Skill descriptor in `AgentDescriptor.skills` and\\n`agent_started.data[\\\"avp.skills\\\"]`: name plus optional metadata about each\\nskill the agent ships with or has loaded for the run.\\n\\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\\ncomes from the SKILL.md frontmatter when the agent surfaces it\\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\\n`skills` breakdown including frontmatter); `version` is the skill's\\nown version when known; `avp.source` is the SKILL.md path / URI.\\n\\nAll fields except `name` are optional so agents that only know\\nthe name (Commission-declared without enrichment) still emit valid\\ndecls.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
@@ -341,6 +505,17 @@ pub struct AvpV01AgentDescriptor {
 #[doc = "    \"name\": {"]
 #[doc = "      \"title\": \"Name\","]
 #[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"version\": {"]
+#[doc = "      \"title\": \"Version\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -358,15 +533,17 @@ pub struct SkillDecl {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     pub name: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub version: ::std::option::Option<::std::string::String>,
 }
-#[doc = "Subagent descriptor in `agent_started.data.subagents`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts."]
+#[doc = "Subagent descriptor in `agent_started.data[\"avp.subagents\"]`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"_SubagentDecl\","]
-#[doc = "  \"description\": \"Subagent descriptor in `agent_started.data.subagents`: what the\\nparent model sees when deciding whether to delegate. Same MCP-shaped\\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\\ncan render subagents to the model's tool list with no translation.\\n\\n`description` is optional to match `_ToolDecl`: when surfacing a\\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\\nthe agent has authoritative knowledge of the name but not the prose\\ndescription. Honest-null beats authored-prose-that-drifts.\","]
+#[doc = "  \"title\": \"SubagentDecl\","]
+#[doc = "  \"description\": \"Subagent descriptor in `agent_started.data[\\\"avp.subagents\\\"]`: what the\\nparent model sees when deciding whether to delegate. Same MCP-shaped\\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\\ncan render subagents to the model's tool list with no translation.\\n\\n`description` is optional to match `ToolDecl`: when surfacing a\\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\\nthe agent has authoritative knowledge of the name but not the prose\\ndescription. Honest-null beats authored-prose-that-drifts.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
@@ -434,45 +611,19 @@ pub struct SubagentDecl {
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
 }
-#[doc = "Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields."]
+#[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"_ToolDecl\","]
-#[doc = "  \"description\": \"Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields.\","]
+#[doc = "  \"title\": \"ToolDecl\","]
+#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools`,\\n`agent_started.data[\\\"avp.tools\\\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity; how the tool is\\n*dispatched* (local vs MCP server) is implicit from where the decl\\nappears on the wire — `descriptor.tools` and `agent_started.data[\\\"avp.tools\\\"]`\\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\\nare MCP-dispatched by virtue of being nested under a server. The\\nper-invocation discriminator lives on `tool_invoked.data[\\\"avp.tool.dispatch_target\\\"]`.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
-#[doc = "    \"avp.dispatch_target\": {"]
-#[doc = "      \"title\": \"Avp.Dispatch Target\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"enum\": ["]
-#[doc = "            \"mcp_server\","]
-#[doc = "            \"local\""]
-#[doc = "          ]"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp_server_id\": {"]
-#[doc = "      \"title\": \"Avp.Mcp Server Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
 #[doc = "    \"description\": {"]
 #[doc = "      \"title\": \"Description\","]
 #[doc = "      \"anyOf\": ["]
@@ -507,18 +658,6 @@ pub struct SubagentDecl {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ToolDecl {
-    #[serde(
-        rename = "avp.dispatch_target",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_dispatch_target: ::std::option::Option<ToolDeclAvpDispatchTarget>,
-    #[serde(
-        rename = "avp.mcp_server_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_server_id: ::std::option::Option<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[serde(
@@ -529,76 +668,4 @@ pub struct ToolDecl {
     pub input_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
-}
-#[doc = "`ToolDeclAvpDispatchTarget`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"mcp_server\","]
-#[doc = "    \"local\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum ToolDeclAvpDispatchTarget {
-    #[serde(rename = "mcp_server")]
-    McpServer,
-    #[serde(rename = "local")]
-    Local,
-}
-impl ::std::fmt::Display for ToolDeclAvpDispatchTarget {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::McpServer => f.write_str("mcp_server"),
-            Self::Local => f.write_str("local"),
-        }
-    }
-}
-impl ::std::str::FromStr for ToolDeclAvpDispatchTarget {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "mcp_server" => Ok(Self::McpServer),
-            "local" => Ok(Self::Local),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ToolDeclAvpDispatchTarget {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for ToolDeclAvpDispatchTarget {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ToolDeclAvpDispatchTarget {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
 }

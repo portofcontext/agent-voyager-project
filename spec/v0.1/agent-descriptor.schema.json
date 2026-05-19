@@ -1,8 +1,48 @@
 {
   "$defs": {
-    "_SkillDecl": {
+    "McpServerDecl": {
       "additionalProperties": true,
-      "description": "Skill descriptor in `agent_started.data.skills`: name plus\noptional metadata about each skill loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `_ToolDecl` / `_SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `avp.source` is the\nSKILL.md path / URI when known.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
+      "description": "MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords only the server's id, optional display name, and optional\ndescription; the tools the server surfaces are NOT enumerated on the\ndescriptor — they appear at runtime on\n`mcp_server_connected.data[\"avp.mcp.tools\"]`.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\nis intentionally looser than `Commission.McpServerRef.id`: the\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\nservers (where `id` is whatever the environment names them, e.g.\n`\"claude.ai Dashboard Builder\"`). Forcing a slug here would either\nlose fidelity or require every agent to invent the same slugification\nrule. Commission-authored ids stay slug-clean by virtue of\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\nnon-empty and must match the `avp.mcp.server_id` the agent later\nsurfaces on `mcp_server_connected` so consumers can correlate.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "McpServerDecl",
+      "type": "object"
+    },
+    "SkillDecl": {
+      "additionalProperties": true,
+      "description": "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data[\"avp.skills\"]`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
       "properties": {
         "name": {
           "title": "Name",
@@ -20,6 +60,18 @@
           "default": null,
           "title": "Description"
         },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
         "avp.source": {
           "anyOf": [
             {
@@ -36,12 +88,12 @@
       "required": [
         "name"
       ],
-      "title": "_SkillDecl",
+      "title": "SkillDecl",
       "type": "object"
     },
-    "_SubagentDecl": {
+    "SubagentDecl": {
       "additionalProperties": true,
-      "description": "Subagent descriptor in `agent_started.data.subagents`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `_ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
+      "description": "Subagent descriptor in `agent_started.data[\"avp.subagents\"]`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts.",
       "properties": {
         "name": {
           "title": "Name",
@@ -88,12 +140,12 @@
       "required": [
         "name"
       ],
-      "title": "_SubagentDecl",
+      "title": "SubagentDecl",
       "type": "object"
     },
-    "_ToolDecl": {
+    "ToolDecl": {
       "additionalProperties": true,
-      "description": "Tool descriptor in `agent_started.data.tools`: MCP-shaped plus AVP fields.",
+      "description": "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`.",
       "properties": {
         "name": {
           "title": "Name",
@@ -123,40 +175,12 @@
           ],
           "default": null,
           "title": "Inputschema"
-        },
-        "avp.dispatch_target": {
-          "anyOf": [
-            {
-              "enum": [
-                "mcp_server",
-                "local"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Dispatch Target"
-        },
-        "avp.mcp_server_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp Server Id"
         }
       },
       "required": [
         "name"
       ],
-      "title": "_ToolDecl",
+      "title": "ToolDecl",
       "type": "object"
     }
   },
@@ -173,9 +197,9 @@
       "title": "Agent Version",
       "type": "string"
     },
-    "avp_spec_version": {
+    "spec_version": {
       "const": "0.1",
-      "title": "Avp Spec Version",
+      "title": "Spec Version",
       "type": "string"
     },
     "default_model": {
@@ -205,41 +229,35 @@
       "default": null,
       "title": "Supported Models"
     },
-    "built_in_tools": {
+    "system_prompt": {
       "anyOf": [
         {
-          "items": {
-            "$ref": "#/$defs/_ToolDecl"
-          },
-          "type": "array"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Built In Tools"
+      "title": "System Prompt"
     },
-    "built_in_subagents": {
+    "prompt": {
       "anyOf": [
         {
-          "items": {
-            "$ref": "#/$defs/_SubagentDecl"
-          },
-          "type": "array"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Built In Subagents"
+      "title": "Prompt"
     },
-    "built_in_skills": {
+    "mcp_servers": {
       "anyOf": [
         {
           "items": {
-            "$ref": "#/$defs/_SkillDecl"
+            "$ref": "#/$defs/McpServerDecl"
           },
           "type": "array"
         },
@@ -248,7 +266,52 @@
         }
       ],
       "default": null,
-      "title": "Built In Skills"
+      "title": "Mcp Servers"
+    },
+    "tools": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ToolDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tools"
+    },
+    "subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/SubagentDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subagents"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/SkillDecl"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skills"
     },
     "capabilities": {
       "anyOf": [
@@ -269,7 +332,7 @@
   "required": [
     "agent_name",
     "agent_version",
-    "avp_spec_version"
+    "spec_version"
   ],
   "title": "AVP v0.1 Agent Descriptor",
   "type": "object",
