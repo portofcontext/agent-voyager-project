@@ -14,26 +14,43 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from pathlib import Path
 
 from claude_agent_sdk.types import ClaudeAgentOptions
-from rich import print
+from rich.console import Console
 
 from avp.trajectory import Event
 from avp_claude_agent_sdk import AVPClaudeSDKClient
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
 async def _run(prompt: str, model: str | None) -> None:
     options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
 
-    async def rich_sink(e: Event):
-        print("\n[bold cyan]" + "*" * 40 + f" AVP ({e.type}) " + "*" * 40 + "[/bold cyan]")
-        print(e)
+    with (
+        (SCRIPTS_DIR / "claude.log").open("w") as claude_file,
+        (SCRIPTS_DIR / "avp.log").open("w") as avp_file,
+    ):
+        claude_console = Console(file=claude_file, no_color=True, markup=False)
+        avp_console = Console(file=avp_file, no_color=True, markup=False)
 
-    async with AVPClaudeSDKClient(options=options, sink=rich_sink) as client:
-        await client.query(prompt)
-        async for message in client.receive_response():
-            print("\n[bold red]" + "=" * 40 + " CLAUDE " + "=" * 40 + "[/bold red]")
-            print(message)
+        counter = 0
+
+        async def rich_sink(e: Event):
+            nonlocal counter
+            counter += 1
+            avp_console.print("\n" + "*" * 40 + f" [{counter}] AVP ({e.type}) " + "*" * 40)
+            avp_console.print(e)
+
+        async with AVPClaudeSDKClient(options=options, sink=rich_sink) as client:
+            await client.query(prompt)
+            async for message in client.receive_response():
+                counter += 1
+                claude_console.print(
+                    "\n" + "=" * 40 + f" [{counter}] CLAUDE ({type(message)})" + "=" * 40
+                )
+                claude_console.print(message)
 
 
 def main(argv: list[str] | None = None) -> int:

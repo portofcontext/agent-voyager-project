@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextvars
 import dataclasses
-from typing import Any
 
 from avp.agent.sink import EventSink
 from avp.content import AVPContentBlock
@@ -41,10 +40,12 @@ class TaskInfo:
 
     `TaskStartedMessage` populates the descriptive head; the eventual
     `TaskNotificationMessage` fills in `status`, `summary`, and the
-    `TaskUsage` rollup. Both arrive before the synthetic
-    `UserMessage(ToolResultBlock)` that closes the parent's bracket, so
-    `subagent_returned` / `subagent_failed` can be emitted with the full
-    payload when that user message dispatches.
+    `TaskUsage` rollup. `subagent_invoked` fires lazily when the parent
+    turn closes (after which the dispatch's `ToolUseBlock` has landed in
+    `assistant_message.content` per spec §3 ordering); `subagent_returned`
+    fires either inline at close (if the terminal notification already
+    arrived) or from `_on_task_notification` (if the notification
+    arrives after close).
     """
 
     task_id: str
@@ -52,7 +53,7 @@ class TaskInfo:
     task_type: str | None = None
     status: str | None = None
     summary: str | None = None
-    usage: dict[str, Any] | None = None
+    usage: dict[str, int] | None = None
 
 
 @dataclasses.dataclass
@@ -65,19 +66,16 @@ class RunState:
     prices: dict[str, ModelPrice]
     agent_span_id: str | None = None
     current_turn_span_id: str | None = None
-    # The span_id of the parent turn that owned the most recent
-    # subagent-dispatch batch. Captured when `TaskStartedMessage` closes
-    # the parent turn (so the closing `assistant_message` lands before
-    # `subagent_invoked`) and reused so sibling dispatches in the same
-    # parallel batch parent under the same turn span. Cleared by
-    # `_open_turn` when a fresh parent turn opens.
-    last_dispatch_turn_span_id: str | None = None
+    # The Anthropic Messages API `id` of the inference owning the open
+    # turn. One API call → one `message_id`; the Claude CLI fans the
+    # response's content blocks out as one AssistantMessage Python
+    # object per block, all stamped with the same id. A turn stays open
+    # across every chunk sharing this id, including across interleaved
+    # `TaskStartedMessage`s. Reset by `_open_turn`; set on first
+    # AssistantMessage of a new turn; transition to a different non-None
+    # id is the producer-side close trigger.
+    current_message_id: str | None = None
     step: int = 0
-    # Set when a UserMessage with ToolResultBlock arrives; cleared when the
-    # next AssistantMessage opens a fresh turn. Guards the merge gate in
-    # handle_message: consecutive AssistantMessages without an intervening
-    # tool result belong to the same LLM call (e.g. thinking + text blocks).
-    tool_result_arrived: bool = False
     # tool_use_id → ToolCallInfo. Populated on tool_invoked; popped on
     # tool_returned (so an unmatched result is honestly dropped).
     tool_spans: dict[str, ToolCallInfo] = dataclasses.field(default_factory=dict)
@@ -94,23 +92,15 @@ class RunState:
     # (ResultMessage handler, exception handler, or disconnect() fallback);
     # later handlers no-op so the trajectory only ends once.
     stopped: bool = False
-    # Cumulative usage tracking for delta computation across turns. Keys:
-    # input, output, cache_read, cache_creation. Reset (silent rebase) when
-    # an AssistantMessage reports a cumulative count lower than the last
-    # one we saw -- the SDK does this on compaction / subagent dispatch.
-    prev_cum: dict[str, int] = dataclasses.field(
-        default_factory=lambda: {
-            "input": 0,
-            "output": 0,
-            "cache_read": 0,
-            "cache_creation": 0,
-        }
-    )
     # Per-turn accumulator. Filled by every AssistantMessage merged into
     # the open turn; drained on turn close into one avp.assistant_message.
     turn_started_at: float | None = None
     turn_content: list[AVPContentBlock] = dataclasses.field(default_factory=list)
-    turn_usage_delta: dict[str, int] = dataclasses.field(
+    # Per-turn usage observation. AssistantMessage chunks of one
+    # `message_id` carry the API call's response totals (identical on
+    # every chunk per the SDK), so we overwrite this on every chunk —
+    # last write wins and equals the API total for the inference.
+    turn_usage: dict[str, int] = dataclasses.field(
         default_factory=lambda: {
             "input": 0,
             "output": 0,

@@ -1,9 +1,9 @@
-"""Stage 1 unit tests: drive the prelude emitters + `handle_message`
-directly against a recording sink. Faster + simpler than spinning up the
-CLI; verifies prelude split (phase A in connect, phase B on init),
-filtering of non-connected MCP servers, mcp__-prefix filter on init
-tools, merge gate, per-turn deltas, content translation, empty-output
-gate, and agent_stopped reason mapping.
+"""Unit tests: drive the prelude emitters + `handle_message` directly
+against a recording sink. Faster + simpler than spinning up the CLI;
+verifies prelude split (phase A in connect, phase B on init), filtering
+of non-connected MCP servers, mcp__-prefix filter on init tools,
+message_id-driven turn merging, per-call usage, content translation,
+empty-output gate, and agent_stopped reason mapping.
 """
 
 from __future__ import annotations
@@ -89,8 +89,17 @@ def _assistant(
     cache_read: int = 0,
     cache_creation: int = 0,
     stop_reason: str | None = None,
+    message_id: str | None = None,
 ) -> AssistantMessage:
-    """AssistantMessage with a stubbed usage dict (cumulative-form)."""
+    """AssistantMessage with a stubbed usage dict.
+
+    Usage is the API call's response total for the inference identified
+    by `message_id`, mirroring the SDK contract (every chunk of one
+    `message_id` carries the same totals; a different `message_id`
+    reports its own totals — there's no cumulative-across-session
+    counter on the wire). Leave `message_id=None` for single-chunk
+    fixtures where the inference identity doesn't matter to the test.
+    """
     usage = {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -102,6 +111,7 @@ def _assistant(
         model=model,
         usage=usage,
         stop_reason=stop_reason,
+        message_id=message_id,
     )
 
 
@@ -417,12 +427,16 @@ def test_consecutive_assistant_messages_merge_into_one_turn() -> None:
 
 
 def test_tool_result_boundary_opens_new_turn() -> None:
+    """A parent-level `UserMessage(ToolResultBlock)` closes the open
+    turn; the next AssistantMessage opens a fresh turn. Each turn's
+    usage reflects its own inference's per-call totals (not a delta
+    against an imaginary running session counter)."""
     events = asyncio.run(
         _drive(
             [
                 _assistant(TextBlock(text="t1"), input_tokens=10, output_tokens=5),
                 _user_tool_result(),
-                _assistant(TextBlock(text="t2"), input_tokens=20, output_tokens=12),
+                _assistant(TextBlock(text="t2"), input_tokens=10, output_tokens=7),
                 _result(),
             ]
         )
@@ -479,9 +493,7 @@ def test_result_message_is_error_emits_error_reason() -> None:
 
 
 def test_result_message_refusal_emits_refused_reason() -> None:
-    events = asyncio.run(
-        _drive([_result(result=None, is_error=False, stop_reason="refusal")])
-    )
+    events = asyncio.run(_drive([_result(result=None, is_error=False, stop_reason="refusal")]))
     stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
     assert stopped.data.reason == "refused"
 
@@ -494,13 +506,15 @@ def test_agent_stopped_is_idempotent() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cumulative usage: silent rebase
+# Per-call usage isolation
 # ---------------------------------------------------------------------------
 
 
-def test_usage_silent_rebase_when_cum_drops() -> None:
-    """When the SDK's cumulative counters drop (compaction), the next
-    delta is computed against the new baseline, not the old one."""
+def test_each_turn_reports_its_own_per_call_usage() -> None:
+    """Each AVP `assistant_message` carries the per-API-call totals of
+    its inference; turns are independent. A bigger-then-smaller pattern
+    (e.g. compaction between turns) is fine — the second turn reports
+    its own numbers, not deltas against the first."""
     events = asyncio.run(
         _drive(
             [
@@ -513,6 +527,8 @@ def test_usage_silent_rebase_when_cum_drops() -> None:
     )
     msgs = [ev for ev in events if ev.type == "avp.assistant_message"]
     assert len(msgs) == 2
+    assert msgs[0].data.usage.input_tokens == 100
+    assert msgs[0].data.usage.output_tokens == 50
     assert msgs[1].data.usage.input_tokens == 10
     assert msgs[1].data.usage.output_tokens == 7
 
@@ -685,7 +701,9 @@ def test_tool_returned_wraps_non_dict_tool_use_result() -> None:
     `structured_content` field is `dict[str, Any] | None`, so the
     translator wraps non-dict payloads as `{"result": val}` to keep the
     block validating instead of crashing the run."""
-    err_str = "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet."
+    err_str = (
+        "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet."
+    )
     events = asyncio.run(
         _drive(
             [
@@ -928,6 +946,86 @@ def test_task_progress_messages_are_dropped() -> None:
     # Progress contributes no events; we still get exactly one invoked/returned pair.
     assert len([ev for ev in events if ev.type == "avp.subagent_invoked"]) == 1
     assert len([ev for ev in events if ev.type == "avp.subagent_returned"]) == 1
+
+
+def test_parallel_subagent_dispatch_merges_into_one_assistant_message() -> None:
+    """One Anthropic API response with multiple content blocks (one
+    thinking block + two parallel Task dispatches) is fanned out by the
+    CLI as multiple `AssistantMessage` Python objects sharing one
+    `message_id`, with `TaskStartedMessage`s interleaved between
+    chunks. The agent MUST coalesce them into exactly ONE
+    `assistant_message` AVP event carrying all three blocks; both
+    `subagent_invoked` events MUST land after the merged
+    `assistant_message`, parented under the same turn span (spec §3:
+    assistant_message precedes subagent_invoked; spec §3.1: avp.content
+    must faithfully list every block the model produced this turn).
+    Regression for the pre-fix bug where TaskStartedMessage forced a
+    turn close mid-inference, splitting the parallel dispatches across
+    a phantom second turn that the empty-output gate then dropped,
+    leaving the second dispatch's `tool_use` block off the wire."""
+    ny_block = _task_use_block(tool_id="toolu_NY", subagent_type="general-purpose")
+    zh_block = _task_use_block(tool_id="toolu_ZH", subagent_type="general-purpose")
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ThinkingBlock(thinking="ponder", signature="sig"),
+                    message_id="msg_PARALLEL",
+                    input_tokens=6,
+                    output_tokens=8,
+                ),
+                _assistant(
+                    ny_block,
+                    message_id="msg_PARALLEL",
+                    input_tokens=6,
+                    output_tokens=8,
+                ),
+                _task_started(tool_use_id="toolu_NY", task_id="task_NY"),
+                _assistant(
+                    zh_block,
+                    message_id="msg_PARALLEL",
+                    input_tokens=6,
+                    output_tokens=8,
+                ),
+                _task_started(tool_use_id="toolu_ZH", task_id="task_ZH"),
+                # Notifications can arrive before the closing UserMessage;
+                # they defer until subagent_invoked lands.
+                _task_notification(tool_use_id="toolu_NY", task_id="task_NY", summary="NY done"),
+                _user_tool_result(tool_use_id="toolu_NY", content="NY done"),
+                _task_notification(tool_use_id="toolu_ZH", task_id="task_ZH", summary="ZH done"),
+                _user_tool_result(tool_use_id="toolu_ZH", content="ZH done"),
+                _result(),
+            ]
+        )
+    )
+    asst_msgs = [ev for ev in events if ev.type == "avp.assistant_message"]
+    assert len(asst_msgs) == 1
+    asst = asst_msgs[0]
+    assert [b.type for b in asst.data.content] == ["thinking", "tool_use", "tool_use"]
+    assert [b.id for b in asst.data.content if b.type == "tool_use"] == ["toolu_NY", "toolu_ZH"]
+    # Per-API-call usage: every chunk reports the same totals; the
+    # merged turn carries those totals once, not summed.
+    assert asst.data.usage.input_tokens == 6
+    assert asst.data.usage.output_tokens == 8
+
+    invoked = [ev for ev in events if ev.type == "avp.subagent_invoked"]
+    returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert [ev.data.subagent_invocation_id for ev in invoked] == ["toolu_NY", "toolu_ZH"]
+    assert sorted(ev.data.subagent_invocation_id for ev in returned) == ["toolu_NY", "toolu_ZH"]
+    # Both subagent_invokeds parent under the merged assistant_message's span.
+    for inv in invoked:
+        assert inv.data.parent_span_id == asst.data.span_id
+
+    # Ordering: assistant_message strictly precedes every subagent_invoked.
+    types = [ev.type for ev in events]
+    asst_idx = types.index("avp.assistant_message")
+    for i, t in enumerate(types):
+        if t == "avp.subagent_invoked":
+            assert i > asst_idx
+    # No `tool_invoked` / `tool_returned` for the dispatches — they
+    # ride the subagent path.
+    assert "avp.tool_invoked" not in types
+    assert "avp.tool_returned" not in types
 
 
 def test_bare_task_without_lifecycle_falls_back_to_tool_pair() -> None:
