@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import dataclasses
 import time
+from typing import Any
 
 from avp._envelope import new_span_id
 from avp.agent.sink import EventSink
@@ -18,6 +19,26 @@ from avp.trajectory import (
 )
 
 _PROVIDER_NAME = "anthropic"
+
+
+@dataclasses.dataclass
+class ToolSpan:
+    """Bookkeeping for an in-flight tool dispatch.
+
+    Populated by `avp_pretooluse_hook` on dispatch; popped by
+    `avp_posttooluse_hook` on return to assemble the matching
+    `tool_returned` (parent under `span_id`, reuse `step` and `name`,
+    derive `duration_ms` from `started_at`).
+    """
+
+    # `tool_invoked.span_id`; becomes the return event's `parent_span_id`.
+    span_id: str
+    # Turn step the invocation belongs to; copied onto the return event.
+    step: int
+    # Tool name; the SDK's `ToolResultBlock` doesn't carry it back.
+    name: str
+    # Monotonic clock at dispatch; drives `tool_returned.duration_ms`.
+    started_at: float
 
 
 @dataclasses.dataclass
@@ -49,6 +70,16 @@ class Turn:
     content: list[AVPContentBlock] = dataclasses.field(default_factory=list)
     # Events captured during the turn; flushed after `assistant_message`.
     emissions: list[Event] = dataclasses.field(default_factory=list)
+    # Live tool dispatches keyed by `tool_use_id`. Populated by the
+    # PreToolUse hook, popped by the PostToolUse hook to pair returns.
+    tool_spans: dict[str, ToolSpan] = dataclasses.field(default_factory=dict)
+    # Anthropic service tier from `usage.service_tier`; affects pricing.
+    meta_service_tier: str | None = None
+    # Cache-creation tokens split by TTL bucket; Anthropic prices these differently.
+    meta_cache_creation_5m: int = 0
+    meta_cache_creation_1h: int = 0
+    # Diagnostic: how many SDK AssistantMessage chunks merged into this turn.
+    meta_chunks_merged: int = 0
 
 
 @dataclasses.dataclass
@@ -92,10 +123,17 @@ class RunState:
             turn.response_model or "",
             input_tokens=turn.usage.input_tokens,
             output_tokens=turn.usage.output_tokens,
-            cache_read=turn.usage.cache_read_input_tokens,
-            cache_write=turn.usage.cache_creation_input_tokens,
+            cache_read=turn.usage.cache_read_input_tokens or 0,
+            cache_write=turn.usage.cache_creation_input_tokens or 0,
             prices=self.prices,
         )
+        meta: dict[str, Any] = {
+            "anthropic.message_id": turn.message_id,
+            "anthropic.service_tier": turn.meta_service_tier,
+            "anthropic.cache_creation.ephemeral_5m_input_tokens": turn.meta_cache_creation_5m,
+            "anthropic.cache_creation.ephemeral_1h_input_tokens": turn.meta_cache_creation_1h,
+            "claude_agent_sdk.chunks_merged": turn.meta_chunks_merged,
+        }
         await self.sink(
             AssistantMessageEvent(
                 subject=self.run_id,
@@ -103,6 +141,7 @@ class RunState:
                     trace_id=self.trace_id,
                     span_id=turn.span_id,
                     parent_span_id=self.agent_span_id,
+                    meta=meta,
                     step=turn.step,
                     duration_ms=duration_ms,
                     content=turn.content,

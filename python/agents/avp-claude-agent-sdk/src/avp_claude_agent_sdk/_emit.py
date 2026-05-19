@@ -7,14 +7,21 @@ reintroduced incrementally.
 
 from __future__ import annotations
 
-from typing import Any
+import json
+import time
+from typing import Any, Literal
 
 from claude_agent_sdk.types import (
     AssistantMessage,
     ClaudeAgentOptions,
     ContentBlock,
+    HookContext,
+    HookJSONOutput,
     McpStatusResponse,
     Message,
+    PostToolUseFailureHookInput,
+    PostToolUseHookInput,
+    PreToolUseHookInput,
     ServerToolResultBlock,
     ServerToolUseBlock,
     TextBlock,
@@ -28,6 +35,7 @@ from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
 from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
 from avp.content import TextBlock as AVPTextBlock
 from avp.content import ThinkingBlock as AVPThinkingBlock
+from avp.content import ToolResultBlock as AVPToolResultBlock
 from avp.content import ToolUseBlock as AVPToolUseBlock
 from avp.trajectory import (
     AgentDescribedData,
@@ -39,9 +47,13 @@ from avp.trajectory import (
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
+    ToolInvokedData,
+    ToolInvokedEvent,
+    ToolReturnedData,
+    ToolReturnedEvent,
     Usage,
 )
-from avp_claude_agent_sdk._runstate import RunState, Turn
+from avp_claude_agent_sdk._runstate import RunState, ToolSpan, Turn, current_run
 from avp_claude_agent_sdk._translator import (
     descriptor_full,
     mcp_servers_connected,
@@ -108,6 +120,8 @@ async def emit_agent_started(
     subsequent turn / tool events parent under it."""
     agent_span_id = new_span_id()
     state.agent_span_id = agent_span_id
+    sdk_session_id = init_data.get("session_id") if init_data else None
+    meta = {"claude_agent_sdk.session_id": sdk_session_id} if sdk_session_id else None
     await state.sink(
         AgentStartedEvent(
             subject=state.run_id,
@@ -115,6 +129,7 @@ async def emit_agent_started(
                 trace_id=state.trace_id,
                 span_id=agent_span_id,
                 parent_span_id=ZERO_SPAN_ID,
+                meta=meta,
                 provider_name=_PROVIDER_NAME,
                 operation_name="invoke_agent",
                 request_model=(
@@ -214,6 +229,13 @@ def _usage_from_dict(usage: dict[str, Any]) -> Usage:
     )
 
 
+def _dispatch_target(tool_name: str) -> Literal["mcp_server", "local"]:
+    """Wire discriminator for `tool_invoked`. The Claude Agent SDK
+    namespaces MCP tools as `mcp__<server>__<tool>`; everything else is
+    a CLI built-in, server tool, or local hook."""
+    return "mcp_server" if tool_name.startswith("mcp__") else "local"
+
+
 # ---------------------------------------------------------------------------
 # Per-message handlers
 # ---------------------------------------------------------------------------
@@ -232,6 +254,11 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
         # parent_tool_use_id indicates it is a subagent assistant msg
         return
 
+    # The Claude CLI fans one API response's content blocks out as one
+    # AssistantMessage per block, all stamped with the same `message_id`.
+    # One AVP turn = one inference = one `message_id`, so multiple SDK
+    # chunks merge into the open turn; a different non-None `message_id`
+    # is the boundary that closes the prior inference.
     next_step = 1
     if (
         state.turn is not None
@@ -245,6 +272,7 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     if state.turn is None:
         state.turn = Turn(message_id=message.message_id, step=next_step)
 
+    state.turn.meta_chunks_merged += 1
     state.turn.content.extend(_translate_blocks(message.content))
     if state.turn.response_model is None:
         state.turn.response_model = message.model
@@ -252,6 +280,172 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
         state.turn.stop_reason = message.stop_reason
     if message.usage:
         state.turn.usage = _usage_from_dict(message.usage)
+        state.turn.meta_service_tier = (
+            message.usage.get("service_tier") or state.turn.meta_service_tier
+        )
+        cache_creation = message.usage.get("cache_creation") or {}
+        if isinstance(cache_creation, dict):
+            state.turn.meta_cache_creation_5m = int(
+                cache_creation.get("ephemeral_5m_input_tokens") or 0
+            )
+            state.turn.meta_cache_creation_1h = int(
+                cache_creation.get("ephemeral_1h_input_tokens") or 0
+            )
+
+
+async def avp_pretooluse_hook(
+    input_data: PreToolUseHookInput,
+    tool_use_id: str | None,
+    _context: HookContext,
+) -> HookJSONOutput:
+    """PreToolUse callback: buffer a `tool_invoked` onto the open turn's
+    `emissions` and return `{}` so the dispatch proceeds unmodified.
+
+    Reads the active `RunState` via the run-scoped contextvar (set by
+    `AVPClaudeSDKClient.connect`). The buffered event flushes after the
+    turn's `assistant_message` in `state.drain`, preserving wire ordering
+    even though this callback fires DURING the assistant chunk stream.
+    """
+    state = current_run()
+    if state is None or state.turn is None:
+        return {}
+    # `agent_id` is set only when the hook fires inside a Task-spawned
+    # subagent (per the SDK's `_SubagentContextMixin`). Subagent tool
+    # calls are treated as opaque to the parent trajectory for now --
+    # they'll surface later via subagent_invoked/_returned bracketing.
+    if input_data.get("agent_id"):
+        return {}
+
+    tool_name = input_data["tool_name"]
+    tool_input = input_data["tool_input"]
+
+    span_id = new_span_id()
+    state.turn.tool_spans[tool_use_id] = ToolSpan(
+        span_id=span_id,
+        step=state.turn.step,
+        name=tool_name,
+        started_at=time.monotonic(),
+    )
+    state.turn.emissions.append(
+        ToolInvokedEvent(
+            subject=state.run_id,
+            data=ToolInvokedData(
+                trace_id=state.trace_id,
+                span_id=span_id,
+                parent_span_id=state.turn.span_id,
+                step=state.turn.step,
+                tool_call_id=tool_use_id,
+                tool_name=tool_name,
+                tool_input=tool_input,
+                tool_dispatch_target=_dispatch_target(tool_name),
+                meta={"anthropic.input_data": input_data, "anthropic.tool_use_id": tool_use_id},
+            ),
+        )
+    )
+
+    return {}
+
+
+def _normalize_tool_response(response: Any) -> tuple[str | list[Any], dict[str, Any] | None]:
+    """Project the hook's `tool_response: Any` onto AVP's
+    `(content, structured_content)`. Strings pass through verbatim;
+    dicts ride on the structured channel AND get JSON-encoded for
+    `content`; anything else is best-effort stringified.
+    """
+    if response is None:
+        return "", None
+    if isinstance(response, str):
+        return response, None
+    if isinstance(response, dict):
+        try:
+            return json.dumps(response, default=str), response
+        except (TypeError, ValueError):
+            return str(response), response
+    try:
+        return json.dumps(response, default=str), None
+    except (TypeError, ValueError):
+        return str(response), None
+
+
+def _buffer_tool_returned(
+    tool_use_id: str,
+    input_data: PostToolUseHookInput | PostToolUseFailureHookInput,
+    tool_result: AVPToolResultBlock,
+) -> None:
+    """Pop the matching `ToolSpan` from the open turn and append a
+    `tool_returned` to its emissions. Shared by the success and failure
+    post-hooks; the only thing that varies between them is `tool_result`.
+    No-op if no run / no open turn / no matching invocation.
+    """
+    state = current_run()
+    if state is None or state.turn is None:
+        return
+    span = state.turn.tool_spans.pop(tool_use_id, None)
+    if span is None:
+        return
+    duration_ms = max(0, int((time.monotonic() - span.started_at) * 1000))
+    state.turn.emissions.append(
+        ToolReturnedEvent(
+            subject=state.run_id,
+            data=ToolReturnedData(
+                trace_id=state.trace_id,
+                span_id=new_span_id(),
+                parent_span_id=span.span_id,
+                step=span.step,
+                tool_call_id=tool_use_id,
+                tool_name=span.name,
+                duration_ms=duration_ms,
+                tool_result=tool_result,
+                meta={
+                    "anthropic.input_data": dict(input_data),
+                    "anthropic.tool_use_id": tool_use_id,
+                },
+            ),
+        )
+    )
+
+
+async def avp_posttooluse_hook(
+    input_data: PostToolUseHookInput,
+    tool_use_id: str | None,
+    _context: HookContext,
+) -> HookJSONOutput:
+    """PostToolUse callback: emit a successful `tool_returned`."""
+    if not isinstance(tool_use_id, str) or input_data.get("agent_id"):
+        return {}
+    content, structured = _normalize_tool_response(input_data.get("tool_response"))
+    _buffer_tool_returned(
+        tool_use_id,
+        input_data,
+        AVPToolResultBlock(
+            tool_use_id=tool_use_id,
+            content=content,
+            structured_content=structured,
+        ),
+    )
+    return {}
+
+
+async def avp_posttoolusefailure_hook(
+    input_data: PostToolUseFailureHookInput,
+    tool_use_id: str | None,
+    _context: HookContext,
+) -> HookJSONOutput:
+    """PostToolUseFailure callback: emit a failed `tool_returned`. Fires
+    instead of PostToolUse when a tool dispatch errors, is denied by a
+    permission check, or is interrupted."""
+    if not isinstance(tool_use_id, str) or input_data.get("agent_id"):
+        return {}
+    _buffer_tool_returned(
+        tool_use_id,
+        input_data,
+        AVPToolResultBlock(
+            tool_use_id=tool_use_id,
+            content=input_data.get("error") or "",
+            is_error=True,
+        ),
+    )
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -271,5 +465,7 @@ async def handle_message(state: RunState, message: Message) -> None:
     #     await _on_task_started(state, message)
     # elif isinstance(message, TaskNotificationMessage):
     #     await _on_task_notification(state, message)
-    # TaskProgressMessage, plain SystemMessage (init/etc), MirrorErrorMessage,
-    # StreamEvent, RateLimitEvent: drop. Honest-silent beats fabricated events.
+    # PreToolUse / PostToolUse arrive via registered hook callbacks
+    # (avp_pretooluse_hook), not through the message stream. SystemMessage,
+    # TaskProgressMessage, MirrorErrorMessage, StreamEvent, RateLimitEvent:
+    # drop. Honest-silent beats fabricated events.
