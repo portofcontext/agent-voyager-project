@@ -48,7 +48,7 @@ async def _run(prompt: str, model: str | None) -> None:
             async for message in client.receive_response():
                 counter += 1
                 claude_console.print(
-                    "\n" + "=" * 40 + f" [{counter}] CLAUDE ({type(message)})" + "=" * 40
+                    "\n" + "=" * 40 + f" [{counter}] CLAUDE ({type(message).__name__})" + "=" * 40
                 )
                 claude_console.print(message)
 
