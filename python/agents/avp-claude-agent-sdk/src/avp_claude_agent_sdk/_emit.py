@@ -27,6 +27,8 @@ from claude_agent_sdk.types import (
     ResultMessage,
     ServerToolResultBlock,
     ServerToolUseBlock,
+    TaskNotificationMessage,
+    TaskStartedMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -55,13 +57,20 @@ from avp.trajectory import (
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
+    SubagentFailedData,
+    SubagentFailedEvent,
+    SubagentInvokedData,
+    SubagentInvokedEvent,
+    SubagentReturnedData,
+    SubagentReturnedEvent,
+    SubagentUsage,
     ToolInvokedData,
     ToolInvokedEvent,
     ToolReturnedData,
     ToolReturnedEvent,
     Usage,
 )
-from avp_claude_agent_sdk._runstate import RunState, ToolCallInfo
+from avp_claude_agent_sdk._runstate import RunState, TaskInfo, ToolCallInfo
 from avp_claude_agent_sdk._translator import (
     descriptor_full,
     mcp_servers_connected,
@@ -229,6 +238,10 @@ def _open_turn(state: RunState) -> None:
     state.turn_usage_delta = {"input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
     state.turn_response_model = None
     state.turn_stop_reason = None
+    # The remembered dispatch turn only belonged to the previous parent
+    # turn's parallel batch; clear it so subsequent batches don't reuse
+    # a stale span.
+    state.last_dispatch_turn_span_id = None
 
 
 async def _close_turn(state: RunState) -> None:
@@ -296,6 +309,14 @@ async def _close_turn(state: RunState) -> None:
     # close out within the same turn.
     for block in state.turn_content:
         if isinstance(block, AVPToolUseBlock):
+            # Subagent dispatches (id present in `state.task_info`) are
+            # bracketed by the lifecycle handlers — `_on_task_started`
+            # emits `subagent_invoked`, `_on_task_notification` emits
+            # `subagent_returned` / `subagent_failed` — so the dispatch
+            # ToolUseBlock stays in the assistant_message content for
+            # fidelity but produces no `tool_invoked` here.
+            if block.id in state.task_info:
+                continue
             await _emit_tool_invoked(
                 state,
                 parent_span_id=turn_span_id,
@@ -433,6 +454,7 @@ async def _emit_tool_invoked(
     span_id = new_span_id()
     state.tool_spans[tool_call_id] = ToolCallInfo(
         span_id=span_id,
+        parent_span_id=parent_span_id,
         name=tool_name,
         step=state.step,
         started_at=time.monotonic(),
@@ -487,11 +509,163 @@ async def _emit_tool_returned(
 
 
 # ---------------------------------------------------------------------------
+# Subagent bracketing (Task tool dispatch)
+# ---------------------------------------------------------------------------
+
+
+_TASK_STATUS_TO_REASON: dict[str, StopReason] = {
+    "completed": StopReason.converged,
+    "stopped": StopReason.interrupted,
+}
+
+
+def _subagent_name(block: AVPToolUseBlock, task: TaskInfo | None) -> str:
+    """Pick the subagent's declared name.
+
+    Primary source is `TaskStartedMessage.task_type` (the SDK's
+    authoritative lifecycle signal, surfaced via `TaskInfo`). Falls
+    back to the dispatch tool's `input.subagent_type` (Claude Code's
+    `Agent` / `Task` tool shape is `{subagent_type, description,
+    prompt}`), then to `"Task"` so the event still validates if a
+    future SDK version reshapes both."""
+    if task is not None and task.task_type:
+        return task.task_type
+    subagent_type = block.input.get("subagent_type")
+    if isinstance(subagent_type, str) and subagent_type:
+        return subagent_type
+    return "Task"
+
+
+def _task_usage_to_subagent_usage(usage: dict[str, Any] | None) -> SubagentUsage | None:
+    """Project a `TaskUsage` TypedDict onto AVP `SubagentUsage`.
+
+    `TaskUsage` carries `{total_tokens, tool_uses, duration_ms}` without
+    an input/output split or cost. Required AVP fields stay at 0 (honest
+    sentinel — we don't know); the raw triple rides along as extras
+    (allowed by `SubagentUsage.model_config = _OPEN`) so consumers that
+    care about the SDK's actual shape can read them.
+    """
+    if not usage:
+        return None
+    return SubagentUsage(
+        cost_usd=0.0,
+        tokens_input=0,
+        tokens_output=0,
+        turns=0,
+        total_tokens=int(usage.get("total_tokens") or 0),
+        tool_uses=int(usage.get("tool_uses") or 0),
+        duration_ms=int(usage.get("duration_ms") or 0),
+    )
+
+
+async def _emit_subagent_invoked(
+    state: RunState,
+    *,
+    parent_span_id: str,
+    block: AVPToolUseBlock,
+) -> None:
+    """Emit `subagent_invoked` for a Task ToolUseBlock and record the
+    span for later pairing. The event's `span_id` IS the subagent's
+    frame span (spec §6); descendants of the subagent (if the SDK ever
+    surfaces them) would parent under it."""
+    span_id = new_span_id()
+    name = _subagent_name(block, state.task_info.get(block.id))
+    state.subagent_spans[block.id] = ToolCallInfo(
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        name=name,
+        step=state.step,
+        started_at=time.monotonic(),
+    )
+    await state.sink(
+        SubagentInvokedEvent(
+            subject=state.run_id,
+            data=SubagentInvokedData(
+                trace_id=state.trace_id,
+                span_id=span_id,
+                parent_span_id=parent_span_id,
+                step=state.step,
+                subagent_name=name,
+                subagent_invocation_id=block.id,
+                subagent_input=block.input,
+            ),
+        )
+    )
+
+
+async def _emit_subagent_returned_or_failed(
+    state: RunState,
+    *,
+    tool_use_id: str,
+    result_text: str,
+) -> None:
+    """Close the subagent frame. Driven by `TaskNotificationMessage` via
+    `_on_task_notification`: `status == "failed"` emits `subagent_failed`,
+    `completed` / `stopped` emit `subagent_returned` with the matching
+    `StopReason`. `state.task_info[tool_use_id]` is left in place so the
+    synthetic `UserMessage(ToolResultBlock)` that follows can still be
+    recognized and dropped in `_on_user`."""
+    info = state.subagent_spans.pop(tool_use_id, None)
+    if info is None:
+        return
+    task = state.task_info.get(tool_use_id)
+    duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
+    status = task.status if task else None
+    if status == "failed":
+        await state.sink(
+            SubagentFailedEvent(
+                subject=state.run_id,
+                data=SubagentFailedData(
+                    trace_id=state.trace_id,
+                    span_id=new_span_id(),
+                    parent_span_id=info.span_id,
+                    step=info.step,
+                    subagent_name=info.name,
+                    subagent_invocation_id=tool_use_id,
+                    duration_ms=duration_ms,
+                    subagent_error=(task.summary if task and task.summary else result_text),
+                ),
+            )
+        )
+        return
+    reason = _TASK_STATUS_TO_REASON.get(status or "", StopReason.converged)
+    summary_text = task.summary if task and task.summary else result_text
+    await state.sink(
+        SubagentReturnedEvent(
+            subject=state.run_id,
+            data=SubagentReturnedData(
+                trace_id=state.trace_id,
+                # span_id matches subagent_invoked: same frame, closed.
+                span_id=info.span_id,
+                # Parent the close under the frame's own parent (the
+                # turn span), not the frame itself.
+                parent_span_id=info.parent_span_id,
+                step=info.step,
+                subagent_name=info.name,
+                subagent_invocation_id=tool_use_id,
+                duration_ms=duration_ms,
+                subagent_result_text=summary_text,
+                subagent_reason=reason,
+                subagent_usage=_task_usage_to_subagent_usage(task.usage if task else None),
+            ),
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # Per-message handlers
 # ---------------------------------------------------------------------------
 
 
 async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
+    # Subagent-interior AssistantMessages (`parent_tool_use_id` set) are
+    # part of the in-process subagent fallback per spec §5.6: the parent
+    # treats the child as a black box and summarizes its spend on
+    # `subagent_returned` via `SubagentUsage` instead of leaking the
+    # child's turns into the parent's flow. Skip them entirely — no
+    # parent-turn merge and no parent-usage update.
+    if message.parent_tool_use_id is not None:
+        return
     # Merge gate: a new turn opens only when no turn is open, OR a tool
     # result arrived since the last AssistantMessage. Consecutive
     # AssistantMessages within one LLM call (thinking + text) APPEND
@@ -509,6 +683,11 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
 
 
 async def _on_user(state: RunState, message: UserMessage) -> None:
+    # Subagent-interior UserMessages (`parent_tool_use_id` set) carry
+    # the subagent's prompt or its own tool results; skip them under the
+    # in-process subagent fallback (spec §5.6).
+    if message.parent_tool_use_id is not None:
+        return
     # UserMessage.content is `str | list[ContentBlock]`. A plain string
     # carries no tool result, so only the list form is inspected.
     content = message.content if isinstance(message.content, list) else []
@@ -517,7 +696,9 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
         return
     # Close the in-flight turn (emit its assistant_message + bracketing
     # tool_invoked events for blocks this turn produced) before the
-    # tool result events fire.
+    # tool result events fire. For subagent-only dispatch batches the
+    # parent turn was already closed by `_on_task_started`, so this is
+    # a no-op there.
     if state.current_turn_span_id is not None:
         await _close_turn(state)
     # `UserMessage.tool_use_result` is the SDK's structured-payload
@@ -526,8 +707,22 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
     # It lives at the message level, not per-block, so attribution is
     # only unambiguous when there's exactly one result; multi-result
     # messages drop the structured channel to avoid mis-attribution.
-    structured = message.tool_use_result if len(tool_results) == 1 else None
+    # SDK ships non-dict payloads too (e.g. permission-denial errors come
+    # through as a string); wrap those as `{"result": val}` so the
+    # dict-typed AVP field still validates.
+    structured: dict[str, Any] | None
+    if len(tool_results) == 1 and message.tool_use_result is not None:
+        raw = message.tool_use_result
+        structured = raw if isinstance(raw, dict) else {"result": raw}
+    else:
+        structured = None
     for block in tool_results:
+        # Synthetic ToolResultBlock for a subagent dispatch: its
+        # `subagent_returned` / `subagent_failed` already fired from the
+        # paired `TaskNotificationMessage` (lifecycle-driven), so drop
+        # it from the wire instead of emitting `tool_returned`.
+        if block.tool_use_id in state.task_info:
+            continue
         await _emit_tool_returned(
             state,
             tool_use_id=block.tool_use_id,
@@ -554,6 +749,79 @@ async def _on_result(state: RunState, message: ResultMessage) -> None:
     await emit_agent_stopped(state, reason, output=message.result)
 
 
+async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None:
+    """Drive `subagent_invoked` from the SDK lifecycle.
+
+    Records the `TaskInfo` (so `_close_turn` and `_on_user` recognize
+    this tool_use_id as a subagent dispatch and skip emitting
+    `tool_invoked` / `tool_returned` for it), then closes the open
+    parent turn so its `assistant_message` lands before
+    `subagent_invoked` (spec §3 ordering: assistant_message MUST precede
+    subagent_invoked). Sibling dispatches in the same parallel batch
+    parent under the same just-closed turn via
+    `state.last_dispatch_turn_span_id`. The dispatch's input is read
+    from the parent turn's buffered content (still populated after
+    `_close_turn`, which empties only on the next `_open_turn`)."""
+    if not message.tool_use_id:
+        return
+    tool_use_id = message.tool_use_id
+    # Mark the id as a subagent dispatch BEFORE closing the turn so
+    # `_close_turn`'s bracketing pass skips it (no spurious tool_invoked).
+    state.task_info[tool_use_id] = TaskInfo(
+        task_id=message.task_id,
+        description=message.description,
+        task_type=message.task_type,
+    )
+    # Look up the dispatch ToolUseBlock by id in the buffered (or
+    # just-flushed) parent turn content. Synthesize a minimal one if it
+    # wasn't observed -- the wire event still validates.
+    dispatch_block: AVPToolUseBlock | None = None
+    for block in state.turn_content:
+        if isinstance(block, AVPToolUseBlock) and block.id == tool_use_id:
+            dispatch_block = block
+            break
+    if dispatch_block is None:
+        dispatch_block = AVPToolUseBlock(id=tool_use_id, name="Agent", input={})
+    # Capture parent turn span before close clears it. Fall back to a
+    # sibling-dispatch's captured span (parallel batch) or the agent
+    # span if neither is available.
+    parent_span_id = state.current_turn_span_id or state.last_dispatch_turn_span_id
+    if state.current_turn_span_id is not None:
+        await _close_turn(state)
+        state.last_dispatch_turn_span_id = parent_span_id
+    if parent_span_id is None:
+        parent_span_id = state.agent_span_id or ZERO_SPAN_ID
+    await _emit_subagent_invoked(
+        state,
+        parent_span_id=parent_span_id,
+        block=dispatch_block,
+    )
+
+
+async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
+    """Drive `subagent_returned` / `subagent_failed` from the SDK
+    lifecycle. `status == "failed"` produces `subagent_failed`;
+    `completed` / `stopped` produce `subagent_returned` with the
+    matching `StopReason`. Updates `TaskInfo` with the terminal
+    payload first so the close helper picks up the summary / usage."""
+    if not message.tool_use_id:
+        return
+    info = state.task_info.get(message.tool_use_id)
+    if info is None:
+        # TaskNotification without a preceding TaskStarted: synthesize a
+        # minimal TaskInfo so the close still has something to read.
+        info = TaskInfo(task_id=message.task_id, description="")
+        state.task_info[message.tool_use_id] = info
+    info.status = message.status
+    info.summary = message.summary
+    info.usage = dict(message.usage) if message.usage is not None else None
+    await _emit_subagent_returned_or_failed(
+        state,
+        tool_use_id=message.tool_use_id,
+        result_text=message.summary or "",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public dispatch entry point
 # ---------------------------------------------------------------------------
@@ -567,4 +835,10 @@ async def handle_message(state: RunState, message: Message) -> None:
         await _on_user(state, message)
     elif isinstance(message, ResultMessage):
         await _on_result(state, message)
-    # SystemMessage, RateLimitEvent, StreamEvent: Stage 2+
+    elif isinstance(message, TaskStartedMessage):
+        await _on_task_started(state, message)
+    elif isinstance(message, TaskNotificationMessage):
+        await _on_task_notification(state, message)
+    # TaskProgressMessage, plain SystemMessage (init/etc), MirrorErrorMessage,
+    # StreamEvent, RateLimitEvent: drop. Per checklist: honest-silent beats
+    # fabricated events.

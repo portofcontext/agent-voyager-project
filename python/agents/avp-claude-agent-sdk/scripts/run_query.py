@@ -26,7 +26,7 @@ async def _run(prompt: str, model: str | None) -> None:
     options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
 
     async def rich_sink(e: Event):
-        print("\n[bold cyan]" + "*" * 40 + " AVP " + "*" * 40 + "[/bold cyan]")
+        print("\n[bold cyan]" + "*" * 40 + f" AVP ({e.type}) " + "*" * 40 + "[/bold cyan]")
         print(e)
 
     async with AVPClaudeSDKClient(options=options, sink=rich_sink) as client:

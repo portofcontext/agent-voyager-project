@@ -19,6 +19,9 @@ from claude_agent_sdk.types import (
     ServerToolResultBlock,
     ServerToolUseBlock,
     SystemMessage,
+    TaskNotificationMessage,
+    TaskProgressMessage,
+    TaskStartedMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -676,6 +679,35 @@ def test_tool_returned_carries_structured_content_from_user_message() -> None:
     assert returned.data.tool_result.content == "a.md\nb.md"
 
 
+def test_tool_returned_wraps_non_dict_tool_use_result() -> None:
+    """The SDK ships non-dict `tool_use_result` payloads (e.g.
+    permission-denial errors arrive as a bare string). AVP's
+    `structured_content` field is `dict[str, Any] | None`, so the
+    translator wraps non-dict payloads as `{"result": val}` to keep the
+    block validating instead of crashing the run."""
+    err_str = "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet."
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    ToolUseBlock(id="t1", name="WebSearch", input={"query": "x"}),
+                    input_tokens=2,
+                    output_tokens=2,
+                ),
+                UserMessage(
+                    content=[ToolResultBlock(tool_use_id="t1", content=err_str, is_error=True)],
+                    tool_use_result=err_str,
+                ),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.tool_returned")
+    assert returned.data.tool_result.structured_content == {"result": err_str}
+    assert returned.data.tool_result.content == err_str
+    assert returned.data.tool_result.is_error is True
+
+
 def test_tool_event_ordering_is_message_then_invoked_then_returned() -> None:
     """Per spec §8 #4, `tool_invoked` MUST precede `tool_returned`.
     `assistant_message` MUST precede `tool_invoked` since the model's
@@ -699,3 +731,219 @@ def test_tool_event_ordering_is_message_then_invoked_then_returned() -> None:
         if ev.type in {"avp.assistant_message", "avp.tool_invoked", "avp.tool_returned"}
     ]
     assert tool_types == ["avp.assistant_message", "avp.tool_invoked", "avp.tool_returned"]
+
+
+# ---------------------------------------------------------------------------
+# Subagent bracketing (Stage 2 step 2)
+# ---------------------------------------------------------------------------
+
+
+def _task_started(
+    tool_use_id: str = "toolu_task_1",
+    task_id: str = "task_1",
+    task_type: str | None = "general-purpose",
+) -> TaskStartedMessage:
+    return TaskStartedMessage(
+        subtype="task_started",
+        data={},
+        task_id=task_id,
+        description="explore the codebase",
+        uuid="uuid-1",
+        session_id="sess-1",
+        tool_use_id=tool_use_id,
+        task_type=task_type,
+    )
+
+
+def _task_notification(
+    tool_use_id: str = "toolu_task_1",
+    task_id: str = "task_1",
+    status: str = "completed",
+    summary: str = "done: found 7 markdown files",
+    usage: dict[str, int] | None = None,
+) -> TaskNotificationMessage:
+    return TaskNotificationMessage(
+        subtype="task_notification",
+        data={},
+        task_id=task_id,
+        status=status,  # type: ignore[arg-type]
+        output_file="/tmp/out",
+        summary=summary,
+        uuid="uuid-2",
+        session_id="sess-1",
+        tool_use_id=tool_use_id,
+        usage=usage,  # type: ignore[arg-type]
+    )
+
+
+def _task_use_block(
+    tool_id: str = "toolu_task_1",
+    subagent_type: str = "general-purpose",
+    name: str = "Agent",
+) -> ToolUseBlock:
+    """Build a dispatch ToolUseBlock. Default tool name is `Agent` to
+    match the current SDK; the wire-event mapping is driven by the
+    paired `TaskStartedMessage`, not the tool name."""
+    return ToolUseBlock(
+        id=tool_id,
+        name=name,
+        input={
+            "description": "explore",
+            "prompt": "find the markdown files",
+            "subagent_type": subagent_type,
+        },
+    )
+
+
+def test_task_dispatch_emits_subagent_invoked_and_returned_not_tool_pair() -> None:
+    """A Task tool call paired with TaskStarted + TaskNotification(completed)
+    MUST emit `subagent_invoked` + `subagent_returned`, NOT
+    `tool_invoked` / `tool_returned`. `subagent_returned.span_id`
+    matches the invoked span (frame pairing, spec §6)."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=4, output_tokens=4),
+                _task_started(),
+                _task_notification(
+                    summary="done",
+                    usage={"total_tokens": 42, "tool_uses": 3, "duration_ms": 1234},
+                ),
+                _user_tool_result(tool_use_id="toolu_task_1", content="done"),
+                _result(),
+            ]
+        )
+    )
+    types = [ev.type for ev in events]
+    assert "avp.subagent_invoked" in types
+    assert "avp.subagent_returned" in types
+    assert "avp.tool_invoked" not in types
+    assert "avp.tool_returned" not in types
+    invoked = next(ev for ev in events if ev.type == "avp.subagent_invoked")
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert invoked.data.subagent_name == "general-purpose"
+    assert invoked.data.subagent_invocation_id == "toolu_task_1"
+    assert invoked.data.subagent_input["prompt"] == "find the markdown files"
+    # subagent_returned reuses the invoked span (frame pairing).
+    assert returned.data.span_id == invoked.data.span_id
+    assert returned.data.parent_span_id == invoked.data.parent_span_id
+    assert returned.data.subagent_result_text == "done"
+    assert returned.data.subagent_reason == "converged"
+
+
+def test_task_failed_status_emits_subagent_failed() -> None:
+    """TaskNotification.status == 'failed' MUST emit `subagent_failed`,
+    with the summary surfacing on `subagent.error`."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                _task_notification(status="failed", summary="auth error"),
+                _user_tool_result(tool_use_id="toolu_task_1", content="auth error"),
+                _result(),
+            ]
+        )
+    )
+    failed = [ev for ev in events if ev.type == "avp.subagent_failed"]
+    assert len(failed) == 1
+    assert failed[0].data.subagent_error == "auth error"
+    assert "avp.subagent_returned" not in {ev.type for ev in events}
+
+
+def test_task_stopped_status_emits_returned_with_interrupted_reason() -> None:
+    """TaskNotification.status == 'stopped' maps to
+    `subagent_returned.reason = "interrupted"`."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                _task_notification(status="stopped", summary="user cancelled"),
+                _user_tool_result(tool_use_id="toolu_task_1", content="user cancelled"),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert returned.data.subagent_reason == "interrupted"
+
+
+def test_task_usage_rolls_up_onto_subagent_usage() -> None:
+    """TaskUsage (`total_tokens`, `tool_uses`, `duration_ms`) rides on
+    `subagent_returned.subagent_usage` as extras alongside the AVP
+    canonical fields (which stay 0 since the SDK doesn't split
+    input/output). This is the in-process-fallback rollup per spec §6."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                _task_notification(
+                    summary="done",
+                    usage={"total_tokens": 1500, "tool_uses": 5, "duration_ms": 7000},
+                ),
+                _user_tool_result(tool_use_id="toolu_task_1", content="done"),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    usage = returned.data.subagent_usage
+    assert usage is not None
+    assert usage.cost_usd == 0.0
+    assert usage.tokens_input == 0
+    assert usage.tokens_output == 0
+    assert usage.turns == 0
+    dumped = usage.model_dump(by_alias=True, exclude_none=True)
+    assert dumped["total_tokens"] == 1500
+    assert dumped["tool_uses"] == 5
+    assert dumped["duration_ms"] == 7000
+
+
+def test_task_progress_messages_are_dropped() -> None:
+    """`TaskProgressMessage` is informational only; it MUST NOT emit
+    any AVP event of its own."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                TaskProgressMessage(
+                    subtype="task_progress",
+                    data={},
+                    task_id="task_1",
+                    description="in flight",
+                    usage={"total_tokens": 50, "tool_uses": 1, "duration_ms": 100},  # type: ignore[arg-type]
+                    uuid="p",
+                    session_id="sess-1",
+                    tool_use_id="toolu_task_1",
+                ),
+                _task_notification(summary="done"),
+                _user_tool_result(tool_use_id="toolu_task_1", content="done"),
+                _result(),
+            ]
+        )
+    )
+    # Progress contributes no events; we still get exactly one invoked/returned pair.
+    assert len([ev for ev in events if ev.type == "avp.subagent_invoked"]) == 1
+    assert len([ev for ev in events if ev.type == "avp.subagent_returned"]) == 1
+
+
+def test_bare_task_without_lifecycle_falls_back_to_tool_pair() -> None:
+    """If the SDK doesn't surface TaskStartedMessage (e.g. older SDK,
+    edge case), a `ToolUseBlock(name="Task")` MUST fall through to the
+    regular tool path so the bracket still closes."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _user_tool_result(tool_use_id="toolu_task_1", content="done"),
+                _result(),
+            ]
+        )
+    )
+    types = {ev.type for ev in events}
+    assert "avp.tool_invoked" in types
+    assert "avp.tool_returned" in types
+    assert "avp.subagent_invoked" not in types

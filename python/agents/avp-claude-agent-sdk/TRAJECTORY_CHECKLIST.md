@@ -168,15 +168,28 @@ appears in `UserMessage.content` and is handled separately (below) as a
 
 ## SystemMessage subtypes (subagent dispatch via Task tool)
 
-- [ ] `TaskStartedMessage` / `TaskNotificationMessage` →
-  `avp.subagent_invoked` / `avp.subagent_returned`. Populate
-  `avp.subagent.usage` (`SubagentUsage`) from `TaskUsage` — in-process
-  fallback per spec §6: the SDK black-boxes the child loop, so the rollup
-  on `subagent_returned` is the only signal of child spend. Use a
-  `_msg_field(message, field)` helper for SDK version compatibility
-  (`>=0.1.11` top-level attrs vs `0.1.10` data dict).
-- [ ] `TaskProgressMessage` — drop.
-- [ ] Unknown subtypes — drop (honest-silent beats fabricated events).
+- [x] `TaskStartedMessage` / `TaskNotificationMessage` →
+  `avp.subagent_invoked` / `avp.subagent_returned`. `TaskStartedMessage`
+  stashes a `TaskInfo(tool_use_id → ...)` on RunState while the parent's
+  `AssistantMessage` carrying the `Task` `ToolUseBlock` is still
+  buffered; `_close_turn` then walks `turn_content` and routes the Task
+  block to `subagent_invoked` (instead of `tool_invoked`) when a
+  matching TaskInfo exists. The synthetic `UserMessage(ToolResultBlock)`
+  closes the bracket via `subagent_returned` (status "completed" →
+  reason=converged, "stopped" → interrupted) or `subagent_failed`
+  (status "failed", error from `summary`). `TaskUsage` rolls up onto
+  `SubagentUsage` with the canonical fields (`cost_usd`, `tokens_input`,
+  `tokens_output`, `turns`) set to 0 and the raw triple
+  (`total_tokens`, `tool_uses`, `duration_ms`) riding as extras (the
+  SDK doesn't split input/output, so the canonical fields stay honest
+  sentinels). Bare `Task` calls with no SDK lifecycle messages fall
+  back to the regular tool path. SDK ≥0.1.81 uses typed subclasses
+  (`TaskStartedMessage`, `TaskNotificationMessage`); class-based
+  `isinstance` dispatch in `handle_message` covers the union directly,
+  so the older `_msg_field` data-dict compatibility shim is unnecessary.
+- [x] `TaskProgressMessage` — drop.
+- [x] Unknown SystemMessage subtypes — drop (honest-silent beats
+  fabricated events).
 
 ## Terminal events (spec §8 #3, #6)
 
