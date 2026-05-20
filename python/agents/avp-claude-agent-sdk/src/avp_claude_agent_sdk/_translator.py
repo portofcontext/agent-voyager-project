@@ -22,8 +22,16 @@ authoritative source for the run's tool surface.
 
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from claude_agent_sdk import (
+    ContentBlock,
+    ServerToolResultBlock,
+    ServerToolUseBlock,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+)
 from claude_agent_sdk.types import (
     ClaudeAgentOptions,
     McpStatusResponse,
@@ -31,6 +39,12 @@ from claude_agent_sdk.types import (
     SystemPromptPreset,
 )
 
+from avp.content import AVPContentBlock
+from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
+from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
+from avp.content import TextBlock as AVPTextBlock
+from avp.content import ThinkingBlock as AVPThinkingBlock
+from avp.content import ToolUseBlock as AVPToolUseBlock
 from avp.descriptor import (
     AgentDescriptor,
     McpServerDecl,
@@ -38,16 +52,72 @@ from avp.descriptor import (
     SubagentDecl,
     ToolDecl,
 )
+from avp.trajectory import Usage
 
 _AGENT_NAME = "avp-claude-agent-sdk"
 
 
 # ---------------------------------------------------------------------------
-# Static descriptor (phase A: emitted in connect())
+# SDK → AVP translation helpers
 # ---------------------------------------------------------------------------
 
 
-def descriptor_full(
+def translate_content_blocks(blocks: list[ContentBlock]) -> list[AVPContentBlock]:
+    """SDK content blocks → AVP content blocks. Drops unknown subtypes
+    silently (honest-silent beats fabricated). `ToolResultBlock` is not
+    translated here -- it surfaces as a `tool_returned` event, not as
+    inline content.
+
+    `ServerToolResultBlock` doesn't carry `name` (only its paired
+    `ServerToolUseBlock` does); a single in-order pass tracks the most
+    recent server-tool name per `tool_use_id` and back-fills it.
+    """
+    out: list[AVPContentBlock] = []
+    server_tool_names: dict[str, str] = {}
+    for block in blocks or []:
+        if isinstance(block, TextBlock):
+            out.append(AVPTextBlock(text=block.text))
+        elif isinstance(block, ThinkingBlock):
+            out.append(AVPThinkingBlock(thinking=block.thinking, signature=block.signature))
+        elif isinstance(block, ToolUseBlock):
+            out.append(AVPToolUseBlock(id=block.id, name=block.name, input=block.input))
+        elif isinstance(block, ServerToolUseBlock):
+            server_tool_names[block.id] = block.name
+            out.append(AVPServerToolUseBlock(id=block.id, name=block.name, input=block.input))
+        elif isinstance(block, ServerToolResultBlock):
+            out.append(
+                AVPServerToolResultBlock(
+                    tool_use_id=block.tool_use_id,
+                    name=server_tool_names.get(block.tool_use_id, ""),
+                    content=block.content,
+                )
+            )
+    return out
+
+
+def translate_usage(usage: dict[str, Any]) -> Usage:
+    """Project the SDK's `AssistantMessage.usage` dict onto AVP `Usage`.
+
+    The SDK reports the API call's response totals (duplicated on every
+    chunk of one `message_id`), so overwriting on each chunk converges
+    to the inference's true totals by the time the turn drains.
+    """
+    return Usage(
+        input_tokens=int(usage.get("input_tokens") or 0),
+        output_tokens=int(usage.get("output_tokens") or 0),
+        cache_read_input_tokens=int(usage.get("cache_read_input_tokens") or 0) or None,
+        cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens") or 0) or None,
+    )
+
+
+def get_dispatch_target(tool_name: str) -> Literal["mcp_server", "local"]:
+    """Wire discriminator for `tool_invoked`. The Claude Agent SDK
+    namespaces MCP tools as `mcp__<server>__<tool>`; everything else is
+    a CLI built-in, server tool, or local hook."""
+    return "mcp_server" if tool_name.startswith("mcp__") else "local"
+
+
+def translate_agent_descriptor(
     options: ClaudeAgentOptions,
     init_data: dict[str, Any] | None,
     status: McpStatusResponse,
@@ -71,9 +141,7 @@ def descriptor_full(
         agent_name=_AGENT_NAME,
         agent_version=_pkg_version(_AGENT_NAME),
         spec_version="0.1",
-        default_model=(
-            request_model_from_init(init_data, options) if init_data else options.model
-        ),
+        default_model=(request_model_from_init(init_data, options) if init_data else options.model),
         system_prompt=resolve_system_prompt(options.system_prompt),
         prompt=prompt,
         tools=tools_from_init(init_data) if init_data else None,
@@ -84,7 +152,7 @@ def descriptor_full(
 
 
 # ---------------------------------------------------------------------------
-# Runtime-merged view (phase B: emitted on init SystemMessage)
+# Runtime-merged view (emitted on init SystemMessage)
 # ---------------------------------------------------------------------------
 
 

@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from avp._envelope import _OPEN
+from avp.envelope import _OPEN
 
 # ── Source variants ───────────────────────────────────────────────────────────
 

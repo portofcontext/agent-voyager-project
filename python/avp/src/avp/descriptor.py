@@ -32,7 +32,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from avp._envelope import _OPEN, _STRICT
+from avp.envelope import _OPEN, _STRICT
 
 
 class ToolDecl(BaseModel):

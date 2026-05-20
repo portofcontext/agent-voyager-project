@@ -7,9 +7,9 @@ import dataclasses
 import time
 from typing import Any
 
-from avp._envelope import new_span_id
 from avp.agent.sink import EventSink
 from avp.content import AVPContentBlock
+from avp.envelope import new_span_id
 from avp.pricing import ModelPrice, compute_cost
 from avp.trajectory import (
     AssistantMessageData,

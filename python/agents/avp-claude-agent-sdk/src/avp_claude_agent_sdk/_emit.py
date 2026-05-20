@@ -9,34 +9,26 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Literal
+from typing import Any
 
 from claude_agent_sdk.types import (
     AssistantMessage,
     ClaudeAgentOptions,
-    ContentBlock,
     McpStatusResponse,
     Message,
-    ServerToolResultBlock,
-    ServerToolUseBlock,
     TaskNotificationMessage,
     TaskStartedMessage,
     TaskUsage,
-    TextBlock,
-    ThinkingBlock,
     ToolResultBlock,
-    ToolUseBlock,
     UserMessage,
 )
 
-from avp._envelope import ZERO_SPAN_ID, new_span_id
 from avp.content import AVPContentBlock
 from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
 from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
-from avp.content import TextBlock as AVPTextBlock
-from avp.content import ThinkingBlock as AVPThinkingBlock
 from avp.content import ToolResultBlock as AVPToolResultBlock
 from avp.content import ToolUseBlock as AVPToolUseBlock
+from avp.envelope import ZERO_SPAN_ID, new_span_id
 from avp.trajectory import (
     AgentDescribedData,
     AgentDescribedEvent,
@@ -44,6 +36,9 @@ from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedData,
     AgentStoppedEvent,
+    ErrorCode,
+    ErrorOccurredData,
+    ErrorOccurredEvent,
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
@@ -58,17 +53,19 @@ from avp.trajectory import (
     ToolInvokedEvent,
     ToolReturnedData,
     ToolReturnedEvent,
-    Usage,
 )
 from avp_claude_agent_sdk._runstate import RunState, TaskInfo, ToolSpan, Turn
 from avp_claude_agent_sdk._translator import (
-    descriptor_full,
+    get_dispatch_target,
     mcp_servers_connected,
     request_model_from_init,
     resolve_system_prompt,
     skills_from_init,
     subagents_from_init,
     tools_from_init,
+    translate_agent_descriptor,
+    translate_content_blocks,
+    translate_usage,
 )
 
 _PROVIDER_NAME = "anthropic"
@@ -109,7 +106,7 @@ async def emit_agent_described(
                 trace_id=state.trace_id,
                 span_id=new_span_id(),
                 parent_span_id=ZERO_SPAN_ID,
-                descriptor=descriptor_full(options, init_data, status, prompt=prompt),
+                descriptor=translate_agent_descriptor(options, init_data, status, prompt=prompt),
             ),
         )
     )
@@ -183,64 +180,22 @@ async def emit_agent_stopped(
     )
 
 
-# ---------------------------------------------------------------------------
-# SDK → AVP translation helpers
-# ---------------------------------------------------------------------------
+async def emit_error(
+    self, state: RunState, exc: Exception, error_code: ErrorCode = ErrorCode.agent_crash
+) -> None:
 
-
-def _translate_blocks(blocks: list[ContentBlock]) -> list[AVPContentBlock]:
-    """SDK content blocks → AVP content blocks. Drops unknown subtypes
-    silently (honest-silent beats fabricated). `ToolResultBlock` is not
-    translated here -- it surfaces as a `tool_returned` event, not as
-    inline content.
-
-    `ServerToolResultBlock` doesn't carry `name` (only its paired
-    `ServerToolUseBlock` does); a single in-order pass tracks the most
-    recent server-tool name per `tool_use_id` and back-fills it.
-    """
-    out: list[AVPContentBlock] = []
-    server_tool_names: dict[str, str] = {}
-    for block in blocks or []:
-        if isinstance(block, TextBlock):
-            out.append(AVPTextBlock(text=block.text))
-        elif isinstance(block, ThinkingBlock):
-            out.append(AVPThinkingBlock(thinking=block.thinking, signature=block.signature))
-        elif isinstance(block, ToolUseBlock):
-            out.append(AVPToolUseBlock(id=block.id, name=block.name, input=block.input))
-        elif isinstance(block, ServerToolUseBlock):
-            server_tool_names[block.id] = block.name
-            out.append(AVPServerToolUseBlock(id=block.id, name=block.name, input=block.input))
-        elif isinstance(block, ServerToolResultBlock):
-            out.append(
-                AVPServerToolResultBlock(
-                    tool_use_id=block.tool_use_id,
-                    name=server_tool_names.get(block.tool_use_id, ""),
-                    content=block.content,
-                )
-            )
-    return out
-
-
-def _usage_from_dict(usage: dict[str, Any]) -> Usage:
-    """Project the SDK's `AssistantMessage.usage` dict onto AVP `Usage`.
-
-    The SDK reports the API call's response totals (duplicated on every
-    chunk of one `message_id`), so overwriting on each chunk converges
-    to the inference's true totals by the time the turn drains.
-    """
-    return Usage(
-        input_tokens=int(usage.get("input_tokens") or 0),
-        output_tokens=int(usage.get("output_tokens") or 0),
-        cache_read_input_tokens=int(usage.get("cache_read_input_tokens") or 0) or None,
-        cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens") or 0) or None,
+    await state.sink(
+        ErrorOccurredEvent(
+            subject=state.run_id,
+            data=ErrorOccurredData(
+                trace_id=state.trace_id,
+                span_id=new_span_id(),
+                parent_span_id=state.agent_span_id,
+                error_code=error_code,
+                error_message=str(exc) or type(exc).__name__,
+            ),
+        )
     )
-
-
-def _dispatch_target(tool_name: str) -> Literal["mcp_server", "local"]:
-    """Wire discriminator for `tool_invoked`. The Claude Agent SDK
-    namespaces MCP tools as `mcp__<server>__<tool>`; everything else is
-    a CLI built-in, server tool, or local hook."""
-    return "mcp_server" if tool_name.startswith("mcp__") else "local"
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +238,7 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
         state.turn = Turn(message_id=message.message_id, step=next_step)
 
     state.turn.meta_chunks_merged += 1
-    translated = _translate_blocks(message.content)
+    translated = translate_content_blocks(message.content)
     state.turn.content.extend(translated)
     for block in translated:
         if isinstance(block, AVPToolUseBlock):
@@ -311,7 +266,7 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     if message.stop_reason:
         state.turn.stop_reason = message.stop_reason
     if message.usage:
-        state.turn.usage = _usage_from_dict(message.usage)
+        state.turn.usage = translate_usage(message.usage)
         state.turn.meta_service_tier = (
             message.usage.get("service_tier") or state.turn.meta_service_tier
         )
@@ -354,7 +309,7 @@ def _buffer_tool_invoked(
                 tool_call_id=tool_use_id,
                 tool_name=tool_name,
                 tool_input=tool_input,
-                tool_dispatch_target=_dispatch_target(tool_name),
+                tool_dispatch_target=get_dispatch_target(tool_name),
             ),
         )
     )

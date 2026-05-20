@@ -35,17 +35,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from avp._envelope import (
-    _OPEN,
-    SOURCE_AGENT,
-    ZERO_SPAN_ID,
-    _CloudEventBase,
-    _SpanData,
-    new_event_id,
-    new_span_id,
-    new_trace_id,
-    now_iso,
-)
 from avp.commission import Commission
 from avp.content import AVPContentBlock, ToolResultBlock
 from avp.descriptor import (
@@ -55,6 +44,17 @@ from avp.descriptor import (
     SkillDecl,
     SubagentDecl,
     ToolDecl,
+)
+from avp.envelope import (
+    _OPEN,
+    SOURCE_AGENT,
+    ZERO_SPAN_ID,
+    _CloudEventBase,
+    _SpanData,
+    new_event_id,
+    new_span_id,
+    new_trace_id,
+    now_iso,
 )
 
 # Reverse-DNS event types per CloudEvents convention. All AVP-defined types

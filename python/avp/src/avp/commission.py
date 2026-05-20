@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from avp._envelope import _STRICT
+from avp.envelope import _STRICT
 
 _ID_PATTERN = r"^[a-z0-9_-]+$"
 
@@ -79,7 +79,6 @@ class Skill(BaseModel):
     @property
     def description(self) -> str | None:
         return self._frontmatter_value("description")
-
 
 
 class SupervisorPreamble(BaseModel):

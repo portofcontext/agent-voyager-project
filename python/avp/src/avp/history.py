@@ -26,8 +26,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from avp._envelope import _OPEN
 from avp.content import AVPContentBlock, TextBlock
+from avp.envelope import _OPEN
 from avp.trajectory import (
     AgentStartedEvent,
     AssistantMessageEvent,

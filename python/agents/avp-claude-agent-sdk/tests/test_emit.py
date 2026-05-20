@@ -29,7 +29,7 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 
-from avp._envelope import new_trace_id
+from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.trajectory import Event
 from avp_claude_agent_sdk._emit import (

@@ -45,14 +45,15 @@ from typing import Any
 from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
-from avp._envelope import new_trace_id
 from avp.agent.sink import EventSink, stdio_sink
+from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
-from avp.trajectory import ErrorCode, ErrorOccurredData, ErrorOccurredEvent, StopReason
+from avp.trajectory import StopReason
 from avp_claude_agent_sdk._emit import (
     emit_agent_described,
     emit_agent_started,
     emit_agent_stopped,
+    emit_error,
     emit_run_requested,
     handle_message,
 )
@@ -71,18 +72,17 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         sink: EventSink = stdio_sink,
     ) -> None:
         super().__init__(options=options, transport=transport)
+        self._original_options = options
         self._sink = sink
         self._avp_token = None
 
     async def connect(self, prompt: str | AsyncIterable[dict[str, Any]] | None = None) -> None:
         # 1. Probe pass: discover the agent's full pre-Commission surface
         #    via a transient CLI session.
-        probe_init, probe_status = await _probe_describe(self.options)
+        probe_init, probe_status = await _probe_describe(self._original_options)
 
         # 2. Set up RunState + emit the prelude. agent_described carries
         #    the probe view; agent_started carries the merged-state view
-        #    (TODO Stage 3: apply Commission filters here -- enabled_*
-        #    allowlists, managed-ref merges).
         state = RunState(
             trace_id=new_trace_id(),
             run_id=str(uuid.uuid4()),
@@ -95,11 +95,13 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         await emit_run_requested(state)
         await emit_agent_described(
             state,
-            self.options,
+            self._original_options,
             prompt=prompt_text,
             init_data=probe_init,
             status=probe_status,
         )
+        # TODO: merge comission and override
+
         await emit_agent_started(
             state,
             prompt=prompt_text,
@@ -129,7 +131,7 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         except BaseException as exc:
             if state is not None and not state.stopped:
                 if isinstance(exc, Exception):
-                    await self._emit_error(state, exc)
+                    await emit_error(state, exc)
                     await emit_agent_stopped(state, StopReason.error)
                 else:
                     # CancelledError (BaseException, not Exception).
@@ -144,22 +146,6 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
             reset_run(self._avp_token)
             self._avp_token = None
         await super().disconnect()
-
-    async def _emit_error(self, state: RunState, exc: Exception) -> None:
-        from avp._envelope import new_span_id
-
-        await state.sink(
-            ErrorOccurredEvent(
-                subject=state.run_id,
-                data=ErrorOccurredData(
-                    trace_id=state.trace_id,
-                    span_id=new_span_id(),
-                    parent_span_id=state.agent_span_id,
-                    error_code=ErrorCode.agent_crash,
-                    error_message=str(exc) or type(exc).__name__,
-                ),
-            )
-        )
 
 
 async def _probe_describe(
