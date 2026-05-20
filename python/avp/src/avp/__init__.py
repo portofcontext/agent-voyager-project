@@ -8,7 +8,7 @@ Public API lives in the spec-scoped submodules; this package's top level
 exposes only version metadata. Import wire types and helpers directly from
 the module that owns them:
 
-    from avp.commission import Commission, McpServerHttp, McpServerStdio, SkillRef, SubagentRef
+    from avp.commission import Commission, McpServerHttp, McpServerStdio, Skill, SubagentRef
     from avp.descriptor import AgentDescriptor
     from avp.trajectory import (
         AgentStartedEvent,

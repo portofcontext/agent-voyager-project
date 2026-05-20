@@ -1281,7 +1281,7 @@
           "anyOf": [
             {
               "items": {
-                "$ref": "#/$defs/SkillRef"
+                "$ref": "#/$defs/Skill"
               },
               "type": "array"
             },
@@ -2960,6 +2960,31 @@
       "title": "ServerToolUseBlock",
       "type": "object"
     },
+    "Skill": {
+      "additionalProperties": false,
+      "description": "Inline skill entry in Commission.skills.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "files"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
     "SkillDecl": {
       "additionalProperties": true,
       "description": "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data[\"avp.skills\"]`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls.",
@@ -3009,27 +3034,6 @@
         "name"
       ],
       "title": "SkillDecl",
-      "type": "object"
-    },
-    "SkillRef": {
-      "additionalProperties": false,
-      "description": "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads); agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses.",
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "pattern": "^[a-z0-9_-]+$",
-          "title": "Id",
-          "type": "string"
-        },
-        "ref": {
-          "$ref": "#/$defs/JsonValue"
-        }
-      },
-      "required": [
-        "id",
-        "ref"
-      ],
-      "title": "SkillRef",
       "type": "object"
     },
     "StopReason": {

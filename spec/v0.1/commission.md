@@ -52,8 +52,8 @@ A Commission is a single JSON document validating against [`commission.schema.js
     { "id": "github", "type": "http", "url": "https://mcp.example.com/github", "headers": { "Authorization": "Bearer ghp_..." } }
   ],
   "skills": [
-    { "id": "style-guide",     "ref": "sha256:abc..." },
-    { "id": "domain-glossary", "ref": { "vault": "prod", "key": "skill-glossary-v2" } }
+    { "id": "style-guide", "files": { "SKILL.md": "---\nname: Style Guide\n---\n…" } },
+    { "id": "code-runner", "files": { "SKILL.md": "---\nname: Code Runner\n---\n…", "scripts/run.sh": "#!/bin/sh\n…" } }
   ],
   "subagents": [
     { "id": "researcher", "ref": "sk_subagent_abc123" }
@@ -87,7 +87,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
 | `supervisor` | `{ name: string, version?: string }` | Attribution for `run_requested`. When absent, the corresponding `avp.supervisor.*` fields on `run_requested` are omitted (absence is the canonical signal; the prior `"unknown"` placeholder is superseded). |
 | `system_prompt` | string | The agent's system context. Overrides `descriptor.system_prompt` when both are set. |
 | `mcp_servers` | `Array<McpServerHttp \| McpServerStdio>` | Inline MCP server connection material, discriminated on `type`. See §3. |
-| `skills` | `Array<{ id: string, ref: JsonValue }>` | Managed Agent Skill refs. See §3. |
+| `skills` | `Array<Skill>` | Inline Agent Skills (SKILL.md content). See §3. |
 | `subagents` | `Array<{ id: string, ref: JsonValue }>` | Managed subagent refs. See §3. |
 | `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.tools[].name`. See §4. |
 | `enabled_builtin_subagents` | `string[] \| null` | Allowlist over `descriptor.subagents[].name`. See §4. |
@@ -134,7 +134,23 @@ Each entry in `mcp_servers` is a discriminated union on `type`:
 - **`id`**: a string the supervisor chooses. Stable across the run. MUST match `^[a-z0-9_-]+$`.
 - `headers` is optional. Pass auth and any other request headers directly (e.g. `"Authorization": "Bearer <token>"`).
 
-### 3.2 Asset-id collisions
+### 3.2 Skill entries
+
+Each entry in `skills` carries the full skill inline as a file map:
+
+```jsonc
+{
+  "id": "code-runner",
+  "files": {
+    "SKILL.md": "---\nname: Code Runner\ndescription: …\n---\n# Code Runner\n…",
+    "scripts/run.sh": "#!/bin/sh\n…"
+  }
+}
+```
+
+Keys in `files` are relative paths; values are file contents as UTF-8 strings. `files` MUST contain a `"SKILL.md"` entry. Additional paths (scripts, config, reference assets) are optional. `name` and `description` are declared in SKILL.md YAML frontmatter; agent SDKs SHOULD extract them from there rather than requiring duplicate top-level fields.
+
+### 3.3 Asset-id collisions
 
 The agent MUST detect the following at startup and fail with `error_occurred(code: "commission_collision")` followed by `agent_stopped(reason: "error")`:
 

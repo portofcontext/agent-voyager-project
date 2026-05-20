@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, field_validator
 
 from avp._envelope import _STRICT
 
@@ -46,19 +46,39 @@ class McpServerStdio(BaseModel):
 McpServer = Annotated[McpServerHttp | McpServerStdio, Field(discriminator="type")]
 
 
-class SkillRef(BaseModel):
-    """Reference to a supervisor-managed skill.
-
-    The agent resolves this entry at startup by calling `avp.resolve` with
-    `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
-    (or a location the agent fetches and reads); agentskills.io's content
-    model still applies; the resolver just hands the content back from
-    whatever store the supervisor uses.
-    """
+class Skill(BaseModel):
+    """Inline skill entry in Commission.skills."""
 
     model_config = _STRICT
     id: str = Field(min_length=1, pattern=_ID_PATTERN)
-    ref: JsonValue
+    files: dict[str, str]
+
+    @field_validator("files")
+    @classmethod
+    def _require_skill_md(cls, v: dict[str, str]) -> dict[str, str]:
+        if "SKILL.md" not in v:
+            raise ValueError("files must contain 'SKILL.md'")
+        return v
+
+    def _frontmatter_value(self, key: str) -> str | None:
+        content = self.files.get("SKILL.md", "")
+        if not content.startswith("---"):
+            return None
+        end = content.find("---", 3)
+        if end == -1:
+            return None
+        for line in content[3:end].splitlines():
+            if line.startswith(f"{key}:"):
+                return line[len(key) + 1 :].strip() or None
+        return None
+
+    @property
+    def name(self) -> str | None:
+        return self._frontmatter_value("name")
+
+    @property
+    def description(self) -> str | None:
+        return self._frontmatter_value("description")
 
 
 class SubagentRef(BaseModel):
@@ -131,7 +151,7 @@ class Commission(BaseModel):
     # Supervisor-managed assets. Connection material is inline; agents dial
     # MCP servers and load skill content directly at startup.
     mcp_servers: list[McpServer] | None = None
-    skills: list[SkillRef] | None = None
+    skills: list[Skill] | None = None
     subagents: list[SubagentRef] | None = None
 
     # Allow-lists over the agent's Descriptor-declared surface. Each list
@@ -175,7 +195,7 @@ __all__ = [
     "McpServer",
     "McpServerHttp",
     "McpServerStdio",
-    "SkillRef",
+    "Skill",
     "SubagentRef",
     "SupervisorPreamble",
 ]

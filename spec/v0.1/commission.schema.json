@@ -107,9 +107,9 @@
       "title": "McpServerStdio",
       "type": "object"
     },
-    "SkillRef": {
+    "Skill": {
       "additionalProperties": false,
-      "description": "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads); agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses.",
+      "description": "Inline skill entry in Commission.skills.",
       "properties": {
         "id": {
           "minLength": 1,
@@ -117,15 +117,19 @@
           "title": "Id",
           "type": "string"
         },
-        "ref": {
-          "$ref": "#/$defs/JsonValue"
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "object"
         }
       },
       "required": [
         "id",
-        "ref"
+        "files"
       ],
-      "title": "SkillRef",
+      "title": "Skill",
       "type": "object"
     },
     "SubagentRef": {
@@ -235,7 +239,7 @@
       "anyOf": [
         {
           "items": {
-            "$ref": "#/$defs/SkillRef"
+            "$ref": "#/$defs/Skill"
           },
           "type": "array"
         },
