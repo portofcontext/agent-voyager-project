@@ -27,40 +27,39 @@ For every run of a `claude-agent-sdk` session, this package produces the AVP eve
 
 The wire format is defined by the [`avp`](../../avp) package; this adapter contributes no schema of its own.
 
-## Hooks where possible
+## How events are sourced
 
-Tool bracketing uses the Claude Agent SDK's [hook callbacks](https://code.claude.com/docs/en/agent-sdk/hooks), not content-block inference:
+Every AVP event traces back to one SDK signal — no hook callbacks, no contextvar-mediated ambient state. The `handle_message` dispatcher routes incoming SDK messages to per-type handlers that mutate `RunState` and emit AVP events through the run's sink:
 
-- **`PreToolUse`** → `tool_invoked` (records a [`ToolSpan`](src/avp_claude_agent_sdk/_runstate.py) keyed by `tool_use_id`)
-- **`PostToolUse`** → `tool_returned` (successful dispatch)
-- **`PostToolUseFailure`** → `tool_returned` with `is_error=True` (errors, permission denials, interrupts)
+| AVP event | Source |
+|---|---|
+| `assistant_message` | `AssistantMessage` chunks merged by `message_id`, flushed at turn close |
+| `tool_invoked` | `ToolUseBlock` / `ServerToolUseBlock` in `AssistantMessage.content` |
+| `tool_returned` | `ToolResultBlock` in `UserMessage.content` (or inline `ServerToolResultBlock` for server tools) |
+| `subagent_invoked` | `TaskStartedMessage` |
+| `subagent_returned` / `subagent_failed` | `TaskNotificationMessage` (`completed` / `stopped` vs `failed`) |
 
-Task (subagent) dispatches are bracketed separately by `TaskStartedMessage` → `subagent_invoked` and `TaskNotificationMessage` → `subagent_returned` / `subagent_failed`, since those carry richer payload (task_type, summary, usage) than the tool hooks. The tool hooks skip `tool_name == "Task"` to avoid double-emission. Tools fired *from inside* a subagent are dropped (they roll up under `subagent_returned.subagent_usage` per spec §5.6).
-
-The CLI's hooks are the authoritative "this dispatch actually happened" signal — they fire for every dispatched tool regardless of whether it produced a `ToolUseBlock` the SDK surfaces back to us. Inferring tool calls from `AssistantMessage.content` would miss eager-dispatch and parallel cases the CLI handles internally.
-
-User-supplied hook callbacks under the same names are preserved — ours are appended alongside, not in place of.
-
+Why not the SDK's `PreToolUse` / `PostToolUse` hooks? They'd work, but tool-related state would split across two execution contexts (callback vs. message handler). Sourcing everything from the message stream keeps the model uniform and the state machine in one place. Task dispatches are bracketed via the message stream specifically because `SubagentStop` doesn't carry the terminal `status` / `summary` / `usage` payload — `TaskNotificationMessage` does. Subagent-interior activity (`parent_tool_use_id is not None`) is dropped and rolls up under `subagent_returned.subagent_usage` per spec §5.6.
 
 ## Architecture
 
 ```
-_client.py     AVPClaudeSDKClient + hook registration (_install_avp_hooks)
-_emit.py       Emitters, hook callbacks, SDK→AVP translation helpers
-_runstate.py   RunState, Turn (per-inference buffer), ToolSpan
+_client.py     AVPClaudeSDKClient (probe-then-run connect, error/cancel handling)
+_emit.py       Per-message handlers, prelude/terminal emitters, SDK→AVP helpers
+_runstate.py   RunState, Turn (per-inference buffer), ToolSpan, TaskInfo
 _translator.py SDK init-data → AgentDescriptor fields
 ```
 
-The hot path is the **deferred-emission pattern** in `_runstate.py:Turn`. The Claude CLI fans one API response into multiple `AssistantMessage` chunks (one per content block) sharing a `message_id`, and dispatches tools eagerly between them. To keep wire ordering causal (assistant_message precedes its tool_invokeds), each turn buffers in `Turn.emissions` until a new `message_id` arrives — then `RunState.drain()` flushes one `assistant_message` followed by every buffered event in arrival order. Original timestamps are preserved on each event.
+The hot path is the **deferred-emission pattern** on `Turn`. The Claude CLI fans one API response into multiple `AssistantMessage` chunks sharing a `message_id`. To keep wire ordering causal (assistant_message precedes the tool / subagent events it triggered), each turn buffers AVP events in `Turn.emissions` until a new `message_id` arrives. `RunState.drain()` then flushes one `assistant_message` followed by every buffered event in arrival order. Original timestamps are preserved.
 
-See [CLAUDE.md](CLAUDE.md) for the design rationale and active development notes.
+See [CLAUDE.md](CLAUDE.md) for design notes.
 
 ## Contributing
 
 - **AVP spec** lives at [`spec/v0.1`](../../../spec/v0.1). Conformance cases at [`conformance/v0.1`](../../../conformance/v0.1). Wire-format changes belong there, not here.
 - **Code style:** avoid `Any` / `dict[str, Any]` typing where a concrete type fits; keep docstrings compact (one-line where possible). Use `uv` for dependency management.
-- **Subagents are out of scope for now.** All three hooks short-circuit when `input_data["agent_id"]` is present (the SDK's marker for "fires inside a Task-spawned subagent"). Subagent activity will surface via `subagent_invoked` / `subagent_returned` in a later pass.
-- **The reference (success) path is tested manually via [`scripts/`](scripts/).** A real test suite is on the TODO list.
+- **Subagent-interior events are dropped** (`parent_tool_use_id is not None` on chunks; `tool_use_id` in `state.turn.tasks` on results). Subagent activity surfaces on the parent only via `subagent_invoked` / `subagent_returned` / `subagent_failed`.
+- **The reference path is tested manually via [`scripts/`](scripts/).** A real test suite is on the TODO list.
 
 ## License
 

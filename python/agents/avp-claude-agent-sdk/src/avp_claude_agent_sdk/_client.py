@@ -38,22 +38,18 @@ probe cost; consider caching probe results across runs by options hash.
 from __future__ import annotations
 
 import contextlib
-import dataclasses
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
 
 from claude_agent_sdk import ClaudeSDKClient
-from claude_agent_sdk.types import ClaudeAgentOptions, HookMatcher, McpStatusResponse
+from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
 from avp._envelope import new_trace_id
 from avp.agent.sink import EventSink, stdio_sink
 from avp.pricing import load_default_prices
 from avp.trajectory import ErrorCode, ErrorOccurredData, ErrorOccurredEvent, StopReason
 from avp_claude_agent_sdk._emit import (
-    avp_posttooluse_hook,
-    avp_posttoolusefailure_hook,
-    avp_pretooluse_hook,
     emit_agent_described,
     emit_agent_started,
     emit_agent_stopped,
@@ -61,26 +57,6 @@ from avp_claude_agent_sdk._emit import (
     handle_message,
 )
 from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
-
-
-def _install_avp_hooks(options: ClaudeAgentOptions | None) -> ClaudeAgentOptions:
-    """Append the AVP PreToolUse observer to `options.hooks`. User-supplied
-    PreToolUse callbacks are preserved -- ours runs alongside them."""
-    options = options or ClaudeAgentOptions()
-    existing = dict(options.hooks or {})
-    existing["PreToolUse"] = [
-        *existing.get("PreToolUse", []),
-        HookMatcher(hooks=[avp_pretooluse_hook]),
-    ]
-    existing["PostToolUse"] = [
-        *existing.get("PostToolUse", []),
-        HookMatcher(hooks=[avp_posttooluse_hook]),
-    ]
-    existing["PostToolUseFailure"] = [
-        *existing.get("PostToolUseFailure", []),
-        HookMatcher(hooks=[avp_posttoolusefailure_hook]),
-    ]
-    return dataclasses.replace(options, hooks=existing)
 
 
 class AVPClaudeSDKClient(ClaudeSDKClient):
@@ -94,14 +70,7 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         *,
         sink: EventSink = stdio_sink,
     ) -> None:
-        # Register the AVP PreToolUse observer so every tool dispatch
-        # becomes a buffered `tool_invoked` event. The callback returns
-        # `{}` (no-op), so user-supplied hooks in any category are
-        # unaffected; ours is appended alongside theirs under `PreToolUse`.
-        super().__init__(
-            options=_install_avp_hooks(options),
-            transport=transport,
-        )
+        super().__init__(options=options, transport=transport)
         self._sink = sink
         self._avp_token = None
 

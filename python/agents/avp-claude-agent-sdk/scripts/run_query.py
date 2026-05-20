@@ -26,7 +26,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
 async def _run(prompt: str, model: str | None) -> None:
-    options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
+    options = ClaudeAgentOptions(model=model, permission_mode="auto")
 
     with (
         (SCRIPTS_DIR / "logs/claude.log").open("w") as claude_file,
