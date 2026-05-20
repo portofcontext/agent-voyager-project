@@ -13,5 +13,6 @@ Stage 3 will add `run_avp_agent` (Commission-driven entry point).
 
 from avp_claude_agent_sdk._client import AVPClaudeSDKClient
 from avp_claude_agent_sdk._patches import setup_avp
+from avp_claude_agent_sdk._run_agent import run_avp_agent
 
-__all__ = ["AVPClaudeSDKClient", "setup_avp"]
+__all__ = ["AVPClaudeSDKClient", "run_avp_agent", "setup_avp"]

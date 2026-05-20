@@ -1,9 +1,9 @@
 {
   "$defs": {
     "JsonValue": {},
-    "McpServerRef": {
+    "McpServerHttp": {
       "additionalProperties": false,
-      "description": "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\nconcerns; AVP does not constrain them.",
+      "description": "Inline HTTP MCP server entry in Commission.mcp_servers.",
       "properties": {
         "id": {
           "minLength": 1,
@@ -11,15 +11,100 @@
           "title": "Id",
           "type": "string"
         },
-        "ref": {
-          "$ref": "#/$defs/JsonValue"
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Headers"
         }
       },
       "required": [
         "id",
-        "ref"
+        "type",
+        "url"
       ],
-      "title": "McpServerRef",
+      "title": "McpServerHttp",
+      "type": "object"
+    },
+    "McpServerStdio": {
+      "additionalProperties": false,
+      "description": "Inline stdio MCP server entry in Commission.mcp_servers.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        },
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "args": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Args"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Env"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "command"
+      ],
+      "title": "McpServerStdio",
       "type": "object"
     },
     "SkillRef": {
@@ -121,7 +206,21 @@
       "anyOf": [
         {
           "items": {
-            "$ref": "#/$defs/McpServerRef"
+            "discriminator": {
+              "mapping": {
+                "http": "#/$defs/McpServerHttp",
+                "stdio": "#/$defs/McpServerStdio"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/McpServerHttp"
+              },
+              {
+                "$ref": "#/$defs/McpServerStdio"
+              }
+            ]
           },
           "type": "array"
         },

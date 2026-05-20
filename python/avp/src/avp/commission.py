@@ -1,48 +1,49 @@
 """avp.commission — Pydantic types for the AVP Commission Spec.
 
 Defines the Commission shape (supervisor → agent setup message) and the
-opaque managed-asset refs the supervisor declares. This module mirrors
+managed-asset entries the supervisor declares inline. This module mirrors
 the [Commission spec](../../../../spec/v0.1/commission.md).
 
 Consumers wanting only the run-config object can:
 
-    from avp.commission import Commission, McpServerRef, SubagentRef
+    from avp.commission import Commission, McpServerHttp, McpServerStdio
 
-…without dragging in Trajectory / Descriptor / Resolver API types.
+…without dragging in Trajectory / Descriptor types.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
 from avp._envelope import _STRICT
 
-# An opaque, supervisor-defined reference resolved by the AVP resolver
-# protocol. AVP does not constrain the shape; it can be a string (UUID, ARN,
-# content hash, URL, anything the supervisor's resolver understands), an
-# object (the supervisor's own structured shape, e.g. Anthropic Managed
-# Agents' `{type, skill_id, version}`), or any other JSON value. The agent
-# round-trips the value verbatim to the resolver and uses the returned
-# connection material; the agent never interprets it.
 _ID_PATTERN = r"^[a-z0-9_-]+$"
 
 
-class McpServerRef(BaseModel):
-    """Reference to a supervisor-managed MCP server.
-
-    The agent resolves this entry at startup by calling `avp.resolve` with
-    `{kind: "mcp_server", id, ref}`. The resolver returns the connection
-    material (transport, URL, auth, etc.) the agent uses to dial the actual
-    MCP server. Per-`kind` result schemas are pinned in the Resolver API
-    spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
-    concerns; AVP does not constrain them.
-    """
+class McpServerHttp(BaseModel):
+    """Inline HTTP MCP server entry in Commission.mcp_servers."""
 
     model_config = _STRICT
     id: str = Field(min_length=1, pattern=_ID_PATTERN)
-    ref: JsonValue
+    type: Literal["http"]
+    url: str = Field(min_length=1)
+    headers: dict[str, str] | None = None
+
+
+class McpServerStdio(BaseModel):
+    """Inline stdio MCP server entry in Commission.mcp_servers."""
+
+    model_config = _STRICT
+    id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    type: Literal["stdio"]
+    command: list[str] = Field(min_length=1)
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+
+
+McpServer = Annotated[McpServerHttp | McpServerStdio, Field(discriminator="type")]
 
 
 class SkillRef(BaseModel):
@@ -103,20 +104,17 @@ class SupervisorPreamble(BaseModel):
 class Commission(BaseModel):
     """Supervisor's declaration of the supervisor-managed environment slice.
 
-    All asset entries (`mcp_servers`, `skills`, `subagents`) are opaque refs
-    resolved by the AVP Resolver API at startup (see `spec/v0.1/resolver.md`).
-    The
-    supervisor never embeds connection material, file paths, or inline
-    asset definitions on the wire; those land in `run_requested.data`
-    on the trajectory and would leak secrets to consumers.
+    Managed asset entries (`mcp_servers`, `skills`) carry inline connection
+    material; no resolver round-trip is needed. The agent dials MCP servers
+    and injects skill content directly from these fields at startup.
 
     Anything the agent provides on its own (in-process tools, baked-in
-    skills, internally-defined subagents) is invisible to AVP and the
-    Commission entirely. The agent's own contribution surfaces in
-    `agent_described.data["avp.descriptor"]` so consumers can audit what the
-    agent showed up with. The agent's runtime layer merges its internal
-    contribution with the resolved managed assets into one bag the loop
-    dispatches against; collisions on `id` are a startup error.
+    skills) is invisible to AVP and the Commission entirely. The agent's own
+    contribution surfaces in `agent_described.data["avp.descriptor"]` so
+    consumers can audit what the agent showed up with. The agent's runtime
+    layer merges its internal contribution with the Commission-managed assets
+    into one bag the loop dispatches against; collisions on `id` are a
+    startup error.
     """
 
     model_config = _STRICT
@@ -130,12 +128,9 @@ class Commission(BaseModel):
     # still emits `run_requested` but with `avp.supervisor.name="unknown"`.
     supervisor: SupervisorPreamble | None = None
 
-    # Supervisor-managed assets. Each entry is `{id, ref}` where `ref` is
-    # opaque to AVP and to the agent. Resolution timing:
-    #   - mcp_servers, skills: at startup (fail-fast on resolver error)
-    #   - subagents: metadata at startup; spawn on-demand via
-    #     `avp.spawn_subagent` when the model invokes the subagent
-    mcp_servers: list[McpServerRef] | None = None
+    # Supervisor-managed assets. Connection material is inline; agents dial
+    # MCP servers and load skill content directly at startup.
+    mcp_servers: list[McpServer] | None = None
     skills: list[SkillRef] | None = None
     subagents: list[SubagentRef] | None = None
 
@@ -177,7 +172,9 @@ class Commission(BaseModel):
 
 __all__ = [
     "Commission",
-    "McpServerRef",
+    "McpServer",
+    "McpServerHttp",
+    "McpServerStdio",
     "SkillRef",
     "SubagentRef",
     "SupervisorPreamble",

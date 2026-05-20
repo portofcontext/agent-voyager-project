@@ -49,7 +49,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
   "model":         "claude-sonnet-4-6",
 
   "mcp_servers": [
-    { "id": "github", "ref": { "vault": "prod", "key": "gh-mcp-v2" } }
+    { "id": "github", "type": "http", "url": "https://mcp.example.com/github", "headers": { "Authorization": "Bearer ghp_..." } }
   ],
   "skills": [
     { "id": "style-guide",     "ref": "sha256:abc..." },
@@ -86,7 +86,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
 |---|---|---|
 | `supervisor` | `{ name: string, version?: string }` | Attribution for `run_requested`. When absent, the corresponding `avp.supervisor.*` fields on `run_requested` are omitted (absence is the canonical signal; the prior `"unknown"` placeholder is superseded). |
 | `system_prompt` | string | The agent's system context. Overrides `descriptor.system_prompt` when both are set. |
-| `mcp_servers` | `Array<{ id: string, ref: JsonValue }>` | Managed MCP server refs. See §3. |
+| `mcp_servers` | `Array<McpServerHttp \| McpServerStdio>` | Inline MCP server connection material, discriminated on `type`. See §3. |
 | `skills` | `Array<{ id: string, ref: JsonValue }>` | Managed Agent Skill refs. See §3. |
 | `subagents` | `Array<{ id: string, ref: JsonValue }>` | Managed subagent refs. See §3. |
 | `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.tools[].name`. See §4. |
@@ -100,29 +100,46 @@ A Commission is a single JSON document validating against [`commission.schema.js
 
 ---
 
-## 3. Managed assets (refs only)
+## 3. Managed assets (inline)
 
-`mcp_servers`, `skills`, and `subagents` carry **only opaque refs** in v0.1. Each entry is:
+`mcp_servers` and `skills` carry **inline connection material** in v0.1. No resolver round-trip is needed; the agent dials MCP servers and loads skill content directly from the Commission at startup.
+
+### 3.1 MCP server entries
+
+Each entry in `mcp_servers` is a discriminated union on `type`:
+
+**HTTP transport:**
 
 ```jsonc
-{ "id": "<stable identifier the supervisor picked>", "ref": <JsonValue> }
+{
+  "id": "github",
+  "type": "http",
+  "url": "https://mcp.example.com/github",
+  "headers": { "Authorization": "Bearer ghp_..." }  // optional
+}
 ```
 
-- **`id`**: a string the supervisor chooses. Becomes the model-facing name once resolved (or the resolver MAY override via its `name` field for `subagent` / `skill` results). Stable across the run.
-- **`ref`**: an arbitrary JSON value the supervisor's resolver service understands. Strings, objects, arrays, numbers, booleans, and `null` are all legal. The agent MUST NOT inspect `ref`; it passes the value verbatim to the resolver.
+**stdio transport:**
 
-The Commission carries **no inline connection material**: no URLs, no auth tokens, no SKILL.md bodies, no subagent system prompts. All of that arrives via the [Resolver API](./resolver.md) at startup. This keeps the Commission auditable without secret redaction.
+```jsonc
+{
+  "id": "fs",
+  "type": "stdio",
+  "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+  "args": ["/workspace"],    // optional
+  "env": { "HOME": "/tmp" }  // optional
+}
+```
 
-If a Commission carries any non-empty asset list, the agent MUST be configured with a reachable resolver service (the `AVP_RESOLVER_URL` env var); see [`resolver.md`](./resolver.md) §2. The Trajectory Spec's run-prelude rules (§2.2 of [`trajectory.md`](./trajectory.md)) describe the resolution events that fire before the first model turn.
+- **`id`**: a string the supervisor chooses. Stable across the run. MUST match `^[a-z0-9_-]+$`.
+- `headers` is optional. Pass auth and any other request headers directly (e.g. `"Authorization": "Bearer <token>"`).
 
-### 3.1 Asset-id collisions
+### 3.2 Asset-id collisions
 
 The agent MUST detect the following at startup and fail with `error_occurred(code: "commission_collision")` followed by `agent_stopped(reason: "error")`:
 
 - `Commission.mcp_servers[].id` matching `descriptor.mcp_servers[].id`.
 - `Commission.skills[].id` matching `descriptor.skills[].name`.
-- `Commission.subagents[].id` matching `descriptor.subagents[].name`.
-- `Commission.subagents[].id` matching `descriptor.tools[].name` (subagents surface to the model as tools).
 
 These collisions are configuration errors; the supervisor referenced an id the agent already declares. Fail-fast surfaces the conflict before any model turn.
 
