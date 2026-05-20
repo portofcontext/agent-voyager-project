@@ -46,12 +46,13 @@ from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
 from avp.agent.sink import EventSink, stdio_sink
+from avp.commission import Commission
 from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.trajectory import StopReason
+from avp_claude_agent_sdk._commission import apply_commission
 from avp_claude_agent_sdk._emit import (
     emit_agent_described,
-    emit_agent_started,
     emit_agent_stopped,
     emit_error,
     emit_run_requested,
@@ -67,12 +68,15 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
     def __init__(
         self,
         options: ClaudeAgentOptions | None = None,
+        commission: Commission | None = None,
         transport: Any | None = None,
         *,
         sink: EventSink = stdio_sink,
     ) -> None:
-        super().__init__(options=options, transport=transport)
+        run_options = apply_commission(commission, options)
+        super().__init__(options=run_options, transport=transport)
         self._original_options = options
+        self._commission = commission
         self._sink = sink
         self._avp_token = None
 
@@ -81,38 +85,38 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         #    via a transient CLI session.
         probe_init, probe_status = await _probe_describe(self._original_options)
 
+        final_prompt = prompt
+        if self._commission is not None and self._commission.prompt is not None:
+            final_prompt = self._commission.prompt
+
         # 2. Set up RunState + emit the prelude. agent_described carries
         #    the probe view; agent_started carries the merged-state view
         state = RunState(
+            prompt=final_prompt,
             trace_id=new_trace_id(),
             run_id=str(uuid.uuid4()),
             sink=self._sink,
             prices=load_default_prices(),
         )
         self._avp_token = set_run(state)
-        prompt_text = prompt if isinstance(prompt, str) else None
+        original_prompt = prompt if isinstance(prompt, str) else None
 
-        await emit_run_requested(state)
+        await emit_run_requested(state, commission=self._commission)
         await emit_agent_described(
             state,
             self._original_options,
-            prompt=prompt_text,
+            prompt=original_prompt,
             init_data=probe_init,
             status=probe_status,
         )
-        # TODO: merge comission and override
 
-        await emit_agent_started(
-            state,
-            prompt=prompt_text,
-            options=self.options,
-            init_data=probe_init,
-            status=probe_status,
-        )
+        final_prompt = prompt
+        if self._commission is not None and self._commission.prompt is not None:
+            final_prompt = self._commission.prompt
 
         # 3. Real connect: boot the actual run session. The user's
         #    query() / receive_response() drive from here.
-        await super().connect(prompt)
+        await super().connect(final_prompt)
 
     async def receive_response(self) -> AsyncIterator[Any]:
         """Tee `super().receive_response()` through AVP emission.
@@ -126,7 +130,7 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         try:
             async for message in super().receive_response():
                 if state is not None:
-                    await handle_message(state, message)
+                    await handle_message(self, state, message)
                 yield message
         except BaseException as exc:
             if state is not None and not state.stopped:

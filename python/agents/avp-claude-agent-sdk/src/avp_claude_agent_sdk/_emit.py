@@ -11,11 +11,13 @@ import json
 import time
 from typing import Any
 
+from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import (
     AssistantMessage,
     ClaudeAgentOptions,
     McpStatusResponse,
     Message,
+    SystemMessage,
     TaskNotificationMessage,
     TaskStartedMessage,
     TaskUsage,
@@ -23,6 +25,7 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 
+from avp.commission import Commission
 from avp.content import AVPContentBlock
 from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
 from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
@@ -71,7 +74,7 @@ from avp_claude_agent_sdk._translator import (
 _PROVIDER_NAME = "anthropic"
 
 
-async def emit_run_requested(state: RunState) -> None:
+async def emit_run_requested(state: RunState, commission: Commission | None = None) -> None:
     """First event of the trajectory. Anchors the run."""
     await state.sink(
         RunRequestedEvent(
@@ -80,6 +83,7 @@ async def emit_run_requested(state: RunState) -> None:
                 trace_id=state.trace_id,
                 span_id=new_span_id(),
                 parent_span_id=ZERO_SPAN_ID,
+                commission=commission,
             ),
         )
     )
@@ -201,6 +205,23 @@ async def emit_error(
 # ---------------------------------------------------------------------------
 # Per-message handlers
 # ---------------------------------------------------------------------------
+
+
+async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: SystemMessage) -> None:
+    """Emit `agent_started` on the real session's first `init` SystemMessage.
+
+    Skips non-`init` subtypes and double-fires (state.agent_started_emitted).
+    Uses init_data from the *real* session (not the probe's) so the merged
+    snapshot reflects what the run will actually use.
+    """
+    status = await client.get_mcp_status()
+    await emit_agent_started(
+        state,
+        prompt=state.prompt,
+        options=client.options,
+        init_data=message.data,
+        status=status,
+    )
 
 
 async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
@@ -536,9 +557,11 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
 # ---------------------------------------------------------------------------
 
 
-async def handle_message(state: RunState, message: Message) -> None:
+async def handle_message(client: ClaudeSDKClient, state: RunState, message: Message) -> None:
     """Dispatch one SDK message to the appropriate AVP emitter. Mutates state."""
-    if isinstance(message, AssistantMessage):
+    if isinstance(message, SystemMessage):
+        await _on_system_init(client, state, message)
+    elif isinstance(message, AssistantMessage):
         await _on_assistant(state, message)
     elif isinstance(message, UserMessage):
         await _on_user(state, message)
@@ -548,5 +571,5 @@ async def handle_message(state: RunState, message: Message) -> None:
         await _on_task_notification(state, message)
     # elif isinstance(message, ResultMessage):
     #     await _on_result(state, message)
-    # SystemMessage, TaskProgressMessage, MirrorErrorMessage, StreamEvent,
-    # RateLimitEvent: drop. Honest-silent beats fabricated events.
+    # TaskProgressMessage, MirrorErrorMessage, StreamEvent, RateLimitEvent:
+    # drop. Honest-silent beats fabricated events.

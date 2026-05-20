@@ -18,12 +18,12 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions
 from rich.console import Console
 
+from avp.commission import Commission
 from avp.trajectory import Event
-from avp_claude_agent_sdk import setup_avp
+from avp_claude_agent_sdk import AVPClaudeSDKClient
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 
@@ -46,8 +46,13 @@ async def _run(prompt: str, model: str | None) -> None:
             avp_console.print("\n" + "*" * 40 + f" [{counter}] AVP ({e.type}) " + "*" * 40)
             avp_console.print(e)
 
-        setup_avp(sink=rich_sink)
-        async with ClaudeSDKClient(options=options) as client:
+        async with AVPClaudeSDKClient(
+            options=options,
+            sink=rich_sink,
+            commission=Commission(
+                enabled_builtin_tools=["Bash"], schema_version="0.1", run_id="test"
+            ),
+        ) as client:
             await client.query(prompt)
             async for message in client.receive_response():
                 counter += 1

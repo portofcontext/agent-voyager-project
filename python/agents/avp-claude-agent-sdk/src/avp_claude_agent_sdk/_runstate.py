@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import dataclasses
 import time
+from collections.abc import AsyncIterable
 from typing import Any
 
 from avp.agent.sink import EventSink
@@ -113,6 +114,8 @@ class Turn:
 class RunState:
     """Flat per-run state. One instance per active run."""
 
+    # Prompt the agent was started with
+    prompt: str | AsyncIterable[dict[str, Any]] | None
     # Where every event for this run is written. Transport is the caller's choice.
     sink: EventSink
     # Supervisor-issued run identifier; CloudEvents `subject` on every event.
