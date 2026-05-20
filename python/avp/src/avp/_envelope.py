@@ -1,7 +1,7 @@
 """Shared CloudEvents 1.0 / OTel span scaffolding for AVP v0.1.
 
 Private module. Consumers MUST import from the spec-scoped namespaces
-(`avp.trajectory`, `avp.commission`, `avp.descriptor`, `avp.resolver`)
+(`avp.trajectory`, `avp.commission`, `avp.descriptor`)
 which re-export the public bits of this file.
 
 What lives here is the cross-cutting wire scaffolding shared by every

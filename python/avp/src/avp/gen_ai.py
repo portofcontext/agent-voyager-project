@@ -77,7 +77,7 @@ def to_gen_ai_attrs(event: Event) -> dict[str, Any]:
     Keys are the OTel GenAI registry names; values are passed through
     from the AVP payload unchanged (no unit conversion). Returns `{}`
     for events with no GenAI projection (`run_requested`, `agent_stopped`,
-    `mcp_*`, `managed_ref_*`, `error_occurred`, `UnknownEvent`).
+    `mcp_*`, `error_occurred`, `UnknownEvent`).
     """
     if isinstance(event, AgentStartedEvent):
         d = event.data

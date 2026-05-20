@@ -209,8 +209,8 @@ When a [Commission](./commission.md) is in play at run time, descriptor entries 
 ```
 
 - `Commission.enabled_builtin_*` is **subtractive-only over the descriptor**. It never enables a Commission-supplied asset; those are always active by virtue of being present in the Commission.
-- Descriptor entries are agent-internal (no resolver round-trip, no `managed_ref_resolved` event). Commission entries are opaque refs the agent dereferences via the Resolver API.
-- An id/name collision between a descriptor entry and a Commission entry MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn. Specifically: `descriptor.mcp_servers[].id` vs `Commission.mcp_servers[].id`; `descriptor.skills[].name` vs `Commission.skills[].id`; `descriptor.subagents[].name` vs `Commission.subagents[].id`; and any subagent id/name colliding with `descriptor.tools[].name` (subagents surface to the model as tools).
+- Descriptor entries are agent-internal. Commission entries carry inline connection material and are always active by virtue of being present.
+- An id/name collision between a descriptor entry and a Commission entry MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn. Specifically: `descriptor.mcp_servers[].id` vs `Commission.mcp_servers[].id`; `descriptor.skills[].name` vs `Commission.skills[].id`.
 - A name in `Commission.enabled_builtin_*` that doesn't appear in the corresponding `descriptor.*` field is the same `commission_collision`.
 
 **Tools (`descriptor.tools` only):** the effective local tool catalog for the run is `descriptor.tools` filtered by `Commission.enabled_builtin_tools`. MCP-surfaced tools are not enumerated here (§2.3); they come from each dialed server's `tools/list` at runtime and live on the corresponding `mcp_server_connected` events. Disabling a server via `Commission.enabled_builtin_mcp_servers` prevents the dial, so its tools never become available for the run.
@@ -240,7 +240,6 @@ Implementations MAY publish additional vendor-namespaced flags (e.g., `vendor.ac
 |---|---|
 | [Trajectory](./trajectory.md) | The Descriptor payload is the body of `agent_described.data["avp.descriptor"]`. The pre-flight `describe` surface and the run-time `agent_described` event MUST emit byte-identical JSON for the same agent build. |
 | [Commission](./commission.md) | Commission's `enabled_builtin_*` allow-lists reference Descriptor-declared `name`/`id`s (subtractive-only over the descriptor). Prompt-shaped fields override per §2.7; list-shaped fields merge as `(descriptor filtered by enabled_builtin_*) ∪ Commission` with id-collision = `commission_collision` fail-fast. |
-| [Resolver API](./resolver.md) | Descriptor entries are internal to the agent — no resolver round-trip, no `managed_ref_resolved` event. Commission-declared refs go through `avp.resolve` as usual. |
 
 A consumer that adopts only the Agent Descriptor Spec can run an agent's `describe` command and ingest the result for catalog/discovery purposes without ever sending a Commission or reading a trajectory.
 

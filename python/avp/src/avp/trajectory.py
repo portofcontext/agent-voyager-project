@@ -13,8 +13,7 @@ Consumers wanting only the event stream can:
         parse_event,
     )
 
-…without dragging in Commission / Descriptor / Resolver API types they
-don't use.
+…without dragging in Commission / Descriptor types they don't use.
 
 The wire format is built on:
 
@@ -25,10 +24,7 @@ The wire format is built on:
   tree.
 
 All AVP-defined `data` attributes (token / cost / model / tool /
-subagent / refusal / step / content) live under the single `avp.*`
-namespace. OpenTelemetry GenAI semantic conventions are NOT carried on
-the wire; an AVP → OTel-attribute projection is documented in
-`FOUNDATIONS.md` for consumers translating into OTel-native backends.
+subagent / refusal / step / content) live under the single `avp.*` namespace.
 See `spec/v0.1/trajectory.md` for the normative attribute reference.
 """
 
@@ -76,8 +72,6 @@ T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
 T_SUBAGENT_INVOKED = "avp.subagent_invoked"
 T_SUBAGENT_RETURNED = "avp.subagent_returned"
 T_SUBAGENT_FAILED = "avp.subagent_failed"
-T_MANAGED_REF_RESOLVED = "avp.managed_ref_resolved"
-T_MANAGED_REF_RESOLVE_FAILED = "avp.managed_ref_resolve_failed"
 
 
 class StopReason(StrEnum):
@@ -99,8 +93,6 @@ class ErrorCode(StrEnum):
     auth_error = "auth_error"
     agent_crash = "agent_crash"
     unsupported_model = "unsupported_model"
-    # Commission-managed-asset / resolver-protocol error codes (v0.1).
-    resolver_not_configured = "resolver_not_configured"
     commission_collision = "commission_collision"
     unknown = "unknown"
 
@@ -133,15 +125,9 @@ class SubagentUsage(BaseModel):
     """Narrow totals carrier for the in-process subagent rollup.
 
     Used ONLY on `subagent_returned.data["avp.subagent.usage"]` when the
-    parent agent's SDK does not expose the child's per-turn events
-    (e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`
-    with `TaskUsage` and never exposes per-turn AssistantMessages for the
-    child). In that fallback case this is the only signal the supervisor
-    receives of the child's spend.
-
-    Managed subagents (separate `run_id`, separate trajectory the supervisor
-    reads) MUST NOT use this; the supervisor reads the child's trajectory
-    directly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md).
+    parent agent's SDK does not expose the child's per-turn events (e.g.
+    Claude Agent SDK's Task tool). `extra="allow"` so SDK-specific fields
+    (total_tokens, tool_uses, duration_ms) round-trip verbatim.
     """
 
     model_config = _OPEN
@@ -292,12 +278,8 @@ class SubagentInvokedData(_SpanData):
     the event type itself signals an `invoke_agent`-style operation, so no
     separate operation-name field is carried on the wire.
 
-    `avp.subagent.run_id` is set when the subagent is supervisor-managed:
-    the parent's runtime calls `avp.spawn_subagent` and receives the child
-    `run_id` of the subagent's separate, independently-trajectoried run.
-    Consumers correlate the parent and child trajectories via this field.
-    Absent (or null) when the subagent runs in-process (the parent's loop
-    is the same process as the subagent's loop).
+    `avp.subagent.run_id` is reserved for future use when the subagent runs
+    as a separate commissioned trajectory. Absent for in-process subagents.
     """
 
     step: int = Field(ge=0, alias="avp.step")
@@ -379,8 +361,8 @@ class McpServerConnectedData(_SpanData):
     # SDK-reported connection status, mirroring the Claude Agent SDK's
     # McpServerStatus.status enum. Default null because pre-live-transport
     # stub emitters didn't have this signal.
-    mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = (
-        Field(default=None, alias="avp.mcp.status")
+    mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = Field(
+        default=None, alias="avp.mcp.status"
     )
     # Error message when status indicates failure (failed / needs-auth).
     # Surfaces the SDK's `error` field verbatim. Null on healthy connects.
@@ -391,42 +373,6 @@ class McpServerDisconnectedData(_SpanData):
     mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
     mcp_disconnect_reason: Literal["clean", "error"] = Field(alias="avp.mcp.disconnect_reason")
     mcp_disconnect_message: str | None = Field(default=None, alias="avp.mcp.disconnect_message")
-
-
-# Kinds of asset the AVP resolver protocol can dereference. Carried on
-# `managed_ref_resolved` / `managed_ref_resolve_failed` events to discriminate
-# which asset class the resolution was for.
-ManagedKind = Literal["mcp_server", "skill", "subagent"]
-
-
-class ManagedRefResolvedData(_SpanData):
-    """Audit event emitted when the agent successfully resolves one
-    Commission-declared managed-asset ref via the AVP resolver protocol.
-
-    Fires once per `Commission.{mcp_servers,skills,subagents}[]` entry the
-    agent dereferences. For mcp_servers and skills the resolution is
-    startup-only; for subagents this fires for the metadata-resolve at
-    startup (the on-demand spawn at runtime is recorded on
-    `subagent_invoked` instead). The opaque ref material is NOT re-recorded
-    here; `run_requested.data["avp.commission"]` already has it. This
-    event records only that the round-trip happened.
-    """
-
-    managed_kind: ManagedKind = Field(alias="avp.managed.kind")
-    managed_id: str = Field(min_length=1, alias="avp.managed.id")
-    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-
-
-class ManagedRefResolveFailedData(_SpanData):
-    """The resolver returned an error or could not be reached for one of
-    the Commission's managed-asset refs. The agent MUST stop with
-    `agent_stopped(reason: "error")` after emitting this event. Startup
-    resolution is fail-fast (see `spec/v0.1/resolver.md` §5)."""
-
-    managed_kind: ManagedKind = Field(alias="avp.managed.kind")
-    managed_id: str = Field(min_length=1, alias="avp.managed.id")
-    resolve_error: str = Field(min_length=1, alias="avp.resolve.error")
-    resolve_error_code: str | None = Field(default=None, alias="avp.resolve.error.code")
 
 
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
@@ -527,18 +473,6 @@ class McpServerDisconnectedEvent(_CloudEventBase):
     data: McpServerDisconnectedData
 
 
-class ManagedRefResolvedEvent(_CloudEventBase):
-    type: Literal["avp.managed_ref_resolved"] = T_MANAGED_REF_RESOLVED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ManagedRefResolvedData
-
-
-class ManagedRefResolveFailedEvent(_CloudEventBase):
-    type: Literal["avp.managed_ref_resolve_failed"] = T_MANAGED_REF_RESOLVE_FAILED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: ManagedRefResolveFailedData
-
-
 class UnknownEvent(_CloudEventBase):
     """Catch-all for CloudEvents whose `type` is not in the AVP-defined
     union. Validates the CloudEvents 1.0 envelope plus the AVP span
@@ -575,8 +509,6 @@ _AGENT_EVENT_TYPES = (
     ErrorOccurredEvent,
     McpServerConnectedEvent,
     McpServerDisconnectedEvent,
-    ManagedRefResolvedEvent,
-    ManagedRefResolveFailedEvent,
 )
 
 Event = Annotated[
@@ -592,9 +524,7 @@ Event = Annotated[
     | SubagentFailedEvent
     | ErrorOccurredEvent
     | McpServerConnectedEvent
-    | McpServerDisconnectedEvent
-    | ManagedRefResolvedEvent
-    | ManagedRefResolveFailedEvent,
+    | McpServerDisconnectedEvent,
     Field(discriminator="type"),
 ]
 
@@ -632,8 +562,6 @@ __all__ = [
     "T_AGENT_STOPPED",
     "T_ASSISTANT_MESSAGE",
     "T_ERROR_OCCURRED",
-    "T_MANAGED_REF_RESOLVED",
-    "T_MANAGED_REF_RESOLVE_FAILED",
     "T_MCP_SERVER_CONNECTED",
     "T_MCP_SERVER_DISCONNECTED",
     "T_RUN_REQUESTED",
@@ -654,11 +582,6 @@ __all__ = [
     "ErrorOccurredData",
     "ErrorOccurredEvent",
     "Event",
-    "ManagedKind",
-    "ManagedRefResolveFailedData",
-    "ManagedRefResolveFailedEvent",
-    "ManagedRefResolvedData",
-    "ManagedRefResolvedEvent",
     "McpServerConnectedData",
     "McpServerConnectedEvent",
     "McpServerDisconnectedData",

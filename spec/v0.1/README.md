@@ -9,11 +9,10 @@ This directory is the **normative specification** for v0.1 of the Agent Voyager 
 | Sub-spec | Kind | What it defines | File |
 |---|---|---|---|
 | **AVP Trajectory** | Data-shape spec | The event stream: CloudEvents envelope, OTel span/GenAI attrs, event-type catalog, ordering/pairing invariants, the agent loop algorithm | [`trajectory.md`](./trajectory.md) |
-| **AVP Commission** | Data-shape spec | The run-config object: prompt, model, refs-only managed assets, `enabled_builtin_*` allowlist semantics | [`commission.md`](./commission.md) |
+| **AVP Commission** | Data-shape spec | The run-config object: prompt, model, inline managed assets, `enabled_builtin_*` allowlist semantics | [`commission.md`](./commission.md) |
 | **AVP Agent Descriptor** | Data-shape spec | What an agent advertises pre-flight: built-in tool/subagent/skill catalogs, capabilities, supported models | [`agent-descriptor.md`](./agent-descriptor.md) |
-| **AVP Resolver API** | Protocol | JSON-RPC 2.0 methods (`avp.resolve`, `avp.spawn_subagent`) for dereferencing managed-asset refs against a supervisor-stood-up service | [`resolver.md`](./resolver.md) |
 
-The three data-shape specs are independent; each can be adopted on its own. The Resolver API is the only spec that defines wire-level request/response between two parties, and depends on Commission (the refs it dereferences live there).
+The three data-shape specs are independent; each can be adopted on its own.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in every spec are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
 
@@ -25,9 +24,8 @@ AVP specializes (it does not reinvent) the following industry specs:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
 - **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../FOUNDATIONS.md).
-- **JSON-RPC 2.0** for the AVP Resolver API. Agent → resolver service calls (`avp.resolve`, `avp.spawn_subagent`) that dereference opaque refs in the Commission.
-- **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` are opaque refs the agent resolves into MCP connection material; the agent then runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
-- **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries are refs; the resolver returns SKILL.md content (or a location to fetch).
+- **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` carry inline connection material; the agent runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
+- **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries carry inline file content including `SKILL.md`.
 - **JSON Schema Draft 2020-12** for this specification's machine-readable form.
 
 AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace. See [`../../FOUNDATIONS.md`](../../FOUNDATIONS.md) for the full mapping rationale and ATIF (Harbor) positioning.
@@ -36,25 +34,24 @@ AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory
 
 ## 1. The seam
 
-AVP defines exactly one seam, between two roles, with **two unidirectional flows** crossing it, plus **one agent-initiated callback** to a supervisor-stood-up resolver service:
+AVP defines exactly one seam, between two roles, with **two unidirectional flows** crossing it:
 
-- **Supervisor**: declares a Commission at startup with the prompt, model, and supervisor-managed assets (`mcp_servers`, `skills`, `subagents`) as opaque refs. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
-- **Agent**: runs inside the Commission. Calls the supervisor's resolver service (Resolver API) at startup to dereference managed refs into connection material. Emits a stream of facts (events), the trajectory, that the supervisor observes.
+- **Supervisor**: declares a Commission at startup with the prompt, model, and managed assets (`mcp_servers`, `skills`) with inline connection material. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
+- **Agent**: runs inside the Commission. Dials MCP servers and loads skills directly from the Commission. Emits a stream of facts (events), the trajectory, that the supervisor observes.
 
 ```
    supervisor  ──────── Commission ─────────▶  agent
                                                  │
-                                                 │  resolves managed refs at
-                                                 │  startup via avp.resolve
-                                                 │  to a supervisor-stood-up
-                                                 │  resolver service
+                                                 │  dials MCP servers, loads
+                                                 │  skills from inline
+                                                 │  Commission content
                                                  │
                                                  │  runs the run, emits events
                                                  ▼
    supervisor  ◀──────── trajectory ─────────  agent
 ```
 
-This is the v0.1 architectural choice: **the supervisor configures, the agent runs, the trajectory is the truth.** No mid-run supervisor → agent push channel. The agent's bounded context is intact because its environment was fully specified up front; runtime resolution of opaque refs is agent-initiated, scoped to startup, and recorded on the trajectory as `managed_ref_resolved` / `managed_ref_resolve_failed` events.
+This is the v0.1 architectural choice: **the supervisor configures, the agent runs, the trajectory is the truth.** No mid-run supervisor → agent push channel. The agent's bounded context is fully specified in the Commission before any model turn runs.
 
 What an agent provides on its own (built-in tools, baked-in skills, in-process subagent definitions) is invisible to AVP and the Commission. It surfaces only on the agent's Descriptor (`agent_described.data["avp.descriptor"]`), which the supervisor and any auditor can read on the trajectory's second event.
 
@@ -66,7 +63,6 @@ What an agent provides on its own (built-in tools, baked-in skills, in-process s
 |---|---|---|---|
 | `Commission` | supervisor → agent | exactly one, at startup | [Commission](./commission.md) |
 | `Event` | agent → supervisor | streamed throughout the run | [Trajectory](./trajectory.md) |
-| `avp.resolve` / `avp.spawn_subagent` (request / response) | agent ↔ resolver service | per managed ref / per managed subagent invocation | [Resolver API](./resolver.md) |
 
 v0.1 has no supervisor → agent push channel.
 
@@ -75,8 +71,6 @@ v0.1 has no supervisor → agent push channel.
 ## 3. Transport
 
 AVP is transport-agnostic for the Commission / event pipe. The three data-shape specs (Commission, Trajectory, Agent Descriptor) describe JSON document shapes; how those bytes move between supervisor and agent is a deployment concern. Subprocess pipes, HTTP, Server-Sent Events, a message bus, an in-process callback: any of these can carry a Commission in and trajectory events out, as long as the JSON on the wire matches the spec schemas.
-
-The Resolver API is the one exception: it IS a wire protocol (JSON-RPC 2.0 over HTTP/HTTPS/unix-socket) because it's a runtime request/response service the agent dials. See [`resolver.md`](./resolver.md) §1.
 
 ### 3.1 Reference binding: stdio
 
@@ -116,9 +110,8 @@ v0.1 does not specify verifiers. The deterministic-checks-at-trigger-points conc
 AVP defines the **wire format**, not the deployment topology. The following are explicitly **out of scope**, and implementations choose:
 
 - **Workspace provisioning.** What directory the agent runs in, how files (reference data, source trees) get there, and how it's cleaned up after (git checkout, container volume mount, tmpdir, NFS share, etc).
-- **Secret injection.** How API keys and credentials reach the agent process and the resolver service (env vars, secrets manager, mounted files).
-- **MCP server hosting.** Where supervisor-declared MCP servers run, how they're discovered, how they're scaled. The supervisor's resolver knows where each ref points; AVP records the dispatch.
-- **Resolver hosting.** Where `AVP_RESOLVER_URL` points, how it authenticates, how it scales. Same trust boundary as the agent process; the supervisor configures both.
+- **Secret injection.** How API keys and credentials reach the agent process (env vars, secrets manager, mounted files). Note: MCP server auth headers in `Commission.mcp_servers[].headers` are supervisor-injected at Commission construction time; how the supervisor obtains those credentials is a deployment concern.
+- **MCP server hosting.** Where supervisor-declared MCP servers run, how they're discovered, how they're scaled.
 - **Agent placement.** Local subprocess, Docker container, remote VM, serverless function, browser sandbox.
 - **OS-level sandboxing.** seccomp, AppArmor, cgroups, network policies, filesystem capabilities.
 - **Authentication of the supervisor↔agent channel** beyond what the chosen transport inherits from its environment.

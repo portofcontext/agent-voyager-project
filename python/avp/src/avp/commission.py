@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, JsonValue, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from avp._envelope import _STRICT
 
@@ -81,23 +81,6 @@ class Skill(BaseModel):
         return self._frontmatter_value("description")
 
 
-class SubagentRef(BaseModel):
-    """Reference to a supervisor-managed subagent.
-
-    The agent resolves this entry at startup by calling `avp.resolve` with
-    `{kind: "subagent", id, ref}`; the resolver returns the model-facing
-    metadata (`name`, `description`, `inputSchema`) so the parent's model
-    can decide whether to delegate. When the model invokes the subagent at
-    runtime, the agent calls `avp.spawn_subagent` with the same ref to
-    obtain a child `run_id`. The subagent run carries its own complete
-    trajectory; the parent's `subagent_invoked.data["avp.subagent.run_id"]`
-    references it.
-    """
-
-    model_config = _STRICT
-    id: str = Field(min_length=1, pattern=_ID_PATTERN)
-    ref: JsonValue
-
 
 class SupervisorPreamble(BaseModel):
     """Identifies the supervisor that is requesting the run.
@@ -152,7 +135,6 @@ class Commission(BaseModel):
     # MCP servers and load skill content directly at startup.
     mcp_servers: list[McpServer] | None = None
     skills: list[Skill] | None = None
-    subagents: list[SubagentRef] | None = None
 
     # Allow-lists over the agent's Descriptor-declared surface. Each list
     # gates the parallel `descriptor.*` field for this run.
@@ -196,6 +178,5 @@ __all__ = [
     "McpServerHttp",
     "McpServerStdio",
     "Skill",
-    "SubagentRef",
     "SupervisorPreamble",
 ]

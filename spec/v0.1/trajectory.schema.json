@@ -1292,21 +1292,6 @@
           "default": null,
           "title": "Skills"
         },
-        "subagents": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/SubagentRef"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subagents"
-        },
         "enabled_builtin_tools": {
           "anyOf": [
             {
@@ -1549,7 +1534,6 @@
         "auth_error",
         "agent_crash",
         "unsupported_model",
-        "resolver_not_configured",
         "commission_collision",
         "unknown"
       ],
@@ -1759,337 +1743,6 @@
         "source"
       ],
       "title": "ImageBlock",
-      "type": "object"
-    },
-    "JsonValue": {},
-    "ManagedRefResolveFailedData": {
-      "additionalProperties": true,
-      "description": "The resolver returned an error or could not be reached for one of\nthe Commission's managed-asset refs. The agent MUST stop with\n`agent_stopped(reason: \"error\")` after emitting this event. Startup\nresolution is fail-fast (see `spec/v0.1/resolver.md` §5).",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.managed.kind": {
-          "enum": [
-            "mcp_server",
-            "skill",
-            "subagent"
-          ],
-          "title": "Avp.Managed.Kind",
-          "type": "string"
-        },
-        "avp.managed.id": {
-          "minLength": 1,
-          "title": "Avp.Managed.Id",
-          "type": "string"
-        },
-        "avp.resolve.error": {
-          "minLength": 1,
-          "title": "Avp.Resolve.Error",
-          "type": "string"
-        },
-        "avp.resolve.error.code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Resolve.Error.Code"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.managed.kind",
-        "avp.managed.id",
-        "avp.resolve.error"
-      ],
-      "title": "ManagedRefResolveFailedData",
-      "type": "object"
-    },
-    "ManagedRefResolveFailedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.managed_ref_resolve_failed",
-          "default": "avp.managed_ref_resolve_failed",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ManagedRefResolveFailedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ManagedRefResolveFailedEvent",
-      "type": "object"
-    },
-    "ManagedRefResolvedData": {
-      "additionalProperties": true,
-      "description": "Audit event emitted when the agent successfully resolves one\nCommission-declared managed-asset ref via the AVP resolver protocol.\n\nFires once per `Commission.{mcp_servers,skills,subagents}[]` entry the\nagent dereferences. For mcp_servers and skills the resolution is\nstartup-only; for subagents this fires for the metadata-resolve at\nstartup (the on-demand spawn at runtime is recorded on\n`subagent_invoked` instead). The opaque ref material is NOT re-recorded\nhere; `run_requested.data[\"avp.commission\"]` already has it. This\nevent records only that the round-trip happened.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.managed.kind": {
-          "enum": [
-            "mcp_server",
-            "skill",
-            "subagent"
-          ],
-          "title": "Avp.Managed.Kind",
-          "type": "string"
-        },
-        "avp.managed.id": {
-          "minLength": 1,
-          "title": "Avp.Managed.Id",
-          "type": "string"
-        },
-        "avp.duration_ms": {
-          "minimum": 0,
-          "title": "Avp.Duration Ms",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.managed.kind",
-        "avp.managed.id",
-        "avp.duration_ms"
-      ],
-      "title": "ManagedRefResolvedData",
-      "type": "object"
-    },
-    "ManagedRefResolvedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.managed_ref_resolved",
-          "default": "avp.managed_ref_resolved",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/ManagedRefResolvedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "ManagedRefResolvedEvent",
       "type": "object"
     },
     "McpServerConnectedData": {
@@ -3278,7 +2931,7 @@
     },
     "SubagentInvokedData": {
       "additionalProperties": true,
-      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is set when the subagent is supervisor-managed:\nthe parent's runtime calls `avp.spawn_subagent` and receives the child\n`run_id` of the subagent's separate, independently-trajectoried run.\nConsumers correlate the parent and child trajectories via this field.\nAbsent (or null) when the subagent runs in-process (the parent's loop\nis the same process as the subagent's loop).",
+      "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is reserved for future use when the subagent runs\nas a separate commissioned trajectory. Absent for in-process subagents.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3459,27 +3112,6 @@
         "data"
       ],
       "title": "SubagentInvokedEvent",
-      "type": "object"
-    },
-    "SubagentRef": {
-      "additionalProperties": false,
-      "description": "Reference to a supervisor-managed subagent.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"subagent\", id, ref}`; the resolver returns the model-facing\nmetadata (`name`, `description`, `inputSchema`) so the parent's model\ncan decide whether to delegate. When the model invokes the subagent at\nruntime, the agent calls `avp.spawn_subagent` with the same ref to\nobtain a child `run_id`. The subagent run carries its own complete\ntrajectory; the parent's `subagent_invoked.data[\"avp.subagent.run_id\"]`\nreferences it.",
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "pattern": "^[a-z0-9_-]+$",
-          "title": "Id",
-          "type": "string"
-        },
-        "ref": {
-          "$ref": "#/$defs/JsonValue"
-        }
-      },
-      "required": [
-        "id",
-        "ref"
-      ],
-      "title": "SubagentRef",
       "type": "object"
     },
     "SubagentReturnedData": {
@@ -3674,7 +3306,7 @@
     },
     "SubagentUsage": {
       "additionalProperties": true,
-      "description": "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events\n(e.g. Claude Agent SDK's Task tool, which yields `TaskNotificationMessage`\nwith `TaskUsage` and never exposes per-turn AssistantMessages for the\nchild). In that fallback case this is the only signal the supervisor\nreceives of the child's spend.\n\nManaged subagents (separate `run_id`, separate trajectory the supervisor\nreads) MUST NOT use this; the supervisor reads the child's trajectory\ndirectly and sums deltas there. See [trajectory.md §6](../../../../spec/v0.1/trajectory.md).",
+      "description": "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events (e.g.\nClaude Agent SDK's Task tool). `extra=\"allow\"` so SDK-specific fields\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.",
       "properties": {
         "cost_usd": {
           "minimum": 0,
@@ -4434,8 +4066,6 @@
       "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
       "avp.assistant_message": "#/$defs/AssistantMessageEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
-      "avp.managed_ref_resolve_failed": "#/$defs/ManagedRefResolveFailedEvent",
-      "avp.managed_ref_resolved": "#/$defs/ManagedRefResolvedEvent",
       "avp.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
       "avp.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
@@ -4486,12 +4116,6 @@
     },
     {
       "$ref": "#/$defs/McpServerDisconnectedEvent"
-    },
-    {
-      "$ref": "#/$defs/ManagedRefResolvedEvent"
-    },
-    {
-      "$ref": "#/$defs/ManagedRefResolveFailedEvent"
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",
