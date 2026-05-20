@@ -50,7 +50,7 @@ from avp.commission import Commission
 from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.trajectory import StopReason
-from avp_claude_agent_sdk._commission import apply_commission
+from avp_claude_agent_sdk._commission import apply_commission, apply_prompt
 from avp_claude_agent_sdk._emit import (
     emit_agent_described,
     emit_agent_stopped,
@@ -79,44 +79,41 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         self._commission = commission
         self._sink = sink
         self._avp_token = None
+        self._avp_prelude_emitted = False
 
-    async def connect(self, prompt: str | AsyncIterable[dict[str, Any]] | None = None) -> None:
-        # 1. Probe pass: discover the agent's full pre-Commission surface
-        #    via a transient CLI session.
-        probe_init, probe_status = await _probe_describe(self._original_options)
+    async def query(
+        self, prompt: str | AsyncIterable[dict[str, Any]], session_id: str = "default"
+    ) -> None:
+        if not self._avp_prelude_emitted:
+            # 1. Probe pass: discover the agent's full pre-Commission surface
+            #    via a transient CLI session.
+            probe_init, probe_status = await _probe_describe(self._original_options)
 
-        final_prompt = prompt
-        if self._commission is not None and self._commission.prompt is not None:
-            final_prompt = self._commission.prompt
+            final_prompt = apply_prompt(self._commission, prompt)
+            # 2. Set up RunState + emit the prelude. agent_described carries
+            #    the probe view; agent_started carries the merged-state view
+            state = RunState(
+                prompt=final_prompt,
+                trace_id=new_trace_id(),
+                run_id=str(uuid.uuid4()),
+                sink=self._sink,
+                prices=load_default_prices(),
+            )
+            self._avp_token = set_run(state)
+            original_prompt = prompt if isinstance(prompt, str) else None
 
-        # 2. Set up RunState + emit the prelude. agent_described carries
-        #    the probe view; agent_started carries the merged-state view
-        state = RunState(
-            prompt=final_prompt,
-            trace_id=new_trace_id(),
-            run_id=str(uuid.uuid4()),
-            sink=self._sink,
-            prices=load_default_prices(),
-        )
-        self._avp_token = set_run(state)
-        original_prompt = prompt if isinstance(prompt, str) else None
+            await emit_run_requested(state, commission=self._commission)
+            await emit_agent_described(
+                state,
+                self._original_options,
+                prompt=original_prompt,
+                init_data=probe_init,
+                status=probe_status,
+            )
 
-        await emit_run_requested(state, commission=self._commission)
-        await emit_agent_described(
-            state,
-            self._original_options,
-            prompt=original_prompt,
-            init_data=probe_init,
-            status=probe_status,
-        )
+            self._avp_prelude_emitted = True
 
-        final_prompt = prompt
-        if self._commission is not None and self._commission.prompt is not None:
-            final_prompt = self._commission.prompt
-
-        # 3. Real connect: boot the actual run session. The user's
-        #    query() / receive_response() drive from here.
-        await super().connect(final_prompt)
+        return await super().query(final_prompt, session_id)
 
     async def receive_response(self) -> AsyncIterator[Any]:
         """Tee `super().receive_response()` through AVP emission.

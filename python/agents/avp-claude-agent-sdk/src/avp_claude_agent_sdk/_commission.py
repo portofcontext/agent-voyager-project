@@ -6,9 +6,7 @@
 |-------------------------------|---------------------------------|------------------------------------------------------------------------------|
 | `model`                       | `model`                         | Direct.                                                                      |
 | `system_prompt`               | `system_prompt`                 | Direct.                                                                      |
-| `prompt`                      | *(connect call arg)*            | Not an option field. Merged in `AVPClaudeSDKClient.connect()`: commission's   |
-|                               |                                 | prompt overrides the caller-supplied `connect(prompt=...)` arg before        |
-|                               |                                 | `super().connect()` and the `agent_started` emit.                            |
+| `prompt`                      | *(query call arg)*              | Direct.                                                                      |
 | `mcp_servers` (inline)        | `mcp_servers` dict              | `id` becomes the dict key. `McpServerHttp` → `McpHttpServerConfig`;           |
 |                               |                                 | `McpServerStdio.command[0]` → SDK `command`, `command[1:] + args` → SDK      |
 |                               |                                 | `args`. No resolver round-trip; connection material is inline on the wire.   |
@@ -94,12 +92,12 @@ def apply_commission(
 
 
 def apply_prompt(
-    original_prompt: str | AsyncIterable[dict[str, Any]] | None = None,
-    commission: Commission | None = None,
-) -> str | AsyncIterable[dict[str, Any]] | None:
-    if commission is None:
-        return original_prompt
-    return commission.prompt
+    commission: Commission | None,
+    original_prompt: str | AsyncIterable[dict[str, Any]],
+) -> str | AsyncIterable[dict[str, Any]]:
+    if commission is not None and commission.prompt is not None:
+        return commission.prompt
+    return original_prompt
 
 
 def _map_mcp_servers(commission: Commission) -> dict[str, McpServerConfig]:
