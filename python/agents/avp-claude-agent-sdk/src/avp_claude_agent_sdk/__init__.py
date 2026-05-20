@@ -4,11 +4,14 @@ Primary surface: `AVPClaudeSDKClient`, a subclass of
 `claude_agent_sdk.ClaudeSDKClient` that emits a conforming AVP
 trajectory across `connect()` / `receive_response()` / `disconnect()`.
 
-Stage 3 will add `run_avp_agent` (Commission-driven entry point) and
-`setup_avp` (module-level monkeypatch that swaps `ClaudeSDKClient` for
-`AVPClaudeSDKClient`).
+`setup_avp(sink=...)` is the module-level monkeypatch alternative: it
+swaps `claude_agent_sdk.ClaudeSDKClient` for the AVP wrapper so callers
+who can't change their import still get instrumentation.
+
+Stage 3 will add `run_avp_agent` (Commission-driven entry point).
 """
 
 from avp_claude_agent_sdk._client import AVPClaudeSDKClient
+from avp_claude_agent_sdk._patches import setup_avp
 
-__all__ = ["AVPClaudeSDKClient"]
+__all__ = ["AVPClaudeSDKClient", "setup_avp"]
