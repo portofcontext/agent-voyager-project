@@ -22,6 +22,30 @@ _PROVIDER_NAME = "anthropic"
 
 
 @dataclasses.dataclass
+class TaskInfo:
+    """Bookkeeping for a dispatched Task (subagent).
+
+    Populated by `_on_task_started` when the SDK fires `TaskStartedMessage`;
+    consumed by `_on_task_notification` to emit the matching
+    `subagent_returned` / `subagent_failed`. `span_id` is shared between
+    the invoked and returned events (same frame, opened then closed),
+    while `parent_span_id` (the turn's span) is what both events sit
+    under.
+    """
+
+    # Subagent frame's span; reused by `subagent_returned` (same frame).
+    span_id: str
+    # Turn span the dispatch belongs to; parent of both invoked and returned.
+    parent_span_id: str
+    # Turn step the dispatch belongs to.
+    step: int
+    # Subagent type / name (e.g. "general-purpose"); from `TaskStartedMessage.task_type`.
+    task_type: str
+    # Monotonic clock at dispatch; drives `subagent_returned.duration_ms`.
+    started_at: float
+
+
+@dataclasses.dataclass
 class ToolSpan:
     """Bookkeeping for an in-flight tool dispatch.
 
@@ -73,6 +97,9 @@ class Turn:
     # Live tool dispatches keyed by `tool_use_id`. Populated by the
     # PreToolUse hook, popped by the PostToolUse hook to pair returns.
     tool_spans: dict[str, ToolSpan] = dataclasses.field(default_factory=dict)
+    # Live Task (subagent) dispatches keyed by `tool_use_id`. Populated
+    # by `_on_task_started`, popped by `_on_task_notification`.
+    tasks: dict[str, TaskInfo] = dataclasses.field(default_factory=dict)
     # Anthropic service tier from `usage.service_tier`; affects pricing.
     meta_service_tier: str | None = None
     # Cache-creation tokens split by TTL bucket; Anthropic prices these differently.

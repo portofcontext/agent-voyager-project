@@ -12,6 +12,7 @@ venv/
 env/
 .env
 pip-wheel-metadata/
+python/agents/avp-claude-agent-sdk/scripts/logs
 
 # Hatch / UV
 .hatch/

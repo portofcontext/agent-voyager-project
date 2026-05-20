@@ -24,6 +24,9 @@ from claude_agent_sdk.types import (
     PreToolUseHookInput,
     ServerToolResultBlock,
     ServerToolUseBlock,
+    TaskNotificationMessage,
+    TaskStartedMessage,
+    TaskUsage,
     TextBlock,
     ThinkingBlock,
     ToolUseBlock,
@@ -47,13 +50,20 @@ from avp.trajectory import (
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
+    SubagentFailedData,
+    SubagentFailedEvent,
+    SubagentInvokedData,
+    SubagentInvokedEvent,
+    SubagentReturnedData,
+    SubagentReturnedEvent,
+    SubagentUsage,
     ToolInvokedData,
     ToolInvokedEvent,
     ToolReturnedData,
     ToolReturnedEvent,
     Usage,
 )
-from avp_claude_agent_sdk._runstate import RunState, ToolSpan, Turn, current_run
+from avp_claude_agent_sdk._runstate import RunState, TaskInfo, ToolSpan, Turn, current_run
 from avp_claude_agent_sdk._translator import (
     descriptor_full,
     mcp_servers_connected,
@@ -311,9 +321,14 @@ async def avp_pretooluse_hook(
         return {}
     # `agent_id` is set only when the hook fires inside a Task-spawned
     # subagent (per the SDK's `_SubagentContextMixin`). Subagent tool
-    # calls are treated as opaque to the parent trajectory for now --
-    # they'll surface later via subagent_invoked/_returned bracketing.
+    # calls are opaque to the parent trajectory -- they roll up under
+    # `subagent_returned.subagent_usage` instead.
     if input_data.get("agent_id"):
+        return {}
+    # The parent's Task dispatch is bracketed by subagent_invoked /
+    # subagent_returned (driven by `TaskStartedMessage` and
+    # `TaskNotificationMessage`), not tool_invoked / tool_returned.
+    if input_data["tool_name"] == "Task":
         return {}
 
     tool_name = input_data["tool_name"]
@@ -410,8 +425,12 @@ async def avp_posttooluse_hook(
     tool_use_id: str | None,
     _context: HookContext,
 ) -> HookJSONOutput:
-    """PostToolUse callback: emit a successful `tool_returned`."""
+    """PostToolUse callback: emit a successful `tool_returned`. Skips
+    Task dispatches (they're bracketed as subagents) and any tool fired
+    from inside a subagent."""
     if not isinstance(tool_use_id, str) or input_data.get("agent_id"):
+        return {}
+    if input_data.get("tool_name") == "Task":
         return {}
     content, structured = _normalize_tool_response(input_data.get("tool_response"))
     _buffer_tool_returned(
@@ -433,8 +452,12 @@ async def avp_posttoolusefailure_hook(
 ) -> HookJSONOutput:
     """PostToolUseFailure callback: emit a failed `tool_returned`. Fires
     instead of PostToolUse when a tool dispatch errors, is denied by a
-    permission check, or is interrupted."""
+    permission check, or is interrupted. Skips Task dispatches and
+    subagent-interior tools (subagent failure surfaces via
+    `TaskNotificationMessage(status="failed")` instead)."""
     if not isinstance(tool_use_id, str) or input_data.get("agent_id"):
+        return {}
+    if input_data.get("tool_name") == "Task":
         return {}
     _buffer_tool_returned(
         tool_use_id,
@@ -449,6 +472,133 @@ async def avp_posttoolusefailure_hook(
 
 
 # ---------------------------------------------------------------------------
+# Subagent (Task) lifecycle
+# ---------------------------------------------------------------------------
+
+
+_TASK_STATUS_TO_REASON: dict[str, StopReason] = {
+    "completed": StopReason.converged,
+    "stopped": StopReason.interrupted,
+}
+
+
+def _task_usage_to_subagent_usage(usage: TaskUsage | None) -> SubagentUsage | None:
+    """Project a `TaskUsage` onto AVP `SubagentUsage`.
+
+    `TaskUsage` carries `{total_tokens, tool_uses, duration_ms}` with no
+    input/output split or cost. AVP required fields stay at 0 (honest
+    sentinel -- we don't know); the raw triple rides along as extras
+    (`SubagentUsage` permits open keys).
+    """
+    if not usage:
+        return None
+    return SubagentUsage(
+        cost_usd=0.0,
+        tokens_input=0,
+        tokens_output=0,
+        turns=0,
+        total_tokens=int(usage.get("total_tokens") or 0),
+        tool_uses=int(usage.get("tool_uses") or 0),
+        duration_ms=int(usage.get("duration_ms") or 0),
+    )
+
+
+def _subagent_input(state_turn_content: list[AVPContentBlock], tool_use_id: str) -> dict[str, Any]:
+    """Find the parent's Task `ToolUseBlock` in the open turn's content
+    and return its input dict (the subagent's prompt / subagent_type /
+    description). Empty dict if not found (defensive)."""
+    for block in state_turn_content:
+        if isinstance(block, AVPToolUseBlock) and block.id == tool_use_id:
+            return block.input
+    return {}
+
+
+async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None:
+    """Buffer a `subagent_invoked` onto the open turn's emissions.
+
+    Fires when the CLI spawns a Task subagent. We record the dispatch
+    in `state.turn.tasks` for `_on_task_notification` to pair against.
+    The matching `ToolUseBlock` (in `state.turn.content`) supplies
+    `subagent_input`.
+    """
+    if state.turn is None or not message.tool_use_id:
+        return
+    span_id = new_span_id()
+    task_type = message.task_type or "Task"
+    state.turn.tasks[message.tool_use_id] = TaskInfo(
+        span_id=span_id,
+        parent_span_id=state.turn.span_id,
+        step=state.turn.step,
+        task_type=task_type,
+        started_at=time.monotonic(),
+    )
+    state.turn.emissions.append(
+        SubagentInvokedEvent(
+            subject=state.run_id,
+            data=SubagentInvokedData(
+                trace_id=state.trace_id,
+                span_id=span_id,
+                parent_span_id=state.turn.span_id,
+                step=state.turn.step,
+                subagent_name=task_type,
+                subagent_invocation_id=message.tool_use_id,
+                subagent_input=_subagent_input(state.turn.content, message.tool_use_id),
+            ),
+        )
+    )
+
+
+async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
+    """Buffer the matching `subagent_returned` (completed / stopped) or
+    `subagent_failed` (failed) onto the open turn's emissions. No-op if
+    the dispatch wasn't recorded (e.g. the parent turn drained early)."""
+    if state.turn is None or not message.tool_use_id:
+        return
+    info = state.turn.tasks.pop(message.tool_use_id, None)
+    if info is None:
+        return
+    duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
+    summary = message.summary or ""
+    if message.status == "failed":
+        state.turn.emissions.append(
+            SubagentFailedEvent(
+                subject=state.run_id,
+                data=SubagentFailedData(
+                    trace_id=state.trace_id,
+                    span_id=new_span_id(),
+                    parent_span_id=info.span_id,
+                    step=info.step,
+                    subagent_name=info.task_type,
+                    subagent_invocation_id=message.tool_use_id,
+                    duration_ms=duration_ms,
+                    subagent_error=summary,
+                ),
+            )
+        )
+        return
+    reason = _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged)
+    state.turn.emissions.append(
+        SubagentReturnedEvent(
+            subject=state.run_id,
+            data=SubagentReturnedData(
+                trace_id=state.trace_id,
+                # span_id matches subagent_invoked (same frame, closed).
+                span_id=info.span_id,
+                # Parent under the frame's parent (turn span), not the frame itself.
+                parent_span_id=info.parent_span_id,
+                step=info.step,
+                subagent_name=info.task_type,
+                subagent_invocation_id=message.tool_use_id,
+                duration_ms=duration_ms,
+                subagent_result_text=summary,
+                subagent_reason=reason,
+                subagent_usage=_task_usage_to_subagent_usage(message.usage),
+            ),
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public dispatch entry point
 # ---------------------------------------------------------------------------
 
@@ -457,15 +607,15 @@ async def handle_message(state: RunState, message: Message) -> None:
     """Dispatch one SDK message to the appropriate AVP emitter. Mutates state."""
     if isinstance(message, AssistantMessage):
         await _on_assistant(state, message)
+    elif isinstance(message, TaskStartedMessage):
+        await _on_task_started(state, message)
+    elif isinstance(message, TaskNotificationMessage):
+        await _on_task_notification(state, message)
     # elif isinstance(message, UserMessage):
     #     await _on_user(state, message)
     # elif isinstance(message, ResultMessage):
     #     await _on_result(state, message)
-    # elif isinstance(message, TaskStartedMessage):
-    #     await _on_task_started(state, message)
-    # elif isinstance(message, TaskNotificationMessage):
-    #     await _on_task_notification(state, message)
-    # PreToolUse / PostToolUse arrive via registered hook callbacks
-    # (avp_pretooluse_hook), not through the message stream. SystemMessage,
+    # PreToolUse / PostToolUse / PostToolUseFailure arrive via registered
+    # hook callbacks, not through the message stream. SystemMessage,
     # TaskProgressMessage, MirrorErrorMessage, StreamEvent, RateLimitEvent:
     # drop. Honest-silent beats fabricated events.

@@ -29,8 +29,8 @@ async def _run(prompt: str, model: str | None) -> None:
     options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
 
     with (
-        (SCRIPTS_DIR / "claude.log").open("w") as claude_file,
-        (SCRIPTS_DIR / "avp.log").open("w") as avp_file,
+        (SCRIPTS_DIR / "logs/claude.log").open("w") as claude_file,
+        (SCRIPTS_DIR / "logs/avp.log").open("w") as avp_file,
     ):
         claude_console = Console(file=claude_file, no_color=True, markup=False)
         avp_console = Console(file=avp_file, no_color=True, markup=False)
