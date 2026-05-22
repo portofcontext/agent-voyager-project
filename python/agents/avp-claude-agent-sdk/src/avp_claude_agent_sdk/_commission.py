@@ -67,6 +67,8 @@ def apply_commission(
     TODO:
     - `mcp_servers` (inline) + `enabled_builtin_mcp_servers` filter
     - `skills` (inline) + `enabled_builtin_skills` filter
+    - `enabled_builtin_mcp_servers`
+    - `enabled_builtin_skills`
     """
     if commission is None:
         return options
