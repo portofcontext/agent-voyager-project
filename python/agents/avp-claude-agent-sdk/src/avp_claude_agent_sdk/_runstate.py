@@ -8,10 +8,10 @@ import time
 from collections.abc import AsyncIterable
 from typing import Any
 
-from avp.agent.sink import EventSink
 from avp.content import AVPContentBlock
 from avp.envelope import new_span_id
 from avp.pricing import ModelPrice, compute_cost
+from avp.sink import EventSink
 from avp.trajectory import (
     AssistantMessageData,
     AssistantMessageEvent,

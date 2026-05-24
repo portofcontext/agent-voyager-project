@@ -45,10 +45,10 @@ from typing import Any
 from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
-from avp.agent.sink import EventSink, stdio_sink
 from avp.commission import Commission
 from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
+from avp.sink import EventSink, stdio_sink
 from avp.trajectory import StopReason
 from avp_claude_agent_sdk._commission import apply_commission, apply_prompt
 from avp_claude_agent_sdk._emit import (

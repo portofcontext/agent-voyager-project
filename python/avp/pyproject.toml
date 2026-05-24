@@ -9,19 +9,14 @@ description = "Agent Voyager Protocol (AVP) — Python reference implementation.
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic>=2.6,<3",
-    "jsonschema>=4.18",
-    "referencing>=0.30",
-    "mcp>=1.0",
-]
+dependencies = ["pydantic>=2.6,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "ruff>=0.6"]
-interop = [
-    # Cross-validation tests: confirm our wire format is parseable by the
-    # canonical Python implementations of the specs we adopt.
-    "cloudevents>=1.10",
+conformance = [
+    # CLI + case files. Bare `pip install avp` excludes these so consumers
+    # who only want the wire types don't pay the dep cost.
+    "typer>=0.12",
 ]
 
 [project.scripts]

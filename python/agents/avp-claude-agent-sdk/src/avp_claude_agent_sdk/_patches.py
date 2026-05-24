@@ -23,7 +23,7 @@ from typing import Any
 import claude_agent_sdk
 from claude_agent_sdk.types import ClaudeAgentOptions
 
-from avp.agent.sink import EventSink, stdio_sink
+from avp.sink import EventSink, stdio_sink
 from avp_claude_agent_sdk._client import AVPClaudeSDKClient
 
 _AVP_WRAPPED = "_avp_wrapped"

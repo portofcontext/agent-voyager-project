@@ -10,14 +10,10 @@ In scope:
 
 - **Spec types** — `commission.py`, `descriptor.py`, `trajectory.py`.
   Pydantic models matching the JSON Schemas under `spec/v0.1/`. Source of truth.
-- **`AVPAgent` base** — minimal with two modes: `sink` and `managaged`.
-  - `def emit(event)` emits a trajectory event via some internal channel determined by the mode. e.g. `sink` will write to a db or to a file or to stdout, and `managed` will send over a websocket or something
-    - `managed` mode will be alpha and `sink` will be beta
-  - `run(commission)` No loop, no driver protocols, no auto-emitted events.
-  Integrators subclass and implement `run`.
-  - we might include more funcitonality in the base class but that will be in the future.
-- **Serve stubs (ALPHA)** — `agent.serve_stdio()`, `agent.serve_ws()` to
-  bind an `AVPAgent` to a transport effecting how the agent will emit trajectories and accept run committions. just stub for now, dont implement yet.
+- **Sink type + stdio sink** — `sink.py`. `EventSink` is the async-callable
+  type for "consume one trajectory event"; `stdio_sink` is the trivial
+  NDJSON-to-stdout built-in. No base class, no agent abstraction: integrator
+  packages own their own agent shape and just take an `EventSink`.
 - **Resolver client + worked sample** — one client class for talking to a
   resolver service according to the resolver.md spec. The server itself is not in this repo for now.
 - **Conformance harness** — validates an externally-produced trajectory
@@ -25,7 +21,9 @@ In scope:
 
 Out of scope here (belongs in the agent package that needs it, not in `avp`):
 
+- Agent base classes / ABCs and any agent-lifecycle abstraction
 - Agent loops, driver protocols (`ModelDriver`, `ToolDriver`, etc.)
+- Transport stubs (serve_stdio, serve_ws) — deployment concern
 - MCP / skill / subagent dispatch helpers
 - Opinionated tracers with scope ergonomics
 - Multi-class resolver server/client abstractions

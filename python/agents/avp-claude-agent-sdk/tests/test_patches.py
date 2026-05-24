@@ -9,7 +9,7 @@ from __future__ import annotations
 import claude_agent_sdk
 import pytest
 
-from avp.agent.sink import stdio_sink
+from avp.sink import stdio_sink
 from avp.trajectory import Event
 from avp_claude_agent_sdk import AVPClaudeSDKClient, setup_avp
 from avp_claude_agent_sdk._patches import _AVP_WRAPPED, _restore_patches
