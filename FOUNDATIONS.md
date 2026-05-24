@@ -178,11 +178,13 @@ declares servers as opaque `{id, ref}` pairs; the agent calls
 `avp.resolve` (the AVP Resolver API, see below) at startup to get
 back the connection material the supervisor wants the agent to use. The
 agent then runs MCP's `initialize` + `tools/list` against the resolved
-endpoint, surfaces the live tool catalog on
-`mcp_server_connected.data.avp.mcp.tools[]`, and dispatches model tool
-calls using MCP's `tools/call`. The `tool_invoked` / `tool_returned` AVP
-events tag the dispatch with `avp.tool.dispatch_target = "mcp_server"`
-and `avp.mcp_server_id` so consumers can filter.
+endpoint, surfaces the live tool catalog as entries in
+`agent_started.data["avp.tools"]` (each carrying `avp.mcp_server_id`
+pointing back at the server's `id` in `agent_started.data["avp.mcp_servers"]`),
+and dispatches model tool calls using MCP's `tools/call`. The
+`tool_invoked` / `tool_returned` AVP events tag the dispatch with
+`avp.tool.dispatch_target = "mcp_server"` and `avp.mcp_server_id` so
+consumers can filter.
 
 **What AVP does NOT take:** MCP's server protocol internals. AVP doesn't
 re-implement MCP; the agent uses an off-the-shelf MCP client (the
@@ -414,10 +416,14 @@ v0.1 has two paths for any tool the model can call:
    `avp.resolve` to dereference the ref into connection material, then
    uses an off-the-shelf MCP client to connect, list tools, and dispatch
    `tools/call`. AVP events: `managed_ref_resolved` for the resolution
-   round-trip, `mcp_server_connected` with the live tool catalog after
-   the MCP handshake, `tool_invoked` / `tool_returned` for each model
-   invocation tagged `avp.tool.dispatch_target = "mcp_server"` and
-   `avp.mcp_server_id`, `mcp_server_disconnected` on close.
+   round-trip; the live tool catalog flows into `agent_started.data["avp.tools"]`
+   with each MCP-surfaced entry carrying `avp.mcp_server_id`, and the
+   server itself appears in `agent_started.data["avp.mcp_servers"]` with
+   its terminal `status` (`connected` / `failed` / `needs-auth` /
+   `pending` / `disabled`); `tool_invoked` / `tool_returned` for each
+   model invocation tagged `avp.tool.dispatch_target = "mcp_server"` and
+   `avp.mcp_server_id`. No per-server lifecycle event — failed dials of
+   Commission-declared servers surface as `error_occurred(code: mcp_connect_failed)`.
 
 There is no AVP-flavored RPC channel between supervisor and agent for
 mid-run state. The supervisor's mid-run job is purely reading the NDJSON

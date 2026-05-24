@@ -69,7 +69,7 @@ def _result(
 # ---------------------------------------------------------------------------
 
 
-def _make_state(events: list[Event]) -> RunState:
+def _make_state(events: list[Event], *, prompt: str | None = "ping") -> RunState:
     async def sink(event: Event) -> None:
         events.append(event)
 
@@ -78,6 +78,7 @@ def _make_state(events: list[Event]) -> RunState:
         run_id="test-run",
         sink=sink,
         prices=load_default_prices(),
+        prompt=prompt,
     )
 
 
@@ -129,8 +130,9 @@ def _status(
     *, connected_named: str | None = "demo", extra_pending: bool = False
 ) -> McpStatusResponse:
     """Build an `McpStatusResponse`. `connected_named` adds one
-    `connected` server with the given name; `extra_pending` adds a
-    second server in `needs-auth` that the descriptor MUST filter out.
+    `connected` server; `extra_pending` adds a second server in
+    `needs-auth` which (per AVP v0.1) is recorded on the wire with
+    `status: "needs-auth"` rather than filtered out.
     """
     servers: list[dict[str, Any]] = []
     if connected_named:
@@ -263,9 +265,11 @@ def test_agent_described_carries_full_pre_commission_surface() -> None:
     described = next(ev for ev in events if ev.type == "avp.agent_described")
     desc = described.data.descriptor
     assert desc.agent_name == "avp-claude-agent-sdk"
-    # mcp__-prefixed tools are filtered out (they live on
-    # mcp_server_connected events instead, per spec §8).
-    assert [t.name for t in desc.tools] == ["Bash", "Read", "Edit"]
+    # AVP v0.1 §4: tools[] is the single bag of usable tools — local AND
+    # MCP-surfaced. MCP-surfaced entries carry `avp.mcp_server_id`
+    # extracted from the `mcp__<server>__<tool>` prefix.
+    assert [t.name for t in desc.tools] == ["Bash", "Read", "Edit", "mcp__demo__search"]
+    assert [t.mcp_server_id for t in desc.tools] == [None, None, None, "demo"]
     assert [a.name for a in desc.subagents] == ["Explore", "Plan"]
     assert [s.name for s in desc.skills] == ["xlsx", "review"]
 
@@ -310,10 +314,11 @@ def test_request_model_prefers_init_resolved_model() -> None:
     assert started.data.request_model == "claude-opus-4-7[1m]"
 
 
-def test_non_connected_mcp_servers_are_filtered_out() -> None:
-    """needs-auth / failed / disabled / pending servers MUST NOT appear
-    on agent_started or agent_described (spec §2.1: 'what is currently
-    available' means usable, not configured-but-unauth'd)."""
+def test_mcp_servers_include_non_connected_with_status() -> None:
+    """AVP v0.1 §2.1: `mcp_servers[]` records every attempted dial with
+    its terminal `status`. needs-auth / failed / disabled / pending
+    servers stay on the wire so consumers see what was attempted; only
+    their *tools* are excluded from `tools[]`."""
     events = asyncio.run(
         _drive_prelude(
             init=_init(),
@@ -322,8 +327,14 @@ def test_non_connected_mcp_servers_are_filtered_out() -> None:
     )
     started = next(ev for ev in events if ev.type == "avp.agent_started")
     described = next(ev for ev in events if ev.type == "avp.agent_described")
-    assert [s.id for s in started.data.mcp_servers] == ["mcpsrv_demo"]
-    assert [s.id for s in described.data.descriptor.mcp_servers] == ["mcpsrv_demo"]
+    assert [(s.id, s.status) for s in started.data.mcp_servers] == [
+        ("demo", "connected"),
+        ("claude.ai Gmail", "needs-auth"),
+    ]
+    assert [(s.id, s.status) for s in described.data.descriptor.mcp_servers] == [
+        ("demo", "connected"),
+        ("claude.ai Gmail", "needs-auth"),
+    ]
 
 
 def test_prelude_falls_back_when_probe_failed() -> None:

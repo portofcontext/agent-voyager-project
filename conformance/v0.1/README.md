@@ -15,7 +15,7 @@ conformance/v0.1/
 ├── validate.py        (validates all cases against test-case.schema.json)
 └── cases/
     ├── enabled-builtins/        (Commission.enabled_builtin_* allowlist gating)
-    ├── mcp/                     (mcp_server_connected lifecycle, dispatch_target tagging)
+    ├── mcp/                     (mcp_server status in agent_started.mcp_servers[], dispatch_target tagging, mcp_connect_failed semantics)
     ├── prelude/                 (run_requested → agent_described → agent_started ordering)
     ├── reasoning/               (avp.reasoning.* attributes on assistant_message)
     ├── refusal/                 (refusal_recorded provenance)

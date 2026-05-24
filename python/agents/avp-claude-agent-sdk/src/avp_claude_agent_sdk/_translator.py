@@ -2,24 +2,28 @@
 
 Two distinct views fall out of the SDK:
 
-- The **static descriptor** (`descriptor_head`) is what the agent can
-  state about itself pre-flight: identity, package version, AVP spec
-  version, and the default model from `ClaudeAgentOptions`. It's the
-  payload of `agent_described` and is what `<agent> describe` would
-  print.
+- The **static descriptor** is what the agent can state about itself
+  pre-flight: identity, package version, AVP spec version, default model.
+  It's the payload of `agent_described`.
 - The **runtime-merged view** comes from the first
   `SystemMessage(subtype="init")` the SDK emits. It carries the actual
   tool catalog (CLI built-ins + MCP-namespaced names), live subagent /
-  skill lists, and the resolved model. Together with the filtered MCP
-  status, it populates `agent_started`.
+  skill lists, and the resolved model. Combined with `get_mcp_status()`,
+  it populates `agent_started`.
 
-`get_mcp_status()` alone is not enough for `agent_started.tools`: when
-MCP servers are `needs-auth` / `pending` / `disabled`, their `tools/list`
-is empty, and CLI built-ins (`Task`, `Bash`, `Read`, ...) are never
-exposed by `get_mcp_status` regardless. The `init` message is the only
-authoritative source for the run's tool surface.
+Per AVP v0.1: `agent_started.data["avp.tools"]` is the single bag of
+usable tools (local + MCP-surfaced from connected servers); MCP-surfaced
+entries carry `avp.mcp_server_id`. `agent_started.data["avp.mcp_servers"]`
+records every attempted dial with its terminal `status` —
+`connected` / `failed` / `needs-auth` / `pending` / `disabled`.
+
+The init message is the authoritative source for the run's tool surface:
+CLI built-ins are never reported by `get_mcp_status()`, and even when
+MCP servers are non-`connected`, the init message reliably enumerates
+the tools each server contributes when it IS connected.
 """
 
+import re
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any, Literal
@@ -144,10 +148,10 @@ def translate_agent_descriptor(
         default_model=(request_model_from_init(init_data, options) if init_data else options.model),
         system_prompt=resolve_system_prompt(options.system_prompt),
         prompt=prompt,
-        tools=tools_from_init(init_data) if init_data else None,
+        tools=tools_from_init(init_data, status) if init_data else None,
         subagents=subagents_from_init(init_data) if init_data else None,
         skills=skills_from_init(init_data) if init_data else None,
-        mcp_servers=mcp_servers_connected(status),
+        mcp_servers=mcp_servers_from_status(status),
     )
 
 
@@ -156,19 +160,40 @@ def translate_agent_descriptor(
 # ---------------------------------------------------------------------------
 
 
-def tools_from_init(init_data: dict[str, Any]) -> list[ToolDecl] | None:
-    """CLI built-in tool catalog from the `init` SystemMessage.
+def _normalize_mcp_prefix(server_name: str) -> str:
+    """Mirror the SDK's tool-naming sanitizer: in `mcp__<prefix>__<tool>`,
+    `<prefix>` is the server's display name with every non-alphanumeric
+    char (dots, spaces, hyphens, ...) replaced by `_`. Used to map a
+    sanitized prefix back to its original `McpServerDecl.id`."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", server_name)
+
+
+def tools_from_init(init_data: dict[str, Any], status: McpStatusResponse) -> list[ToolDecl] | None:
+    """Full tool catalog from the `init` SystemMessage.
 
     `init.tools` is a flat list of names that includes both CLI
-    built-ins (`Task`, `Bash`, `Edit`, ...) and MCP-namespaced
-    handles (`mcp__server__tool`). Per spec §8: MCP-surfaced tools
-    MUST NOT be duplicated on `agent_started.avp.tools`; they live
-    on each `mcp_server_connected.avp.mcp.tools` instead. We filter
-    the `mcp__*` prefix out here.
+    built-ins (`Task`, `Bash`, `Edit`, ...) and MCP-namespaced handles
+    (`mcp__<sanitized-server>__<tool>`, where the SDK sanitizes the
+    server's display name via `_normalize_mcp_prefix`). Per AVP v0.1 §4:
+    all tools land in one bag; MCP-surfaced entries carry
+    `avp.mcp_server_id` pointing at the un-sanitized `McpServerDecl.id`
+    in `mcp_servers[]`. Lookups go through a sanitized-prefix → id map
+    built from `status.mcpServers`.
     """
     names = init_data.get("tools") or []
-    builtins = [n for n in names if not n.startswith("mcp__")]
-    return [ToolDecl(name=n) for n in builtins] or None
+    prefix_to_id = {
+        _normalize_mcp_prefix(s["name"]): s["name"] for s in status.get("mcpServers", [])
+    }
+    decls: list[ToolDecl] = []
+    for name in names:
+        if name.startswith("mcp__"):
+            parts = name.split("__", 2)
+            prefix = parts[1] if len(parts) >= 3 else None
+            server_id = prefix_to_id.get(prefix) if prefix else None
+            decls.append(ToolDecl.model_validate({"name": name, "avp.mcp_server_id": server_id}))
+        else:
+            decls.append(ToolDecl(name=name))
+    return decls or None
 
 
 def subagents_from_init(init_data: dict[str, Any]) -> list[SubagentDecl] | None:
@@ -191,22 +216,27 @@ def request_model_from_init(init_data: dict[str, Any], options: ClaudeAgentOptio
     return init_data.get("model") or options.model
 
 
-def mcp_servers_connected(status: McpStatusResponse) -> list[McpServerDecl] | None:
-    """One `McpServerDecl` per `connected` server in the SDK's status.
+def mcp_servers_from_status(status: McpStatusResponse) -> list[McpServerDecl] | None:
+    """One `McpServerDecl` per server in the SDK's status, regardless of
+    state.
 
-    `needs-auth` / `failed` / `disabled` / `pending` servers are NOT
-    callable as part of the current run, so they're filtered out (per
-    spec §2.1: `agent_started` is "what the run will actually use").
-    `id` is the SDK's stable `config.id` (e.g. `mcpsrv_011u…`) when
-    available, otherwise the display name; `name` carries the display.
+    Per AVP v0.1 §2.1: `agent_started.data["avp.mcp_servers"]` records
+    every attempted dial with its terminal `status` — only `"connected"`
+    servers contribute tools to `tools[]`, but `"failed"` / `"needs-auth"`
+    / `"pending"` / `"disabled"` servers stay on the wire so consumers
+    see what was attempted and how it ended.
+
+    `id` is the server's display name (the dict key the user authored,
+    which also matches the SDK's `mcp__<id>__<tool>` namespacing) so
+    tools cross-reference back to their server's `id`.
     """
+    # from rich import print
+
+    # print("MCP STATUS")
+    # print(status)
     decls: list[McpServerDecl] = []
     for server in status.get("mcpServers", []):
-        if server.get("status") != "connected":
-            continue
-        display = server["name"]
-        server_id = server.get("config", {}).get("id") or display
-        decls.append(McpServerDecl(id=server_id, name=display))
+        decls.append(McpServerDecl(id=server["name"], status=server.get("status")))
     return decls or None
 
 

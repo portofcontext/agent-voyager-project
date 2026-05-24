@@ -61,14 +61,17 @@ Cross-references:
   `ZERO`. (Commission path lives on Stage 3 `run_avp_agent`.)
 - [x] `avp.agent_described` — `AgentDescriptor` with
   `agent_name="avp-claude-agent-sdk"`, `agent_version` from package
-  metadata, `spec_version="0.1"`. Tools come from
-  `McpStatusResponse["mcpServers"][*]["tools"]` (per-tool: `name`,
-  optional `description`; no input schema is reported by the SDK, so
-  `ToolDecl.parameters` is `None`). `mcp_servers[]` carries the SDK's
+  metadata, `spec_version="0.1"`. `tools[]` is the merged bag of local
+  + MCP-surfaced names from the init `SystemMessage`; MCP-surfaced
+  entries carry `avp.mcp_server_id` extracted from the
+  `mcp__<server>__<tool>` prefix. `mcp_servers[]` carries the SDK's
   display name verbatim as `id` (`McpServerDecl.id` is intentionally
   loose -- no slug pattern -- so environment-resident server names like
   `"claude.ai Dashboard Builder"` pass through without lossy slugging
-  and stay correlatable with future `mcp_server_connected` events).
+  and stay correlatable with the `avp.mcp_server_id` on tool entries).
+  Each entry carries its terminal `status` (`connected` / `failed` /
+  `needs-auth` / `pending` / `disabled`); only `connected` servers
+  contribute tools.
   `default_model`, `system_prompt`, `skills`, `subagents` come from
   `ClaudeAgentOptions`. `parent_span_id = ZERO`.
 - [x] `avp.agent_started` — opens the agent span; `agent_span_id` stored

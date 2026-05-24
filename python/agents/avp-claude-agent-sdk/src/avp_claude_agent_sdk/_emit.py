@@ -60,7 +60,7 @@ from avp.trajectory import (
 from avp_claude_agent_sdk._runstate import RunState, TaskInfo, ToolSpan, Turn
 from avp_claude_agent_sdk._translator import (
     get_dispatch_target,
-    mcp_servers_connected,
+    mcp_servers_from_status,
     request_model_from_init,
     resolve_system_prompt,
     skills_from_init,
@@ -145,8 +145,8 @@ async def emit_agent_started(
                 ),
                 prompt=prompt,
                 system_prompt=resolve_system_prompt(options.system_prompt),
-                tools=tools_from_init(init_data) if init_data else None,
-                mcp_servers=mcp_servers_connected(status),
+                tools=tools_from_init(init_data, status) if init_data else None,
+                mcp_servers=mcp_servers_from_status(status),
                 skills=skills_from_init(init_data) if init_data else None,
                 subagents=subagents_from_init(init_data) if init_data else None,
             ),
