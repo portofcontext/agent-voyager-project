@@ -35,10 +35,10 @@ fn error_occurred_carries_code_and_message() {
 // --- subagents (spec; pending) ----------------------------------------------
 
 #[test]
-fn summon_tool_call_emits_subagent_events_not_a_tool_call() {
-    // A tool call to the `summon` extension delegates to a subagent. AVP should
-    // see subagent_invoked/returned (paired by invocation id), not a plain
-    // tool_invoked/tool_returned.
+fn summon_tool_call_emits_both_tool_and_subagent_events() {
+    // A tool call to the `summon` extension delegates to a subagent. Per spec,
+    // a subagent started via a tool call surfaces on BOTH axes: tool_invoked +
+    // subagent_invoked, then tool_returned + subagent_returned.
     let sink = CapturingSink::default();
     let mut em = emitter(sink.clone(), &[]);
     em.start(None).unwrap();
@@ -57,17 +57,26 @@ fn summon_tool_call_emits_subagent_events_not_a_tool_call() {
         .unwrap();
 
     let t = sink.trajectory();
+    assert_eq!(t.find_all("avp.tool_invoked").len(), 1);
     assert_eq!(t.find_all("avp.subagent_invoked").len(), 1);
-    assert_eq!(t.find_all("avp.subagent_returned").len(), 1);
-    assert!(
-        t.find_all("avp.tool_invoked").is_empty(),
-        "summon must not be a plain tool call"
+    assert_eq!(t.find_all("avp.tool_returned").len(), 1);
+    let returned = t.find_all("avp.subagent_returned");
+    assert_eq!(returned.len(), 1);
+    // Success path: reason converged. The subagent frame is one span: returned
+    // reuses the invoked span.
+    assert_eq!(returned[0]["data"]["avp.subagent.reason"], "converged");
+    assert_eq!(
+        t.find("avp.subagent_invoked")["data"]["span_id"],
+        returned[0]["data"]["span_id"],
+        "subagent_returned reuses the subagent_invoked frame span"
     );
     t.assert_schema_valid();
 }
 
 #[test]
-fn summon_failure_emits_subagent_failed() {
+fn summon_failure_emits_subagent_returned_with_error_reason() {
+    // subagent_failed was collapsed into subagent_returned(reason=error); the
+    // paired tool_returned mirrors it with is_error=true.
     let sink = CapturingSink::default();
     let mut em = emitter(sink.clone(), &[]);
     em.start(None).unwrap();
@@ -81,27 +90,12 @@ fn summon_failure_emits_subagent_failed() {
         .unwrap();
 
     let t = sink.trajectory();
-    assert_eq!(t.find_all("avp.subagent_failed").len(), 1);
-    t.assert_schema_valid();
-}
-
-// --- MCP lifecycle (spec; pending) ------------------------------------------
-
-#[test]
-fn mcp_server_connected_emitted_for_commission_mcp_servers() {
-    // Loading an MCP-server extension should synthesize an mcp_server_connected
-    // event in the prelude.
-    let sink = CapturingSink::default();
-    let mut em = emitter(sink.clone(), &[TEST_MCP_ID]);
-    em.prelude(
-        &commission(json!({ "mcp_servers": [test_mcp_server()] })),
-        &descriptor(json!({})),
-    )
-    .unwrap();
-
-    let t = sink.trajectory();
-    let connected = t.find_all("avp.mcp_server_connected");
-    assert_eq!(connected.len(), 1);
-    assert_eq!(connected[0]["data"]["avp.mcp.server_id"], TEST_MCP_ID);
+    assert!(t.find_all("avp.subagent_failed").is_empty(), "subagent_failed is gone");
+    let returned = t.find_all("avp.subagent_returned");
+    assert_eq!(returned.len(), 1);
+    assert_eq!(returned[0]["data"]["avp.subagent.reason"], "error");
+    // Paired tool_returned carries the error discriminator.
+    let tool_returned = t.find("avp.tool_returned");
+    assert_eq!(tool_returned["data"]["avp.tool_result"]["is_error"], true);
     t.assert_schema_valid();
 }

@@ -414,14 +414,14 @@ impl<'de> ::serde::Deserialize<'de> for Id {
             })
     }
 }
-#[doc = "MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords only the server's id, optional display name, and optional\ndescription; the tools the server surfaces are NOT enumerated on the\ndescriptor — they appear at runtime on\n`mcp_server_connected.data[\"avp.mcp.tools\"]`.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\nis intentionally looser than `Commission.McpServerRef.id`: the\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\nservers (where `id` is whatever the environment names them, e.g.\n`\"claude.ai Dashboard Builder\"`). Forcing a slug here would either\nlose fidelity or require every agent to invent the same slugification\nrule. Commission-authored ids stay slug-clean by virtue of\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\nnon-empty and must match the `avp.mcp.server_id` the agent later\nsurfaces on `mcp_server_connected` so consumers can correlate.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted."]
+#[doc = "MCP server descriptor in `AgentDescriptor.mcp_servers` and\n`agent_started.data[\"avp.mcp_servers\"]`: identity + terminal dial status.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords the server's id, optional display name, optional description,\nand the terminal dial status when known. The tools the server surfaces\nare enumerated in the sibling `tools[]` list with `avp.mcp_server_id`\nset to this server's `id`; only `status: \"connected\"` servers\ncontribute tools.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally\nlooser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH\nCommission-resolved servers (where `id` is the supervisor-authored slug)\nAND agent-baked-in / environment-resident servers (where `id` is whatever\nthe environment names them, e.g. `\"claude.ai Dashboard Builder\"`). Forcing\na slug here would either lose fidelity or require every agent to invent\nthe same slugification rule. Commission-authored ids stay slug-clean by\nvirtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must\nonly be non-empty.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted.\n\n`status` records the dial outcome at startup. Pre-flight `<agent> describe`\nMAY omit it (no dial has happened); on-the-wire `agent_described` and\n`agent_started` populate it. Values mirror the Claude Agent SDK's\n`McpServerStatus.status` enum."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"McpServerDecl\","]
-#[doc = "  \"description\": \"MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\\n\\nConnection material (URLs, auth, command-lines) stays inside the agent\\nprocess and is NOT carried on the descriptor wire. The descriptor\\nrecords only the server's id, optional display name, and optional\\ndescription; the tools the server surfaces are NOT enumerated on the\\ndescriptor — they appear at runtime on\\n`mcp_server_connected.data[\\\"avp.mcp.tools\\\"]`.\\n\\n`id` is the agent's correlation key for this server across the wire\\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\\nis intentionally looser than `Commission.McpServerRef.id`: the\\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\\nservers (where `id` is whatever the environment names them, e.g.\\n`\\\"claude.ai Dashboard Builder\\\"`). Forcing a slug here would either\\nlose fidelity or require every agent to invent the same slugification\\nrule. Commission-authored ids stay slug-clean by virtue of\\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\\nnon-empty and must match the `avp.mcp.server_id` the agent later\\nsurfaces on `mcp_server_connected` so consumers can correlate.\\n\\n`name` is the display name when the environment provides one distinct\\nfrom `id` (typical for Commission-resolved servers: `id` is the\\nCommission slug, `name` is the human-readable label from the resolved\\nconfig). For environment-resident servers whose only identifier is\\nthe display name, `id` carries that string and `name` is omitted.\","]
+#[doc = "  \"description\": \"MCP server descriptor in `AgentDescriptor.mcp_servers` and\\n`agent_started.data[\\\"avp.mcp_servers\\\"]`: identity + terminal dial status.\\n\\nConnection material (URLs, auth, command-lines) stays inside the agent\\nprocess and is NOT carried on the descriptor wire. The descriptor\\nrecords the server's id, optional display name, optional description,\\nand the terminal dial status when known. The tools the server surfaces\\nare enumerated in the sibling `tools[]` list with `avp.mcp_server_id`\\nset to this server's `id`; only `status: \\\"connected\\\"` servers\\ncontribute tools.\\n\\n`id` is the agent's correlation key for this server across the wire\\n(descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally\\nlooser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH\\nCommission-resolved servers (where `id` is the supervisor-authored slug)\\nAND agent-baked-in / environment-resident servers (where `id` is whatever\\nthe environment names them, e.g. `\\\"claude.ai Dashboard Builder\\\"`). Forcing\\na slug here would either lose fidelity or require every agent to invent\\nthe same slugification rule. Commission-authored ids stay slug-clean by\\nvirtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must\\nonly be non-empty.\\n\\n`name` is the display name when the environment provides one distinct\\nfrom `id` (typical for Commission-resolved servers: `id` is the\\nCommission slug, `name` is the human-readable label from the resolved\\nconfig). For environment-resident servers whose only identifier is\\nthe display name, `id` carries that string and `name` is omitted.\\n\\n`status` records the dial outcome at startup. Pre-flight `<agent> describe`\\nMAY omit it (no dial has happened); on-the-wire `agent_described` and\\n`agent_started` populate it. Values mirror the Claude Agent SDK's\\n`McpServerStatus.status` enum.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\""]
@@ -453,6 +453,24 @@ impl<'de> ::serde::Deserialize<'de> for Id {
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"status\": {"]
+#[doc = "      \"title\": \"Status\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"enum\": ["]
+#[doc = "            \"connected\","]
+#[doc = "            \"failed\","]
+#[doc = "            \"needs-auth\","]
+#[doc = "            \"pending\","]
+#[doc = "            \"disabled\""]
+#[doc = "          ]"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -466,6 +484,95 @@ pub struct McpServerDecl {
     pub id: Id,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub status: ::std::option::Option<McpServerDeclStatus>,
+}
+#[doc = "`McpServerDeclStatus`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"connected\","]
+#[doc = "    \"failed\","]
+#[doc = "    \"needs-auth\","]
+#[doc = "    \"pending\","]
+#[doc = "    \"disabled\""]
+#[doc = "  ]"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum McpServerDeclStatus {
+    #[serde(rename = "connected")]
+    Connected,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "needs-auth")]
+    NeedsAuth,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+impl ::std::fmt::Display for McpServerDeclStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Connected => f.write_str("connected"),
+            Self::Failed => f.write_str("failed"),
+            Self::NeedsAuth => f.write_str("needs-auth"),
+            Self::Pending => f.write_str("pending"),
+            Self::Disabled => f.write_str("disabled"),
+        }
+    }
+}
+impl ::std::str::FromStr for McpServerDeclStatus {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "connected" => Ok(Self::Connected),
+            "failed" => Ok(Self::Failed),
+            "needs-auth" => Ok(Self::NeedsAuth),
+            "pending" => Ok(Self::Pending),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for McpServerDeclStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for McpServerDeclStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for McpServerDeclStatus {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
 }
 #[doc = "Skill descriptor in `AgentDescriptor.skills` and\n`agent_started.data[\"avp.skills\"]`: name plus optional metadata about each\nskill the agent ships with or has loaded for the run.\n\nReplaces the v0.1-prototype `list[str]` shape (names-only) with a\nstructured decl matching `ToolDecl` / `SubagentDecl`. Description\ncomes from the SKILL.md frontmatter when the agent surfaces it\n(e.g. via `ClaudeSDKClient.get_context_usage()` which returns a\n`skills` breakdown including frontmatter); `version` is the skill's\nown version when known; `avp.source` is the SKILL.md path / URI.\n\nAll fields except `name` are optional so agents that only know\nthe name (Commission-declared without enrichment) still emit valid\ndecls."]
 #[doc = r""]
@@ -611,19 +718,30 @@ pub struct SubagentDecl {
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
 }
-#[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
+#[doc = "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity. Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ToolDecl\","]
-#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools`,\\n`agent_started.data[\\\"avp.tools\\\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity; how the tool is\\n*dispatched* (local vs MCP server) is implicit from where the decl\\nappears on the wire — `descriptor.tools` and `agent_started.data[\\\"avp.tools\\\"]`\\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\\nare MCP-dispatched by virtue of being nested under a server. The\\nper-invocation discriminator lives on `tool_invoked.data[\\\"avp.tool.dispatch_target\\\"]`.\","]
+#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools` and\\n`agent_started.data[\\\"avp.tools\\\"]`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity. Dispatch is\\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\\nthe tool runs locally in the agent's process. The per-invocation\\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\\npresence of this field.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"avp.mcp_server_id\": {"]
+#[doc = "      \"title\": \"Avp.Mcp Server Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"description\": {"]
 #[doc = "      \"title\": \"Description\","]
 #[doc = "      \"anyOf\": ["]
@@ -658,6 +776,12 @@ pub struct SubagentDecl {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ToolDecl {
+    #[serde(
+        rename = "avp.mcp_server_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_mcp_server_id: ::std::option::Option<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[serde(

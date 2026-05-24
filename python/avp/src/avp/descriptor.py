@@ -2,7 +2,7 @@
 
 Defines `AgentDescriptor` (the agent's self-description shape) and the
 declaration types it carries: `ToolDecl`, `SubagentDecl`, `SkillDecl`,
-`McpServerDecl`, `ResourceDecl`. This module mirrors the
+`McpServerDecl`. This module mirrors the
 [Agent Descriptor spec](../../../../spec/v0.1/agent-descriptor.md).
 
 Implementors building an `agent_described` event construct
@@ -19,8 +19,7 @@ Implementors building an `agent_described` event construct
 
 The decl types are also reused by `avp.trajectory` for events that share
 the same shape (`agent_started.data["avp.tools"]`,
-`mcp_server_connected.data.avp.mcp.tools`,
-`mcp_server_connected.data.avp.mcp.resources`).
+`agent_started.data["avp.mcp_servers"]`).
 
 This module is self-contained: importing from it does not drag in
 Trajectory / Commission / Resolver API types.
@@ -36,21 +35,22 @@ from avp.envelope import _OPEN, _STRICT
 
 
 class ToolDecl(BaseModel):
-    """Tool descriptor used by `AgentDescriptor.tools`,
-    `agent_started.data["avp.tools"]`, and `mcp_server_connected.data.avp.mcp.tools`.
+    """Tool descriptor used by `AgentDescriptor.tools` and
+    `agent_started.data["avp.tools"]`.
 
     MCP-shaped: `name` plus optional `description` and `inputSchema`. The
-    decl describes a single tool's model-facing identity; how the tool is
-    *dispatched* (local vs MCP server) is implicit from where the decl
-    appears on the wire — `descriptor.tools` and `agent_started.data["avp.tools"]`
-    are local-only; entries under `mcp_server_connected.data.avp.mcp.tools`
-    are MCP-dispatched by virtue of being nested under a server. The
-    per-invocation discriminator lives on `tool_invoked.data["avp.tool.dispatch_target"]`."""
+    decl describes a single tool's model-facing identity. Dispatch is
+    discriminated by `avp.mcp_server_id`: when set, the tool is sourced
+    from the MCP server with that `id` in `mcp_servers[]`; when absent,
+    the tool runs locally in the agent's process. The per-invocation
+    discriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors
+    presence of this field."""
 
     model_config = _OPEN
     name: str
     description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
+    mcp_server_id: str | None = Field(default=None, alias="avp.mcp_server_id")
 
 
 class SubagentDecl(BaseModel):
@@ -95,54 +95,44 @@ class SkillDecl(BaseModel):
 
 
 class McpServerDecl(BaseModel):
-    """MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.
+    """MCP server descriptor in `AgentDescriptor.mcp_servers` and
+    `agent_started.data["avp.mcp_servers"]`: identity + terminal dial status.
 
     Connection material (URLs, auth, command-lines) stays inside the agent
     process and is NOT carried on the descriptor wire. The descriptor
-    records only the server's id, optional display name, and optional
-    description; the tools the server surfaces are NOT enumerated on the
-    descriptor — they appear at runtime on
-    `mcp_server_connected.data["avp.mcp.tools"]`.
+    records the server's id, optional display name, optional description,
+    and the terminal dial status when known. The tools the server surfaces
+    are enumerated in the sibling `tools[]` list with `avp.mcp_server_id`
+    set to this server's `id`; only `status: "connected"` servers
+    contribute tools.
 
     `id` is the agent's correlation key for this server across the wire
-    (descriptor entry, `mcp_server_connected` event, tool dispatch). It
-    is intentionally looser than `Commission.McpServerRef.id`: the
-    descriptor enumerates BOTH Commission-resolved servers (where `id` is
-    the supervisor-authored slug) AND agent-baked-in / environment-resident
-    servers (where `id` is whatever the environment names them, e.g.
-    `"claude.ai Dashboard Builder"`). Forcing a slug here would either
-    lose fidelity or require every agent to invent the same slugification
-    rule. Commission-authored ids stay slug-clean by virtue of
-    `Commission.McpServerRef.id`'s pattern; descriptor ids must only be
-    non-empty and must match the `avp.mcp.server_id` the agent later
-    surfaces on `mcp_server_connected` so consumers can correlate.
+    (descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally
+    looser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH
+    Commission-resolved servers (where `id` is the supervisor-authored slug)
+    AND agent-baked-in / environment-resident servers (where `id` is whatever
+    the environment names them, e.g. `"claude.ai Dashboard Builder"`). Forcing
+    a slug here would either lose fidelity or require every agent to invent
+    the same slugification rule. Commission-authored ids stay slug-clean by
+    virtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must
+    only be non-empty.
 
     `name` is the display name when the environment provides one distinct
     from `id` (typical for Commission-resolved servers: `id` is the
     Commission slug, `name` is the human-readable label from the resolved
     config). For environment-resident servers whose only identifier is
-    the display name, `id` carries that string and `name` is omitted."""
+    the display name, `id` carries that string and `name` is omitted.
+
+    `status` records the dial outcome at startup. Pre-flight `<agent> describe`
+    MAY omit it (no dial has happened); on-the-wire `agent_described` and
+    `agent_started` populate it. Values mirror the Claude Agent SDK's
+    `McpServerStatus.status` enum."""
 
     model_config = _OPEN
     id: str = Field(min_length=1)
     name: str | None = None
     description: str | None = None
-
-
-class ResourceDecl(BaseModel):
-    """MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.
-
-    Mirrors MCP's `Resource` type from the protocol spec; `uri` is the
-    primary identifier the agent uses to fetch via `resources/read`,
-    `name` and `description` are display/discovery metadata, `mimeType`
-    hints at the content format. Skills sourced as `mcp://<server-id>/<path>`
-    in `Commission.skills[].avp.source` resolve through this catalog."""
-
-    model_config = _OPEN
-    uri: str = Field(min_length=1)
-    name: str | None = None
-    description: str | None = None
-    mimeType: str | None = Field(default=None, alias="mimeType")
+    status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = None
 
 
 class AgentDescriptor(BaseModel):
@@ -154,19 +144,21 @@ class AgentDescriptor(BaseModel):
     tool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all
     just "what's in the agent" to a Descriptor consumer.
 
-    Two views, normatively the same payload:
+    Two views, normatively consistent:
 
       1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.
       2. **On the wire**: `agent_described.data["avp.descriptor"]` carries
          the same payload during a run.
 
-    The Descriptor is *static* (identical bytes for the same agent build).
+    The pre-flight view MAY omit MCP-surfaced `tools[]` entries (those
+    whose `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,
+    since both require the agent to dial its MCP servers and run
+    `tools/list` — work the agent only needs to do at run-time. Every
+    other field MUST be identical between the two views.
+
     Anything that varies per invocation (per-call prompt, run_id, thread_id,
     additional supervisor-managed assets) belongs on the Commission, not
-    here. Environment-discovered surfaces (filesystem skills under
-    `~/.claude/skills/`, plugins, MCP servers discovered at startup) also
-    don't appear here; they surface on `agent_started.data.*` and
-    `mcp_server_connected` at run time.
+    here.
     """
 
     model_config = _STRICT
@@ -192,10 +184,10 @@ class AgentDescriptor(BaseModel):
     # per-call user message). Commission.prompt overrides when both are set.
     prompt: str | None = None
     # MCP servers the agent dials at startup. Connection material stays
-    # inside the agent process; only identity (id, description) is on the
-    # wire. Tools surfaced by these servers are NOT enumerated under
-    # `tools` (which is local-only); they appear at runtime on
-    # `mcp_server_connected.data["avp.mcp.tools"]`.
+    # inside the agent process; only identity (id, name, description) and
+    # the terminal dial `status` are on the wire. Tools surfaced by these
+    # servers appear in `tools` with `avp.mcp_server_id` set to the
+    # server's id.
     mcp_servers: list[McpServerDecl] | None = None
     tools: list[ToolDecl] | None = None
     subagents: list[SubagentDecl] | None = None
@@ -206,7 +198,6 @@ class AgentDescriptor(BaseModel):
 __all__ = [
     "AgentDescriptor",
     "McpServerDecl",
-    "ResourceDecl",
     "SkillDecl",
     "SubagentDecl",
     "ToolDecl",

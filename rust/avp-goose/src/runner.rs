@@ -6,7 +6,7 @@
 //! `reply()` stream into the `Emitter`. Events leave as Goose produces them;
 //! there is no batching.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
@@ -35,20 +35,27 @@ const GOOSE_VERSION: &str = env!("GOOSE_VERSION");
 const FINAL_OUTPUT_TOOL: &str = "recipe__final_output";
 
 /// Reshape rmcp tools (from `list_tools`) to the AVP `ToolDecl` wire shape,
-/// keeping only `name`/`description`/`inputSchema` and dropping Goose-internal
-/// tools.
-fn tool_decls(raw: Vec<Value>) -> Vec<Value> {
+/// keeping only `name`/`description`/`inputSchema` (plus `avp.mcp_server_id`
+/// when the tool is MCP-surfaced) and dropping Goose-internal tools.
+///
+/// `mcp_tool_to_server` maps a tool name to the id of the MCP server that
+/// surfaced it; tools absent from the map run locally and carry no server id.
+fn tool_decls(raw: Vec<Value>, mcp_tool_to_server: &HashMap<String, String>) -> Vec<Value> {
     raw.into_iter()
         .filter_map(|v| {
             let name = v.get("name").and_then(Value::as_str)?.to_string();
             if name == FINAL_OUTPUT_TOOL {
                 return None;
             }
-            Some(json!({
+            let mut decl = json!({
                 "name": name,
                 "description": v.get("description").cloned().unwrap_or(Value::Null),
                 "inputSchema": v.get("inputSchema").cloned().unwrap_or_else(|| json!({ "type": "object" })),
-            }))
+            });
+            if let Some(server_id) = mcp_tool_to_server.get(&name) {
+                decl["avp.mcp_server_id"] = json!(server_id);
+            }
+            Some(decl)
         })
         .collect()
 }
@@ -131,10 +138,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         agent.add_final_output_tool(response).await;
     }
 
-    // Static descriptor from the agent's live tool registry (no probe needed).
-    let descriptor = build_descriptor(&agent, &session_id, &model_name).await?;
-
-    // Emitter: provider + the set of MCP-extension names (for dispatch target).
+    // The set of MCP-extension ids (for tool dispatch-target classification and
+    // for tagging descriptor tools with their `mcp_server_id`).
     let mcp_servers: HashSet<String> = commission
         .mcp_servers
         .iter()
@@ -144,6 +149,10 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             AvpV01CommissionMcpServersItem::Http(x) => x.id.to_string(),
         })
         .collect();
+
+    // Static descriptor from the agent's live tool registry (no probe needed).
+    let descriptor = build_descriptor(&agent, &session_id, &model_name, &mcp_servers).await?;
+
     let mut emitter = Emitter::new(
         sink,
         run_id.clone(),
@@ -255,20 +264,45 @@ async fn build_descriptor(
     agent: &Arc<Agent>,
     session_id: &str,
     model: &str,
+    mcp_servers: &HashSet<String>,
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
+    let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
+        tools.iter().map(|t| t.name.to_string()).collect()
+    };
+
+    // Map each MCP-surfaced tool to its server id by querying the registry
+    // per-extension (tool names from `list_tools(None)` are not reliably
+    // prefixed, so a per-server query is the dependable correlation).
+    let mut mcp_tool_to_server: HashMap<String, String> = HashMap::new();
+    for id in mcp_servers {
+        for name in tool_names(agent.list_tools(session_id, Some(id.clone())).await) {
+            mcp_tool_to_server.insert(name, id.clone());
+        }
+    }
+
     let raw: Vec<Value> = agent
         .list_tools(session_id, None)
         .await
         .iter()
         .map(|tool| serde_json::to_value(tool).unwrap_or(Value::Null))
         .collect();
-    let tools = tool_decls(raw);
+    let tools = tool_decls(raw, &mcp_tool_to_server);
+
+    // Each Commission MCP server the agent loaded is enumerated with its dial
+    // status. `add_extensions_bulk` connected them earlier, so status is
+    // `connected`; only connected servers contribute tools (above).
+    let mcp_server_decls: Vec<Value> = mcp_servers
+        .iter()
+        .map(|id| json!({ "id": id, "status": "connected" }))
+        .collect();
+
     serde_json::from_value(json!({
         "agent_name": "goose",
         "agent_version": GOOSE_VERSION,
         "spec_version": "0.1",
         "default_model": model,
         "tools": tools,
+        "mcp_servers": mcp_server_decls,
     }))
     .map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }
@@ -307,12 +341,18 @@ mod tests {
                     "inputSchema": { "type": "object" } }),
             json!({ "name": "analyze__list_functions" }),
         ];
-        let decls = tool_decls(raw);
+        // `analyze__list_functions` is surfaced by the `analyze` MCP server.
+        let mcp: HashMap<String, String> =
+            [("analyze__list_functions".to_string(), "analyze".to_string())].into();
+        let decls = tool_decls(raw, &mcp);
         let names: Vec<&str> = decls.iter().map(|d| d["name"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["developer__shell", "analyze__list_functions"]);
-        // Extra rmcp fields (annotations) dropped: only name/description/inputSchema.
+        // Local tool: only name/description/inputSchema, no mcp_server_id.
         assert_eq!(decls[0].as_object().unwrap().len(), 3);
+        assert!(decls[0].get("avp.mcp_server_id").is_none());
         // Missing inputSchema defaults to an object schema.
         assert_eq!(decls[1]["inputSchema"], json!({ "type": "object" }));
+        // MCP-surfaced tool carries its server id.
+        assert_eq!(decls[1]["avp.mcp_server_id"], "analyze");
     }
 }

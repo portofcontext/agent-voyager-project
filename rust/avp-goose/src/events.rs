@@ -12,9 +12,8 @@ use avp::trajectory::{
     AgentDescribedData, AgentDescribedEvent, AgentDescriptor, AgentStartedData,
     AgentStartedDataAvpOperationName, AgentStartedEvent, AgentStoppedData, AgentStoppedEvent,
     AssistantMessageData, AssistantMessageDataAvpCostSource, AssistantMessageEvent, AvpContentItem,
-    Content, ErrorCode, ErrorOccurredData, ErrorOccurredEvent, McpServerConnectedData,
-    McpServerConnectedEvent, RunRequestedData, RunRequestedEvent, StopReason, SubagentFailedData,
-    SubagentFailedEvent, SubagentInvokedData, SubagentInvokedEvent, SubagentReturnedData,
+    Content, ErrorCode, ErrorOccurredData, ErrorOccurredEvent, RunRequestedData, RunRequestedEvent,
+    StopReason, SubagentInvokedData, SubagentInvokedEvent, SubagentReturnedData,
     SubagentReturnedEvent, ToolInvokedData, ToolInvokedDataAvpToolDispatchTarget, ToolInvokedEvent,
     ToolResultBlock, ToolReturnedData, ToolReturnedEvent, Usage,
 };
@@ -400,67 +399,8 @@ pub fn subagent_returned(
     event!(SubagentReturnedEvent, "avp.subagent_returned", run_id, data)
 }
 
-/// Build a `subagent_failed` event.
-#[allow(clippy::too_many_arguments)]
-pub fn subagent_failed(
-    run_id: &str,
-    trace_id: &str,
-    span_id: &str,
-    parent_span_id: &str,
-    step: u64,
-    invocation_id: &str,
-    name: &str,
-    duration_ms: u64,
-    error: &str,
-) -> Event {
-    let data = SubagentFailedData {
-        trace_id: trace_id.parse().expect("valid trace id"),
-        span_id: span_id.parse().expect("valid span id"),
-        parent_span_id: parent_span_id.parse().expect("valid parent span id"),
-        avp_meta: None,
-        avp_step: step,
-        avp_duration_ms: duration_ms,
-        avp_subagent_error: error.to_string(),
-        avp_subagent_error_code: None,
-        avp_subagent_invocation_id: invocation_id.parse().expect("valid invocation id"),
-        avp_subagent_name: name.to_string(),
-    };
-    event!(SubagentFailedEvent, "avp.subagent_failed", run_id, data)
-}
-
-/// MCP protocol version reported on `mcp_server_connected`. Goose negotiates
-/// its own version per server; we report a stable default until that is
-/// surfaced (see TECH_DEBT).
-const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
-
-/// Build an `mcp_server_connected` event for a Commission MCP server.
-pub fn mcp_server_connected(
-    run_id: &str,
-    trace_id: &str,
-    span_id: &str,
-    parent_span_id: &str,
-    server_id: &str,
-    tool_count: u64,
-) -> Event {
-    let data = McpServerConnectedData {
-        trace_id: trace_id.parse().expect("valid trace id"),
-        span_id: span_id.parse().expect("valid span id"),
-        parent_span_id: parent_span_id.parse().expect("valid parent span id"),
-        avp_meta: None,
-        avp_mcp_server_id: server_id.parse().expect("valid mcp server id"),
-        avp_mcp_protocol_version: MCP_PROTOCOL_VERSION.to_string(),
-        avp_mcp_tool_count: tool_count,
-        avp_mcp_server_name: None,
-        avp_mcp_server_version: None,
-        avp_mcp_status: None,
-        avp_mcp_error: None,
-        avp_mcp_tools: None,
-        avp_mcp_resources: None,
-    };
-    event!(
-        McpServerConnectedEvent,
-        "avp.mcp_server_connected",
-        run_id,
-        data
-    )
-}
+// `subagent_failed` was collapsed into `subagent_returned` (reason = error)
+// in the v0.1 spec sweep; the error string rides on `avp.subagent.result.text`.
+// `mcp_server_connected` / `_disconnected` were removed entirely: MCP server
+// identity + dial status now live on the descriptor's `mcp_servers[]`, and each
+// MCP-surfaced tool carries `avp.mcp_server_id` in the descriptor's `tools[]`.

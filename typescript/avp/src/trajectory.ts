@@ -18,10 +18,7 @@ export type AVPV01TrajectoryEvent =
   | ToolReturnedEvent
   | SubagentInvokedEvent
   | SubagentReturnedEvent
-  | SubagentFailedEvent
-  | ErrorOccurredEvent
-  | McpServerConnectedEvent
-  | McpServerDisconnectedEvent;
+  | ErrorOccurredEvent;
 export type Specversion = "1.0";
 export type Id = string;
 export type Time = string;
@@ -103,12 +100,14 @@ export type McpServers1 = McpServerDecl[] | null;
 export type Id5 = string;
 export type Name1 = string | null;
 export type Description = string | null;
+export type Status = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
 export type Tools = ToolDecl[] | null;
 export type Name2 = string;
 export type Description1 = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
+export type AvpMcpServerId = string | null;
 export type Subagents = SubagentDecl[] | null;
 export type Name3 = string;
 export type Description2 = string | null;
@@ -356,33 +355,12 @@ export type Subject9 = string | null;
 export type Datacontenttype9 = string | null;
 export type Dataschema9 = string | null;
 export type AvpCorrelationId9 = string | null;
-export type Type26 = "avp.subagent_failed";
+export type Type26 = "avp.error_occurred";
 export type Source13 = "avp://agent";
 export type TraceId9 = string;
 export type SpanId9 = string;
 export type ParentSpanId9 = string;
 export type AvpMeta9 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep5 = number;
-export type AvpSubagentName2 = string;
-export type AvpSubagentInvocationId2 = string;
-export type AvpDurationMs3 = number;
-export type AvpSubagentError = string;
-export type AvpSubagentErrorCode = string | null;
-export type Specversion10 = "1.0";
-export type Id16 = string;
-export type Time10 = string;
-export type Subject10 = string | null;
-export type Datacontenttype10 = string | null;
-export type Dataschema10 = string | null;
-export type AvpCorrelationId10 = string | null;
-export type Type27 = "avp.error_occurred";
-export type Source14 = "avp://agent";
-export type TraceId10 = string;
-export type SpanId10 = string;
-export type ParentSpanId10 = string;
-export type AvpMeta10 = {
   [k: string]: unknown;
 } | null;
 export type ErrorCode =
@@ -392,54 +370,9 @@ export type ErrorCode =
   | "agent_crash"
   | "unsupported_model"
   | "commission_collision"
+  | "mcp_connect_failed"
   | "unknown";
 export type AvpErrorMessage = string;
-export type Specversion11 = "1.0";
-export type Id17 = string;
-export type Time11 = string;
-export type Subject11 = string | null;
-export type Datacontenttype11 = string | null;
-export type Dataschema11 = string | null;
-export type AvpCorrelationId11 = string | null;
-export type Type28 = "avp.mcp_server_connected";
-export type Source15 = "avp://agent";
-export type TraceId11 = string;
-export type SpanId11 = string;
-export type ParentSpanId11 = string;
-export type AvpMeta11 = {
-  [k: string]: unknown;
-} | null;
-export type AvpMcpServerId = string;
-export type AvpMcpProtocolVersion = string;
-export type AvpMcpToolCount = number;
-export type AvpMcpServerName = string | null;
-export type AvpMcpServerVersion = string | null;
-export type AvpMcpTools = ToolDecl[] | null;
-export type AvpMcpResources = ResourceDecl[] | null;
-export type Uri = string;
-export type Name8 = string | null;
-export type Description4 = string | null;
-export type Mimetype = string | null;
-export type AvpMcpStatus = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
-export type AvpMcpError = string | null;
-export type Specversion12 = "1.0";
-export type Id18 = string;
-export type Time12 = string;
-export type Subject12 = string | null;
-export type Datacontenttype12 = string | null;
-export type Dataschema12 = string | null;
-export type AvpCorrelationId12 = string | null;
-export type Type29 = "avp.mcp_server_disconnected";
-export type Source16 = "avp://agent";
-export type TraceId12 = string;
-export type SpanId12 = string;
-export type ParentSpanId12 = string;
-export type AvpMeta12 = {
-  [k: string]: unknown;
-} | null;
-export type AvpMcpServerId1 = string;
-export type AvpMcpDisconnectReason = "clean" | "error";
-export type AvpMcpDisconnectMessage = string | null;
 
 /**
  * First event of the trajectory. The agent is the sole producer on the
@@ -584,8 +517,11 @@ export interface AgentDescribedEvent {
  * Payload of avp.agent_described events.
  *
  * The agent's published Descriptor, emitted between `run_requested`
- * and `agent_started`. `avp.descriptor` MUST equal what
- * `<agent> describe` prints to stdout for the same agent build.
+ * and `agent_started`. `avp.descriptor` SHOULD be consistent with what
+ * `<agent> describe` prints to stdout for the same agent build;
+ * pre-flight describe MAY omit MCP-surfaced tool entries (those whose
+ * `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,
+ * both of which require a startup dial.
  */
 export interface AgentDescribedData {
   trace_id: TraceId1;
@@ -604,19 +540,21 @@ export interface AgentDescribedData {
  * tool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all
  * just "what's in the agent" to a Descriptor consumer.
  *
- * Two views, normatively the same payload:
+ * Two views, normatively consistent:
  *
  *   1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.
  *   2. **On the wire**: `agent_described.data["avp.descriptor"]` carries
  *      the same payload during a run.
  *
- * The Descriptor is *static* (identical bytes for the same agent build).
+ * The pre-flight view MAY omit MCP-surfaced `tools[]` entries (those
+ * whose `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,
+ * since both require the agent to dial its MCP servers and run
+ * `tools/list` — work the agent only needs to do at run-time. Every
+ * other field MUST be identical between the two views.
+ *
  * Anything that varies per invocation (per-call prompt, run_id, thread_id,
  * additional supervisor-managed assets) belongs on the Commission, not
- * here. Environment-discovered surfaces (filesystem skills under
- * `~/.claude/skills/`, plugins, MCP servers discovered at startup) also
- * don't appear here; they surface on `agent_started.data.*` and
- * `mcp_server_connected` at run time.
+ * here.
  */
 export interface AgentDescriptor {
   agent_name: AgentName;
@@ -633,56 +571,63 @@ export interface AgentDescriptor {
   capabilities?: Capabilities;
 }
 /**
- * MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.
+ * MCP server descriptor in `AgentDescriptor.mcp_servers` and
+ * `agent_started.data["avp.mcp_servers"]`: identity + terminal dial status.
  *
  * Connection material (URLs, auth, command-lines) stays inside the agent
  * process and is NOT carried on the descriptor wire. The descriptor
- * records only the server's id, optional display name, and optional
- * description; the tools the server surfaces are NOT enumerated on the
- * descriptor — they appear at runtime on
- * `mcp_server_connected.data["avp.mcp.tools"]`.
+ * records the server's id, optional display name, optional description,
+ * and the terminal dial status when known. The tools the server surfaces
+ * are enumerated in the sibling `tools[]` list with `avp.mcp_server_id`
+ * set to this server's `id`; only `status: "connected"` servers
+ * contribute tools.
  *
  * `id` is the agent's correlation key for this server across the wire
- * (descriptor entry, `mcp_server_connected` event, tool dispatch). It
- * is intentionally looser than `Commission.McpServerRef.id`: the
- * descriptor enumerates BOTH Commission-resolved servers (where `id` is
- * the supervisor-authored slug) AND agent-baked-in / environment-resident
- * servers (where `id` is whatever the environment names them, e.g.
- * `"claude.ai Dashboard Builder"`). Forcing a slug here would either
- * lose fidelity or require every agent to invent the same slugification
- * rule. Commission-authored ids stay slug-clean by virtue of
- * `Commission.McpServerRef.id`'s pattern; descriptor ids must only be
- * non-empty and must match the `avp.mcp.server_id` the agent later
- * surfaces on `mcp_server_connected` so consumers can correlate.
+ * (descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally
+ * looser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH
+ * Commission-resolved servers (where `id` is the supervisor-authored slug)
+ * AND agent-baked-in / environment-resident servers (where `id` is whatever
+ * the environment names them, e.g. `"claude.ai Dashboard Builder"`). Forcing
+ * a slug here would either lose fidelity or require every agent to invent
+ * the same slugification rule. Commission-authored ids stay slug-clean by
+ * virtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must
+ * only be non-empty.
  *
  * `name` is the display name when the environment provides one distinct
  * from `id` (typical for Commission-resolved servers: `id` is the
  * Commission slug, `name` is the human-readable label from the resolved
  * config). For environment-resident servers whose only identifier is
  * the display name, `id` carries that string and `name` is omitted.
+ *
+ * `status` records the dial outcome at startup. Pre-flight `<agent> describe`
+ * MAY omit it (no dial has happened); on-the-wire `agent_described` and
+ * `agent_started` populate it. Values mirror the Claude Agent SDK's
+ * `McpServerStatus.status` enum.
  */
 export interface McpServerDecl {
   id: Id5;
   name?: Name1;
   description?: Description;
+  status?: Status;
   [k: string]: unknown;
 }
 /**
- * Tool descriptor used by `AgentDescriptor.tools`,
- * `agent_started.data["avp.tools"]`, and `mcp_server_connected.data.avp.mcp.tools`.
+ * Tool descriptor used by `AgentDescriptor.tools` and
+ * `agent_started.data["avp.tools"]`.
  *
  * MCP-shaped: `name` plus optional `description` and `inputSchema`. The
- * decl describes a single tool's model-facing identity; how the tool is
- * *dispatched* (local vs MCP server) is implicit from where the decl
- * appears on the wire — `descriptor.tools` and `agent_started.data["avp.tools"]`
- * are local-only; entries under `mcp_server_connected.data.avp.mcp.tools`
- * are MCP-dispatched by virtue of being nested under a server. The
- * per-invocation discriminator lives on `tool_invoked.data["avp.tool.dispatch_target"]`.
+ * decl describes a single tool's model-facing identity. Dispatch is
+ * discriminated by `avp.mcp_server_id`: when set, the tool is sourced
+ * from the MCP server with that `id` in `mcp_servers[]`; when absent,
+ * the tool runs locally in the agent's process. The per-invocation
+ * discriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors
+ * presence of this field.
  */
 export interface ToolDecl {
   name: Name2;
   description?: Description1;
   inputSchema?: Inputschema;
+  "avp.mcp_server_id"?: AvpMcpServerId;
   [k: string]: unknown;
 }
 /**
@@ -1181,6 +1126,11 @@ export interface SubagentReturnedEvent {
  * Closes the subagent's frame. `span_id` matches the corresponding
  * `subagent_invoked` event so consumers can pair them.
  *
+ * `avp.subagent.reason` is a `StopReason`; on the error path,
+ * `reason = error` and `avp.subagent.result.text` carries the error
+ * string. The paired `tool_returned` mirrors this: `is_error = true`
+ * when `reason = error`, with the same `Error: ...` content.
+ *
  * `avp.subagent.usage` is OPTIONAL and intended only for the in-process
  * fallback: parent agents whose SDK black-boxes the child loop (no
  * per-turn AssistantMessages exposed to the parent) carry the child's
@@ -1221,7 +1171,7 @@ export interface SubagentUsage {
   turns: Turns;
   [k: string]: unknown;
 }
-export interface SubagentFailedEvent {
+export interface ErrorOccurredEvent {
   specversion?: Specversion9;
   id?: Id15;
   time?: Time9;
@@ -1231,110 +1181,14 @@ export interface SubagentFailedEvent {
   "avp.correlation_id"?: AvpCorrelationId9;
   type?: Type26;
   source?: Source13;
-  data: SubagentFailedData;
+  data: ErrorOccurredData;
 }
-/**
- * Subagent invocation errored. The parent treats the error as a
- * tool-call failure: the model receives an `Error: ...` string in place
- * of the result and may retry or proceed.
- */
-export interface SubagentFailedData {
+export interface ErrorOccurredData {
   trace_id: TraceId9;
   span_id: SpanId9;
   parent_span_id: ParentSpanId9;
   "avp.meta"?: AvpMeta9;
-  "avp.step": AvpStep5;
-  "avp.subagent.name": AvpSubagentName2;
-  "avp.subagent.invocation_id": AvpSubagentInvocationId2;
-  "avp.duration_ms": AvpDurationMs3;
-  "avp.subagent.error": AvpSubagentError;
-  "avp.subagent.error.code"?: AvpSubagentErrorCode;
-  [k: string]: unknown;
-}
-export interface ErrorOccurredEvent {
-  specversion?: Specversion10;
-  id?: Id16;
-  time?: Time10;
-  subject?: Subject10;
-  datacontenttype?: Datacontenttype10;
-  dataschema?: Dataschema10;
-  "avp.correlation_id"?: AvpCorrelationId10;
-  type?: Type27;
-  source?: Source14;
-  data: ErrorOccurredData;
-}
-export interface ErrorOccurredData {
-  trace_id: TraceId10;
-  span_id: SpanId10;
-  parent_span_id: ParentSpanId10;
-  "avp.meta"?: AvpMeta10;
   "avp.error.code": ErrorCode;
   "avp.error.message": AvpErrorMessage;
-  [k: string]: unknown;
-}
-export interface McpServerConnectedEvent {
-  specversion?: Specversion11;
-  id?: Id17;
-  time?: Time11;
-  subject?: Subject11;
-  datacontenttype?: Datacontenttype11;
-  dataschema?: Dataschema11;
-  "avp.correlation_id"?: AvpCorrelationId11;
-  type?: Type28;
-  source?: Source15;
-  data: McpServerConnectedData;
-}
-export interface McpServerConnectedData {
-  trace_id: TraceId11;
-  span_id: SpanId11;
-  parent_span_id: ParentSpanId11;
-  "avp.meta"?: AvpMeta11;
-  "avp.mcp.server_id": AvpMcpServerId;
-  "avp.mcp.protocol_version": AvpMcpProtocolVersion;
-  "avp.mcp.tool_count": AvpMcpToolCount;
-  "avp.mcp.server_name"?: AvpMcpServerName;
-  "avp.mcp.server_version"?: AvpMcpServerVersion;
-  "avp.mcp.tools"?: AvpMcpTools;
-  "avp.mcp.resources"?: AvpMcpResources;
-  "avp.mcp.status"?: AvpMcpStatus;
-  "avp.mcp.error"?: AvpMcpError;
-  [k: string]: unknown;
-}
-/**
- * MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.
- *
- * Mirrors MCP's `Resource` type from the protocol spec; `uri` is the
- * primary identifier the agent uses to fetch via `resources/read`,
- * `name` and `description` are display/discovery metadata, `mimeType`
- * hints at the content format. Skills sourced as `mcp://<server-id>/<path>`
- * in `Commission.skills[].avp.source` resolve through this catalog.
- */
-export interface ResourceDecl {
-  uri: Uri;
-  name?: Name8;
-  description?: Description4;
-  mimeType?: Mimetype;
-  [k: string]: unknown;
-}
-export interface McpServerDisconnectedEvent {
-  specversion?: Specversion12;
-  id?: Id18;
-  time?: Time12;
-  subject?: Subject12;
-  datacontenttype?: Datacontenttype12;
-  dataschema?: Dataschema12;
-  "avp.correlation_id"?: AvpCorrelationId12;
-  type?: Type29;
-  source?: Source16;
-  data: McpServerDisconnectedData;
-}
-export interface McpServerDisconnectedData {
-  trace_id: TraceId12;
-  span_id: SpanId12;
-  parent_span_id: ParentSpanId12;
-  "avp.meta"?: AvpMeta12;
-  "avp.mcp.server_id": AvpMcpServerId1;
-  "avp.mcp.disconnect_reason": AvpMcpDisconnectReason;
-  "avp.mcp.disconnect_message"?: AvpMcpDisconnectMessage;
   [k: string]: unknown;
 }

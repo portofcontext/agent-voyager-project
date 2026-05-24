@@ -44,6 +44,15 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   dispatches to the server, asserting `dispatch_target=mcp_server`, a successful
   `tool_returned`, and the echoed token round-tripping. Both isolate via
   `GOOSE_PATH_ROOT`.
+- **Conformed to the v0.1 spec sweep (merge from main).** `mcp_server_connected`
+  / `_disconnected` events removed (MCP identity + dial `status` now ride on the
+  descriptor's `mcp_servers[]`, and each MCP tool carries `avp.mcp_server_id` in
+  `tools[]`, populated by a per-extension `list_tools` query in
+  `build_descriptor`). `subagent_failed` collapsed into `subagent_returned`
+  (`reason = error`). A subagent started via a tool call now fires BOTH
+  `tool_invoked` + `subagent_invoked` and BOTH `tool_returned` +
+  `subagent_returned`; the subagent frame is one span (returned reuses invoked).
+  Bindings regenerated; hermetic suite + both gated MCP tests green.
 
 ## Blocked on a Goose in-loop signal
 - **Stop-reason fidelity.** Only `converged`/`error` emitted. `interrupted`
@@ -58,12 +67,13 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   usage).
 - **Skills discovery** — files are written + the `skills` platform extension
   enabled; confirm Goose loads it and discovers them.
-- **MCP `protocol_version`** is still a constant `"2025-06-18"`. There is now a
-  real MCP server in the loop (`avp_test_mcp.py`, which negotiates `2025-06-18`),
-  so the negotiated version can be surfaced from the connected extension instead
-  of hardcoded; not yet wired.
-- **`subagent_returned.reason`** is always `converged` (Goose doesn't surface the
-  child's stop reason).
+- **Descriptor `mcp_servers[].status` is hardcoded `connected`.** The runner
+  loads servers via `add_extensions_bulk` but does not yet read the per-server
+  `ExtensionLoadResult`, so a failed dial is not reflected as `failed`. Wire the
+  load results through `build_descriptor`.
+- **`subagent_returned.reason` on the success path is always `converged`** (Goose
+  doesn't surface the child's stop reason); the error path now correctly reports
+  `error`.
 
 ## Planned: native provider routing in the Commission
 - **`GOOSE_PROVIDER` is temporary.** Today the connector resolves the provider

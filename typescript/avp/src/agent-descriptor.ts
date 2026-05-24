@@ -16,12 +16,14 @@ export type McpServers = McpServerDecl[] | null;
 export type Id = string;
 export type Name = string | null;
 export type Description = string | null;
+export type Status = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
 export type Tools = ToolDecl[] | null;
 export type Name1 = string;
 export type Description1 = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
+export type AvpMcpServerId = string | null;
 export type Subagents = SubagentDecl[] | null;
 export type Name2 = string;
 export type Description2 = string | null;
@@ -54,33 +56,38 @@ export interface AVPV01AgentDescriptor {
   capabilities?: Capabilities;
 }
 /**
- * MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.
+ * MCP server descriptor in `AgentDescriptor.mcp_servers` and
+ * `agent_started.data["avp.mcp_servers"]`: identity + terminal dial status.
  *
  * Connection material (URLs, auth, command-lines) stays inside the agent
  * process and is NOT carried on the descriptor wire. The descriptor
- * records only the server's id, optional display name, and optional
- * description; the tools the server surfaces are NOT enumerated on the
- * descriptor — they appear at runtime on
- * `mcp_server_connected.data["avp.mcp.tools"]`.
+ * records the server's id, optional display name, optional description,
+ * and the terminal dial status when known. The tools the server surfaces
+ * are enumerated in the sibling `tools[]` list with `avp.mcp_server_id`
+ * set to this server's `id`; only `status: "connected"` servers
+ * contribute tools.
  *
  * `id` is the agent's correlation key for this server across the wire
- * (descriptor entry, `mcp_server_connected` event, tool dispatch). It
- * is intentionally looser than `Commission.McpServerRef.id`: the
- * descriptor enumerates BOTH Commission-resolved servers (where `id` is
- * the supervisor-authored slug) AND agent-baked-in / environment-resident
- * servers (where `id` is whatever the environment names them, e.g.
- * `"claude.ai Dashboard Builder"`). Forcing a slug here would either
- * lose fidelity or require every agent to invent the same slugification
- * rule. Commission-authored ids stay slug-clean by virtue of
- * `Commission.McpServerRef.id`'s pattern; descriptor ids must only be
- * non-empty and must match the `avp.mcp.server_id` the agent later
- * surfaces on `mcp_server_connected` so consumers can correlate.
+ * (descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally
+ * looser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH
+ * Commission-resolved servers (where `id` is the supervisor-authored slug)
+ * AND agent-baked-in / environment-resident servers (where `id` is whatever
+ * the environment names them, e.g. `"claude.ai Dashboard Builder"`). Forcing
+ * a slug here would either lose fidelity or require every agent to invent
+ * the same slugification rule. Commission-authored ids stay slug-clean by
+ * virtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must
+ * only be non-empty.
  *
  * `name` is the display name when the environment provides one distinct
  * from `id` (typical for Commission-resolved servers: `id` is the
  * Commission slug, `name` is the human-readable label from the resolved
  * config). For environment-resident servers whose only identifier is
  * the display name, `id` carries that string and `name` is omitted.
+ *
+ * `status` records the dial outcome at startup. Pre-flight `<agent> describe`
+ * MAY omit it (no dial has happened); on-the-wire `agent_described` and
+ * `agent_started` populate it. Values mirror the Claude Agent SDK's
+ * `McpServerStatus.status` enum.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
  * via the `definition` "McpServerDecl".
@@ -89,19 +96,20 @@ export interface McpServerDecl {
   id: Id;
   name?: Name;
   description?: Description;
+  status?: Status;
   [k: string]: unknown;
 }
 /**
- * Tool descriptor used by `AgentDescriptor.tools`,
- * `agent_started.data["avp.tools"]`, and `mcp_server_connected.data.avp.mcp.tools`.
+ * Tool descriptor used by `AgentDescriptor.tools` and
+ * `agent_started.data["avp.tools"]`.
  *
  * MCP-shaped: `name` plus optional `description` and `inputSchema`. The
- * decl describes a single tool's model-facing identity; how the tool is
- * *dispatched* (local vs MCP server) is implicit from where the decl
- * appears on the wire — `descriptor.tools` and `agent_started.data["avp.tools"]`
- * are local-only; entries under `mcp_server_connected.data.avp.mcp.tools`
- * are MCP-dispatched by virtue of being nested under a server. The
- * per-invocation discriminator lives on `tool_invoked.data["avp.tool.dispatch_target"]`.
+ * decl describes a single tool's model-facing identity. Dispatch is
+ * discriminated by `avp.mcp_server_id`: when set, the tool is sourced
+ * from the MCP server with that `id` in `mcp_servers[]`; when absent,
+ * the tool runs locally in the agent's process. The per-invocation
+ * discriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors
+ * presence of this field.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
  * via the `definition` "ToolDecl".
@@ -110,6 +118,7 @@ export interface ToolDecl {
   name: Name1;
   description?: Description1;
   inputSchema?: Inputschema;
+  "avp.mcp_server_id"?: AvpMcpServerId;
   [k: string]: unknown;
 }
 /**

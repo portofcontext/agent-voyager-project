@@ -18,7 +18,6 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
-use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::ids::{new_span_id, new_trace_id, ZERO_SPAN_ID};
 use avp::pricing::PriceTable;
 use avp::sink::Sink;
@@ -33,14 +32,26 @@ use crate::translate::{self, GooseContent};
 /// `subagent_*` events rather than `tool_*`.
 const SUMMON_EXTENSION: &str = "summon";
 
+/// The frame a subagent invocation opens. The same span closes it on return:
+/// the spec pairs `subagent_invoked` / `subagent_returned` by a shared frame
+/// span (unlike tool events, where the return is a child of the invocation).
+struct SubagentFrame {
+    /// `subagent_invoked` span; reused as the `subagent_returned` span_id.
+    span: String,
+    /// Parent of the frame (the turn span); also the `subagent_returned` parent.
+    parent: String,
+}
+
 struct PendingTool {
     step: u64,
-    /// Invocation span; becomes the parent span of the return/failed event.
-    invoked_span: String,
+    /// `tool_invoked` span; the matching `tool_returned` parents to it.
+    tool_span: String,
+    /// Present when the call also spawned a subagent (a `summon` call). Such a
+    /// call fires BOTH tool_* and subagent_* events (spec: a subagent started
+    /// via a tool call surfaces on both axes).
+    subagent: Option<SubagentFrame>,
     name: String,
     started_at: Instant,
-    /// A `summon` (subagent) call vs. a plain tool call.
-    is_subagent: bool,
 }
 
 /// Drives a single agent run's trajectory.
@@ -100,29 +111,10 @@ impl<S: Sink> Emitter<S> {
             descriptor,
         );
         self.state.emit(&described)?;
-
-        // Synthesize an mcp_server_connected for each Commission MCP server,
-        // with a tool count derived from the descriptor (Goose has no connect
-        // events on the stream). `{id}__` is Goose's tool-name prefix.
-        for server in commission.mcp_servers.iter().flatten() {
-            let id = match server {
-                AvpV01CommissionMcpServersItem::Stdio(x) => x.id.to_string(),
-                AvpV01CommissionMcpServersItem::Http(x) => x.id.to_string(),
-            };
-            let prefix = format!("{id}__");
-            let tool_count = descriptor.tools.as_ref().map_or(0, |tools| {
-                tools.iter().filter(|t| t.name.starts_with(&prefix)).count()
-            }) as u64;
-            let connected = events::mcp_server_connected(
-                &self.state.run_id,
-                &self.state.trace_id,
-                &new_span_id(),
-                ZERO_SPAN_ID,
-                &id,
-                tool_count,
-            );
-            self.state.emit(&connected)?;
-        }
+        // MCP servers are no longer announced via events: their identity and
+        // dial status ride on the descriptor's `mcp_servers[]`, and each
+        // MCP-surfaced tool carries `avp.mcp_server_id` in the descriptor's
+        // `tools[]` (built in `runner::build_descriptor`).
         Ok(())
     }
 
@@ -153,43 +145,47 @@ impl<S: Sink> Emitter<S> {
             if let Some(block) = translate::to_content_block(item) {
                 self.state.push_content(block);
             } else if let Some(call) = translate::as_tool_call(item) {
-                let invoked_span = new_span_id();
-                let is_subagent = call.extension.as_deref() == Some(SUMMON_EXTENSION);
-                let ev = if is_subagent {
-                    events::subagent_invoked(
+                // Every tool call surfaces a tool_invoked.
+                let tool_span = new_span_id();
+                let dispatch =
+                    translate::dispatch_target(call.extension.as_deref(), &self.mcp_servers);
+                self.state.buffer_event(events::tool_invoked(
+                    &self.state.run_id,
+                    &self.state.trace_id,
+                    &tool_span,
+                    &turn_span,
+                    step,
+                    &call.id,
+                    &call.name,
+                    call.input.clone(),
+                    Some(dispatch),
+                ));
+                // A `summon` call additionally opens a subagent frame, so the
+                // delegation surfaces on the subagent axis as well.
+                let subagent = if call.extension.as_deref() == Some(SUMMON_EXTENSION) {
+                    let frame_span = new_span_id();
+                    self.state.buffer_event(events::subagent_invoked(
                         &self.state.run_id,
                         &self.state.trace_id,
-                        &invoked_span,
+                        &frame_span,
                         &turn_span,
                         step,
                         &call.id,
                         &call.name,
                         call.input.clone(),
-                    )
+                    ));
+                    Some(SubagentFrame { span: frame_span, parent: turn_span.clone() })
                 } else {
-                    let dispatch =
-                        translate::dispatch_target(call.extension.as_deref(), &self.mcp_servers);
-                    events::tool_invoked(
-                        &self.state.run_id,
-                        &self.state.trace_id,
-                        &invoked_span,
-                        &turn_span,
-                        step,
-                        &call.id,
-                        &call.name,
-                        call.input.clone(),
-                        Some(dispatch),
-                    )
+                    None
                 };
-                self.state.buffer_event(ev);
                 self.pending.insert(
                     call.id.clone(),
                     PendingTool {
                         step,
-                        invoked_span,
+                        tool_span,
+                        subagent,
                         name: call.name,
                         started_at: Instant::now(),
-                        is_subagent,
                     },
                 );
             }
@@ -209,54 +205,39 @@ impl<S: Sink> Emitter<S> {
                 continue;
             };
             let duration_ms = pending.started_at.elapsed().as_millis() as u64;
-            let span = new_span_id();
-            let ev = if pending.is_subagent {
-                if ret.is_error {
-                    let error = ret
-                        .output
-                        .as_str()
-                        .map(str::to_string)
-                        .unwrap_or_else(|| ret.output.to_string());
-                    events::subagent_failed(
-                        &self.state.run_id,
-                        &self.state.trace_id,
-                        &span,
-                        &pending.invoked_span,
-                        pending.step,
-                        &ret.id,
-                        &pending.name,
-                        duration_ms,
-                        &error,
-                    )
-                } else {
-                    events::subagent_returned(
-                        &self.state.run_id,
-                        &self.state.trace_id,
-                        &span,
-                        &pending.invoked_span,
-                        pending.step,
-                        &ret.id,
-                        &pending.name,
-                        duration_ms,
-                        &ret.output,
-                        StopReason::Converged,
-                    )
-                }
-            } else {
-                let block = events::tool_result_block(&ret.id, &ret.output, ret.is_error);
-                events::tool_returned(
+            // Every tool call closes with a tool_returned (parented to its
+            // tool_invoked span), carrying the is_error discriminator.
+            let block = events::tool_result_block(&ret.id, &ret.output, ret.is_error);
+            self.state.emit(&events::tool_returned(
+                &self.state.run_id,
+                &self.state.trace_id,
+                &new_span_id(),
+                &pending.tool_span,
+                pending.step,
+                &ret.id,
+                &pending.name,
+                duration_ms,
+                block,
+            ))?;
+            // A summon call additionally closes its subagent frame. The
+            // subagent_returned reuses the frame span and mirrors the tool's
+            // error via `reason = error` (the error string rides on result.text).
+            if let Some(frame) = pending.subagent {
+                let reason =
+                    if ret.is_error { StopReason::Error } else { StopReason::Converged };
+                self.state.emit(&events::subagent_returned(
                     &self.state.run_id,
                     &self.state.trace_id,
-                    &span,
-                    &pending.invoked_span,
+                    &frame.span,
+                    &frame.parent,
                     pending.step,
                     &ret.id,
                     &pending.name,
                     duration_ms,
-                    block,
-                )
-            };
-            self.state.emit(&ev)?;
+                    &ret.output,
+                    reason,
+                ))?;
+            }
         }
         Ok(())
     }

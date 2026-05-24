@@ -144,7 +144,8 @@ class Commission(BaseModel):
     #   - [n1, n2, …]   → only the listed names/ids are exposed; the agent
     #                     hides the rest from the model and runtime-blocks
     #                     any hallucinated invocation with a `tool_returned`
-    #                     (isError=True) / `subagent_failed`.
+    #                     (isError=True) (or, for subagents, a
+    #                     `subagent_returned` with `reason=error`).
     #
     # Names MUST appear in the corresponding descriptor field at startup or
     # the agent emits `error_occurred(code: "commission_collision")` and

@@ -2,7 +2,7 @@
   "$defs": {
     "AgentDescribedData": {
       "additionalProperties": true,
-      "description": "Payload of avp.agent_described events.\n\nThe agent's published Descriptor, emitted between `run_requested`\nand `agent_started`. `avp.descriptor` MUST equal what\n`<agent> describe` prints to stdout for the same agent build.",
+      "description": "Payload of avp.agent_described events.\n\nThe agent's published Descriptor, emitted between `run_requested`\nand `agent_started`. `avp.descriptor` SHOULD be consistent with what\n`<agent> describe` prints to stdout for the same agent build;\npre-flight describe MAY omit MCP-surfaced tool entries (those whose\n`avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\nboth of which require a startup dial.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -144,7 +144,7 @@
     },
     "AgentDescriptor": {
       "additionalProperties": false,
-      "description": "Self-description of an AVP agent: the static surface it ships with.\n\nIdentity, capabilities, supported models, system prompt, baked-in user\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\nProvenance inside the agent doesn't matter on the wire: an SDK preset\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\njust \"what's in the agent\" to a Descriptor consumer.\n\nTwo views, normatively the same payload:\n\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\n  2. **On the wire**: `agent_described.data[\"avp.descriptor\"]` carries\n     the same payload during a run.\n\nThe Descriptor is *static* (identical bytes for the same agent build).\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\nadditional supervisor-managed assets) belongs on the Commission, not\nhere. Environment-discovered surfaces (filesystem skills under\n`~/.claude/skills/`, plugins, MCP servers discovered at startup) also\ndon't appear here; they surface on `agent_started.data.*` and\n`mcp_server_connected` at run time.",
+      "description": "Self-description of an AVP agent: the static surface it ships with.\n\nIdentity, capabilities, supported models, system prompt, baked-in user\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\nProvenance inside the agent doesn't matter on the wire: an SDK preset\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\njust \"what's in the agent\" to a Descriptor consumer.\n\nTwo views, normatively consistent:\n\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\n  2. **On the wire**: `agent_described.data[\"avp.descriptor\"]` carries\n     the same payload during a run.\n\nThe pre-flight view MAY omit MCP-surfaced `tools[]` entries (those\nwhose `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\nsince both require the agent to dial its MCP servers and run\n`tools/list` — work the agent only needs to do at run-time. Every\nother field MUST be identical between the two views.\n\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\nadditional supervisor-managed assets) belongs on the Commission, not\nhere.",
       "properties": {
         "agent_name": {
           "minLength": 1,
@@ -1535,6 +1535,7 @@
         "agent_crash",
         "unsupported_model",
         "commission_collision",
+        "mcp_connect_failed",
         "unknown"
       ],
       "title": "ErrorCode",
@@ -1745,247 +1746,9 @@
       "title": "ImageBlock",
       "type": "object"
     },
-    "McpServerConnectedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.mcp.server_id": {
-          "minLength": 1,
-          "title": "Avp.Mcp.Server Id",
-          "type": "string"
-        },
-        "avp.mcp.protocol_version": {
-          "title": "Avp.Mcp.Protocol Version",
-          "type": "string"
-        },
-        "avp.mcp.tool_count": {
-          "minimum": 0,
-          "title": "Avp.Mcp.Tool Count",
-          "type": "integer"
-        },
-        "avp.mcp.server_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Server Name"
-        },
-        "avp.mcp.server_version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Server Version"
-        },
-        "avp.mcp.tools": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/ToolDecl"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Tools"
-        },
-        "avp.mcp.resources": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/ResourceDecl"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Resources"
-        },
-        "avp.mcp.status": {
-          "anyOf": [
-            {
-              "enum": [
-                "connected",
-                "failed",
-                "needs-auth",
-                "pending",
-                "disabled"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Status"
-        },
-        "avp.mcp.error": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Error"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.mcp.server_id",
-        "avp.mcp.protocol_version",
-        "avp.mcp.tool_count"
-      ],
-      "title": "McpServerConnectedData",
-      "type": "object"
-    },
-    "McpServerConnectedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.mcp_server_connected",
-          "default": "avp.mcp_server_connected",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/McpServerConnectedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "McpServerConnectedEvent",
-      "type": "object"
-    },
     "McpServerDecl": {
       "additionalProperties": true,
-      "description": "MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords only the server's id, optional display name, and optional\ndescription; the tools the server surfaces are NOT enumerated on the\ndescriptor — they appear at runtime on\n`mcp_server_connected.data[\"avp.mcp.tools\"]`.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\nis intentionally looser than `Commission.McpServerRef.id`: the\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\nservers (where `id` is whatever the environment names them, e.g.\n`\"claude.ai Dashboard Builder\"`). Forcing a slug here would either\nlose fidelity or require every agent to invent the same slugification\nrule. Commission-authored ids stay slug-clean by virtue of\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\nnon-empty and must match the `avp.mcp.server_id` the agent later\nsurfaces on `mcp_server_connected` so consumers can correlate.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted.",
+      "description": "MCP server descriptor in `AgentDescriptor.mcp_servers` and\n`agent_started.data[\"avp.mcp_servers\"]`: identity + terminal dial status.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords the server's id, optional display name, optional description,\nand the terminal dial status when known. The tools the server surfaces\nare enumerated in the sibling `tools[]` list with `avp.mcp_server_id`\nset to this server's `id`; only `status: \"connected\"` servers\ncontribute tools.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally\nlooser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH\nCommission-resolved servers (where `id` is the supervisor-authored slug)\nAND agent-baked-in / environment-resident servers (where `id` is whatever\nthe environment names them, e.g. `\"claude.ai Dashboard Builder\"`). Forcing\na slug here would either lose fidelity or require every agent to invent\nthe same slugification rule. Commission-authored ids stay slug-clean by\nvirtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must\nonly be non-empty.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted.\n\n`status` records the dial outcome at startup. Pre-flight `<agent> describe`\nMAY omit it (no dial has happened); on-the-wire `agent_described` and\n`agent_started` populate it. Values mirror the Claude Agent SDK's\n`McpServerStatus.status` enum.",
       "properties": {
         "id": {
           "minLength": 1,
@@ -2015,175 +1778,31 @@
           ],
           "default": null,
           "title": "Description"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "connected",
+                "failed",
+                "needs-auth",
+                "pending",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
         }
       },
       "required": [
         "id"
       ],
       "title": "McpServerDecl",
-      "type": "object"
-    },
-    "McpServerDisconnectedData": {
-      "additionalProperties": true,
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.mcp.server_id": {
-          "minLength": 1,
-          "title": "Avp.Mcp.Server Id",
-          "type": "string"
-        },
-        "avp.mcp.disconnect_reason": {
-          "enum": [
-            "clean",
-            "error"
-          ],
-          "title": "Avp.Mcp.Disconnect Reason",
-          "type": "string"
-        },
-        "avp.mcp.disconnect_message": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Mcp.Disconnect Message"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.mcp.server_id",
-        "avp.mcp.disconnect_reason"
-      ],
-      "title": "McpServerDisconnectedData",
-      "type": "object"
-    },
-    "McpServerDisconnectedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.mcp_server_disconnected",
-          "default": "avp.mcp_server_disconnected",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/McpServerDisconnectedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "McpServerDisconnectedEvent",
       "type": "object"
     },
     "McpServerHttp": {
@@ -2311,58 +1930,6 @@
         "refusal"
       ],
       "title": "RefusalBlock",
-      "type": "object"
-    },
-    "ResourceDecl": {
-      "additionalProperties": true,
-      "description": "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog.",
-      "properties": {
-        "uri": {
-          "minLength": 1,
-          "title": "Uri",
-          "type": "string"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Description"
-        },
-        "mimeType": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Mimetype"
-        }
-      },
-      "required": [
-        "uri"
-      ],
-      "title": "ResourceDecl",
       "type": "object"
     },
     "RunRequestedData": {
@@ -2752,183 +2319,6 @@
       "title": "SubagentDecl",
       "type": "object"
     },
-    "SubagentFailedData": {
-      "additionalProperties": true,
-      "description": "Subagent invocation errored. The parent treats the error as a\ntool-call failure: the model receives an `Error: ...` string in place\nof the result and may retry or proceed.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.step": {
-          "minimum": 0,
-          "title": "Avp.Step",
-          "type": "integer"
-        },
-        "avp.subagent.name": {
-          "title": "Avp.Subagent.Name",
-          "type": "string"
-        },
-        "avp.subagent.invocation_id": {
-          "minLength": 1,
-          "title": "Avp.Subagent.Invocation Id",
-          "type": "string"
-        },
-        "avp.duration_ms": {
-          "minimum": 0,
-          "title": "Avp.Duration Ms",
-          "type": "integer"
-        },
-        "avp.subagent.error": {
-          "title": "Avp.Subagent.Error",
-          "type": "string"
-        },
-        "avp.subagent.error.code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Subagent.Error.Code"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.step",
-        "avp.subagent.name",
-        "avp.subagent.invocation_id",
-        "avp.duration_ms",
-        "avp.subagent.error"
-      ],
-      "title": "SubagentFailedData",
-      "type": "object"
-    },
-    "SubagentFailedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.subagent_failed",
-          "default": "avp.subagent_failed",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/SubagentFailedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "SubagentFailedEvent",
-      "type": "object"
-    },
     "SubagentInvokedData": {
       "additionalProperties": true,
       "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is reserved for future use when the subagent runs\nas a separate commissioned trajectory. Absent for in-process subagents.",
@@ -3116,7 +2506,7 @@
     },
     "SubagentReturnedData": {
       "additionalProperties": true,
-      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory.",
+      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.reason` is a `StopReason`; on the error path,\n`reason = error` and `avp.subagent.result.text` carries the error\nstring. The paired `tool_returned` mirrors this: `is_error = true`\nwhen `reason = error`, with the same `Error: ...` content.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3449,7 +2839,7 @@
     },
     "ToolDecl": {
       "additionalProperties": true,
-      "description": "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`.",
+      "description": "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity. Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field.",
       "properties": {
         "name": {
           "title": "Name",
@@ -3479,6 +2869,18 @@
           ],
           "default": null,
           "title": "Inputschema"
+        },
+        "avp.mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avp.Mcp Server Id"
         }
       },
       "required": [
@@ -4066,10 +3468,7 @@
       "avp.agent_stopped": "#/$defs/AgentStoppedEvent",
       "avp.assistant_message": "#/$defs/AssistantMessageEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
-      "avp.mcp_server_connected": "#/$defs/McpServerConnectedEvent",
-      "avp.mcp_server_disconnected": "#/$defs/McpServerDisconnectedEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
-      "avp.subagent_failed": "#/$defs/SubagentFailedEvent",
       "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
       "avp.subagent_returned": "#/$defs/SubagentReturnedEvent",
       "avp.tool_invoked": "#/$defs/ToolInvokedEvent",
@@ -4106,16 +3505,7 @@
       "$ref": "#/$defs/SubagentReturnedEvent"
     },
     {
-      "$ref": "#/$defs/SubagentFailedEvent"
-    },
-    {
       "$ref": "#/$defs/ErrorOccurredEvent"
-    },
-    {
-      "$ref": "#/$defs/McpServerConnectedEvent"
-    },
-    {
-      "$ref": "#/$defs/McpServerDisconnectedEvent"
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",

@@ -185,7 +185,7 @@ fn run_case(
     let run_id = format!("eval-{}-{}", setup.name, target.provider);
     let commission = build_commission(setup, target, &run_id);
 
-    let mut fail = |err: String| CaseResult {
+    let fail = |err: String| CaseResult {
         setup: setup.name,
         target: target.label,
         spawn_err: Some(err),

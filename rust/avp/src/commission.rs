@@ -315,6 +315,7 @@ pub enum AvpV01CommissionMcpServersItem {
     Http(McpServerHttp),
     #[serde(rename = "stdio")]
     Stdio(McpServerStdio),
+
 }
 impl ::std::convert::From<McpServerHttp> for AvpV01CommissionMcpServersItem {
     fn from(value: McpServerHttp) -> Self {

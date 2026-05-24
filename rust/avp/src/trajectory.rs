@@ -29,14 +29,14 @@ pub mod error {
         }
     }
 }
-#[doc = "Payload of avp.agent_described events.\n\nThe agent's published Descriptor, emitted between `run_requested`\nand `agent_started`. `avp.descriptor` MUST equal what\n`<agent> describe` prints to stdout for the same agent build."]
+#[doc = "Payload of avp.agent_described events.\n\nThe agent's published Descriptor, emitted between `run_requested`\nand `agent_started`. `avp.descriptor` SHOULD be consistent with what\n`<agent> describe` prints to stdout for the same agent build;\npre-flight describe MAY omit MCP-surfaced tool entries (those whose\n`avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\nboth of which require a startup dial."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AgentDescribedData\","]
-#[doc = "  \"description\": \"Payload of avp.agent_described events.\\n\\nThe agent's published Descriptor, emitted between `run_requested`\\nand `agent_started`. `avp.descriptor` MUST equal what\\n`<agent> describe` prints to stdout for the same agent build.\","]
+#[doc = "  \"description\": \"Payload of avp.agent_described events.\\n\\nThe agent's published Descriptor, emitted between `run_requested`\\nand `agent_started`. `avp.descriptor` SHOULD be consistent with what\\n`<agent> describe` prints to stdout for the same agent build;\\npre-flight describe MAY omit MCP-surfaced tool entries (those whose\\n`avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\\nboth of which require a startup dial.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.descriptor\","]
@@ -220,11 +220,7 @@ pub struct AgentDescribedEvent {
     pub subject: ::std::option::Option<AgentDescribedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::agent_described_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::agent_described_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentDescribedEventAvpCorrelationId`"]
@@ -363,14 +359,14 @@ impl<'de> ::serde::Deserialize<'de> for AgentDescribedEventSubject {
             })
     }
 }
-#[doc = "Self-description of an AVP agent: the static surface it ships with.\n\nIdentity, capabilities, supported models, system prompt, baked-in user\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\nProvenance inside the agent doesn't matter on the wire: an SDK preset\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\njust \"what's in the agent\" to a Descriptor consumer.\n\nTwo views, normatively the same payload:\n\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\n  2. **On the wire**: `agent_described.data[\"avp.descriptor\"]` carries\n     the same payload during a run.\n\nThe Descriptor is *static* (identical bytes for the same agent build).\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\nadditional supervisor-managed assets) belongs on the Commission, not\nhere. Environment-discovered surfaces (filesystem skills under\n`~/.claude/skills/`, plugins, MCP servers discovered at startup) also\ndon't appear here; they surface on `agent_started.data.*` and\n`mcp_server_connected` at run time."]
+#[doc = "Self-description of an AVP agent: the static surface it ships with.\n\nIdentity, capabilities, supported models, system prompt, baked-in user\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\nProvenance inside the agent doesn't matter on the wire: an SDK preset\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\njust \"what's in the agent\" to a Descriptor consumer.\n\nTwo views, normatively consistent:\n\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\n  2. **On the wire**: `agent_described.data[\"avp.descriptor\"]` carries\n     the same payload during a run.\n\nThe pre-flight view MAY omit MCP-surfaced `tools[]` entries (those\nwhose `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\nsince both require the agent to dial its MCP servers and run\n`tools/list` — work the agent only needs to do at run-time. Every\nother field MUST be identical between the two views.\n\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\nadditional supervisor-managed assets) belongs on the Commission, not\nhere."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"AgentDescriptor\","]
-#[doc = "  \"description\": \"Self-description of an AVP agent: the static surface it ships with.\\n\\nIdentity, capabilities, supported models, system prompt, baked-in user\\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\\nProvenance inside the agent doesn't matter on the wire: an SDK preset\\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\\njust \\\"what's in the agent\\\" to a Descriptor consumer.\\n\\nTwo views, normatively the same payload:\\n\\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\\n  2. **On the wire**: `agent_described.data[\\\"avp.descriptor\\\"]` carries\\n     the same payload during a run.\\n\\nThe Descriptor is *static* (identical bytes for the same agent build).\\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\\nadditional supervisor-managed assets) belongs on the Commission, not\\nhere. Environment-discovered surfaces (filesystem skills under\\n`~/.claude/skills/`, plugins, MCP servers discovered at startup) also\\ndon't appear here; they surface on `agent_started.data.*` and\\n`mcp_server_connected` at run time.\","]
+#[doc = "  \"description\": \"Self-description of an AVP agent: the static surface it ships with.\\n\\nIdentity, capabilities, supported models, system prompt, baked-in user\\nprompt (for autonomous agents), MCP servers, tools, skills, subagents.\\nProvenance inside the agent doesn't matter on the wire: an SDK preset\\ntool (`Grep`), a runtime-bundled skill, and a hand-coded tool are all\\njust \\\"what's in the agent\\\" to a Descriptor consumer.\\n\\nTwo views, normatively consistent:\\n\\n  1. **Pre-flight**: `<agent> describe` prints the Descriptor as JSON.\\n  2. **On the wire**: `agent_described.data[\\\"avp.descriptor\\\"]` carries\\n     the same payload during a run.\\n\\nThe pre-flight view MAY omit MCP-surfaced `tools[]` entries (those\\nwhose `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,\\nsince both require the agent to dial its MCP servers and run\\n`tools/list` — work the agent only needs to do at run-time. Every\\nother field MUST be identical between the two views.\\n\\nAnything that varies per invocation (per-call prompt, run_id, thread_id,\\nadditional supervisor-managed assets) belongs on the Commission, not\\nhere.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"agent_name\","]
@@ -1088,11 +1084,7 @@ pub struct AgentStartedEvent {
     pub subject: ::std::option::Option<AgentStartedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::agent_started_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::agent_started_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentStartedEventAvpCorrelationId`"]
@@ -1436,11 +1428,7 @@ pub struct AgentStoppedEvent {
     pub subject: ::std::option::Option<AgentStoppedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::agent_stopped_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::agent_stopped_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentStoppedEventAvpCorrelationId`"]
@@ -2127,11 +2115,7 @@ pub struct AssistantMessageEvent {
     pub subject: ::std::option::Option<AssistantMessageEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::assistant_message_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::assistant_message_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`AssistantMessageEventAvpCorrelationId`"]
@@ -2332,11 +2316,7 @@ pub struct AudioBlock {
     pub source: Source,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub transcript: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::audio_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::audio_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`AvpContentItem`"]
@@ -2424,6 +2404,7 @@ pub enum AvpContentItem {
     ServerToolResultBlock(ServerToolResultBlock),
     #[serde(rename = "refusal")]
     RefusalBlock(RefusalBlock),
+
 }
 impl ::std::convert::From<TextBlock> for AvpContentItem {
     fn from(value: TextBlock) -> Self {
@@ -2478,148 +2459,6 @@ impl ::std::convert::From<ServerToolResultBlock> for AvpContentItem {
 impl ::std::convert::From<RefusalBlock> for AvpContentItem {
     fn from(value: RefusalBlock) -> Self {
         Self::RefusalBlock(value)
-    }
-}
-#[doc = "`AvpMcpDisconnectReason`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Avp.Mcp.Disconnect Reason\","]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"clean\","]
-#[doc = "    \"error\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum AvpMcpDisconnectReason {
-    #[serde(rename = "clean")]
-    Clean,
-    #[serde(rename = "error")]
-    Error,
-}
-impl ::std::fmt::Display for AvpMcpDisconnectReason {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Clean => f.write_str("clean"),
-            Self::Error => f.write_str("error"),
-        }
-    }
-}
-impl ::std::str::FromStr for AvpMcpDisconnectReason {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "clean" => Ok(Self::Clean),
-            "error" => Ok(Self::Error),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for AvpMcpDisconnectReason {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AvpMcpDisconnectReason {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AvpMcpDisconnectReason {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-#[doc = "`AvpMcpServerId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Avp.Mcp.Server Id\","]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct AvpMcpServerId(::std::string::String);
-impl ::std::ops::Deref for AvpMcpServerId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<AvpMcpServerId> for ::std::string::String {
-    fn from(value: AvpMcpServerId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for AvpMcpServerId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for AvpMcpServerId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for AvpMcpServerId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AvpMcpServerId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for AvpMcpServerId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
     }
 }
 #[doc = "`AvpSubagentInvocationId`"]
@@ -2798,16 +2637,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpToolCallId {
 #[doc = "      \"$ref\": \"#/$defs/SubagentReturnedEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/SubagentFailedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/ErrorOccurredEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/McpServerConnectedEvent\""]
-#[doc = "    },"]
-#[doc = "    {"]
-#[doc = "      \"$ref\": \"#/$defs/McpServerDisconnectedEvent\""]
 #[doc = "    }"]
 #[doc = "  ],"]
 #[doc = "  \"discriminator\": {"]
@@ -2817,10 +2647,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpToolCallId {
 #[doc = "      \"avp.agent_stopped\": \"#/$defs/AgentStoppedEvent\","]
 #[doc = "      \"avp.assistant_message\": \"#/$defs/AssistantMessageEvent\","]
 #[doc = "      \"avp.error_occurred\": \"#/$defs/ErrorOccurredEvent\","]
-#[doc = "      \"avp.mcp_server_connected\": \"#/$defs/McpServerConnectedEvent\","]
-#[doc = "      \"avp.mcp_server_disconnected\": \"#/$defs/McpServerDisconnectedEvent\","]
 #[doc = "      \"avp.run_requested\": \"#/$defs/RunRequestedEvent\","]
-#[doc = "      \"avp.subagent_failed\": \"#/$defs/SubagentFailedEvent\","]
 #[doc = "      \"avp.subagent_invoked\": \"#/$defs/SubagentInvokedEvent\","]
 #[doc = "      \"avp.subagent_returned\": \"#/$defs/SubagentReturnedEvent\","]
 #[doc = "      \"avp.tool_invoked\": \"#/$defs/ToolInvokedEvent\","]
@@ -2852,14 +2679,9 @@ pub enum AvpV01TrajectoryEvent {
     SubagentInvokedEvent(SubagentInvokedEvent),
     #[serde(rename = "avp.subagent_returned")]
     SubagentReturnedEvent(SubagentReturnedEvent),
-    #[serde(rename = "avp.subagent_failed")]
-    SubagentFailedEvent(SubagentFailedEvent),
     #[serde(rename = "avp.error_occurred")]
     ErrorOccurredEvent(ErrorOccurredEvent),
-    #[serde(rename = "avp.mcp_server_connected")]
-    McpServerConnectedEvent(McpServerConnectedEvent),
-    #[serde(rename = "avp.mcp_server_disconnected")]
-    McpServerDisconnectedEvent(McpServerDisconnectedEvent),
+
 }
 impl ::std::convert::From<RunRequestedEvent> for AvpV01TrajectoryEvent {
     fn from(value: RunRequestedEvent) -> Self {
@@ -2906,24 +2728,9 @@ impl ::std::convert::From<SubagentReturnedEvent> for AvpV01TrajectoryEvent {
         Self::SubagentReturnedEvent(value)
     }
 }
-impl ::std::convert::From<SubagentFailedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: SubagentFailedEvent) -> Self {
-        Self::SubagentFailedEvent(value)
-    }
-}
 impl ::std::convert::From<ErrorOccurredEvent> for AvpV01TrajectoryEvent {
     fn from(value: ErrorOccurredEvent) -> Self {
         Self::ErrorOccurredEvent(value)
-    }
-}
-impl ::std::convert::From<McpServerConnectedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: McpServerConnectedEvent) -> Self {
-        Self::McpServerConnectedEvent(value)
-    }
-}
-impl ::std::convert::From<McpServerDisconnectedEvent> for AvpV01TrajectoryEvent {
-    fn from(value: McpServerDisconnectedEvent) -> Self {
-        Self::McpServerDisconnectedEvent(value)
     }
 }
 #[doc = "Inline base64-encoded media. Anthropic `source.type=base64`, Gemini\n`inline_data`, Bedrock `source.bytes`."]
@@ -2963,11 +2770,7 @@ impl ::std::convert::From<McpServerDisconnectedEvent> for AvpV01TrajectoryEvent 
 pub struct Base64Source {
     pub data: ::std::string::String,
     pub media_type: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::base64_source_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::base64_source_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "Span-anchored attribution on a text or document block. Unifies\nAnthropic citations (`char_location`, `page_location`,\n`content_block_location`), OpenAI annotations (`url_citation`,\n`file_citation`, `file_path`), and Gemini grounding chunks. `type`\ncarries the provider's raw citation kind verbatim so downstream\nconsumers can normalize without re-deriving it."]
@@ -3362,6 +3165,7 @@ pub enum CommissionMcpServersItem {
     Http(McpServerHttp),
     #[serde(rename = "stdio")]
     Stdio(McpServerStdio),
+
 }
 impl ::std::convert::From<McpServerHttp> for CommissionMcpServersItem {
     fn from(value: McpServerHttp) -> Self {
@@ -3460,6 +3264,7 @@ pub enum ContentArrayItem {
     ImageBlock(ImageBlock),
     #[serde(rename = "document")]
     DocumentBlock(DocumentBlock),
+
 }
 impl ::std::convert::From<TextBlock> for ContentArrayItem {
     fn from(value: TextBlock) -> Self {
@@ -3567,11 +3372,7 @@ pub struct DocumentBlock {
     pub source: Source,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub title: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::document_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::document_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`ErrorCode`"]
@@ -3589,6 +3390,7 @@ pub struct DocumentBlock {
 #[doc = "    \"agent_crash\","]
 #[doc = "    \"unsupported_model\","]
 #[doc = "    \"commission_collision\","]
+#[doc = "    \"mcp_connect_failed\","]
 #[doc = "    \"unknown\""]
 #[doc = "  ]"]
 #[doc = "}"]
@@ -3619,6 +3421,8 @@ pub enum ErrorCode {
     UnsupportedModel,
     #[serde(rename = "commission_collision")]
     CommissionCollision,
+    #[serde(rename = "mcp_connect_failed")]
+    McpConnectFailed,
     #[serde(rename = "unknown")]
     Unknown,
 }
@@ -3631,6 +3435,7 @@ impl ::std::fmt::Display for ErrorCode {
             Self::AgentCrash => f.write_str("agent_crash"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
             Self::CommissionCollision => f.write_str("commission_collision"),
+            Self::McpConnectFailed => f.write_str("mcp_connect_failed"),
             Self::Unknown => f.write_str("unknown"),
         }
     }
@@ -3645,6 +3450,7 @@ impl ::std::str::FromStr for ErrorCode {
             "agent_crash" => Ok(Self::AgentCrash),
             "unsupported_model" => Ok(Self::UnsupportedModel),
             "commission_collision" => Ok(Self::CommissionCollision),
+            "mcp_connect_failed" => Ok(Self::McpConnectFailed),
             "unknown" => Ok(Self::Unknown),
             _ => Err("invalid value".into()),
         }
@@ -3868,11 +3674,7 @@ pub struct ErrorOccurredEvent {
     pub subject: ::std::option::Option<ErrorOccurredEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::error_occurred_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::error_occurred_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`ErrorOccurredEventAvpCorrelationId`"]
@@ -4042,11 +3844,7 @@ impl<'de> ::serde::Deserialize<'de> for ErrorOccurredEventSubject {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct FileSource {
     pub file_id: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::file_source_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::file_source_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`Id`"]
@@ -4167,572 +3965,17 @@ impl<'de> ::serde::Deserialize<'de> for Id {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ImageBlock {
     pub source: Source,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::image_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::image_block_type")]
     pub type_: ::std::string::String,
 }
-#[doc = "`McpServerConnectedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"McpServerConnectedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.mcp.protocol_version\","]
-#[doc = "    \"avp.mcp.server_id\","]
-#[doc = "    \"avp.mcp.tool_count\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.mcp.error\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Error\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.protocol_version\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Protocol Version\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.resources\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Resources\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/ResourceDecl\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.server_id\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Server Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.server_name\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Server Name\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.server_version\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Server Version\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.status\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Status\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"enum\": ["]
-#[doc = "            \"connected\","]
-#[doc = "            \"failed\","]
-#[doc = "            \"needs-auth\","]
-#[doc = "            \"pending\","]
-#[doc = "            \"disabled\""]
-#[doc = "          ]"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.tool_count\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Tool Count\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.tools\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Tools\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/ToolDecl\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct McpServerConnectedData {
-    #[serde(
-        rename = "avp.mcp.error",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_error: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "avp.mcp.protocol_version")]
-    pub avp_mcp_protocol_version: ::std::string::String,
-    #[serde(
-        rename = "avp.mcp.resources",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_resources: ::std::option::Option<::std::vec::Vec<ResourceDecl>>,
-    #[serde(rename = "avp.mcp.server_id")]
-    pub avp_mcp_server_id: AvpMcpServerId,
-    #[serde(
-        rename = "avp.mcp.server_name",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_server_name: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "avp.mcp.server_version",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_server_version: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "avp.mcp.status",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_status: ::std::option::Option<McpServerConnectedDataAvpMcpStatus>,
-    #[serde(rename = "avp.mcp.tool_count")]
-    pub avp_mcp_tool_count: u64,
-    #[serde(
-        rename = "avp.mcp.tools",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_tools: ::std::option::Option<::std::vec::Vec<ToolDecl>>,
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`McpServerConnectedDataAvpMcpStatus`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"enum\": ["]
-#[doc = "    \"connected\","]
-#[doc = "    \"failed\","]
-#[doc = "    \"needs-auth\","]
-#[doc = "    \"pending\","]
-#[doc = "    \"disabled\""]
-#[doc = "  ]"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-)]
-pub enum McpServerConnectedDataAvpMcpStatus {
-    #[serde(rename = "connected")]
-    Connected,
-    #[serde(rename = "failed")]
-    Failed,
-    #[serde(rename = "needs-auth")]
-    NeedsAuth,
-    #[serde(rename = "pending")]
-    Pending,
-    #[serde(rename = "disabled")]
-    Disabled,
-}
-impl ::std::fmt::Display for McpServerConnectedDataAvpMcpStatus {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Connected => f.write_str("connected"),
-            Self::Failed => f.write_str("failed"),
-            Self::NeedsAuth => f.write_str("needs-auth"),
-            Self::Pending => f.write_str("pending"),
-            Self::Disabled => f.write_str("disabled"),
-        }
-    }
-}
-impl ::std::str::FromStr for McpServerConnectedDataAvpMcpStatus {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        match value {
-            "connected" => Ok(Self::Connected),
-            "failed" => Ok(Self::Failed),
-            "needs-auth" => Ok(Self::NeedsAuth),
-            "pending" => Ok(Self::Pending),
-            "disabled" => Ok(Self::Disabled),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for McpServerConnectedDataAvpMcpStatus {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for McpServerConnectedDataAvpMcpStatus {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for McpServerConnectedDataAvpMcpStatus {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-#[doc = "`McpServerConnectedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"McpServerConnectedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/McpServerConnectedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.mcp_server_connected\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.mcp_server_connected\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct McpServerConnectedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<McpServerConnectedEventAvpCorrelationId>,
-    pub data: McpServerConnectedData,
-    #[serde(default = "defaults::mcp_server_connected_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::mcp_server_connected_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::mcp_server_connected_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<McpServerConnectedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::mcp_server_connected_event_type"
-    )]
-    pub type_: ::std::string::String,
-}
-#[doc = "`McpServerConnectedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct McpServerConnectedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for McpServerConnectedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<McpServerConnectedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: McpServerConnectedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for McpServerConnectedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for McpServerConnectedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for McpServerConnectedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for McpServerConnectedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for McpServerConnectedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`McpServerConnectedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct McpServerConnectedEventSubject(::std::string::String);
-impl ::std::ops::Deref for McpServerConnectedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<McpServerConnectedEventSubject> for ::std::string::String {
-    fn from(value: McpServerConnectedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for McpServerConnectedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for McpServerConnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for McpServerConnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for McpServerConnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for McpServerConnectedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords only the server's id, optional display name, and optional\ndescription; the tools the server surfaces are NOT enumerated on the\ndescriptor — they appear at runtime on\n`mcp_server_connected.data[\"avp.mcp.tools\"]`.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\nis intentionally looser than `Commission.McpServerRef.id`: the\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\nservers (where `id` is whatever the environment names them, e.g.\n`\"claude.ai Dashboard Builder\"`). Forcing a slug here would either\nlose fidelity or require every agent to invent the same slugification\nrule. Commission-authored ids stay slug-clean by virtue of\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\nnon-empty and must match the `avp.mcp.server_id` the agent later\nsurfaces on `mcp_server_connected` so consumers can correlate.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted."]
+#[doc = "MCP server descriptor in `AgentDescriptor.mcp_servers` and\n`agent_started.data[\"avp.mcp_servers\"]`: identity + terminal dial status.\n\nConnection material (URLs, auth, command-lines) stays inside the agent\nprocess and is NOT carried on the descriptor wire. The descriptor\nrecords the server's id, optional display name, optional description,\nand the terminal dial status when known. The tools the server surfaces\nare enumerated in the sibling `tools[]` list with `avp.mcp_server_id`\nset to this server's `id`; only `status: \"connected\"` servers\ncontribute tools.\n\n`id` is the agent's correlation key for this server across the wire\n(descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally\nlooser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH\nCommission-resolved servers (where `id` is the supervisor-authored slug)\nAND agent-baked-in / environment-resident servers (where `id` is whatever\nthe environment names them, e.g. `\"claude.ai Dashboard Builder\"`). Forcing\na slug here would either lose fidelity or require every agent to invent\nthe same slugification rule. Commission-authored ids stay slug-clean by\nvirtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must\nonly be non-empty.\n\n`name` is the display name when the environment provides one distinct\nfrom `id` (typical for Commission-resolved servers: `id` is the\nCommission slug, `name` is the human-readable label from the resolved\nconfig). For environment-resident servers whose only identifier is\nthe display name, `id` carries that string and `name` is omitted.\n\n`status` records the dial outcome at startup. Pre-flight `<agent> describe`\nMAY omit it (no dial has happened); on-the-wire `agent_described` and\n`agent_started` populate it. Values mirror the Claude Agent SDK's\n`McpServerStatus.status` enum."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"McpServerDecl\","]
-#[doc = "  \"description\": \"MCP server descriptor in `AgentDescriptor.mcp_servers`: identity only.\\n\\nConnection material (URLs, auth, command-lines) stays inside the agent\\nprocess and is NOT carried on the descriptor wire. The descriptor\\nrecords only the server's id, optional display name, and optional\\ndescription; the tools the server surfaces are NOT enumerated on the\\ndescriptor — they appear at runtime on\\n`mcp_server_connected.data[\\\"avp.mcp.tools\\\"]`.\\n\\n`id` is the agent's correlation key for this server across the wire\\n(descriptor entry, `mcp_server_connected` event, tool dispatch). It\\nis intentionally looser than `Commission.McpServerRef.id`: the\\ndescriptor enumerates BOTH Commission-resolved servers (where `id` is\\nthe supervisor-authored slug) AND agent-baked-in / environment-resident\\nservers (where `id` is whatever the environment names them, e.g.\\n`\\\"claude.ai Dashboard Builder\\\"`). Forcing a slug here would either\\nlose fidelity or require every agent to invent the same slugification\\nrule. Commission-authored ids stay slug-clean by virtue of\\n`Commission.McpServerRef.id`'s pattern; descriptor ids must only be\\nnon-empty and must match the `avp.mcp.server_id` the agent later\\nsurfaces on `mcp_server_connected` so consumers can correlate.\\n\\n`name` is the display name when the environment provides one distinct\\nfrom `id` (typical for Commission-resolved servers: `id` is the\\nCommission slug, `name` is the human-readable label from the resolved\\nconfig). For environment-resident servers whose only identifier is\\nthe display name, `id` carries that string and `name` is omitted.\","]
+#[doc = "  \"description\": \"MCP server descriptor in `AgentDescriptor.mcp_servers` and\\n`agent_started.data[\\\"avp.mcp_servers\\\"]`: identity + terminal dial status.\\n\\nConnection material (URLs, auth, command-lines) stays inside the agent\\nprocess and is NOT carried on the descriptor wire. The descriptor\\nrecords the server's id, optional display name, optional description,\\nand the terminal dial status when known. The tools the server surfaces\\nare enumerated in the sibling `tools[]` list with `avp.mcp_server_id`\\nset to this server's `id`; only `status: \\\"connected\\\"` servers\\ncontribute tools.\\n\\n`id` is the agent's correlation key for this server across the wire\\n(descriptor entry, tool entry's `avp.mcp_server_id`). It is intentionally\\nlooser than `Commission.McpServerRef.id`: the descriptor enumerates BOTH\\nCommission-resolved servers (where `id` is the supervisor-authored slug)\\nAND agent-baked-in / environment-resident servers (where `id` is whatever\\nthe environment names them, e.g. `\\\"claude.ai Dashboard Builder\\\"`). Forcing\\na slug here would either lose fidelity or require every agent to invent\\nthe same slugification rule. Commission-authored ids stay slug-clean by\\nvirtue of `Commission.McpServerRef.id`'s pattern; descriptor ids must\\nonly be non-empty.\\n\\n`name` is the display name when the environment provides one distinct\\nfrom `id` (typical for Commission-resolved servers: `id` is the\\nCommission slug, `name` is the human-readable label from the resolved\\nconfig). For environment-resident servers whose only identifier is\\nthe display name, `id` carries that string and `name` is omitted.\\n\\n`status` records the dial outcome at startup. Pre-flight `<agent> describe`\\nMAY omit it (no dial has happened); on-the-wire `agent_described` and\\n`agent_started` populate it. Values mirror the Claude Agent SDK's\\n`McpServerStatus.status` enum.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\""]
@@ -4764,6 +4007,24 @@ impl<'de> ::serde::Deserialize<'de> for McpServerConnectedEventSubject {
 #[doc = "          \"type\": \"null\""]
 #[doc = "        }"]
 #[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"status\": {"]
+#[doc = "      \"title\": \"Status\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\","]
+#[doc = "          \"enum\": ["]
+#[doc = "            \"connected\","]
+#[doc = "            \"failed\","]
+#[doc = "            \"needs-auth\","]
+#[doc = "            \"pending\","]
+#[doc = "            \"disabled\""]
+#[doc = "          ]"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -4777,275 +4038,81 @@ pub struct McpServerDecl {
     pub id: Id,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub status: ::std::option::Option<McpServerDeclStatus>,
 }
-#[doc = "`McpServerDisconnectedData`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"McpServerDisconnectedData\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.mcp.disconnect_reason\","]
-#[doc = "    \"avp.mcp.server_id\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.mcp.disconnect_message\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Disconnect Message\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.disconnect_reason\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Disconnect Reason\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"enum\": ["]
-#[doc = "        \"clean\","]
-#[doc = "        \"error\""]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.mcp.server_id\": {"]
-#[doc = "      \"title\": \"Avp.Mcp.Server Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct McpServerDisconnectedData {
-    #[serde(
-        rename = "avp.mcp.disconnect_message",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_mcp_disconnect_message: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "avp.mcp.disconnect_reason")]
-    pub avp_mcp_disconnect_reason: AvpMcpDisconnectReason,
-    #[serde(rename = "avp.mcp.server_id")]
-    pub avp_mcp_server_id: AvpMcpServerId,
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`McpServerDisconnectedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"McpServerDisconnectedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/McpServerDisconnectedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.mcp_server_disconnected\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.mcp_server_disconnected\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct McpServerDisconnectedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<McpServerDisconnectedEventAvpCorrelationId>,
-    pub data: McpServerDisconnectedData,
-    #[serde(default = "defaults::mcp_server_disconnected_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::mcp_server_disconnected_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::mcp_server_disconnected_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<McpServerDisconnectedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        default = "defaults::mcp_server_disconnected_event_type"
-    )]
-    pub type_: ::std::string::String,
-}
-#[doc = "`McpServerDisconnectedEventAvpCorrelationId`"]
+#[doc = "`McpServerDeclStatus`"]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
+#[doc = "  \"enum\": ["]
+#[doc = "    \"connected\","]
+#[doc = "    \"failed\","]
+#[doc = "    \"needs-auth\","]
+#[doc = "    \"pending\","]
+#[doc = "    \"disabled\""]
+#[doc = "  ]"]
 #[doc = "}"]
 #[doc = r" ```"]
 #[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct McpServerDisconnectedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for McpServerDisconnectedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
+#[derive(
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+)]
+pub enum McpServerDeclStatus {
+    #[serde(rename = "connected")]
+    Connected,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "needs-auth")]
+    NeedsAuth,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+impl ::std::fmt::Display for McpServerDeclStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::Connected => f.write_str("connected"),
+            Self::Failed => f.write_str("failed"),
+            Self::NeedsAuth => f.write_str("needs-auth"),
+            Self::Pending => f.write_str("pending"),
+            Self::Disabled => f.write_str("disabled"),
+        }
     }
 }
-impl ::std::convert::From<McpServerDisconnectedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: McpServerDisconnectedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for McpServerDisconnectedEventAvpCorrelationId {
+impl ::std::str::FromStr for McpServerDeclStatus {
     type Err = self::error::ConversionError;
     fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
+        match value {
+            "connected" => Ok(Self::Connected),
+            "failed" => Ok(Self::Failed),
+            "needs-auth" => Ok(Self::NeedsAuth),
+            "pending" => Ok(Self::Pending),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("invalid value".into()),
         }
-        Ok(Self(value.to_string()))
     }
 }
-impl ::std::convert::TryFrom<&str> for McpServerDisconnectedEventAvpCorrelationId {
+impl ::std::convert::TryFrom<&str> for McpServerDeclStatus {
     type Error = self::error::ConversionError;
     fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
         value.parse()
     }
 }
-impl ::std::convert::TryFrom<&::std::string::String>
-    for McpServerDisconnectedEventAvpCorrelationId
-{
+impl ::std::convert::TryFrom<&::std::string::String> for McpServerDeclStatus {
     type Error = self::error::ConversionError;
     fn try_from(
         value: &::std::string::String,
@@ -5053,92 +4120,12 @@ impl ::std::convert::TryFrom<&::std::string::String>
         value.parse()
     }
 }
-impl ::std::convert::TryFrom<::std::string::String> for McpServerDisconnectedEventAvpCorrelationId {
+impl ::std::convert::TryFrom<::std::string::String> for McpServerDeclStatus {
     type Error = self::error::ConversionError;
     fn try_from(
         value: ::std::string::String,
     ) -> ::std::result::Result<Self, self::error::ConversionError> {
         value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for McpServerDisconnectedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`McpServerDisconnectedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct McpServerDisconnectedEventSubject(::std::string::String);
-impl ::std::ops::Deref for McpServerDisconnectedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<McpServerDisconnectedEventSubject> for ::std::string::String {
-    fn from(value: McpServerDisconnectedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for McpServerDisconnectedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for McpServerDisconnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for McpServerDisconnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for McpServerDisconnectedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for McpServerDisconnectedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
     }
 }
 #[doc = "Inline HTTP MCP server entry in Commission.mcp_servers."]
@@ -5463,82 +4450,8 @@ impl<'de> ::serde::Deserialize<'de> for ParentSpanId {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct RefusalBlock {
     pub refusal: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::refusal_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::refusal_block_type")]
     pub type_: ::std::string::String,
-}
-#[doc = "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"ResourceDecl\","]
-#[doc = "  \"description\": \"MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\\n\\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\\nprimary identifier the agent uses to fetch via `resources/read`,\\n`name` and `description` are display/discovery metadata, `mimeType`\\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\\nin `Commission.skills[].avp.source` resolve through this catalog.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"uri\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"description\": {"]
-#[doc = "      \"title\": \"Description\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"mimeType\": {"]
-#[doc = "      \"title\": \"Mimetype\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"name\": {"]
-#[doc = "      \"title\": \"Name\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"uri\": {"]
-#[doc = "      \"title\": \"Uri\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct ResourceDecl {
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub description: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "mimeType",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub mime_type: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub name: ::std::option::Option<::std::string::String>,
-    pub uri: Uri,
 }
 #[doc = "`RunId`"]
 #[doc = r""]
@@ -5913,11 +4826,7 @@ pub struct RunRequestedEvent {
     pub subject: ::std::option::Option<RunRequestedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::run_requested_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::run_requested_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`RunRequestedEventAvpCorrelationId`"]
@@ -6111,11 +5020,7 @@ pub struct ServerToolResultBlock {
     pub is_error: ::std::option::Option<bool>,
     pub name: ::std::string::String,
     pub tool_use_id: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::server_tool_result_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::server_tool_result_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "Built-in tool executed by the provider rather than the agent.\nAnthropic `server_tool_use` (web_search, code_execution), OpenAI\nResponses `web_search_call` / `file_search_call` / `computer_call` /\n`code_interpreter_call`, Gemini `executable_code` / `google_search`.\n`name` carries the tool kind (e.g. \"web_search\", \"code_interpreter\",\n\"computer_use\", \"google_search\"). Distinct from `tool_use` because\nthe agent never dispatches these; they are observability of a\nprovider-side action."]
@@ -6162,11 +5067,7 @@ pub struct ServerToolUseBlock {
     pub id: ::std::string::String,
     pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     pub name: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::server_tool_use_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::server_tool_use_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "Inline skill entry in Commission.skills."]
@@ -6314,6 +5215,7 @@ pub enum Source {
     UrlSource(UrlSource),
     #[serde(rename = "file")]
     FileSource(FileSource),
+
 }
 impl ::std::convert::From<Base64Source> for Source {
     fn from(value: Base64Source) -> Self {
@@ -6567,388 +5469,6 @@ pub struct SubagentDecl {
     pub input_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
-}
-#[doc = "Subagent invocation errored. The parent treats the error as a\ntool-call failure: the model receives an `Error: ...` string in place\nof the result and may retry or proceed."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"SubagentFailedData\","]
-#[doc = "  \"description\": \"Subagent invocation errored. The parent treats the error as a\\ntool-call failure: the model receives an `Error: ...` string in place\\nof the result and may retry or proceed.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"avp.duration_ms\","]
-#[doc = "    \"avp.step\","]
-#[doc = "    \"avp.subagent.error\","]
-#[doc = "    \"avp.subagent.invocation_id\","]
-#[doc = "    \"avp.subagent.name\","]
-#[doc = "    \"parent_span_id\","]
-#[doc = "    \"span_id\","]
-#[doc = "    \"trace_id\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.duration_ms\": {"]
-#[doc = "      \"title\": \"Avp.Duration Ms\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.meta\": {"]
-#[doc = "      \"title\": \"Avp.Meta\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.step\": {"]
-#[doc = "      \"title\": \"Avp.Step\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
-#[doc = "    },"]
-#[doc = "    \"avp.subagent.error\": {"]
-#[doc = "      \"title\": \"Avp.Subagent.Error\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"avp.subagent.error.code\": {"]
-#[doc = "      \"title\": \"Avp.Subagent.Error.Code\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"avp.subagent.invocation_id\": {"]
-#[doc = "      \"title\": \"Avp.Subagent.Invocation Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"avp.subagent.name\": {"]
-#[doc = "      \"title\": \"Avp.Subagent.Name\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"parent_span_id\": {"]
-#[doc = "      \"title\": \"Parent Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"span_id\": {"]
-#[doc = "      \"title\": \"Span Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 16,"]
-#[doc = "      \"minLength\": 16,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{16}$\""]
-#[doc = "    },"]
-#[doc = "    \"trace_id\": {"]
-#[doc = "      \"title\": \"Trace Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"maxLength\": 32,"]
-#[doc = "      \"minLength\": 32,"]
-#[doc = "      \"pattern\": \"^[0-9a-f]{32}$\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-pub struct SubagentFailedData {
-    #[serde(rename = "avp.duration_ms")]
-    pub avp_duration_ms: u64,
-    #[serde(
-        rename = "avp.meta",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_meta:
-        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(rename = "avp.step")]
-    pub avp_step: u64,
-    #[serde(rename = "avp.subagent.error")]
-    pub avp_subagent_error: ::std::string::String,
-    #[serde(
-        rename = "avp.subagent.error.code",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_subagent_error_code: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "avp.subagent.invocation_id")]
-    pub avp_subagent_invocation_id: AvpSubagentInvocationId,
-    #[serde(rename = "avp.subagent.name")]
-    pub avp_subagent_name: ::std::string::String,
-    pub parent_span_id: ParentSpanId,
-    pub span_id: SpanId,
-    pub trace_id: TraceId,
-}
-#[doc = "`SubagentFailedEvent`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"SubagentFailedEvent\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"data\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"avp.correlation_id\": {"]
-#[doc = "      \"title\": \"Avp.Correlation Id\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"data\": {"]
-#[doc = "      \"$ref\": \"#/$defs/SubagentFailedData\""]
-#[doc = "    },"]
-#[doc = "    \"datacontenttype\": {"]
-#[doc = "      \"title\": \"Datacontenttype\","]
-#[doc = "      \"default\": \"application/json\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"dataschema\": {"]
-#[doc = "      \"title\": \"Dataschema\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1"]
-#[doc = "    },"]
-#[doc = "    \"source\": {"]
-#[doc = "      \"title\": \"Source\","]
-#[doc = "      \"default\": \"avp://agent\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp://agent\""]
-#[doc = "    },"]
-#[doc = "    \"specversion\": {"]
-#[doc = "      \"title\": \"Specversion\","]
-#[doc = "      \"default\": \"1.0\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"1.0\""]
-#[doc = "    },"]
-#[doc = "    \"subject\": {"]
-#[doc = "      \"title\": \"Subject\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\","]
-#[doc = "          \"minLength\": 1"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"time\": {"]
-#[doc = "      \"title\": \"Time\","]
-#[doc = "      \"type\": \"string\""]
-#[doc = "    },"]
-#[doc = "    \"type\": {"]
-#[doc = "      \"title\": \"Type\","]
-#[doc = "      \"default\": \"avp.subagent_failed\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"const\": \"avp.subagent_failed\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct SubagentFailedEvent {
-    #[serde(
-        rename = "avp.correlation_id",
-        default,
-        skip_serializing_if = "::std::option::Option::is_none"
-    )]
-    pub avp_correlation_id: ::std::option::Option<SubagentFailedEventAvpCorrelationId>,
-    pub data: SubagentFailedData,
-    #[serde(default = "defaults::subagent_failed_event_datacontenttype")]
-    pub datacontenttype: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub dataschema: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub id: ::std::option::Option<Id>,
-    #[serde(default = "defaults::subagent_failed_event_source")]
-    pub source: ::std::string::String,
-    #[serde(default = "defaults::subagent_failed_event_specversion")]
-    pub specversion: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subject: ::std::option::Option<SubagentFailedEventSubject>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::subagent_failed_event_type"
-    )]
-    pub type_: ::std::string::String,
-}
-#[doc = "`SubagentFailedEventAvpCorrelationId`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct SubagentFailedEventAvpCorrelationId(::std::string::String);
-impl ::std::ops::Deref for SubagentFailedEventAvpCorrelationId {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<SubagentFailedEventAvpCorrelationId> for ::std::string::String {
-    fn from(value: SubagentFailedEventAvpCorrelationId) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for SubagentFailedEventAvpCorrelationId {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for SubagentFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for SubagentFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for SubagentFailedEventAvpCorrelationId {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for SubagentFailedEventAvpCorrelationId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`SubagentFailedEventSubject`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct SubagentFailedEventSubject(::std::string::String);
-impl ::std::ops::Deref for SubagentFailedEventSubject {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<SubagentFailedEventSubject> for ::std::string::String {
-    fn from(value: SubagentFailedEventSubject) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for SubagentFailedEventSubject {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for SubagentFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for SubagentFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for SubagentFailedEventSubject {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for SubagentFailedEventSubject {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
 }
 #[doc = "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is reserved for future use when the subagent runs\nas a separate commissioned trajectory. Absent for in-process subagents."]
 #[doc = r""]
@@ -7268,11 +5788,7 @@ pub struct SubagentInvokedEvent {
     pub subject: ::std::option::Option<SubagentInvokedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::subagent_invoked_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::subagent_invoked_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`SubagentInvokedEventAvpCorrelationId`"]
@@ -7411,14 +5927,14 @@ impl<'de> ::serde::Deserialize<'de> for SubagentInvokedEventSubject {
             })
     }
 }
-#[doc = "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory."]
+#[doc = "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.reason` is a `StopReason`; on the error path,\n`reason = error` and `avp.subagent.result.text` carries the error\nstring. The paired `tool_returned` mirrors this: `is_error = true`\nwhen `reason = error`, with the same `Error: ...` content.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SubagentReturnedData\","]
-#[doc = "  \"description\": \"Closes the subagent's frame. `span_id` matches the corresponding\\n`subagent_invoked` event so consumers can pair them.\\n\\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\\nfallback: parent agents whose SDK black-boxes the child loop (no\\nper-turn AssistantMessages exposed to the parent) carry the child's\\ntotals here as the only signal the supervisor receives of the child's\\nspend. Agents that emit the child's per-turn events into the parent's\\ntrajectory with proper span parentage (`parent_span_id` = this event's\\n`span_id`) MUST omit this field; the supervisor reconstructs from the\\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\\nMUST also omit it; the supervisor reads the child's trajectory.\","]
+#[doc = "  \"description\": \"Closes the subagent's frame. `span_id` matches the corresponding\\n`subagent_invoked` event so consumers can pair them.\\n\\n`avp.subagent.reason` is a `StopReason`; on the error path,\\n`reason = error` and `avp.subagent.result.text` carries the error\\nstring. The paired `tool_returned` mirrors this: `is_error = true`\\nwhen `reason = error`, with the same `Error: ...` content.\\n\\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\\nfallback: parent agents whose SDK black-boxes the child loop (no\\nper-turn AssistantMessages exposed to the parent) carry the child's\\ntotals here as the only signal the supervisor receives of the child's\\nspend. Agents that emit the child's per-turn events into the parent's\\ntrajectory with proper span parentage (`parent_span_id` = this event's\\n`span_id`) MUST omit this field; the supervisor reconstructs from the\\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\\nMUST also omit it; the supervisor reads the child's trajectory.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"avp.duration_ms\","]
@@ -7670,11 +6186,7 @@ pub struct SubagentReturnedEvent {
     pub subject: ::std::option::Option<SubagentReturnedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::subagent_returned_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::subagent_returned_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`SubagentReturnedEventAvpCorrelationId`"]
@@ -7949,11 +6461,7 @@ pub struct TextBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub citations: ::std::option::Option<::std::vec::Vec<Citation>>,
     pub text: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::text_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::text_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "Reasoning / chain-of-thought emitted by the model.\n\nAnthropic extended thinking, OpenAI o-series `reasoning` items,\nGemini `thought` parts, Bedrock `reasoningContent`, Mistral thinking.\n`signature` is the opaque blob the provider requires echoed back on\nthe next turn for continued reasoning: Anthropic's cryptographic\nsignature, OpenAI's `encrypted_content`, or Gemini's\n`thought_signature`. `redacted` flags blocks whose plaintext is\nunavailable (encrypted-only form)."]
@@ -8013,26 +6521,33 @@ pub struct ThinkingBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub signature: ::std::option::Option<::std::string::String>,
     pub thinking: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::thinking_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::thinking_block_type")]
     pub type_: ::std::string::String,
 }
-#[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
+#[doc = "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity. Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ToolDecl\","]
-#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools`,\\n`agent_started.data[\\\"avp.tools\\\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity; how the tool is\\n*dispatched* (local vs MCP server) is implicit from where the decl\\nappears on the wire — `descriptor.tools` and `agent_started.data[\\\"avp.tools\\\"]`\\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\\nare MCP-dispatched by virtue of being nested under a server. The\\nper-invocation discriminator lives on `tool_invoked.data[\\\"avp.tool.dispatch_target\\\"]`.\","]
+#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools` and\\n`agent_started.data[\\\"avp.tools\\\"]`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity. Dispatch is\\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\\nthe tool runs locally in the agent's process. The per-invocation\\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\\npresence of this field.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"avp.mcp_server_id\": {"]
+#[doc = "      \"title\": \"Avp.Mcp Server Id\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"description\": {"]
 #[doc = "      \"title\": \"Description\","]
 #[doc = "      \"anyOf\": ["]
@@ -8067,6 +6582,12 @@ pub struct ThinkingBlock {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ToolDecl {
+    #[serde(
+        rename = "avp.mcp_server_id",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub avp_mcp_server_id: ::std::option::Option<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[serde(
@@ -8385,11 +6906,7 @@ pub struct ToolInvokedEvent {
     pub subject: ::std::option::Option<ToolInvokedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::tool_invoked_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::tool_invoked_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`ToolInvokedEventAvpCorrelationId`"]
@@ -8621,11 +7138,7 @@ pub struct ToolResultBlock {
     pub structured_content:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub tool_use_id: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::tool_result_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::tool_result_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "Tool result sent back to the model.\n\n`avp.tool_result` is a `content.ToolResultBlock` carrying\n`tool_use_id`, `content` (string or nested text/image/document\nblocks), and `is_error`. Rejections set `is_error=True` with the\nreason in `content[0].text`. During reconstruction this block\nbecomes one entry of the next user-role message's content array."]
@@ -8849,11 +7362,7 @@ pub struct ToolReturnedEvent {
     pub subject: ::std::option::Option<ToolReturnedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::tool_returned_event_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::tool_returned_event_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`ToolReturnedEventAvpCorrelationId`"]
@@ -9036,11 +7545,7 @@ pub struct ToolUseBlock {
     pub id: ::std::string::String,
     pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     pub name: ::std::string::String,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::tool_use_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::tool_use_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = "`TraceId`"]
@@ -9111,75 +7616,6 @@ impl ::std::convert::TryFrom<::std::string::String> for TraceId {
     }
 }
 impl<'de> ::serde::Deserialize<'de> for TraceId {
-    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-    where
-        D: ::serde::Deserializer<'de>,
-    {
-        ::std::string::String::deserialize(deserializer)?
-            .parse()
-            .map_err(|e: self::error::ConversionError| {
-                <D::Error as ::serde::de::Error>::custom(e.to_string())
-            })
-    }
-}
-#[doc = "`Uri`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"Uri\","]
-#[doc = "  \"type\": \"string\","]
-#[doc = "  \"minLength\": 1"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[serde(transparent)]
-pub struct Uri(::std::string::String);
-impl ::std::ops::Deref for Uri {
-    type Target = ::std::string::String;
-    fn deref(&self) -> &::std::string::String {
-        &self.0
-    }
-}
-impl ::std::convert::From<Uri> for ::std::string::String {
-    fn from(value: Uri) -> Self {
-        value.0
-    }
-}
-impl ::std::str::FromStr for Uri {
-    type Err = self::error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        if value.chars().count() < 1usize {
-            return Err("shorter than 1 characters".into());
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-impl ::std::convert::TryFrom<&str> for Uri {
-    type Error = self::error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<&::std::string::String> for Uri {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: &::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for Uri {
-    type Error = self::error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, self::error::ConversionError> {
-        value.parse()
-    }
-}
-impl<'de> ::serde::Deserialize<'de> for Uri {
     fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
     where
         D: ::serde::Deserializer<'de>,
@@ -9290,11 +7726,7 @@ impl<'de> ::serde::Deserialize<'de> for Url {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct UrlSource {
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::url_source_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::url_source_type")]
     pub type_: ::std::string::String,
     pub url: ::std::string::String,
 }
@@ -9423,11 +7855,7 @@ pub struct Usage {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct VideoBlock {
     pub source: Source,
-    #[serde(
-        rename = "type",
-        skip_serializing,
-        default = "defaults::video_block_type"
-    )]
+    #[serde(rename = "type", skip_serializing, default = "defaults::video_block_type")]
     pub type_: ::std::string::String,
 }
 #[doc = r" Generation of default values for serde."]
@@ -9512,32 +7940,6 @@ pub mod defaults {
     pub(super) fn image_block_type() -> ::std::string::String {
         "image".to_string()
     }
-    pub(super) fn mcp_server_connected_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn mcp_server_connected_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn mcp_server_connected_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn mcp_server_connected_event_type() -> ::std::string::String {
-        "avp.mcp_server_connected".to_string()
-    }
-    pub(super) fn mcp_server_disconnected_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn mcp_server_disconnected_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn mcp_server_disconnected_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn mcp_server_disconnected_event_type() -> ::std::string::String {
-        "avp.mcp_server_disconnected".to_string()
-    }
     pub(super) fn refusal_block_type() -> ::std::string::String {
         "refusal".to_string()
     }
@@ -9559,19 +7961,6 @@ pub mod defaults {
     }
     pub(super) fn server_tool_use_block_type() -> ::std::string::String {
         "server_tool_use".to_string()
-    }
-    pub(super) fn subagent_failed_event_datacontenttype(
-    ) -> ::std::option::Option<::std::string::String> {
-        ::std::option::Option::Some("application/json".to_string())
-    }
-    pub(super) fn subagent_failed_event_source() -> ::std::string::String {
-        "avp://agent".to_string()
-    }
-    pub(super) fn subagent_failed_event_specversion() -> ::std::string::String {
-        "1.0".to_string()
-    }
-    pub(super) fn subagent_failed_event_type() -> ::std::string::String {
-        "avp.subagent_failed".to_string()
     }
     pub(super) fn subagent_invoked_event_datacontenttype(
     ) -> ::std::option::Option<::std::string::String> {

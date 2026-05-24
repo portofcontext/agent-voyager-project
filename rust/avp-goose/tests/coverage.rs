@@ -13,14 +13,12 @@ use serde_json::json;
 const ALL_EVENT_TYPES: &[&str] = &[
     "avp.run_requested",
     "avp.agent_described",
-    "avp.mcp_server_connected",
     "avp.agent_started",
     "avp.assistant_message",
     "avp.tool_invoked",
     "avp.tool_returned",
     "avp.subagent_invoked",
     "avp.subagent_returned",
-    "avp.subagent_failed",
     "avp.error_occurred",
     "avp.agent_stopped",
 ];

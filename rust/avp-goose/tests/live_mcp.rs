@@ -42,14 +42,19 @@ async fn model_dispatches_to_mcp_server_tool() {
     let t = sink.trajectory();
     t.assert_schema_valid();
 
-    // The MCP server connected.
-    let connected = t.find_all("avp.mcp_server_connected");
+    // The MCP server is recorded on the descriptor (mcp_server_connected events
+    // were removed; identity + status now ride on agent_described's descriptor).
+    let descriptor = &t.find("avp.agent_described")["data"]["avp.descriptor"];
+    let servers = descriptor["mcp_servers"].as_array().cloned().unwrap_or_default();
     assert!(
-        connected
-            .iter()
-            .any(|e| e["data"]["avp.mcp.server_id"] == TEST_MCP_ID),
-        "no mcp_server_connected for {TEST_MCP_ID}; got {:?}",
-        t.types()
+        servers.iter().any(|s| s["id"] == TEST_MCP_ID),
+        "no {TEST_MCP_ID} in descriptor mcp_servers: {servers:?}"
+    );
+    // ... and at least one tool is attributed to it via avp.mcp_server_id.
+    let tools = descriptor["tools"].as_array().cloned().unwrap_or_default();
+    assert!(
+        tools.iter().any(|t| t["avp.mcp_server_id"] == TEST_MCP_ID),
+        "no tool attributed to {TEST_MCP_ID} in descriptor tools"
     );
 
     // The model dispatched at least one tool to the MCP server (this is the
