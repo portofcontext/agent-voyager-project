@@ -40,7 +40,6 @@ from avp.content import AVPContentBlock, ToolResultBlock
 from avp.descriptor import (
     AgentDescriptor,
     McpServerDecl,
-    ResourceDecl,
     SkillDecl,
     SubagentDecl,
     ToolDecl,
@@ -67,8 +66,6 @@ T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_TOOL_INVOKED = "avp.tool_invoked"
 T_TOOL_RETURNED = "avp.tool_returned"
 T_ERROR_OCCURRED = "avp.error_occurred"
-T_MCP_SERVER_CONNECTED = "avp.mcp_server_connected"
-T_MCP_SERVER_DISCONNECTED = "avp.mcp_server_disconnected"
 T_SUBAGENT_INVOKED = "avp.subagent_invoked"
 T_SUBAGENT_RETURNED = "avp.subagent_returned"
 T_SUBAGENT_FAILED = "avp.subagent_failed"
@@ -94,6 +91,7 @@ class ErrorCode(StrEnum):
     agent_crash = "agent_crash"
     unsupported_model = "unsupported_model"
     commission_collision = "commission_collision"
+    mcp_connect_failed = "mcp_connect_failed"
     unknown = "unknown"
 
 
@@ -164,8 +162,11 @@ class AgentDescribedData(_SpanData):
     """Payload of avp.agent_described events.
 
     The agent's published Descriptor, emitted between `run_requested`
-    and `agent_started`. `avp.descriptor` MUST equal what
-    `<agent> describe` prints to stdout for the same agent build.
+    and `agent_started`. `avp.descriptor` SHOULD be consistent with what
+    `<agent> describe` prints to stdout for the same agent build;
+    pre-flight describe MAY omit MCP-surfaced tool entries (those whose
+    `avp.mcp_server_id` is set) and per-server `mcp_servers[].status`,
+    both of which require a startup dial.
     """
 
     descriptor: AgentDescriptor = Field(alias="avp.descriptor")
@@ -335,46 +336,6 @@ class ErrorOccurredData(_SpanData):
     error_message: str = Field(alias="avp.error.message")
 
 
-class McpServerConnectedData(_SpanData):
-    mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
-    mcp_protocol_version: str = Field(alias="avp.mcp.protocol_version")
-    mcp_tool_count: int = Field(ge=0, alias="avp.mcp.tool_count")
-    mcp_server_name: str | None = Field(default=None, alias="avp.mcp.server_name")
-    mcp_server_version: str | None = Field(default=None, alias="avp.mcp.server_version")
-    # Per-server tool list, populated by agents that actually drive the
-    # MCP handshake (e.g. avp-claude-agent-sdk calling
-    # `ClaudeSDKClient.get_mcp_status()` after connect). Null when the
-    # agent emits a stub event (e.g. the reference agent; its
-    # mcp_server_connected events are placeholders without live transport).
-    # Each entry is the same `ToolDecl` shape used on
-    # `agent_started.data.tools`. Dispatch target is implicit "mcp_server"
-    # by virtue of being nested under this event; the server's id is on
-    # this event's own `avp.mcp.server_id` — no need to repeat per-tool.
-    mcp_tools: list[ToolDecl] | None = Field(default=None, alias="avp.mcp.tools")
-    # Live resource catalog from MCP's `resources/list`. Parallel to
-    # `avp.mcp.tools`. Populated by agents that drive the MCP handshake;
-    # null on stub emitters. Skills declared in `Commission.skills[]` with
-    # `avp.source = "mcp://<server-id>/<resource-path>"` resolve against
-    # this catalog: the agent calls `resources/read` on the named server
-    # before turn 1 to pull the SKILL.md body into the model's context.
-    mcp_resources: list[ResourceDecl] | None = Field(default=None, alias="avp.mcp.resources")
-    # SDK-reported connection status, mirroring the Claude Agent SDK's
-    # McpServerStatus.status enum. Default null because pre-live-transport
-    # stub emitters didn't have this signal.
-    mcp_status: Literal["connected", "failed", "needs-auth", "pending", "disabled"] | None = Field(
-        default=None, alias="avp.mcp.status"
-    )
-    # Error message when status indicates failure (failed / needs-auth).
-    # Surfaces the SDK's `error` field verbatim. Null on healthy connects.
-    mcp_error: str | None = Field(default=None, alias="avp.mcp.error")
-
-
-class McpServerDisconnectedData(_SpanData):
-    mcp_server_id: str = Field(min_length=1, alias="avp.mcp.server_id")
-    mcp_disconnect_reason: Literal["clean", "error"] = Field(alias="avp.mcp.disconnect_reason")
-    mcp_disconnect_message: str | None = Field(default=None, alias="avp.mcp.disconnect_message")
-
-
 # ── CloudEvents 1.0 envelope (event types) ────────────────────────────────────
 #
 # Each event is a CloudEvent. `type` discriminates the union. `source` is the
@@ -461,18 +422,6 @@ class ErrorOccurredEvent(_CloudEventBase):
     data: ErrorOccurredData
 
 
-class McpServerConnectedEvent(_CloudEventBase):
-    type: Literal["avp.mcp_server_connected"] = T_MCP_SERVER_CONNECTED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: McpServerConnectedData
-
-
-class McpServerDisconnectedEvent(_CloudEventBase):
-    type: Literal["avp.mcp_server_disconnected"] = T_MCP_SERVER_DISCONNECTED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: McpServerDisconnectedData
-
-
 class UnknownEvent(_CloudEventBase):
     """Catch-all for CloudEvents whose `type` is not in the AVP-defined
     union. Validates the CloudEvents 1.0 envelope plus the AVP span
@@ -507,8 +456,6 @@ _AGENT_EVENT_TYPES = (
     SubagentReturnedEvent,
     SubagentFailedEvent,
     ErrorOccurredEvent,
-    McpServerConnectedEvent,
-    McpServerDisconnectedEvent,
 )
 
 Event = Annotated[
@@ -522,9 +469,7 @@ Event = Annotated[
     | SubagentInvokedEvent
     | SubagentReturnedEvent
     | SubagentFailedEvent
-    | ErrorOccurredEvent
-    | McpServerConnectedEvent
-    | McpServerDisconnectedEvent,
+    | ErrorOccurredEvent,
     Field(discriminator="type"),
 ]
 
@@ -562,8 +507,6 @@ __all__ = [
     "T_AGENT_STOPPED",
     "T_ASSISTANT_MESSAGE",
     "T_ERROR_OCCURRED",
-    "T_MCP_SERVER_CONNECTED",
-    "T_MCP_SERVER_DISCONNECTED",
     "T_RUN_REQUESTED",
     "T_SUBAGENT_FAILED",
     "T_SUBAGENT_INVOKED",
@@ -582,10 +525,6 @@ __all__ = [
     "ErrorOccurredData",
     "ErrorOccurredEvent",
     "Event",
-    "McpServerConnectedData",
-    "McpServerConnectedEvent",
-    "McpServerDisconnectedData",
-    "McpServerDisconnectedEvent",
     "RunRequestedData",
     "RunRequestedEvent",
     "SubagentFailedData",
