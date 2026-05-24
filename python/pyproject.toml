@@ -19,7 +19,7 @@ requires-python = ">=3.11"
 # Listing the members here is what makes `uv sync` install them.
 # Workspace membership alone makes them resolvable but not installed.
 dependencies = [
-    "avp",
+    "avp[conformance]",
     "avp-anthropic",
     "avp-claude-agent-sdk",
     "simple-supervisor-example",
