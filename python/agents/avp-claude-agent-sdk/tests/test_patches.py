@@ -139,5 +139,3 @@ def test_patched_class_accepts_explicit_sink_override() -> None:
     setup_avp(sink=default_sink)
     inst = claude_agent_sdk.ClaudeSDKClient(sink=override_sink)
     assert inst._sink is override_sink
-
-

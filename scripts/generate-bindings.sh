@@ -70,6 +70,9 @@ generate_rust() {
 
   strip_null_defaults "$schema" > "$tmp"
   cargo typify --no-builder "$tmp" -o "$RUST_OUT/$name.rs"
+  # typify ignores the schema discriminator and emits `#[serde(untagged)]` for
+  # `type`-discriminated unions; re-tag them so they discriminate by `type`.
+  python3 "$REPO/scripts/tag-rust-unions.py" "$RUST_OUT/$name.rs" "$schema"
   echo "  rust: wrote $RUST_OUT/$name.rs"
 }
 

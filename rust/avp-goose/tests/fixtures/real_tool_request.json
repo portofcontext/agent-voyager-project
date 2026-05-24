@@ -1,0 +1,12 @@
+[
+  {
+    "type": "toolRequest",
+    "id": "toolu_vrtx_01Dahw11h1Tbv76fCpenUcLy",
+    "toolCall": {
+      "status": "success",
+      "value": {
+        "name": "code_navigator__list_tree_sitter_tools"
+      }
+    }
+  }
+]

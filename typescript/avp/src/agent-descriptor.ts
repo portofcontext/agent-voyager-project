@@ -7,29 +7,30 @@
 
 export type AgentName = string;
 export type AgentVersion = string;
-export type AvpSpecVersion = "0.1";
+export type SpecVersion = "0.1";
 export type DefaultModel = string | null;
 export type SupportedModels = string[] | null;
 export type SystemPrompt = string | null;
 export type Prompt = string | null;
 export type McpServers = McpServerDecl[] | null;
 export type Id = string;
+export type Name = string | null;
 export type Description = string | null;
 export type Tools = ToolDecl[] | null;
-export type Name = string;
+export type Name1 = string;
 export type Description1 = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
 export type Subagents = SubagentDecl[] | null;
-export type Name1 = string;
+export type Name2 = string;
 export type Description2 = string | null;
 export type Inputschema1 = {
   [k: string]: unknown;
 } | null;
 export type AvpAgentType = string | null;
 export type Skills = SkillDecl[] | null;
-export type Name2 = string;
+export type Name3 = string;
 export type Description3 = string | null;
 export type Version = string | null;
 export type AvpSource = string | null;
@@ -41,7 +42,7 @@ export type Capabilities = string[] | null;
 export interface AVPV01AgentDescriptor {
   agent_name: AgentName;
   agent_version: AgentVersion;
-  avp_spec_version: AvpSpecVersion;
+  spec_version: SpecVersion;
   default_model?: DefaultModel;
   supported_models?: SupportedModels;
   system_prompt?: SystemPrompt;
@@ -57,18 +58,36 @@ export interface AVPV01AgentDescriptor {
  *
  * Connection material (URLs, auth, command-lines) stays inside the agent
  * process and is NOT carried on the descriptor wire. The descriptor
- * records only the server's id and an optional description; the tools
- * the server surfaces are NOT enumerated on the descriptor — they appear
- * at runtime on `mcp_server_connected.data["avp.mcp.tools"]`. The id-pattern
- * mirrors `Commission.McpServerRef.id` so cross-source id-collision
- * detection at startup is straight string
- * equality.
+ * records only the server's id, optional display name, and optional
+ * description; the tools the server surfaces are NOT enumerated on the
+ * descriptor — they appear at runtime on
+ * `mcp_server_connected.data["avp.mcp.tools"]`.
+ *
+ * `id` is the agent's correlation key for this server across the wire
+ * (descriptor entry, `mcp_server_connected` event, tool dispatch). It
+ * is intentionally looser than `Commission.McpServerRef.id`: the
+ * descriptor enumerates BOTH Commission-resolved servers (where `id` is
+ * the supervisor-authored slug) AND agent-baked-in / environment-resident
+ * servers (where `id` is whatever the environment names them, e.g.
+ * `"claude.ai Dashboard Builder"`). Forcing a slug here would either
+ * lose fidelity or require every agent to invent the same slugification
+ * rule. Commission-authored ids stay slug-clean by virtue of
+ * `Commission.McpServerRef.id`'s pattern; descriptor ids must only be
+ * non-empty and must match the `avp.mcp.server_id` the agent later
+ * surfaces on `mcp_server_connected` so consumers can correlate.
+ *
+ * `name` is the display name when the environment provides one distinct
+ * from `id` (typical for Commission-resolved servers: `id` is the
+ * Commission slug, `name` is the human-readable label from the resolved
+ * config). For environment-resident servers whose only identifier is
+ * the display name, `id` carries that string and `name` is omitted.
  *
  * This interface was referenced by `AVPV01AgentDescriptor`'s JSON-Schema
  * via the `definition` "McpServerDecl".
  */
 export interface McpServerDecl {
   id: Id;
+  name?: Name;
   description?: Description;
   [k: string]: unknown;
 }
@@ -88,7 +107,7 @@ export interface McpServerDecl {
  * via the `definition` "ToolDecl".
  */
 export interface ToolDecl {
-  name: Name;
+  name: Name1;
   description?: Description1;
   inputSchema?: Inputschema;
   [k: string]: unknown;
@@ -108,7 +127,7 @@ export interface ToolDecl {
  * via the `definition` "SubagentDecl".
  */
 export interface SubagentDecl {
-  name: Name1;
+  name: Name2;
   description?: Description2;
   inputSchema?: Inputschema1;
   "avp.agent_type"?: AvpAgentType;
@@ -134,7 +153,7 @@ export interface SubagentDecl {
  * via the `definition` "SkillDecl".
  */
 export interface SkillDecl {
-  name: Name2;
+  name: Name3;
   description?: Description3;
   version?: Version;
   "avp.source"?: AvpSource;

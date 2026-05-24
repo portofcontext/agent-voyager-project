@@ -54,53 +54,53 @@ fn agent_started_roundtrips() {
 }
 
 #[test]
-fn model_turn_ended_with_cost_source_parses() {
-    // Pins that the recently-added `avp.cost.source` field on
-    // `model_turn_ended` is recognized by the generated types.
+fn assistant_message_with_cost_source_parses() {
+    // Pins that the `avp.cost.source` field on `assistant_message` is
+    // recognized by the generated types. Fixture generated from the
+    // canonical Pydantic models (`avp.trajectory.AssistantMessageEvent`).
     let raw = r#"{
         "specversion": "1.0",
         "id": "test-id",
         "time": "2026-05-07T00:00:00Z",
         "subject": "r1",
         "datacontenttype": "application/json",
-        "type": "avp.model_turn_ended",
+        "type": "avp.assistant_message",
         "source": "avp://agent",
         "data": {
             "trace_id": "00000000000000000000000000000000",
             "span_id": "1111111111111111",
             "parent_span_id": "0000000000000000",
-            "step": 1,
-            "duration_ms": 42,
-            "gen_ai.usage.input_tokens": 100,
-            "gen_ai.usage.output_tokens": 25,
+            "avp.step": 1,
+            "avp.duration_ms": 42,
+            "avp.content": [{ "type": "text", "text": "hi" }],
+            "avp.usage": { "input_tokens": 100, "output_tokens": 25 },
             "avp.cost_usd": 0.001,
             "avp.cost.source": "computed"
         }
     }"#;
-    let parsed: Event = serde_json::from_str(raw).expect("model_turn_ended should deserialize");
-    matches!(parsed, Event::ModelTurnEndedEvent(_));
+    let parsed: Event = serde_json::from_str(raw).expect("assistant_message should deserialize");
+    assert!(matches!(parsed, Event::AssistantMessageEvent(_)));
 }
 
 #[test]
-fn refusal_recorded_parses() {
-    // Pins that the recently-added refusal_recorded event type is generated.
+fn agent_stopped_refused_parses() {
+    // Refusal is folded into `agent_stopped` with reason "refused"; the
+    // standalone refusal_recorded event was removed in v0.1.
     let raw = r#"{
         "specversion": "1.0",
         "id": "test-id",
         "time": "2026-05-07T00:00:00Z",
         "subject": "r1",
         "datacontenttype": "application/json",
-        "type": "avp.refusal_recorded",
+        "type": "avp.agent_stopped",
         "source": "avp://agent",
         "data": {
             "trace_id": "00000000000000000000000000000000",
             "span_id": "2222222222222222",
             "parent_span_id": "0000000000000000",
-            "step": 1,
-            "avp.refusal.reason": "refusal",
-            "avp.refusal.provider": "anthropic"
+            "avp.reason": "refused"
         }
     }"#;
-    let parsed: Event = serde_json::from_str(raw).expect("refusal_recorded should deserialize");
-    matches!(parsed, Event::RefusalRecordedEvent(_));
+    let parsed: Event = serde_json::from_str(raw).expect("agent_stopped should deserialize");
+    assert!(matches!(parsed, Event::AgentStoppedEvent(_)));
 }

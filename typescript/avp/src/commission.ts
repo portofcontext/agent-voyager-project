@@ -9,16 +9,24 @@ export type SchemaVersion = "0.1";
 export type RunId = string;
 export type Name = string;
 export type Version = string | null;
-export type McpServers = McpServerRef[] | null;
+export type McpServers = (McpServerHttp | McpServerStdio)[] | null;
 export type Id = string;
-/**
- * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "JsonValue".
- */
-export type JsonValue = unknown;
-export type Skills = SkillRef[] | null;
+export type Type = "http";
+export type Url = string;
+export type Headers = {
+  [k: string]: string;
+} | null;
 export type Id1 = string;
-export type Subagents = SubagentRef[] | null;
+export type Type1 = "stdio";
+/**
+ * @minItems 1
+ */
+export type Command = [string, ...string[]];
+export type Args = string[] | null;
+export type Env = {
+  [k: string]: string;
+} | null;
+export type Skills = Skill[] | null;
 export type Id2 = string;
 export type EnabledBuiltinTools = string[] | null;
 export type EnabledBuiltinSubagents = string[] | null;
@@ -45,7 +53,6 @@ export interface AVPV01Commission {
   supervisor?: SupervisorPreamble | null;
   mcp_servers?: McpServers;
   skills?: Skills;
-  subagents?: Subagents;
   enabled_builtin_tools?: EnabledBuiltinTools;
   enabled_builtin_subagents?: EnabledBuiltinSubagents;
   enabled_builtin_skills?: EnabledBuiltinSkills;
@@ -82,54 +89,40 @@ export interface SupervisorPreamble {
   version?: Version;
 }
 /**
- * Reference to a supervisor-managed MCP server.
- *
- * The agent resolves this entry at startup by calling `avp.resolve` with
- * `{kind: "mcp_server", id, ref}`. The resolver returns the connection
- * material (transport, URL, auth, etc.) the agent uses to dial the actual
- * MCP server. Per-`kind` result schemas are pinned in the Resolver API
- * spec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment
- * concerns; AVP does not constrain them.
+ * Inline HTTP MCP server entry in Commission.mcp_servers.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "McpServerRef".
+ * via the `definition` "McpServerHttp".
  */
-export interface McpServerRef {
+export interface McpServerHttp {
   id: Id;
-  ref: JsonValue;
+  type: Type;
+  url: Url;
+  headers?: Headers;
 }
 /**
- * Reference to a supervisor-managed skill.
- *
- * The agent resolves this entry at startup by calling `avp.resolve` with
- * `{kind: "skill", id, ref}`. The resolver returns the SKILL.md content
- * (or a location the agent fetches and reads); agentskills.io's content
- * model still applies; the resolver just hands the content back from
- * whatever store the supervisor uses.
+ * Inline stdio MCP server entry in Commission.mcp_servers.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "SkillRef".
+ * via the `definition` "McpServerStdio".
  */
-export interface SkillRef {
+export interface McpServerStdio {
   id: Id1;
-  ref: JsonValue;
+  type: Type1;
+  command: Command;
+  args?: Args;
+  env?: Env;
 }
 /**
- * Reference to a supervisor-managed subagent.
- *
- * The agent resolves this entry at startup by calling `avp.resolve` with
- * `{kind: "subagent", id, ref}`; the resolver returns the model-facing
- * metadata (`name`, `description`, `inputSchema`) so the parent's model
- * can decide whether to delegate. When the model invokes the subagent at
- * runtime, the agent calls `avp.spawn_subagent` with the same ref to
- * obtain a child `run_id`. The subagent run carries its own complete
- * trajectory; the parent's `subagent_invoked.data["avp.subagent.run_id"]`
- * references it.
+ * Inline skill entry in Commission.skills.
  *
  * This interface was referenced by `AVPV01Commission`'s JSON-Schema
- * via the `definition` "SubagentRef".
+ * via the `definition` "Skill".
  */
-export interface SubagentRef {
+export interface Skill {
   id: Id2;
-  ref: JsonValue;
+  files: Files;
+}
+export interface Files {
+  [k: string]: string;
 }

@@ -11,9 +11,9 @@
  * One module per AVP v0.1 spec:
  *
  * - `commission` — `Commission`, the supervisor's setup message. Lists
- *   supervisor-managed assets (mcp_servers, skills, subagents) as opaque
- *   refs the agent dereferences via the AVP Resolver API at startup.
- *   Sent once at run start.
+ *   supervisor-managed assets (mcp_servers, skills) with inline connection
+ *   material the agent dials and loads directly at startup. Sent once at
+ *   run start.
  * - `trajectory` — agent-emitted events. The `AVPV01TrajectoryEvent`
  *   discriminated union is what your code matches on when consuming a
  *   trajectory.
@@ -22,9 +22,9 @@
  *   `<agent> describe`).
  *
  * v0.1 has no supervisor → agent push channel. The supervisor pipes
- * `Commission` in once and reads the NDJSON trajectory out. The agent
- * initiates an `avp.resolve` JSON-RPC call to a supervisor-stood-up
- * resolver service to dereference each managed ref; agent-driven, no push.
+ * `Commission` in once and reads the NDJSON trajectory out. Managed assets
+ * carry inline connection material on the Commission, so there is no
+ * resolver round-trip; the agent dials and loads them directly.
  *
  * ## Regenerating
  *

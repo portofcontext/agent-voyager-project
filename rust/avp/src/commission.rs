@@ -106,7 +106,21 @@ pub mod error {
 #[doc = "        {"]
 #[doc = "          \"type\": \"array\","]
 #[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/McpServerRef\""]
+#[doc = "            \"oneOf\": ["]
+#[doc = "              {"]
+#[doc = "                \"$ref\": \"#/$defs/McpServerHttp\""]
+#[doc = "              },"]
+#[doc = "              {"]
+#[doc = "                \"$ref\": \"#/$defs/McpServerStdio\""]
+#[doc = "              }"]
+#[doc = "            ],"]
+#[doc = "            \"discriminator\": {"]
+#[doc = "              \"mapping\": {"]
+#[doc = "                \"http\": \"#/$defs/McpServerHttp\","]
+#[doc = "                \"stdio\": \"#/$defs/McpServerStdio\""]
+#[doc = "              },"]
+#[doc = "              \"propertyName\": \"type\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -176,21 +190,7 @@ pub mod error {
 #[doc = "        {"]
 #[doc = "          \"type\": \"array\","]
 #[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/SkillRef\""]
-#[doc = "          }"]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
-#[doc = "    },"]
-#[doc = "    \"subagents\": {"]
-#[doc = "      \"title\": \"Subagents\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"$ref\": \"#/$defs/SubagentRef\""]
+#[doc = "            \"$ref\": \"#/$defs/Skill\""]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -261,7 +261,7 @@ pub struct AvpV01Commission {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub enabled_builtin_tools: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub mcp_servers: ::std::option::Option<::std::vec::Vec<McpServerRef>>,
+    pub mcp_servers: ::std::option::Option<::std::vec::Vec<AvpV01CommissionMcpServersItem>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -274,9 +274,7 @@ pub struct AvpV01Commission {
     pub run_id: RunId,
     pub schema_version: ::std::string::String,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub skills: ::std::option::Option<::std::vec::Vec<SkillRef>>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub subagents: ::std::option::Option<::std::vec::Vec<SubagentRef>>,
+    pub skills: ::std::option::Option<::std::vec::Vec<Skill>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub supervisor: ::std::option::Option<SupervisorPreamble>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -285,6 +283,49 @@ pub struct AvpV01Commission {
     pub tags: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub thread_id: ::std::option::Option<::std::string::String>,
+}
+#[doc = "`AvpV01CommissionMcpServersItem`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"oneOf\": ["]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/McpServerHttp\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/$defs/McpServerStdio\""]
+#[doc = "    }"]
+#[doc = "  ],"]
+#[doc = "  \"discriminator\": {"]
+#[doc = "    \"mapping\": {"]
+#[doc = "      \"http\": \"#/$defs/McpServerHttp\","]
+#[doc = "      \"stdio\": \"#/$defs/McpServerStdio\""]
+#[doc = "    },"]
+#[doc = "    \"propertyName\": \"type\""]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum AvpV01CommissionMcpServersItem {
+    #[serde(rename = "http")]
+    Http(McpServerHttp),
+    #[serde(rename = "stdio")]
+    Stdio(McpServerStdio),
+
+}
+impl ::std::convert::From<McpServerHttp> for AvpV01CommissionMcpServersItem {
+    fn from(value: McpServerHttp) -> Self {
+        Self::Http(value)
+    }
+}
+impl ::std::convert::From<McpServerStdio> for AvpV01CommissionMcpServersItem {
+    fn from(value: McpServerStdio) -> Self {
+        Self::Stdio(value)
+    }
 }
 #[doc = "`Id`"]
 #[doc = r""]
@@ -361,55 +402,50 @@ impl<'de> ::serde::Deserialize<'de> for Id {
             })
     }
 }
-#[doc = "`JsonValue`"]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(transparent)]
-pub struct JsonValue(pub ::serde_json::Value);
-impl ::std::ops::Deref for JsonValue {
-    type Target = ::serde_json::Value;
-    fn deref(&self) -> &::serde_json::Value {
-        &self.0
-    }
-}
-impl ::std::convert::From<JsonValue> for ::serde_json::Value {
-    fn from(value: JsonValue) -> Self {
-        value.0
-    }
-}
-impl ::std::convert::From<::serde_json::Value> for JsonValue {
-    fn from(value: ::serde_json::Value) -> Self {
-        Self(value)
-    }
-}
-#[doc = "Reference to a supervisor-managed MCP server.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"mcp_server\", id, ref}`. The resolver returns the connection\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\nconcerns; AVP does not constrain them."]
+#[doc = "Inline HTTP MCP server entry in Commission.mcp_servers."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"McpServerRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed MCP server.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"mcp_server\\\", id, ref}`. The resolver returns the connection\\nmaterial (transport, URL, auth, etc.) the agent uses to dial the actual\\nMCP server. Per-`kind` result schemas are pinned in the Resolver API\\nspec (`spec/v0.1/resolver.md` §3.2). Auth and transport are deployment\\nconcerns; AVP does not constrain them.\","]
+#[doc = "  \"title\": \"McpServerHttp\","]
+#[doc = "  \"description\": \"Inline HTTP MCP server entry in Commission.mcp_servers.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"id\","]
-#[doc = "    \"ref\""]
+#[doc = "    \"type\","]
+#[doc = "    \"url\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"headers\": {"]
+#[doc = "      \"title\": \"Headers\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"id\": {"]
 #[doc = "      \"title\": \"Id\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"minLength\": 1,"]
 #[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
 #[doc = "    },"]
-#[doc = "    \"ref\": {"]
-#[doc = "      \"$ref\": \"#/$defs/JsonValue\""]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"http\""]
+#[doc = "    },"]
+#[doc = "    \"url\": {"]
+#[doc = "      \"title\": \"Url\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": false"]
@@ -418,10 +454,96 @@ impl ::std::convert::From<::serde_json::Value> for JsonValue {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct McpServerRef {
+pub struct McpServerHttp {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub headers: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::string::String>,
+    >,
     pub id: Id,
-    #[serde(rename = "ref")]
-    pub ref_: JsonValue,
+    #[serde(rename = "type", skip_serializing, default)]
+    pub type_: ::std::string::String,
+    pub url: Url,
+}
+#[doc = "Inline stdio MCP server entry in Commission.mcp_servers."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"McpServerStdio\","]
+#[doc = "  \"description\": \"Inline stdio MCP server entry in Commission.mcp_servers.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"command\","]
+#[doc = "    \"id\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"args\": {"]
+#[doc = "      \"title\": \"Args\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"array\","]
+#[doc = "          \"items\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"command\": {"]
+#[doc = "      \"title\": \"Command\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      },"]
+#[doc = "      \"minItems\": 1"]
+#[doc = "    },"]
+#[doc = "    \"env\": {"]
+#[doc = "      \"title\": \"Env\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1,"]
+#[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"stdio\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct McpServerStdio {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub args: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub command: ::std::vec::Vec<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub env: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::string::String>,
+    >,
+    pub id: Id,
+    #[serde(rename = "type", skip_serializing, default)]
+    pub type_: ::std::string::String,
 }
 #[doc = "`Name`"]
 #[doc = r""]
@@ -561,28 +683,32 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
             })
     }
 }
-#[doc = "Reference to a supervisor-managed skill.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"skill\", id, ref}`. The resolver returns the SKILL.md content\n(or a location the agent fetches and reads); agentskills.io's content\nmodel still applies; the resolver just hands the content back from\nwhatever store the supervisor uses."]
+#[doc = "Inline skill entry in Commission.skills."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
-#[doc = "  \"title\": \"SkillRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed skill.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"skill\\\", id, ref}`. The resolver returns the SKILL.md content\\n(or a location the agent fetches and reads); agentskills.io's content\\nmodel still applies; the resolver just hands the content back from\\nwhatever store the supervisor uses.\","]
+#[doc = "  \"title\": \"Skill\","]
+#[doc = "  \"description\": \"Inline skill entry in Commission.skills.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
-#[doc = "    \"id\","]
-#[doc = "    \"ref\""]
+#[doc = "    \"files\","]
+#[doc = "    \"id\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"files\": {"]
+#[doc = "      \"title\": \"Files\","]
+#[doc = "      \"type\": \"object\","]
+#[doc = "      \"additionalProperties\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
+#[doc = "    },"]
 #[doc = "    \"id\": {"]
 #[doc = "      \"title\": \"Id\","]
 #[doc = "      \"type\": \"string\","]
 #[doc = "      \"minLength\": 1,"]
 #[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
-#[doc = "    },"]
-#[doc = "    \"ref\": {"]
-#[doc = "      \"$ref\": \"#/$defs/JsonValue\""]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": false"]
@@ -591,45 +717,9 @@ impl<'de> ::serde::Deserialize<'de> for RunId {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct SkillRef {
+pub struct Skill {
+    pub files: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     pub id: Id,
-    #[serde(rename = "ref")]
-    pub ref_: JsonValue,
-}
-#[doc = "Reference to a supervisor-managed subagent.\n\nThe agent resolves this entry at startup by calling `avp.resolve` with\n`{kind: \"subagent\", id, ref}`; the resolver returns the model-facing\nmetadata (`name`, `description`, `inputSchema`) so the parent's model\ncan decide whether to delegate. When the model invokes the subagent at\nruntime, the agent calls `avp.spawn_subagent` with the same ref to\nobtain a child `run_id`. The subagent run carries its own complete\ntrajectory; the parent's `subagent_invoked.data[\"avp.subagent.run_id\"]`\nreferences it."]
-#[doc = r""]
-#[doc = r" <details><summary>JSON schema</summary>"]
-#[doc = r""]
-#[doc = r" ```json"]
-#[doc = "{"]
-#[doc = "  \"title\": \"SubagentRef\","]
-#[doc = "  \"description\": \"Reference to a supervisor-managed subagent.\\n\\nThe agent resolves this entry at startup by calling `avp.resolve` with\\n`{kind: \\\"subagent\\\", id, ref}`; the resolver returns the model-facing\\nmetadata (`name`, `description`, `inputSchema`) so the parent's model\\ncan decide whether to delegate. When the model invokes the subagent at\\nruntime, the agent calls `avp.spawn_subagent` with the same ref to\\nobtain a child `run_id`. The subagent run carries its own complete\\ntrajectory; the parent's `subagent_invoked.data[\\\"avp.subagent.run_id\\\"]`\\nreferences it.\","]
-#[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"id\","]
-#[doc = "    \"ref\""]
-#[doc = "  ],"]
-#[doc = "  \"properties\": {"]
-#[doc = "    \"id\": {"]
-#[doc = "      \"title\": \"Id\","]
-#[doc = "      \"type\": \"string\","]
-#[doc = "      \"minLength\": 1,"]
-#[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
-#[doc = "    },"]
-#[doc = "    \"ref\": {"]
-#[doc = "      \"$ref\": \"#/$defs/JsonValue\""]
-#[doc = "    }"]
-#[doc = "  },"]
-#[doc = "  \"additionalProperties\": false"]
-#[doc = "}"]
-#[doc = r" ```"]
-#[doc = r" </details>"]
-#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct SubagentRef {
-    pub id: Id,
-    #[serde(rename = "ref")]
-    pub ref_: JsonValue,
 }
 #[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and projected onto the\n`run_requested` event's `data` (`avp.supervisor.name` +\n`avp.supervisor.version`) so a trajectory consumer can attribute the\nrun to the originating supervisor without an out-of-band lookup. The\nevent's `source` is `avp://agent` (the agent is the sole producer on\nthe wire); supervisor attribution lives inside `data`.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"simple-supervisor-example\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
 #[doc = r""]
@@ -671,4 +761,73 @@ pub struct SupervisorPreamble {
     pub name: Name,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub version: ::std::option::Option<::std::string::String>,
+}
+#[doc = "`Url`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Url\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct Url(::std::string::String);
+impl ::std::ops::Deref for Url {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<Url> for ::std::string::String {
+    fn from(value: Url) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for Url {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for Url {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for Url {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for Url {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for Url {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
 }
