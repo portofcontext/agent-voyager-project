@@ -58,8 +58,8 @@ help:
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make test-real-llm   real-LLM smoke tests for both agents"
-	@echo "    make test-mcp        gated avp-goose MCP tests (spawn the bundled uv server;"
-	@echo "                         live_mcp also calls a real model). Needs uv on PATH."
+	@echo "    make test-live       gated avp-goose live tests (mcp_connect / live_mcp /"
+	@echo "                         live_skills; spawn the uv server + call a real model). Needs uv."
 	@echo "    make examples        all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
 	@echo "    make smoke           check + bindings-test + test-real-llm + examples (full sanity)"
 	@echo ""
@@ -174,11 +174,11 @@ test-real-llm:
 	echo ""; echo "All real-LLM tests passed."
 
 
-.PHONY: test-mcp
-test-mcp:
-	@command -v uv >/dev/null 2>&1 || { echo "error: uv is required to run the bundled MCP server"; exit 2; }
-	@echo "Running gated avp-goose MCP tests (mcp_connect is key-free; live_mcp calls a real model)."
-	@cd rust/avp-goose && cargo test --test mcp_connect --test live_mcp -- --ignored
+.PHONY: test-live
+test-live:
+	@command -v uv >/dev/null 2>&1 || { echo "error: uv is required (the bundled MCP server runs via uv run)"; exit 2; }
+	@echo "Running gated avp-goose live tests (mcp_connect is key-free; live_mcp / live_skills / live_subagent call a real model)."
+	@cd rust/avp-goose && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
 # Common run-an-example macro. Distinguishes:

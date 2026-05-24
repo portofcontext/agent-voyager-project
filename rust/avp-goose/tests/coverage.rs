@@ -50,14 +50,14 @@ fn full_event_surface_is_emitted_and_schema_valid() {
             ),
             tool_request(
                 "s1",
-                "summon__run",
-                json!({ "recipe": "researcher" }),
+                "delegate",
+                json!({ "source": "researcher" }),
                 Some("summon"),
             ),
             tool_request(
                 "s2",
-                "summon__run",
-                json!({ "recipe": "broken" }),
+                "delegate",
+                json!({ "source": "broken" }),
                 Some("summon"),
             ),
         ],

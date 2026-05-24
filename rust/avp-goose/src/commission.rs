@@ -68,6 +68,22 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
         });
     }
 
+    // Subagents: enable the `summon` platform extension so the model can
+    // delegate to subagent recipes (scanned from the working dir's
+    // `.agents/recipes`). AVP's `enabled_builtin_subagents` is the signal to turn
+    // the capability on; the summonable recipes themselves come from the
+    // environment (the Commission carries names, not inline recipe definitions
+    // — see TECH_DEBT).
+    if commission.enabled_builtin_subagents.as_ref().is_some_and(|s| !s.is_empty()) {
+        extensions.push(ExtensionConfig::Platform {
+            name: "summon".to_string(),
+            description: "Load knowledge and delegate tasks to subagents".to_string(),
+            display_name: None,
+            bundled: None,
+            available_tools: Vec::new(),
+        });
+    }
+
     let response = commission.output_schema.as_ref().map(|schema| Response {
         json_schema: Some(serde_json::Value::Object(schema.clone())),
     });
@@ -202,5 +218,22 @@ mod tests {
             "schema_version": "0.1", "run_id": "r1", "model": "m"
         })));
         assert!(!ext_names(&cfg).contains(&"skills".to_string()));
+    }
+
+    #[test]
+    fn enabled_builtin_subagents_enables_summon() {
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "enabled_builtin_subagents": ["echoer"]
+        })));
+        assert!(ext_names(&cfg).contains(&"summon".to_string()), "{:?}", ext_names(&cfg));
+    }
+
+    #[test]
+    fn no_subagents_means_no_summon() {
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m"
+        })));
+        assert!(!ext_names(&cfg).contains(&"summon".to_string()));
     }
 }

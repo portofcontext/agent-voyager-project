@@ -45,8 +45,8 @@ fn summon_tool_call_emits_both_tool_and_subagent_events() {
     em.on_assistant(
         &[tool_request(
             "s1",
-            "summon__run",
-            json!({ "recipe": "researcher" }),
+            "delegate",
+            json!({ "source": "researcher" }),
             Some("summon"),
         )],
         usage_zero(),
@@ -58,10 +58,14 @@ fn summon_tool_call_emits_both_tool_and_subagent_events() {
 
     let t = sink.trajectory();
     assert_eq!(t.find_all("avp.tool_invoked").len(), 1);
-    assert_eq!(t.find_all("avp.subagent_invoked").len(), 1);
+    let invoked = t.find_all("avp.subagent_invoked");
+    assert_eq!(invoked.len(), 1);
+    // The subagent name is the delegated recipe (`source`), not the tool name.
+    assert_eq!(invoked[0]["data"]["avp.subagent.name"], "researcher");
     assert_eq!(t.find_all("avp.tool_returned").len(), 1);
     let returned = t.find_all("avp.subagent_returned");
     assert_eq!(returned.len(), 1);
+    assert_eq!(returned[0]["data"]["avp.subagent.name"], "researcher");
     // Success path: reason converged. The subagent frame is one span: returned
     // reuses the invoked span.
     assert_eq!(returned[0]["data"]["avp.subagent.reason"], "converged");
@@ -81,7 +85,7 @@ fn summon_failure_emits_subagent_returned_with_error_reason() {
     let mut em = emitter(sink.clone(), &[]);
     em.start(None).unwrap();
     em.on_assistant(
-        &[tool_request("s1", "summon__run", json!({}), Some("summon"))],
+        &[tool_request("s1", "delegate", json!({ "source": "broken" }), Some("summon"))],
         usage_zero(),
         None,
     )

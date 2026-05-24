@@ -100,9 +100,14 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         .ok_or_else(|| anyhow::anyhow!("Commission has no model"))?;
     let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
 
-    // Agent + session.
+    // Agent + session. The working dir is an isolated workspace under the run's
+    // path root, not the user's CWD: the Commission defines the environment, and
+    // Goose writes run-scoped state there (`.agents/skills`, `.agents/recipes`)
+    // which must not pollute the caller's directory. (If a future use case needs
+    // the agent to operate on the caller's project tree, make this configurable.)
     let agent = Arc::new(Agent::new());
-    let working_dir = std::env::current_dir()?;
+    let working_dir = path_root.join("workspace");
+    std::fs::create_dir_all(&working_dir)?;
     let session = agent
         .config
         .session_manager
@@ -150,8 +155,14 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         })
         .collect();
 
+    // Commission-declared skills (materialized by `write_skills`), enumerated on
+    // the descriptor.
+    let skills: Vec<String> =
+        commission.skills.iter().flatten().map(|s| s.id.to_string()).collect();
+
     // Static descriptor from the agent's live tool registry (no probe needed).
-    let descriptor = build_descriptor(&agent, &session_id, &model_name, &mcp_servers).await?;
+    let descriptor =
+        build_descriptor(&agent, &session_id, &model_name, &mcp_servers, &skills).await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -265,6 +276,7 @@ async fn build_descriptor(
     session_id: &str,
     model: &str,
     mcp_servers: &HashSet<String>,
+    skills: &[String],
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
         tools.iter().map(|t| t.name.to_string()).collect()
@@ -296,6 +308,11 @@ async fn build_descriptor(
         .map(|id| json!({ "id": id, "status": "connected" }))
         .collect();
 
+    // The Commission's inline skills, materialized by `write_skills` and loaded
+    // on demand via Goose's `load_skill` tool. The descriptor enumerates them as
+    // the agent's available skills.
+    let skill_decls: Vec<Value> = skills.iter().map(|name| json!({ "name": name })).collect();
+
     serde_json::from_value(json!({
         "agent_name": "goose",
         "agent_version": GOOSE_VERSION,
@@ -303,6 +320,7 @@ async fn build_descriptor(
         "default_model": model,
         "tools": tools,
         "mcp_servers": mcp_server_decls,
+        "skills": skill_decls,
     }))
     .map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }

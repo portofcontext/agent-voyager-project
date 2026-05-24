@@ -2,8 +2,12 @@
 //!
 //! The agent stamps `avp.cost.source` on each `assistant_message` so consumers
 //! can tell a locally-computed cost from a provider-reported one (or unknown).
-//! The price table is data: the default ships in `src/data/prices.json`,
-//! embedded at build time. Callers may build or override their own `PriceTable`.
+//! The price table is data with a SINGLE source of truth: the canonical
+//! `prices.json` lives in the Python `avp` package (`avp/data/prices.json`,
+//! synced from models.dev by `scripts/sync-prices.py`), and this crate embeds
+//! that same file at build time via `include_str!`. Keeping one committed copy
+//! avoids a per-language duplicate (the file is ~0.5MB and grows). Callers may
+//! build or override their own `PriceTable`.
 
 use std::collections::HashMap;
 
@@ -32,7 +36,11 @@ struct PriceFile {
     models: HashMap<String, ModelPrice>,
 }
 
-const PRICES_JSON: &str = include_str!("data/prices.json");
+// The single canonical price table lives in the Python package; embed that one
+// file rather than committing a per-language copy. The path is repo-relative
+// (works for path/git deps); a standalone crates.io publish would need it
+// vendored into the crate (see TECH_DEBT).
+const PRICES_JSON: &str = include_str!("../../../python/avp/src/avp/data/prices.json");
 
 /// Load the bundled default price table. Returns a fresh, owned table the
 /// caller can mutate.

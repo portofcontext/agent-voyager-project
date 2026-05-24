@@ -9,26 +9,6 @@ a live run produces the full ordered trajectory with real usage/cost. Shared
 test harness (`tests/common`) with schema-conformance baked in; 32 tests / 3
 ignored (band 2 subagent + MCP-lifecycle specs).
 
-**Live usage (solved):** Goose streams usage in a later chunk than content, so
-a message's tokens are not in the session when it arrives. The runner uses a
-one-message lookahead: buffer each assistant message and flush it (reading the
-settled session token delta) when the next event arrives or at stop. This keeps
-ordering and makes the run total exact (verified live: a turn reported
-`in=234 out=9` -> `$0.001395` for opus-4-7). The cache-token split is not
-available at the session layer, so cost treats input as fresh (small
-over-estimate when caching is active).
-
-Band 1 (prelude, usage/cost, stop reasons) is complete and live-verified.
-Band 2 (subagents, MCP lifecycle, error events) is implemented and
-schema-validated. Commission coverage (skills, structured output, builtins) is
-mapped. A coverage test emits all 12 event types and validates them. 41 tests
-green; tech debt tracked in `TECH_DEBT.md`. Remaining: live validation of
-subagent/MCP/skills/structured-output runs, telemetry polish, and upstreaming
-into Goose. v0.1 target.
-
-Cross-checked against the generated Rust wire types (`rust/avp/`) and Goose
-source at `github.com/block/goose` HEAD `728d72a` (cloned to
-`~/repos/scratch/goose-latest`).
 
 ## 1. Decision
 
@@ -227,9 +207,6 @@ Observing Goose in-process keeps the connector small:
   `McpNotification` summaries). We emit `subagent_invoked`/`returned` around
   the tool call with `SubagentUsage` when recoverable. This is exactly the
   AVP-documented black-box fallback, so the wire stays conformant.
-- **MCP lifecycle.** No connect/disconnect events on the stream. We
-  synthesize `McpServerConnectedEvent` from the extension set established at
-  session setup; disconnect is omitted in v0.1.
 
 ## 11. Cross-check notes
 

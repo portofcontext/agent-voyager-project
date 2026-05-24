@@ -28,9 +28,11 @@ use crate::runstate::RunState;
 use crate::translate::{self, GooseContent};
 
 /// An in-flight tool invocation awaiting its result.
-/// Goose extension that delegates to subagents; its calls become AVP
-/// `subagent_*` events rather than `tool_*`.
+/// Goose's `summon` platform extension. It exposes two tools: `delegate` (run a
+/// subagent recipe) and `load` (pull content into context). Only `delegate` is a
+/// subagent invocation; `load` is a plain tool call.
 const SUMMON_EXTENSION: &str = "summon";
+const DELEGATE_TOOL: &str = "delegate";
 
 /// The frame a subagent invocation opens. The same span closes it on return:
 /// the spec pairs `subagent_invoked` / `subagent_returned` by a shared frame
@@ -40,6 +42,9 @@ struct SubagentFrame {
     span: String,
     /// Parent of the frame (the turn span); also the `subagent_returned` parent.
     parent: String,
+    /// The delegated subagent's name (the `delegate` call's `source` arg), not
+    /// the tool name. Carried so `subagent_returned` reports the same name.
+    name: String,
 }
 
 struct PendingTool {
@@ -160,9 +165,19 @@ impl<S: Sink> Emitter<S> {
                     call.input.clone(),
                     Some(dispatch),
                 ));
-                // A `summon` call additionally opens a subagent frame, so the
-                // delegation surfaces on the subagent axis as well.
-                let subagent = if call.extension.as_deref() == Some(SUMMON_EXTENSION) {
+                // A `summon`/`delegate` call additionally opens a subagent frame,
+                // so the delegation surfaces on the subagent axis as well. The
+                // subagent's name is the delegated recipe (`source` arg), not the
+                // tool name. `load` (the other summon tool) is not a subagent.
+                let is_delegate =
+                    call.extension.as_deref() == Some(SUMMON_EXTENSION) && call.name == DELEGATE_TOOL;
+                let subagent = if is_delegate {
+                    let subagent_name = call
+                        .input
+                        .get("source")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(&call.name)
+                        .to_string();
                     let frame_span = new_span_id();
                     self.state.buffer_event(events::subagent_invoked(
                         &self.state.run_id,
@@ -171,10 +186,14 @@ impl<S: Sink> Emitter<S> {
                         &turn_span,
                         step,
                         &call.id,
-                        &call.name,
+                        &subagent_name,
                         call.input.clone(),
                     ));
-                    Some(SubagentFrame { span: frame_span, parent: turn_span.clone() })
+                    Some(SubagentFrame {
+                        span: frame_span,
+                        parent: turn_span.clone(),
+                        name: subagent_name,
+                    })
                 } else {
                     None
                 };
@@ -232,7 +251,7 @@ impl<S: Sink> Emitter<S> {
                     &frame.parent,
                     pending.step,
                     &ret.id,
-                    &pending.name,
+                    &frame.name,
                     duration_ms,
                     &ret.output,
                     reason,

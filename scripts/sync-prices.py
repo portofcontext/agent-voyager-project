@@ -3,10 +3,12 @@
 
 models.dev (https://models.dev/api.json) is the open, community-maintained
 catalog of model pricing (the same source Goose uses). This mirrors its entire
-cost table into the bundled `prices.json` (the rust + python copies), keyed by
-the models.dev id `<provider>/<model>`, so the default table covers every model
-models.dev prices without per-model maintenance. Runtime stays offline
-(`include_str!`); production overrides via `compute_cost(prices=...)`.
+cost table into the single canonical `prices.json` (in the Python `avp`
+package), keyed by the models.dev id `<provider>/<model>`, so the default table
+covers every model models.dev prices without per-model maintenance. There is
+one committed copy: the Rust crate embeds this same file via `include_str!`, and
+future language bindings vendor it the same way. Runtime stays offline;
+production overrides via `compute_cost(prices=...)`.
 
     python scripts/sync-prices.py            # dry run: print the table
     python scripts/sync-prices.py --write     # write both prices.json copies
@@ -31,10 +33,9 @@ from pathlib import Path
 MODELS_DEV_API = "https://models.dev/api.json"
 
 REPO = Path(__file__).resolve().parent.parent
-TARGETS = [
-    REPO / "rust/avp/src/data/prices.json",
-    REPO / "python/avp/src/avp/data/prices.json",
-]
+# Single canonical copy (the Python package); the Rust crate embeds this same
+# file via include_str!, and future bindings vendor it the same way.
+TARGETS = [REPO / "python/avp/src/avp/data/prices.json"]
 
 # Per-million cost fields we carry, in ModelPrice order.
 COST_FIELDS = ("input", "output", "cache_read", "cache_write")

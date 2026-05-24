@@ -3,77 +3,28 @@
 Running ledger of known shortcuts and follow-ups. Add to it as work lands;
 clear items when fixed. Not blockers — deliberate, recorded debt.
 
-## Cleared
-- Final-output tool filtered out of the descriptor (`tool_decls`).
-- `cost_source` reports `unknown` for zero-usage turns (not `computed $0`).
-- Error classification: stream errors map to `rate_limit`/`context_limit`/
-  `auth_error`/`agent_crash` via `classify_error` (was always `agent_crash`).
-- `enabled_builtin_tools` semantics decided: each listed name is enabled as a
-  builtin extension; `None` enables none (the Commission lists what it wants).
-  This intentionally differs from AVP's implied "None = all" because the run is
-  an isolated, Commission-defined environment.
-- `GOOSE_VERSION` (descriptor `agent_version`) now derived from Cargo.lock by
-  `build.rs` instead of hardcoded.
-- `CapturingSink` deduped: src unit tests share `src/testkit.rs` (integration
-  tests keep their richer `tests/common` harness).
-- **Per-turn usage + cache split** via the provider tap (`provider_tap.rs`): a
-  `Provider` decorator tees per-inference `ProviderUsage` (incl. cache
-  read/write) off the stream, so each turn carries its own real cost. Replaces
-  the lagging session-token diff (which lumped all cost on the final turn).
-  Live-verified: a tool round distributed `$0.000875` + `$0.022120` across its
-  two inferences.
-- **Streaming-delta coalescing** (`translate::append_coalescing` + the runner
-  loop): Goose's live `reply()` stream yields an assistant inference as
-  incremental message deltas (`"av"` then `"p-tool-ok"`), and the runner used to
-  emit one `assistant_message` per delta, fragmenting a single turn into many.
-  The runner now accumulates consecutive assistant messages into one turn,
-  closing it at the next non-assistant message or stream end (a new inference
-  only follows tool execution, so the boundary is unambiguous). Cross-provider
-  live-verified: a one-line reply is now 1 turn, a tool round is 2.
-- **Cross-provider eval harness** (`src/bin/avp-goose-eval.rs`): runs a matrix
-  of Commission setups × providers by spawning `avp-goose-run` per case (fresh
-  process per case, since Goose's `Config`/`SessionManager` are global), schema-
-  validates each trajectory, and scores declarative evals. 6/6 pass on Sonnet
-  (Anthropic) + GPT-4o (OpenRouter).
-- **Live MCP dispatch confirmed, on a stable in-repo fixture.** Replaced the
-  machine-specific `gtmagent` test reference with a tiny self-contained stdio
-  MCP server (`testing/mcp/avp_test_mcp.py` at the repo root, shared across
-  suites; arcade-mcp-server, deps inline for `uv run`). Two gated tests use it
-  (`make test-mcp`): `mcp_connect` (no key)
-  proves Goose connects and lists its tools; `live_mcp` drives a real model that
-  dispatches to the server, asserting `dispatch_target=mcp_server`, a successful
-  `tool_returned`, and the echoed token round-tripping. Both isolate via
-  `GOOSE_PATH_ROOT`.
-- **Conformed to the v0.1 spec sweep (merge from main).** `mcp_server_connected`
-  / `_disconnected` events removed (MCP identity + dial `status` now ride on the
-  descriptor's `mcp_servers[]`, and each MCP tool carries `avp.mcp_server_id` in
-  `tools[]`, populated by a per-extension `list_tools` query in
-  `build_descriptor`). `subagent_failed` collapsed into `subagent_returned`
-  (`reason = error`). A subagent started via a tool call now fires BOTH
-  `tool_invoked` + `subagent_invoked` and BOTH `tool_returned` +
-  `subagent_returned`; the subagent frame is one span (returned reuses invoked).
-  Bindings regenerated; hermetic suite + both gated MCP tests green.
-
 ## Blocked on a Goose in-loop signal
 - **Stop-reason fidelity.** Only `converged`/`error` emitted. `interrupted`
   needs a wired cancel token (max_turns/timeout); `refused` needs a model-refusal
   signal Goose does not surface on the stream (the provider tap may expose a
   finish reason — to investigate).
+- **`subagent_returned.reason` on the success path is always `converged`.** Goose
+  doesn't surface the child's stop reason; the error path correctly reports
+  `error` (mirrors the paired `tool_returned` is_error).
 
-## Needs a live run with goose-side setup (emit/schema already proven)
-- **Subagents** (needs configured subrecipes) — and **subagent token
-  attribution**: `subagent_returned.avp.subagent.usage` is omitted; confirm
-  whether the child `Agent` shares the parent session (if not, surface child
-  usage).
-- **Skills discovery** — files are written + the `skills` platform extension
-  enabled; confirm Goose loads it and discovers them.
+## Code TODOs (small follow-ups, no goose signal needed)
+- **Subagent token attribution.** `subagent_returned.avp.subagent.usage` is
+  omitted. The summon path is wired + live-validated (`live_subagent`), but the
+  child's spend isn't surfaced; confirm whether the child `Agent` shares the
+  parent session (if not, roll up the child's tokens onto the event).
 - **Descriptor `mcp_servers[].status` is hardcoded `connected`.** The runner
-  loads servers via `add_extensions_bulk` but does not yet read the per-server
+  loads servers via `add_extensions_bulk` but does not read the per-server
   `ExtensionLoadResult`, so a failed dial is not reflected as `failed`. Wire the
   load results through `build_descriptor`.
-- **`subagent_returned.reason` on the success path is always `converged`** (Goose
-  doesn't surface the child's stop reason); the error path now correctly reports
-  `error`.
+- **Price-table mapping report.** Copy Goose's `name_builder` "mapping report"
+  lock-file idea so a model dropping out of the models.dev catalog is visible in
+  the `sync-prices` diff. (The mirror, lookup normalization, Goose-equality, and
+  the daily CI sync are done.)
 
 ## Planned: native provider routing in the Commission
 - **`GOOSE_PROVIDER` is temporary.** Today the connector resolves the provider
@@ -115,36 +66,6 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   Commission, not env) → `commission.md` prose → a conformance case pinning that
   the secret never appears inline.
 
-## Pricing from models.dev, agent-reported first
-- **Cost-source priority:** prefer the agent's own reported cost
-  (`avp.cost.source = "reported"`): an agent that knows its real cost can
-  self-report it in its implementation. Only when it doesn't is cost
-  `"computed"` from the bundled table; else `"unknown"`. The wire already
-  carries all three, so this is logic, not a schema change.
-- **Full models.dev mirror (BUILT):** `scripts/sync-prices.py` mirrors the entire
-  models.dev cost table (~4610 models) into both `prices.json` copies, keyed by
-  its `<provider>/<model>` id; `make sync-prices` / `make sync-prices-check`.
-  No per-model curation: every model models.dev prices is covered. Runtime stays
-  offline (`include_str!`, ~476KB embed). (models.dev 403s the default urllib
-  agent, so the script sets a User-Agent.)
-- **Normalization at lookup (BUILT):** `compute_cost(provider, model, ...)` (rust
-  + python, via `resolve_price`) maps a wire model to a key: a slug like
-  `openai/gpt-4o` is used as-is; a bare `claude-sonnet-4-6` is qualified with its
-  provider to `anthropic/claude-sonnet-4-6`. The connector passes its provider.
-- **Verified against Goose (2026-05-24):** synced prices equal Goose's vendored
-  canonical catalog for every shipped model (opus 5/25/0.5/6.25, sonnet
-  3/15/0.3/3.75, haiku 1/5/0.1/1.25, gpt-4o 2.5/10/1.25); both pull from
-  models.dev. Live run: sonnet resolves to `computed` $0.001026, not `unknown`.
-  The connector deliberately computes from our table (not Goose's registry) to
-  keep proving this equality; same rates × the tap's tokens ⇒ same run cost.
-- **Daily sync in CI (BUILT):** `.github/workflows/sync-prices.yml` runs the sync
-  daily (+ manual dispatch), opens/updates a PR only on a real price change (it
-  gates on `--check`, which ignores the snapshot date), via the first-party `gh`
-  CLI. The PR triggers `conformance.yml` (validates the python pricing side; note
-  there is no rust CI yet, so the rust pricing tests are not auto-run on it).
-- **Remaining:** copy Goose's `name_builder` "mapping report" lock file so a model
-  dropping out of the catalog is visible in the sync diff.
-
 ## Accepted (revisit at upstream; not worth churning now)
 - **Per-turn input tokens follow Goose's additive accounting.** Goose sums every
   `ProviderUsage` it sees, and a provider can report usage more than once per
@@ -152,11 +73,24 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   sums the same way, so a turn's totals match Goose's own metrics by
   construction. If a provider re-reports input across stream chunks this can
   over-count input vs. the provider's bill; consistency with Goose is the chosen
-  invariant. Cross-provider cost is best-effort from the bundled price table
-  (now models.dev-synced; see "Pricing from models.dev" above).
+  invariant.
 - **`trajectory::Commission` vs `commission::AvpV01Commission` round-trip** — a
   2-line serde bridge for the schema's embedded types. Inherent to the
   embedded-commission shape; only removable by changing schema generation.
 - **Goose git dep pinned to a `main` rev** (`728d72a`). Works and is isolated
   from the user's install; track a release tag for an external crate, moot once
   upstreamed into the Goose tree.
+- **One committed `prices.json`, embedded cross-tree.** To avoid a per-language
+  duplicate (the table is ~0.5MB and grows), the single canonical copy lives in
+  the Python package and the Rust crate embeds it via
+  `include_str!("../../../python/avp/src/avp/data/prices.json")`. The path is
+  repo-relative, so it works for path/git deps and the upstream-into-goose path;
+  a standalone crates.io/PyPI publish of `avp` would need the file vendored into
+  each package (a `build.rs` copy for Rust, a build hook for Python). Revisit if
+  we ever publish the crates independently.
+- **Runs use an isolated workspace, not the caller's CWD.** The runner points
+  Goose's working dir at `<path_root>/workspace`, so run-scoped state
+  (`.agents/skills`, `.agents/recipes`) never pollutes the caller's directory and
+  the Commission fully defines the environment. If a future use case needs the
+  agent to operate on the caller's project tree, make the working dir
+  Commission/env-configurable.
