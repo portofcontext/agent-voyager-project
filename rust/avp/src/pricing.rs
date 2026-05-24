@@ -42,14 +42,41 @@ pub fn load_default_prices() -> PriceTable {
     file.models
 }
 
+/// Resolve a price by the model the agent put on the wire.
+///
+/// The bundled table is mirrored from models.dev and keyed by its
+/// `<provider>/<model>` id. A wire `model` is either already a slug containing a
+/// provider (`openai/gpt-4o`, used as-is) or a bare provider-native string
+/// (`claude-sonnet-4-6`) that is qualified with `provider` to form the key
+/// (`anthropic/claude-sonnet-4-6`). The exact string is tried first so a custom
+/// table keyed by bare names still works.
+pub fn resolve_price<'a>(
+    prices: &'a PriceTable,
+    provider: Option<&str>,
+    model: &str,
+) -> Option<&'a ModelPrice> {
+    if let Some(p) = prices.get(model) {
+        return Some(p);
+    }
+    match provider {
+        Some(prov) if !model.contains('/') => prices.get(&format!("{prov}/{model}")),
+        _ => None,
+    }
+}
+
 /// Compute billable USD cost from a turn's token counts, returning the cost
 /// and its provenance.
+///
+/// `provider` is the model's provider (e.g. `"anthropic"`), used to resolve a
+/// bare wire model against the `<provider>/<model>`-keyed table; pass `None` if
+/// the wire model is already provider-qualified or unknown.
 ///
 /// `input_tokens` follows the AVP convention: cache reads are INCLUDED. Cache
 /// reads and writes are billed at their own rates; the fresh remainder gets
 /// the regular input rate. An unknown model returns `(0.0, Unknown)` so the
 /// caller can flag a silent under-count rather than ship a wrong number.
 pub fn compute_cost(
+    provider: Option<&str>,
     model: &str,
     input_tokens: u64,
     output_tokens: u64,
@@ -57,7 +84,7 @@ pub fn compute_cost(
     cache_write: u64,
     prices: &PriceTable,
 ) -> (f64, CostSource) {
-    let Some(p) = prices.get(model) else {
+    let Some(p) = resolve_price(prices, provider, model) else {
         return (0.0, CostSource::Unknown);
     };
     let fresh = input_tokens
@@ -77,7 +104,8 @@ mod tests {
     #[test]
     fn default_table_loads() {
         let t = load_default_prices();
-        let p = t.get("claude-opus-4-7").expect("opus 4.7 in default table");
+        // Mirrored from models.dev, keyed by `<provider>/<model>`.
+        let p = t.get("anthropic/claude-opus-4-7").expect("opus 4.7 in default table");
         assert_eq!(p.input, 5.0);
         assert_eq!(p.output, 25.0);
     }
@@ -87,15 +115,25 @@ mod tests {
         // fresh = 1000 - 200 - 100 = 700.
         // 700*5 + 200*0.5 + 100*6.25 + 500*25 = 3500 + 100 + 625 + 12500 = 16725 (per 1e6).
         let prices = load_default_prices();
-        let (cost, src) = compute_cost("claude-opus-4-7", 1000, 500, 200, 100, &prices);
+        // Bare wire model is resolved via the provider to `anthropic/claude-opus-4-7`.
+        let (cost, src) = compute_cost(Some("anthropic"), "claude-opus-4-7", 1000, 500, 200, 100, &prices);
         assert!((cost - 0.016725).abs() < 1e-9, "got {cost}");
         assert_eq!(src, CostSource::Computed);
     }
 
     #[test]
+    fn slug_model_resolves_without_provider() {
+        // A provider-qualified wire slug is used as the key as-is.
+        let prices = load_default_prices();
+        let (cost, src) = compute_cost(None, "openai/gpt-4o", 1_000_000, 0, 0, 0, &prices);
+        assert_eq!(src, CostSource::Computed);
+        assert!((cost - 2.5).abs() < 1e-9, "got {cost}");
+    }
+
+    #[test]
     fn unknown_model_is_zero_unknown() {
         let prices = load_default_prices();
-        let (cost, src) = compute_cost("nope/unknown", 1000, 500, 0, 0, &prices);
+        let (cost, src) = compute_cost(Some("nope"), "unknown", 1000, 500, 0, 0, &prices);
         assert_eq!(cost, 0.0);
         assert_eq!(src, CostSource::Unknown);
     }

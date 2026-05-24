@@ -50,6 +50,7 @@ help:
 	@echo "    make format          ruff format (writes)"
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
+	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate Rust + TS bindings from schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (rust/avp) + npm test (typescript/avp)"
@@ -107,6 +108,15 @@ format-check:
 .PHONY: schemas
 schemas:
 	@$(UV) run python ../scripts/generate-schemas.py
+
+
+.PHONY: sync-prices
+sync-prices:
+	@$(UV) run python ../scripts/sync-prices.py --write
+
+.PHONY: sync-prices-check
+sync-prices-check:
+	@$(UV) run python ../scripts/sync-prices.py --check
 
 
 .PHONY: bindings

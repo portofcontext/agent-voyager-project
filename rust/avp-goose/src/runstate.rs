@@ -148,6 +148,7 @@ impl<S: Sink> RunState<S> {
                 (0.0, CostSource::Unknown)
             } else {
                 compute_cost(
+                    self.provider.as_deref(),
                     &model,
                     turn.usage.input_tokens,
                     turn.usage.output_tokens,

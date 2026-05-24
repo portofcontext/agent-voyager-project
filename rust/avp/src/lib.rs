@@ -57,5 +57,7 @@ pub use commission::AvpV01Commission as Commission;
 pub use trajectory::AvpV01TrajectoryEvent as Event;
 
 /// Agent-base re-exports: ids/timestamps, pricing, and the event sink.
-pub use pricing::{compute_cost, load_default_prices, CostSource, ModelPrice, PriceTable};
+pub use pricing::{
+    compute_cost, load_default_prices, resolve_price, CostSource, ModelPrice, PriceTable,
+};
 pub use sink::{Sink, StdioSink};

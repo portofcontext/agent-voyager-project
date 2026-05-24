@@ -105,6 +105,36 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   Commission, not env) → `commission.md` prose → a conformance case pinning that
   the secret never appears inline.
 
+## Pricing from models.dev, agent-reported first
+- **Cost-source priority:** prefer the agent's own reported cost
+  (`avp.cost.source = "reported"`): an agent that knows its real cost can
+  self-report it in its implementation. Only when it doesn't is cost
+  `"computed"` from the bundled table; else `"unknown"`. The wire already
+  carries all three, so this is logic, not a schema change.
+- **Full models.dev mirror (BUILT):** `scripts/sync-prices.py` mirrors the entire
+  models.dev cost table (~4610 models) into both `prices.json` copies, keyed by
+  its `<provider>/<model>` id; `make sync-prices` / `make sync-prices-check`.
+  No per-model curation: every model models.dev prices is covered. Runtime stays
+  offline (`include_str!`, ~476KB embed). (models.dev 403s the default urllib
+  agent, so the script sets a User-Agent.)
+- **Normalization at lookup (BUILT):** `compute_cost(provider, model, ...)` (rust
+  + python, via `resolve_price`) maps a wire model to a key: a slug like
+  `openai/gpt-4o` is used as-is; a bare `claude-sonnet-4-6` is qualified with its
+  provider to `anthropic/claude-sonnet-4-6`. The connector passes its provider.
+- **Verified against Goose (2026-05-24):** synced prices equal Goose's vendored
+  canonical catalog for every shipped model (opus 5/25/0.5/6.25, sonnet
+  3/15/0.3/3.75, haiku 1/5/0.1/1.25, gpt-4o 2.5/10/1.25); both pull from
+  models.dev. Live run: sonnet resolves to `computed` $0.001026, not `unknown`.
+  The connector deliberately computes from our table (not Goose's registry) to
+  keep proving this equality; same rates × the tap's tokens ⇒ same run cost.
+- **Daily sync in CI (BUILT):** `.github/workflows/sync-prices.yml` runs the sync
+  daily (+ manual dispatch), opens/updates a PR only on a real price change (it
+  gates on `--check`, which ignores the snapshot date), via the first-party `gh`
+  CLI. The PR triggers `conformance.yml` (validates the python pricing side; note
+  there is no rust CI yet, so the rust pricing tests are not auto-run on it).
+- **Remaining:** copy Goose's `name_builder` "mapping report" lock file so a model
+  dropping out of the catalog is visible in the sync diff.
+
 ## Accepted (revisit at upstream; not worth churning now)
 - **Per-turn input tokens follow Goose's additive accounting.** Goose sums every
   `ProviderUsage` it sees, and a provider can report usage more than once per
@@ -113,7 +143,7 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   construction. If a provider re-reports input across stream chunks this can
   over-count input vs. the provider's bill; consistency with Goose is the chosen
   invariant. Cross-provider cost is best-effort from the bundled price table
-  (`openai/gpt-4o` priced at the OpenAI list rate); production should override.
+  (now models.dev-synced; see "Pricing from models.dev" above).
 - **`trajectory::Commission` vs `commission::AvpV01Commission` round-trip** — a
   2-line serde bridge for the schema's embedded types. Inherent to the
   embedded-commission shape; only removable by changing schema generation.
