@@ -68,7 +68,6 @@ T_TOOL_RETURNED = "avp.tool_returned"
 T_ERROR_OCCURRED = "avp.error_occurred"
 T_SUBAGENT_INVOKED = "avp.subagent_invoked"
 T_SUBAGENT_RETURNED = "avp.subagent_returned"
-T_SUBAGENT_FAILED = "avp.subagent_failed"
 
 
 class StopReason(StrEnum):
@@ -295,6 +294,11 @@ class SubagentReturnedData(_SpanData):
     """Closes the subagent's frame. `span_id` matches the corresponding
     `subagent_invoked` event so consumers can pair them.
 
+    `avp.subagent.reason` is a `StopReason`; on the error path,
+    `reason = error` and `avp.subagent.result.text` carries the error
+    string. The paired `tool_returned` mirrors this: `is_error = true`
+    when `reason = error`, with the same `Error: ...` content.
+
     `avp.subagent.usage` is OPTIONAL and intended only for the in-process
     fallback: parent agents whose SDK black-boxes the child loop (no
     per-turn AssistantMessages exposed to the parent) carry the child's
@@ -316,19 +320,6 @@ class SubagentReturnedData(_SpanData):
     )
     subagent_reason: StopReason = Field(alias="avp.subagent.reason")
     subagent_usage: SubagentUsage | None = Field(default=None, alias="avp.subagent.usage")
-
-
-class SubagentFailedData(_SpanData):
-    """Subagent invocation errored. The parent treats the error as a
-    tool-call failure: the model receives an `Error: ...` string in place
-    of the result and may retry or proceed."""
-
-    step: int = Field(ge=0, alias="avp.step")
-    subagent_name: str = Field(alias="avp.subagent.name")
-    subagent_invocation_id: str = Field(min_length=1, alias="avp.subagent.invocation_id")
-    duration_ms: int = Field(ge=0, alias="avp.duration_ms")
-    subagent_error: str = Field(alias="avp.subagent.error")
-    subagent_error_code: str | None = Field(default=None, alias="avp.subagent.error.code")
 
 
 class ErrorOccurredData(_SpanData):
@@ -410,12 +401,6 @@ class SubagentReturnedEvent(_CloudEventBase):
     data: SubagentReturnedData
 
 
-class SubagentFailedEvent(_CloudEventBase):
-    type: Literal["avp.subagent_failed"] = T_SUBAGENT_FAILED
-    source: Literal["avp://agent"] = SOURCE_AGENT
-    data: SubagentFailedData
-
-
 class ErrorOccurredEvent(_CloudEventBase):
     type: Literal["avp.error_occurred"] = T_ERROR_OCCURRED
     source: Literal["avp://agent"] = SOURCE_AGENT
@@ -454,7 +439,6 @@ _AGENT_EVENT_TYPES = (
     ToolReturnedEvent,
     SubagentInvokedEvent,
     SubagentReturnedEvent,
-    SubagentFailedEvent,
     ErrorOccurredEvent,
 )
 
@@ -468,7 +452,6 @@ Event = Annotated[
     | ToolReturnedEvent
     | SubagentInvokedEvent
     | SubagentReturnedEvent
-    | SubagentFailedEvent
     | ErrorOccurredEvent,
     Field(discriminator="type"),
 ]
@@ -508,7 +491,6 @@ __all__ = [
     "T_ASSISTANT_MESSAGE",
     "T_ERROR_OCCURRED",
     "T_RUN_REQUESTED",
-    "T_SUBAGENT_FAILED",
     "T_SUBAGENT_INVOKED",
     "T_SUBAGENT_RETURNED",
     "T_TOOL_INVOKED",
@@ -527,8 +509,6 @@ __all__ = [
     "Event",
     "RunRequestedData",
     "RunRequestedEvent",
-    "SubagentFailedData",
-    "SubagentFailedEvent",
     "SubagentInvokedData",
     "SubagentInvokedEvent",
     "SubagentReturnedData",

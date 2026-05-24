@@ -18,7 +18,7 @@ The trajectory holds two semantically distinct kinds of facts:
 
 | Class | Event types | Semantics |
 |---|---|---|
-| **What the agent did** | `assistant_message` (carries `avp.content`, the model's content-block array for the turn), `tool_invoked`, `tool_returned`, `subagent_*`, `error_occurred` | Mechanical actions the agent took |
+| **What the agent did** | `assistant_message` (carries `avp.content`, the model's content-block array for the turn), `tool_invoked`, `tool_returned`, `subagent_invoked`, `subagent_returned`, `error_occurred` | Mechanical actions the agent took |
 | **What the run cost** | `assistant_message.avp.usage.*`, `assistant_message.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
 | **What the model output** | `assistant_message.avp.content: list[AVPContentBlock]` | Provider-agnostic content blocks (`text`, `thinking`, `tool_use`, `image`, `document`, `audio`, `video`, `refusal`, `server_tool_use`, `server_tool_result`). Reconstructing a provider message array is a direct read of this field per turn, paired with the `avp.tool_result` blocks on intervening `tool_returned` events to form the user-role tool-result messages. Block taxonomy: [`avp.content`](../../python/avp/src/avp/content.py). |
 
@@ -113,7 +113,7 @@ loop:
         elif tool is a built-in subagent:
             emit subagent_invoked
             output = invoke_subagent(...)
-            emit subagent_returned (or subagent_failed)
+            emit subagent_returned
         else:
             output = execute_tool_locally(input)
         emit tool_returned(call_id, output)
@@ -181,10 +181,9 @@ Subagents are usually dispatched as tool calls from the model's perspective: the
 
 1. Model invokes a tool whose name matches a declared subagent. Agent emits `avp.tool_invoked` for the dispatch, exactly as for any other tool call. `data["avp.tool.dispatch_target"]` SHOULD be `local` (the subagent runs in-agent).
 2. Agent emits `avp.subagent_invoked`. The event's `data.span_id` is the **frame span** for this invocation; `data.parent_span_id` MUST equal the enclosing turn span (the matching `assistant_message.data.span_id`) so the subagent frame sits as a sibling of the `tool_invoked` span rather than nesting under it. The tool dispatch and the subagent lifecycle are parallel views of the same call: the `tool_*` pair carries what the model saw, the `subagent_*` pair carries what the parent agent observed; neither is logically inside the other.
-3. The agent runs the subagent. When the subagent returns, the agent emits `avp.subagent_returned` carrying `data["avp.subagent.result.text"]`. The `data.span_id` MUST equal the matching `subagent_invoked.data.span_id` so consumers pair them; `data.parent_span_id` MUST equal the enclosing turn span (same as `subagent_invoked.data.parent_span_id`).
-4. If the subagent errors, the agent emits `avp.subagent_failed` with `data["avp.subagent.error"]` instead of `subagent_returned`.
-5. Agent emits `avp.tool_returned` carrying the `ToolResultBlock` the model actually consumed, closing the tool-dispatch span (`data.parent_span_id` = the matching `tool_invoked.data.span_id`). On the success path, `avp.tool_result.is_error = false` (or absent) and `content` carries the subagent's result text. On the failure path (`subagent_failed` was emitted), `is_error = true` and `content` carries an `Error: …` string; the structured detail stays on the `subagent_failed` event.
-6. **In-process SDK fallback.** When the agent's SDK black-boxes the child loop and never exposes the child's per-turn events (e.g. Claude Agent SDK's Task tool, which yields only `TaskNotificationMessage` with `TaskUsage` totals), the parent MAY populate `subagent_returned.data["avp.subagent.usage"]` with a `SubagentUsage` carrier (`cost_usd`, `tokens_input`, `tokens_output`, `turns`) so the supervisor sees the child's spend. Agents that CAN emit the child's per-turn events into the parent's trajectory (with `parent_span_id` = the invocation's `span_id`) MUST do so and MUST omit `avp.subagent.usage`; the supervisor reconstructs from raw events.
+3. The agent runs the subagent. When it terminates, the agent emits `avp.subagent_returned` with `data["avp.subagent.reason"]` (a `StopReason`) and `data["avp.subagent.result.text"]`; on the error path, `reason = error` and `result.text` carries the error string. The `data.span_id` MUST equal the matching `subagent_invoked.data.span_id`; `data.parent_span_id` MUST equal the enclosing turn span.
+4. Agent emits `avp.tool_returned` carrying the `ToolResultBlock` the model consumed, closing the tool-dispatch span (`data.parent_span_id` = the matching `tool_invoked.data.span_id`). `avp.tool_result.is_error` tracks `subagent_returned.avp.subagent.reason`: `false` (or absent) when the subagent converged, `true` when it errored, with `content` sourced from `subagent_returned.avp.subagent.result.text`.
+5. **In-process SDK fallback.** When the agent's SDK black-boxes the child loop and never exposes the child's per-turn events (e.g. Claude Agent SDK's Task tool, which yields only `TaskNotificationMessage` with `TaskUsage` totals), the parent MAY populate `subagent_returned.data["avp.subagent.usage"]` with a `SubagentUsage` carrier (`cost_usd`, `tokens_input`, `tokens_output`, `turns`) so the supervisor sees the child's spend. Agents that CAN emit the child's per-turn events into the parent's trajectory (with `parent_span_id` = the invocation's `span_id`) MUST do so and MUST omit `avp.subagent.usage`; the supervisor reconstructs from raw events.
 
 **`agent_started.data["avp.subagents"]`.** The agent MUST surface its built-in subagent declarations on `agent_started.data["avp.subagents"]` (parallel to `data["avp.tools"]` and `data["avp.skills"]`).
 
@@ -212,8 +211,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.tool_invoked` | `avp://agent` | Model invoked a tool. |
 | `avp.tool_returned` | `avp://agent` | Tool produced a result. `avp.tool_result.is_error` discriminates success, rejection, and execution error. |
 | `avp.subagent_invoked` | `avp://agent` | Parent agent delegated to a built-in subagent. Frame span opens. |
-| `avp.subagent_returned` | `avp://agent` | Subagent returned to its parent. Frame span closes; pairs with `subagent_invoked` by `span_id`. |
-| `avp.subagent_failed` | `avp://agent` | Subagent invocation errored; the model receives an `Error: …` tool_result. |
+| `avp.subagent_returned` | `avp://agent` | Subagent's frame closed for any reason (converged / refused / errored / interrupted). Pairs with `subagent_invoked` by `span_id`. `avp.subagent.reason` is a `StopReason`; on `error`, `avp.subagent.result.text` carries the error string and the paired `tool_returned` sets `is_error = true`. |
 | `avp.error_occurred` | `avp://agent` | Non-tool error. Includes `data["avp.error.code"]: "mcp_connect_failed"` when a Commission-declared MCP server fails to dial at startup. |
 
 Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/trajectory.py`).

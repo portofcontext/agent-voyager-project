@@ -908,12 +908,12 @@ def test_task_dispatch_emits_tool_pair_with_subagent_overlay() -> None:
     assert tool_returned.data.parent_span_id == tool_invoked.data.span_id
 
 
-def test_task_failed_status_emits_subagent_failed() -> None:
-    """TaskNotification.status == 'failed' MUST emit `subagent_failed`,
-    with the summary surfacing on `subagent.error`. The wrapping tool
-    pair still fires (spec §5) so the model's message-history pairing
-    stays intact; `tool_returned.is_error` reflects what the SDK
-    reports on the synthetic tool result."""
+def test_task_failed_status_emits_returned_with_error_reason() -> None:
+    """TaskNotification.status == 'failed' maps to `subagent_returned`
+    with `reason = error` and the failure summary on `result.text`. The
+    wrapping tool pair still fires (spec §5) so the model's
+    message-history pairing stays intact; `tool_returned.is_error`
+    reflects what the SDK reports on the synthetic tool result."""
     events = asyncio.run(
         _drive(
             [
@@ -928,10 +928,10 @@ def test_task_failed_status_emits_subagent_failed() -> None:
     types = {ev.type for ev in events}
     assert "avp.tool_invoked" in types
     assert "avp.tool_returned" in types
-    failed = [ev for ev in events if ev.type == "avp.subagent_failed"]
-    assert len(failed) == 1
-    assert failed[0].data.subagent_error == "auth error"
-    assert "avp.subagent_returned" not in types
+    subagent_returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert len(subagent_returned) == 1
+    assert subagent_returned[0].data.subagent_reason == "error"
+    assert subagent_returned[0].data.subagent_result_text == "auth error"
     returned = next(ev for ev in events if ev.type == "avp.tool_returned")
     assert returned.data.tool_result.is_error is True
     assert returned.data.tool_result.content == "auth error"

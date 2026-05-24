@@ -45,8 +45,6 @@ from avp.trajectory import (
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
-    SubagentFailedData,
-    SubagentFailedEvent,
     SubagentInvokedData,
     SubagentInvokedEvent,
     SubagentReturnedData,
@@ -423,6 +421,7 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
 _TASK_STATUS_TO_REASON: dict[str, StopReason] = {
     "completed": StopReason.converged,
     "stopped": StopReason.interrupted,
+    "failed": StopReason.error,
 }
 
 
@@ -496,9 +495,11 @@ async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None
 
 
 async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
-    """Buffer the matching `subagent_returned` (completed / stopped) or
-    `subagent_failed` (failed) onto the open turn's emissions. No-op if
-    the dispatch wasn't recorded (e.g. the parent turn drained early)."""
+    """Buffer the matching `subagent_returned` onto the open turn's
+    emissions. Status maps to `avp.subagent.reason`: completed→converged,
+    stopped→interrupted, failed→error (with `result.text` carrying the
+    failure summary). No-op if the dispatch wasn't recorded (e.g. the
+    parent turn drained early)."""
     if state.turn is None or not message.tool_use_id:
         return
     info = state.turn.tasks.pop(message.tool_use_id, None)
@@ -506,23 +507,6 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
         return
     duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
     summary = message.summary or ""
-    if message.status == "failed":
-        state.turn.emissions.append(
-            SubagentFailedEvent(
-                subject=state.run_id,
-                data=SubagentFailedData(
-                    trace_id=state.trace_id,
-                    span_id=new_span_id(),
-                    parent_span_id=info.span_id,
-                    step=info.step,
-                    subagent_name=info.task_type,
-                    subagent_invocation_id=message.tool_use_id,
-                    duration_ms=duration_ms,
-                    subagent_error=summary,
-                ),
-            )
-        )
-        return
     reason = _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged)
     state.turn.emissions.append(
         SubagentReturnedEvent(

@@ -59,7 +59,6 @@ from avp.trajectory import (
     AgentStartedEvent,
     AssistantMessageEvent,
     Event,
-    SubagentFailedEvent,
     SubagentInvokedEvent,
     SubagentReturnedEvent,
     ToolInvokedEvent,
@@ -146,7 +145,7 @@ def to_gen_ai_attrs(event: Event) -> dict[str, Any]:
             }
         )
 
-    if isinstance(event, SubagentReturnedEvent | SubagentFailedEvent):
+    if isinstance(event, SubagentReturnedEvent):
         return {"gen_ai.agent.name": event.data.subagent_name}
 
     if isinstance(event, AgentDescribedEvent):

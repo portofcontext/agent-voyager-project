@@ -28,10 +28,9 @@ class TaskInfo:
 
     Populated by `_on_task_started` when the SDK fires `TaskStartedMessage`;
     consumed by `_on_task_notification` to emit the matching
-    `subagent_returned` / `subagent_failed`. `span_id` is shared between
-    the invoked and returned events (same frame, opened then closed),
-    while `parent_span_id` (the turn's span) is what both events sit
-    under.
+    `subagent_returned`. `span_id` is shared between the invoked and
+    returned events (same frame, opened then closed), while
+    `parent_span_id` (the turn's span) is what both events sit under.
     """
 
     # Subagent frame's span; reused by `subagent_returned` (same frame).
