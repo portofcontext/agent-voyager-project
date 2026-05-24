@@ -17,6 +17,7 @@ from claude_agent_sdk.types import (
     ClaudeAgentOptions,
     McpStatusResponse,
     Message,
+    ResultMessage,
     SystemMessage,
     TaskNotificationMessage,
     TaskStartedMessage,
@@ -208,10 +209,12 @@ async def emit_error(
 async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: SystemMessage) -> None:
     """Emit `agent_started` on the real session's first `init` SystemMessage.
 
-    Skips non-`init` subtypes and double-fires (state.agent_started_emitted).
-    Uses init_data from the *real* session (not the probe's) so the merged
-    snapshot reflects what the run will actually use.
+    Skips non-`init` subtypes (e.g. `compact_boundary`). Uses init_data from
+    the *real* session (not the probe's) so the merged snapshot reflects
+    what the run will actually use.
     """
+    if message.subtype != "init":
+        return
     status = await client.get_mcp_status()
     await emit_agent_started(
         state,
@@ -530,6 +533,21 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
     )
 
 
+async def _on_result(state: RunState, message: ResultMessage) -> None:
+    """Map `ResultMessage` to `agent_stopped`. The wire message carries
+    the stop info (`is_error`, `stop_reason`, `result`); only this path
+    can distinguish converged / error / refused. `emit_agent_stopped` is
+    idempotent via `state.stopped`, so the `_client.py` disconnect /
+    exception paths remain safe fallbacks for premature termination."""
+    if message.is_error:
+        reason = StopReason.error
+    elif message.stop_reason == "refusal":
+        reason = StopReason.refused
+    else:
+        reason = StopReason.converged
+    await emit_agent_stopped(state, reason, output=message.result)
+
+
 # ---------------------------------------------------------------------------
 # Public dispatch entry point
 # ---------------------------------------------------------------------------
@@ -537,17 +555,19 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
 
 async def handle_message(client: ClaudeSDKClient, state: RunState, message: Message) -> None:
     """Dispatch one SDK message to the appropriate AVP emitter. Mutates state."""
-    if isinstance(message, SystemMessage):
+    # Task* messages subclass SystemMessage in the SDK, so the subclass
+    # branches MUST come before the generic SystemMessage branch.
+    if isinstance(message, TaskStartedMessage):
+        await _on_task_started(state, message)
+    elif isinstance(message, TaskNotificationMessage):
+        await _on_task_notification(state, message)
+    elif isinstance(message, SystemMessage):
         await _on_system_init(client, state, message)
     elif isinstance(message, AssistantMessage):
         await _on_assistant(state, message)
     elif isinstance(message, UserMessage):
         await _on_user(state, message)
-    elif isinstance(message, TaskStartedMessage):
-        await _on_task_started(state, message)
-    elif isinstance(message, TaskNotificationMessage):
-        await _on_task_notification(state, message)
-    # elif isinstance(message, ResultMessage):
-    #     await _on_result(state, message)
+    elif isinstance(message, ResultMessage):
+        await _on_result(state, message)
     # TaskProgressMessage, MirrorErrorMessage, StreamEvent, RateLimitEvent:
     # drop. Honest-silent beats fabricated events.
