@@ -65,6 +65,46 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
 - **`subagent_returned.reason`** is always `converged` (Goose doesn't surface the
   child's stop reason).
 
+## Planned: native provider routing in the Commission
+- **`GOOSE_PROVIDER` is temporary.** Today the connector resolves the provider
+  from the `GOOSE_PROVIDER` env var, so a Commission carrying `model:
+  "openai/gpt-4o"` is ambiguous on its own (the model string only makes sense
+  once you know the hidden provider). Asymmetric: `model` is on the wire but
+  *where to run it* is not.
+- **Agreed direction (designed, not yet built):** add an optional `provider`
+  block to the Commission so routing is expressed natively:
+
+  ```json
+  "model": "openai/gpt-4o",
+  "provider": {
+    "id": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY"
+  }
+  ```
+
+  Split of concerns: **routing** (provider id + endpoint + model) belongs on the
+  wire; **credentials** never do. `api_key_env` is a *reference* (a secret name),
+  never the secret, so the Commission stays a safe, loggable artifact (see
+  [[goose-connector-prod-auth-followup]]). All fields optional; absent ⇒ today's
+  env behavior, so it is additive.
+- **`base_url` reach:** covers the whole OpenAI-compatible ecosystem (OpenRouter,
+  LiteLLM, vLLM, Together, Azure OpenAI, Groq, Ollama, LM Studio), which Goose
+  already exposes per-provider as `<PROVIDER>_HOST`. It does NOT disambiguate
+  non-OpenAI wire protocols (Anthropic-native, Bedrock SigV4, Vertex), so pair it
+  with `id`: `base_url` + no `id` ⇒ assume OpenAI-compatible.
+- **Goose mapping (feasible):** `provider.id` → the name passed to
+  `goose::providers::create` (replacing the env read); `provider.base_url` → set
+  `<ID>_HOST` before `create` (base_url is not on `ModelConfig`); `api_key_env`
+  → Goose `get_secret` reads env first. The runner already sets env
+  (`GOOSE_PATH_ROOT`), so this is the same mechanism, and the env var stops being
+  a *user* requirement.
+- **When built, sweep:** `commission.py` model → `make schemas` → `make bindings`
+  (rust + ts) → connector mapping (`commission.rs` / `runner.rs`, drop the stale
+  "intentionally not derived" comment) → both `examples/` (carry it in the
+  Commission, not env) → `commission.md` prose → a conformance case pinning that
+  the secret never appears inline.
+
 ## Accepted (revisit at upstream; not worth churning now)
 - **Per-turn input tokens follow Goose's additive accounting.** Goose sums every
   `ProviderUsage` it sees, and a provider can report usage more than once per
