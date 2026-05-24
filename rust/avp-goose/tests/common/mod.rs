@@ -162,6 +162,36 @@ pub fn tool_response_error(id: &str, error: &str) -> GooseContent {
     }))
 }
 
+// --- MCP test-server fixture ------------------------------------------------
+
+/// Extension id of the shared stdio MCP test server
+/// (`<repo>/testing/mcp/avp_test_mcp.py`). A stable, self-contained replacement
+/// for the old machine-specific `gtmagent` reference, shared across the repo's
+/// test suites.
+pub const TEST_MCP_ID: &str = "avptest";
+
+/// The argv that launches the shared stdio MCP test server via `uv run` (deps
+/// are declared inline in the script, so `uv` bootstraps them). The server
+/// lives at the repo root (`testing/mcp/`) so every package can spawn it. Used
+/// as a Commission `mcp_servers[].command`: emit-level tests carry it as data,
+/// the live tests actually spawn it.
+pub fn test_mcp_command() -> Vec<String> {
+    // From `rust/avp-goose` up to the repo root, then into the shared fixture.
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testing/mcp/avp_test_mcp.py");
+    vec![
+        "uv".to_string(),
+        "run".to_string(),
+        "--quiet".to_string(),
+        path.to_string_lossy().into_owned(),
+    ]
+}
+
+/// A Commission `mcp_servers` stdio entry for the bundled test server.
+pub fn test_mcp_server() -> Value {
+    json!({ "type": "stdio", "id": TEST_MCP_ID, "command": test_mcp_command() })
+}
+
 // --- avp fixtures (built from the wire form to avoid field plumbing) ---------
 
 pub fn commission(extra: Value) -> avp::Commission {

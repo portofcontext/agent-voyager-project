@@ -35,6 +35,15 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   process per case, since Goose's `Config`/`SessionManager` are global), schema-
   validates each trajectory, and scores declarative evals. 6/6 pass on Sonnet
   (Anthropic) + GPT-4o (OpenRouter).
+- **Live MCP dispatch confirmed, on a stable in-repo fixture.** Replaced the
+  machine-specific `gtmagent` test reference with a tiny self-contained stdio
+  MCP server (`testing/mcp/avp_test_mcp.py` at the repo root, shared across
+  suites; arcade-mcp-server, deps inline for `uv run`). Two gated tests use it
+  (`make test-mcp`): `mcp_connect` (no key)
+  proves Goose connects and lists its tools; `live_mcp` drives a real model that
+  dispatches to the server, asserting `dispatch_target=mcp_server`, a successful
+  `tool_returned`, and the echoed token round-tripping. Both isolate via
+  `GOOSE_PATH_ROOT`.
 
 ## Blocked on a Goose in-loop signal
 - **Stop-reason fidelity.** Only `converged`/`error` emitted. `interrupted`
@@ -43,16 +52,16 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   finish reason — to investigate).
 
 ## Needs a live run with goose-side setup (emit/schema already proven)
-- **mcp-dispatched tool call** unconfirmed live (`goose mcp developer` as a stdio
-  MCP exposed 0 tools in isolation; needs a tools-exposing MCP server).
 - **Subagents** (needs configured subrecipes) — and **subagent token
   attribution**: `subagent_returned.avp.subagent.usage` is omitted; confirm
   whether the child `Agent` shares the parent session (if not, surface child
   usage).
 - **Skills discovery** — files are written + the `skills` platform extension
   enabled; confirm Goose loads it and discovers them.
-- **MCP `protocol_version`** is a constant `"2025-06-18"`; surface the negotiated
-  version once a real MCP server is in the loop.
+- **MCP `protocol_version`** is still a constant `"2025-06-18"`. There is now a
+  real MCP server in the loop (`avp_test_mcp.py`, which negotiates `2025-06-18`),
+  so the negotiated version can be surfaced from the connected extension instead
+  of hardcoded; not yet wired.
 - **`subagent_returned.reason`** is always `converged` (Goose doesn't surface the
   child's stop reason).
 

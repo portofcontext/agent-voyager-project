@@ -10,7 +10,8 @@ use serde_json::json;
 #[test]
 fn representative_trajectory_is_schema_valid_and_ordered() {
     let sink = CapturingSink::default();
-    let mut em = emitter(sink.clone(), &["gtmagent"]);
+    // No MCP server in this representative trajectory (developer tools are local).
+    let mut em = emitter(sink.clone(), &[]);
 
     em.prelude(
         &commission(json!({ "prompt": "list files" })),

@@ -351,7 +351,7 @@ mod tests {
     }
 
     fn emitter(sink: CapturingSink) -> Emitter<CapturingSink> {
-        let mcp: HashSet<String> = ["gtmagent".to_string()].into_iter().collect();
+        let mcp: HashSet<String> = ["avptest".to_string()].into_iter().collect();
         Emitter::new(
             sink,
             "r1",
@@ -433,7 +433,7 @@ mod tests {
         em.on_assistant(
             &content(
                 r#"[{"type":"toolRequest","id":"c","toolCall":{"status":"success",
-                    "value":{"name":"gtmagent__search"}},"_meta":{"goose_extension":"gtmagent"}}]"#,
+                    "value":{"name":"avptest__echo"}},"_meta":{"goose_extension":"avptest"}}]"#,
             ),
             usage(),
             None,

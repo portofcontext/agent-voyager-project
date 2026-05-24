@@ -220,7 +220,11 @@ pub struct AgentDescribedEvent {
     pub subject: ::std::option::Option<AgentDescribedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::agent_described_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::agent_described_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentDescribedEventAvpCorrelationId`"]
@@ -1084,7 +1088,11 @@ pub struct AgentStartedEvent {
     pub subject: ::std::option::Option<AgentStartedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::agent_started_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::agent_started_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentStartedEventAvpCorrelationId`"]
@@ -1428,7 +1436,11 @@ pub struct AgentStoppedEvent {
     pub subject: ::std::option::Option<AgentStoppedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::agent_stopped_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::agent_stopped_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`AgentStoppedEventAvpCorrelationId`"]
@@ -2115,7 +2127,11 @@ pub struct AssistantMessageEvent {
     pub subject: ::std::option::Option<AssistantMessageEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::assistant_message_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::assistant_message_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`AssistantMessageEventAvpCorrelationId`"]
@@ -2316,7 +2332,11 @@ pub struct AudioBlock {
     pub source: Source,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub transcript: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::audio_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::audio_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`AvpContentItem`"]
@@ -2404,7 +2424,6 @@ pub enum AvpContentItem {
     ServerToolResultBlock(ServerToolResultBlock),
     #[serde(rename = "refusal")]
     RefusalBlock(RefusalBlock),
-
 }
 impl ::std::convert::From<TextBlock> for AvpContentItem {
     fn from(value: TextBlock) -> Self {
@@ -2841,7 +2860,6 @@ pub enum AvpV01TrajectoryEvent {
     McpServerConnectedEvent(McpServerConnectedEvent),
     #[serde(rename = "avp.mcp_server_disconnected")]
     McpServerDisconnectedEvent(McpServerDisconnectedEvent),
-
 }
 impl ::std::convert::From<RunRequestedEvent> for AvpV01TrajectoryEvent {
     fn from(value: RunRequestedEvent) -> Self {
@@ -2945,7 +2963,11 @@ impl ::std::convert::From<McpServerDisconnectedEvent> for AvpV01TrajectoryEvent 
 pub struct Base64Source {
     pub data: ::std::string::String,
     pub media_type: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::base64_source_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::base64_source_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Span-anchored attribution on a text or document block. Unifies\nAnthropic citations (`char_location`, `page_location`,\n`content_block_location`), OpenAI annotations (`url_citation`,\n`file_citation`, `file_path`), and Gemini grounding chunks. `type`\ncarries the provider's raw citation kind verbatim so downstream\nconsumers can normalize without re-deriving it."]
@@ -3340,7 +3362,6 @@ pub enum CommissionMcpServersItem {
     Http(McpServerHttp),
     #[serde(rename = "stdio")]
     Stdio(McpServerStdio),
-
 }
 impl ::std::convert::From<McpServerHttp> for CommissionMcpServersItem {
     fn from(value: McpServerHttp) -> Self {
@@ -3439,7 +3460,6 @@ pub enum ContentArrayItem {
     ImageBlock(ImageBlock),
     #[serde(rename = "document")]
     DocumentBlock(DocumentBlock),
-
 }
 impl ::std::convert::From<TextBlock> for ContentArrayItem {
     fn from(value: TextBlock) -> Self {
@@ -3547,7 +3567,11 @@ pub struct DocumentBlock {
     pub source: Source,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub title: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::document_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::document_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`ErrorCode`"]
@@ -3844,7 +3868,11 @@ pub struct ErrorOccurredEvent {
     pub subject: ::std::option::Option<ErrorOccurredEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::error_occurred_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::error_occurred_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`ErrorOccurredEventAvpCorrelationId`"]
@@ -4014,7 +4042,11 @@ impl<'de> ::serde::Deserialize<'de> for ErrorOccurredEventSubject {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct FileSource {
     pub file_id: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::file_source_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::file_source_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`Id`"]
@@ -4135,7 +4167,11 @@ impl<'de> ::serde::Deserialize<'de> for Id {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ImageBlock {
     pub source: Source,
-    #[serde(rename = "type", skip_serializing, default = "defaults::image_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::image_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`McpServerConnectedData`"]
@@ -4546,7 +4582,11 @@ pub struct McpServerConnectedEvent {
     pub subject: ::std::option::Option<McpServerConnectedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::mcp_server_connected_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::mcp_server_connected_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`McpServerConnectedEventAvpCorrelationId`"]
@@ -5423,7 +5463,11 @@ impl<'de> ::serde::Deserialize<'de> for ParentSpanId {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct RefusalBlock {
     pub refusal: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::refusal_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::refusal_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "MCP resource descriptor in `mcp_server_connected.data.avp.mcp.resources`.\n\nMirrors MCP's `Resource` type from the protocol spec; `uri` is the\nprimary identifier the agent uses to fetch via `resources/read`,\n`name` and `description` are display/discovery metadata, `mimeType`\nhints at the content format. Skills sourced as `mcp://<server-id>/<path>`\nin `Commission.skills[].avp.source` resolve through this catalog."]
@@ -5869,7 +5913,11 @@ pub struct RunRequestedEvent {
     pub subject: ::std::option::Option<RunRequestedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::run_requested_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::run_requested_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`RunRequestedEventAvpCorrelationId`"]
@@ -6063,7 +6111,11 @@ pub struct ServerToolResultBlock {
     pub is_error: ::std::option::Option<bool>,
     pub name: ::std::string::String,
     pub tool_use_id: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::server_tool_result_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::server_tool_result_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Built-in tool executed by the provider rather than the agent.\nAnthropic `server_tool_use` (web_search, code_execution), OpenAI\nResponses `web_search_call` / `file_search_call` / `computer_call` /\n`code_interpreter_call`, Gemini `executable_code` / `google_search`.\n`name` carries the tool kind (e.g. \"web_search\", \"code_interpreter\",\n\"computer_use\", \"google_search\"). Distinct from `tool_use` because\nthe agent never dispatches these; they are observability of a\nprovider-side action."]
@@ -6110,7 +6162,11 @@ pub struct ServerToolUseBlock {
     pub id: ::std::string::String,
     pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     pub name: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::server_tool_use_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::server_tool_use_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Inline skill entry in Commission.skills."]
@@ -6258,7 +6314,6 @@ pub enum Source {
     UrlSource(UrlSource),
     #[serde(rename = "file")]
     FileSource(FileSource),
-
 }
 impl ::std::convert::From<Base64Source> for Source {
     fn from(value: Base64Source) -> Self {
@@ -6752,7 +6807,11 @@ pub struct SubagentFailedEvent {
     pub subject: ::std::option::Option<SubagentFailedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::subagent_failed_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::subagent_failed_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`SubagentFailedEventAvpCorrelationId`"]
@@ -7209,7 +7268,11 @@ pub struct SubagentInvokedEvent {
     pub subject: ::std::option::Option<SubagentInvokedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::subagent_invoked_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::subagent_invoked_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`SubagentInvokedEventAvpCorrelationId`"]
@@ -7607,7 +7670,11 @@ pub struct SubagentReturnedEvent {
     pub subject: ::std::option::Option<SubagentReturnedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::subagent_returned_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::subagent_returned_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`SubagentReturnedEventAvpCorrelationId`"]
@@ -7882,7 +7949,11 @@ pub struct TextBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub citations: ::std::option::Option<::std::vec::Vec<Citation>>,
     pub text: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::text_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::text_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Reasoning / chain-of-thought emitted by the model.\n\nAnthropic extended thinking, OpenAI o-series `reasoning` items,\nGemini `thought` parts, Bedrock `reasoningContent`, Mistral thinking.\n`signature` is the opaque blob the provider requires echoed back on\nthe next turn for continued reasoning: Anthropic's cryptographic\nsignature, OpenAI's `encrypted_content`, or Gemini's\n`thought_signature`. `redacted` flags blocks whose plaintext is\nunavailable (encrypted-only form)."]
@@ -7942,7 +8013,11 @@ pub struct ThinkingBlock {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub signature: ::std::option::Option<::std::string::String>,
     pub thinking: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::thinking_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::thinking_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Tool descriptor used by `AgentDescriptor.tools`,\n`agent_started.data[\"avp.tools\"]`, and `mcp_server_connected.data.avp.mcp.tools`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity; how the tool is\n*dispatched* (local vs MCP server) is implicit from where the decl\nappears on the wire — `descriptor.tools` and `agent_started.data[\"avp.tools\"]`\nare local-only; entries under `mcp_server_connected.data.avp.mcp.tools`\nare MCP-dispatched by virtue of being nested under a server. The\nper-invocation discriminator lives on `tool_invoked.data[\"avp.tool.dispatch_target\"]`."]
@@ -8310,7 +8385,11 @@ pub struct ToolInvokedEvent {
     pub subject: ::std::option::Option<ToolInvokedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::tool_invoked_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::tool_invoked_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`ToolInvokedEventAvpCorrelationId`"]
@@ -8542,7 +8621,11 @@ pub struct ToolResultBlock {
     pub structured_content:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub tool_use_id: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::tool_result_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::tool_result_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "Tool result sent back to the model.\n\n`avp.tool_result` is a `content.ToolResultBlock` carrying\n`tool_use_id`, `content` (string or nested text/image/document\nblocks), and `is_error`. Rejections set `is_error=True` with the\nreason in `content[0].text`. During reconstruction this block\nbecomes one entry of the next user-role message's content array."]
@@ -8766,7 +8849,11 @@ pub struct ToolReturnedEvent {
     pub subject: ::std::option::Option<ToolReturnedEventSubject>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub time: ::std::option::Option<::std::string::String>,
-    #[serde(rename = "type", skip_serializing, default = "defaults::tool_returned_event_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::tool_returned_event_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`ToolReturnedEventAvpCorrelationId`"]
@@ -8949,7 +9036,11 @@ pub struct ToolUseBlock {
     pub id: ::std::string::String,
     pub input: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     pub name: ::std::string::String,
-    #[serde(rename = "type", skip_serializing, default = "defaults::tool_use_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::tool_use_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = "`TraceId`"]
@@ -9199,7 +9290,11 @@ impl<'de> ::serde::Deserialize<'de> for Url {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct UrlSource {
-    #[serde(rename = "type", skip_serializing, default = "defaults::url_source_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::url_source_type"
+    )]
     pub type_: ::std::string::String,
     pub url: ::std::string::String,
 }
@@ -9328,7 +9423,11 @@ pub struct Usage {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct VideoBlock {
     pub source: Source,
-    #[serde(rename = "type", skip_serializing, default = "defaults::video_block_type")]
+    #[serde(
+        rename = "type",
+        skip_serializing,
+        default = "defaults::video_block_type"
+    )]
     pub type_: ::std::string::String,
 }
 #[doc = r" Generation of default values for serde."]

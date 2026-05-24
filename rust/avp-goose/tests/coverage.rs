@@ -28,14 +28,12 @@ const ALL_EVENT_TYPES: &[&str] = &[
 #[test]
 fn full_event_surface_is_emitted_and_schema_valid() {
     let sink = CapturingSink::default();
-    let mut em = emitter(sink.clone(), &["gtmagent"]);
+    let mut em = emitter(sink.clone(), &[TEST_MCP_ID]);
 
     em.prelude(
-        &commission(json!({
-            "mcp_servers": [{ "type": "stdio", "id": "gtmagent", "command": ["uv", "run"] }]
-        })),
+        &commission(json!({ "mcp_servers": [test_mcp_server()] })),
         &descriptor(json!({
-            "tools": [{ "name": "gtmagent__search", "description": "search",
+            "tools": [{ "name": "avptest__echo", "description": "echo",
                         "inputSchema": { "type": "object" } }]
         })),
     )

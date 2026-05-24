@@ -331,11 +331,11 @@ mod tests {
         // No _meta; extension derived from the `{ext}__{tool}` name prefix.
         let c = parse(
             r#"{"type":"toolRequest","id":"call_2",
-                "toolCall":{"status":"success","value":{"name":"gtmagent__search"}}}"#,
+                "toolCall":{"status":"success","value":{"name":"avptest__echo"}}}"#,
         );
         let call = as_tool_call(&c).unwrap();
         assert!(call.input.is_empty()); // arguments absent
-        assert_eq!(call.extension.as_deref(), Some("gtmagent"));
+        assert_eq!(call.extension.as_deref(), Some("avptest"));
     }
 
     #[test]
@@ -373,9 +373,9 @@ mod tests {
 
     #[test]
     fn dispatch_target_keys_on_mcp_extension_set() {
-        let mcp: HashSet<String> = ["gtmagent".to_string()].into_iter().collect();
+        let mcp: HashSet<String> = ["avptest".to_string()].into_iter().collect();
         assert_eq!(
-            dispatch_target(Some("gtmagent"), &mcp),
+            dispatch_target(Some("avptest"), &mcp),
             ToolInvokedDataAvpToolDispatchTarget::McpServer
         );
         assert_eq!(

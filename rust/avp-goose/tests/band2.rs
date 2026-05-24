@@ -92,11 +92,9 @@ fn mcp_server_connected_emitted_for_commission_mcp_servers() {
     // Loading an MCP-server extension should synthesize an mcp_server_connected
     // event in the prelude.
     let sink = CapturingSink::default();
-    let mut em = emitter(sink.clone(), &["gtmagent"]);
+    let mut em = emitter(sink.clone(), &[TEST_MCP_ID]);
     em.prelude(
-        &commission(json!({
-            "mcp_servers": [{ "type": "stdio", "id": "gtmagent", "command": ["uv", "run"] }]
-        })),
+        &commission(json!({ "mcp_servers": [test_mcp_server()] })),
         &descriptor(json!({})),
     )
     .unwrap();
@@ -104,6 +102,6 @@ fn mcp_server_connected_emitted_for_commission_mcp_servers() {
     let t = sink.trajectory();
     let connected = t.find_all("avp.mcp_server_connected");
     assert_eq!(connected.len(), 1);
-    assert_eq!(connected[0]["data"]["avp.mcp.server_id"], "gtmagent");
+    assert_eq!(connected[0]["data"]["avp.mcp.server_id"], TEST_MCP_ID);
     t.assert_schema_valid();
 }

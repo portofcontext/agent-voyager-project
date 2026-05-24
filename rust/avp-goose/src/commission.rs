@@ -142,7 +142,7 @@ mod tests {
             "schema_version": "0.1", "run_id": "r1", "model": "m",
             "enabled_builtin_tools": ["developer"],
             "mcp_servers": [
-                { "type": "stdio", "id": "gtm", "command": ["uv", "run"] },
+                { "type": "stdio", "id": "avptest", "command": ["uv", "run"] },
                 { "type": "http", "id": "web", "url": "https://example.com/mcp" }
             ],
             "skills": [{ "id": "researcher", "files": { "SKILL.md": "# research" } }]
@@ -152,7 +152,10 @@ mod tests {
             names.contains(&"developer".to_string()),
             "builtin: {names:?}"
         );
-        assert!(names.contains(&"gtm".to_string()), "stdio mcp: {names:?}");
+        assert!(
+            names.contains(&"avptest".to_string()),
+            "stdio mcp: {names:?}"
+        );
         assert!(names.contains(&"web".to_string()), "http mcp: {names:?}");
         assert!(
             names.contains(&"skills".to_string()),
