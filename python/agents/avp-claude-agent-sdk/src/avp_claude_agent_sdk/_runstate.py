@@ -36,7 +36,7 @@ class TaskInfo:
 
     # Subagent frame's span; reused by `subagent_returned` (same frame).
     span_id: str
-    # Turn span the dispatch belongs to; parent of both invoked and returned.
+    # Enclosing turn span; parent of both subagent_invoked and subagent_returned.
     parent_span_id: str
     # Turn step the dispatch belongs to.
     step: int

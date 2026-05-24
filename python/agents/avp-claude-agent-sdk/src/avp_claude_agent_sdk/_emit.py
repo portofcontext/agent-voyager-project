@@ -230,13 +230,12 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     Drains the open turn on a new `message_id`, then opens (if needed)
     and extends the current turn with the chunk's content, model,
     stop_reason, and usage. Emits `tool_invoked` for each `ToolUseBlock`
-    / `ServerToolUseBlock` (Task dispatches skipped -- those become
-    `subagent_invoked` via `TaskStartedMessage`) and `tool_returned` for
-    each `ServerToolResultBlock` (server tools complete inline in the
-    same response). Subagent-interior chunks
-    (`parent_tool_use_id is not None`) are skipped under the in-process
-    subagent fallback (spec §5.6).
-    """
+    (including Task dispatches: per spec §5, the subagent_* events layer
+    on top of the tool dispatch, they don't replace it) and
+    `ServerToolUseBlock`, plus `tool_returned` for each
+    `ServerToolResultBlock` (server tools complete inline in the same
+    response). Subagent-interior chunks (`parent_tool_use_id is not
+    None`) are skipped under the in-process subagent fallback (spec §5.6)."""
     if message.parent_tool_use_id is not None:
         return
 
@@ -262,13 +261,7 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     translated = translate_content_blocks(message.content)
     state.turn.content.extend(translated)
     for block in translated:
-        if isinstance(block, AVPToolUseBlock):
-            # Task dispatches surface as subagent_invoked (driven by
-            # TaskStartedMessage), not tool_invoked.
-            if block.name == "Task":
-                continue
-            _buffer_tool_invoked(state, block.id, block.name, block.input)
-        elif isinstance(block, AVPServerToolUseBlock):
+        if isinstance(block, AVPToolUseBlock | AVPServerToolUseBlock):
             _buffer_tool_invoked(state, block.id, block.name, block.input)
         elif isinstance(block, AVPServerToolResultBlock):
             # Server tools execute in the model's runtime and return
@@ -343,8 +336,7 @@ def _buffer_tool_returned(
 ) -> None:
     """Pop the matching `ToolSpan` and append a paired `tool_returned`
     to the open turn's emissions. Silently drops if no matching
-    invocation: subagent task results (handled by `subagent_returned`),
-    unknown ids, or no open turn."""
+    invocation: unknown ids or no open turn."""
     if state.turn is None:
         return
     span = state.turn.tool_spans.pop(tool_use_id, None)
@@ -385,10 +377,11 @@ def _normalize_tool_result_content(content: Any) -> str | list[Any]:
 
 
 async def _on_user(state: RunState, message: UserMessage) -> None:
-    """Handle one UserMessage: each `ToolResultBlock` in `content`
-    closes a prior `tool_invoked`. Subagent-interior UserMessages and
-    tool results that paired against a Task dispatch (subagent return
-    path) are skipped."""
+    """Handle one UserMessage: each `ToolResultBlock` in `content` closes
+    a prior `tool_invoked`. Subagent-interior UserMessages are skipped.
+    Per spec §5, subagent dispatches close their tool-dispatch span here
+    just like any other tool call; the `subagent_*` events are layered
+    on top via `_on_task_*`, they don't replace the tool pair."""
     if message.parent_tool_use_id is not None:
         return
     if state.turn is None:
@@ -410,9 +403,6 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
     else:
         structured = None
     for block in tool_results:
-        if block.tool_use_id in state.turn.tasks:
-            # Subagent dispatch's synthetic tool result; subagent_returned covers it.
-            continue
         _buffer_tool_returned(
             state,
             block.tool_use_id,
@@ -473,7 +463,10 @@ async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None
     Fires when the CLI spawns a Task subagent. We record the dispatch
     in `state.turn.tasks` for `_on_task_notification` to pair against.
     The matching `ToolUseBlock` (in `state.turn.content`) supplies
-    `subagent_input`.
+    `subagent_input`. Per spec §5, the subagent frame parents under
+    the enclosing turn span (sibling of `tool_invoked`, not nested
+    under it): the tool pair and the subagent pair are parallel views
+    of the same call.
     """
     if state.turn is None or not message.tool_use_id:
         return
@@ -538,7 +531,8 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
                 trace_id=state.trace_id,
                 # span_id matches subagent_invoked (same frame, closed).
                 span_id=info.span_id,
-                # Parent under the frame's parent (turn span), not the frame itself.
+                # Parent under the turn span (per spec §5: subagent frame
+                # is a sibling of `tool_invoked`, not nested under it).
                 parent_span_id=info.parent_span_id,
                 step=info.step,
                 subagent_name=info.task_type,

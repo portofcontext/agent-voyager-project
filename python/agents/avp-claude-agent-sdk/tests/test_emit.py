@@ -229,7 +229,16 @@ async def _drive(
         status=eff_status,
     )
     for msg in messages:
-        await handle_message(state, msg)
+        # `client` is only consumed by `_on_system_init` (SystemMessage
+        # path), and these tests prime the prelude separately rather
+        # than dispatching SystemMessage through `handle_message`.
+        await handle_message(None, state, msg)  # type: ignore[arg-type]
+    # The real lifecycle drains via `_on_result` (and `_client.disconnect`)
+    # at end-of-stream; `handle_message` doesn't currently route
+    # ResultMessage, so drain here to flush any buffered emissions for
+    # the test's open turn.
+    if state.turn is not None:
+        await state.drain()
     return events
 
 
@@ -824,11 +833,14 @@ def _task_use_block(
     )
 
 
-def test_task_dispatch_emits_subagent_invoked_and_returned_not_tool_pair() -> None:
-    """A Task tool call paired with TaskStarted + TaskNotification(completed)
-    MUST emit `subagent_invoked` + `subagent_returned`, NOT
-    `tool_invoked` / `tool_returned`. `subagent_returned.span_id`
-    matches the invoked span (frame pairing, spec §6)."""
+def test_task_dispatch_emits_tool_pair_with_subagent_overlay() -> None:
+    """Per spec §5, subagent dispatches MUST emit both the tool pair
+    (`tool_invoked` / `tool_returned`, so message-history reconstruction
+    stays a direct read of `avp.content` + `tool_result`) AND the
+    subagent overlay (`subagent_invoked` / `subagent_returned`,
+    recording lifecycle + usage). Event order:
+    `assistant_message → tool_invoked → subagent_invoked → subagent_returned → tool_returned`.
+    The subagent frame nests under the tool-dispatch span."""
     events = asyncio.run(
         _drive(
             [
@@ -844,40 +856,85 @@ def test_task_dispatch_emits_subagent_invoked_and_returned_not_tool_pair() -> No
         )
     )
     types = [ev.type for ev in events]
-    assert "avp.subagent_invoked" in types
-    assert "avp.subagent_returned" in types
-    assert "avp.tool_invoked" not in types
-    assert "avp.tool_returned" not in types
+    # All four lifecycle events present, in the spec-§5 order.
+    assert types.count("avp.tool_invoked") == 1
+    assert types.count("avp.subagent_invoked") == 1
+    assert types.count("avp.subagent_returned") == 1
+    assert types.count("avp.tool_returned") == 1
+    bracketed = [
+        t
+        for t in types
+        if t
+        in {
+            "avp.assistant_message",
+            "avp.tool_invoked",
+            "avp.subagent_invoked",
+            "avp.subagent_returned",
+            "avp.tool_returned",
+        }
+    ]
+    assert bracketed == [
+        "avp.assistant_message",
+        "avp.tool_invoked",
+        "avp.subagent_invoked",
+        "avp.subagent_returned",
+        "avp.tool_returned",
+    ]
+    tool_invoked = next(ev for ev in events if ev.type == "avp.tool_invoked")
+    tool_returned = next(ev for ev in events if ev.type == "avp.tool_returned")
     invoked = next(ev for ev in events if ev.type == "avp.subagent_invoked")
     returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    # Tool pair preserves message-history integrity for the Task dispatch.
+    assert tool_invoked.data.tool_call_id == "toolu_task_1"
+    assert tool_invoked.data.tool_name == "Agent"
+    assert tool_invoked.data.tool_dispatch_target == "local"
+    assert tool_returned.data.tool_call_id == "toolu_task_1"
+    assert tool_returned.data.tool_result.content == "done"
+    # Subagent overlay carries the richer lifecycle.
     assert invoked.data.subagent_name == "general-purpose"
     assert invoked.data.subagent_invocation_id == "toolu_task_1"
     assert invoked.data.subagent_input["prompt"] == "find the markdown files"
-    # subagent_returned reuses the invoked span (frame pairing).
-    assert returned.data.span_id == invoked.data.span_id
-    assert returned.data.parent_span_id == invoked.data.parent_span_id
     assert returned.data.subagent_result_text == "done"
     assert returned.data.subagent_reason == "converged"
+    # Frame pairing: subagent_returned reuses subagent_invoked's span_id.
+    assert returned.data.span_id == invoked.data.span_id
+    # Spec §5: the subagent frame sits as a sibling of `tool_invoked`
+    # under the enclosing turn span, not nested under the tool span.
+    asst = next(ev for ev in events if ev.type == "avp.assistant_message")
+    assert invoked.data.parent_span_id == asst.data.span_id
+    assert returned.data.parent_span_id == asst.data.span_id
+    assert tool_invoked.data.parent_span_id == asst.data.span_id
+    # tool_returned closes the tool span.
+    assert tool_returned.data.parent_span_id == tool_invoked.data.span_id
 
 
 def test_task_failed_status_emits_subagent_failed() -> None:
     """TaskNotification.status == 'failed' MUST emit `subagent_failed`,
-    with the summary surfacing on `subagent.error`."""
+    with the summary surfacing on `subagent.error`. The wrapping tool
+    pair still fires (spec §5) so the model's message-history pairing
+    stays intact; `tool_returned.is_error` reflects what the SDK
+    reports on the synthetic tool result."""
     events = asyncio.run(
         _drive(
             [
                 _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
                 _task_started(),
                 _task_notification(status="failed", summary="auth error"),
-                _user_tool_result(tool_use_id="toolu_task_1", content="auth error"),
+                _user_tool_result(tool_use_id="toolu_task_1", content="auth error", is_error=True),
                 _result(),
             ]
         )
     )
+    types = {ev.type for ev in events}
+    assert "avp.tool_invoked" in types
+    assert "avp.tool_returned" in types
     failed = [ev for ev in events if ev.type == "avp.subagent_failed"]
     assert len(failed) == 1
     assert failed[0].data.subagent_error == "auth error"
-    assert "avp.subagent_returned" not in {ev.type for ev in events}
+    assert "avp.subagent_returned" not in types
+    returned = next(ev for ev in events if ev.type == "avp.tool_returned")
+    assert returned.data.tool_result.is_error is True
+    assert returned.data.tool_result.content == "auth error"
 
 
 def test_task_stopped_status_emits_returned_with_interrupted_reason() -> None:
@@ -965,15 +1022,15 @@ def test_parallel_subagent_dispatch_merges_into_one_assistant_message() -> None:
     CLI as multiple `AssistantMessage` Python objects sharing one
     `message_id`, with `TaskStartedMessage`s interleaved between
     chunks. The agent MUST coalesce them into exactly ONE
-    `assistant_message` AVP event carrying all three blocks; both
-    `subagent_invoked` events MUST land after the merged
-    `assistant_message`, parented under the same turn span (spec §3:
-    assistant_message precedes subagent_invoked; spec §3.1: avp.content
-    must faithfully list every block the model produced this turn).
-    Regression for the pre-fix bug where TaskStartedMessage forced a
-    turn close mid-inference, splitting the parallel dispatches across
-    a phantom second turn that the empty-output gate then dropped,
-    leaving the second dispatch's `tool_use` block off the wire."""
+    `assistant_message` AVP event carrying all three blocks; the four
+    lifecycle events per dispatch (tool_invoked → subagent_invoked →
+    subagent_returned → tool_returned, spec §5) MUST land after the
+    merged `assistant_message`. Each subagent frame nests under its own
+    tool-dispatch span. Regression for the pre-fix bug where
+    TaskStartedMessage forced a turn close mid-inference, splitting
+    the parallel dispatches across a phantom second turn that the
+    empty-output gate then dropped, leaving the second dispatch's
+    `tool_use` block off the wire."""
     ny_block = _task_use_block(tool_id="toolu_NY", subagent_type="general-purpose")
     zh_block = _task_use_block(tool_id="toolu_ZH", subagent_type="general-purpose")
     events = asyncio.run(
@@ -1019,30 +1076,36 @@ def test_parallel_subagent_dispatch_merges_into_one_assistant_message() -> None:
     assert asst.data.usage.input_tokens == 6
     assert asst.data.usage.output_tokens == 8
 
+    tool_invoked = [ev for ev in events if ev.type == "avp.tool_invoked"]
+    tool_returned = [ev for ev in events if ev.type == "avp.tool_returned"]
     invoked = [ev for ev in events if ev.type == "avp.subagent_invoked"]
     returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert [ev.data.tool_call_id for ev in tool_invoked] == ["toolu_NY", "toolu_ZH"]
+    assert sorted(ev.data.tool_call_id for ev in tool_returned) == ["toolu_NY", "toolu_ZH"]
     assert [ev.data.subagent_invocation_id for ev in invoked] == ["toolu_NY", "toolu_ZH"]
     assert sorted(ev.data.subagent_invocation_id for ev in returned) == ["toolu_NY", "toolu_ZH"]
-    # Both subagent_invokeds parent under the merged assistant_message's span.
+    # Both tool_invoked and subagent_invoked parent under the turn span
+    # (sibling pair per spec §5, not nested).
+    for ti in tool_invoked:
+        assert ti.data.parent_span_id == asst.data.span_id
     for inv in invoked:
         assert inv.data.parent_span_id == asst.data.span_id
 
-    # Ordering: assistant_message strictly precedes every subagent_invoked.
+    # Ordering: assistant_message strictly precedes every tool_invoked /
+    # subagent_invoked. Per dispatch, tool_invoked precedes subagent_invoked.
     types = [ev.type for ev in events]
     asst_idx = types.index("avp.assistant_message")
     for i, t in enumerate(types):
-        if t == "avp.subagent_invoked":
+        if t in {"avp.tool_invoked", "avp.subagent_invoked"}:
             assert i > asst_idx
-    # No `tool_invoked` / `tool_returned` for the dispatches — they
-    # ride the subagent path.
-    assert "avp.tool_invoked" not in types
-    assert "avp.tool_returned" not in types
 
 
-def test_bare_task_without_lifecycle_falls_back_to_tool_pair() -> None:
+def test_task_without_lifecycle_emits_tool_pair_only() -> None:
     """If the SDK doesn't surface TaskStartedMessage (e.g. older SDK,
-    edge case), a `ToolUseBlock(name="Task")` MUST fall through to the
-    regular tool path so the bracket still closes."""
+    edge case), a `ToolUseBlock(name="Agent")` still produces the
+    regular `tool_invoked` / `tool_returned` pair (per spec §5, that
+    pair is always emitted for Task dispatches now); the subagent
+    overlay simply doesn't fire without the lifecycle messages."""
     events = asyncio.run(
         _drive(
             [
@@ -1056,3 +1119,4 @@ def test_bare_task_without_lifecycle_falls_back_to_tool_pair() -> None:
     assert "avp.tool_invoked" in types
     assert "avp.tool_returned" in types
     assert "avp.subagent_invoked" not in types
+    assert "avp.subagent_returned" not in types
