@@ -2319,183 +2319,6 @@
       "title": "SubagentDecl",
       "type": "object"
     },
-    "SubagentFailedData": {
-      "additionalProperties": true,
-      "description": "Subagent invocation errored. The parent treats the error as a\ntool-call failure: the model receives an `Error: ...` string in place\nof the result and may retry or proceed.",
-      "properties": {
-        "trace_id": {
-          "maxLength": 32,
-          "minLength": 32,
-          "pattern": "^[0-9a-f]{32}$",
-          "title": "Trace Id",
-          "type": "string"
-        },
-        "span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Span Id",
-          "type": "string"
-        },
-        "parent_span_id": {
-          "maxLength": 16,
-          "minLength": 16,
-          "pattern": "^[0-9a-f]{16}$",
-          "title": "Parent Span Id",
-          "type": "string"
-        },
-        "avp.meta": {
-          "anyOf": [
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Meta"
-        },
-        "avp.step": {
-          "minimum": 0,
-          "title": "Avp.Step",
-          "type": "integer"
-        },
-        "avp.subagent.name": {
-          "title": "Avp.Subagent.Name",
-          "type": "string"
-        },
-        "avp.subagent.invocation_id": {
-          "minLength": 1,
-          "title": "Avp.Subagent.Invocation Id",
-          "type": "string"
-        },
-        "avp.duration_ms": {
-          "minimum": 0,
-          "title": "Avp.Duration Ms",
-          "type": "integer"
-        },
-        "avp.subagent.error": {
-          "title": "Avp.Subagent.Error",
-          "type": "string"
-        },
-        "avp.subagent.error.code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Subagent.Error.Code"
-        }
-      },
-      "required": [
-        "trace_id",
-        "span_id",
-        "parent_span_id",
-        "avp.step",
-        "avp.subagent.name",
-        "avp.subagent.invocation_id",
-        "avp.duration_ms",
-        "avp.subagent.error"
-      ],
-      "title": "SubagentFailedData",
-      "type": "object"
-    },
-    "SubagentFailedEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "specversion": {
-          "const": "1.0",
-          "default": "1.0",
-          "title": "Specversion",
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "time": {
-          "title": "Time",
-          "type": "string"
-        },
-        "subject": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Subject"
-        },
-        "datacontenttype": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "application/json",
-          "title": "Datacontenttype"
-        },
-        "dataschema": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Dataschema"
-        },
-        "avp.correlation_id": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Avp.Correlation Id"
-        },
-        "type": {
-          "const": "avp.subagent_failed",
-          "default": "avp.subagent_failed",
-          "title": "Type",
-          "type": "string"
-        },
-        "source": {
-          "const": "avp://agent",
-          "default": "avp://agent",
-          "title": "Source",
-          "type": "string"
-        },
-        "data": {
-          "$ref": "#/$defs/SubagentFailedData"
-        }
-      },
-      "required": [
-        "data"
-      ],
-      "title": "SubagentFailedEvent",
-      "type": "object"
-    },
     "SubagentInvokedData": {
       "additionalProperties": true,
       "description": "Parent agent delegates to a declared subagent.\n\nThe event's `span_id` IS the subagent's frame span. Events emitted by\nthe subagent's sub-loop set `parent_span_id` to this frame (or chain\nthrough descendants of it), so the trajectory reconstructs as a nested\ntree. The subagent's declared name surfaces on `avp.subagent.name`;\nthe event type itself signals an `invoke_agent`-style operation, so no\nseparate operation-name field is carried on the wire.\n\n`avp.subagent.run_id` is reserved for future use when the subagent runs\nas a separate commissioned trajectory. Absent for in-process subagents.",
@@ -2683,7 +2506,7 @@
     },
     "SubagentReturnedData": {
       "additionalProperties": true,
-      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory.",
+      "description": "Closes the subagent's frame. `span_id` matches the corresponding\n`subagent_invoked` event so consumers can pair them.\n\n`avp.subagent.reason` is a `StopReason`; on the error path,\n`reason = error` and `avp.subagent.result.text` carries the error\nstring. The paired `tool_returned` mirrors this: `is_error = true`\nwhen `reason = error`, with the same `Error: ...` content.\n\n`avp.subagent.usage` is OPTIONAL and intended only for the in-process\nfallback: parent agents whose SDK black-boxes the child loop (no\nper-turn AssistantMessages exposed to the parent) carry the child's\ntotals here as the only signal the supervisor receives of the child's\nspend. Agents that emit the child's per-turn events into the parent's\ntrajectory with proper span parentage (`parent_span_id` = this event's\n`span_id`) MUST omit this field; the supervisor reconstructs from the\nraw stream. Managed subagents (separate `run_id`, separate trajectory)\nMUST also omit it; the supervisor reads the child's trajectory.",
       "properties": {
         "trace_id": {
           "maxLength": 32,
@@ -3646,7 +3469,6 @@
       "avp.assistant_message": "#/$defs/AssistantMessageEvent",
       "avp.error_occurred": "#/$defs/ErrorOccurredEvent",
       "avp.run_requested": "#/$defs/RunRequestedEvent",
-      "avp.subagent_failed": "#/$defs/SubagentFailedEvent",
       "avp.subagent_invoked": "#/$defs/SubagentInvokedEvent",
       "avp.subagent_returned": "#/$defs/SubagentReturnedEvent",
       "avp.tool_invoked": "#/$defs/ToolInvokedEvent",
@@ -3681,9 +3503,6 @@
     },
     {
       "$ref": "#/$defs/SubagentReturnedEvent"
-    },
-    {
-      "$ref": "#/$defs/SubagentFailedEvent"
     },
     {
       "$ref": "#/$defs/ErrorOccurredEvent"

@@ -1,18 +1,17 @@
 //! AVP — Agent Voyager Project v0.1 wire types.
 //!
 //! Types in this crate are generated from the canonical JSON Schemas under
-//! `spec/v0.1/` of the AVP repo. The Pydantic models in `python/avp/` are the
-//! source of truth; the JSON Schemas are derived from them; these Rust types
-//! are derived from the schemas. Single chain, no hand-maintained drift.
+//! `spec/v0.1/` of the AVP repo, which are the source of truth; these Rust
+//! types are derived from the schemas. Single chain, no hand-maintained drift.
 //!
 //! ## Layout
 //!
 //! One module per AVP v0.1 spec:
 //!
 //! - [`commission`] — `Commission`, the supervisor's setup message. Lists
-//!   supervisor-managed assets (mcp_servers, skills, subagents) as opaque
-//!   refs the agent dereferences via the AVP Resolver API at startup.
-//!   Sent once at run start.
+//!   supervisor-managed assets (mcp_servers, skills) with inline connection
+//!   material the agent dials and loads directly at startup. Sent once at
+//!   run start.
 //! - [`trajectory`] — agent-emitted events. The discriminated
 //!   [`trajectory::AvpV01TrajectoryEvent`] union is what your code matches
 //!   on when consuming a trajectory.
@@ -21,9 +20,9 @@
 //!   `<agent> describe`).
 //!
 //! v0.1 has no supervisor → agent push channel. The supervisor pipes
-//! `Commission` in once and reads the NDJSON trajectory out. The agent
-//! initiates an `avp.resolve` JSON-RPC call to a supervisor-stood-up
-//! resolver service to dereference each managed ref; agent-driven, no push.
+//! `Commission` in once and reads the NDJSON trajectory out. Managed assets
+//! carry inline connection material on the Commission, so there is no
+//! resolver round-trip; the agent dials and loads them directly.
 //!
 //! ## Regenerating
 //!
@@ -44,6 +43,11 @@ pub mod agent_descriptor;
 pub mod commission;
 pub mod trajectory;
 
+// Agent base: runtime machinery shared by AVP agents (not wire types).
+pub mod ids;
+pub mod pricing;
+pub mod sink;
+
 /// Re-export the Agent Descriptor under its canonical name.
 pub use agent_descriptor::AvpV01AgentDescriptor as AgentDescriptor;
 /// Re-export the top-level Commission struct (typify generates it as
@@ -51,3 +55,9 @@ pub use agent_descriptor::AvpV01AgentDescriptor as AgentDescriptor;
 pub use commission::AvpV01Commission as Commission;
 /// Re-export the discriminated trajectory-event union under a friendlier name.
 pub use trajectory::AvpV01TrajectoryEvent as Event;
+
+/// Agent-base re-exports: ids/timestamps, pricing, and the event sink.
+pub use pricing::{
+    compute_cost, load_default_prices, resolve_price, CostSource, ModelPrice, PriceTable,
+};
+pub use sink::{Sink, StdioSink};

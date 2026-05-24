@@ -309,10 +309,13 @@ pub struct AvpV01Commission {
 #[doc = r" ```"]
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum AvpV01CommissionMcpServersItem {
+    #[serde(rename = "http")]
     Http(McpServerHttp),
+    #[serde(rename = "stdio")]
     Stdio(McpServerStdio),
+
 }
 impl ::std::convert::From<McpServerHttp> for AvpV01CommissionMcpServersItem {
     fn from(value: McpServerHttp) -> Self {
@@ -457,7 +460,7 @@ pub struct McpServerHttp {
         ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     >,
     pub id: Id,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing, default)]
     pub type_: ::std::string::String,
     pub url: Url,
 }
@@ -539,7 +542,7 @@ pub struct McpServerStdio {
         ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     >,
     pub id: Id,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing, default)]
     pub type_: ::std::string::String,
 }
 #[doc = "`Name`"]

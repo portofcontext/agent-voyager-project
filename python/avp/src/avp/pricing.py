@@ -13,9 +13,11 @@ Why this lives in `avp` core, not per-agent:
   cost number is tagged with `avp.cost.source` so downstreams can tell
   a locally-computed number from a provider-reported one (or unknown).
 
-Default ships in `avp/data/prices.json`; `load_default_prices()` reads it
-fresh on each call. To override, pass a `PriceTable` to your driver /
-translator at construction.
+Default ships in `avp/data/prices.json`, mirrored from models.dev and
+keyed by its `<provider>/<model>` id (synced by `scripts/sync-prices.py`);
+`load_default_prices()` reads it fresh on each call. `compute_cost`
+normalizes a wire model (plus its provider) to a key here. To override,
+pass a `PriceTable` to your driver / translator at construction.
 
 `COST_SOURCE_*` constants name the audit-source values:
   - `computed`: we did the math locally from a price table
@@ -72,9 +74,29 @@ def load_default_prices() -> dict[str, ModelPrice]:
     }
 
 
+def resolve_price(prices: PriceTable, model: str, provider: str | None = None) -> ModelPrice | None:
+    """Resolve a price by the model the agent put on the wire.
+
+    The bundled table is mirrored from models.dev and keyed by its
+    `<provider>/<model>` id. A wire `model` is either a slug already
+    containing a provider (`openai/gpt-4o`, used as-is) or a bare
+    provider-native string (`claude-sonnet-4-6`) qualified with
+    `provider` to form the key (`anthropic/claude-sonnet-4-6`). The
+    exact string is tried first so a custom table keyed by bare names
+    still works.
+    """
+    p = prices.get(model)
+    if p is not None:
+        return p
+    if provider and "/" not in model:
+        return prices.get(f"{provider}/{model}")
+    return None
+
+
 def compute_cost(
     model: str,
     *,
+    provider: str | None = None,
     input_tokens: int,
     output_tokens: int,
     cache_read: int,
@@ -86,13 +108,17 @@ def compute_cost(
     Returns `(cost, source)` so callers can stamp `avp.cost.source` on
     the wire alongside `avp.cost_usd`.
 
+    `provider` is the model's provider (e.g. `"anthropic"`), used to
+    resolve a bare wire model against the `<provider>/<model>`-keyed
+    table; omit it if the wire model is already provider-qualified.
+
     `input_tokens` here is the AVP convention (cache reads INCLUDED).
     Cache reads / writes are billed at their own per-token rates; the
     fresh portion gets the regular input rate. If the model isn't in
     the table, returns `(0.0, "unknown")` — caller should warn so
     silent under-counts don't ship.
     """
-    p = prices.get(model)
+    p = resolve_price(prices, model, provider)
     if p is None:
         return 0.0, COST_SOURCE_UNKNOWN
     fresh = max(0, input_tokens - cache_read - cache_write)

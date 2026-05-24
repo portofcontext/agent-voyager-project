@@ -1,0 +1,69 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "connected to gtm?"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I don't have a direct \"GTM\" (Google Tag Manager) integration available. Let me check what functions are currently connected to see if there's anything related."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "toolRequest",
+        "id": "toolu_01HyJZo9q4RNj19s3CzjxtJk",
+        "toolCall": {
+          "status": "success",
+          "value": {
+            "name": "list_functions",
+            "arguments": {}
+          }
+        },
+        "_meta": {
+          "goose_extension": "code_execution"
+        }
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolResponse",
+        "id": "toolu_01HyJZo9q4RNj19s3CzjxtJk",
+        "toolResult": {
+          "status": "success",
+          "value": {
+            "content": [
+              {
+                "type": "text",
+                "text": "/**\n *\n */\nnamespace Analyze {\n  /**\n   * Analyze code structure in 3 modes: 1) Directory overview - file tree with LOC/function/class counts to max_depth. 2) File details - functions, classes, imports. 3) Symbol focus - call graphs across directory to max_depth (requires file or directory path, case-sensitive). Typical flow: directory \u2192 files \u2192 symbols. Functions called >3x show \u2022N.\n   */\n  export async function analyze(input: AnalyzeInput): Promise<any>\n}\n\n/**\n *\n */\nnamespace Skills {\n  /**\n   * Load a skill's full content into your context so you can follow its instructions.\n   *\n   * Skills are listed in your system instructions. When you need to use one, load it first to get the detailed instructions.\n   *\n   * Examples:\n   * - load_skill(name: \"gdrive\") \u2192 Loads the gdrive skill instructions\n   * - load_skill(name: \"my-skill/template.md\") \u2192 Loads a supporting file\n   */\n  export async function loadSkill(input: LoadSkillInput): Promise<any>\n}\n\n/**\n *\n */\nnamespace Todo {\n  /**\n   * Overwrite the entire TODO content.\n   *\n   * The content persists across conversation turns and compaction. Use this for:\n   * - Task tracking and progress updates\n   * - Important notes and reminders\n   *\n   * WARNING: This operation completely replaces the existing content. Always include\n   * all content you want to keep, not just the changes.\n   *\n   */\n  export async function todoWrite(input: TodoWriteInput): Promise<any>\n}\n\n/**\n *\n */\nnamespace Summon {\n  /**\n   * Load knowledge into your current context or discover available sources.\n   *\n   * Call with no arguments to list all available sources (subrecipes, recipes, agents).\n   * Call with a source name to load its content into your context.\n   * For background tasks: load(source: \"task_id\") waits for the task and returns the result.\n   * To cancel a running task: load(source: \"task_id\", cancel: true) stops and returns output.\n   *\n   * Examples:\n   * - load() \u2192 Lists available sources\n   * - load(source: \"deploy\") \u2192 Loads the deploy recipe\n   * - load(source: \"20260219_1\") \u2192 Waits for background task, then returns result\n   */\n  export async function load(input: LoadInput = {}): Promise<any>\n\n  /**\n   * Delegate a task to a subagent that runs independently with its own context.\n   *\n   * Modes:\n   * 1. Ad-hoc: Provide `instructions` for a custom task\n   * 2. Source-based: Provide `source` name to run a subrecipe, recipe, or agent\n   * 3. Combined: Pair a source with a task (e.g., source: \"deploy\", instructions: \"deploy to staging\")\n   *\n   * Effective Delegation:\n   * - Delegates know only instructions + source content\n   * - Delegates cannot coordinate. Same-file work = conflicts.\n   * - Parallel: async: true, then load(taskId) to wait and get results. Single: sync.\n   *\n   * Research (read-only): parallelize freely - delegates explore and report back.\n   * Work (writes): partition files strictly - no two delegates touch the same file.\n   *\n   * Decompose \u2192 async delegates \u2192 load(taskId) for each \u2192 synthesize.\n   */\n  export async function delegate(input: DelegateInput = {}): Promise<any>\n}\n\n/**\n *\n */\nnamespace Apps {\n  /**\n   * List all available Goose apps with their names and descriptions. Use this to see what apps exist before creating or modifying apps.\n   */\n  export async function listApps(input: { [key: string]: any | undefined } = {}): Promise<any>\n\n  /**\n   * Create a new Goose app based on a description or PRD. The extension will use an LLM to generate the HTML/CSS/JavaScript. Apps are sandboxed and run in standalone windows.\n   */\n  export async function createApp(input: CreateAppInput): Promise<any>\n\n  /**\n   * Improve an existing app based on feedback. The extension will use an LLM to update the HTML while preserving the app's intent.\n   */\n  export async function iterateApp(input: IterateAppInput): Promise<any>\n\n  /**\n   * Delete an app permanently\n   */\n  export async function deleteApp(input: DeleteAppInput): Promise<any>\n}\n\n/**\n *\n */\nnamespace Autovisualiser {\n  /**\n   * Show a chord diagram visualization for showing relationships and flows between entities.\n   *\n   * The data must contain:\n   * - labels: Array of strings representing the entities\n   * - matrix: 2D array of numbers representing flows (matrix[i][j] = flow from i to j)\n   *\n   * Example:\n   * {\n   *   \"labels\": [\"North America\", \"Europe\", \"Asia\", \"Africa\"],\n   *   \"matrix\": [\n   *     [0, 15, 25, 8],\n   *     [18, 0, 20, 12],\n   *     [22, 18, 0, 15],\n   *     [5, 10, 18, 0]\n   *   ]\n   * }\n   */\n  export async function renderChord(input: RenderChordInput): Promise<any>\n\n  /**\n   * show pie or donut charts for categorical data visualization.\n   * Supports one or more charts in a grid layout.\n   * The `data` field must always be an array; pass a single-element array for one chart.\n   *\n   * Each chart object must contain:\n   * - values: Array of numbers OR objects with 'label' and 'value'\n   * - type: Optional 'doughnut' (default) or 'pie'\n   * - title: Optional chart title\n   * - labels: Optional array of labels (required when values are plain numbers)\n   *\n   * Example single chart (labeled values):\n   * [\n   *   {\n   *     \"values\": [\n   *       {\"label\": \"Marketing\", \"value\": 25000},\n   *       {\"label\": \"Development\", \"value\": 35000}\n   *     ],\n   *     \"title\": \"Budget\"\n   *   }\n   * ]\n   *\n   * Example single chart (parallel arrays):\n   * [\n   *   {\n   *     \"values\": [45000, 38000],\n   *     \"labels\": [\"Product A\", \"Product B\"],\n   *     \"type\": \"pie\"\n   *   }\n   * ]\n   *\n   * Example multiple charts (array of chart objects):\n   * [\n   *   {\"values\": [60, 40], \"labels\": [\"Yes\", \"No\"], \"title\": \"Q1\"},\n   *   {\"values\": [75, 25], \"labels\": [\"Yes\", \"No\"], \"title\": \"Q2\"}\n   * ]\n   */\n  export async function renderDonut(input: RenderDonutInput): Promise<any>\n\n  /**\n   * show an interactive map visualization with location markers using Leaflet.\n   *\n   * The data must contain:\n   * - markers: Array of objects with 'lat', 'lng', and optional properties\n   * - title: Optional title for the map (default: \"Interactive Map\")\n   * - subtitle: Optional subtitle (default: \"Geographic data visualization\")\n   * - center: Optional center point {lat, lng} (default: USA center)\n   * - zoom: Optional initial zoom level (default: 4)\n   * - clustering: Optional boolean to enable/disable clustering (default: true)\n   * - autoFit: Optional boolean to auto-fit map to markers (default: true)\n   *\n   * Marker properties:\n   * - lat: Latitude (required)\n   * - lng: Longitude (required)\n   * - name: Location name\n   * - value: Numeric value for sizing/coloring\n   * - description: Description text\n   * - popup: Custom popup HTML\n   * - color: Custom marker color\n   * - label: Custom marker label\n   * - useDefaultIcon: Use default Leaflet icon\n   *\n   * Example:\n   * {\n   *   \"title\": \"Store Locations\",\n   *   \"markers\": [\n   *     {\"lat\": 37.7749, \"lng\": -122.4194, \"name\": \"SF Store\", \"value\": 150000},\n   *     {\"lat\": 40.7128, \"lng\": -74.0060, \"name\": \"NYC Store\", \"value\": 200000}\n   *   ]\n   * }\n   */\n  export async function renderMap(input: RenderMapInput): Promise<any>\n\n  /**\n   * show a Mermaid diagram from Mermaid syntax\n   *\n   * Provide the Mermaid code as a string. Supports flowcharts, sequence diagrams, Gantt charts, etc.\n   *\n   * Example:\n   * graph TD;\n   *     A-->B;\n   *     A-->C;\n   *     B-->D;\n   *     C-->D;\n   *\n   */\n  export async function renderMermaid(input: RenderMermaidInput): Promise<any>\n\n  /**\n   * show a radar chart (spider chart) for multi-dimensional data comparison\n   *\n   * The data must contain:\n   * - labels: Array of strings representing the dimensions/axes\n   * - datasets: Array of dataset objects with 'label' and 'data' properties\n   *\n   * Example:\n   * {\n   *   \"labels\": [\"Speed\", \"Strength\", \"Endurance\", \"Agility\", \"Intelligence\"],\n   *   \"datasets\": [\n   *     {\n   *       \"label\": \"Player 1\",\n   *       \"data\": [85, 70, 90, 75, 80]\n   *     },\n   *     {\n   *       \"label\": \"Player 2\",\n   *       \"data\": [75, 85, 80, 90, 70]\n   *     }\n   *   ]\n   * }\n   */\n  export async function renderRadar(input: RenderRadarInput): Promise<any>\n\n  /**\n   * show a Sankey diagram from flow data\n   * The data must contain:\n   * - nodes: Array of objects with 'name' and optional 'category' properties\n   * - links: Array of objects with 'source', 'target', and 'value' properties\n   *\n   * IMPORTANT: Links must NOT form cycles (e.g. A\u2192B and B\u2192A). Sankey diagrams are\n   * directional acyclic flows. If the data has circular relationships, restructure\n   * them so flow moves in one direction (e.g. add a separate node like \"Re-signed\"\n   * instead of linking back to an earlier node).\n   *\n   * Example:\n   * {\n   *   \"nodes\": [\n   *     {\"name\": \"Source A\", \"category\": \"source\"},\n   *     {\"name\": \"Target B\", \"category\": \"target\"}\n   *   ],\n   *   \"links\": [\n   *     {\"source\": \"Source A\", \"target\": \"Target B\", \"value\": 100}\n   *   ]\n   * }\n   */\n  export async function renderSankey(input: RenderSankeyInput): Promise<any>\n\n  /**\n   * show a treemap visualization for hierarchical data with proportional area representation as boxes\n   *\n   * The data should be a hierarchical structure with:\n   * - name: Name of the node (required)\n   * - value: Numeric value for leaf nodes (optional for parent nodes)\n   * - children: Array of child nodes (optional)\n   * - category: Category for coloring (optional)\n   *\n   * Example:\n   * {\n   *   \"name\": \"Root\",\n   *   \"children\": [\n   *     {\n   *       \"name\": \"Group A\",\n   *       \"children\": [\n   *         {\"name\": \"Item 1\", \"value\": 100, \"category\": \"Type1\"},\n   *         {\"name\": \"Item 2\", \"value\": 200, \"category\": \"Type2\"}\n   *       ]\n   *     },\n   *     {\"name\": \"Item 3\", \"value\": 150, \"category\": \"Type1\"}\n   *   ]\n   * }\n   */\n  export async function renderTreemap(input: RenderTreemapInput): Promise<any>\n\n  /**\n   * show interactive line, scatter, or bar charts\n   *\n   * Required: type ('line', 'scatter', or 'bar'), datasets array\n   * Optional: labels, title, subtitle, xAxisLabel, yAxisLabel, options\n   *\n   * Example:\n   * {\n   *   \"type\": \"line\",\n   *   \"title\": \"Monthly Sales\",\n   *   \"labels\": [\"Jan\", \"Feb\", \"Mar\"],\n   *   \"datasets\": [\n   *     {\"label\": \"Product A\", \"data\": [65, 59, 80]}\n   *   ]\n   * }\n   */\n  export async function showChart(input: ShowChartInput): Promise<any>\n}\n"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "No, I'm **not connected to GTM** (Google Tag Manager). \n\nThe tools I currently have access to are:\n- **Analyze** \u2013 code structure analysis\n- **Skills / Summon** \u2013 load skills, recipes, agents, or delegate tasks\n- **Todo** \u2013 task tracking\n- **Apps** \u2013 create/manage Goose apps\n- **Autovisualiser** \u2013 charts, maps, diagrams (chord, donut, map, mermaid, radar, sankey, treemap, line/bar/scatter)\n\nIf you want to connect to Google Tag Manager, you'd need to add an extension/MCP server that provides GTM API access. Want help finding or setting one up, or did you mean something else by \"GTM\"?"
+      }
+    ]
+  }
+]

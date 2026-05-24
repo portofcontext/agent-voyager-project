@@ -47,10 +47,11 @@ avp-workspace/
 
 # Rust
 rust/avp/target/
-Cargo.lock
+rust/avp-goose/target/
 
 # TypeScript
 typescript/avp/node_modules/
 typescript/avp/dist/
 typescript/avp/dist-test/
 typescript/avp/package-lock.json
+

@@ -18,11 +18,38 @@ from avp.pricing import (
 
 def test_default_prices_loads_from_data_file() -> None:
     prices = load_default_prices()
-    assert "claude-sonnet-4-6" in prices
-    sonnet = prices["claude-sonnet-4-6"]
+    # Mirrored from models.dev, keyed by `<provider>/<model>`.
+    assert "anthropic/claude-sonnet-4-6" in prices
+    sonnet = prices["anthropic/claude-sonnet-4-6"]
     assert isinstance(sonnet, ModelPrice)
     assert sonnet.input == 3.0
     assert sonnet.output == 15.0
+
+
+def test_compute_cost_normalizes_wire_model_via_provider() -> None:
+    prices = load_default_prices()
+    # A bare provider-native string resolves through its provider.
+    _, bare = compute_cost(
+        "claude-sonnet-4-6",
+        provider="anthropic",
+        input_tokens=1_000_000,
+        output_tokens=0,
+        cache_read=0,
+        cache_write=0,
+        prices=prices,
+    )
+    assert bare == COST_SOURCE_COMPUTED
+    # A provider-qualified slug is used as the key as-is (no provider needed).
+    cost, slug = compute_cost(
+        "openai/gpt-4o",
+        input_tokens=1_000_000,
+        output_tokens=0,
+        cache_read=0,
+        cache_write=0,
+        prices=prices,
+    )
+    assert slug == COST_SOURCE_COMPUTED
+    assert abs(cost - 2.5) < 1e-9
 
 
 def test_load_returns_fresh_dict_on_each_call() -> None:

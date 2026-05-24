@@ -97,8 +97,7 @@ def to_gen_ai_attrs(event: Event) -> dict[str, Any]:
             {
                 "role": "assistant",
                 "content": [
-                    b.model_dump(by_alias=True, exclude_none=True, mode="json")
-                    for b in d.content
+                    b.model_dump(by_alias=True, exclude_none=True, mode="json") for b in d.content
                 ],
             }
         ]

@@ -15,8 +15,8 @@ import { test } from "node:test";
 import type { Event } from "../src/index.js";
 import type {
   AgentStartedEvent,
-  ModelTurnEndedEvent,
-  RefusalRecordedEvent,
+  AgentStoppedEvent,
+  AssistantMessageEvent,
 } from "../src/trajectory.js";
 
 test("agent_started parses + matches the discriminator", () => {
@@ -54,62 +54,61 @@ test("agent_started parses + matches the discriminator", () => {
   }
 });
 
-test("model_turn_ended carries avp.cost.source provenance tag", () => {
+test("assistant_message carries avp.cost.source provenance tag", () => {
   const raw = `{
     "specversion": "1.0",
     "id": "test-id",
     "time": "2026-05-07T00:00:00Z",
     "subject": "r1",
     "datacontenttype": "application/json",
-    "type": "avp.model_turn_ended",
+    "type": "avp.assistant_message",
     "source": "avp://agent",
     "data": {
       "trace_id": "00000000000000000000000000000000",
       "span_id": "1111111111111111",
       "parent_span_id": "0000000000000000",
-      "step": 1,
-      "duration_ms": 42,
-      "gen_ai.usage.input_tokens": 100,
-      "gen_ai.usage.output_tokens": 25,
+      "avp.step": 1,
+      "avp.duration_ms": 42,
+      "avp.content": [{ "type": "text", "text": "hi" }],
+      "avp.usage": { "input_tokens": 100, "output_tokens": 25 },
       "avp.cost_usd": 0.001,
       "avp.cost.source": "computed"
     }
   }`;
   const ev = JSON.parse(raw) as Event;
-  if (ev.type === "avp.model_turn_ended") {
-    const turn: ModelTurnEndedEvent = ev;
+  if (ev.type === "avp.assistant_message") {
+    const turn: AssistantMessageEvent = ev;
     // Field accessor proves the dotted alias is mapped correctly in the types.
     assert.equal(turn.data["avp.cost.source"], "computed");
     assert.equal(turn.data["avp.cost_usd"], 0.001);
   } else {
-    assert.fail(`expected model_turn_ended, got ${ev.type}`);
+    assert.fail(`expected assistant_message, got ${ev.type}`);
   }
 });
 
-test("refusal_recorded parses with provider tag", () => {
+test("agent_stopped carries the refused stop reason", () => {
+  // Refusal is folded into agent_stopped with reason "refused"; the standalone
+  // refusal_recorded event was removed in v0.1.
   const raw = `{
     "specversion": "1.0",
     "id": "test-id",
     "time": "2026-05-07T00:00:00Z",
     "subject": "r1",
     "datacontenttype": "application/json",
-    "type": "avp.refusal_recorded",
+    "type": "avp.agent_stopped",
     "source": "avp://agent",
     "data": {
       "trace_id": "00000000000000000000000000000000",
       "span_id": "2222222222222222",
       "parent_span_id": "0000000000000000",
-      "step": 1,
-      "avp.refusal.reason": "refusal",
-      "avp.refusal.provider": "anthropic"
+      "avp.reason": "refused"
     }
   }`;
   const ev = JSON.parse(raw) as Event;
-  if (ev.type === "avp.refusal_recorded") {
-    const r: RefusalRecordedEvent = ev;
-    assert.equal(r.data["avp.refusal.reason"], "refusal");
-    assert.equal(r.data["avp.refusal.provider"], "anthropic");
+  if (ev.type === "avp.agent_stopped") {
+    const stopped: AgentStoppedEvent = ev;
+    assert.equal(stopped.data["avp.reason"], "refused");
   } else {
-    assert.fail(`expected refusal_recorded, got ${ev.type}`);
+    assert.fail(`expected agent_stopped, got ${ev.type}`);
   }
 });

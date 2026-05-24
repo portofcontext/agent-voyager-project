@@ -18,7 +18,6 @@ export type AVPV01TrajectoryEvent =
   | ToolReturnedEvent
   | SubagentInvokedEvent
   | SubagentReturnedEvent
-  | SubagentFailedEvent
   | ErrorOccurredEvent;
 export type Specversion = "1.0";
 export type Id = string;
@@ -356,33 +355,12 @@ export type Subject9 = string | null;
 export type Datacontenttype9 = string | null;
 export type Dataschema9 = string | null;
 export type AvpCorrelationId9 = string | null;
-export type Type26 = "avp.subagent_failed";
+export type Type26 = "avp.error_occurred";
 export type Source13 = "avp://agent";
 export type TraceId9 = string;
 export type SpanId9 = string;
 export type ParentSpanId9 = string;
 export type AvpMeta9 = {
-  [k: string]: unknown;
-} | null;
-export type AvpStep5 = number;
-export type AvpSubagentName2 = string;
-export type AvpSubagentInvocationId2 = string;
-export type AvpDurationMs3 = number;
-export type AvpSubagentError = string;
-export type AvpSubagentErrorCode = string | null;
-export type Specversion10 = "1.0";
-export type Id16 = string;
-export type Time10 = string;
-export type Subject10 = string | null;
-export type Datacontenttype10 = string | null;
-export type Dataschema10 = string | null;
-export type AvpCorrelationId10 = string | null;
-export type Type27 = "avp.error_occurred";
-export type Source14 = "avp://agent";
-export type TraceId10 = string;
-export type SpanId10 = string;
-export type ParentSpanId10 = string;
-export type AvpMeta10 = {
   [k: string]: unknown;
 } | null;
 export type ErrorCode =
@@ -1148,6 +1126,11 @@ export interface SubagentReturnedEvent {
  * Closes the subagent's frame. `span_id` matches the corresponding
  * `subagent_invoked` event so consumers can pair them.
  *
+ * `avp.subagent.reason` is a `StopReason`; on the error path,
+ * `reason = error` and `avp.subagent.result.text` carries the error
+ * string. The paired `tool_returned` mirrors this: `is_error = true`
+ * when `reason = error`, with the same `Error: ...` content.
+ *
  * `avp.subagent.usage` is OPTIONAL and intended only for the in-process
  * fallback: parent agents whose SDK black-boxes the child loop (no
  * per-turn AssistantMessages exposed to the parent) carry the child's
@@ -1188,7 +1171,7 @@ export interface SubagentUsage {
   turns: Turns;
   [k: string]: unknown;
 }
-export interface SubagentFailedEvent {
+export interface ErrorOccurredEvent {
   specversion?: Specversion9;
   id?: Id15;
   time?: Time9;
@@ -1198,43 +1181,13 @@ export interface SubagentFailedEvent {
   "avp.correlation_id"?: AvpCorrelationId9;
   type?: Type26;
   source?: Source13;
-  data: SubagentFailedData;
+  data: ErrorOccurredData;
 }
-/**
- * Subagent invocation errored. The parent treats the error as a
- * tool-call failure: the model receives an `Error: ...` string in place
- * of the result and may retry or proceed.
- */
-export interface SubagentFailedData {
+export interface ErrorOccurredData {
   trace_id: TraceId9;
   span_id: SpanId9;
   parent_span_id: ParentSpanId9;
   "avp.meta"?: AvpMeta9;
-  "avp.step": AvpStep5;
-  "avp.subagent.name": AvpSubagentName2;
-  "avp.subagent.invocation_id": AvpSubagentInvocationId2;
-  "avp.duration_ms": AvpDurationMs3;
-  "avp.subagent.error": AvpSubagentError;
-  "avp.subagent.error.code"?: AvpSubagentErrorCode;
-  [k: string]: unknown;
-}
-export interface ErrorOccurredEvent {
-  specversion?: Specversion10;
-  id?: Id16;
-  time?: Time10;
-  subject?: Subject10;
-  datacontenttype?: Datacontenttype10;
-  dataschema?: Dataschema10;
-  "avp.correlation_id"?: AvpCorrelationId10;
-  type?: Type27;
-  source?: Source14;
-  data: ErrorOccurredData;
-}
-export interface ErrorOccurredData {
-  trace_id: TraceId10;
-  span_id: SpanId10;
-  parent_span_id: ParentSpanId10;
-  "avp.meta"?: AvpMeta10;
   "avp.error.code": ErrorCode;
   "avp.error.message": AvpErrorMessage;
   [k: string]: unknown;
