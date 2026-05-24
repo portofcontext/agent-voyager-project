@@ -35,21 +35,22 @@ Slim, single-runner conformance for AVP v0.1.
 ## CLI surface
 
 ```
-avp-conformance run --agent <manifest.json> --suite v0.1
-avp-conformance run --agent <manifest.json> --case <path>
+avp-conformance ping  --agent <manifest.json>
+avp-conformance check --agent <manifest.json> --suite v0.1
+avp-conformance check --agent <manifest.json> --case <path>
 avp-conformance validate --suite v0.1
 avp-conformance check-coverage --suite v0.1
 ```
 
 - `--suite v0.1` resolves to the packaged cases dir; no walk-up needed.
-- `--agent` is required only for `run`.
+- `--agent` is required for `ping` and `check`.
 - `validate` and `check-coverage` work on packaged cases without an SDK.
 
 ## Manifest shape (JSON)
 
 ```json
 {
-  "command": ["python", "-m", "avp_anthropic.conformance_entrypoint"],
+  "command": ["uv", "run", "python", "-m", "avp_anthropic.conformance"],
   "cwd": ".",
   "env": { "AVP_CONFORMANCE_MODE": "1" },
   "description": "avp-anthropic SDK adapter"
@@ -105,7 +106,8 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Implement `ping --agent <manifest>`: loads manifest, spawns agent, validates pong response.
 - [x] Gate the CLI behind the `conformance` extra (clear error when not installed).
 - [ ] Implement `validate`: load every packaged case via `TestCase`, report per-file failures.
-- [ ] Implement `run`: spawn agent subprocess with `run --commission --built-in --out`, capture jsonl, match expectations.
+- [x] Implement `check` (load side): load manifest, discover cases by `--suite` or `--case`, group by category subdir, print summary.
+- [ ] Implement `check` (dispatch side): spawn agent subprocess with `run --commission --built-in --out`, capture jsonl, match expectations.
 - [ ] Implement matcher: `in_order_subsequence` / `in_order_strict` / `any_order`, `forbidden_events`, `final_state`.
 - [ ] Implement `check-coverage`: every event `type` in `spec/v0.1/trajectory.schema.json` has ≥1 case asserting on it.
 
@@ -118,7 +120,7 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Add `avp-conformance.json` manifest + `conformance.py` entrypoint to `python/agents/avp-claude-agent-sdk/` (ping verified end-to-end; run is a stub).
 - [ ] Add the same to `python/sdks/avp-anthropic/`.
 - [ ] Implement the `run` subcommand in each entrypoint (Commission → trajectory NDJSON).
-- [ ] Confirm `avp-conformance run --agent <manifest> --suite v0.1` drives both end-to-end.
+- [ ] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end.
 
 ### CI / Make
 - [ ] Update `make conformance` to install the extra and run the new CLI shape.

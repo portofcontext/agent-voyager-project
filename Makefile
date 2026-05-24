@@ -45,7 +45,8 @@ help:
 	@echo ""
 	@echo "  Free targets (no API calls):"
 	@echo "    make test            pytest across every package, real-LLM excluded"
-	@echo "    make conformance     avp-conformance run + validate + check-coverage"
+	@echo "    make conformance     avp-conformance validate + ping + check"
+	@echo "                         (check runs cases against avp-claude-agent-sdk)"
 	@echo "    make lint            ruff check"
 	@echo "    make format          ruff format (writes)"
 	@echo "    make format-check    ruff format --check (read-only)"
@@ -84,8 +85,9 @@ test:
 .PHONY: conformance
 conformance:
 	@$(UV) run avp-conformance validate
-	@$(UV) run avp-conformance run
-	@$(UV) run avp-conformance check-coverage
+	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
+	@$(UV) run avp-conformance ping  --agent agents/avp-claude-agent-sdk/avp-conformance.json
+	@$(UV) run avp-conformance check --agent agents/avp-claude-agent-sdk/avp-conformance.json --suite v0.1
 
 
 .PHONY: lint

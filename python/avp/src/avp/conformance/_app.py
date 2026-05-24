@@ -1,7 +1,8 @@
 """Typer app for `avp-conformance`. Requires the `conformance` extra.
 
-`ping` is implemented; `run`, `validate`, and `check-coverage` are stubs.
-See CONFORMANCE_PLAN.md for the planned behavior of each.
+`ping` is implemented end-to-end. `check` loads the manifest + cases but
+does not yet dispatch to the agent. `validate` and `check-coverage` are
+stubs. See CONFORMANCE_PLAN.md for the planned behavior of each.
 """
 
 from __future__ import annotations
@@ -14,9 +15,8 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic import ValidationError
 
-from avp.conformance.manifest import AgentManifest
+from avp.conformance.utils import discover_suite, load_case, load_manifest
 
 app = typer.Typer(
     name="avp-conformance",
@@ -24,18 +24,6 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
-
-
-def _load_manifest(path: Path) -> AgentManifest:
-    """Load and validate an agent manifest, exiting with a clear error on failure."""
-    try:
-        return AgentManifest.model_validate_json(path.read_text())
-    except FileNotFoundError:
-        typer.echo(f"error: manifest not found: {path}", err=True)
-        raise typer.Exit(code=2) from None
-    except ValidationError as e:
-        typer.echo(f"error: manifest invalid:\n{e}", err=True)
-        raise typer.Exit(code=2) from None
 
 
 @app.command()
@@ -50,7 +38,7 @@ def ping(
     ] = 10.0,
 ) -> None:
     """Verify the agent at --agent is invocable and emits {"type": "pong"}."""
-    manifest = _load_manifest(agent)
+    manifest = load_manifest(agent)
     cwd = (agent.parent / manifest.cwd).resolve()
 
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
@@ -95,28 +83,47 @@ def ping(
 
 
 @app.command()
-def run(
+def check(
     agent: Annotated[
         Path,
         typer.Option("--agent", help="Path to the agent manifest JSON."),
     ],
     suite: Annotated[
         str | None,
-        typer.Option("--suite", help="Spec version to run (e.g. 'v0.1')."),
+        typer.Option("--suite", help="Spec version to check (e.g. 'v0.1')."),
     ] = None,
     case: Annotated[
         Path | None,
         typer.Option("--case", help="Path to a single case file."),
     ] = None,
 ) -> None:
-    """Execute conformance cases against the SDK described by --agent."""
+    """Run conformance cases against the SDK described by --agent."""
     if suite is None and case is None:
-        typer.echo("error: run requires either --suite or --case.", err=True)
+        typer.echo("error: check requires either --suite or --case.", err=True)
         raise typer.Exit(code=2)
     if suite is not None and case is not None:
         typer.echo("error: --suite and --case are mutually exclusive.", err=True)
         raise typer.Exit(code=2)
-    typer.echo(f"[stub] run: agent={agent} suite={suite} case={case}")
+
+    manifest = load_manifest(agent)
+
+    if case is not None:
+        grouped = {case.parent.name: [load_case(case, str(case))]}
+    else:
+        assert suite is not None  # narrowed by the guards above
+        grouped = discover_suite(suite)
+
+    total = sum(len(cs) for cs in grouped.values())
+    n_cats = len(grouped)
+    cat_word = "category" if n_cats == 1 else "categories"
+    typer.echo(f"loaded {total} case(s) across {n_cats} {cat_word}")
+    for cat_name in sorted(grouped):
+        cases = grouped[cat_name]
+        typer.echo(f"  {cat_name}: {len(cases)}")
+        for tc in cases:
+            typer.echo(f"    - {tc.id}")
+    typer.echo()
+    typer.echo(f"[stub] dispatch to {manifest.command[0]!r} not yet wired")
 
 
 @app.command()
@@ -128,14 +135,3 @@ def validate(
 ) -> None:
     """Validate every packaged case file against the TestCase pydantic model."""
     typer.echo(f"[stub] validate: suite={suite}")
-
-
-@app.command("check-coverage")
-def check_coverage(
-    suite: Annotated[
-        str,
-        typer.Option("--suite", help="Spec version to check."),
-    ] = "v0.1",
-) -> None:
-    """Assert every event type in the trajectory schema has >=1 case asserting on it."""
-    typer.echo(f"[stub] check-coverage: suite={suite}")

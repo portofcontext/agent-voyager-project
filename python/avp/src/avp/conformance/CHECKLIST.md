@@ -23,7 +23,7 @@ at `src/avp_claude_agent_sdk/conformance.py` and `avp-conformance.json`).
 
 ```json
 {
-  "command": ["python", "-m", "your_sdk_pkg.conformance"],
+  "command": ["uv", "run", "python", "-m", "your_sdk_pkg.conformance"],
   "cwd": ".",
   "env": {},
   "description": "your_sdk_pkg conformance entrypoint"
@@ -31,6 +31,7 @@ at `src/avp_claude_agent_sdk/conformance.py` and `avp-conformance.json`).
 ```
 
 - [ ] `command` is the prefix — the conformance CLI appends `ping --out ...` or `run --commission ... --out ...`.
+- [ ] Lead with `uv run` so the manifest bootstraps the right venv regardless of the caller's shell state.
 - [ ] `cwd` resolves relative to the manifest file's location, not the conformance CLI's CWD.
 
 ## 4. Verify ping works end-to-end
@@ -48,9 +49,9 @@ at `src/avp_claude_agent_sdk/conformance.py` and `avp-conformance.json`).
 - [ ] Run the agent loop. For every AVP trajectory event emitted, write one JSON object as a line to `--out`. Use the `avp.trajectory.*` Pydantic models to serialize.
 - [ ] Exit `0` after `agent_stopped`. Non-zero is a crash; stderr is surfaced to the user by the conformance CLI.
 
-## 6. Verify run works end-to-end (once cases are promoted)
+## 6. Verify end-to-end (once cases are promoted)
 
-- [ ] `uv --directory python run avp-conformance run --agent <manifest> --suite v0.1`.
+- [ ] `uv --directory python run avp-conformance check --agent <manifest> --suite v0.1`.
 - [ ] Until cases land in `python/avp/src/avp/conformance/cases/v0.1/`, drive a single case manually with `--case <path>`.
 
 ## Pointers
