@@ -16,7 +16,7 @@ from typing import Annotated
 
 import typer
 
-from avp.conformance.utils import discover_suite, load_case, load_manifest
+from avp.conformance._utils import discover_suite, load_case, load_manifest
 
 app = typer.Typer(
     name="avp-conformance",

@@ -22,3 +22,17 @@ async-trait = "0.1"
 rmcp = "1.7"
 # Used by the eval harness to schema-validate live trajectories.
 jsonschema = "0.46"
+# Optional: only pulled in for the `conformance` feature, which gates the
+# avp-goose-conformance binary consumed by the avp-conformance harness.
+clap = { version = "4", features = ["derive"], optional = true }
+
+[features]
+# Compiles the avp-goose-conformance binary (declared below) and pulls in
+# clap. Off by default so a plain `cargo build` doesn't drag clap into the
+# dep graph.
+conformance = ["dep:clap"]
+
+[[bin]]
+name = "avp-goose-conformance"
+path = "src/bin/avp-goose-conformance.rs"
+required-features = ["conformance"]

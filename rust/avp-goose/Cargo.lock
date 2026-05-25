@@ -330,6 +330,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "avp",
+ "clap",
  "futures",
  "goose",
  "jsonschema 0.46.5",

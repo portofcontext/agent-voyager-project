@@ -1,0 +1,6 @@
+{
+  "command": ["cargo", "run", "--quiet", "--features", "conformance", "--bin", "avp-goose-conformance", "--"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-goose conformance entrypoint"
+}

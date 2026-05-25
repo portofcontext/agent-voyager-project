@@ -36,6 +36,10 @@ SPEC="$REPO/spec/v0.1"
 RUST_OUT="$REPO/rust/avp/src"
 TS_OUT="$REPO/typescript/avp/src"
 
+# Conformance fixture schema lives inside the avp Python package (it is not
+# part of the wire spec; it describes the `--built-in` harness payload).
+CONFORMANCE_SCHEMA="$REPO/python/avp/src/avp/conformance/agent-built-ins.schema.json"
+
 # Tools
 command -v cargo-typify >/dev/null 2>&1 || {
   echo "error: cargo-typify not found. Install: cargo install cargo-typify" >&2
@@ -50,7 +54,7 @@ command -v npx >/dev/null 2>&1 || {
   exit 1
 }
 
-mkdir -p "$RUST_OUT" "$TS_OUT"
+mkdir -p "$RUST_OUT" "$TS_OUT" "$RUST_OUT/conformance" "$TS_OUT/conformance"
 
 # Strip `default: null` recursively from a schema. Pre-pass for typify; safe
 # for json-schema-to-typescript too (TS optional types don't care about the
@@ -65,7 +69,7 @@ generate_rust() {
   local name="$1"      # output module name (no .rs)
   local schema="$2"    # path to schema file
   local tmp
-  tmp="$(mktemp -t "avp-${name}-XXXXXX.json")"
+  tmp="$(mktemp -t "avp-${name//\//-}-XXXXXX.json")"
   trap "rm -f '$tmp'" RETURN
 
   strip_null_defaults "$schema" > "$tmp"
@@ -80,7 +84,7 @@ generate_ts() {
   local name="$1"
   local schema="$2"
   local tmp
-  tmp="$(mktemp -t "avp-${name}-XXXXXX.json")"
+  tmp="$(mktemp -t "avp-${name//\//-}-XXXXXX.json")"
   trap "rm -f '$tmp'" RETURN
 
   strip_null_defaults "$schema" > "$tmp"
@@ -97,17 +101,14 @@ echo "Generating Rust bindings (cargo-typify)…"
 generate_rust "commission" "$SPEC/commission.schema.json"
 generate_rust "trajectory" "$SPEC/trajectory.schema.json"
 generate_rust "agent_descriptor" "$SPEC/agent-descriptor.schema.json"
-
-# Old generated files from previous schema/spec names; clean up to avoid
-# stale code drifting in tree.
-rm -f "$RUST_OUT/event.rs" "$RUST_OUT/supervisor_message.rs"
-rm -f "$TS_OUT/event.ts" "$TS_OUT/supervisor-message.ts"
+generate_rust "conformance/agent_builtins" "$CONFORMANCE_SCHEMA"
 
 echo
 echo "Generating TypeScript bindings (json-schema-to-typescript)…"
 generate_ts "commission" "$SPEC/commission.schema.json"
 generate_ts "trajectory" "$SPEC/trajectory.schema.json"
 generate_ts "agent-descriptor" "$SPEC/agent-descriptor.schema.json"
+generate_ts "conformance/agent_builtins" "$CONFORMANCE_SCHEMA"
 
 echo
 echo "Done."

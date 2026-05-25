@@ -16,6 +16,11 @@ One entry-point schema per AVP v0.1 spec, plus the unified bundle:
     spec/v0.1/trajectory.schema.json        — agent-emitted Event union
     spec/v0.1/agent-descriptor.schema.json  — AgentDescriptor shape
     spec/v0.1/avp.schema.json               — top-level bundle (oneOf of all three)
+
+Plus the conformance-harness fixture schema (not part of the wire spec; ships
+inside the avp package so consumers can validate `--built-in` payloads):
+
+    python/avp/src/avp/conformance/agent-built-ins.schema.json
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "python" / "avp" / "src"))
 
 from avp.commission import Commission  # noqa: E402
+from avp.conformance.case import AgentBuiltins  # noqa: E402
 from avp.descriptor import AgentDescriptor  # noqa: E402
 from avp.trajectory import Event  # noqa: E402
 from pydantic import TypeAdapter  # noqa: E402
@@ -139,6 +145,25 @@ def main() -> int:
         ],
     }
     write_json(out_dir / "avp.schema.json", bundle)
+
+    # Conformance fixture schema. Lives inside the avp package (not under
+    # spec/v0.1/) because it describes the harness `--built-in` payload, not
+    # the wire format.
+    conformance_dir = ROOT / "python" / "avp" / "src" / "avp" / "conformance"
+    builtins_schema = render(
+        TypeAdapter(AgentBuiltins),
+        schema_id=f"{SCHEMA_BASE}/conformance/agent-built-ins.schema.json",
+        title="Agent Builtins",
+        description=(
+            "Test fixture consumed by an SDK's conformance entrypoint via "
+            "`--built-in <json|path>`. The SDK MUST behave as if these are "
+            "its actual built-ins for the run (system_prompt, tools, skills, "
+            "mcp_servers, subagents), then apply Commission overrides per "
+            "the AVP merge spec. Not part of the wire format; only used by "
+            "the conformance harness."
+        ),
+    )
+    write_json(conformance_dir / "agent-built-ins.schema.json", builtins_schema)
 
     print("Done.")
     return 0

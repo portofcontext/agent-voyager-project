@@ -19,7 +19,7 @@ import argparse
 import json
 from pathlib import Path
 
-from avp.conformance.utils import load_built_in, load_commission
+from avp.conformance import load_built_in, load_commission
 
 
 def _cmd_ping(args: argparse.Namespace) -> int:

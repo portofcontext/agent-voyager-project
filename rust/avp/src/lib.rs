@@ -41,6 +41,7 @@
 
 pub mod agent_descriptor;
 pub mod commission;
+pub mod conformance;
 pub mod trajectory;
 
 // Agent base: runtime machinery shared by AVP agents (not wire types).
