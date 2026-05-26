@@ -253,18 +253,19 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     # One AVP turn = one inference = one `message_id`, so multiple SDK
     # chunks merge into the open turn; a different non-None `message_id`
     # is the boundary that closes the prior inference.
-    next_step = 1
-    if (
-        state.turn is not None
-        and message.message_id is not None
-        and message.message_id != state.turn.message_id
+    # Close the prior inference when a new one begins: a different non-None
+    # message_id, OR a turn already marked `tool_resulted` (its inference ended
+    # at the tool call, so this message starts a fresh one even if it shares or
+    # lacks a message_id). Chunks of one inference (same message_id, no tool
+    # result yet) merge into the open turn.
+    if state.turn is not None and (
+        state.turn.tool_resulted
+        or (message.message_id is not None and message.message_id != state.turn.message_id)
     ):
-        drained = await state.drain()
-        if drained is not None:
-            next_step = drained.step + 1
+        await state.drain()
 
     if state.turn is None:
-        state.turn = Turn(message_id=message.message_id, step=next_step)
+        state.turn = Turn(message_id=message.message_id, step=state.last_step + 1)
 
     state.turn.meta_chunks_merged += 1
     translated = translate_content_blocks(message.content)
@@ -422,6 +423,10 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
                 is_error=block.is_error,
             ),
         )
+    # The tool result ends this inference; the next AssistantMessage opens a new
+    # turn. Drain stays deferred to that message so parallel results spanning
+    # several UserMessages all attach to this turn first.
+    state.turn.tool_resulted = True
 
 
 # ---------------------------------------------------------------------------

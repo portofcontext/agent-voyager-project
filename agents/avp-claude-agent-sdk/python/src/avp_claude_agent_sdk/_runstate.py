@@ -107,6 +107,24 @@ class Turn:
     meta_cache_creation_1h: int = 0
     # Diagnostic: how many SDK AssistantMessage chunks merged into this turn.
     meta_chunks_merged: int = 0
+    # Set once a tool-result for this turn arrives: the inference has ended, so
+    # the next AssistantMessage opens a new turn even if it shares (or lacks) a
+    # `message_id`. Drain is still deferred to that next message so parallel
+    # tool results (which may span several UserMessages) all land on this turn.
+    tool_resulted: bool = False
+
+
+def _turn_has_output(turn: Turn) -> bool:
+    """Whether a turn produced anything worth emitting: any buffered event
+    (tool_invoked / subagent_*), or any content block other than an empty
+    text block. A turn with no content (or only empty text) is degenerate
+    and skipped."""
+    if turn.emissions:
+        return True
+    return any(
+        not (getattr(b, "type", None) == "text" and not getattr(b, "text", ""))
+        for b in turn.content
+    )
 
 
 @dataclasses.dataclass
@@ -128,16 +146,20 @@ class RunState:
     agent_span_id: str | None = None
     # Currently open turn buffer; `None` between turns.
     turn: Turn | None = None
+    # Highest step actually emitted; the next turn opens at `last_step + 1`.
+    # Tracked on the run (not derived from the just-drained turn) so a gated
+    # empty turn doesn't consume a step number.
+    last_step: int = 0
     # `True` once `agent_stopped` has fired; guards against double-emit.
     stopped: bool = False
 
     async def drain(self) -> Turn | None:
         """Close the open turn: emit one `assistant_message`, then flush
-        every buffered event in arrival order. No-op when no turn is
-        open. Clears `self.turn` so the next AssistantMessage opens a
-        fresh one. Returns the just-drained `Turn` (or `None` if there
-        was nothing to drain) so the caller can chain off it (e.g. for
-        the next turn's `step`).
+        every buffered event in arrival order. No-op when no turn is open,
+        and a no-emit no-op when the turn produced nothing (an empty-output
+        inference is not put on the wire, and does not consume a step).
+        Clears `self.turn` so the next AssistantMessage opens a fresh one.
+        Returns the just-drained `Turn` (or `None` if nothing was emitted).
         """
         if self.turn is None:
             return None
@@ -146,6 +168,10 @@ class RunState:
 
         turn = self.turn
         self.turn = None
+
+        if not _turn_has_output(turn):
+            return None
+        self.last_step = turn.step
 
         duration_ms = int((time.monotonic() - turn.started_at) * 1000)
         cost_usd, cost_source = compute_cost(
