@@ -74,7 +74,13 @@ _PROVIDER_NAME = "anthropic"
 
 
 async def emit_run_requested(state: RunState, commission: Commission | None = None) -> None:
-    """First event of the trajectory. Anchors the run."""
+    """First event of the trajectory. Anchors the run.
+
+    Stamps `avp.supervisor.{name,version}` from `Commission.supervisor` for
+    attribution (spec §2.1), matching the avp-goose connector; left unset when
+    the Commission carries no supervisor.
+    """
+    supervisor = commission.supervisor if commission else None
     await state.sink(
         RunRequestedEvent(
             subject=state.run_id,
@@ -82,6 +88,8 @@ async def emit_run_requested(state: RunState, commission: Commission | None = No
                 trace_id=state.trace_id,
                 span_id=new_span_id(),
                 parent_span_id=ZERO_SPAN_ID,
+                supervisor_name=supervisor.name if supervisor else None,
+                supervisor_version=supervisor.version if supervisor else None,
                 commission=commission,
             ),
         )

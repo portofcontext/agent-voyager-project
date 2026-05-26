@@ -1,18 +1,25 @@
 {
-  "_comment": "Base srt (@anthropic-ai/sandbox-runtime) profile for running conformance agents.",
+  "_comment": "Base srt (@anthropic-ai/sandbox-runtime) policy for sandboxing conformance agents. Goal: stop a model-driven agent from trashing the local checkout/machine — NOT to contain a determined adversary. The lever is WRITES: deny-by-default, the harness allows only an OS-temp scratch + the build-toolchain dirs. Reads stay open (locking $HOME fights uv/cargo/the claude CLI); a curated denyRead still blocks obvious credential stores. Network: srt mandates an allow-list, so the harness sets a generous one (model API + github for cargo git) — it's there to avoid breaking the agents, not as a security boundary. The harness fills network.allowedDomains, the macOS trust mach-lookup, and filesystem.allowWrite at spawn.",
   "network": {
-    "allowedDomains": [
-      "api.anthropic.com",
-      "*.anthropic.com"
-    ]
+    "allowedDomains": [],
+    "deniedDomains": []
   },
   "filesystem": {
     "denyRead": [
       "~/.ssh",
       "~/.aws",
+      "~/.gnupg",
+      "~/.kube",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.pypirc",
+      "~/.docker/config.json",
       "~/.config/gcloud",
-      "~/.netrc"
+      "~/.config/op",
+      "~/Library/Keychains"
     ],
-    "allowWrite": []
+    "allowRead": [],
+    "allowWrite": [],
+    "denyWrite": []
   }
 }

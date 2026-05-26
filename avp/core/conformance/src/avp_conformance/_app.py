@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from importlib.resources import files
 from pathlib import Path
@@ -45,14 +46,74 @@ def _resolve_cwd(agent: Path, manifest: AgentManifest) -> Path:
     return (agent.parent / manifest.cwd).resolve()
 
 
-def _sandbox_prefix(sandbox: bool, cwd: Path, stack: list[Path]) -> list[str]:
+# Domains the sandboxed agents (and their build toolchains) reach: the Anthropic
+# model API, plus github for cargo's git-sourced deps (goose pins `block/goose`).
+# srt forbids a bare "*", so this is an explicit (generous) allow-list; extend it
+# per run with `check --allow-domain`. Network isn't the security lever here
+# (writes are) — this list just keeps the agents from failing to connect.
+_DEFAULT_ALLOW_DOMAINS = (
+    "api.anthropic.com",
+    "*.anthropic.com",
+    "github.com",
+    "codeload.github.com",
+)
+
+# macOS native-tls (goose's reqwest) resolves cert trust via this Mach service;
+# srt blocks it by default, so the agent can't establish TLS. Linux ignores it.
+_MACOS_TRUST_MACH_SERVICE = "com.apple.trustd.agent"
+
+
+def _toolchain_write_dirs() -> list[str]:
+    """Existing build-toolchain dirs the launcher (`uv run` / `cargo run`) must
+    WRITE under the sandbox: uv's cache, cargo's home (git checkouts/locks), and
+    rustup's home (the cargo shim writes settings.toml). Reads are open, so these
+    only need to be on the write allow-list. Honors UV_CACHE_DIR / CARGO_HOME /
+    RUSTUP_HOME overrides."""
+    home = Path.home()
+    candidates = [
+        os.environ.get("UV_CACHE_DIR"),
+        home / "Library" / "Caches" / "uv",  # macOS default
+        home / ".cache" / "uv",  # Linux default
+        os.environ.get("CARGO_HOME"),
+        home / ".cargo",
+        os.environ.get("RUSTUP_HOME"),
+        home / ".rustup",
+    ]
+    return [str(Path(c)) for c in candidates if c and Path(c).exists()]
+
+
+def _resolve_command(command: list[str]) -> list[str]:
+    """Resolve the launcher (`command[0]`) to an absolute host path so the
+    sandbox runs the same binary the host would. srt sets its own PATH, which
+    can otherwise resolve a bare `uv`/`cargo` to a different (often stale)
+    binary (e.g. `~/.cargo/bin/uv` shadowing `~/.local/bin/uv`)."""
+    exe = shutil.which(command[0])
+    return [exe, *command[1:]] if exe else command
+
+
+def _sandbox_prefix(
+    sandbox: bool,
+    cwd: Path,
+    stack: list[Path],
+    allow_domains: list[str] | None = None,
+) -> list[str]:
     """Build the `srt --settings <profile>` command prefix, or [] when off.
 
-    The packaged base profile is deny-by-default network + filesystem; the
-    writable allow-list is computed here (the OS temp dir, `/tmp`, and the
-    agent's cwd) because that's where the run's scratch and the harness's
-    temp Commission/--out files live. Errors out if `srt` isn't installed.
-    `stack` collects temp settings files for the caller to clean up.
+    The one security lever that matters here is WRITES: the sandbox exists to
+    stop a model-driven agent from trashing the local checkout/machine, not to
+    contain a determined adversary. Reads stay open; network is a generous
+    allow-list (srt mandates one). On top of the skeleton the harness allows:
+
+    - writes: an OS-temp scratch (agent workspace + the harness's temp
+      Commission/--out files), the build-toolchain dirs the launcher must write
+      (uv cache, cargo/rustup home), and the cargo `target/` under cwd. Repo
+      source and the rest of the host stay read-only.
+    - network: the default allow-list plus any `--allow-domain` extras. On
+      macOS, allow the trust Mach service so native-tls clients (goose's
+      reqwest) can verify certs.
+
+    Errors out if `srt` isn't installed. `stack` collects temp settings files
+    for the caller to clean up.
     """
     if not sandbox:
         return []
@@ -66,17 +127,26 @@ def _sandbox_prefix(sandbox: bool, cwd: Path, stack: list[Path]) -> list[str]:
 
     base = json.loads((files("avp_conformance") / "sandbox-profile.json").read_text())
     base.pop("_comment", None)
-    tmpdir = tempfile.gettempdir()
+
+    net = base.setdefault("network", {})
+    # Extend (not replace) the defaults so the provider + cargo-git hosts stay
+    # reachable even when the caller adds domains.
+    net["allowedDomains"] = list(dict.fromkeys([*_DEFAULT_ALLOW_DOMAINS, *(allow_domains or [])]))
+    if sys.platform == "darwin":
+        net["allowMachLookup"] = [_MACOS_TRUST_MACH_SERVICE]
+
     write = base.setdefault("filesystem", {}).setdefault("allowWrite", [])
-    for path in (tmpdir, "/tmp", str(cwd)):
-        if path not in write:
-            write.append(path)
+    for p in [tempfile.gettempdir(), *_toolchain_write_dirs(), str(cwd / "target")]:
+        if p not in write:
+            write.append(p)
 
     fd, settings_path = tempfile.mkstemp(suffix=".srt-settings.json")
     with os.fdopen(fd, "w") as f:
         json.dump(base, f)
     stack.append(Path(settings_path))
-    return [srt, "--settings", settings_path]
+    # `--` stops srt's own option parsing: without it, srt's commander eats
+    # flags from the agent command (e.g. uv's `--no-sync`, a tool's `-c`).
+    return [srt, "--settings", settings_path, "--"]
 
 
 # ── ping ────────────────────────────────────────────────────────────────────
@@ -100,6 +170,7 @@ def ping(
     """Verify the agent at --agent is invocable and emits {"type": "pong"}."""
     manifest = load_manifest(agent)
     cwd = _resolve_cwd(agent, manifest)
+    command = _resolve_command(manifest.command)
     cleanup: list[Path] = []
 
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
@@ -107,7 +178,7 @@ def ping(
 
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup)
-        cmd = [*prefix, *manifest.command, "ping", "--out", str(out_path)]
+        cmd = [*prefix, *command, "ping", "--out", str(out_path)]
         env = {**os.environ, **manifest.env}
         result = subprocess.run(
             cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
@@ -147,14 +218,18 @@ def ping(
 def _run_case(
     tc: TestCase,
     manifest: AgentManifest,
+    command: list[str],
     cwd: Path,
     prefix: list[str],
     timeout: float,
+    dump_dir: Path | None = None,
 ) -> tuple[list[dict] | None, str | None]:
     """Spawn the agent's `run` for one case; return (events, error).
 
     On success `error` is None and `events` is the parsed NDJSON trajectory.
     On failure `events` is None and `error` is a one-line diagnostic.
+    When `dump_dir` is set, the emitted trajectory is also saved to
+    `<dump_dir>/<case_id>.jsonl` for inspection (whether or not it matches).
     """
     env = {**os.environ, **manifest.env}
     with tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp:
@@ -170,7 +245,7 @@ def _run_case(
             args += ["--built-in", str(built_in_path)]
         args += ["--out", str(out_path)]
 
-        cmd = [*prefix, *manifest.command, *args]
+        cmd = [*prefix, *command, *args]
         try:
             result = subprocess.run(
                 cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
@@ -184,7 +259,14 @@ def _run_case(
 
         if not out_path.exists():
             return None, "agent wrote no --out file"
-        events = [json.loads(ln) for ln in out_path.read_text().splitlines() if ln.strip()]
+        raw = out_path.read_text()
+        if dump_dir is not None:
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            (dump_dir / f"{tc.id}.jsonl").write_text(raw)
+            # Agent stderr is free-form logging; capture it too so a clean
+            # exit-0 run with a suspicious trajectory can still be debugged.
+            (dump_dir / f"{tc.id}.stderr").write_text(result.stderr or "")
+        events = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
         return events, None
 
 
@@ -210,6 +292,17 @@ def check(
         float,
         typer.Option("--timeout", help="Seconds to wait for each case's agent run."),
     ] = 120.0,
+    dump_dir: Annotated[
+        Path | None,
+        typer.Option("--dump-dir", help="Save each emitted trajectory to <dir>/<case_id>.jsonl."),
+    ] = None,
+    allow_domain: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--allow-domain",
+            help="Domain the sandboxed agent may reach (repeatable). Defaults to the Anthropic API.",
+        ),
+    ] = None,
 ) -> None:
     """Run conformance cases against the SDK described by --agent."""
     if suite is None and case is None:
@@ -221,6 +314,7 @@ def check(
 
     manifest = load_manifest(agent)
     cwd = _resolve_cwd(agent, manifest)
+    command = _resolve_command(manifest.command)
 
     if case is not None:
         grouped = {case.parent.name: [load_case(case, str(case))]}
@@ -237,12 +331,12 @@ def check(
     n_pass = 0
     n_fail = 0
     try:
-        prefix = _sandbox_prefix(sandbox, cwd, cleanup)
+        prefix = _sandbox_prefix(sandbox, cwd, cleanup, allow_domain)
         typer.echo(f"running {total} case(s) against {manifest.command[0]!r}\n")
         for cat_name in sorted(grouped):
             typer.echo(f"  {cat_name}:")
             for tc in grouped[cat_name]:
-                events, error = _run_case(tc, manifest, cwd, prefix, timeout)
+                events, error = _run_case(tc, manifest, command, cwd, prefix, timeout, dump_dir)
                 if error is not None:
                     typer.echo(f"    FAIL  {tc.id}  {error}", err=True)
                     n_fail += 1

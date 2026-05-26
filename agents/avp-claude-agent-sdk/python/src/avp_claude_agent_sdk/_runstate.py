@@ -150,6 +150,7 @@ class RunState:
         duration_ms = int((time.monotonic() - turn.started_at) * 1000)
         cost_usd, cost_source = compute_cost(
             turn.response_model or "",
+            provider=_PROVIDER_NAME,
             input_tokens=turn.usage.input_tokens,
             output_tokens=turn.usage.output_tokens,
             cache_read=turn.usage.cache_read_input_tokens or 0,
