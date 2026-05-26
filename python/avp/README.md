@@ -8,7 +8,7 @@ This package ships:
 - **Wire types** — Pydantic v2 models for every Commission, Event, and AgentDescriptor variant in v0.1, with discriminated unions on `type`. Defined in spec-scoped modules: `avp.commission`, `avp.descriptor`, `avp.trajectory`, `avp.resolver`. The top-level `avp` package re-exports them for `from avp import Commission` ergonomics.
 - **NDJSON IO** (`avp.io`) — line-buffered stdio readers and writers for the Commission (in) + Event trajectory (out).
 - **Reference agent** (`avp.agent`) — implements the normative loop in [`trajectory.md` §3.2](../../spec/v0.1/trajectory.md#32-the-loop). Pluggable model and tool drivers (mock drivers ship with the package for testing).
-- **Conformance harness** (`avp.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference agent with scripted model / tools / resolver, asserts captured trajectory against the expectations. CLI: `avp-conformance run` (subcommands `run` / `validate` / `check-coverage`).
+- **Conformance harness** (`avp.conformance`) — loads test-case files from the v0.1 conformance suite, drives the reference agent with scripted model / tools / resolver, asserts captured trajectory against the expectations. CLI: `avp-conformance` (subcommands `ping` / `check` / `validate`).
 
 The reference agent is the gate for AVP v0.1 correctness. All conformance cases MUST pass before any other AVP-compliant agent (e.g. a closed-source Rust supervisor talking to a real-LLM agent) is wired up against it.
 
@@ -25,9 +25,7 @@ Then:
 
 ```bash
 uv run pytest python/avp                  # runs every test in this package
-uv run avp-conformance run                # runs the conformance suite (26 cases today)
-uv run avp-conformance validate           # schema-checks the case files
-uv run avp-conformance check-coverage     # every event type has at least 1 case
+uv run avp-conformance validate           # TestCase-validate every packaged case file
 ```
 
 ## Package layout

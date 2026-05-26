@@ -39,12 +39,11 @@ avp-conformance ping  --agent <manifest.json>
 avp-conformance check --agent <manifest.json> --suite v0.1
 avp-conformance check --agent <manifest.json> --case <path>
 avp-conformance validate --suite v0.1
-avp-conformance check-coverage --suite v0.1
 ```
 
 - `--suite v0.1` resolves to the packaged cases dir; no walk-up needed.
 - `--agent` is required for `ping` and `check`.
-- `validate` and `check-coverage` work on packaged cases without an SDK.
+- `validate` works on packaged cases without an SDK.
 
 ## Manifest shape (JSON)
 
@@ -90,9 +89,9 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Add `[project.optional-dependencies] conformance = [...]` to `python/avp/pyproject.toml`.
 - [x] Update workspace root (`python/pyproject.toml`) to pull `avp[conformance]` so `uv sync` installs typer for dev.
 - [x] Move `conformance/v0.1/cases/` → `python/avp/src/avp/conformance/cases/v0.1/archive/` for review and per-case promotion to the new six-field shape.
-- [ ] Promote archived cases to `cases/v0.1/` as they're rewritten against the new `TestCase` model.
+- [ ] Review archived cases one by one in to `cases/v0.1-archive/` & promote/rewrite relevant cases rewritten against the new `TestCase` model.
 - [ ] Configure package data so cases ship in the wheel under the `conformance` extra.
-- [ ] Delete top-level `conformance/v0.1/` once promotion is complete (HARNESS.md, schema dir, validate.py, README).
+- [x] Delete top-level `conformance/v0.1/` once promotion is complete (HARNESS.md, schema dir, validate.py, README).
 
 ### Pydantic models
 - [x] Add `avp.conformance.manifest.AgentManifest`.
@@ -102,23 +101,22 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 
 ### CLI (write fresh under `python/avp/src/avp/conformance/`)
 - [x] Scaffold CLI surface: `__init__.py`, `cli.py` (import-error gate), `_app.py` (Typer app).
-- [x] Wire `run` / `validate` / `check-coverage` subcommands and the `--agent` / `--suite` / `--case` flags per the CLI surface above (stub bodies).
+- [x] Wire `run` / `validate` subcommands and the `--agent` / `--suite` / `--case` flags per the CLI surface above (stub bodies).
 - [x] Implement `ping --agent <manifest>`: loads manifest, spawns agent, validates pong response.
 - [x] Gate the CLI behind the `conformance` extra (clear error when not installed).
-- [ ] Implement `validate`: load every packaged case via `TestCase`, report per-file failures.
+- [x] Implement `validate`: load every packaged case via `TestCase`, report per-file failures.
 - [x] Implement `check` (load side): load manifest, discover cases by `--suite` or `--case`, group by category subdir, print summary.
 - [ ] Implement `check` (dispatch side): spawn agent subprocess with `run --commission --built-in --out`, capture jsonl, match expectations.
 - [ ] Implement matcher: `in_order_subsequence` / `in_order_strict` / `any_order`, `forbidden_events`, `final_state`.
-- [ ] Implement `check-coverage`: every event `type` in `spec/v0.1/trajectory.schema.json` has ≥1 case asserting on it.
 
 ### Docs
 - [ ] Write `python/avp/src/avp/conformance/AGENT-CLI.md` (agent `run` + `ping` subcommand contract + manifest fields, with the pydantic model as cited source of truth).
-- [ ] Write `python/avp/src/avp/conformance/README.md`: short walk-through of the CLI (`run`, `validate`, `check-coverage`), manifest example, where cases live, link to AGENT-CLI.md for the agent-side contract.
+- [ ] Write `python/avp/src/avp/conformance/README.md`: short walk-through of the CLI (`run`, `validate`), manifest example, where cases live, link to AGENT-CLI.md for the agent-side contract.
 - [ ] Update top-level `README.md` and `CLAUDE.md` references to the new path.
 
 ### Reference SDKs
 - [x] Add `avp-conformance.json` manifest + `conformance.py` entrypoint to `python/agents/avp-claude-agent-sdk/` (ping verified end-to-end; run is a stub).
-- [ ] Add the same to `python/sdks/avp-anthropic/`.
+- [x] Implement the `ping` subcommand in each entrypoint (Commission → trajectory NDJSON).
 - [ ] Implement the `run` subcommand in each entrypoint (Commission → trajectory NDJSON).
 - [ ] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end.
 
@@ -128,6 +126,6 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 
 ### Future: monorepo CI/CD configs
 - [ ] Commit a manifest per in-repo SDK at a predictable location (e.g. `<sdk>/avp-conformance.json`).
-- [ ] Add `make conformance-all` (or equivalent) that runs every committed manifest against the packaged suite.
+- [x] Add `make conformance` (or equivalent) that runs every committed manifest against the packaged suite.
 - [ ] Wire that target into CI so PRs touching any SDK or the spec re-run the full matrix.
 - [ ] Decide whether to fan out per-SDK as separate CI jobs (parallelism + clearer failures) or one job (simpler).

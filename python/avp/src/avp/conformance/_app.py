@@ -1,8 +1,8 @@
 """Typer app for `avp-conformance`. Requires the `conformance` extra.
 
-`ping` is implemented end-to-end. `check` loads the manifest + cases but
-does not yet dispatch to the agent. `validate` and `check-coverage` are
-stubs. See CONFORMANCE_PLAN.md for the planned behavior of each.
+`ping` and `validate` are implemented end-to-end. `check` loads the
+manifest + cases but does not yet dispatch to the agent. See
+CONFORMANCE_PLAN.md for the planned behavior of each.
 """
 
 from __future__ import annotations
@@ -11,12 +11,15 @@ import json
 import os
 import subprocess
 import tempfile
+from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from avp.conformance._utils import discover_suite, load_case, load_manifest
+from avp.conformance.case import TestCase
 
 app = typer.Typer(
     name="avp-conformance",
@@ -133,5 +136,37 @@ def validate(
         typer.Option("--suite", help="Spec version to validate."),
     ] = "v0.1",
 ) -> None:
-    """Validate every packaged case file against the TestCase pydantic model."""
-    typer.echo(f"[stub] validate: suite={suite}")
+    """Validate every packaged case file against the TestCase pydantic model.
+
+    Walks `cases/<suite>/<category>/*.json` and reports per-file pass / fail.
+    Exits 0 if every case validates (including an empty suite), 1 if any
+    case fails, 2 if the suite dir is missing.
+    """
+    root = files("avp.conformance") / "cases" / suite
+    if not root.is_dir():
+        typer.echo(f"error: suite '{suite}' not found in packaged cases", err=True)
+        raise typer.Exit(code=2)
+
+    n_pass = 0
+    n_fail = 0
+    for category in sorted(root.iterdir(), key=lambda t: t.name):
+        if not category.is_dir():
+            continue
+        for entry in sorted(category.iterdir(), key=lambda t: t.name):
+            if not (entry.is_file() and entry.name.endswith(".json")):
+                continue
+            label = f"{category.name}/{entry.name}"
+            try:
+                TestCase.model_validate_json(entry.read_text())
+                typer.echo(f"PASS  {label}")
+                n_pass += 1
+            except ValidationError as e:
+                typer.echo(f"FAIL  {label}", err=True)
+                for line in str(e).splitlines():
+                    typer.echo(f"      {line}", err=True)
+                n_fail += 1
+
+    total = n_pass + n_fail
+    typer.echo(f"\nvalidated {total} case(s) ({n_pass} pass, {n_fail} fail)")
+    if n_fail > 0:
+        raise typer.Exit(code=1)

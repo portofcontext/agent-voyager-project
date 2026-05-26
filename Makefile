@@ -82,15 +82,25 @@ test:
 	echo ""; echo "All package tests passed."
 
 
+.PHONY: claude-conformance
+claude-conformance:
+	@$(UV) run avp-conformance ping  --agent agents/avp-claude-agent-sdk/avp-conformance.json
+	@$(UV) run avp-conformance check --agent agents/avp-claude-agent-sdk/avp-conformance.json --suite v0.1
+
+
+.PHONY: goose-conformance
+goose-conformance:
+	@$(UV) run avp-conformance ping  --agent ../rust/avp-goose/avp-conformance.json
+	@$(UV) run avp-conformance check --agent ../rust/avp-goose/avp-conformance.json --suite v0.1
+
+
 .PHONY: conformance
 conformance:
 	@$(UV) run avp-conformance validate
 	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
-	@$(UV) run avp-conformance ping  --agent agents/avp-claude-agent-sdk/avp-conformance.json
-	@$(UV) run avp-conformance check --agent agents/avp-claude-agent-sdk/avp-conformance.json --suite v0.1
+	@$(MAKE) --no-print-directory claude-conformance
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
-	@$(UV) run avp-conformance ping  --agent ../rust/avp-goose/avp-conformance.json
-	@$(UV) run avp-conformance check --agent ../rust/avp-goose/avp-conformance.json --suite v0.1
+	@$(MAKE) --no-print-directory goose-conformance
 
 
 .PHONY: lint

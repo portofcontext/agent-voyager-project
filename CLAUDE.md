@@ -150,20 +150,17 @@ The seams in this repo:
 
 ## Deterministic checks
 
-The `avp-conformance` CLI ships three subcommands; run them all before
-committing wire-format changes:
+The `avp-conformance` CLI ships the subcommands below; run `make
+conformance` before committing wire-format changes:
 
 ```bash
-make conformance                                  # runs all three below
+make conformance                                  # validate + ping + check per agent
 
 # or directly via uv (Python workspace root lives at python/):
-uv --directory python run avp-conformance run             # execute every case against the reference agent
-uv --directory python run avp-conformance validate        # schema-validate the case files themselves
-uv --directory python run avp-conformance check-coverage  # every event type declared in the schema has ≥1 case
+uv --directory python run avp-conformance validate                                  # TestCase-validate every packaged case file
+uv --directory python run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
+uv --directory python run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent
 ```
-
-`check-coverage` is the deterministic floor: a new event type without a
-matching conformance case fails the command. Wire it into CI when you have one.
 
 ## End-to-end sanity: `make smoke`
 
