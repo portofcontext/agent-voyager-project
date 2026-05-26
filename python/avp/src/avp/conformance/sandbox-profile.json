@@ -1,0 +1,18 @@
+{
+  "_comment": "Base srt (@anthropic-ai/sandbox-runtime) profile for running conformance agents.",
+  "network": {
+    "allowedDomains": [
+      "api.anthropic.com",
+      "*.anthropic.com"
+    ]
+  },
+  "filesystem": {
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gcloud",
+      "~/.netrc"
+    ],
+    "allowWrite": []
+  }
+}

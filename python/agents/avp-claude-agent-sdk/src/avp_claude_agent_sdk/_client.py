@@ -73,6 +73,10 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         *,
         sink: EventSink = stdio_sink,
     ) -> None:
+        # An omitted options is the empty pre-Commission surface; normalize to
+        # a real object so the probe + descriptor translation (which read
+        # `options.system_prompt` etc.) don't dereference None.
+        options = options if options is not None else ClaudeAgentOptions()
         run_options = apply_commission(commission, options)
         super().__init__(options=run_options, transport=transport)
         self._original_options = options

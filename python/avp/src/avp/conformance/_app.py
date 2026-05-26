@@ -1,14 +1,20 @@
 """Typer app for `avp-conformance`. Requires the `conformance` extra.
 
-`ping` and `validate` are implemented end-to-end. `check` loads the
-manifest + cases but does not yet dispatch to the agent. See
-CONFORMANCE_PLAN.md for the planned behavior of each.
+`ping`, `validate`, and `check` are implemented end-to-end. `check` writes
+each case's Commission (and optional built-in fixture) to temp files, spawns
+the agent's `run` subcommand per the manifest, reads the emitted NDJSON
+trajectory, and matches it against the case's expectations.
+
+`--sandbox` wraps the agent invocation in `srt`
+(@anthropic-ai/sandbox-runtime) so a live run's shell tools can only write to
+the run's scratch dirs and reach only the model provider's API.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from importlib.resources import files
@@ -18,8 +24,10 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
+from avp.conformance._match import match_case
 from avp.conformance._utils import discover_suite, load_case, load_manifest
 from avp.conformance.case import TestCase
+from avp.conformance.manifest import AgentManifest
 
 app = typer.Typer(
     name="avp-conformance",
@@ -29,12 +37,61 @@ app = typer.Typer(
 )
 
 
+# ── Subprocess + sandbox plumbing ──────────────────────────────────────────────
+
+
+def _resolve_cwd(agent: Path, manifest: AgentManifest) -> Path:
+    """Manifest `cwd` is relative to the manifest file, not the caller's CWD."""
+    return (agent.parent / manifest.cwd).resolve()
+
+
+def _sandbox_prefix(sandbox: bool, cwd: Path, stack: list[Path]) -> list[str]:
+    """Build the `srt --settings <profile>` command prefix, or [] when off.
+
+    The packaged base profile is deny-by-default network + filesystem; the
+    writable allow-list is computed here (the OS temp dir, `/tmp`, and the
+    agent's cwd) because that's where the run's scratch and the harness's
+    temp Commission/--out files live. Errors out if `srt` isn't installed.
+    `stack` collects temp settings files for the caller to clean up.
+    """
+    if not sandbox:
+        return []
+    srt = shutil.which("srt")
+    if srt is None:
+        typer.echo(
+            "error: --sandbox needs the `srt` CLI (npm install -g @anthropic-ai/sandbox-runtime)",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    base = json.loads((files("avp.conformance") / "sandbox-profile.json").read_text())
+    base.pop("_comment", None)
+    tmpdir = tempfile.gettempdir()
+    write = base.setdefault("filesystem", {}).setdefault("allowWrite", [])
+    for path in (tmpdir, "/tmp", str(cwd)):
+        if path not in write:
+            write.append(path)
+
+    fd, settings_path = tempfile.mkstemp(suffix=".srt-settings.json")
+    with os.fdopen(fd, "w") as f:
+        json.dump(base, f)
+    stack.append(Path(settings_path))
+    return [srt, "--settings", settings_path]
+
+
+# ── ping ────────────────────────────────────────────────────────────────────
+
+
 @app.command()
 def ping(
     agent: Annotated[
         Path,
         typer.Option("--agent", help="Path to the agent manifest JSON."),
     ],
+    sandbox: Annotated[
+        bool,
+        typer.Option("--sandbox/--no-sandbox", help="Wrap the agent in `srt` sandbox."),
+    ] = False,
     timeout: Annotated[
         float,
         typer.Option("--timeout", help="Seconds to wait for the agent's ping response."),
@@ -42,21 +99,18 @@ def ping(
 ) -> None:
     """Verify the agent at --agent is invocable and emits {"type": "pong"}."""
     manifest = load_manifest(agent)
-    cwd = (agent.parent / manifest.cwd).resolve()
+    cwd = _resolve_cwd(agent, manifest)
+    cleanup: list[Path] = []
 
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
         out_path = Path(f.name)
 
     try:
-        cmd = [*manifest.command, "ping", "--out", str(out_path)]
+        prefix = _sandbox_prefix(sandbox, cwd, cleanup)
+        cmd = [*prefix, *manifest.command, "ping", "--out", str(out_path)]
         env = {**os.environ, **manifest.env}
         result = subprocess.run(
-            cmd,
-            cwd=cwd,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
         )
 
         if result.returncode != 0:
@@ -83,6 +137,55 @@ def ping(
         typer.echo("PASS  ping")
     finally:
         out_path.unlink(missing_ok=True)
+        for path in cleanup:
+            path.unlink(missing_ok=True)
+
+
+# ── check ─────────────────────────────────────────────────────────────────────
+
+
+def _run_case(
+    tc: TestCase,
+    manifest: AgentManifest,
+    cwd: Path,
+    prefix: list[str],
+    timeout: float,
+) -> tuple[list[dict] | None, str | None]:
+    """Spawn the agent's `run` for one case; return (events, error).
+
+    On success `error` is None and `events` is the parsed NDJSON trajectory.
+    On failure `events` is None and `error` is a one-line diagnostic.
+    """
+    env = {**os.environ, **manifest.env}
+    with tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp:
+        tmpd = Path(tmp)
+        commission_path = tmpd / "commission.json"
+        commission_path.write_text(tc.commission.model_dump_json(by_alias=True, exclude_none=True))
+        out_path = tmpd / "out.jsonl"
+
+        args = ["run", "--commission", str(commission_path)]
+        if tc.built_in is not None:
+            built_in_path = tmpd / "built-in.json"
+            built_in_path.write_text(tc.built_in.model_dump_json(by_alias=True, exclude_none=True))
+            args += ["--built-in", str(built_in_path)]
+        args += ["--out", str(out_path)]
+
+        cmd = [*prefix, *manifest.command, *args]
+        try:
+            result = subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            return None, f"timed out after {timeout}s"
+
+        if result.returncode != 0:
+            tail = result.stderr[-500:].strip() if result.stderr else "(no stderr)"
+            return None, f"agent exit={result.returncode}: {tail}"
+
+        if not out_path.exists():
+            return None, "agent wrote no --out file"
+        events = [json.loads(ln) for ln in out_path.read_text().splitlines() if ln.strip()]
+        return events, None
 
 
 @app.command()
@@ -99,6 +202,14 @@ def check(
         Path | None,
         typer.Option("--case", help="Path to a single case file."),
     ] = None,
+    sandbox: Annotated[
+        bool,
+        typer.Option("--sandbox/--no-sandbox", help="Wrap each agent run in `srt` sandbox."),
+    ] = False,
+    timeout: Annotated[
+        float,
+        typer.Option("--timeout", help="Seconds to wait for each case's agent run."),
+    ] = 120.0,
 ) -> None:
     """Run conformance cases against the SDK described by --agent."""
     if suite is None and case is None:
@@ -109,6 +220,7 @@ def check(
         raise typer.Exit(code=2)
 
     manifest = load_manifest(agent)
+    cwd = _resolve_cwd(agent, manifest)
 
     if case is not None:
         grouped = {case.parent.name: [load_case(case, str(case))]}
@@ -117,16 +229,44 @@ def check(
         grouped = discover_suite(suite)
 
     total = sum(len(cs) for cs in grouped.values())
-    n_cats = len(grouped)
-    cat_word = "category" if n_cats == 1 else "categories"
-    typer.echo(f"loaded {total} case(s) across {n_cats} {cat_word}")
-    for cat_name in sorted(grouped):
-        cases = grouped[cat_name]
-        typer.echo(f"  {cat_name}: {len(cases)}")
-        for tc in cases:
-            typer.echo(f"    - {tc.id}")
-    typer.echo()
-    typer.echo(f"[stub] dispatch to {manifest.command[0]!r} not yet wired")
+    if total == 0:
+        typer.echo("error: no cases found to check.", err=True)
+        raise typer.Exit(code=2)
+
+    cleanup: list[Path] = []
+    n_pass = 0
+    n_fail = 0
+    try:
+        prefix = _sandbox_prefix(sandbox, cwd, cleanup)
+        typer.echo(f"running {total} case(s) against {manifest.command[0]!r}\n")
+        for cat_name in sorted(grouped):
+            typer.echo(f"  {cat_name}:")
+            for tc in grouped[cat_name]:
+                events, error = _run_case(tc, manifest, cwd, prefix, timeout)
+                if error is not None:
+                    typer.echo(f"    FAIL  {tc.id}  {error}", err=True)
+                    n_fail += 1
+                    continue
+                assert events is not None
+                result = match_case(events, tc.expectations)
+                if result.ok:
+                    typer.echo(f"    PASS  {tc.id}")
+                    n_pass += 1
+                else:
+                    typer.echo(f"    FAIL  {tc.id}", err=True)
+                    for reason in result.reasons:
+                        typer.echo(f"          {reason}", err=True)
+                    n_fail += 1
+    finally:
+        for path in cleanup:
+            path.unlink(missing_ok=True)
+
+    typer.echo(f"\nchecked {total} case(s) ({n_pass} pass, {n_fail} fail)")
+    if n_fail > 0:
+        raise typer.Exit(code=1)
+
+
+# ── validate ──────────────────────────────────────────────────────────────────
 
 
 @app.command()

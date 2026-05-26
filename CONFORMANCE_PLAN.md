@@ -89,7 +89,7 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Add `[project.optional-dependencies] conformance = [...]` to `python/avp/pyproject.toml`.
 - [x] Update workspace root (`python/pyproject.toml`) to pull `avp[conformance]` so `uv sync` installs typer for dev.
 - [x] Move `conformance/v0.1/cases/` → `python/avp/src/avp/conformance/cases/v0.1/archive/` for review and per-case promotion to the new six-field shape.
-- [ ] Review archived cases one by one in to `cases/v0.1-archive/` & promote/rewrite relevant cases rewritten against the new `TestCase` model.
+- [~] Review archived cases one by one in `cases/v0.1-archive/` & promote/rewrite relevant cases against the new `TestCase` model. Started: two structural, cross-agent, real-model cases promoted (`prelude/prelude-events-open-trajectory`, `lifecycle/trivial-prompt-converges`). Note many archived cases assumed a scripted model and stale events (e.g. `text_emitted`, which no longer exists); those need rewriting, not lifting.
 - [ ] Configure package data so cases ship in the wheel under the `conformance` extra.
 - [x] Delete top-level `conformance/v0.1/` once promotion is complete (HARNESS.md, schema dir, validate.py, README).
 
@@ -106,8 +106,9 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Gate the CLI behind the `conformance` extra (clear error when not installed).
 - [x] Implement `validate`: load every packaged case via `TestCase`, report per-file failures.
 - [x] Implement `check` (load side): load manifest, discover cases by `--suite` or `--case`, group by category subdir, print summary.
-- [ ] Implement `check` (dispatch side): spawn agent subprocess with `run --commission --built-in --out`, capture jsonl, match expectations.
-- [ ] Implement matcher: `in_order_subsequence` / `in_order_strict` / `any_order`, `forbidden_events`, `final_state`.
+- [x] Implement `check` (dispatch side): spawn agent subprocess with `run --commission --built-in --out`, capture jsonl, match expectations.
+- [x] Implement matcher (`_match.py`): `in_order_subsequence` / `in_order_strict` / `any_order`, `forbidden_events`, `final_state` (totals folded from the stream).
+- [x] Add `--sandbox` to `ping` / `check`: wraps the agent in `srt` (@anthropic-ai/sandbox-runtime) via a package-data base profile + runtime-computed writable dirs.
 
 ### Docs
 - [ ] Write `python/avp/src/avp/conformance/AGENT-CLI.md` (agent `run` + `ping` subcommand contract + manifest fields, with the pydantic model as cited source of truth).
@@ -117,11 +118,11 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 ### Reference SDKs
 - [x] Add `avp-conformance.json` manifest + `conformance.py` entrypoint to `python/agents/avp-claude-agent-sdk/` (ping verified end-to-end; run is a stub).
 - [x] Implement the `ping` subcommand in each entrypoint (Commission → trajectory NDJSON).
-- [ ] Implement the `run` subcommand in each entrypoint (Commission → trajectory NDJSON).
-- [ ] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end.
+- [x] Implement the `run` subcommand in each entrypoint (Commission → trajectory NDJSON). avp-claude-agent-sdk: `conformance.py` drives `run_avp_agent`. avp-goose: `avp-goose-conformance run` drives `runner::run` into a `FileSink` (new `avp::sink::FileSink`). Both honor the feasible part of `--built-in` (system_prompt / prompt; tool/MCP/subagent injection is a documented gap).
+- [~] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end. Free path (validate + ping) + seam-tested dispatch are green; real-model run is wired and pending a paid `conformance-check` run with `ANTHROPIC_API_KEY`.
 
 ### CI / Make
-- [ ] Update `make conformance` to install the extra and run the new CLI shape.
+- [x] Split conformance into free (`conformance` = validate + per-agent `ping`) and paid (`conformance-check` = per-agent `check --suite v0.1`, gated on `ANTHROPIC_API_KEY`, optional `SANDBOX=--sandbox`); fold `conformance-check` into `smoke`. `make check`'s free floor keeps only the no-model parts.
 - [ ] Verify `make check` still passes end-to-end.
 
 ### Future: monorepo CI/CD configs

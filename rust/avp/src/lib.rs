@@ -61,4 +61,4 @@ pub use trajectory::AvpV01TrajectoryEvent as Event;
 pub use pricing::{
     compute_cost, load_default_prices, resolve_price, CostSource, ModelPrice, PriceTable,
 };
-pub use sink::{Sink, StdioSink};
+pub use sink::{FileSink, Sink, StdioSink};

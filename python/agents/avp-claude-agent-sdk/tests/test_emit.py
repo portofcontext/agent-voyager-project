@@ -259,6 +259,20 @@ def test_prelude_order_is_run_requested_described_started() -> None:
         assert ev.data.parent_span_id == ZERO
 
 
+def test_client_normalizes_missing_options() -> None:
+    """Constructing the client without explicit `options` (as the Commission-
+    driven conformance `run` does) must not leave `_original_options` as None:
+    the probe + descriptor translation read `options.system_prompt` etc. and
+    would crash on None. Regression for the conformance `run` path."""
+    from avp.commission import Commission
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp_claude_agent_sdk import AVPClaudeSDKClient
+
+    client = AVPClaudeSDKClient(commission=Commission(schema_version="0.1", run_id="x"))
+    assert isinstance(client._original_options, ClaudeAgentOptions)
+
+
 def test_agent_described_carries_full_pre_commission_surface() -> None:
     """`agent_described` is built from the probe session: the agent's
     full capabilities BEFORE any Commission filter applies."""

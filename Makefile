@@ -82,25 +82,52 @@ test:
 	echo ""; echo "All package tests passed."
 
 
-.PHONY: claude-conformance
-claude-conformance:
-	@$(UV) run avp-conformance ping  --agent agents/avp-claude-agent-sdk/avp-conformance.json
-	@$(UV) run avp-conformance check --agent agents/avp-claude-agent-sdk/avp-conformance.json --suite v0.1
+# Manifest paths, relative to the python/ workspace root the harness runs from.
+CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/avp-conformance.json
+GOOSE_MANIFEST  := ../rust/avp-goose/avp-conformance.json
+
+# Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
+# (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
+# on machines without srt installed; on for any untrusted / CI run.
+SANDBOX ?=
 
 
-.PHONY: goose-conformance
-goose-conformance:
-	@$(UV) run avp-conformance ping  --agent ../rust/avp-goose/avp-conformance.json
-	@$(UV) run avp-conformance check --agent ../rust/avp-goose/avp-conformance.json --suite v0.1
+# ── Free: validate case files + liveness-ping each agent (no model calls) ──────
+.PHONY: claude-ping goose-ping
+claude-ping:
+	@$(UV) run avp-conformance ping --agent $(CLAUDE_MANIFEST)
+
+goose-ping:
+	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
 
 
 .PHONY: conformance
 conformance:
 	@$(UV) run avp-conformance validate
 	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
-	@$(MAKE) --no-print-directory claude-conformance
+	@$(MAKE) --no-print-directory claude-ping
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
-	@$(MAKE) --no-print-directory goose-conformance
+	@$(MAKE) --no-print-directory goose-ping
+
+
+# ── Paid: run the v0.1 suite against each agent on a real model ────────────────
+.PHONY: claude-check goose-check
+claude-check:
+	@$(UV) run avp-conformance check --agent $(CLAUDE_MANIFEST) --suite v0.1 $(SANDBOX)
+
+goose-check:
+	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
+
+
+.PHONY: conformance-check
+conformance-check:
+	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
+		echo "error: ANTHROPIC_API_KEY is not set; conformance-check runs cases on a real model"; exit 2; \
+	fi
+	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
+	@$(MAKE) --no-print-directory claude-check
+	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
+	@$(MAKE) --no-print-directory goose-check
 
 
 .PHONY: lint
@@ -228,8 +255,8 @@ examples:
 
 
 .PHONY: smoke
-smoke: check bindings-test test-real-llm examples
-	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + all examples passed."
+smoke: check bindings-test test-real-llm conformance-check examples
+	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + conformance suite + all examples passed."
 
 
 # ── Other ─────────────────────────────────────────────────────────────────────

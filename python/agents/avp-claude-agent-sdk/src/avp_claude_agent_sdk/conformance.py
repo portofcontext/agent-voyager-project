@@ -4,18 +4,20 @@ Exposes the agent CLI contract consumed by `avp-conformance`:
 
 - `ping --out <path>` — write a single `{"type": "pong"}` line and exit.
 - `run --commission <json|path> [--built-in <json|path>] --out <path>` —
-  run the agent against the given Commission and emit AVP trajectory
-  events to the output file. Currently a stub that validates inputs and
-  writes one self-describing line; real dispatch lands later.
+  run the agent against the given Commission and stream AVP trajectory
+  events to the output file as NDJSON, one event per line.
 
 See the avp package's `conformance/CHECKLIST.md` for the SDK-author flow.
 Argparse is intentional here: this entrypoint stays stdlib-only so it
-doesn't pull a CLI framework into the agent package.
+doesn't pull a CLI framework into the agent package. `ping` must not import
+the agent loop (it's a liveness check), so the heavy imports live inside
+`_cmd_run`.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 from pathlib import Path
 
@@ -28,23 +30,38 @@ def _cmd_ping(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    """Stub: validate inputs, write one self-describing line to --out.
+    """Run the Claude Agent SDK against the Commission, streaming to --out.
 
-    Real agent dispatch is not yet wired. This exists so the conformance
-    CLI's dispatch side can be exercised end-to-end before the Claude Agent
-    SDK is plugged in.
+    Honors the feasible part of the `--built-in` fixture: `system_prompt` and
+    `prompt` seed the run as defaults, with the Commission overriding when it
+    speaks to the same field. Tool / MCP / subagent built-in injection is not
+    simulated (a documented gap, same as goose).
     """
+    # Imported here, not at module top, so `ping` stays loop-free.
+    from avp.sink import jsonl_sink
+    from avp_claude_agent_sdk import AVPClaudeSDKClient, run_avp_agent
+
     commission = load_commission(args.commission)
-    built_in = load_built_in(args.built_in) if args.built_in is not None else None
-    stub_event = {
-        "type": "stub",
-        "data": {
-            "commission_run_id": commission.run_id,
-            "built_in_present": built_in is not None,
-            "note": "real agent dispatch not yet implemented",
-        },
-    }
-    Path(args.out).write_text(json.dumps(stub_event) + "\n")
+    if args.built_in is not None:
+        built_in = load_built_in(args.built_in)
+        overrides = {}
+        if commission.system_prompt is None and built_in.system_prompt is not None:
+            overrides["system_prompt"] = built_in.system_prompt
+        if commission.prompt is None and built_in.prompt is not None:
+            overrides["prompt"] = built_in.prompt
+        if overrides:
+            commission = commission.model_copy(update=overrides)
+
+    sink = jsonl_sink(Path(args.out))
+
+    async def agent_main(client: AVPClaudeSDKClient) -> None:
+        # The prompt flows from the Commission via `apply_prompt`; the literal
+        # passed here is only a fallback when the Commission omits a prompt.
+        await client.query("")
+        async for _ in client.receive_response():
+            pass
+
+    asyncio.run(run_avp_agent(commission, agent_main, sink=sink))
     return 0
 
 

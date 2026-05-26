@@ -1,0 +1,51 @@
+{
+  "id": "trivial-prompt-converges",
+  "title": "A trivial prompt runs to a clean agent_stopped(converged) with no error",
+  "description": "Given a prompt the model can answer in one turn with no tools, the run reaches a terminal agent_stopped event whose avp.reason is converged, and never emits error_occurred. Structural and model-agnostic: the assertion is the stop reason and the absence of errors, not any token/cost numbers (which vary run to run).",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#7-event-reference"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "trivial-prompt-converges",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "run opens with run_requested",
+        "match": {
+          "type": "avp.run_requested",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "run closes with agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "source": "avp://agent",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no error on a trivial prompt",
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}
