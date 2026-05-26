@@ -1,0 +1,61 @@
+# Python workspace metadata. NOT a publishable package.
+#
+# AVP is a multi-language repo. The core project (spec, conformance, and the
+# Python / Rust / TypeScript bindings) lives under `avp/`; agents live under
+# `agents/<name>/<lang>/`, SDK adapters under `sdks/`, and supervisor examples
+# under `supervisors/`. The Python workspace root lives at the REPO ROOT so a
+# single `uv sync` spans the core package and every Python member across those
+# trees.
+#
+# Each member has its own pyproject.toml and ships independently (via
+# `cd <member> && uv build && uv publish` or any other tool). This file only
+# exists to make local development ergonomic: `uv sync` installs all members
+# editably and resolves cross-package deps to local sources rather than PyPI.
+# `make sync` from the repo root is the simplest entry point.
+
+[project]
+name = "avp-workspace"
+version = "0.0.0"
+description = "Python workspace root for the AVP repo. Not published."
+requires-python = ">=3.11"
+# Listing the members here is what makes `uv sync` install them.
+# Workspace membership alone makes them resolvable but not installed.
+dependencies = [
+    "avp",
+    "avp-conformance",
+    "avp-anthropic",
+    "avp-claude-agent-sdk",
+    "simple-supervisor-example",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7",
+    "rich>=15.0.0",
+    "ruff>=0.6",
+]
+
+[tool.uv.workspace]
+# Paths are relative to this pyproject.toml (repo root).
+members = [
+    "avp/bindings/python",
+    "avp/core/conformance",
+    "sdks/avp-anthropic",
+    "supervisors/simple-supervisor-example",
+    "agents/avp-claude-agent-sdk/python",
+]
+
+# When any workspace member declares `avp`, `avp-anthropic`, etc. as a
+# dependency, resolve it from the workspace rather than PyPI. Critical:
+# there's an unrelated package on PyPI named `avp` (security tooling), and
+# without this override `pip install` would pull it down on a fresh machine.
+[tool.uv.sources]
+avp = { workspace = true }
+avp-conformance = { workspace = true }
+avp-anthropic = { workspace = true }
+avp-claude-agent-sdk = { workspace = true }
+simple-supervisor-example = { workspace = true }
+
+[tool.uv]
+# Don't try to package the workspace root itself; no source code here.
+package = false

@@ -8,7 +8,7 @@
 >
 > AVP is in active design iteration. The wire format, event types,
 > Commission / Descriptor shape, conformance criteria, and any of the
-> Pydantic source-of-truth models in `python/avp/src/avp/` may change
+> Pydantic source-of-truth models in `avp/bindings/python/src/avp/` may change
 > without backwards-compatibility shims while we are on v0.1.x. There is
 > no deprecation cycle, no compatibility layer, no "keep the old name
 > too." A change lands cleanly, sweeps every dependent surface in the
@@ -27,10 +27,10 @@
 AVP = **Agent Voyager Project**, an open-source collection of specs for the
 agent-execution case:
 
-- **AVP Trajectory** (`spec/v0.1/trajectory.md`): event stream
-- **AVP Commission** (`spec/v0.1/commission.md`): run-config object
-- **AVP Agent Descriptor** (`spec/v0.1/agent-descriptor.md`): agent self-description
-- **AVP Resolver API** (`spec/v0.1/resolver.md`): JSON-RPC for ref dereferencing
+- **AVP Trajectory** (`avp/core/spec/v0.1/trajectory.md`): event stream
+- **AVP Commission** (`avp/core/spec/v0.1/commission.md`): run-config object
+- **AVP Agent Descriptor** (`avp/core/spec/v0.1/agent-descriptor.md`): agent self-description
+- **AVP Resolver API** (`avp/core/spec/v0.1/resolver.md`): JSON-RPC for ref dereferencing
 
 The three data-shape specs (Trajectory/Commission/Agent Descriptor) compose
 independently; the Resolver API is the only thing that's actually a
@@ -46,10 +46,10 @@ right one when picking where new code lives; the contracts differ.
 **Agent.** Owns the agent loop. Reads a Commission from input, emits the
 trajectory, advertises an Agent Descriptor, dispatches tools, calls the
 resolver for managed assets, and produces `agent_stopped` with a stop
-reason. An agent IS what `spec/v0.1/` certifies as conforming. Examples
+reason. An agent IS what `avp/core/spec/v0.1/` certifies as conforming. Examples
 in this repo: `avp-claude-agent-sdk` (built on the Claude Agent SDK, which
 already owns a loop), and the reference agent at
-`python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`
+`supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`
 (built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
 
 **SDK adapter.** Translates one raw API / client surface to AVP. Ships a
@@ -60,15 +60,15 @@ the underlying API doesn't have them, so neither does the adapter. Agents
 wrap the adapter. Example: `avp-anthropic` for the Anthropic Messages API.
 
 Rule of thumb for new providers: if the upstream SDK ships its own agent
-loop and tool catalog, package a complete agent under `python/agents/`.
+loop and tool catalog, package a complete agent under `agents/<name>/<lang>/`.
 If the upstream is a raw HTTP client, package an SDK adapter under
-`python/sdks/` and add a reference agent in
-`python/supervisors/simple-supervisor-example/examples/`. The descriptor
+`sdks/` and add a reference agent in
+`supervisors/simple-supervisor-example/examples/`. The descriptor
 helper and the driver protocol are designed so the agent does the
 minimum of plumbing.
 
-The folder split reflects this: `python/agents/` for agents,
-`python/sdks/` for adapters, `python/supervisors/.../examples/` for
+The folder split reflects this: `agents/` for agents,
+`sdks/` for adapters, `supervisors/.../examples/` for
 worked reference agents that sit on top of adapters.
 
 Agents-vs-adapters is the packaging axis. The orthogonal *integration*
@@ -106,12 +106,12 @@ for the full mapping.
 When you touch the wire, regenerate the schemas:
 
 ```bash
-make schemas    # uv --directory python run python ../scripts/generate-schemas.py
+make schemas    # uv run python avp/scripts/generate-schemas.py
 ```
 
-The Pydantic models under `python/avp/src/avp/` (`avp.commission`,
+The Pydantic models under `avp/bindings/python/src/avp/` (`avp.commission`,
 `avp.descriptor`, `avp.trajectory`) are the source of truth; the JSON
-Schema files under `spec/v0.1/` are derived from them.
+Schema files under `avp/core/spec/v0.1/` are derived from them.
 
 ## The seams principle
 
@@ -132,12 +132,12 @@ The seams in this repo:
 
 | Layer | Location | Catches |
 |---|---|---|
-| **JSON Schema** | `spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json` | Wire shape: every `Event`, `Commission`, and `AgentDescriptor` field |
-| **Conformance** | `conformance/v0.1/cases/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against the reference agent with `ScriptedModel` |
-| **Unit** | `python/<pkg>/tests/test_*.py` | Single-component behavior with seams mocked |
+| **JSON Schema** | `avp/core/spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json` | Wire shape: every `Event`, `Commission`, and `AgentDescriptor` field |
+| **Conformance** | `avp/core/conformance/src/avp_conformance/cases/v0.1/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against an agent on a real model |
+| **Unit** | `<pkg>/tests/test_*.py` | Single-component behavior with seams mocked |
 | **Seam** | `tests/test_cli_smoke.py`, `tests/test_multi_turn.py`, translator-state tests | Cross-component bugs that unit tests can't see |
 | **Real-LLM** | `tests/test_real_llm.py` (gated `-m real_llm` + `ANTHROPIC_API_KEY`) | End-to-end correctness against actual model responses |
-| **Examples** | `python/supervisors/simple-supervisor-example/examples/` | Full Commission → trajectory → summary on real LLMs in narrative form |
+| **Examples** | `supervisors/simple-supervisor-example/examples/` | Full Commission → trajectory → summary on real LLMs in narrative form |
 
 ## Decision tree when adding a feature
 
@@ -154,12 +154,12 @@ The `avp-conformance` CLI ships the subcommands below; run `make
 conformance` before committing wire-format changes:
 
 ```bash
-make conformance                                  # validate + ping + check per agent
+make conformance                                  # validate + ping per agent (free; no model)
 
-# or directly via uv (Python workspace root lives at python/):
-uv --directory python run avp-conformance validate                                  # TestCase-validate every packaged case file
-uv --directory python run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
-uv --directory python run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent
+# or directly via uv (workspace rooted at repo root):
+uv run avp-conformance validate                                  # TestCase-validate every packaged case file
+uv run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
+uv run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
 ```
 
 ## End-to-end sanity: `make smoke`
@@ -168,8 +168,8 @@ uv --directory python run avp-conformance check --agent <path/to/avp-conformance
 detection) is the **free pre-commit floor**. Run it on every change.
 Drift detection catches the case where the AVP Pydantic models
 (`avp.commission` / `avp.descriptor` / `avp.trajectory`) or schemas
-changed but the generated Rust / TypeScript bindings under `rust/avp/`
-and `typescript/avp/` weren't regenerated.
+changed but the generated Rust / TypeScript bindings under `avp/bindings/rust/`
+and `avp/bindings/typescript/` weren't regenerated.
 
 `make smoke` is the **paid pre-merge ceiling**. It runs `check`, then the
 Rust + TS bindings test suites (`cargo test` + `npm test` against the
@@ -180,13 +180,14 @@ on Haiku.
 Run `make smoke` whenever you've changed something that could pass unit /
 seam tests but break real-model integration. Concretely, that's any of:
 
-- **Wire format**: `python/avp/src/avp/{commission,descriptor,trajectory}.py`,
+- **Wire format**: `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py`,
   the JSON Schemas, any new event type or Commission field.
-- **Agent loop**: `python/avp/src/avp/agent/agent.py` (tool/subagent
-  dispatch, history shape).
+- **Agent loop**: an agent's own loop (e.g. the Claude Agent SDK observer in
+  `agents/avp-claude-agent-sdk/python/`, the Goose runner in
+  `agents/avp-goose/rust/src/runner.rs`).
 - **Provider drivers / translators**:
-  `python/sdks/avp-anthropic/src/avp_anthropic/driver.py` (token / cost
-  extraction), `python/agents/avp-claude-agent-sdk/src/avp_claude_agent/translator.py`
+  `sdks/avp-anthropic/src/avp_anthropic/driver.py` (token / cost
+  extraction), `agents/avp-claude-agent-sdk/python/src/avp_claude_agent_sdk/_translator.py`
   (SDK message handling, hook installation).
 - **Tracer or traced clients**: `avp.tracer` (AVPTracer, format_event,
   module-level helpers), `avp_anthropic.AnthropicTracedClient` /
@@ -203,7 +204,7 @@ that compiled fine but undercounted by 30%).
 
 ## Things you should not do
 
-- Do NOT add prose docs that duplicate the specs under `spec/v0.1/`. Two
+- Do NOT add prose docs that duplicate the specs under `avp/core/spec/v0.1/`. Two
   sources of truth drift. Either update the relevant spec
   (`trajectory.md` / `commission.md` / `agent-descriptor.md` / `resolver.md`) or
   update `README.md`'s explanation; not both with the same content.
@@ -225,27 +226,34 @@ that compiled fine but undercounted by 30%).
 
 ## Project shape
 
-- `spec/v0.1/`: the four normative specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
-- `conformance/v0.1/cases/`: language-agnostic test cases.
-- `python/avp/`: wire types (Pydantic), reference agent (`AVPAgent`),
-  reference tracer (`AVPTracer` in `avp.tracer` for instrumenting an existing
-  loop), conformance harness, and cross-validation interop tests (gated on the
-  `[interop]` extras group).
-- `python/sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API:
-  `AnthropicModelDriver` (plugs into `AVPAgent` as a `ModelDriver`),
+Top-level layout: the **core project** lives under `avp/`, split into
+`avp/core/` (the normative `spec/` and the `conformance/` harness + cases) and
+`avp/bindings/` (the Python / Rust / TypeScript type packages); `avp/scripts/`
+holds the codegen + tooling. **Agents** live under `agents/<name>/<lang>/`, **SDK
+adapters** under `sdks/`, and **supervisor examples** under `supervisors/`. The
+uv (Python) workspace is rooted at the repo root (`pyproject.toml` +
+`ruff.toml` + `uv.lock`) and spans every Python member across those trees.
+
+- `avp/core/spec/v0.1/`: the four normative specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
+- `avp/core/conformance/`: the `avp-conformance` package (import root `avp_conformance`) — the harness CLI, the matcher, and the packaged language-agnostic cases (`src/avp_conformance/cases/v0.1/`). Depends on the `avp` types package; it is NOT part of it.
+- `avp/bindings/python/`: the `avp` package — wire types (Pydantic source of truth), the sink type + stdio/jsonl sinks, and the resolver client. No harness, no cases.
+- `avp/bindings/rust/`, `avp/bindings/typescript/`: the generated Rust + TypeScript bindings of the wire types.
+- `sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API:
+  `AnthropicModelDriver` (plugs into an agent loop as a `ModelDriver`),
   `AnthropicTracedClient` + `wrap_anthropic` (drop-in over an existing
   Anthropic SDK loop), and Commission-to-API translators. No agent loop or
   built-in tools: the API itself ships neither, and agents wrap the SDK.
-- `python/agents/avp-claude-agent-sdk/`: observer-pattern agent over Claude Agent SDK,
+- `agents/avp-claude-agent-sdk/python/`: observer-pattern agent over Claude Agent SDK,
   plus `TracedClaudeSDKClient` and `traced_claude_sdk_client` (drop-in over an
   existing `ClaudeSDKClient` loop). The Claude Agent SDK ships its own loop +
   tools, so this is a complete agent rather than an adapter.
-- `python/supervisors/simple-supervisor-example/`: worked supervisor example
+- `agents/avp-goose/rust/`: in-process Rust observer of Block's Goose agent (the `avp-goose` crate), including its `avp-goose-conformance` binary.
+- `supervisors/simple-supervisor-example/`: worked supervisor example
   plus runnable real-LLM examples (`examples/01_*` through `examples/07_*`)
   and `examples/_anthropic_reference_agent.py`: a reference agent built on
   the `avp-anthropic` SDK adapter, demonstrating how to wire a `ModelDriver`
-  to `AVPAgent` with a local `ToolDriver` (`ShellTools`).
-- `scripts/`: `generate-schemas.py`, `build-skill.sh`.
+  to an agent loop with a local `ToolDriver` (`ShellTools`).
+- `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make smoke` is the pre-merge
   full-matrix sanity check (see above).
 - `FOUNDATIONS.md`: what AVP is built on (CloudEvents, OTel GenAI, OTel spans,

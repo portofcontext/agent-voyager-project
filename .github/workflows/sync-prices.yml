@@ -1,6 +1,7 @@
 name: Sync model prices
 
-# Keep the bundled price table (rust/avp + python/avp `prices.json`) tracking
+# Keep the bundled price table (the single canonical `prices.json` in
+# avp/bindings/python, which the Rust crate embeds via include_str!) tracking
 # models.dev, so no one hand-maintains pricing. Runs daily; opens a PR only when
 # the model prices actually change (the snapshot date alone never triggers one).
 # Also runnable on demand from the Actions tab.
@@ -33,7 +34,7 @@ jobs:
       - name: Check models.dev for price changes
         id: check
         run: |
-          if python scripts/sync-prices.py --check; then
+          if python avp/scripts/sync-prices.py --check; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -41,7 +42,7 @@ jobs:
 
       - name: Write refreshed price table
         if: steps.check.outputs.changed == 'true'
-        run: python scripts/sync-prices.py --write
+        run: python avp/scripts/sync-prices.py --write
 
       - name: Open or update the sync PR
         if: steps.check.outputs.changed == 'true'
@@ -53,7 +54,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add rust/avp/src/data/prices.json python/avp/src/avp/data/prices.json
+          git add avp/bindings/python/src/avp/data/prices.json
           git commit -m "chore: sync model prices from models.dev ($(date -u +%F))"
           # Force-push the fixed branch: updates an open PR in place, or seeds a new one.
           git push -f -u origin "$BRANCH"

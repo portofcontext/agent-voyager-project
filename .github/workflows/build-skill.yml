@@ -2,26 +2,23 @@ name: Build skill artifact
 
 # Re-package avp.skill whenever the skill bundle's contents change. Path filter
 # scopes this to files that actually end up inside the .skill — code-only changes
-# under python/agents/ or root README.md don't trigger a rebuild.
+# under agents/ or root README.md don't trigger a rebuild.
 
 on:
   push:
     branches: [main]
     paths:
       - "SKILL.md"
-      - "examples/**"
-      - "spec/v0.1/**"
-      - "conformance/v0.1/**"
-      - "python/avp/**"
-      - "scripts/build-skill.sh"
+      - "avp/core/spec/v0.1/**"
+      - "avp/bindings/python/**"
+      - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
     tags: ["v*"]
   pull_request:
     branches: [main]
     paths:
       - "SKILL.md"
-      - "examples/**"
-      - "scripts/build-skill.sh"
+      - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
   workflow_dispatch:
 
@@ -54,7 +51,7 @@ jobs:
           # Locate the skill-creator subdir inside the cloned anthropics/skills repo.
           SKILL_CREATOR_DIR: /tmp/anthropics-skills/skills/skill-creator
           PYTHON: python
-        run: bash scripts/build-skill.sh dist
+        run: bash avp/scripts/build-skill.sh dist
 
       - name: Verify .skill is a valid zip and contains SKILL.md
         run: |

@@ -3,9 +3,11 @@
 # Default target prints help. Use `make smoke` for the full $$ sanity check
 # you want before tagging a release.
 #
-# The Python workspace lives under python/ (its own pyproject.toml + ruff.toml
-# + uv.lock); this Makefile invokes uv via `uv --directory python` so the repo
-# root stays language-agnostic.
+# Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
+# under avp/; agents under agents/<name>/<lang>/; SDK adapters under sdks/;
+# supervisor examples under supervisors/. The uv (Python) workspace is rooted
+# at the repo root (root pyproject.toml + ruff.toml + uv.lock), so `uv` runs
+# from here and spans every Python member.
 #
 # Cost notes: targets that hit a real LLM are clearly marked. The default
 # `make smoke` runs the entire matrix (all real-LLM tests + all examples)
@@ -14,17 +16,18 @@
 
 SHELL := /usr/bin/env bash
 
-# All uv calls route through python/ so the repo root has no Python config.
-UV := uv --directory python
+# The uv workspace is rooted at the repo root; run uv from here.
+UV := uv
 
 # Each package has its own pyproject.toml + tests/ directory. Pytest's
 # importer collides if invoked at the repo root because every package
 # uses the same `tests` dirname, so we iterate per-package.
 TEST_PKGS := \
-	python/avp \
-	python/sdks/avp-anthropic \
-	python/agents/avp-claude-agent-sdk \
-	python/supervisors/simple-supervisor-example
+	avp/bindings/python \
+	avp/core/conformance \
+	sdks/avp-anthropic \
+	agents/avp-claude-agent-sdk/python \
+	supervisors/simple-supervisor-example
 
 # All examples. Each script self-detects missing preflight (API key,
 # claude_agent_sdk, the `claude` CLI) and exits 2. The run-an-example
@@ -32,11 +35,11 @@ TEST_PKGS := \
 # workstation without the Claude Code CLI still completes the Anthropic-
 # only examples cleanly.
 EXAMPLES := \
-	python/supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
-	python/supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
-	python/supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
-	python/supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
-	python/supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
+	supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
+	supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
+	supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
+	supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
+	supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
 
 
 .PHONY: help
@@ -45,8 +48,7 @@ help:
 	@echo ""
 	@echo "  Free targets (no API calls):"
 	@echo "    make test            pytest across every package, real-LLM excluded"
-	@echo "    make conformance     avp-conformance validate + ping + check"
-	@echo "                         (check runs cases against avp-claude-agent-sdk)"
+	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
 	@echo "    make lint            ruff check"
 	@echo "    make format          ruff format (writes)"
 	@echo "    make format-check    ruff format --check (read-only)"
@@ -54,18 +56,19 @@ help:
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate Rust + TS bindings from schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
-	@echo "    make bindings-test   cargo test (rust/avp) + npm test (typescript/avp)"
+	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make test-real-llm   real-LLM smoke tests for both agents"
-	@echo "    make test-live       gated avp-goose live tests (mcp_connect / live_mcp /"
-	@echo "                         live_skills; spawn the uv server + call a real model). Needs uv."
-	@echo "    make examples        all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
-	@echo "    make smoke           check + bindings-test + test-real-llm + examples (full sanity)"
+	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
+	@echo "    make test-real-llm      real-LLM smoke tests for both agents"
+	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
+	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
+	@echo "    make examples           all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
+	@echo "    make smoke              check + bindings-test + test-real-llm + conformance-check + examples"
 	@echo ""
 	@echo "  Other:"
-	@echo "    make sync            uv sync the Python workspace at python/"
+	@echo "    make sync            uv sync the Python workspace (repo root)"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -82,9 +85,9 @@ test:
 	echo ""; echo "All package tests passed."
 
 
-# Manifest paths, relative to the python/ workspace root the harness runs from.
-CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/avp-conformance.json
-GOOSE_MANIFEST  := ../rust/avp-goose/avp-conformance.json
+# Manifest paths, relative to the repo root the harness runs from.
+CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
+GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -149,21 +152,21 @@ format-check:
 
 .PHONY: schemas
 schemas:
-	@$(UV) run python ../scripts/generate-schemas.py
+	@$(UV) run python avp/scripts/generate-schemas.py
 
 
 .PHONY: sync-prices
 sync-prices:
-	@$(UV) run python ../scripts/sync-prices.py --write
+	@$(UV) run python avp/scripts/sync-prices.py --write
 
 .PHONY: sync-prices-check
 sync-prices-check:
-	@$(UV) run python ../scripts/sync-prices.py --check
+	@$(UV) run python avp/scripts/sync-prices.py --check
 
 
 .PHONY: bindings
 bindings:
-	@bash scripts/generate-bindings.sh
+	@bash avp/scripts/generate-bindings.sh
 
 
 .PHONY: bindings-check
@@ -173,14 +176,14 @@ bindings-check:
 	@# bindings to be committed. If regeneration changes any byte, the
 	@# user's bindings are stale relative to types.py / schemas.
 	@snapshot=$$(mktemp -d); \
-	cp -R rust/avp/src "$$snapshot/rust-src"; \
-	cp -R typescript/avp/src "$$snapshot/ts-src"; \
-	bash scripts/generate-bindings.sh > /dev/null; \
-	if ! diff -rq "$$snapshot/rust-src" rust/avp/src > /dev/null 2>&1 \
-	   || ! diff -rq "$$snapshot/ts-src" typescript/avp/src > /dev/null 2>&1; then \
+	cp -R avp/bindings/rust/src "$$snapshot/rust-src"; \
+	cp -R avp/bindings/typescript/src "$$snapshot/ts-src"; \
+	bash avp/scripts/generate-bindings.sh > /dev/null; \
+	if ! diff -rq "$$snapshot/rust-src" avp/bindings/rust/src > /dev/null 2>&1 \
+	   || ! diff -rq "$$snapshot/ts-src" avp/bindings/typescript/src > /dev/null 2>&1; then \
 		echo "error: Rust/TS bindings are stale relative to schemas. Run 'make bindings'." >&2; \
-		diff -rq "$$snapshot/rust-src" rust/avp/src 2>&1 | head -10 >&2 || true; \
-		diff -rq "$$snapshot/ts-src" typescript/avp/src 2>&1 | head -10 >&2 || true; \
+		diff -rq "$$snapshot/rust-src" avp/bindings/rust/src 2>&1 | head -10 >&2 || true; \
+		diff -rq "$$snapshot/ts-src" avp/bindings/typescript/src 2>&1 | head -10 >&2 || true; \
 		rm -rf "$$snapshot"; \
 		exit 1; \
 	fi; \
@@ -190,8 +193,8 @@ bindings-check:
 
 .PHONY: bindings-test
 bindings-test:
-	@cd rust/avp && cargo test --quiet
-	@cd typescript/avp && npm test --silent
+	@cd avp/bindings/rust && cargo test --quiet
+	@cd avp/bindings/typescript && npm test --silent
 
 
 .PHONY: check
@@ -208,7 +211,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in python/sdks/avp-anthropic python/agents/avp-claude-agent-sdk; do \
+	for pkg in sdks/avp-anthropic agents/avp-claude-agent-sdk/python; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
@@ -220,7 +223,7 @@ test-real-llm:
 test-live:
 	@command -v uv >/dev/null 2>&1 || { echo "error: uv is required (the bundled MCP server runs via uv run)"; exit 2; }
 	@echo "Running gated avp-goose live tests (mcp_connect is key-free; live_mcp / live_skills / live_subagent call a real model)."
-	@cd rust/avp-goose && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
+	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
 # Common run-an-example macro. Distinguishes:
@@ -231,7 +234,7 @@ define run_examples
 	@failed=""; skipped=""; \
 	for ex in $(1); do \
 		echo ""; echo "==== $$ex ===="; \
-		$(UV) run python ../$$ex; \
+		$(UV) run python $$ex; \
 		rc=$$?; \
 		case $$rc in \
 			0) ;; \

@@ -39,29 +39,29 @@ AVP is built and maintained by the [Port of Context](https://github.com/portofco
 
 If you want to run an AI agent that emits AVP events out of the box, install the reference agent built on the Claude Agent SDK:
 
-- [`avp-claude-agent-sdk`](python/agents/avp-claude-agent-sdk/) wraps the Claude Agent SDK, which ships its own loop and tools.
+- [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools.
 
 If you want to build your own agent on top of the raw Anthropic Messages API, install the SDK adapter and copy the reference agent from the examples:
 
-- [`avp-anthropic`](python/sdks/avp-anthropic/) is the SDK adapter: a `ModelDriver`, a `TracedClient`, and Commission-to-API translators. The Anthropic API ships no loop or tools, so this package doesn't either; agents wrap it.
-- The reference agent at [`python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`](python/supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py) wires `avp-anthropic` to `AVPAgent` plus a local `ShellTools`. Examples 01 and 05 spawn it.
+- [`avp-anthropic`](sdks/avp-anthropic/) is the SDK adapter: a `ModelDriver`, a `TracedClient`, and Commission-to-API translators. The Anthropic API ships no loop or tools, so this package doesn't either; agents wrap it.
+- The reference agent at [`supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`](supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py) wires `avp-anthropic` to `AVPAgent` plus a local `ShellTools`. Examples 01 and 05 spawn it.
 
 If you want to consume an AVP trajectory from another language, install the typed bindings. They are generated from the same JSON Schemas the Python types come from, so they cannot drift:
 
-- Python: [`python/avp/`](python/avp/)
-- Rust: [`rust/avp/`](rust/avp/)
-- TypeScript: [`typescript/avp/`](typescript/avp/)
+- Python: [`avp/bindings/python/`](avp/bindings/python/)
+- Rust: [`avp/bindings/rust/`](avp/bindings/rust/)
+- TypeScript: [`avp/bindings/typescript/`](avp/bindings/typescript/)
 
-For a complete walk through that builds a Commission, runs an agent, and prints the trajectory, see [`python/supervisors/simple-supervisor-example/`](python/supervisors/simple-supervisor-example/). The example suite is the fastest way to see AVP end to end.
+For a complete walk through that builds a Commission, runs an agent, and prints the trajectory, see [`supervisors/simple-supervisor-example/`](supervisors/simple-supervisor-example/). The example suite is the fastest way to see AVP end to end.
 
 ## To start developing AVP
 
-The repo is a multi-language workspace. The Python side uses [uv](https://github.com/astral-sh/uv) with its workspace root at [`python/`](python/); Rust and TypeScript packages each have their own `Cargo.toml` / `package.json`. Run everything from the repo root:
+The repo groups the core project under [`avp/`](avp/) (spec + Python/Rust/TS bindings), with agents under [`agents/`](agents/), SDK adapters under [`sdks/`](sdks/), and supervisor examples under [`supervisors/`](supervisors/). The Python side uses [uv](https://github.com/astral-sh/uv) with its workspace root at the repo root; Rust and TypeScript packages each have their own `Cargo.toml` / `package.json`. Run everything from the repo root:
 
 ```bash
 git clone https://github.com/portofcontext/agent-voyager-project
 cd agent-voyager-project
-make sync           # `uv --directory python sync` under the hood
+make sync           # `uv sync` under the hood
 make check
 ```
 
@@ -75,19 +75,19 @@ AVP is split into four specs. Each one can be adopted on its own. Most consumers
 
 | Sub-spec | What it covers |
 |---|---|
-| [AVP Trajectory](spec/v0.1/trajectory.md) | The stream of events an agent emits as it runs. |
-| [AVP Commission](spec/v0.1/commission.md) | The run configuration the supervisor sends to the agent at startup. |
-| [AVP Agent Descriptor](spec/v0.1/agent-descriptor.md) | What an agent advertises about itself before a run begins. |
-| [AVP Resolver API](spec/v0.1/resolver.md) | The JSON-RPC service the agent calls to look up the resources the Commission referenced. |
+| [AVP Trajectory](avp/core/spec/v0.1/trajectory.md) | The stream of events an agent emits as it runs. |
+| [AVP Commission](avp/core/spec/v0.1/commission.md) | The run configuration the supervisor sends to the agent at startup. |
+| [AVP Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md) | What an agent advertises about itself before a run begins. |
+| [AVP Resolver API](avp/core/spec/v0.1/resolver.md) | The JSON-RPC service the agent calls to look up the resources the Commission referenced. |
 
-Three of these are data-shape specs. They describe a JSON document and nothing more. The Resolver API is the only one that defines a two party wire protocol. The umbrella [`spec/v0.1/README.md`](spec/v0.1/README.md) indexes all four and the shared concerns (transport, versioning, deployment scope).
+Three of these are data-shape specs. They describe a JSON document and nothing more. The Resolver API is the only one that defines a two party wire protocol. The umbrella [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md) indexes all four and the shared concerns (transport, versioning, deployment scope).
 
 ## Where to learn more
 
 - [FOUNDATIONS.md](FOUNDATIONS.md) covers the upstream specs AVP builds on and what AVP adds on top.
 - [PATTERNS.md](PATTERNS.md) is the integration guide: the shapes an application can take to wire onto AVP, with composition sketches and links to worked examples.
-- [`spec/v0.1/`](spec/v0.1/) is the normative specification, organized by spec.
-- [`conformance/v0.1/`](conformance/v0.1/) is the language agnostic test suite every conforming implementation MUST pass.
+- [`avp/core/spec/v0.1/`](avp/core/spec/v0.1/) is the normative specification, organized by spec.
+- [`avp/core/conformance/src/avp_conformance/cases/v0.1/`](avp/core/conformance/src/avp_conformance/cases/v0.1/) is the language agnostic test suite every conforming implementation MUST pass, driven by the `avp-conformance` CLI.
 - [SKILL.md](SKILL.md) is a skill file for AI assistants working inside this repo.
 
 ## Support

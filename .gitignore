@@ -12,7 +12,7 @@ venv/
 env/
 .env
 pip-wheel-metadata/
-python/agents/avp-claude-agent-sdk/scripts/logs
+agents/avp-claude-agent-sdk/python/scripts/logs
 
 # Hatch / UV
 .hatch/
@@ -45,13 +45,12 @@ avp-workspace/
 
 .ruff_cache
 
-# Rust
-rust/avp/target/
-rust/avp-goose/target/
+# Rust — match any Cargo target dir, wherever a crate lives (layout-agnostic).
+target/
 
-# TypeScript
-typescript/avp/node_modules/
-typescript/avp/dist/
-typescript/avp/dist-test/
-typescript/avp/package-lock.json
+# TypeScript / Node — match anywhere, wherever a package lives (dist/ is
+# already ignored above under Distribution).
+node_modules/
+dist-test/
+package-lock.json
 

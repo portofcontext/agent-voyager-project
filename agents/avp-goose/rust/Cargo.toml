@@ -1,0 +1,38 @@
+[package]
+name = "avp-goose"
+version = "0.1.0"
+edition = "2021"
+description = "AVP connector for Block's Goose coding agent (in-process trajectory emitter)."
+license = "MIT"
+repository = "https://github.com/portofcontext/agent-voyager-project"
+
+[dependencies]
+avp = { path = "../../../avp/bindings/rust" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Heavy git dependency: pinned to the rev whose API this connector targets.
+# Default features (local-inference, aws-providers, code-mode, otel, keyring)
+# are dropped; only TLS is needed to drive an Agent with a hosted provider.
+goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false, features = ["rustls-tls", "system-keyring"] }
+futures = "0.3"
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+async-trait = "0.1"
+# Same registry version Goose resolves, so `rmcp::model::Tool` is the same type.
+rmcp = "1.7"
+# Used by the eval harness to schema-validate live trajectories.
+jsonschema = "0.46"
+# Optional: only pulled in for the `conformance` feature, which gates the
+# avp-goose-conformance binary consumed by the avp-conformance harness.
+clap = { version = "4", features = ["derive"], optional = true }
+
+[features]
+# Compiles the avp-goose-conformance binary (declared below) and pulls in
+# clap. Off by default so a plain `cargo build` doesn't drag clap into the
+# dep graph.
+conformance = ["dep:clap"]
+
+[[bin]]
+name = "avp-goose-conformance"
+path = "src/bin/avp-goose-conformance.rs"
+required-features = ["conformance"]
