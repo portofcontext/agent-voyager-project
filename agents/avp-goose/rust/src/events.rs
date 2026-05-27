@@ -255,7 +255,12 @@ pub fn agent_started(
     parent_span_id: &str,
     provider: Option<&str>,
     model: Option<&str>,
+    descriptor: Option<&AgentDescriptor>,
 ) -> Event {
+    // The run's actual capability surface. We apply no mid-run Commission
+    // filtering beyond what's already baked into the loaded extensions (e.g.
+    // `enabled_builtin_tools` -> the developer extension's `available_tools`), so
+    // agent_started mirrors the descriptor's tools / subagents / MCP / skills.
     let data = AgentStartedData {
         trace_id: trace_id.parse().expect("valid trace id"),
         span_id: span_id.parse().expect("valid span id"),
@@ -266,10 +271,10 @@ pub fn agent_started(
         avp_request_model: model.map(str::to_string),
         avp_prompt: None,
         avp_system_prompt: None,
-        avp_tools: None,
-        avp_subagents: None,
-        avp_mcp_servers: None,
-        avp_skills: None,
+        avp_tools: descriptor.and_then(|d| d.tools.clone()),
+        avp_subagents: descriptor.and_then(|d| d.subagents.clone()),
+        avp_mcp_servers: descriptor.and_then(|d| d.mcp_servers.clone()),
+        avp_skills: descriptor.and_then(|d| d.skills.clone()),
         avp_thread_id: None,
         avp_session_id: None,
         avp_tags: None,

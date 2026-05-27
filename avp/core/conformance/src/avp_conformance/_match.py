@@ -33,8 +33,17 @@ def _partial(value: Any, pattern: Any) -> bool:
     Dicts: every key in `pattern` must be present in `value` and match
     (recursively); extra keys in `value` are ignored. Lists: same length,
     element-wise partial. Scalars: exact equality.
+
+    Operator: a pattern `{"$contains": X}` matches a list `value` when at
+    least one element partial-matches `X`. Use it to assert presence within
+    an order-/length-variable list (e.g. a text block in `avp.content`, an
+    MCP server in `avp.mcp_servers`) without pinning the whole list.
     """
     if isinstance(pattern, dict):
+        if set(pattern) == {"$contains"}:
+            return isinstance(value, list) and any(
+                _partial(elem, pattern["$contains"]) for elem in value
+            )
         if not isinstance(value, dict):
             return False
         return all(k in value and _partial(value[k], v) for k, v in pattern.items())

@@ -32,6 +32,7 @@ from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
 from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
 from avp.content import ToolResultBlock as AVPToolResultBlock
 from avp.content import ToolUseBlock as AVPToolUseBlock
+from avp.descriptor import ToolDecl
 from avp.envelope import ZERO_SPAN_ID, new_span_id
 from avp.trajectory import (
     AgentDescribedData,
@@ -123,6 +124,21 @@ async def emit_agent_described(
     )
 
 
+def _apply_enabled_builtin_tools(
+    tools: list[ToolDecl] | None, allow: list[str] | None
+) -> list[ToolDecl] | None:
+    """Apply the Commission's `enabled_builtin_tools` allow-list to the merged
+    `agent_started` tool bag. `None` (no allow-list) exposes all and is passed
+    through unchanged; any concrete list keeps only the named tools, so `[]`
+    yields `[]` (none) even when the CLI reported no tools section. This is the
+    spec's subtractive filter over `descriptor.tools` (which, for claude, is the
+    single bag of built-in AND MCP-surfaced tools)."""
+    if allow is None:
+        return tools
+    allowed = set(allow)
+    return [t for t in (tools or []) if t.name in allowed]
+
+
 async def emit_agent_started(
     state: RunState,
     *,
@@ -152,7 +168,10 @@ async def emit_agent_started(
                 ),
                 prompt=prompt,
                 system_prompt=resolve_system_prompt(options.system_prompt),
-                tools=tools_from_init(init_data, status) if init_data else None,
+                tools=_apply_enabled_builtin_tools(
+                    tools_from_init(init_data, status) if init_data else None,
+                    state.enabled_builtin_tools,
+                ),
                 mcp_servers=mcp_servers_from_status(status),
                 skills=skills_from_init(init_data) if init_data else None,
                 subagents=subagents_from_init(init_data) if init_data else None,
@@ -192,16 +211,17 @@ async def emit_agent_stopped(
 
 
 async def emit_error(
-    self, state: RunState, exc: Exception, error_code: ErrorCode = ErrorCode.agent_crash
+    state: RunState, exc: Exception, error_code: ErrorCode = ErrorCode.agent_crash
 ) -> None:
-
+    """Emit `error_occurred`. Parents under the agent span once the loop has
+    started, else the root (a pre-loop fail-fast has no agent frame yet)."""
     await state.sink(
         ErrorOccurredEvent(
             subject=state.run_id,
             data=ErrorOccurredData(
                 trace_id=state.trace_id,
                 span_id=new_span_id(),
-                parent_span_id=state.agent_span_id,
+                parent_span_id=state.agent_span_id or ZERO_SPAN_ID,
                 error_code=error_code,
                 error_message=str(exc) or type(exc).__name__,
             ),

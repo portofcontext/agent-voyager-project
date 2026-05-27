@@ -1,0 +1,52 @@
+{
+  "id": "unknown-tool-name-fails-fast",
+  "title": "enabled_builtin_tools naming a tool the agent doesn't offer fails fast",
+  "description": "enabled_builtin_tools is an allow-list over the agent's own tool surface. A name that isn't one of the agent's tools is a Commission/agent collision: the agent MUST emit error_occurred with code commission_collision and stop with reason error BEFORE running any model turn (no assistant_message). Uses a clearly-bogus tool name so it collides on every agent regardless of its native tool names.",
+  "spec_refs": [
+    "spec/v0.1/commission.md",
+    "spec/v0.1/trajectory.md#7-event-reference"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "unknown-tool-name-fails-fast",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "enabled_builtin_tools": ["definitely-not-a-real-tool"],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "error_occurred(commission_collision)",
+        "match": {
+          "type": "avp.error_occurred",
+          "source": "avp://agent",
+          "data": {
+            "avp.error.code": "commission_collision"
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(error)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "error"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no model turn runs",
+        "match": {
+          "type": "avp.assistant_message"
+        }
+      }
+    ]
+  }
+}

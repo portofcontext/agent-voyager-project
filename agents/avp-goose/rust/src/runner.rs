@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
-use avp::trajectory::Usage;
+use avp::trajectory::{ErrorCode, StopReason, Usage};
 use avp::Commission;
 use futures::StreamExt;
 use goose::agents::{Agent, AgentEvent, SessionConfig};
@@ -131,9 +131,21 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // its stream — the signal that never reaches the AgentEvent level.
     let (provider, usage_tap) = provider_tap::tap(provider);
     agent.update_provider(provider, &session_id).await?;
-    agent
+    // `add_extensions_bulk` reports per-extension outcomes in its return value
+    // rather than failing the call, so a built-in that won't load (missing
+    // factory, init error) is otherwise silent. Surface failures on stderr.
+    for result in agent
         .add_extensions_bulk(cfg.extensions.clone(), &session_id)
-        .await?;
+        .await?
+    {
+        if !result.success {
+            eprintln!(
+                "avp-goose: extension '{}' failed to load: {}",
+                result.name,
+                result.error.as_deref().unwrap_or("unknown error"),
+            );
+        }
+    }
     if let Some(system_prompt) = &cfg.system_prompt {
         agent
             .extend_system_prompt("commission".to_string(), system_prompt.clone())
@@ -172,6 +184,29 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         avp::load_default_prices(),
     );
     emitter.prelude(commission, &descriptor)?;
+
+    // Fail fast (spec): every name in `enabled_builtin_tools` must be a tool the
+    // agent actually offers. An unknown name is a Commission/agent collision —
+    // emit `error_occurred(commission_collision)` + `agent_stopped(error)` before
+    // the loop, so no model turn runs.
+    if let Some(names) = &commission.enabled_builtin_tools {
+        let known: HashSet<&str> =
+            descriptor.tools.iter().flatten().map(|t| t.name.as_str()).collect();
+        let unknown: Vec<&str> =
+            names.iter().map(String::as_str).filter(|n| !known.contains(n)).collect();
+        if !unknown.is_empty() {
+            emitter.error(
+                ErrorCode::CommissionCollision,
+                &format!(
+                    "enabled_builtin_tools names not offered by the agent: {}",
+                    unknown.join(", ")
+                ),
+            )?;
+            emitter.stop(StopReason::Error, None)?;
+            return Ok(());
+        }
+    }
+
     emitter.start(Some(&model_name))?;
 
     // Drive the live reply stream.

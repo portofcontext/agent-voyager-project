@@ -82,6 +82,23 @@ def _toolchain_write_dirs() -> list[str]:
     return [str(Path(c)) for c in candidates if c and Path(c).exists()]
 
 
+def _repo_root(start: Path) -> Path:
+    """Nearest ancestor of `start` containing `.git`, else `start`."""
+    for d in (start, *start.parents):
+        if (d / ".git").exists():
+            return d
+    return start
+
+
+def _expand_fixture_tokens(commission_json: str, cwd: Path) -> str:
+    """Expand in-repo fixture placeholders in a serialized Commission so a case
+    can reference repo fixtures portably (their absolute path differs per
+    checkout). `${AVP_TEST_MCP}` → the bundled stdio test MCP server at
+    `testing/mcp/avp_test_mcp.py`."""
+    test_mcp = _repo_root(cwd) / "testing" / "mcp" / "avp_test_mcp.py"
+    return commission_json.replace("${AVP_TEST_MCP}", str(test_mcp))
+
+
 def _resolve_command(command: list[str]) -> list[str]:
     """Resolve the launcher (`command[0]`) to an absolute host path so the
     sandbox runs the same binary the host would. srt sets its own PATH, which
@@ -235,7 +252,10 @@ def _run_case(
     with tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp:
         tmpd = Path(tmp)
         commission_path = tmpd / "commission.json"
-        commission_path.write_text(tc.commission.model_dump_json(by_alias=True, exclude_none=True))
+        commission_json = _expand_fixture_tokens(
+            tc.commission.model_dump_json(by_alias=True, exclude_none=True), cwd
+        )
+        commission_path.write_text(commission_json)
         out_path = tmpd / "out.jsonl"
 
         args = ["run", "--commission", str(commission_path)]

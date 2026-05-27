@@ -141,6 +141,10 @@ class RunState:
     trace_id: str
     # Per-model price catalog consumed by `compute_cost` at turn drain.
     prices: dict[str, ModelPrice]
+    # Commission `enabled_builtin_tools` allow-list (None = expose all). Applied
+    # to `agent_started.data.avp.tools` so the merged surface reflects the
+    # Commission's subtractive filter over the descriptor's tool bag.
+    enabled_builtin_tools: list[str] | None = None
     # Root agent span; parent of every turn / tool / subagent frame.
     # `None` until `agent_started` fires.
     agent_span_id: str | None = None

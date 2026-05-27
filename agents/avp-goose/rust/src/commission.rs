@@ -34,18 +34,17 @@ pub struct GooseRunConfig {
 pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     let mut extensions = Vec::new();
 
-    // Built-in extensions the Commission enables. AVP `enabled_builtin_tools`
-    // is an allowlist of names; Goose enables whole extensions, so each name is
-    // treated as a builtin extension to load.
-    for name in commission.enabled_builtin_tools.iter().flatten() {
-        extensions.push(ExtensionConfig::Builtin {
-            name: name.clone(),
-            description: String::new(),
-            display_name: None,
-            timeout: None,
-            bundled: None,
-            available_tools: Vec::new(),
-        });
+    // Goose's built-in tool surface is the `developer` extension (goose's
+    // DEFAULT_EXTENSION), loaded by default — as the real goose CLI does, where
+    // `developer` ships enabled. AVP `enabled_builtin_tools` subtractively
+    // filters that surface (per spec; the claude-agent-sdk is the reference for
+    // this semantic): `None` exposes all developer tools, `[]` exposes none
+    // (developer not loaded), and a list exposes only the named tools via the
+    // extension's own `available_tools` allow-list.
+    match commission.enabled_builtin_tools.as_deref() {
+        None => extensions.push(developer_extension(Vec::new())),
+        Some([]) => {}
+        Some(names) => extensions.push(developer_extension(names.to_vec())),
     }
 
     // Commission-supplied MCP servers carry inline connection material.
@@ -94,6 +93,21 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
         prompt: commission.prompt.clone(),
         extensions,
         response,
+    }
+}
+
+/// Goose's default built-in tool extension (`developer`), optionally restricted
+/// to `available_tools` (empty = expose all of its tools). `developer` is a
+/// first-class PLATFORM extension served in-process from the goose library
+/// (`PLATFORM_EXTENSIONS`), like `skills`/`summon` above — NOT a `Builtin` (those
+/// resolve through the `goose-mcp` registry, which this embedding doesn't load).
+fn developer_extension(available_tools: Vec<String>) -> ExtensionConfig {
+    ExtensionConfig::Platform {
+        name: "developer".to_string(),
+        description: "Core developer tools".to_string(),
+        display_name: Some("Developer".to_string()),
+        bundled: Some(true),
+        available_tools,
     }
 }
 
@@ -152,11 +166,21 @@ mod tests {
             .collect()
     }
 
+    fn developer_available_tools(cfg: &GooseRunConfig) -> Option<Vec<String>> {
+        cfg.extensions.iter().find_map(|e| match e {
+            ExtensionConfig::Platform {
+                name,
+                available_tools,
+                ..
+            } if name == "developer" => Some(available_tools.clone()),
+            _ => None,
+        })
+    }
+
     #[test]
     fn maps_builtins_mcp_and_skills_to_extensions() {
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m",
-            "enabled_builtin_tools": ["developer"],
             "mcp_servers": [
                 { "type": "stdio", "id": "avptest", "command": ["uv", "run"] },
                 { "type": "http", "id": "web", "url": "https://example.com/mcp" }
@@ -164,18 +188,42 @@ mod tests {
             "skills": [{ "id": "researcher", "files": { "SKILL.md": "# research" } }]
         })));
         let names = ext_names(&cfg);
-        assert!(
-            names.contains(&"developer".to_string()),
-            "builtin: {names:?}"
-        );
-        assert!(
-            names.contains(&"avptest".to_string()),
-            "stdio mcp: {names:?}"
-        );
+        // `developer` loads by default (no enabled_builtin_tools override).
+        assert!(names.contains(&"developer".to_string()), "builtin: {names:?}");
+        assert!(names.contains(&"avptest".to_string()), "stdio mcp: {names:?}");
         assert!(names.contains(&"web".to_string()), "http mcp: {names:?}");
-        assert!(
-            names.contains(&"skills".to_string()),
-            "skills platform: {names:?}"
+        assert!(names.contains(&"skills".to_string()), "skills platform: {names:?}");
+    }
+
+    #[test]
+    fn enabled_builtin_tools_default_loads_developer_unfiltered() {
+        // None -> all built-in tools (developer with an empty allow-list).
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m"
+        })));
+        assert_eq!(developer_available_tools(&cfg), Some(vec![]));
+    }
+
+    #[test]
+    fn empty_enabled_builtin_tools_omits_developer() {
+        // [] -> no built-in tools: developer is not loaded at all.
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "enabled_builtin_tools": []
+        })));
+        assert!(!ext_names(&cfg).contains(&"developer".to_string()));
+    }
+
+    #[test]
+    fn enabled_builtin_tools_subset_sets_available_tools() {
+        // [names] -> developer restricted to those tools via available_tools.
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "enabled_builtin_tools": ["developer__shell"]
+        })));
+        assert_eq!(
+            developer_available_tools(&cfg),
+            Some(vec!["developer__shell".to_string()])
         );
     }
 
@@ -186,7 +234,12 @@ mod tests {
             "mcp_servers": [{ "type": "stdio", "id": "x",
                 "command": ["uv", "run", "server.py"], "args": ["--flag"] }]
         })));
-        match &cfg.extensions[0] {
+        let stdio = cfg
+            .extensions
+            .iter()
+            .find(|e| matches!(e, ExtensionConfig::Stdio { .. }))
+            .expect("stdio extension present");
+        match stdio {
             ExtensionConfig::Stdio { cmd, args, .. } => {
                 assert_eq!(cmd, "uv");
                 assert_eq!(

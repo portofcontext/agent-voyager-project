@@ -48,6 +48,15 @@ def test_partial_lists_are_exact_length_elementwise():
     assert not _partial({"xs": [1, 2, 3]}, {"xs": [1, 2]})
 
 
+def test_partial_contains_operator_matches_element_in_list():
+    content = [{"type": "thinking"}, {"type": "text", "text": "hi"}]
+    assert _partial(content, {"$contains": {"type": "text"}})
+    assert _partial({"avp.content": content}, {"avp.content": {"$contains": {"type": "text"}}})
+    # No matching element, or a non-list value.
+    assert not _partial(content, {"$contains": {"type": "image"}})
+    assert not _partial("notalist", {"$contains": {"type": "text"}})
+
+
 # ── orderings ────────────────────────────────────────────────────────────────
 
 

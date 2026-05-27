@@ -65,6 +65,9 @@ pub struct Emitter<S: Sink> {
     mcp_servers: HashSet<String>,
     pending: HashMap<String, PendingTool>,
     stopped: bool,
+    /// Captured in `prelude`; `start` reads it so `agent_started` carries the
+    /// same capability surface as `agent_described`.
+    descriptor: Option<avp::trajectory::AgentDescriptor>,
 }
 
 impl<S: Sink> Emitter<S> {
@@ -90,6 +93,7 @@ impl<S: Sink> Emitter<S> {
             mcp_servers,
             pending: HashMap::new(),
             stopped: false,
+            descriptor: None,
         }
     }
 
@@ -100,6 +104,7 @@ impl<S: Sink> Emitter<S> {
         commission: &avp::Commission,
         descriptor: &avp::trajectory::AgentDescriptor,
     ) -> std::io::Result<()> {
+        self.descriptor = Some(descriptor.clone());
         let requested = events::run_requested(
             &self.state.run_id,
             &self.state.trace_id,
@@ -123,7 +128,8 @@ impl<S: Sink> Emitter<S> {
         Ok(())
     }
 
-    /// Emit `agent_started` (loop entry). Call once, before any messages.
+    /// Emit `agent_started` (loop entry). Call once, after `prelude` and before
+    /// any messages. Carries the capability surface captured in `prelude`.
     pub fn start(&mut self, model: Option<&str>) -> std::io::Result<()> {
         let ev = events::agent_started(
             &self.state.run_id,
@@ -132,6 +138,7 @@ impl<S: Sink> Emitter<S> {
             ZERO_SPAN_ID,
             self.state.provider.as_deref(),
             model,
+            self.descriptor.as_ref(),
         );
         self.state.emit(&ev)
     }

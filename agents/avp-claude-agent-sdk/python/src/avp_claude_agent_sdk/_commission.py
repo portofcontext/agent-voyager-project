@@ -63,9 +63,9 @@ def apply_commission(
     - `system_prompt`         → `system_prompt`
     - `enabled_builtin_tools` → `tools`
     - `output_schema`         → `output_format` (wrapped as json_schema)
+    - `mcp_servers` (inline)  → `mcp_servers`
 
     TODO:
-    - `mcp_servers` (inline) + `enabled_builtin_mcp_servers` filter
     - `skills` (inline) + `enabled_builtin_skills` filter
     - `enabled_builtin_mcp_servers`
     - `enabled_builtin_skills`
@@ -89,6 +89,11 @@ def apply_commission(
             "type": "json_schema",
             "schema": commission.output_schema,
         }
+    # Inline MCP servers: merge the Commission's onto any base ones (Commission
+    # id wins on collision). The SDK dials them; they surface on
+    # agent_started.data.avp.mcp_servers.
+    if commission.mcp_servers:
+        updates["mcp_servers"] = {**(base.mcp_servers or {}), **_map_mcp_servers(commission)}
 
     return dataclasses.replace(base, **updates) if updates else base
 

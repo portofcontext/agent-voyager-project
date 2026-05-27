@@ -38,6 +38,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     simulated (a documented gap, same as goose).
     """
     # Imported here, not at module top, so `ping` stays loop-free.
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
     from avp.sink import jsonl_sink
     from avp_claude_agent_sdk import AVPClaudeSDKClient, run_avp_agent
 
@@ -54,6 +56,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     sink = jsonl_sink(Path(args.out))
 
+    # Isolate the run for determinism: don't inherit the host's settings or
+    # filesystem MCP config, so the tool surface is governed only by the
+    # Commission (not the operator's ~/.claude). Without this the claude CLI
+    # picks up ambient MCP servers, making agent_started non-reproducible.
+    options = ClaudeAgentOptions(setting_sources=[], strict_mcp_config=True)
+
     async def agent_main(client: AVPClaudeSDKClient) -> None:
         # The prompt flows from the Commission via `apply_prompt`; the literal
         # passed here is only a fallback when the Commission omits a prompt.
@@ -61,7 +69,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         async for _ in client.receive_response():
             pass
 
-    asyncio.run(run_avp_agent(commission, agent_main, sink=sink))
+    asyncio.run(run_avp_agent(commission, agent_main, sink=sink, options=options))
     return 0
 
 

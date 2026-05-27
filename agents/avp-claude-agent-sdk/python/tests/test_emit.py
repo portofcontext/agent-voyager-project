@@ -259,6 +259,21 @@ def test_prelude_order_is_run_requested_described_started() -> None:
         assert ev.data.parent_span_id == ZERO
 
 
+def test_apply_enabled_builtin_tools_filters_the_bag() -> None:
+    """The enabled_builtin_tools allow-list filters agent_started's tool bag:
+    None passes through (all), [] yields [] (none), a list keeps only the named
+    tools, and [] yields [] even when the bag was None."""
+    from avp.descriptor import ToolDecl
+    from avp_claude_agent_sdk._emit import _apply_enabled_builtin_tools
+
+    bag = [ToolDecl(name="Bash"), ToolDecl(name="Read"), ToolDecl(name="mcp__x__y")]
+    assert _apply_enabled_builtin_tools(bag, None) == bag
+    assert _apply_enabled_builtin_tools(bag, []) == []
+    assert [t.name for t in _apply_enabled_builtin_tools(bag, ["Bash"])] == ["Bash"]
+    assert _apply_enabled_builtin_tools(None, []) == []
+    assert _apply_enabled_builtin_tools(None, None) is None
+
+
 def test_client_normalizes_missing_options() -> None:
     """Constructing the client without explicit `options` (as the Commission-
     driven conformance `run` does) must not leave `_original_options` as None:

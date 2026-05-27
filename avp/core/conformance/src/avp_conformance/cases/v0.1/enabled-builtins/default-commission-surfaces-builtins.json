@@ -1,0 +1,44 @@
+{
+  "id": "default-commission-surfaces-builtins",
+  "title": "A Commission with no enabled_builtin_tools surfaces the agent's built-in tools",
+  "description": "enabled_builtin_tools omitted (None) means 'expose all': agent_started.data.avp.tools MUST enumerate the agent's built-in tool surface as a non-empty list. This is the positive complement to empty-allowlist-hides-builtins (which asserts []). Cross-agent the tool NAMES differ (claude: Read/Bash/...; goose: write/edit/shell/...) and the entries vary in richness (claude knows names but not authoritative descriptions, so emits name-only; goose emits the full name/description/inputSchema triple), so the only portable assertion is that the list is non-empty. Built-in tools dispatch locally, signalled by the ABSENCE of avp.mcp_server_id on each ToolDecl; the per-invocation avp.tool.dispatch_target=local discriminator on tool_invoked is exercised separately (needs a forced tool call, see BACKLOG).",
+  "spec_refs": [
+    "spec/v0.1/commission.md",
+    "spec/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/v0.1/agent-descriptor.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "default-commission-surfaces-builtins",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started enumerates a non-empty built-in tool surface",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent",
+          "data": {
+            "avp.tools": { "$contains": {} }
+          }
+        }
+      },
+      {
+        "label": "run converges",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ]
+  }
+}

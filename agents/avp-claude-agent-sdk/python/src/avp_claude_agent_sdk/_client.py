@@ -49,7 +49,7 @@ from avp.commission import Commission
 from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.sink import EventSink, stdio_sink
-from avp.trajectory import StopReason
+from avp.trajectory import ErrorCode, StopReason
 from avp_claude_agent_sdk._commission import apply_commission, apply_prompt
 from avp_claude_agent_sdk._emit import (
     emit_agent_described,
@@ -59,6 +59,7 @@ from avp_claude_agent_sdk._emit import (
     handle_message,
 )
 from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
+from avp_claude_agent_sdk._translator import tools_from_init
 
 
 class AVPClaudeSDKClient(ClaudeSDKClient):
@@ -84,6 +85,9 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         self._sink = sink
         self._avp_token = None
         self._avp_prelude_emitted = False
+        # Set when a startup fail-fast (e.g. commission_collision) aborts the
+        # run before the real session; `receive_response` then yields nothing.
+        self._aborted = False
 
     async def query(
         self, prompt: str | AsyncIterable[dict[str, Any]], session_id: str = "default"
@@ -102,6 +106,9 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
                 run_id=str(uuid.uuid4()),
                 sink=self._sink,
                 prices=load_default_prices(),
+                enabled_builtin_tools=(
+                    self._commission.enabled_builtin_tools if self._commission else None
+                ),
             )
             self._avp_token = set_run(state)
             original_prompt = prompt if isinstance(prompt, str) else None
@@ -117,6 +124,27 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
 
             self._avp_prelude_emitted = True
 
+            # Fail fast (spec): a name in enabled_builtin_tools that isn't one of
+            # the agent's tools is a commission_collision; stop before any model
+            # turn. Validated against the probe surface (pre-Commission tools).
+            allow = self._commission.enabled_builtin_tools if self._commission else None
+            if allow is not None:
+                probe_tools = tools_from_init(probe_init, probe_status) if probe_init else None
+                known = {t.name for t in (probe_tools or [])}
+                unknown = [n for n in allow if n not in known]
+                if unknown:
+                    await emit_error(
+                        state,
+                        ValueError(
+                            "enabled_builtin_tools names not offered by the agent: "
+                            + ", ".join(unknown)
+                        ),
+                        error_code=ErrorCode.commission_collision,
+                    )
+                    await emit_agent_stopped(state, StopReason.error)
+                    self._aborted = True
+                    return None
+
         return await super().query(final_prompt, session_id)
 
     async def receive_response(self) -> AsyncIterator[Any]:
@@ -127,6 +155,10 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         sets `state.stopped` before re-raising so `disconnect()` doesn't
         double-fire.
         """
+        # A startup fail-fast already emitted error_occurred + agent_stopped and
+        # never started the real session; nothing to receive.
+        if self._aborted:
+            return
         state = current_run()
         try:
             async for message in super().receive_response():
