@@ -10,6 +10,7 @@ stream, because `agent_stopped` deliberately carries no cumulative totals
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,14 @@ from avp_conformance.case import EventMatcher, Expectations, FinalState
 
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_AGENT_STOPPED = "avp.agent_stopped"
+
+# OTel span identification (FOUNDATIONS.md): trace_id is 32 hex chars, span_id
+# is 16. ZERO_SPAN is the root sentinel (no parent).
+_TRACE_RE = re.compile(r"^[0-9a-f]{32}$")
+_SPAN_RE = re.compile(r"^[0-9a-f]{16}$")
+_ZERO_SPAN = "0" * 16
+# Prelude events anchor the trajectory at the root (no parent span).
+_ROOT_TYPES = frozenset({"avp.run_requested", "avp.agent_described", "avp.agent_started"})
 
 
 @dataclass
@@ -146,14 +155,79 @@ def _wants_cost(fs: FinalState) -> bool:
     return fs.min_total_cost_usd is not None or fs.max_total_cost_usd is not None
 
 
+def _check_structure(events: list[dict]) -> list[str]:
+    """Universal span-tree invariants every conforming trajectory MUST satisfy,
+    independent of the case (OTel span identification, FOUNDATIONS.md):
+
+    - one `trace_id` for the whole run;
+    - every event's `span_id` / `parent_span_id` is well-formed (16 hex), and
+      `span_id` is non-zero (each event owns a real span);
+    - prelude events (`run_requested`, `agent_described`, `agent_started`) sit
+      at the root (`parent_span_id` == zero);
+    - every other event's `parent_span_id` either is the root or resolves to a
+      span some event in the run actually emitted (the tree has no dangling
+      parents). This is what pairs `tool_returned` under its `tool_invoked`,
+      turns under the agent span, etc.
+
+    Run on every checked trajectory, so it guards all cases at once.
+    """
+    if not events:
+        return ["structure: empty trajectory"]
+
+    reasons: list[str] = []
+    trace_ids: set[str] = set()
+    span_ids: set[str] = set()
+
+    for e in events:
+        t = e.get("type", "?")
+        d = e.get("data", {}) if isinstance(e.get("data"), dict) else {}
+        tid, sid, pid = d.get("trace_id"), d.get("span_id"), d.get("parent_span_id")
+
+        if isinstance(tid, str) and _TRACE_RE.match(tid):
+            trace_ids.add(tid)
+        else:
+            reasons.append(f"structure: {t} has malformed trace_id {tid!r}")
+
+        if isinstance(sid, str) and _SPAN_RE.match(sid):
+            if sid == _ZERO_SPAN:
+                reasons.append(f"structure: {t} has zero span_id")
+            else:
+                span_ids.add(sid)
+        else:
+            reasons.append(f"structure: {t} has malformed span_id {sid!r}")
+
+        if not (isinstance(pid, str) and _SPAN_RE.match(pid)):
+            reasons.append(f"structure: {t} has malformed parent_span_id {pid!r}")
+
+    if len(trace_ids) > 1:
+        reasons.append(f"structure: multiple trace_ids in one run: {sorted(trace_ids)}")
+
+    for e in events:
+        t = e.get("type", "?")
+        pid = (e.get("data") or {}).get("parent_span_id")
+        if t in _ROOT_TYPES:
+            if pid != _ZERO_SPAN:
+                reasons.append(f"structure: {t} must be root (parent_span_id == zero), got {pid!r}")
+        elif (
+            isinstance(pid, str)
+            and _SPAN_RE.match(pid)
+            and pid != _ZERO_SPAN
+            and pid not in span_ids
+        ):
+            reasons.append(f"structure: {t} parent_span_id {pid!r} resolves to no emitted span")
+
+    return reasons
+
+
 def match_case(events: list[dict], expectations: Expectations) -> MatchResult:
     """Match an emitted trajectory against a case's expectations.
 
-    Checks, in order: positive `events` per `ordering`, `forbidden_events`
-    (none may appear), and `final_state`. Collects every failure into one
-    `MatchResult` so a run surfaces all problems at once.
+    Checks, in order: universal span-tree structure, positive `events` per
+    `ordering`, `forbidden_events` (none may appear), and `final_state`.
+    Collects every failure into one `MatchResult` so a run surfaces all
+    problems at once.
     """
-    reasons: list[str] = []
+    reasons: list[str] = _check_structure(events)
 
     dispatch = {
         "in_order_subsequence": _match_subsequence,

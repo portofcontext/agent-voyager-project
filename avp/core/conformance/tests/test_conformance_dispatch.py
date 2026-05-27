@@ -24,11 +24,20 @@ runner = CliRunner()
 STUB_AGENT = """\
 import argparse, json, sys
 
+# Well-formed span tree: prelude at the root, agent_stopped under the agent
+# span. (The harness structure check validates this on every trajectory.)
+_T = "a" * 32
+_Z = "0" * 16
+_AGENT = "3" * 16
+def _s(span_id, parent):
+    return {"trace_id": _T, "span_id": span_id, "parent_span_id": parent}
+
 TRAJECTORY = [
-    {"type": "avp.run_requested", "source": "avp://agent", "data": {}},
-    {"type": "avp.agent_described", "source": "avp://agent", "data": {}},
-    {"type": "avp.agent_started", "source": "avp://agent", "data": {}},
-    {"type": "avp.agent_stopped", "source": "avp://agent", "data": {"avp.reason": "converged"}},
+    {"type": "avp.run_requested", "source": "avp://agent", "data": _s("1" * 16, _Z)},
+    {"type": "avp.agent_described", "source": "avp://agent", "data": _s("2" * 16, _Z)},
+    {"type": "avp.agent_started", "source": "avp://agent", "data": _s(_AGENT, _Z)},
+    {"type": "avp.agent_stopped", "source": "avp://agent",
+     "data": {**_s("5" * 16, _AGENT), "avp.reason": "converged"}},
 ]
 
 p = argparse.ArgumentParser()

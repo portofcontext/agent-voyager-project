@@ -17,7 +17,7 @@ What you'll see on the wire:
 
 Note: v0.1 dropped the resolver-managed subagent path (a subagent with a
 separate child `run_id`, dereferenced from a Commission ref); that is
-tracked in the conformance BACKLOG. This example shows the IN-PROCESS
+tracked in the conformance COVERAGE notes. This example shows the IN-PROCESS
 shape, which is what the wire records either way: `subagent_invoked` ->
 `subagent_returned`, span-paired.
 
