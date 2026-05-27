@@ -13,9 +13,6 @@ conformance suite is the language-agnostic behavioral contract on top: every
 case runs against a real model and is expected to pass on every conforming
 agent (today: `avp-claude-agent-sdk` and `avp-goose`).
 
-Reference principle: when the agents disagree, the claude SDK is authoritative
-and goose is fixed to match ("match claude" sometimes means "finish claude").
-
 ## Covered (cross-agent, live)
 
 - **Prelude + lifecycle.** The trajectory opens `run_requested` ->
@@ -114,6 +111,4 @@ least-baked part of v0.1 and there is no in-repo resolver service to dial.
 ## Not expressible cross-agent
 
 - **Subset tool filter** (`[names]` -> exactly those tools). Mechanically
-  supported by both agents, but no built-in tool name is common across claude
-  (`Bash`/`Read`) and goose (`shell`/`write`/`edit`), so a shared case cannot be
-  written. Would have to be agent-specific.
+  supported by both agents, but no built-in tool name is common across agents.
