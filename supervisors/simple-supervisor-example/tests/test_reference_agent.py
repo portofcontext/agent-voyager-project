@@ -127,10 +127,13 @@ def test_text_only_run_emits_full_lifecycle(monkeypatch: pytest.MonkeyPatch) -> 
     assert types[1] == "avp.agent_described"
     assert types[2] == "avp.agent_started"
     assert "avp.assistant_message" in types
-    assert "avp.text_emitted" in types
-    assert "avp.cost_recorded" in types
     assert types[-1] == "avp.agent_stopped"
     assert events[-1]["data"]["avp.reason"] == "converged"
+    # The model's text rides inside assistant_message.avp.content as a TextBlock
+    # (there is no separate text_emitted event in v0.1).
+    am = next(e for e in events if e["type"] == "avp.assistant_message")
+    text_blocks = [b for b in am["data"]["avp.content"] if b.get("type") == "text"]
+    assert any("DONE" in b["text"] for b in text_blocks)
 
 
 def test_ndjson_envelope_one_event_per_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,9 +184,10 @@ def test_tool_call_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     assert events[-1]["data"]["avp.reason"] == "converged"
 
     returned = next(e for e in events if e["type"] == "avp.tool_returned")
-    assert returned["data"]["gen_ai.tool.call.id"] == "tu1"
-    assert returned["data"]["gen_ai.tool.name"] == "bash"
-    assert "hi" in returned["data"]["avp.tool_result"]["content"][0]["text"]
+    assert returned["data"]["avp.tool.call_id"] == "tu1"
+    assert returned["data"]["avp.tool.name"] == "bash"
+    # ShellTools runs the real `echo hi`; the result content is a plain string.
+    assert "hi" in returned["data"]["avp.tool_result"]["content"]
 
 
 def test_bad_schema_version_emits_error_then_stop(

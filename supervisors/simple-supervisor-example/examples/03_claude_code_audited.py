@@ -6,12 +6,13 @@ the same Commission-declared environment they'd get from a driver-pattern agent.
 
 What this example demonstrates:
   - The same Commission-building flow as example 01 — profile + overrides
-  - Translation of Commission → ClaudeAgentOptions:
+  - Translation of Commission → ClaudeAgentOptions (done inside
+    `AVPClaudeSDKClient`):
       Commission.enabled_builtin_tools → SDK's `tools` parameter
       Commission.system_prompt        → SDK's system_prompt
       Commission.model                → SDK's model
-  - Claude Code hooks (PreToolUse / PostToolUse) registered by the translator
-    to emit AVP tool_invoked / tool_returned in step with the SDK's own dispatch
+  - Claude Code hooks register AVP tool_invoked / tool_returned in step with
+    the SDK's own dispatch
   - Same post-run summary as the driver examples
 
 Requires:
@@ -23,25 +24,36 @@ Requires:
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
 import os
+import shutil
 import sys
 from datetime import UTC, datetime
 
 from simple_supervisor import build_commission, render, summarize
 
-from avp_claude_agent_sdk import ClaudeAgentTranslator
+from avp.content import TextBlock
 
 
 def main() -> int:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("error: set ANTHROPIC_API_KEY before running this example", file=sys.stderr)
         return 2
+    if importlib.util.find_spec("claude_agent_sdk") is None:
+        print("error: install claude-agent-sdk (pip install claude-agent-sdk)", file=sys.stderr)
+        return 2
+    if shutil.which("claude") is None:
+        print("error: install the Claude Code CLI; `claude` must be on PATH", file=sys.stderr)
+        return 2
+
+    from avp_claude_agent_sdk import AVPClaudeSDKClient
 
     run_id = f"claude-code-audit-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
     # Tool names here are Claude Code's (Read / Write / Bash / Edit / Glob).
     # The supervisor narrows the surface to a read-only audit; the SDK enforces
-    # it via the `tools` parameter the translator passes through.
+    # it via the `tools` parameter AVPClaudeSDKClient passes through.
     config = build_commission(
         run_id=run_id,
         prompt="Read the README.md and tell me what this project demonstrates. End with 'DONE'.",
@@ -55,28 +67,39 @@ def main() -> int:
     print("== Live trajectory ==")
 
     events: list = []
-    translator = ClaudeAgentTranslator(config, on_event=events.append)
-    translator.run()
+
+    async def sink(ev) -> None:
+        events.append(ev)
+
+    async def _run() -> None:
+        async with AVPClaudeSDKClient(commission=config, sink=sink) as client:
+            await client.query(config.prompt)
+            async for _message in client.receive_response():
+                pass
+
+    asyncio.run(_run())
 
     for ev in events:
         type_name = type(ev).__name__
         if type_name == "AssistantMessageEvent":
             print(
-                f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f}  "
-                f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
+                f"  [turn {ev.data.step}] cost=${ev.data.cost_usd:.5f}  "
+                f"tokens={ev.data.usage.input_tokens}+{ev.data.usage.output_tokens}"
             )
-        elif type_name == "TextEmittedEvent":
-            preview = ev.data.avp_text.replace("\n", " ")[:80]
-            print(f"  [turn {ev.data.avp_step}] text: {preview!r}")
+            for block in ev.data.content:
+                if isinstance(block, TextBlock) and block.text.strip():
+                    print(
+                        f"  [turn {ev.data.step}] text: {block.text.replace(chr(10), ' ')[:80]!r}"
+                    )
         elif type_name == "ToolInvokedEvent":
             print(
-                f"  [turn {ev.data.avp_step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+                f"  [turn {ev.data.step}] -> {ev.data.tool_name}({list(ev.data.tool_input.keys())})"
             )
         elif type_name == "ToolReturnedEvent":
-            head = ev.data.avp_tool_result.content[0].text.replace("\n", " ")[:60]
-            print(f"  [turn {ev.data.avp_step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
+            head = str(ev.data.tool_result.content).replace("\n", " ")[:60]
+            print(f"  [turn {ev.data.step}] <- {ev.data.tool_name}: {head!r}...")
         elif type_name == "AgentStoppedEvent":
-            print(f"  STOPPED reason={ev.data.avp_reason}")
+            print(f"  STOPPED reason={ev.data.reason}")
 
     print()
     print(render(summarize(events)))
@@ -98,39 +121,39 @@ def _validate_outcome(events: list) -> list[str]:
     PASS criteria:
       - Run converged
       - At least one Read tool call fired (the only allowed_tool)
-      - Some text was emitted (the agent actually answered)
-      - Errors limited to the documented accounting_reset SDK quirk
-        (any OTHER error_occurred is a real failure)
+      - The agent produced some assistant text (it actually answered)
+      - No error_occurred events
     """
     issues: list[str] = []
-    types = [type(ev).__name__ for ev in events]
 
     stop = next((ev for ev in events if type(ev).__name__ == "AgentStoppedEvent"), None)
     if stop is None:
-        issues.append("no agent_stopped event — translator exited mid-trajectory")
+        issues.append("no agent_stopped event — run exited mid-trajectory")
         return issues
-    if str(stop.data.avp_reason) != "converged":
-        issues.append(f"expected stop reason 'converged'; got {stop.data.avp_reason!r}")
+    if stop.data.reason.value != "converged":
+        issues.append(f"expected stop reason 'converged'; got {stop.data.reason!r}")
 
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:
         issues.append("no tool calls — agent should have used Read")
-    elif not any(ev.data.gen_ai_tool_name == "Read" for ev in tool_invokes):
+    elif not any(ev.data.tool_name == "Read" for ev in tool_invokes):
         issues.append(
-            f"agent never called Read; called: {[ev.data.gen_ai_tool_name for ev in tool_invokes]}"
+            f"agent never called Read; called: {[ev.data.tool_name for ev in tool_invokes]}"
         )
 
-    if "TextEmittedEvent" not in types:
-        issues.append("no text_emitted events — agent didn't produce a response")
+    # Some assistant_message must carry visible text (the agent answered).
+    msgs = [ev for ev in events if type(ev).__name__ == "AssistantMessageEvent"]
+    has_text = any(
+        isinstance(b, TextBlock) and b.text.strip() for ev in msgs for b in ev.data.content
+    )
+    if not has_text:
+        issues.append("no assistant text — agent didn't produce a response")
 
-    # accounting_reset is a known SDK quirk (see avp-claude-agent-sdk README).
-    # Any OTHER error_occurred is a real failure.
     errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
-    unexpected = [ev for ev in errs if ev.data.avp_error_code.value != "accounting_reset"]
-    if unexpected:
+    if errs:
         issues.append(
-            f"unexpected error_occurred (not accounting_reset): "
-            f"{[(e.data.avp_error_code.value, e.data.avp_error_message[:80]) for e in unexpected]}"
+            f"error_occurred events present: "
+            f"{[(e.data.error_code.value, e.data.error_message[:80]) for e in errs]}"
         )
 
     return issues

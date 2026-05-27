@@ -44,28 +44,31 @@ The repo packages two kinds of things on top of the wire format. Get the
 right one when picking where new code lives; the contracts differ.
 
 **Agent.** Owns the agent loop. Reads a Commission from input, emits the
-trajectory, advertises an Agent Descriptor, dispatches tools, calls the
-resolver for managed assets, and produces `agent_stopped` with a stop
-reason. An agent IS what `avp/core/spec/v0.1/` certifies as conforming. Examples
-in this repo: `avp-claude-agent-sdk` (built on the Claude Agent SDK, which
-already owns a loop), and the reference agent at
+trajectory, advertises an Agent Descriptor, dispatches tools, and produces
+`agent_stopped` with a stop reason. An agent IS what `avp/core/spec/v0.1/`
+certifies as conforming. Examples in this repo: `avp-claude-agent-sdk`
+(built on the Claude Agent SDK, which already owns a loop), and the
+reference agent at
 `supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py`
-(built on the `avp-anthropic` SDK adapter plus `AVPAgent`).
+(inlines its own loop over the `avp-anthropic` SDK adapter, emitting events
+directly to a sink).
 
 **SDK adapter.** Translates one raw API / client surface to AVP. Ships a
-`ModelDriver` (turn-by-turn translation that plugs into `AVPAgent`), a
-`TracedClient` (drop-in observability over an existing SDK loop), and
-Commission-to-API translators. Ships NO agent loop and NO built-in tools:
-the underlying API doesn't have them, so neither does the adapter. Agents
-wrap the adapter. Example: `avp-anthropic` for the Anthropic Messages API.
+per-turn translator (e.g. `AnthropicModelDriver`: an agent's loop calls
+`.step(history)` and emits the matching events), a `TracedClient` (drop-in
+observability over an existing SDK loop), and Commission-to-API translators.
+Ships NO agent loop and NO built-in tools: the underlying API doesn't have
+them, so neither does the adapter. The wire-types binding ships no agent base
+class / driver protocol, so each agent inlines its own loop. Agents wrap the
+adapter. Example: `avp-anthropic` for the Anthropic Messages API.
 
 Rule of thumb for new providers: if the upstream SDK ships its own agent
 loop and tool catalog, package a complete agent under `agents/<name>/<lang>/`.
 If the upstream is a raw HTTP client, package an SDK adapter under
 `sdks/` and add a reference agent in
 `supervisors/simple-supervisor-example/examples/`. The descriptor
-helper and the driver protocol are designed so the agent does the
-minimum of plumbing.
+helper and the translation DTOs are designed so the agent's inlined loop
+does the minimum of plumbing.
 
 The folder split reflects this: `agents/` for agents,
 `sdks/` for adapters, `supervisors/.../examples/` for
@@ -189,10 +192,9 @@ seam tests but break real-model integration. Concretely, that's any of:
   `sdks/avp-anthropic/src/avp_anthropic/driver.py` (token / cost
   extraction), `agents/avp-claude-agent-sdk/python/src/avp_claude_agent_sdk/_translator.py`
   (SDK message handling, hook installation).
-- **Tracer or traced clients**: `avp.tracer` (AVPTracer, format_event,
-  module-level helpers), `avp_anthropic.AnthropicTracedClient` /
-  `wrap_anthropic`, `avp_claude_agent.TracedClaudeSDKClient` /
-  `traced_claude_sdk_client`.
+- **Traced clients**: `avp_anthropic.AnthropicTracedClient` / `wrap_anthropic`
+  (and their inline run-state + `format_event` / `print_event` helpers). The
+  Claude agent's drop-in surface is `avp_claude_agent_sdk.AVPClaudeSDKClient`.
 - **`build_anthropic_tools` and similar Commission → SDK translators**: they
   affect what the model actually sees.
 
@@ -213,8 +215,9 @@ that compiled fine but undercounted by 30%).
 - Do NOT skip the seam-test step "because the unit tests pass." The
   unit tests passed when each of the bugs we shipped was a bug.
 - Do NOT append assistant turns to history without their `tool_calls`
-  entries. The next model call will fail validation. (`agent.py` enforces
-  this; if you reorganize the loop, preserve it.)
+  entries. The next model call will fail validation. (Each agent's inlined
+  loop carries this invariant, e.g. the reference agent's `run_agent`; if you
+  reorganize a loop, preserve it.)
 - Do NOT use em dashes in prose. Use commas, periods, semicolons, colons,
   or parentheses instead.
 
@@ -239,20 +242,24 @@ uv (Python) workspace is rooted at the repo root (`pyproject.toml` +
 - `avp/bindings/python/`: the `avp` package — wire types (Pydantic source of truth), the sink type + stdio/jsonl sinks, and the resolver client. No harness, no cases.
 - `avp/bindings/rust/`, `avp/bindings/typescript/`: the generated Rust + TypeScript bindings of the wire types.
 - `sdks/avp-anthropic/`: SDK adapter for the raw Anthropic Messages API:
-  `AnthropicModelDriver` (plugs into an agent loop as a `ModelDriver`),
-  `AnthropicTracedClient` + `wrap_anthropic` (drop-in over an existing
-  Anthropic SDK loop), and Commission-to-API translators. No agent loop or
-  built-in tools: the API itself ships neither, and agents wrap the SDK.
-- `agents/avp-claude-agent-sdk/python/`: observer-pattern agent over Claude Agent SDK,
-  plus `TracedClaudeSDKClient` and `traced_claude_sdk_client` (drop-in over an
-  existing `ClaudeSDKClient` loop). The Claude Agent SDK ships its own loop +
-  tools, so this is a complete agent rather than an adapter.
+  `AnthropicModelDriver` (a per-turn translator an agent's loop calls
+  `.step(history)` on), `AnthropicTracedClient` + `wrap_anthropic` (drop-in
+  over an existing Anthropic SDK loop), the `ModelResponse` → wire converters
+  (`model_response_to_content` / `model_response_usage`), and Commission-to-API
+  translators. No agent loop or built-in tools: the API itself ships neither,
+  and agents wrap the SDK.
+- `agents/avp-claude-agent-sdk/python/`: observer-pattern agent over Claude Agent SDK.
+  `AVPClaudeSDKClient` is its drop-in `ClaudeSDKClient` subclass (emits the
+  trajectory across `query()` / `receive_response()` / `disconnect()`). The
+  Claude Agent SDK ships its own loop + tools, so this is a complete agent
+  rather than an adapter.
 - `agents/avp-goose/rust/`: in-process Rust observer of Block's Goose agent (the `avp-goose` crate), including its `avp-goose-conformance` binary.
 - `supervisors/simple-supervisor-example/`: worked supervisor example
-  plus runnable real-LLM examples (`examples/01_*` through `examples/07_*`)
-  and `examples/_anthropic_reference_agent.py`: a reference agent built on
-  the `avp-anthropic` SDK adapter, demonstrating how to wire a `ModelDriver`
-  to an agent loop with a local `ToolDriver` (`ShellTools`).
+  plus runnable real-LLM examples (`examples/01_*` through `examples/08_*`)
+  and `examples/_anthropic_reference_agent.py`: a reference agent that inlines
+  its own loop over the `avp-anthropic` SDK adapter, calling the driver's
+  `.step(...)` each turn, dispatching a local `ShellTools` catalog, and
+  emitting events directly to a sink.
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make smoke` is the pre-merge
   full-matrix sanity check (see above).

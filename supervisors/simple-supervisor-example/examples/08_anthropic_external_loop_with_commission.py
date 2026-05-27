@@ -8,11 +8,9 @@ Phase 1 (`06_anthropic_traced_client.py`).
 Composition:
 
   1. `Commission`                                       parse / construct
-  2. `HttpResolver` / `ScriptedResolver`                dereference refs
+  2. resolve refs (inline stand-in for a resolver service)
   3. `build_anthropic_tools(commission, builtins=...)`  Commission → tools=
-  4. `build_anthropic_mcp_servers_from_resolved(...)`   resolved → mcp_servers=
-  5. `AVPTracer(commission, on_event=...)`              run lifecycle
-  6. `wrap_anthropic(client)`                           per-turn AVP events
+  4. `AnthropicTracedClient(client, commission=, on_event=)`  run + per-turn events
 
 What this demonstrates concretely:
 
@@ -22,13 +20,12 @@ What this demonstrates concretely:
   - One `skills` ref resolves to inline SKILL.md content that's prepended
     to the system prompt — the model adopts the skill without the agent
     hardcoding it.
-  - `wrap_anthropic` proxies `messages.create` so every turn emits
-    `assistant_message`, `text_emitted`, `tool_invoked`, and
-    `cost_recorded` events. The active `AVPTracer` is found via
-    contextvar.
-  - Tool dispatch is wrapped with `tracer.tool(...)` so AVP records the
-    actual execution span (matching the model's `tool_invoked` to a
-    `tool_returned`).
+  - `AnthropicTracedClient` instruments `messages.create` so every turn
+    emits one `assistant_message` (with `avp.content`, `avp.usage`,
+    `avp.cost_usd`), bracketed by `run_requested` / `agent_started` /
+    `agent_stopped`.
+  - Tool dispatch is wrapped with `client.tool(...)` so AVP records the
+    actual execution span (a `tool_invoked` / `tool_returned` pair).
 
 Run:
   ANTHROPIC_API_KEY=... python examples/08_anthropic_external_loop_with_commission.py
@@ -41,13 +38,11 @@ import sys
 
 import anthropic
 
-from avp.agent.mock import ScriptedResolver
 from avp.commission import (
     Commission,
     SkillRef,
 )
-from avp.tracer import AVPTracer, print_event
-from avp_anthropic import build_anthropic_tools, wrap_anthropic
+from avp_anthropic import AnthropicTracedClient, build_anthropic_tools, print_event
 
 # Local tool catalog the agent exposes. The Commission's
 # `enabled_builtin_tools` allowlist gates which of these the model sees.
@@ -108,28 +103,23 @@ def main() -> int:
         skills=[SkillRef(id="arithmetic-style", ref="local://skills/arithmetic-style")],
     )
 
-    # ── Resolver: in-process stand-in for a real supervisor service ───────────
-    # In production, this is `HttpResolver(url=..., token=...)` or
-    # `http_resolver_from_env()`. The shape returned per resolution matches
-    # `spec/v0.1/resolver.md` §3.
-    resolver = ScriptedResolver(
-        resolutions={
-            "skill:arithmetic-style": {
-                "result": {
-                    "content": (
-                        "# Arithmetic style\n\n"
-                        "When asked to compute, call exactly one tool per step. "
-                        "Do not chain operations in a single call. Show the running result."
-                    ),
-                }
-            }
+    # ── Resolver: inline stand-in for a real supervisor service ───────────────
+    # In production a resolver service dereferences each ref (per
+    # `spec/v0.1/resolver.md`). Here we resolve inline by id.
+    _RESOLUTIONS: dict[str, dict] = {
+        "arithmetic-style": {
+            "content": (
+                "# Arithmetic style\n\n"
+                "When asked to compute, call exactly one tool per step. "
+                "Do not chain operations in a single call. Show the running result."
+            ),
         }
-    )
+    }
 
     # ── Resolve managed refs (skills here; mcp_servers / subagents identical) ──
     system_prompt_parts: list[str] = []
     for skill_ref in commission.skills or []:
-        material = resolver.resolve(kind="skill", id=skill_ref.id, ref=skill_ref.ref)
+        material = _RESOLUTIONS.get(skill_ref.id, {})
         if content := material.get("content"):
             system_prompt_parts.append(content)
     # If commission.mcp_servers were set:
@@ -143,10 +133,10 @@ def main() -> int:
     # tools now contains only the entries whose name is in
     # commission.enabled_builtin_tools — i.e. add + subtract, not multiply.
 
-    # ── Run: tracer first, then wrap the client (composes via contextvar) ────
-    with AVPTracer(commission, on_event=print_event) as tracer:
-        client = wrap_anthropic(anthropic.Anthropic())
-
+    # ── Run: instrument the client; the loop body is otherwise unchanged ──────
+    with AnthropicTracedClient(
+        anthropic.Anthropic(), commission=commission, on_event=print_event
+    ) as client:
         system = "\n\n".join(system_prompt_parts) or None
         msgs: list[dict] = [{"role": "user", "content": commission.prompt}]
         for _ in range(8):  # turn budget; v0.1 leaves bounded execution to caller
@@ -181,7 +171,7 @@ def main() -> int:
 
             # Dispatch tools, recording each span on the trajectory.
             for block in tool_uses:
-                with tracer.tool(call_id=block.id, name=block.name, input=dict(block.input)) as t:
+                with client.tool(call_id=block.id, name=block.name, input=dict(block.input)) as t:
                     output = dispatch(block.name, dict(block.input))
                     t.record(output)
                 msgs.append(
@@ -194,7 +184,7 @@ def main() -> int:
                 )
 
             if resp.stop_reason == "end_turn":
-                tracer.converged()
+                client.converged()
                 break
 
     return 0

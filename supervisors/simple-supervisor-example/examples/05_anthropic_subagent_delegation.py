@@ -1,35 +1,27 @@
-"""Example 05: Managed-subagent delegation via the AVP Resolver API.
+"""Example 05: in-process subagent delegation.
 
-Builds an avp-anthropic-driven agent in-process (no subprocess). The
-reference agent's ShellTools + descriptor live in the sibling script
-`_anthropic_reference_agent.py`; this example imports them directly.
-
-Story: a supervisor declares ONE managed subagent — a `summarizer` whose
-job is to turn a passage into a couple of bullets. The Commission carries
-just an opaque ref for the subagent; an in-process `ScriptedResolver`
-stands in for what a production supervisor would wire as an HTTP service
-(per `spec/v0.1/resolver.md`). The parent agent runs against Claude, calls
-`avp.spawn_subagent` when the model invokes the subagent, and emits the
-expected lifecycle on the wire.
+A parent agent runs against Claude through `AnthropicTracedClient`. It
+exposes one tool, `summarize`. When the model calls it, the example
+delegates to a "summarizer" subagent: a second, focused model call,
+bracketed on the wire by `subagent_invoked` / `subagent_returned` via
+`client.subagent(...)`. The summary comes back as the tool result, the
+parent reports it, and the run converges.
 
 What you'll see on the wire:
-  - `agent_described.data["avp.descriptor"]` — the agent's whoami
-  - `agent_started.data.subagents = [{name: "summarizer"}]` — id-only
-    stub (descriptions arrive via `managed_ref_resolved`)
-  - `managed_ref_resolved` (for the subagent ref) before any model turn
-  - One or more `model_turn_*` from the parent's loop
-  - `subagent_invoked` carrying `avp.subagent.run_id` = the child run
-  - `subagent_returned` carrying the inline summary the resolver returned
-  - The parent's converging turn, `agent_stopped(reason=converged)`
+  - `run_requested` + `agent_started` (the prelude)
+  - `assistant_message` for the parent's turn that calls `summarize`
+  - `subagent_invoked` -> `subagent_returned` (span-paired) around the
+    summarizer sub-call
+  - `tool_returned` carrying the summary back to the parent
+  - the parent's converging turn, `agent_stopped(reason=converged)`
 
-Why this matters: managed-subagent dispatch is supervisor-mediated. The
-parent agent doesn't run a sub-loop in-process — it asks the resolver to
-spawn the subagent. The wire shape stays the same as if the subagent ran
-in-process (subagent_invoked → subagent_returned), but with
-`avp.subagent.run_id` letting consumers correlate the parent and child
-trajectories.
+Note: v0.1 dropped the resolver-managed subagent path (a subagent with a
+separate child `run_id`, dereferenced from a Commission ref); that is
+tracked in the conformance BACKLOG. This example shows the IN-PROCESS
+shape, which is what the wire records either way: `subagent_invoked` ->
+`subagent_returned`, span-paired.
 
-Requires ANTHROPIC_API_KEY (the parent run hits real Claude).
+Requires ANTHROPIC_API_KEY (both the parent and summarizer hit real Claude).
 """
 
 from __future__ import annotations
@@ -38,20 +30,34 @@ import os
 import sys
 from datetime import UTC, datetime
 
-from _anthropic_reference_agent import (
-    SHELL_TOOL_SCHEMAS,
-    ShellTools,
-    descriptor,
-)
+import anthropic
 from simple_supervisor import render, summarize
 
-from avp.agent import AVPAgent
-from avp.agent.mock import ScriptedResolver, ScriptedSupervisor
-from avp.commission import (
-    Commission,
-    SubagentRef,
-)
-from avp_anthropic import AnthropicModelDriver, build_anthropic_tools
+from avp.commission import Commission
+from avp_anthropic import AnthropicTracedClient, print_event
+
+_SUMMARIZE_TOOL = {
+    "name": "summarize",
+    "description": "Delegate a passage to the summarizer subagent. Returns 2 short bullets.",
+    "input_schema": {
+        "type": "object",
+        "required": ["passage"],
+        "properties": {"passage": {"type": "string", "description": "Text to summarize."}},
+    },
+}
+
+
+def _run_summarizer(raw: anthropic.Anthropic, model: str, passage: str) -> str:
+    """The subagent: a focused, untraced sub-call. (Untraced so it doesn't
+    emit a parent-level assistant_message; the subagent_* pair is the wire
+    record of this delegation.)"""
+    resp = raw.messages.create(
+        model=model,
+        max_tokens=200,
+        system="You compress a passage into exactly 2 short bullet points. Output only the bullets.",
+        messages=[{"role": "user", "content": passage}],
+    )
+    return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
 
 
 def main() -> int:
@@ -60,93 +66,78 @@ def main() -> int:
         return 2
 
     run_id = f"subagent-delegation-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
-
+    model = "claude-haiku-4-5-20251001"
     commission = Commission(
         schema_version="0.1",
         run_id=run_id,
-        model="claude-haiku-4-5-20251001",
+        model=model,
         system_prompt=(
-            "You are a delegating agent. Call the `summarizer` subagent ONCE "
-            "with a short passage, then report what it returned. End with 'DONE'."
+            "You are a delegating agent. Call the `summarize` tool ONCE with the "
+            "passage the user gives you, then report the bullets it returns. End with 'DONE'."
         ),
         prompt=(
-            "Summarize this for me: 'Async I/O lets a single thread interleave "
-            "multiple network requests by yielding while waiting for bytes, so "
-            "you get throughput without the memory cost of one OS thread per "
-            "in-flight request.' Use the summarizer subagent."
+            "Summarize this: 'Async I/O lets a single thread interleave multiple "
+            "network requests by yielding while waiting for bytes, so you get "
+            "throughput without the memory cost of one OS thread per in-flight request.'"
         ),
-        subagents=[SubagentRef(id="summarizer", ref="example-05/summarizer/v1")],
-    )
-
-    # In production the supervisor stands up a resolver service and sets
-    # AVP_RESOLVER_URL on the agent's environment; the CLI dials it via
-    # HttpResolver. For this example we wire a ScriptedResolver directly
-    # so the demonstration doesn't require a live service.
-    resolver = ScriptedResolver(
-        resolutions={
-            "subagent:summarizer": {
-                "result": {
-                    "name": "summarizer",
-                    "description": "Compresses a passage into 2 short bullets.",
-                }
-            }
-        },
-        subagent_spawns={
-            "summarizer": {
-                "child_run_id": f"sub-{run_id}-summarizer-1",
-                "text": "- Async I/O interleaves requests on one thread.\n- Saves the memory cost of one OS thread per in-flight request.",
-                "reason": "converged",
-                "duration_ms": 75,
-                "usage": {"total_cost_usd": 0.0006, "total_tokens": 95, "total_turns": 1},
-            }
-        },
     )
 
     events: list = []
 
-    driver = AnthropicModelDriver(
-        model=commission.model,
-        tools_param=build_anthropic_tools(commission, builtins=list(SHELL_TOOL_SCHEMAS)) or None,
-        max_tokens=400,
-    )
+    def on_event(ev) -> None:
+        events.append(ev)
+        print_event(ev)
 
-    agent = AVPAgent(
-        commission=commission,
-        model=driver,
-        tools=ShellTools(),
-        supervisor=ScriptedSupervisor(),
-        agent_builtin_tools=list(SHELL_TOOL_SCHEMAS),
-        resolver=resolver,
-        descriptor=descriptor(),
-        on_event=events.append,
-    )
-    agent.run()
-
-    print(f"== Run {run_id} ==")
-    for ev in events:
-        type_name = type(ev).__name__
-        if type_name == "ManagedRefResolvedEvent":
-            print(f"  resolved {ev.data.avp_managed_kind}:{ev.data.avp_managed_id}")
-        elif type_name == "AssistantMessageEvent":
-            print(
-                f"  [turn {ev.data.avp_step}] cost=${ev.data.avp_cost_usd:.5f} "
-                f"tokens={ev.data.gen_ai_usage_input_tokens}+{ev.data.gen_ai_usage_output_tokens}"
+    with AnthropicTracedClient(
+        anthropic.Anthropic(), commission=commission, on_event=on_event
+    ) as client:
+        msgs: list[dict] = [{"role": "user", "content": commission.prompt}]
+        for _ in range(6):
+            resp = client.messages.create(
+                model=model,
+                max_tokens=400,
+                system=commission.system_prompt,
+                messages=msgs,
+                tools=[_SUMMARIZE_TOOL],
             )
-        elif type_name == "SubagentInvokedEvent":
-            print(
-                f"  -> subagent invoked: {ev.data.gen_ai_agent_name} "
-                f"(child run_id={ev.data.avp_subagent_run_id})"
-            )
-        elif type_name == "SubagentReturnedEvent":
-            preview = ev.data.avp_subagent_result_text.replace("\n", " ")[:80]
-            print(f"  <- subagent returned: {preview!r}")
-        elif type_name == "TextEmittedEvent":
-            preview = ev.data.avp_text.replace("\n", " ")[:120]
-            print(f"  [turn {ev.data.avp_step}] text: {preview!r}")
-        elif type_name == "AgentStoppedEvent":
-            print(f"  STOPPED reason={ev.data.avp_reason}")
 
-    print()
+            assistant_blocks: list = []
+            tool_uses = []
+            for block in resp.content:
+                if block.type == "text":
+                    assistant_blocks.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    assistant_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input": block.input,
+                        }
+                    )
+                    tool_uses.append(block)
+            if assistant_blocks:
+                msgs.append({"role": "assistant", "content": assistant_blocks})
+
+            for block in tool_uses:
+                passage = str(dict(block.input).get("passage", ""))
+                with client.subagent(name="summarizer", input={"passage": passage}) as sa:
+                    summary = _run_summarizer(client.real, model, passage)
+                    sa.record_result(summary)
+                msgs.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "tool_result", "tool_use_id": block.id, "content": summary}
+                        ],
+                    }
+                )
+
+            if resp.stop_reason == "end_turn":
+                client.converged()
+                break
+
+    print(f"\n== Run {run_id} ==")
     print(render(summarize(events)))
 
     issues = _validate_outcome(events)
@@ -162,30 +153,20 @@ def main() -> int:
 
 def _validate_outcome(events: list) -> list[str]:
     issues: list[str] = []
-    types = [type(ev).__name__ for ev in events]
-
-    if "ManagedRefResolvedEvent" not in types:
-        issues.append("expected managed_ref_resolved for the subagent ref")
-
     invoked = [ev for ev in events if type(ev).__name__ == "SubagentInvokedEvent"]
     returned = [ev for ev in events if type(ev).__name__ == "SubagentReturnedEvent"]
     if not invoked:
-        issues.append("subagent_invoked never fired — model didn't call the summarizer")
+        issues.append("subagent_invoked never fired — model didn't call the summarize tool")
     if not returned:
         issues.append("subagent_returned never fired")
-    if invoked and not invoked[0].data.avp_subagent_run_id:
-        issues.append(
-            "subagent_invoked missing avp.subagent.run_id (managed subagent should carry it)"
-        )
     if invoked and returned and invoked[0].data.span_id != returned[0].data.span_id:
         issues.append("subagent_invoked/returned span_ids don't pair")
 
     stop = next((ev for ev in events if type(ev).__name__ == "AgentStoppedEvent"), None)
     if stop is None:
         issues.append("no agent_stopped event")
-    elif str(stop.data.avp_reason) != "converged":
-        issues.append(f"expected stop=converged; got {stop.data.avp_reason!r}")
-
+    elif str(stop.data.reason) != "StopReason.converged" and stop.data.reason.value != "converged":
+        issues.append(f"expected stop=converged; got {stop.data.reason!r}")
     return issues
 
 

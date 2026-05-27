@@ -1,7 +1,7 @@
-"""Tests for AnthropicTracedClient — Layer 2 drop-in for the Anthropic SDK.
+"""Tests for AnthropicTracedClient + wrap_anthropic — drop-in AVP
+instrumentation over an existing Anthropic SDK loop.
 
-The wrapper hides AVPTracer behind a context manager so user code looks
-like a vanilla Anthropic loop:
+User code looks like a vanilla Anthropic loop:
 
     with AnthropicTracedClient(real, commission=cfg, on_event=publish) as client:
         while True:
@@ -13,13 +13,14 @@ like a vanilla Anthropic loop:
 
 These tests pin the contract:
 
-  - Lifecycle: agent_started on `__enter__`, agent_stopped on `__exit__`
-  - One `messages.create()` call → one model_turn pair, before yield
-  - Token / cost extraction matches AnthropicModelDriver
-  - The wrapper returns the underlying Message UNMODIFIED
-  - `client.tool(...)` and `client.subagent(...)` delegate to the
-    internal tracer
-  - Pass-through for non-wrapped attributes via `__getattr__`
+  - Lifecycle: run_requested + agent_started on `__enter__`,
+    agent_stopped on `__exit__`.
+  - One `messages.create()` call → one `assistant_message`, before yield.
+  - Token / cost extraction is byte-identical to `AnthropicModelDriver`
+    (both go through the same Anthropic→ModelResponse walker).
+  - The wrapper returns the underlying Message UNMODIFIED.
+  - `client.tool(...)` / `client.subagent(...)` emit the paired events.
+  - `wrap_anthropic` proxies emit to the active run via the ContextVar.
 """
 
 from __future__ import annotations
@@ -29,27 +30,24 @@ from typing import Any
 
 import pytest
 
-from avp.commission import (
-    Commission,
-    SubagentRef,
-)
-from avp.enums import StopReason
+from avp.commission import Commission
+from avp.content import TextBlock
 from avp.trajectory import (
     AgentStartedEvent,
     AgentStoppedEvent,
     AssistantMessageEvent,
+    StopReason,
     SubagentInvokedEvent,
     SubagentReturnedEvent,
-    TextEmittedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
 )
-from avp_anthropic import AnthropicTracedClient
+from avp_anthropic import AnthropicModelDriver, AnthropicTracedClient, wrap_anthropic
 
 
 class _FakeMessages:
     """Stand-in for `anthropic.Anthropic().messages`. Returns scripted
-    `anthropic.Message`-shaped responses one at a time."""
+    responses one at a time and captures calls."""
 
     def __init__(self, responses: list[Any]) -> None:
         self._responses = list(responses)
@@ -63,8 +61,8 @@ class _FakeMessages:
 
 
 class _FakeAnthropic:
-    """Stand-in for `anthropic.Anthropic()`. Exposes `.messages` and a
-    `.beta` attribute to verify __getattr__ pass-through."""
+    """Stand-in for `anthropic.Anthropic()`. Exposes `.messages` and a `.beta`
+    attribute to verify __getattr__ pass-through."""
 
     def __init__(self, responses: list[Any]) -> None:
         self.messages = _FakeMessages(responses)
@@ -119,6 +117,13 @@ def _types(events: list) -> list[str]:
     return [type(e).__name__ for e in events]
 
 
+def _text_of(msg: AssistantMessageEvent) -> str | None:
+    for block in msg.data.content:
+        if isinstance(block, TextBlock):
+            return block.text
+    return None
+
+
 # ── Lifecycle ────────────────────────────────────────────────────────────────
 
 
@@ -131,76 +136,89 @@ def test_enter_exit_emit_full_lifecycle_around_a_single_create_call() -> None:
         client.converged()
 
     types = _types(out)
-    assert types[0] == "AgentStartedEvent"
+    assert types[0] == "RunRequestedEvent"
+    assert "AgentStartedEvent" in types
     assert types[-1] == "AgentStoppedEvent"
     stopped = _by_type(out, AgentStoppedEvent)[0]
-    assert stopped.data.avp_reason == StopReason.converged
+    assert stopped.data.reason == StopReason.converged
 
 
-def test_create_call_emits_one_assistant_message() -> None:
+def test_create_call_emits_one_assistant_message_carrying_text() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="hello", input_tokens=40, output_tokens=8)])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
 
-    assert len(_by_type(out, AssistantMessageEvent)) == 1
-    text_events = _by_type(out, TextEmittedEvent)
-    assert len(text_events) == 1 and text_events[0].data.avp_text == "hello"
+    msgs = _by_type(out, AssistantMessageEvent)
+    assert len(msgs) == 1
+    assert _text_of(msgs[0]) == "hello"
 
 
 def test_messages_returns_underlying_anthropic_message_unmodified() -> None:
-    """The user's existing code that walks `.content` blocks etc. must
-    keep working. The wrapper does not mutate the SDK response."""
     out: list = []
     msg = _resp(text="preserved", stop_reason="end_turn")
     fake = _FakeAnthropic([msg])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         resp = client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
-    # Same object, same fields.
     assert resp is msg
     assert resp.stop_reason == "end_turn"
     assert resp.content[0].text == "preserved"
 
 
-# ── Token / cost extraction ──────────────────────────────────────────────────
+# ── Token / cost extraction (parity with the driver) ─────────────────────────
 
 
-def test_token_extraction_matches_anthropic_model_driver_convention() -> None:
-    """AVP convention: tokens_input INCLUDES cache reads. SDK reports
-    fresh-only, so the wrapper adds cache reads/writes back. Same rule
-    AnthropicModelDriver uses — must match or trajectories disagree."""
+def test_token_and_cost_extraction_match_anthropic_model_driver() -> None:
+    """The translator ↔ SDK seam: the traced client and AnthropicModelDriver
+    MUST produce byte-identical tokens/cost for the same response (they share
+    the Anthropic→ModelResponse walker). A 30%-undercount bug hid here once."""
+    resp = _resp(text="x", input_tokens=100, output_tokens=20, cache_read=30, cache_write=10)
+
     out: list = []
-    fake = _FakeAnthropic(
-        [_resp(text="x", input_tokens=100, output_tokens=20, cache_read=30, cache_write=10)]
-    )
+    fake = _FakeAnthropic([resp])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
     msg = _by_type(out, AssistantMessageEvent)[0]
-    # 100 fresh + 30 cache_read + 10 cache_write = 140
-    assert msg.data.gen_ai_usage_input_tokens == 140
-    assert msg.data.gen_ai_usage_output_tokens == 20
-    assert msg.data.gen_ai_usage_cache_read_input_tokens == 30
-    assert msg.data.gen_ai_usage_cache_creation_input_tokens == 10
-    assert msg.data.avp_cost_usd > 0
+
+    # Same response straight through the driver.
+    class _One:
+        def __init__(self, r):
+            self._r = r
+            self.messages = self
+
+        def create(self, **_):
+            return self._r
+
+    mr = AnthropicModelDriver(model="claude-sonnet-4-6", client=_One(resp)).step(
+        [{"role": "user", "content": "x"}]
+    )
+
+    # 100 fresh + 30 cache_read + 10 cache_write = 140 (AVP convention).
+    assert msg.data.usage.input_tokens == 140 == mr.tokens_input
+    assert msg.data.usage.output_tokens == 20 == mr.tokens_output
+    assert msg.data.usage.cache_read_input_tokens == 30
+    assert msg.data.usage.cache_creation_input_tokens == 10
+    assert msg.data.cost_usd == mr.cost_usd
+    assert msg.data.cost_usd > 0
 
 
 def test_cost_zero_for_unknown_model() -> None:
-    """An unpriced model name yields cost=0 without crashing. Same as
-    AnthropicModelDriver."""
     import warnings
 
     out: list = []
     fake = _FakeAnthropic([_resp(text="x", model="some-unknown-model")])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
+        with AnthropicTracedClient(
+            fake, commission=_basic_config(model="some-unknown-model"), on_event=out.append
+        ) as client:
             client.messages.create(model="some-unknown-model", messages=[])
             client.converged()
     msg = _by_type(out, AssistantMessageEvent)[0]
-    assert msg.data.avp_cost_usd == 0.0
+    assert msg.data.cost_usd == 0.0
 
 
 def test_wrapper_records_finish_reason_from_stop_reason() -> None:
@@ -210,10 +228,10 @@ def test_wrapper_records_finish_reason_from_stop_reason() -> None:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         client.converged()
     msg = _by_type(out, AssistantMessageEvent)[0]
-    assert msg.data.gen_ai_response_finish_reasons == ["tool_use"]
+    assert msg.data.response_finish_reasons == ["tool_use"]
 
 
-def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
+def test_two_calls_produce_two_turns_with_distinct_span_ids_and_steps() -> None:
     out: list = []
     fake = _FakeAnthropic(
         [
@@ -228,10 +246,10 @@ def test_two_calls_produce_two_turns_with_distinct_span_ids() -> None:
     msgs = _by_type(out, AssistantMessageEvent)
     assert len(msgs) == 2
     assert msgs[0].data.span_id != msgs[1].data.span_id
-    assert msgs[0].data.avp_step == 1 and msgs[1].data.avp_step == 2
+    assert msgs[0].data.step == 1 and msgs[1].data.step == 2
 
 
-# ── Tool / subagent context managers (delegate to the internal tracer) ──────
+# ── Tool / subagent context managers ─────────────────────────────────────────
 
 
 def test_tool_context_manager_emits_tool_invoked_and_returned() -> None:
@@ -244,43 +262,67 @@ def test_tool_context_manager_emits_tool_invoked_and_returned() -> None:
         client.converged()
     inv = _by_type(out, ToolInvokedEvent)[0]
     ret = _by_type(out, ToolReturnedEvent)[0]
-    assert inv.data.gen_ai_tool_name == "bash"
-    assert ret.data.avp_tool_result.content[0].text == "file1\nfile2"
-    assert inv.data.span_id == ret.data.span_id
+    assert inv.data.tool_name == "bash"
+    assert ret.data.tool_result.content == "file1\nfile2"
+    # tool_returned parents under the tool_invoked span (paired frame).
+    assert ret.data.parent_span_id == inv.data.span_id
 
 
-def test_subagent_context_manager_emits_subagent_invoked_and_returned() -> None:
+def test_tool_failure_marks_result_error() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x")])
-    cfg = _basic_config(subagents=[SubagentRef(id="researcher", ref="sk_researcher")])
-    with AnthropicTracedClient(fake, commission=cfg, on_event=out.append) as client:
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
+        client.messages.create(model="claude-sonnet-4-6", messages=[])
+        with client.tool(call_id="c1", name="bash", input={}) as t:
+            t.fail("boom")
+        client.converged()
+    ret = _by_type(out, ToolReturnedEvent)[0]
+    assert ret.data.tool_result.is_error is True
+    assert ret.data.tool_result.content == "boom"
+
+
+def test_subagent_context_manager_emits_invoked_and_returned() -> None:
+    out: list = []
+    fake = _FakeAnthropic([_resp(text="x")])
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         client.messages.create(model="claude-sonnet-4-6", messages=[])
         with client.subagent(name="researcher", input={"prompt": "go"}) as sa:
-            with sa.turn() as turn:
-                turn.record(tokens_input=5, tokens_output=2, cost_usd=0.0001, text="found 1")
             sa.record_result("found 1")
         client.converged()
     inv = _by_type(out, SubagentInvokedEvent)[0]
     ret = _by_type(out, SubagentReturnedEvent)[0]
-    assert inv.data.span_id == ret.data.span_id
-    assert ret.data.avp_subagent_result_text == "found 1"
+    assert inv.data.subagent_name == "researcher"
+    assert inv.data.span_id == ret.data.span_id  # same frame
+    assert ret.data.subagent_result_text == "found 1"
+    assert ret.data.subagent_reason == StopReason.converged
 
 
-# ── Pass-through ─────────────────────────────────────────────────────────────
+def test_subagent_fail_marks_error_reason() -> None:
+    out: list = []
+    fake = _FakeAnthropic([_resp(text="x")])
+    with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
+        client.messages.create(model="claude-sonnet-4-6", messages=[])
+        with client.subagent(name="researcher") as sa:
+            sa.fail("crashed")
+        client.converged()
+    ret = _by_type(out, SubagentReturnedEvent)[0]
+    assert ret.data.subagent_reason == StopReason.error
+    assert ret.data.subagent_result_text == "crashed"
+
+
+# ── Pass-through + lifecycle guards ──────────────────────────────────────────
 
 
 def test_attribute_passthrough_to_underlying_client() -> None:
     out: list = []
     fake = _FakeAnthropic([_resp(text="x")])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
-        # `beta` is on the underlying client, not wrapped explicitly.
         assert client.beta.some_resource == "here"
         assert client.real is fake
         client.converged()
 
 
 def test_messages_access_before_enter_raises() -> None:
-    """Accessing `client.messages` before `with` raises a clear error."""
     fake = _FakeAnthropic([])
     client = AnthropicTracedClient(fake, commission=_basic_config(), on_event=lambda _: None)
     with pytest.raises(RuntimeError, match="must be used as `with`"):
@@ -288,8 +330,6 @@ def test_messages_access_before_enter_raises() -> None:
 
 
 def test_reused_client_raises() -> None:
-    """A new wrapper per run — same Commission can't be reused on a single
-    instance."""
     fake = _FakeAnthropic([_resp(text="x")])
     client = AnthropicTracedClient(fake, commission=_basic_config(), on_event=lambda _: None)
     with client:
@@ -299,35 +339,42 @@ def test_reused_client_raises() -> None:
             pass
 
 
-# ── agent_started carries the model-facing surface ──────────────────────────
+def test_exception_in_block_stops_with_error() -> None:
+    out: list = []
+    fake = _FakeAnthropic([_resp(text="x")])
+    with pytest.raises(ValueError, match="boom"):
+        with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
+            client.messages.create(model="claude-sonnet-4-6", messages=[])
+            raise ValueError("boom")
+    stopped = _by_type(out, AgentStoppedEvent)[0]
+    assert stopped.data.reason == StopReason.error
 
 
-def test_agent_started_emits_subagents_when_declared() -> None:
+# ── agent_started carries the run config ─────────────────────────────────────
+
+
+def test_agent_started_carries_prompt_and_model() -> None:
     out: list = []
     fake = _FakeAnthropic([])
-    cfg = _basic_config(subagents=[SubagentRef(id="planner", ref="sk_planner")])
-    with AnthropicTracedClient(fake, commission=cfg, on_event=out.append):
+    with AnthropicTracedClient(
+        fake, commission=_basic_config(prompt="do the thing"), on_event=out.append
+    ):
         pass
     started = _by_type(out, AgentStartedEvent)[0]
-    assert started.data.avp_subagents and started.data.avp_subagents[0].name == "planner"
+    assert started.data.prompt == "do the thing"
+    assert started.data.request_model == "claude-sonnet-4-6"
+    assert started.data.provider_name == "anthropic"
 
 
-# ── Beta surface (widened coverage) ──────────────────────────────────────────
+# ── Beta surface ─────────────────────────────────────────────────────────────
 
 
 class _FakeBeta:
-    """Stand-in for `client.beta` — has its own .messages just like the real
-    SDK's beta surface."""
-
     def __init__(self, responses: list[Any]) -> None:
         self.messages = _FakeMessages(responses)
 
 
 class _FakeAnthropicWithBeta(_FakeAnthropic):
-    """Adds .beta.messages.create coverage — the SDK's beta surface uses
-    different paths and we want to confirm `client.beta.messages.create()`
-    also emits AVP events."""
-
     def __init__(
         self,
         responses: list[Any] | None = None,
@@ -338,106 +385,27 @@ class _FakeAnthropicWithBeta(_FakeAnthropic):
 
 
 def test_beta_messages_create_is_instrumented() -> None:
-    """`client.beta.messages.create()` MUST emit the same AVP events as
-    the non-beta path. Without this users using beta features (e.g.,
-    extended-cache-ttl headers, computer-use) silently bypass tracing."""
     out: list = []
     fake = _FakeAnthropicWithBeta(beta_responses=[_resp(text="from beta")])
     with AnthropicTracedClient(fake, commission=_basic_config(), on_event=out.append) as client:
         resp = client.beta.messages.create(model="claude-sonnet-4-6", messages=[])
         assert resp.content[0].text == "from beta"
         client.converged()
-    assert len(_by_type(out, AssistantMessageEvent)) == 1
-    assert _by_type(out, TextEmittedEvent)[0].data.avp_text == "from beta"
+    msgs = _by_type(out, AssistantMessageEvent)
+    assert len(msgs) == 1
+    assert _text_of(msgs[0]) == "from beta"
 
 
-# ── wrap_anthropic factory (active-tracer mode) ─────────────────────────────
-
-
-def test_wrap_anthropic_returns_proxy_that_emits_to_active_tracer() -> None:
-    """`wrap_anthropic(client)` returns a proxy that finds its tracer via
-    the ContextVar at call time — so the same wrapped client works
-    across many traces."""
-    from avp.tracer import AVPTracer
-    from avp_anthropic import wrap_anthropic
-
-    out: list = []
-    fake = _FakeAnthropic([_resp(text="hello")])
-    client = wrap_anthropic(fake)
-    with AVPTracer(_basic_config(), on_event=out.append):
-        resp = client.messages.create(model="claude-sonnet-4-6", messages=[])
-        assert resp.content[0].text == "hello"
-    types = _types(out)
-    assert "AssistantMessageEvent" in types
+# ── wrap_anthropic factory (active-run mode) ─────────────────────────────────
 
 
 def test_wrap_anthropic_is_idempotent() -> None:
-    """Re-wrapping a wrapped client returns the same instance — protects
-    against accidental double-wrap when a library defensively wraps its
-    own clients."""
-    from avp_anthropic import wrap_anthropic
-
     fake = _FakeAnthropic([])
     wrapped = wrap_anthropic(fake)
     assert wrap_anthropic(wrapped) is wrapped
 
 
-def test_wrap_anthropic_raises_outside_active_tracer() -> None:
-    """Calling an instrumented method on a wrapped client OUTSIDE a
-    `with AVPTracer(...)` block fails loud, not silent — better than
-    dropping events the user expected to see."""
-    from avp_anthropic import wrap_anthropic
-
-    fake = _FakeAnthropic([_resp(text="x")])
-    client = wrap_anthropic(fake)
-    with pytest.raises(RuntimeError, match="No active AVPTracer"):
-        client.messages.create(model="claude-sonnet-4-6", messages=[])
-
-
-def test_wrap_anthropic_works_across_multiple_traces() -> None:
-    """The big payoff of the wrap-once-use-many pattern: the same
-    wrapped client survives multiple `with AVPTracer` blocks. Compare
-    to the constructor form which couples one wrapper to one run."""
-    from avp.tracer import AVPTracer
-    from avp_anthropic import wrap_anthropic
-
-    fake = _FakeAnthropic([_resp(text="t1"), _resp(text="t2")])
-    client = wrap_anthropic(fake)
-
-    out_a: list = []
-    cfg_a = _basic_config(run_id="run-a")
-    with AVPTracer(cfg_a, on_event=out_a.append):
-        client.messages.create(model="claude-sonnet-4-6", messages=[])
-
-    out_b: list = []
-    cfg_b = _basic_config(run_id="run-b")
-    with AVPTracer(cfg_b, on_event=out_b.append):
-        client.messages.create(model="claude-sonnet-4-6", messages=[])
-
-    assert _types(out_a)[0] == "AgentStartedEvent" and _types(out_a)[-1] == "AgentStoppedEvent"
-    assert _types(out_b)[0] == "AgentStartedEvent" and _types(out_b)[-1] == "AgentStoppedEvent"
-    assert _by_type(out_a, AgentStartedEvent)[0].subject == "run-a"
-    assert _by_type(out_b, AgentStartedEvent)[0].subject == "run-b"
-    a_trace = _by_type(out_a, AgentStartedEvent)[0].data.trace_id
-    b_trace = _by_type(out_b, AgentStartedEvent)[0].data.trace_id
-    assert a_trace != b_trace
-
-
-def test_wrap_anthropic_attribute_passthrough() -> None:
-    from avp_anthropic import wrap_anthropic
-
-    fake = _FakeAnthropic([])
-    client = wrap_anthropic(fake)
-    assert client.beta.some_resource == "here"
-    assert client.real is fake
-
-
 def test_wrap_anthropic_unknown_client_type_returns_unchanged() -> None:
-    """If the SDK class isn't recognized (third-party Anthropic-compatible
-    client, vendored fork), don't crash — return as-is. Caller can opt
-    into instrumentation explicitly."""
-    from avp_anthropic import wrap_anthropic
-
     class SomeOtherClient:
         pass
 
@@ -445,69 +413,52 @@ def test_wrap_anthropic_unknown_client_type_returns_unchanged() -> None:
     assert wrap_anthropic(obj) is obj
 
 
-# ── Module-level helpers from avp.tracer reach the active tracer ────────────
-
-
-def test_module_level_tool_helper_works_with_wrap_anthropic() -> None:
-    """The wrap-once flow: wrap the client at module load, use
-    `avp.tracer.tool(...)` for tool dispatch inside an AVPTracer block.
-    Both find the active tracer via the ContextVar."""
-    from avp.tracer import AVPTracer
-    from avp.tracer import tool as avp_tool
-    from avp_anthropic import wrap_anthropic
-
-    out: list = []
+def test_wrap_anthropic_raises_outside_active_run() -> None:
     fake = _FakeAnthropic([_resp(text="x")])
     client = wrap_anthropic(fake)
-
-    with AVPTracer(_basic_config(), on_event=out.append):
+    with pytest.raises(RuntimeError, match="No active traced run"):
         client.messages.create(model="claude-sonnet-4-6", messages=[])
-        with avp_tool(call_id="c1", name="bash", input={"command": "ls"}) as t:
-            t.record("ok")
-
-    assert _by_type(out, ToolInvokedEvent)[0].data.gen_ai_tool_name == "bash"
-    assert _by_type(out, ToolReturnedEvent)[0].data.avp_tool_result.content[0].text == "ok"
 
 
-# ── Async surface ────────────────────────────────────────────────────────────
-
-
-class _FakeAsyncMessages:
-    def __init__(self, responses: list[Any]) -> None:
-        self._responses = list(responses)
-
-    async def create(self, **kwargs: Any) -> Any:
-        if not self._responses:
-            raise AssertionError("test asked for more turns than scripted")
-        return self._responses.pop(0)
-
-
-class _FakeAsyncAnthropic:
-    def __init__(self, responses: list[Any]) -> None:
-        self.messages = _FakeAsyncMessages(responses)
+def test_wrap_anthropic_emits_to_active_run() -> None:
+    """A standalone `wrap_anthropic` proxy finds the active run set by an
+    enclosing `AnthropicTracedClient` and emits its turns there."""
+    out: list = []
+    fake = _FakeAnthropic([_resp(text="hello")])
+    proxy = wrap_anthropic(fake)
+    with AnthropicTracedClient(_FakeAnthropic([]), commission=_basic_config(), on_event=out.append):
+        resp = proxy.messages.create(model="claude-sonnet-4-6", messages=[])
+        assert resp.content[0].text == "hello"
+    assert _by_type(out, AssistantMessageEvent)
 
 
 def test_wrap_anthropic_handles_async_client() -> None:
-    """`anthropic.AsyncAnthropic` users should get the same instrumentation
-    as sync users. The proxy detects async-vs-sync by the underlying
-    class name."""
     import asyncio
 
-    from avp.tracer import AVPTracer
-    from avp_anthropic import wrap_anthropic
+    class _FakeAsyncMessages:
+        def __init__(self, responses: list[Any]) -> None:
+            self._responses = list(responses)
+
+        async def create(self, **kwargs: Any) -> Any:
+            return self._responses.pop(0)
+
+    class _FakeAsyncAnthropic:
+        def __init__(self, responses: list[Any]) -> None:
+            self.messages = _FakeAsyncMessages(responses)
 
     fake = _FakeAsyncAnthropic([_resp(text="async hello")])
-    # type name needs to contain "AsyncAnthropic" for the dispatcher
     fake.__class__.__name__ = "AsyncAnthropic"
-    client = wrap_anthropic(fake)
+    proxy = wrap_anthropic(fake)
 
     out: list = []
 
     async def _run() -> None:
-        with AVPTracer(_basic_config(), on_event=out.append):
-            resp = await client.messages.create(model="claude-sonnet-4-6", messages=[])
+        with AnthropicTracedClient(
+            _FakeAnthropic([]), commission=_basic_config(), on_event=out.append
+        ):
+            resp = await proxy.messages.create(model="claude-sonnet-4-6", messages=[])
             assert resp.content[0].text == "async hello"
 
     asyncio.run(_run())
-    assert _by_type(out, AssistantMessageEvent)
-    assert _by_type(out, TextEmittedEvent)[0].data.avp_text == "async hello"
+    msgs = _by_type(out, AssistantMessageEvent)
+    assert msgs and _text_of(msgs[0]) == "async hello"

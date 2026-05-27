@@ -12,12 +12,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from avp.agent.agent import AVPAgent
-from avp.agent.drivers import ModelResponse, ServerToolCall
-from avp.agent.mock import ScriptedModel, ScriptedSupervisor, ScriptedTools
-from avp.commission import Commission
-from avp.trajectory import ToolInvokedEvent, ToolReturnedEvent
-from avp_anthropic import AnthropicModelDriver
+from avp.content import ServerToolResultBlock, ServerToolUseBlock
+from avp_anthropic import AnthropicModelDriver, ModelResponse, model_response_to_content
+from avp_anthropic.translate import ServerToolCall
 
 
 def _mock_response(*, content: list[dict], usage: dict, stop_reason: str) -> SimpleNamespace:
@@ -169,45 +166,38 @@ def test_mcp_and_hosted_tools_in_one_response_both_recorded() -> None:
     assert hosted.tool == "web_search"
 
 
-# ── Agent: hosted-tool synthetic events tag dispatch_target=local ─────────
+# ── Content: hosted/server tool calls surface as content blocks ───────────
 
 
-def test_runner_emits_synthetic_tool_lifecycle_for_hosted_calls() -> None:
-    """The agent's synthetic tool_invoked event MUST tag hosted-provider
-    calls with `avp.tool.dispatch_target=local` — AVP treats provider-hosted
-    tools as agent built-ins; the agent SDK is responsible for actually
-    wiring the provider's hosted-execution mechanism."""
-    agent = AVPAgent(
-        commission=Commission(schema_version="0.1", run_id="hosted", model="test/mock"),
-        model=ScriptedModel(
-            [
-                ModelResponse(
-                    tokens_input=1,
-                    tokens_output=1,
-                    cost_usd=0.0001,
-                    duration_ms=1,
-                    text="ok",
-                    converged=True,
-                    server_tool_calls=[
-                        ServerToolCall(
-                            call_id="ws_X",
-                            tool="web_search",
-                            input={"query": "q"},
-                            output_text="results",
-                            dispatch_target="local",
-                        )
-                    ],
-                )
-            ]
-        ),
-        tools=ScriptedTools(),
-        supervisor=ScriptedSupervisor(),
+def test_server_tool_call_surfaces_as_content_blocks() -> None:
+    """In the v0.1 wire, a server-side tool call (the API ran it inline)
+    surfaces in `assistant_message.avp.content` as a `ServerToolUseBlock`
+    paired with a `ServerToolResultBlock` — NOT as a separate dispatched
+    `tool_invoked` event (the agent never dispatched it). `model_response_to_content`
+    is the shared converter both the reference agent and the traced client use."""
+    mr = ModelResponse(
+        tokens_input=1,
+        tokens_output=1,
+        cost_usd=0.0001,
+        duration_ms=1,
+        text="ok",
+        converged=True,
+        server_tool_calls=[
+            ServerToolCall(
+                call_id="ws_X",
+                tool="web_search",
+                input={"query": "q"},
+                output_text="results",
+                dispatch_target="local",
+            )
+        ],
     )
-    agent.run()
-    invoked = next(e for e in agent.trajectory if isinstance(e, ToolInvokedEvent))
-    wire = invoked.model_dump(mode="json", by_alias=True, exclude_none=True)
-    assert wire["data"]["avp.tool.dispatch_target"] == "local"
-    # No mcp_server_id for hosted (non-MCP) tools.
-    assert "avp.mcp_server_id" not in wire["data"]
-    # Sanity: paired return event also fires.
-    assert any(isinstance(e, ToolReturnedEvent) for e in agent.trajectory)
+    blocks = model_response_to_content(mr)
+    use = next(b for b in blocks if isinstance(b, ServerToolUseBlock))
+    assert use.id == "ws_X"
+    assert use.name == "web_search"
+    assert use.input == {"query": "q"}
+    result = next(b for b in blocks if isinstance(b, ServerToolResultBlock))
+    assert result.tool_use_id == "ws_X"
+    assert result.content == "results"
+    assert result.is_error is None

@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         for name, p in PRESETS.items():
             print(f"{name}")
             print(f"  {p.description}")
-            print(f"  exposed: {p.exposed}")
+            print(f"  enabled_builtin_tools: {p.enabled_builtin_tools}")
             print()
         return 0
 

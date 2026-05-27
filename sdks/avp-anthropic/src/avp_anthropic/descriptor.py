@@ -5,8 +5,8 @@ built-in tools. Agents that wrap this SDK supply their own tool
 catalog, subagents, and skills. This helper produces an
 `AgentDescriptor` populated with whatever the agent author passes in
 plus the constants the SDK does bring (hosted tool kinds the driver
-knows how to parse, the `thinking` capability the driver emits as
-`reasoning_emitted`).
+knows how to parse, the `thinking` capability the driver surfaces as
+`ThinkingBlock`s in `avp.content`).
 
 Use it from your agent's `describe` entry point and from the
 `agent_described` event your agent emits between `run_requested` and
@@ -23,8 +23,9 @@ from avp.descriptor import AgentDescriptor
 from avp_anthropic.driver import ANTHROPIC_HOSTED_TOOL_KINDS
 
 # Capabilities the avp-anthropic driver brings regardless of which agent
-# wraps it. The driver parses extended-thinking blocks and re-emits them
-# as `reasoning_emitted`; new driver-level capabilities go here.
+# wraps it. The driver parses extended-thinking blocks and surfaces them
+# as `ThinkingBlock`s in `assistant_message.avp.content`; new driver-level
+# capabilities go here.
 _SDK_CAPABILITIES: tuple[str, ...] = ("thinking",)
 
 
@@ -46,12 +47,12 @@ def build_descriptor(
     Anthropic API itself has no agent identity.
 
     `built_in_tools` is the tool catalog the agent ships (e.g., a
-    sandboxed bash + read_file + write_file the agent wires as
-    `agent_builtin_tools` when constructing `AVPAgent`). Pass MCP-shaped
-    entries (`name`, `description`, `inputSchema`) plus the AVP
-    extension `avp.dispatch_target` per
-    `spec/v0.1/agent-descriptor.md` §4. Either `inputSchema` (camelCase)
-    or `input_schema` (Anthropic API form) is accepted at the boundary.
+    sandboxed bash + read_file + write_file the agent dispatches in its
+    own loop). Pass MCP-shaped entries (`name`, `description`,
+    `inputSchema`) per `spec/v0.1/agent-descriptor.md`. Either
+    `inputSchema` (camelCase) or `input_schema` (Anthropic API form) is
+    accepted at the boundary. Built-in tools dispatch locally, signalled
+    by the ABSENCE of `avp.mcp_server_id` on the `ToolDecl`.
 
     `include_hosted_tools` (default True) appends the Anthropic API's
     hosted server-side tools (web_search, code_execution,
@@ -66,7 +67,7 @@ def build_descriptor(
         tools.extend(_canonicalize_tools(built_in_tools))
     if include_hosted_tools:
         for hosted_name in ANTHROPIC_HOSTED_TOOL_KINDS:
-            tools.append({"name": hosted_name, "avp.dispatch_target": "local"})
+            tools.append({"name": hosted_name})
 
     caps = list(_SDK_CAPABILITIES)
     if capabilities:
@@ -78,12 +79,12 @@ def build_descriptor(
         {
             "agent_name": agent_name,
             "agent_version": agent_version,
-            "avp_spec_version": "0.1",
+            "spec_version": "0.1",
             "default_model": default_model,
             "supported_models": supported_models or ["claude-*"],
-            "built_in_tools": tools or None,
-            "built_in_subagents": built_in_subagents,
-            "built_in_skills": built_in_skills,
+            "tools": tools or None,
+            "subagents": built_in_subagents,
+            "skills": built_in_skills,
             "capabilities": caps,
         }
     )
@@ -91,7 +92,9 @@ def build_descriptor(
 
 def _canonicalize_tools(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Normalize tool entries to MCP camelCase (`inputSchema`) for the
-    Descriptor's wire shape. Accept either spelling at the boundary."""
+    Descriptor's wire shape. Accept either spelling at the boundary. Built-in
+    tools carry no `avp.mcp_server_id` (that absence is the local-dispatch
+    discriminator)."""
     out: list[dict[str, Any]] = []
     for raw in entries:
         entry: dict[str, Any] = {"name": raw["name"]}
@@ -101,15 +104,8 @@ def _canonicalize_tools(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             entry["inputSchema"] = raw["inputSchema"]
         elif "input_schema" in raw:
             entry["inputSchema"] = raw["input_schema"]
-        entry["avp.dispatch_target"] = raw.get("avp.dispatch_target", "local")
         for k, v in raw.items():
-            if k not in (
-                "name",
-                "description",
-                "inputSchema",
-                "input_schema",
-                "avp.dispatch_target",
-            ):
+            if k not in ("name", "description", "inputSchema", "input_schema"):
                 entry[k] = v
         out.append(entry)
     return out

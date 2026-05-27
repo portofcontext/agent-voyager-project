@@ -1,10 +1,13 @@
-"""AnthropicModelDriver — implements avp.agent.ModelDriver against the Anthropic SDK.
+"""AnthropicModelDriver — per-turn AVP ↔ Anthropic translation.
 
 Each call to .step(history) translates AVP history → Anthropic messages, invokes
 client.messages.create, then translates the response → AVP ModelResponse.
 
-The driver is provider-agnostic at the AVP boundary: AVPAgent doesn't know it's
-talking to Anthropic. Swap drivers, the rest of the loop is unchanged.
+This is a translator object, not an agent loop: it ships no loop and no
+built-in tools (the Anthropic Messages API has neither). An agent inlines
+its own loop, calls `.step(...)` per turn, and emits the matching
+`avp.trajectory` events to an `EventSink` (see the reference agent in
+`supervisors/simple-supervisor-example/examples/`).
 """
 
 from __future__ import annotations
@@ -16,17 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from avp.agent.drivers import (
-    ModelDriver,
-    ModelDriverError,
-    ModelResponse,
-    ReasoningBlock,
-    Refusal,
-    ScriptedToolCall,
-    ServerToolCall,
-)
 from avp.commission import Commission
-from avp.enums import ErrorCode
 from avp.pricing import (
     COST_SOURCE_UNKNOWN,
     ModelPrice,
@@ -34,8 +27,21 @@ from avp.pricing import (
     compute_cost,
     load_default_prices,
 )
+from avp.trajectory import ErrorCode
+from avp_anthropic.translate import (
+    ModelDriverError,
+    ModelResponse,
+    ReasoningBlock,
+    Refusal,
+    ScriptedToolCall,
+    ServerToolCall,
+)
 
 logger = logging.getLogger(__name__)
+
+# Provider id used to resolve a bare Anthropic model (e.g. "claude-sonnet-4-6")
+# against the `<provider>/<model>`-keyed default price table.
+_PROVIDER = "anthropic"
 
 
 # ── Pricing (re-exports + lazy default) ───────────────────────────────────────
@@ -92,6 +98,7 @@ def _compute_cost(
     should call `avp.compute_cost` directly to receive the source tag too."""
     cost, source = compute_cost(
         model,
+        provider=_PROVIDER,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cache_read=cache_read,
@@ -297,9 +304,8 @@ def _h_hosted_result(block: Any, acc: _BlockAcc) -> None:
 # closures that carry the subtype.
 # Anthropic-API hosted server-side tools the agent KNOWS HOW to parse
 # when the user opts them in via the API's tool-use mechanisms. Public:
-# Commission authors building `commission.exposed` import this to surface what
-# the agent can recognize on the wire if the API is configured to use
-# hosted tools.
+# agents surfacing a descriptor import this to advertise what they can
+# recognize on the wire if the API is configured to use hosted tools.
 #
 # Authoritative source of names: `claude_agent_sdk.ServerToolName` Literal
 # (the SDK pins these as a typed enum of API-server-side tool names).
@@ -367,6 +373,7 @@ def _anthropic_response_to_avp(
 
     cost, cost_source = compute_cost(
         model,
+        provider=_PROVIDER,
         input_tokens=avp_tokens_input,
         output_tokens=output_tokens,
         cache_read=cache_read,
@@ -381,6 +388,9 @@ def _anthropic_response_to_avp(
     stop_reason = getattr(response, "stop_reason", None)
     refusal = _detect_refusal(stop_reason, response.content or [])
     converged = (stop_reason == "end_turn") and not tool_calls
+    reasoning_output = (
+        int(getattr(usage, "reasoning_output_tokens", 0) or 0) if usage else 0
+    ) or None
 
     return ModelResponse(
         tokens_input=avp_tokens_input,
@@ -395,7 +405,10 @@ def _anthropic_response_to_avp(
         refusal=refusal,
         tokens_cache_read=cache_read or None,
         tokens_cache_write=cache_write or None,
+        tokens_reasoning_output=reasoning_output,
         converged=converged,
+        response_model=getattr(response, "model", None) or model,
+        finish_reasons=[stop_reason] if isinstance(stop_reason, str) else None,
     )
 
 
@@ -577,8 +590,8 @@ def _render_hosted_result(
 # ── Driver ────────────────────────────────────────────────────────────────────
 
 
-class AnthropicModelDriver(ModelDriver):
-    """ModelDriver that routes each turn through the Anthropic Messages API.
+class AnthropicModelDriver:
+    """Per-turn translator that routes each turn through the Anthropic Messages API.
 
     Construct with `model` (Claude model id), an optional Anthropic client (any
     object exposing `.messages.create(...)`; the real `anthropic.Anthropic()`
@@ -590,9 +603,9 @@ class AnthropicModelDriver(ModelDriver):
 
     `mcp_servers_param` is the API's MCP-connector shape — a list of
     `{type, name, url, ...}` dicts that the Anthropic API connects to and
-    exposes as additional tools to the model. The driver populates it from
-    resolved material at runtime: AVPAgent calls `set_resolved_assets`
-    with the resolver's output, and the driver runs
+    exposes as additional tools to the model. The owning loop populates it
+    from resolved material at runtime by calling `set_resolved_assets` with
+    the resolver's output; the driver runs
     `build_anthropic_mcp_servers_from_resolved` to translate that into the
     connector shape. HTTP-only — Anthropic's connector doesn't speak
     stdio, so stdio entries are skipped with a warning.
@@ -639,22 +652,21 @@ class AnthropicModelDriver(ModelDriver):
         skills: dict[str, dict[str, Any]] | None = None,
         subagents: dict[str, dict[str, Any]] | None = None,
     ) -> None:
-        """AVP resolver-protocol hook: AVPAgent calls this after
+        """AVP resolver-protocol hook: the owning loop calls this after
         `avp.resolve` returns material for each managed asset. The driver
         translates each kind for the next `messages.create(...)` call:
 
         - mcp_servers: appended to `mcp_servers_param` in Anthropic's
           connector shape.
         - subagents: each resolved subagent's `{name, description}` is
-          appended to `tools_param` as a callable tool. AVPAgent's
-          `_handle_tool_call` recognizes the name and routes to
-          `resolver.spawn_subagent`, emitting `subagent_invoked` /
-          `subagent_returned`. Without this exposure the model has no
-          way to *learn* the subagent is available.
+          appended to `tools_param` as a callable tool. The loop
+          recognizes the name and routes to `resolver.spawn_subagent`,
+          emitting `subagent_invoked` / `subagent_returned`. Without this
+          exposure the model has no way to *learn* the subagent is available.
         - skills: unused here — skill content is injected directly into
-          the conversation by AVPAgent (`_inject_skill_bodies_to_history`).
+          the conversation by the loop.
         """
-        del skills  # injected via AVPAgent, not the driver
+        del skills  # injected by the loop, not the driver
         resolved_servers = build_anthropic_mcp_servers_from_resolved(mcp_servers)
         # Append-merge so a caller that pre-populated mcp_servers_param
         # at construction time (e.g. a test fixture) doesn't lose it.
@@ -783,8 +795,8 @@ def build_anthropic_tools(
     filtered by `Commission.enabled_builtin_tools` when that allowlist is
     set. Subagents and managed MCP-server tools are NOT surfaced here:
     managed assets land via the resolver protocol and are merged into
-    `tools_param` by `AnthropicModelDriver.set_resolved_assets` once
-    `avp.resolve` returns.
+    `tools_param` by `AnthropicModelDriver.set_resolved_assets` once the
+    loop's `avp.resolve` call returns.
 
     Translates camelCase MCP `inputSchema` to snake_case `input_schema`
     (the Anthropic API's wire spelling) at the boundary if the input

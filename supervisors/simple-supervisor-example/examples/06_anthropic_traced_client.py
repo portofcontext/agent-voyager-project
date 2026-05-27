@@ -7,8 +7,8 @@ SDK object, you walk `.content` blocks the same way, you dispatch tools
 the same way.
 
 v0.1 leaves bounded execution to the caller — wire external safety
-(subprocess timeouts, supervisor SIGKILL, caller-side checks against
-`client.state`) as needed.
+(subprocess timeouts, supervisor SIGKILL, caller-side turn budgets) as
+needed.
 
 Run:
   ANTHROPIC_API_KEY=... python examples/06_anthropic_traced_client.py
@@ -22,8 +22,7 @@ import sys
 import anthropic
 
 from avp.commission import Commission
-from avp.tracer import print_event
-from avp_anthropic import AnthropicTracedClient
+from avp_anthropic import AnthropicTracedClient, print_event
 
 
 def main() -> int:

@@ -1,13 +1,13 @@
-"""Example 07 — drop-in instrumentation for an existing Claude Agent SDK loop.
+"""Example 07 — AVP-instrumented Claude Agent SDK loop.
 
-Companion to example 06 (which does the same thing for the Anthropic
+Companion to example 06 (which does the same for the raw Anthropic
 Messages SDK). The Claude Agent SDK runs tools internally via its hook
 protocol; user code just iterates `receive_response()`.
 
-The change to add AVP: wrap the loop in `with AVPTracer(...)` and use
-`traced_claude_sdk_client()` (no args) instead of `ClaudeSDKClient(options=)`.
-The factory pulls Commission from the active tracer; the SDK's hooks emit
-AVP events as turns and tools fire.
+The change to add AVP: use `AVPClaudeSDKClient` (a drop-in subclass of
+`ClaudeSDKClient`) and give it a `sink`. It emits the conforming
+trajectory across `query()` / `receive_response()` / `disconnect()`;
+your existing message-handling body is unchanged.
 
 Run:
   ANTHROPIC_API_KEY=... python examples/07_claude_agent_traced_client.py
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import shutil
 import sys
@@ -25,11 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from avp.commission import Commission
-from avp.tracer import (
-    AVPTracer,
-    print_event,
-)
-from avp_claude_agent_sdk import traced_claude_sdk_client
+from avp.trajectory import event_to_wire
 
 
 def main() -> int:
@@ -42,6 +39,8 @@ def main() -> int:
     if shutil.which("claude") is None:
         print("error: install the Claude Code CLI; `claude` must be on PATH", file=sys.stderr)
         return 2
+
+    from avp_claude_agent_sdk import AVPClaudeSDKClient
 
     workspace = Path(tempfile.mkdtemp(prefix="avp-traced-claude-"))
     target = workspace / "hello.py"
@@ -57,27 +56,26 @@ def main() -> int:
         ),
     )
 
+    async def _print_sink(event) -> None:
+        # Machine-readable NDJSON; swap for a pretty renderer if you like.
+        print(json.dumps(event_to_wire(event)))
+
     # Compare to a plain ClaudeSDKClient loop:
     #
     #     async with ClaudeSDKClient(options=opts) as client:
-    #         await client.connect(prompt)
+    #         await client.query(prompt)
     #         async for message in client.receive_response():
     #             handle(message)
     #
-    # Two changes:
-    #   - wrap with `AVPTracer(commission, on_event=...)` (sets the active tracer)
-    #   - `traced_claude_sdk_client()` replaces `ClaudeSDKClient(options=)`;
-    #     Commission flows from the active tracer
+    # The only change: `AVPClaudeSDKClient(commission=..., sink=...)` in place
+    # of `ClaudeSDKClient(options=...)`. AVP events for each message are on the
+    # wire by the time your handler sees it.
     async def _run() -> None:
-        with AVPTracer(commission, on_event=print_event):
-            async with traced_claude_sdk_client() as client:
-                await client.connect(commission.prompt)
-                async for _message in client.receive_response():
-                    # Your existing message-handling goes here. AVP events for
-                    # this message are already on the wire by the time we get
-                    # here. The user's body could render to a UI, route the
-                    # message, log it, etc.
-                    pass
+        async with AVPClaudeSDKClient(commission=commission, sink=_print_sink) as client:
+            await client.query(commission.prompt)
+            async for _message in client.receive_response():
+                # Your existing message-handling goes here.
+                pass
 
     # Workdir is the tempdir so the SDK's Write tool lands inside it.
     cwd = os.getcwd()

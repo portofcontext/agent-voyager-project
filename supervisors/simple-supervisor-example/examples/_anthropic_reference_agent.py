@@ -5,23 +5,23 @@ The Anthropic Messages API is a raw HTTP client (no agent loop, no
 built-in tools). This script demonstrates how an agent author wires
 the AVP pieces together on top of it:
 
-  1. A `ToolDriver` (`ShellTools` below) supplies the local tool
-     catalog (bash / read_file / write_file). Real deployments swap in
-     a sandboxed / containerized version.
+  1. A local tool catalog (`ShellTools` below) supplies bash / read_file
+     / write_file. Real deployments swap in a sandboxed version.
   2. `AnthropicModelDriver` from `avp-anthropic` translates one turn
-     between the AVP `AVPAgent` loop and `messages.create(...)`.
+     between AVP history and `messages.create(...)`, returning a
+     `ModelResponse`.
   3. `build_descriptor` from `avp-anthropic` produces the
      `AgentDescriptor` the agent advertises pre-flight (via the
      `describe` subcommand) and on-wire (via `agent_described`).
-  4. `AVPAgent` from `avp` owns the loop: reads Commission, calls the
-     driver each turn, dispatches tools, emits events.
-  5. `http_resolver_from_env()` wires `AVP_RESOLVER_URL` if set so
-     managed assets in the Commission can be dereferenced.
+  4. `run_agent` below owns the loop: it reads the Commission, calls the
+     driver each turn, emits the `avp.trajectory` events directly to a
+     sink, dispatches tools, and stops with a reason. There is no shared
+     agent base class; the loop is inlined here (the wire-types binding
+     ships no `AVPAgent`).
 
-Used by examples 01, 05, 06 to demonstrate the supervisor /
-subprocess pattern: the example IS the supervisor, this script IS the
-agent. The Commission gets piped on stdin; events stream out on
-stdout as NDJSON.
+Used by examples 01, 05, 06 to demonstrate the supervisor / subprocess
+pattern: the example IS the supervisor, this script IS the agent. The
+Commission gets piped on stdin; events stream out on stdout as NDJSON.
 
 Run directly:
     echo '{"schema_version": "0.1", "run_id": "demo", "model": "claude-haiku-4-5-20251001", "prompt": "say hi"}' \\
@@ -39,29 +39,57 @@ import json
 import subprocess
 import sys
 import uuid as _uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
 
 from pydantic import BaseModel
 
-from avp.agent import AVPAgent, http_resolver_from_env
-from avp.agent.drivers import ToolDriver, ToolOutcome
 from avp.commission import Commission
-from avp.io import write_event
-from avp.trajectory import ZERO_SPAN_ID, new_span_id, new_trace_id
+from avp.content import ToolResultBlock
+from avp.descriptor import AgentDescriptor, ToolDecl
+from avp.envelope import ZERO_SPAN_ID, new_span_id, new_trace_id
+from avp.trajectory import (
+    AgentDescribedData,
+    AgentDescribedEvent,
+    AgentStartedData,
+    AgentStartedEvent,
+    AgentStoppedData,
+    AgentStoppedEvent,
+    AssistantMessageData,
+    AssistantMessageEvent,
+    ErrorCode,
+    ErrorOccurredData,
+    ErrorOccurredEvent,
+    RunRequestedData,
+    RunRequestedEvent,
+    StopReason,
+    ToolInvokedData,
+    ToolInvokedEvent,
+    ToolReturnedData,
+    ToolReturnedEvent,
+    event_to_wire,
+)
 from avp_anthropic import (
     AnthropicModelDriver,
+    ModelDriverError,
+    ToolOutcome,
     build_anthropic_tools,
     build_descriptor,
+    model_response_to_content,
+    model_response_usage,
 )
 
 __version__ = "0.1.0"
 
+_PROVIDER_NAME = "anthropic"
+_MAX_TURNS = 50
+
 
 # ── Reference tool catalog ────────────────────────────────────────────────────
 #
-# A minimal local ToolDriver. Real agents replace this with sandboxing,
+# A minimal local tool catalog. Real agents replace this with sandboxing,
 # timeouts, path restrictions, line-limit pagination, etc.
 
 SHELL_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -112,8 +140,9 @@ SHELL_TOOL_NAMES: tuple[str, ...] = tuple(schema["name"] for schema in SHELL_TOO
 _LOCAL_NAMES = set(SHELL_TOOL_NAMES)
 
 
-class ShellTools(ToolDriver):
-    """Local ToolDriver that handles bash / read_file / write_file."""
+class ShellTools:
+    """Local tool catalog handling bash / read_file / write_file. Plain class
+    (no shared base): `is_local` / `invoke` is the contract the loop calls."""
 
     def __init__(self, *, timeout_s: float = 30.0, max_output_bytes: int = 8192) -> None:
         self.timeout_s = timeout_s
@@ -183,7 +212,7 @@ class ShellTools(ToolDriver):
 # ── Descriptor ────────────────────────────────────────────────────────────────
 
 
-def descriptor():
+def descriptor() -> AgentDescriptor:
     """Build the AgentDescriptor for this reference agent build."""
     return build_descriptor(
         agent_name="anthropic-reference-agent",
@@ -192,23 +221,258 @@ def descriptor():
     )
 
 
+# ── Event sink ──────────────────────────────────────────────────────────────
+
+
+def stdout_sink(event: BaseModel) -> None:
+    """Write one AVP event to stdout as NDJSON. v0.1 has no inbound
+    supervisor channel, so this is the agent's only surface."""
+    sys.stdout.write(json.dumps(event_to_wire(event)) + "\n")
+    sys.stdout.flush()
+
+
+def _tools_param_to_decls(tools_param: list[dict[str, Any]]) -> list[ToolDecl]:
+    """Convert the Anthropic tools[] schema the model sees into the
+    `agent_started.avp.tools` `ToolDecl` list (so the wire reflects exactly
+    the filtered built-in surface)."""
+    return [
+        ToolDecl(
+            name=t["name"],
+            description=t.get("description"),
+            inputSchema=t.get("input_schema") or t.get("inputSchema"),
+        )
+        for t in tools_param
+    ]
+
+
+# ── The agent loop ────────────────────────────────────────────────────────────
+
+
+def run_agent(
+    commission: Commission,
+    *,
+    driver: AnthropicModelDriver,
+    tools: ShellTools,
+    desc: AgentDescriptor,
+    started_tools: list[ToolDecl],
+    sink: Callable[[BaseModel], None] = stdout_sink,
+    max_turns: int = _MAX_TURNS,
+) -> None:
+    """Inlined AVP agent loop over `AnthropicModelDriver`.
+
+    Emits the prelude (`run_requested` -> `agent_described` -> `agent_started`),
+    then loops: one `assistant_message` per `driver.step(...)`, `tool_invoked` /
+    `tool_returned` per dispatched tool, until the model converges (or refuses,
+    or a driver error). Appends each assistant turn to history WITH its
+    `tool_calls`, and each tool result as a `role:tool` entry, so the next
+    `driver.step` re-renders a valid Anthropic message array.
+    """
+    trace_id = new_trace_id()
+    run_id = commission.run_id
+    agent_span = new_span_id()
+    supervisor = commission.supervisor
+
+    sink(
+        RunRequestedEvent(
+            subject=run_id,
+            data=RunRequestedData(
+                trace_id=trace_id,
+                span_id=new_span_id(),
+                parent_span_id=ZERO_SPAN_ID,
+                supervisor_name=supervisor.name if supervisor else None,
+                supervisor_version=supervisor.version if supervisor else None,
+                commission=commission,
+            ),
+        )
+    )
+    sink(
+        AgentDescribedEvent(
+            subject=run_id,
+            data=AgentDescribedData(
+                trace_id=trace_id,
+                span_id=new_span_id(),
+                parent_span_id=ZERO_SPAN_ID,
+                descriptor=desc,
+            ),
+        )
+    )
+    sink(
+        AgentStartedEvent(
+            subject=run_id,
+            data=AgentStartedData(
+                trace_id=trace_id,
+                span_id=agent_span,
+                parent_span_id=ZERO_SPAN_ID,
+                provider_name=_PROVIDER_NAME,
+                operation_name="invoke_agent",
+                request_model=driver.model,
+                prompt=commission.prompt,
+                system_prompt=commission.system_prompt,
+                tools=started_tools,
+                thread_id=commission.thread_id,
+                tags=commission.tags,
+            ),
+        )
+    )
+
+    def stop(reason: StopReason, output: Any = None) -> None:
+        sink(
+            AgentStoppedEvent(
+                subject=run_id,
+                data=AgentStoppedData(
+                    trace_id=trace_id,
+                    span_id=new_span_id(),
+                    parent_span_id=agent_span,
+                    reason=reason,
+                    output=output,
+                ),
+            )
+        )
+
+    history: list[dict[str, Any]] = []
+    if commission.system_prompt:
+        history.append({"role": "system", "content": commission.system_prompt})
+    history.append({"role": "user", "content": commission.prompt or ""})
+
+    for step in range(1, max_turns + 1):
+        try:
+            mr = driver.step(history)
+        except ModelDriverError as exc:
+            sink(_error_event(run_id, trace_id, agent_span, exc.code, str(exc)))
+            stop(StopReason.error)
+            return
+        except Exception as exc:
+            # Surface any unexpected driver crash as agent_crash, then stop.
+            sink(_error_event(run_id, trace_id, agent_span, ErrorCode.agent_crash, str(exc)))
+            stop(StopReason.error)
+            return
+
+        turn_span = new_span_id()
+        sink(
+            AssistantMessageEvent(
+                subject=run_id,
+                data=AssistantMessageData(
+                    trace_id=trace_id,
+                    span_id=turn_span,
+                    parent_span_id=agent_span,
+                    step=step,
+                    duration_ms=mr.duration_ms,
+                    content=model_response_to_content(mr),
+                    usage=model_response_usage(mr),
+                    cost_usd=mr.cost_usd,
+                    cost_source=mr.cost_source,  # type: ignore[arg-type]
+                    provider_name=_PROVIDER_NAME,
+                    request_model=driver.model,
+                    response_model=mr.response_model,
+                    response_finish_reasons=mr.finish_reasons,
+                ),
+            )
+        )
+
+        # Append the assistant turn WITH its tool_calls; the next driver.step
+        # re-renders it, and a tool_result without its matching tool_use is
+        # rejected by the API.
+        history.append(
+            {
+                "role": "assistant",
+                "content": mr.text or "",
+                "tool_calls": [
+                    {"call_id": tc.call_id, "tool": tc.tool, "input": tc.input}
+                    for tc in mr.tool_calls
+                ],
+            }
+        )
+
+        if mr.refusal is not None:
+            stop(StopReason.refused)
+            return
+        if mr.converged or not mr.tool_calls:
+            stop(StopReason.converged, output=mr.text)
+            return
+
+        for tc in mr.tool_calls:
+            tool_span = new_span_id()
+            sink(
+                ToolInvokedEvent(
+                    subject=run_id,
+                    data=ToolInvokedData(
+                        trace_id=trace_id,
+                        span_id=tool_span,
+                        parent_span_id=turn_span,
+                        step=step,
+                        tool_call_id=tc.call_id,
+                        tool_name=tc.tool,
+                        tool_input=tc.input,
+                        tool_dispatch_target="local",
+                    ),
+                )
+            )
+            outcome = tools.invoke(tc.tool, tc.input)
+            is_error = outcome.error is not None
+            text = outcome.error if is_error else (outcome.output or "")
+            sink(
+                ToolReturnedEvent(
+                    subject=run_id,
+                    data=ToolReturnedData(
+                        trace_id=trace_id,
+                        span_id=new_span_id(),
+                        parent_span_id=tool_span,
+                        step=step,
+                        tool_call_id=tc.call_id,
+                        tool_name=tc.tool,
+                        duration_ms=max(0, outcome.duration_ms),
+                        tool_result=ToolResultBlock(
+                            tool_use_id=tc.call_id,
+                            content=text,
+                            structured_content=(
+                                outcome.output_json
+                                if isinstance(outcome.output_json, dict)
+                                else None
+                            ),
+                            is_error=is_error or None,
+                        ),
+                    ),
+                )
+            )
+            history.append({"role": "tool", "call_id": tc.call_id, "output": text})
+
+    # Hit the turn cap without converging: stop cleanly so the trajectory still
+    # terminates. A production agent would surface this as its own condition.
+    stop(StopReason.converged)
+
+
+def _error_event(
+    run_id: str, trace_id: str, agent_span: str, code: ErrorCode, message: str
+) -> ErrorOccurredEvent:
+    return ErrorOccurredEvent(
+        subject=run_id,
+        data=ErrorOccurredData(
+            trace_id=trace_id,
+            span_id=new_span_id(),
+            parent_span_id=agent_span,
+            error_code=code,
+            error_message=message or "error",
+        ),
+    )
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 
 class StdoutSink:
-    """SupervisorDriver implementation: write every emitted event to stdout as
-    NDJSON. v0.1 has no inbound supervisor channel, so this is the agent's
-    only "speaking-to-the-supervisor" surface."""
+    """Back-compat callable sink wrapper: `StdoutSink(f).observe(event)` writes
+    NDJSON to `f`. The loop uses the plain `stdout_sink` function; this remains
+    for callers that pass a file object."""
 
     def __init__(self, sink: IO[str]) -> None:
         self._sink = sink
 
     def observe(self, event: object) -> None:
         if isinstance(event, BaseModel):
-            write_event(event, file=self._sink)
+            self._sink.write(json.dumps(event_to_wire(event)) + "\n")
         else:
             self._sink.write(json.dumps(event) + "\n")
-            self._sink.flush()
+        self._sink.flush()
 
 
 def _emit_commission_validation_failure(commission_blob: str, exc: Exception) -> None:
@@ -253,11 +517,6 @@ def _emit_commission_validation_failure(commission_blob: str, exc: Exception) ->
                 "span_id": agent_span,
                 "parent_span_id": ZERO_SPAN_ID,
                 "avp.reason": "error",
-                "avp.state": {
-                    "total_cost_usd": 0.0,
-                    "total_tokens": 0,
-                    "total_turns": 0,
-                },
             },
         },
     ):
@@ -312,37 +571,21 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     model = args.model or commission.model or "claude-sonnet-4-6"
-
-    tools_param: list[dict] = build_anthropic_tools(commission, builtins=list(SHELL_TOOL_SCHEMAS))
-
+    tools_param: list[dict[str, Any]] = build_anthropic_tools(
+        commission, builtins=list(SHELL_TOOL_SCHEMAS)
+    )
     driver = AnthropicModelDriver(
         model=model,
         tools_param=tools_param or None,
         max_tokens=args.max_tokens,
     )
-
-    # When the supervisor stands up a resolver service and sets
-    # `AVP_RESOLVER_URL` on the agent's env, this dials it via HTTP/JSON-RPC
-    # per `spec/v0.1/resolver.md`. AVPAgent calls `avp.resolve` for each
-    # Commission-managed asset at startup; after resolution succeeds, the
-    # AVPAgent hands the connection material to the driver via
-    # `set_resolved_assets`, which translates managed MCP servers into
-    # Anthropic's connector parameter for subsequent turns.
-    #
-    # No AVP_RESOLVER_URL → resolver is None → Commissions with managed
-    # asset lists fail at AVPAgent's `resolver_not_configured` gate.
-    resolver = http_resolver_from_env()
-
-    agent = AVPAgent(
-        commission=commission,
-        model=driver,
+    run_agent(
+        commission,
+        driver=driver,
         tools=ShellTools(),
-        supervisor=StdoutSink(sys.stdout),
-        agent_builtin_tools=list(SHELL_TOOL_SCHEMAS),
-        resolver=resolver,
-        descriptor=descriptor(),
+        desc=descriptor(),
+        started_tools=_tools_param_to_decls(tools_param),
     )
-    agent.run()
     return 0
 
 

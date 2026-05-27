@@ -7,7 +7,7 @@ ONE thing: not letting it run away with cost. Profile = `read-only`
 The agent the supervisor spawns is `_anthropic_reference_agent.py` (sibling
 script), a reference agent built on top of the avp-anthropic SDK adapter.
 The SDK itself ships no agent loop and no built-in tools; the reference
-agent supplies a ShellTools catalog and wires `AVPAgent` to the driver.
+agent supplies a ShellTools catalog and inlines its own loop over the driver.
 
 What you'll see:
   - The Commission the supervisor compiled (printed as JSON before launch)
@@ -72,20 +72,20 @@ def main() -> int:
         events.append(ev)
         # One-line preview of each event as it arrives
         type_name = getattr(ev, "type", None) or (ev.get("type") if isinstance(ev, dict) else "?")
-        if type_name == "assistant_message":
+        if type_name == "avp.assistant_message":
             print(
-                f"  [turn {ev.data.avp_step}] tokens_in={ev.data.gen_ai_usage_input_tokens} tokens_out={ev.data.gen_ai_usage_output_tokens} "
-                f"cost=${ev.data.avp_cost_usd:.5f}"
+                f"  [turn {ev.data.step}] tokens_in={ev.data.usage.input_tokens} "
+                f"tokens_out={ev.data.usage.output_tokens} cost=${ev.data.cost_usd:.5f}"
             )
-        elif type_name == "tool_invoked":
+        elif type_name == "avp.tool_invoked":
             print(
-                f"  [turn {ev.data.avp_step}] -> {ev.data.gen_ai_tool_name}({list(ev.data.gen_ai_tool_call_arguments.keys())})"
+                f"  [turn {ev.data.step}] -> {ev.data.tool_name}({list(ev.data.tool_input.keys())})"
             )
-        elif type_name == "tool_returned":
-            head = ev.data.avp_tool_result.content[0].text.replace("\n", " ")[:60]
-            print(f"  [turn {ev.data.avp_step}] <- {ev.data.gen_ai_tool_name}: {head!r}...")
-        elif type_name == "agent_stopped":
-            print(f"  STOPPED reason={ev.data.avp_reason}")
+        elif type_name == "avp.tool_returned":
+            head = str(ev.data.tool_result.content).replace("\n", " ")[:60]
+            print(f"  [turn {ev.data.step}] <- {ev.data.tool_name}: {head!r}...")
+        elif type_name == "avp.agent_stopped":
+            print(f"  STOPPED reason={ev.data.reason}")
 
     print()
     print(render(summarize(events)))
@@ -118,27 +118,20 @@ def _validate_outcome(events: list) -> list[str]:
         return issues
 
     stop = next(ev for ev in events if type(ev).__name__ == "AgentStoppedEvent")
-    accepted_reasons = {"converged"}
-    if str(stop.data.avp_reason) not in accepted_reasons:
-        issues.append(
-            f"unexpected stop reason {stop.data.avp_reason!r}; expected one of {accepted_reasons}"
-        )
+    if stop.data.reason.value != "converged":
+        issues.append(f"unexpected stop reason {stop.data.reason!r}; expected converged")
 
     tool_invokes = [ev for ev in events if type(ev).__name__ == "ToolInvokedEvent"]
     if not tool_invokes:
         issues.append("no tool calls — agent should have used read_file")
     else:
-        wrong = [
-            ev.data.gen_ai_tool_name
-            for ev in tool_invokes
-            if ev.data.gen_ai_tool_name != "read_file"
-        ]
+        wrong = [ev.data.tool_name for ev in tool_invokes if ev.data.tool_name != "read_file"]
         if wrong:
             issues.append(f"agent called disallowed tools (allowed_tools=[read_file]): {wrong}")
 
     if "ErrorOccurredEvent" in types:
         errs = [ev for ev in events if type(ev).__name__ == "ErrorOccurredEvent"]
-        issues.append(f"error_occurred events present: {[e.data.avp_error_message for e in errs]}")
+        issues.append(f"error_occurred events present: {[e.data.error_message for e in errs]}")
 
     return issues
 

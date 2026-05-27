@@ -3,12 +3,13 @@
 `spec/v0.1/trajectory.md` §1 splits trajectory events into two semantically
 distinct kinds in v0.1:
 
-  1. What the agent did    — assistant_message, tool_invoked/returned, text_emitted
-  2. What the run cost     — cost_recorded, assistant_message.usage
+  1. What the agent did    — assistant_message, tool_invoked/returned
+  2. What the run cost     — assistant_message.avp.usage + avp.cost_usd
 
-A real supervisor framework will surface these on separate UI tracks. This
-module ships a `Summary` dataclass that holds them split, plus a renderer
-that prints a compact post-run report.
+The agent does NOT publish cumulative totals; per-turn deltas live on each
+`assistant_message` and the consumer reduces the stream. This module does
+exactly that: a `Summary` dataclass that holds the split facts, plus a
+renderer that prints a compact post-run report.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from pydantic import BaseModel
 from avp.trajectory import (
     AgentStoppedEvent,
     AssistantMessageEvent,
-    CostRecordedEvent,
     ErrorOccurredEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
@@ -43,9 +43,8 @@ class Summary:
     # What the agent did
     total_turns: int = 0
     tools: dict[str, ToolUsage] = field(default_factory=dict)
-    text_chunks: int = 0
 
-    # What the run cost
+    # What the run cost (reduced from per-turn assistant_message deltas)
     total_cost_usd: float = 0.0
     total_tokens: int = 0
     duration_ms: int = 0
@@ -59,7 +58,14 @@ class Summary:
 
 
 def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
-    """Walk a captured trajectory and produce a Summary."""
+    """Walk a captured trajectory and produce a Summary.
+
+    Totals are reduced from each `assistant_message`'s per-turn deltas
+    (`avp.cost_usd`, `avp.usage`, `avp.duration_ms`): the agent publishes no
+    cumulative snapshot, so the consumer sums. `input_tokens` already includes
+    cache reads (Usage convention), so summing input + output does not double
+    count.
+    """
     s = Summary(run_id="(unknown)")
 
     for ev in events:
@@ -68,33 +74,23 @@ def summarize(events: list[BaseModel | dict[str, Any]]) -> Summary:
 
         if isinstance(ev, AssistantMessageEvent):
             s.total_turns += 1
+            s.total_cost_usd += ev.data.cost_usd
+            s.total_tokens += ev.data.usage.input_tokens + ev.data.usage.output_tokens
+            s.duration_ms += ev.data.duration_ms
         elif isinstance(ev, ToolInvokedEvent):
-            tool = ev.data.gen_ai_tool_name
+            tool = ev.data.tool_name
             usage = s.tools.setdefault(tool, ToolUsage(name=tool))
             usage.invocations += 1
         elif isinstance(ev, ToolReturnedEvent):
-            if ev.data.avp_tool_result.isError:
-                tool = ev.data.gen_ai_tool_name
+            if ev.data.tool_result.is_error:
+                tool = ev.data.tool_name
                 usage = s.tools.setdefault(tool, ToolUsage(name=tool))
                 usage.failures += 1
-        elif isinstance(ev, CostRecordedEvent):
-            # Snapshot wins — last-write semantics
-            snap = ev.data.avp_state
-            s.total_cost_usd = snap.total_cost_usd
-            s.total_tokens = snap.total_tokens
-            if snap.duration_ms is not None:
-                s.duration_ms = snap.duration_ms
         elif isinstance(ev, AgentStoppedEvent):
             s.run_id = ev.subject or "(unknown)"
-            s.stop_reason = str(ev.data.avp_reason)
-            if ev.data.avp_total_cost_usd is not None:
-                s.total_cost_usd = ev.data.avp_total_cost_usd
-            if ev.data.avp_total_tokens is not None:
-                s.total_tokens = ev.data.avp_total_tokens
-            if ev.data.avp_duration_ms is not None:
-                s.duration_ms = ev.data.avp_duration_ms
+            s.stop_reason = str(ev.data.reason)
         elif isinstance(ev, ErrorOccurredEvent):
-            s.errors.append(f"{ev.data.avp_error_code}: {ev.data.avp_error_message}")
+            s.errors.append(f"{ev.data.error_code}: {ev.data.error_message}")
 
     return s
 

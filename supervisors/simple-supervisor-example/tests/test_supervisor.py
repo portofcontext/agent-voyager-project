@@ -2,13 +2,14 @@
 
 Covers the wire-level supervisor logic that doesn't need a live agent:
   - Profile → Commission compilation
-  - Trajectory → Summary classification
-  - Subprocess wrapper drives the reference avp agent with ScriptedModel
+  - Trajectory → Summary classification (reducing per-turn assistant_message deltas)
+  - Subprocess wrapper drives the reference agent with a scripted driver
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 from simple_supervisor import (
@@ -20,16 +21,21 @@ from simple_supervisor import (
     summarize,
 )
 
-from avp.commission import Commission
-from avp.enums import StopReason
+from avp.content import TextBlock, ToolResultBlock
+from avp.envelope import ZERO_SPAN_ID, new_span_id, new_trace_id
 from avp.trajectory import (
+    AgentStartedData,
     AgentStartedEvent,
+    AgentStoppedData,
     AgentStoppedEvent,
     AssistantMessageData,
     AssistantMessageEvent,
-    CostRecordedEvent,
+    StopReason,
+    ToolInvokedData,
     ToolInvokedEvent,
+    ToolReturnedData,
     ToolReturnedEvent,
+    Usage,
 )
 
 # ── Profile / Commission compilation ──────────────────────────────────────────────
@@ -50,34 +56,10 @@ def test_profiles_are_distinct() -> None:
     assert DEV_LOOSE.enabled_builtin_tools != READ_ONLY.enabled_builtin_tools
 
 
-# ── Trajectory summarization ──────────────────────────────────────────────────
+# ── Trajectory summarization (reduces per-turn assistant_message deltas) ───────
 
 
-def _make_state(*, cost: float, tokens: int, turns: int) -> dict:
-    return {
-        "total_cost_usd": cost,
-        "total_tokens": tokens,
-        "total_turns": turns,
-        "started_at": "2026-05-04T18:00:00Z",
-        "duration_ms": 1234,
-    }
-
-
-def test_summarize_classifies_fact_classes() -> None:
-    from mcp.types import TextContent, ToolResultContent
-
-    from avp.trajectory import (
-        ZERO_SPAN_ID,
-        AgentStartedData,
-        AgentStoppedData,
-        CostRecordedData,
-        ToolInvokedData,
-        ToolReturnedData,
-        new_span_id,
-        new_trace_id,
-    )
-
-    Commission(schema_version="0.1", run_id="r-summary", model="m")
+def test_summarize_reduces_facts_from_the_stream() -> None:
     trace = new_trace_id()
     agent_span = new_span_id()
     turn_span = new_span_id()
@@ -90,72 +72,45 @@ def test_summarize_classifies_fact_classes() -> None:
         AgentStartedEvent(
             subject="r-summary",
             data=AgentStartedData(
-                **span(agent_span, ZERO_SPAN_ID),
-                **{"gen_ai.request.model": "m"},
+                **span(agent_span, ZERO_SPAN_ID), request_model="m", provider_name="anthropic"
             ),
         ),
         AssistantMessageEvent(
             subject="r-summary",
             data=AssistantMessageData(
                 **span(turn_span, agent_span),
-                avp_step=1,
-                avp_duration_ms=10,
-                **{
-                    "gen_ai.usage.input_tokens": 10,
-                    "gen_ai.usage.output_tokens": 5,
-                    "avp.cost_usd": 0.001,
-                },
+                step=1,
+                duration_ms=10,
+                content=[TextBlock(text="running bash")],
+                usage=Usage(input_tokens=10, output_tokens=5),
+                cost_usd=0.001,
             ),
         ),
         ToolInvokedEvent(
             subject="r-summary",
             data=ToolInvokedData(
                 **span(tool_span, turn_span),
-                avp_step=1,
-                **{
-                    "gen_ai.tool.call.id": "c1",
-                    "gen_ai.tool.name": "bash",
-                    "gen_ai.tool.call.arguments": {"x": 1},
-                },
+                step=1,
+                tool_call_id="c1",
+                tool_name="bash",
+                tool_input={"x": 1},
+                tool_dispatch_target="local",
             ),
         ),
         ToolReturnedEvent(
             subject="r-summary",
             data=ToolReturnedData(
-                **span(tool_span, turn_span),
-                avp_step=1,
-                avp_duration_ms=1,
-                avp_tool_result=ToolResultContent(
-                    type="tool_result",
-                    toolUseId="c1",
-                    content=[TextContent(type="text", text="ok")],
-                ),
-                **{
-                    "gen_ai.tool.call.id": "c1",
-                    "gen_ai.tool.name": "bash",
-                },
-            ),
-        ),
-        CostRecordedEvent(
-            subject="r-summary",
-            data=CostRecordedData(
-                **span(new_span_id(), turn_span),
-                **{"avp.state": _make_state(cost=0.001, tokens=15, turns=1)},
+                **span(new_span_id(), tool_span),
+                step=1,
+                tool_call_id="c1",
+                tool_name="bash",
+                duration_ms=1,
+                tool_result=ToolResultBlock(tool_use_id="c1", content="ok"),
             ),
         ),
         AgentStoppedEvent(
             subject="r-summary",
-            data=AgentStoppedData(
-                **span(agent_span, ZERO_SPAN_ID),
-                **{
-                    "avp.reason": StopReason.converged,
-                    "avp.state": _make_state(cost=0.001, tokens=15, turns=1),
-                    "avp.total_tokens": 15,
-                    "avp.total_cost_usd": 0.001,
-                    "avp.total_turns": 1,
-                    "avp.duration_ms": 1234,
-                },
-            ),
+            data=AgentStoppedData(**span(new_span_id(), agent_span), reason=StopReason.converged),
         ),
     ]
     s = summarize(events)
@@ -164,63 +119,98 @@ def test_summarize_classifies_fact_classes() -> None:
     assert s.stop_reason == "converged"
     assert s.total_turns == 1
     assert s.tools["bash"].invocations == 1
+    # Reduced from the single assistant_message delta.
     assert pytest.approx(s.total_cost_usd, abs=1e-9) == 0.001
+    assert s.total_tokens == 15
 
     rendered = render(s)
     assert "bash: 1 call" in rendered
 
 
-# ── Subprocess wrapper end-to-end (uses no LLM — pipes to a tiny scripted agent) ──
+def test_summarize_counts_tool_failures() -> None:
+    trace = new_trace_id()
+
+    def span(parent: str = ZERO_SPAN_ID) -> dict:
+        return {"trace_id": trace, "span_id": new_span_id(), "parent_span_id": parent}
+
+    events = [
+        ToolInvokedEvent(
+            subject="r",
+            data=ToolInvokedData(
+                **span(), step=1, tool_call_id="c1", tool_name="bash", tool_input={}
+            ),
+        ),
+        ToolReturnedEvent(
+            subject="r",
+            data=ToolReturnedData(
+                **span(),
+                step=1,
+                tool_call_id="c1",
+                tool_name="bash",
+                duration_ms=1,
+                tool_result=ToolResultBlock(tool_use_id="c1", content="boom", is_error=True),
+            ),
+        ),
+    ]
+    s = summarize(events)
+    assert s.tools["bash"].failures == 1
 
 
-_INLINE_SCRIPTED_AGENT = """\
+# ── Subprocess wrapper end-to-end (no LLM — a scripted driver feeds run_agent) ──
+
+_EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples"
+
+_INLINE_SCRIPTED_AGENT = f"""\
 import json, sys
+sys.path.insert(0, {str(_EXAMPLES_DIR)!r})
+
+from _anthropic_reference_agent import run_agent, stdout_sink
 from avp.commission import Commission
-from avp.io import write_event
-from avp.agent import AVPAgent
-from avp.agent.mock import ScriptedTools, ScriptedSupervisor, parse_scripted_model
+from avp.descriptor import AgentDescriptor
+from avp_anthropic import ModelResponse, ToolOutcome
+from avp_anthropic.translate import ScriptedToolCall
 
-cfg_line = sys.stdin.readline()
-commission = Commission.model_validate(json.loads(cfg_line))
 
-# Two-turn scripted run: turn 1 calls 'bash', turn 2 converges.
-model = parse_scripted_model([
-    {
-        "tokens_input": 50, "tokens_output": 10, "cost_usd": 0.001, "duration_ms": 1,
-        "text": "running bash",
-        "tool_calls": [{"call_id": "c1", "tool": "bash", "input": {"cmd": "echo hi"}}],
-        "converged": False,
-    },
-    {
-        "tokens_input": 10, "tokens_output": 5, "cost_usd": 0.0005, "duration_ms": 1,
-        "text": "all done", "converged": True,
-    },
+class ScriptedDriver:
+    model = "scripted-model"
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+
+    def step(self, history):
+        return self._responses.pop(0)
+
+
+class DictTools:
+    def is_local(self, tool):
+        return True
+
+    def invoke(self, tool, input):
+        return ToolOutcome(output="hi", duration_ms=1)
+
+
+commission = Commission.model_validate(json.loads(sys.stdin.readline()))
+driver = ScriptedDriver([
+    ModelResponse(
+        tokens_input=50, tokens_output=10, cost_usd=0.001, duration_ms=1,
+        text="running bash",
+        tool_calls=[ScriptedToolCall(call_id="c1", tool="bash", input={{"cmd": "echo hi"}})],
+        converged=False,
+    ),
+    ModelResponse(
+        tokens_input=10, tokens_output=5, cost_usd=0.0005, duration_ms=1,
+        text="all done", converged=True,
+    ),
 ])
-tools = ScriptedTools({"bash": {"output": "hi", "duration_ms": 1}})
-
-# Streaming supervisor: every observed event gets written to stdout as NDJSON.
-class _StreamingSupervisor(ScriptedSupervisor):
-    def observe(self, event):
-        super().observe(event)
-        write_event(event, file=sys.stdout)
-
-agent = AVPAgent(commission=commission,
-    model=model,
-    tools=tools,
-    supervisor=_StreamingSupervisor([]),
-    agent_builtin_tools=[
-        {"name": "bash"},
-        {"name": "read_file"},
-        {"name": "write_file"},
-    ],
-)
-agent.run()
+desc = AgentDescriptor(agent_name="scripted", agent_version="0.1", spec_version="0.1")
+run_agent(commission, driver=driver, tools=DictTools(), desc=desc, started_tools=[], sink=stdout_sink)
 """
 
 
 def test_run_subprocess_drives_a_real_agent_end_to_end(tmp_path) -> None:
-    """Spawn a tiny inline agent that uses ScriptedModel + ScriptedTools, pipe a
-    Commission in, parse events out. Pins the wire-level supervisor flow."""
+    """Spawn a tiny inline agent that feeds the reference `run_agent` loop a
+    scripted driver, pipe a Commission in, parse events out. Pins the
+    supervisor↔agent subprocess seam end-to-end without an LLM."""
     from simple_supervisor import run_subprocess
 
     agent_script = tmp_path / "tiny_agent.py"
@@ -235,7 +225,7 @@ def test_run_subprocess_drives_a_real_agent_end_to_end(tmp_path) -> None:
     events = run_subprocess(
         [sys.executable, str(agent_script)],
         commission,
-        timeout_s=10.0,
+        timeout_s=20.0,
     )
 
     types = [getattr(ev, "type", None) for ev in events if hasattr(ev, "type")]

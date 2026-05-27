@@ -7,9 +7,9 @@ why the agent died.
 Two entry points:
 - `run_subprocess(cmd, commission)`: drives an external agent CLI (e.g. the
   reference avp-anthropic agent in `examples/_anthropic_reference_agent.py`,
-  or `avp-claude-agent-sdk`).
-- `run_in_process(commission, agent_factory)`: drives the reference agent
-  directly, for fast unit-test-friendly demos with ScriptedModel.
+  or `avp-claude-agent-sdk`), buffering the full trajectory before returning.
+- `stream_subprocess(cmd, commission)`: same wiring, but yields events as the
+  agent emits them.
 """
 
 from __future__ import annotations
