@@ -1,0 +1,44 @@
+{
+  "id": "empty-allowlist-hides-builtins",
+  "title": "Commission.enabled_builtin_tools=[] hides every built-in tool",
+  "description": "enabled_builtin_tools is a subtractive allow-list over the agent's tool surface (descriptor.tools). An empty list exposes none: agent_started.data.avp.tools MUST be an empty array, so the model gets no tools. The run still completes normally. Cross-agent: goose doesn't load its developer extension; claude filters the merged tool bag to the (empty) allow-list.",
+  "spec_refs": [
+    "spec/v0.1/commission.md",
+    "spec/v0.1/trajectory.md#2-1-run-prelude"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "empty-allowlist-hides-builtins",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "enabled_builtin_tools": [],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started exposes no built-in tools",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent",
+          "data": {
+            "avp.tools": []
+          }
+        }
+      },
+      {
+        "label": "run still converges",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ]
+  }
+}

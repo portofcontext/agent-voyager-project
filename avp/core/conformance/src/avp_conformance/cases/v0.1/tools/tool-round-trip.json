@@ -1,0 +1,53 @@
+{
+  "id": "tool-round-trip",
+  "title": "A model tool call produces a tool_invoked / tool_returned pair, then converges",
+  "description": "The core agent-loop seam: when the model invokes a built-in tool, the agent MUST emit tool_invoked, dispatch it, emit the paired tool_returned, feed the result back, and converge. Cross-agent the tool NAMES differ (claude: Write/Bash; goose: write/text_editor/shell) so the case pins only the event types and ordering, not the tool name. The span pairing (tool_returned parents under tool_invoked) is enforced by the harness's universal structure check, not asserted here. tool_returned may carry is_error in a restricted sandbox (e.g. a write-permission prompt); the round-trip and convergence still hold, so the case does not assert tool success.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#7-event-reference",
+    "spec/v0.1/trajectory.md#5-tools"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "tool-round-trip",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Use your file-writing tool to create a file named avp_roundtrip.txt containing exactly the text OK. After the tool has run, reply with the single word DONE.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "tool_invoked (model called a built-in tool)",
+        "match": {
+          "type": "avp.tool_invoked",
+          "source": "avp://agent",
+          "data": {
+            "avp.tool.dispatch_target": "local"
+          }
+        }
+      },
+      {
+        "label": "tool_returned (the agent dispatched it and fed the result back)",
+        "match": {
+          "type": "avp.tool_returned",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

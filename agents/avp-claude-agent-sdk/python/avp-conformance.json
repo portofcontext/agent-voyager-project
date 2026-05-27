@@ -1,0 +1,6 @@
+{
+  "command": ["uv", "run", "--no-sync", "python", "-m", "avp_claude_agent_sdk.conformance"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-claude-agent-sdk conformance entrypoint"
+}

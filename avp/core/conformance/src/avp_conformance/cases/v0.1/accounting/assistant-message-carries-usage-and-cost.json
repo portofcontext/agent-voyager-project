@@ -1,0 +1,36 @@
+{
+  "id": "assistant-message-carries-usage-and-cost",
+  "title": "assistant_message carries per-turn usage and cost; the run reduces to nonzero totals",
+  "description": "Per spec, the agent publishes per-turn deltas on each assistant_message (avp.usage + avp.cost_usd) and NO cumulative totals on agent_stopped; the consumer reduces the stream. This case folds the stream (the harness final_state does this) and asserts the totals are present and nonzero: at least one input/output token, and a computed cost greater than zero (the bundled price table resolves the model). A tiny positive floor is used so the assertion means 'cost was actually computed', not an exact figure (real-LLM token counts vary).",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#7-event-reference",
+    "FOUNDATIONS.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "assistant-message-carries-usage-and-cost",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "at least one assistant_message turn",
+        "match": {
+          "type": "avp.assistant_message",
+          "source": "avp://agent"
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged",
+      "min_total_tokens": 1,
+      "min_total_cost_usd": 1e-06
+    }
+  }
+}

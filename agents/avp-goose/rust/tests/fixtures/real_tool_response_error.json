@@ -1,0 +1,10 @@
+[
+  {
+    "type": "toolResponse",
+    "id": "toolu_vrtx_01UaerKr6kqohXbYPNf8MjMj",
+    "toolResult": {
+      "status": "error",
+      "error": "-32602: Unsupported file type: "
+    }
+  }
+]

@@ -25,7 +25,7 @@ When in doubt, file one. AVP-RFCs are cheap; downstream churn from un-discussed 
 
 ## Quick start
 
-1. **Read the umbrella spec index** at [`../spec/v0.1/README.md`](../spec/v0.1/README.md) so you know which spec your change touches.
+1. **Read the umbrella spec index** at [`../avp/core/spec/v0.1/README.md`](../avp/core/spec/v0.1/README.md) so you know which spec your change touches.
 2. **Copy [`NNNN-template/`](./NNNN-template/)** to `proposals/<NNNN>-<short-title>/` where `<NNNN>` is the next free integer (zero-padded).
 3. **Fill out the README.md** following the section headings. The `Summary` and `Motivation` sections are the minimum to merge as `provisional`.
 4. **Fill out `metadata.yaml`** with at minimum `title`, `authors`, `status`, `created`.
@@ -69,6 +69,6 @@ proposals/
 
 ## Relationship to spec versioning
 
-The four specs ([Trajectory](../spec/v0.1/trajectory.md) / [Commission](../spec/v0.1/commission.md) / [Agent Descriptor](../spec/v0.1/agent-descriptor.md) / [Resolver API](../spec/v0.1/resolver.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
+The four specs ([Trajectory](../avp/core/spec/v0.1/trajectory.md) / [Commission](../avp/core/spec/v0.1/commission.md) / [Agent Descriptor](../avp/core/spec/v0.1/agent-descriptor.md) / [Resolver API](../avp/core/spec/v0.1/resolver.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
 
 When an AVP-RFC lands a wire-affecting change, its `metadata.yaml` records which spec(s) it touches and the target umbrella version. Future tooling can render an "AVP-RFCs implemented since v0.1" view by querying that metadata.

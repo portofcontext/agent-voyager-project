@@ -17,19 +17,7 @@ The project is small. Become a maintainer the same way it works in most early-st
 
 As the project grows, we will likely adopt the Kubernetes-style **OWNERS** model (per-directory reviewers/approvers) and SIG structure. Until there are enough contributors to warrant that overhead, this single MAINTAINERS.md is the source of truth.
 
-## What maintainers do
-
-- Review PRs against the spec docs, reference implementations, and conformance suite.
-- Shepherd AVP-RFCs (proposals/) from `provisional` → `accepted` → `implemented`, including approving stability transitions.
-- Cut release tags, run `make smoke` against the release candidate, publish changelogs.
-- Respond to security reports per `SECURITY.md` (when that file exists).
-
-## What maintainers don't do
-
-- Speak for individual specs' design unilaterally. Wire-affecting changes go through the [AVP-RFC process](proposals/README.md).
-- Override the conformance suite. If the harness fails a case, the implementation is wrong (or the case is, and a proposal fixes it).
 
 ## Contact
 
 - File issues and PRs against [github.com/portofcontext/agent-voyager-project](https://github.com/portofcontext/agent-voyager-project).
-- Security reports: see `SECURITY.md` (TODO).

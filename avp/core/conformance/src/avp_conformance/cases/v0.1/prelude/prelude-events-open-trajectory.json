@@ -1,0 +1,44 @@
+{
+  "id": "prelude-events-open-trajectory",
+  "title": "run_requested, agent_described, agent_started open the trajectory back-to-back",
+  "description": "Every conforming agent opens a run with the prelude trio in order and contiguously, each tagged source=avp://agent (the agent is the sole producer on the wire, per trajectory spec conformance #1): run_requested (carrying the Commission), then agent_described (the agent's self-description), then agent_started (run entry). This is structural and model-agnostic, so it runs against any real model and passes on any SDK that emits a spec-faithful prelude.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#2-1-run-prelude"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "prelude-events-open-trajectory",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_strict",
+    "events": [
+      {
+        "label": "run_requested",
+        "match": {
+          "type": "avp.run_requested",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "agent_described",
+        "match": {
+          "type": "avp.agent_described",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "agent_started",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent"
+        }
+      }
+    ]
+  }
+}

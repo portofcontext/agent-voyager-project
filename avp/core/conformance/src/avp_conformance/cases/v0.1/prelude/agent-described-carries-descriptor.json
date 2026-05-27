@@ -1,0 +1,36 @@
+{
+  "id": "agent-described-carries-descriptor",
+  "title": "agent_described carries the agent's self-description under avp.descriptor",
+  "description": "Before the run proper begins, the agent advertises what it is via agent_described.data.avp.descriptor: an AgentDescriptor carrying at least agent_name and spec_version. This lets a supervisor audit what the agent showed up with. agent_name varies by implementation (so it is not asserted here); spec_version is the wire contract and MUST be 0.1. Structural and model-agnostic.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/v0.1/agent-descriptor.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "agent-described-carries-descriptor",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_described carries a spec-0.1 descriptor",
+        "match": {
+          "type": "avp.agent_described",
+          "source": "avp://agent",
+          "data": {
+            "avp.descriptor": {
+              "spec_version": "0.1"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

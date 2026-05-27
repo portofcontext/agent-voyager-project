@@ -1,0 +1,55 @@
+{
+  "id": "agent-started-lists-mcp-server",
+  "title": "A Commission-supplied MCP server is dialed and enumerated on agent_started",
+  "description": "When the Commission carries an inline mcp_servers entry, the agent dials it at startup and records it on agent_started.data.avp.mcp_servers with its id and terminal status. Asserted with $contains so other (agent-default) servers don't matter. Uses the repo's bundled stdio test MCP server via the ${AVP_TEST_MCP} fixture token (the harness expands it to an absolute path).",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#2-1-run-prelude",
+    "spec/v0.1/commission.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "agent-started-lists-mcp-server",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "mcp_servers": [
+      {
+        "type": "stdio",
+        "id": "avptest",
+        "command": ["uv", "run", "${AVP_TEST_MCP}"]
+      }
+    ],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started lists the connected MCP server",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent",
+          "data": {
+            "avp.mcp_servers": {
+              "$contains": {
+                "id": "avptest",
+                "status": "connected"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "run converges",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "assistant-message-carries-text-content",
+  "title": "assistant_message carries the model's text output under avp.content",
+  "description": "The model's per-turn output is reconstructable from the wire: an assistant_message MUST carry the produced content blocks under avp.content, including at least one text block when the model replied with text. Asserted with $contains so it holds regardless of how many blocks the turn produced. Replaces the retired text_emitted event (text now lives inside avp.content).",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#7-event-reference"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "assistant-message-carries-text-content",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "assistant_message content includes a text block",
+        "match": {
+          "type": "avp.assistant_message",
+          "source": "avp://agent",
+          "data": {
+            "avp.content": {
+              "$contains": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

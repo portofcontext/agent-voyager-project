@@ -1,0 +1,38 @@
+{
+  "id": "run-requested-carries-commission-snapshot",
+  "title": "run_requested carries the supervisor identity + a faithful Commission snapshot",
+  "description": "The opening run_requested event records who requested the run (avp.supervisor.name, from Commission.supervisor.name) and a full snapshot of the Commission under avp.commission. This is what makes a trajectory self-contained: an auditor can re-derive the Commission that started the run from the wire alone. Structural and model-agnostic, so it holds for any conforming agent.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#2-1-run-prelude"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "run-requested-carries-commission-snapshot",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "run_requested carries supervisor + commission snapshot",
+        "match": {
+          "type": "avp.run_requested",
+          "source": "avp://agent",
+          "data": {
+            "avp.supervisor.name": "avp-conformance",
+            "avp.commission": {
+              "schema_version": "0.1",
+              "run_id": "run-requested-carries-commission-snapshot",
+              "model": "claude-haiku-4-5-20251001"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
