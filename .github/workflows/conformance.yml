@@ -52,6 +52,11 @@ jobs:
           pip install -e './sdks/avp-anthropic[dev]' --no-deps
           pip install -e './agents/avp-claude-agent-sdk/python[dev]' --no-deps
           pip install -e './supervisors/simple-supervisor-example[dev]' --no-deps
+          # The editable installs above use --no-deps (so pip doesn't try to
+          # resolve the unpublished sibling `avp` from PyPI), which also skips
+          # third-party runtime deps. typer powers the avp-conformance CLI and
+          # is imported on `import avp_conformance`, so install it explicitly.
+          pip install "typer>=0.12"
           # Real upstream SDKs are pulled separately so the package installs
           # don't block on Anthropic / Claude Agent SDK availability:
           pip install "anthropic>=0.40,<1" || echo "anthropic SDK install skipped"
