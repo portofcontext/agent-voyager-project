@@ -17,11 +17,11 @@ use avp::{Commission, Event};
 let event: Event = serde_json::from_str(line)?;
 match event {
     Event::AgentStartedEvent(_) => { /* ... */ }
-    Event::ModelTurnEndedEvent(e) => {
+    Event::AssistantMessageEvent(e) => {
         let cost = e.data.avp_cost_usd;
         let source = e.data.avp_cost_source;  // "computed" | "reported" | "unknown"
     }
-    Event::RefusalRecordedEvent(e) => { /* ... */ }
+    Event::ToolReturnedEvent(e) => { /* ... */ }
     // ...
 }
 ```
@@ -30,9 +30,9 @@ Use `avp::commission`, `avp::trajectory`, and `avp::agent_descriptor` for the he
 
 ## Source of truth
 
-- `python/avp/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
-  → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
-  → `rust/avp/src/*.rs` (generated here, via `cargo-typify`)
+- `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
+  -> `avp/core/spec/v0.1/*.schema.json` (auto-generated; `avp/scripts/generate-schemas.py`)
+  -> `avp/bindings/rust/src/*.rs` (generated here, via `cargo-typify`)
 
 Don't edit `src/{commission,event}.rs` by hand — they're regenerated. Edit the Python sources upstream.
 

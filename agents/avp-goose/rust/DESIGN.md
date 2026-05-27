@@ -86,9 +86,9 @@ Commission (stdin / supervisor)
 Transport is a `Sink` choice, not a protocol. Non-stdio output (the
 original ask) is just a different `Sink` impl; nothing else changes.
 
-## 4. The Rust AVP agent base (what to add to `rust/avp/`)
+## 4. The Rust AVP agent base (what to add to `avp/bindings/rust/`)
 
-`rust/avp/` today is **wire types only**, generated from the schemas
+`avp/bindings/rust/` today is **wire types only**, generated from the schemas
 (`trajectory.rs`, `commission.rs`, `agent_descriptor.rs`). Every event type
 we need already exists: `RunRequestedEvent`, `AgentDescribedEvent`,
 `AgentStartedEvent`, `AssistantMessageEvent`, `ToolInvokedEvent`,
@@ -101,16 +101,17 @@ Missing is the agent-base machinery that Python keeps in `avp/`. Port these
 
 | Python source | Rust addition | Contents | Status |
 |---|---|---|---|
-| `avp/envelope.py` | `rust/avp/src/ids.rs` | `now_iso`, `new_event_id`, `new_trace_id`, `new_span_id`, `ZERO_SPAN_ID`, `SOURCE_AGENT` (uuid `v4` + chrono `clock` features) | done |
-| `avp/agent/sink.py` | `rust/avp/src/sink.rs` | `trait Sink { fn emit(&self, &Event) -> io::Result<()> }` + `StdioSink` (NDJSON). Sync + object-safe; sinks needing async/state use interior mutability | done |
-| `avp/pricing.py` + `avp/data/prices.json` | `rust/avp/src/pricing.rs` | `ModelPrice`, `CostSource` (re-exported wire enum), `compute_cost`, `load_default_prices`; default table shared with Python via `include_str!` (one source of truth) | done |
+| `avp/envelope.py` | `avp/bindings/rust/src/ids.rs` | `now_iso`, `new_event_id`, `new_trace_id`, `new_span_id`, `ZERO_SPAN_ID`, `SOURCE_AGENT` (uuid `v4` + chrono `clock` features) | done |
+| `avp/sink.py` | `avp/bindings/rust/src/sink.rs` | `trait Sink { fn emit(&self, &Event) -> io::Result<()> }` + `StdioSink` (NDJSON). Sync + object-safe; sinks needing async/state use interior mutability | done |
+| `avp/pricing.py` + `avp/data/prices.json` | `avp/bindings/rust/src/pricing.rs` | `ModelPrice`, `CostSource` (re-exported wire enum), `compute_cost`, `load_default_prices`; default table shared with Python via `include_str!` (one source of truth) | done |
 
 This base is the deliverable that outlives Goose. The connector itself
 (§5) is the integrator package and stays Goose-specific.
 
 Built flat (`ids`/`pricing`/`sink` at the crate root) rather than under an
-`agent/` module: there is no Rust `AVPAgent` trait yet, so the extra nesting
-would be structure for a hypothetical caller. `cargo test` green (8 base unit
+`agent/` module: there is no shared agent base class in any binding (each
+agent inlines its own loop), so the extra nesting would be structure for a
+hypothetical caller. `cargo test` green (8 base unit
 tests + 3 roundtrip). The `prices.json` `include_str!` reaches into the Python
 package data file; publishing the `avp` crate standalone (§12) will swap that
 for a build-script copy of the same file.
@@ -229,8 +230,9 @@ Observing Goose in-process keeps the connector small:
   emitted twice. Canonical schema untouched (Rust-only; TS already
   discriminated). Rust + TS roundtrip tests modernized off removed event types
   and green; `make bindings-check` drift-clean.
-- **Follow-up (Python side, separate from bindings):** `conformance/v0.1/cases/resolver/`
-  is stale post-resolver-removal and should be removed before `make check`/CI.
+- **Done (Python side):** the stale post-resolver-removal conformance cases were
+  removed; the live suite at `avp/core/conformance/src/avp_conformance/cases/v0.1/`
+  has no resolver cases (see its `COVERAGE.md`).
 - **Conformance.** The connector is validated the same way as the Python
   agents: replay real Goose content through `translate.rs` + `runstate.rs`,
   validate emitted events against `spec/v0.1/trajectory.schema.json`, run

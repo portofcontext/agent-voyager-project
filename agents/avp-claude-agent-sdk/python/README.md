@@ -1,6 +1,6 @@
 # avp-claude-agent-sdk
 
-An [AVP](../../../spec/v0.1)-compliant wrapper around the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Exposes [`AVPClaudeSDKClient`](src/avp_claude_agent_sdk/_client.py), a drop-in subclass of `ClaudeSDKClient` that emits a conforming AVP trajectory across `connect()` → `query()` / `receive_response()` → `disconnect()`.
+An [AVP](../../../avp/core/spec/v0.1)-compliant wrapper around the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Exposes [`AVPClaudeSDKClient`](src/avp_claude_agent_sdk/_client.py), a drop-in subclass of `ClaudeSDKClient` that emits a conforming AVP trajectory across `connect()` → `query()` / `receive_response()` → `disconnect()`.
 
 ## Install
 
@@ -25,7 +25,7 @@ For every run of a `claude-agent-sdk` session, this package produces the AVP eve
 - `subagent_invoked` / `subagent_returned` — bracketing every Task dispatch with the subagent's terminal summary, reason (`converged` / `interrupted` / `error`), and usage
 - `agent_stopped` — final event of the run
 
-The wire format is defined by the [`avp`](../../avp) package; this adapter contributes no schema of its own.
+The wire format is defined by the [`avp`](../../../avp/bindings/python) package; this adapter contributes no schema of its own.
 
 ## How events are sourced
 
@@ -56,7 +56,7 @@ See [CLAUDE.md](CLAUDE.md) for design notes.
 
 ## Contributing
 
-- **AVP spec** lives at [`spec/v0.1`](../../../spec/v0.1). Conformance cases at [`conformance/v0.1`](../../../conformance/v0.1). Wire-format changes belong there, not here.
+- **AVP spec** lives at [`avp/core/spec/v0.1`](../../../avp/core/spec/v0.1). Conformance cases at [`avp/core/conformance/.../cases/v0.1`](../../../avp/core/conformance/src/avp_conformance/cases/v0.1). Wire-format changes belong there, not here.
 - **Code style:** avoid `Any` / `dict[str, Any]` typing where a concrete type fits; keep docstrings compact (one-line where possible). Use `uv` for dependency management.
 - **Subagent-interior events are dropped** (`parent_tool_use_id is not None` on chunks; `tool_use_id` in `state.turn.tasks` on results). Subagent activity surfaces on the parent only via `subagent_invoked` / `subagent_returned`.
 - **The reference path is tested manually via [`scripts/`](scripts/).** A real test suite is on the TODO list.

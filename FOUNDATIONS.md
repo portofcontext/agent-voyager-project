@@ -75,7 +75,7 @@ for HTTP, MQTT, Kafka, AMQP, NATS, so any AVP trajectory can be transported
 on standard event infrastructure without re-encoding.
 
 **What AVP takes:** the event envelope. Every AVP event is a valid CloudEvent.
-`type` is reverse-DNS (`avp.model_turn_ended`); `source` is `avp://agent`
+`type` is reverse-DNS (`avp.assistant_message`); `source` is `avp://agent`
 (the agent is the sole producer on the wire — supervisor attribution lives
 inside `run_requested.data`, not in the envelope); `subject` carries
 `run_id`; `time` carries the timestamp; `data` carries the AVP-specific
@@ -114,7 +114,7 @@ backend. Recommended mapping:
 | `avp.tool.name` | `gen_ai.tool.name` | On `tool_invoked` / `tool_returned` |
 | `avp.tool.call_id` | `gen_ai.tool.call.id` | |
 | `avp.tool.input` | `gen_ai.tool.call.arguments` | |
-| `avp.subagent.name` | `gen_ai.agent.name` | On `subagent_invoked` / `subagent_returned` / `subagent_failed` |
+| `avp.subagent.name` | `gen_ai.agent.name` | On `subagent_invoked` / `subagent_returned` |
 | `avp.subagent.description` | `gen_ai.agent.description` | |
 | `avp.response.finish_reasons` | `gen_ai.response.finish_reasons` | |
 | `avp.response.time_to_first_chunk` | `gen_ai.response.time_to_first_chunk` | |
@@ -220,7 +220,7 @@ agent-initiated. There is no resolver → agent push.
 distinguishing feature (positional and named are both legal per spec,
 AVP uses an object-shaped `params` consistently), or RPC-level error
 classification (the resolver returns whatever JSON-RPC error code makes
-sense; the agent fails the run with `managed_ref_resolve_failed` for any
+sense; the agent fails the run with an `error_occurred` event for any
 non-success).
 
 ### Agent Skills
@@ -230,11 +230,11 @@ format: YAML frontmatter (`name`, `description`) plus markdown body
 describing what the skill does and how to use it.
 
 **What AVP takes:** the SKILL.md format. `Commission.skills[]` entries
-are opaque `{id, ref}` pairs the agent dereferences via the resolver
-protocol; the resolver returns SKILL.md content (or a location the agent
-fetches), and the agent loads it into the model's context per
-agentskills.io semantics. The agent emits `skill_loaded` into the
-trajectory. The repo's own [`SKILL.md`](./SKILL.md) is a worked example.
+carry inline SKILL.md content on the wire; the agent materializes it and
+loads it into the model's context per agentskills.io semantics. (The
+optional Resolver API covers the alternative where a skill is an opaque
+`{id, ref}` the agent dereferences instead.) The repo's own
+[`SKILL.md`](./SKILL.md) is a worked example.
 
 **What AVP does NOT take:** source-resolution schemes. agentskills.io
 describes filesystem / HTTPS / registry distribution; AVP stays
@@ -288,10 +288,11 @@ the truth, not a derived view of it.
 
 The supervisor declares the environment in a Commission sent at startup and
 observes the trajectory. It does not push anything else to the agent
-mid-run. The agent's environment is fully specified up front, even when
-some of it is opaque-ref-shaped: the agent dereferences refs at startup
-via the resolver, recording each round-trip as a `managed_ref_resolved`
-event before any model turn.
+mid-run. The agent's environment is fully specified up front: managed
+assets (`mcp_servers`, `skills`) carry their connection material inline on
+the Commission, and the agent connects them at startup before any model
+turn. (When an asset is instead an opaque `{id, ref}`, the optional
+Resolver API is how the agent dereferences it at startup.)
 
 This is an architectural constraint expressed as a wire constraint:
 there is no supervisor → agent push channel. Runtime asset resolution
@@ -406,17 +407,16 @@ implementation-neutral.
 v0.1 has two paths for any tool the model can call:
 
 1. **Agent-built-in.** Compiled into the agent package; declared on the
-   agent's Descriptor (`agent_described.data.avp.descriptor.built_in_tools`).
+   agent's Descriptor (`agent_described.data.avp.descriptor.tools`).
    The agent runs the implementation in-process. AVP events:
-   `tool_invoked` with `avp.tool.dispatch_target = "local"` →
+   `tool_invoked` with `avp.tool.dispatch_target = "local"` ->
    `tool_returned`.
 
-2. **MCP-server tool.** Supervisor declares an MCP server in
-   `Commission.mcp_servers[]` as `{id, ref}`. At startup the agent calls
-   `avp.resolve` to dereference the ref into connection material, then
-   uses an off-the-shelf MCP client to connect, list tools, and dispatch
-   `tools/call`. AVP events: `managed_ref_resolved` for the resolution
-   round-trip; the live tool catalog flows into `agent_started.data["avp.tools"]`
+2. **MCP-server tool.** Supervisor declares an MCP server inline in
+   `Commission.mcp_servers[]` (an `McpServerHttp` or `McpServerStdio` with
+   connection material on the wire). At startup the agent uses an
+   off-the-shelf MCP client to connect, list tools, and dispatch
+   `tools/call`. AVP events: the live tool catalog flows into `agent_started.data["avp.tools"]`
    with each MCP-surfaced entry carrying `avp.mcp_server_id`, and the
    server itself appears in `agent_started.data["avp.mcp_servers"]` with
    its terminal `status` (`connected` / `failed` / `needs-auth` /
@@ -502,8 +502,8 @@ To make the bounded-context discipline concrete:
 - **OTel collector / exporter.** AVP produces span-compatible JSON.
   Plug it into your existing OTel collector if you want; otherwise the
   events are still useful as-is.
-- **Skill execution semantics.** AVP records `skill_loaded`. The Agent
-  Skills spec defines what the skill body means.
+- **Skill execution semantics.** AVP loads the inline skill content into
+  the model's context; the Agent Skills spec defines what the skill body means.
 
 Each of these has a mature spec or convention you can adopt
 independently. AVP's job is to compose them coherently for the

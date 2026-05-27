@@ -82,8 +82,9 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   upstreamed into the Goose tree.
 - **One committed `prices.json`, embedded cross-tree.** To avoid a per-language
   duplicate (the table is ~0.5MB and grows), the single canonical copy lives in
-  the Python package and the Rust crate embeds it via
-  `include_str!("../../../python/avp/src/avp/data/prices.json")`. The path is
+  the Python package and the Rust binding embeds it via
+  `include_str!("../../python/src/avp/data/prices.json")` (from
+  `avp/bindings/rust/src/`, reaching into `avp/bindings/python`). The path is
   repo-relative, so it works for path/git deps and the upstream-into-goose path;
   a standalone crates.io/PyPI publish of `avp` would need the file vendored into
   each package (a `build.rs` copy for Rust, a build hook for Python). Revisit if

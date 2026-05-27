@@ -1,5 +1,13 @@
 # Conformance refactor plan
 
+> [!NOTE]
+> **Historical.** This migration plan is complete: the `avp-conformance` CLI,
+> the six-field `TestCase` model, and the packaged cases all landed, and the
+> repo was restructured (so the `python/avp` / `conformance/v0.1` paths below
+> are pre-restructure; the code now lives under `avp/core/conformance/` and
+> `avp/bindings/python/`). For *current* coverage and the deliberate gaps, read
+> [`COVERAGE.md`](COVERAGE.md), not this file. Kept for the decision record.
+
 Slim, single-runner conformance for AVP v0.1.
 
 ## Goals

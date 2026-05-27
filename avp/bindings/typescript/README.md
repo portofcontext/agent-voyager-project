@@ -8,7 +8,8 @@ npm install github:portofcontext/agent-voyager-project#main --save
 
 ## What's here
 
-Generated TypeScript types for the AVP v0.1 wire format. Two modules, one per top-level message class:
+Generated TypeScript types for the AVP v0.1 wire format. Three modules, one per
+data-shape spec (`commission`, `trajectory`, `agent-descriptor`):
 
 ```typescript
 import type { Commission, Event } from "@avp/types";
@@ -20,13 +21,13 @@ switch (event.type) {
     console.log(event.subject);
     break;
   }
-  case "avp.model_turn_ended": {
+  case "avp.assistant_message": {
     const cost = event.data["avp.cost_usd"];
     const source = event.data["avp.cost.source"]; // "computed" | "reported" | "unknown"
     break;
   }
-  case "avp.refusal_recorded": {
-    console.log(event.data["avp.refusal.reason"]);
+  case "avp.tool_returned": {
+    console.log(event.data["avp.tool.name"]);
     break;
   }
   // ...
@@ -36,15 +37,15 @@ switch (event.type) {
 Sub-path imports for the helper types:
 
 ```typescript
-import type { McpServerRef, SkillRef, SubagentRef } from "@avp/types/commission";
-import type { ModelTurnEndedEvent, AgentStartedData } from "@avp/types/event";
+import type { McpServerHttp, McpServerStdio } from "@avp/types/commission";
+import type { AssistantMessageEvent, AgentStartedData } from "@avp/types/trajectory";
 ```
 
 ## Source of truth
 
-- `python/avp/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
-  → `spec/v0.1/*.schema.json` (auto-generated; `scripts/generate-schemas.py`)
-  → `typescript/avp/src/*.ts` (generated here, via `json-schema-to-typescript`)
+- `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
+  -> `avp/core/spec/v0.1/*.schema.json` (auto-generated; `avp/scripts/generate-schemas.py`)
+  -> `avp/bindings/typescript/src/*.ts` (generated here, via `json-schema-to-typescript`)
 
 Don't edit `src/{commission,event}.ts` by hand — they're regenerated. Edit the Python sources upstream.
 

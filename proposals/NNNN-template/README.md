@@ -54,9 +54,9 @@ section gains them? Are new conformance cases required?
 
 <!--
 What changes in:
-  - python/avp/ (wire types + reference agent)
-  - python/agents/avp-anthropic/
-  - python/agents/avp-claude-agent-sdk/
+  - avp/bindings/python/ (wire types)
+  - sdks/avp-anthropic/
+  - agents/avp-claude-agent-sdk/
   - Other bindings (Rust, TypeScript)
   - The conformance suite
 -->
