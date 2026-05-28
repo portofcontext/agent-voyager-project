@@ -34,15 +34,15 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 ## Use AVP
 
-- **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools.
-- **Build your own agent on the raw Anthropic Messages API:** [`avp-anthropic`](sdks/avp-anthropic/) is the SDK adapter: a per-turn translator (`AnthropicModelDriver`), a drop-in traced client, and Commission-to-API translators. The API ships no loop or tools, so neither does the adapter. The reference agent at [`_anthropic_reference_agent.py`](supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py) inlines its own loop over the adapter with a local `ShellTools`; example 01 spawns it as a subprocess.
+- **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools; [`avp-goose`](agents/avp-goose/rust/) is an in-process observer of Block's Goose.
+- **Build, run, and iterate on Commissions:** [`avp`](avp-cli/), the local CLI, scaffolds a Commission, runs setups (Commission variants) over a dataset against the real agents, and ranks a board by accuracy / pass-rate / cost / turns.
 - **Consume a trajectory from another language:** typed bindings generated from the same JSON Schemas the Python types use, so they cannot drift: [Python](avp/bindings/python/), [Rust](avp/bindings/rust/), [TypeScript](avp/bindings/typescript/).
 
-For an end-to-end walkthrough that builds a Commission, runs an agent, and prints the trajectory, see [`supervisors/simple-supervisor-example/`](supervisors/simple-supervisor-example/).
+For an end-to-end walkthrough that builds a Commission, runs an agent, and ranks a board, see [`avp-cli/`](avp-cli/).
 
 ## Develop AVP
 
-The core project lives under [`avp/`](avp/) (spec plus Python/Rust/TS bindings), with [`agents/`](agents/), [`sdks/`](sdks/), and [`supervisors/`](supervisors/) alongside. Python uses [uv](https://github.com/astral-sh/uv) with its workspace root at the repo root.
+The core project lives under [`avp/`](avp/) (spec plus Python/Rust/TS bindings), with [`agents/`](agents/) and the local CLI [`avp-cli/`](avp-cli/) alongside. Python uses [uv](https://github.com/astral-sh/uv) with its workspace root at the repo root.
 
 ```bash
 git clone https://github.com/portofcontext/agent-voyager-project

@@ -4,13 +4,36 @@ An [AVP](../../../avp/core/spec/v0.1)-compliant wrapper around the [Claude Agent
 
 ## Install
 
-> [!NOTE]
-> TODO: install instructions
+This package is a member of the AVP uv workspace (rooted at the repo root).
+Install the workspace, then satisfy the agent's runtime preflight: the Claude
+Agent SDK shells out to the `claude` CLI, so that binary must be on PATH.
+
+```bash
+make sync                                  # from the repo root: installs the workspace
+npm install -g @anthropic-ai/claude-code   # the SDK shells out to this binary
+export ANTHROPIC_API_KEY=...               # or: claude /login
+```
 
 ## Usage
 
-> [!NOTE]
-> TODO: minimal example
+This package is a conforming AVP agent. The local `avp` CLI knows it as
+`claude-code` (and runs it by default), so the simplest run is to drive it
+through an eval and read the ranked board:
+
+```bash
+uv run avp eval demo --agent claude-code   # bundled demo eval; claude-code is the default agent
+```
+
+`avp eval` composes a Commission per setup, runs this agent via its `run
+--commission <file> --out <ndjson>` manifest contract, reduces the emitted
+trajectory, scores it, and ranks a board. To run your own task, scaffold a
+config with `uv run avp init` and run `uv run avp eval run <config> --agent
+claude-code`. See [`avp-cli/`](../../../avp-cli/) for the full CLI.
+
+For Python integrators who own their own loop, `AVPClaudeSDKClient` is the
+drop-in: construct it with a `commission=` and a `sink=` in place of
+`ClaudeSDKClient(options=...)`, and the conforming trajectory is on the wire by
+the time your `receive_response()` handler runs.
 
 
 ## What it does

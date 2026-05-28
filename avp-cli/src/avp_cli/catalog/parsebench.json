@@ -1,0 +1,44 @@
+{
+  "eval": {
+    "name": "parsebench-table",
+    "dataset": {
+      "source": "huggingface",
+      "id": "llamaindex/ParseBench",
+      "split": "table[:10]",
+      "input": "https://huggingface.co/datasets/llamaindex/ParseBench/resolve/main/{pdf}",
+      "expected_field": "expected_markdown",
+      "id_field": "id"
+    },
+    "scorer": {
+      "name": "structural-fidelity",
+      "threshold": 0.8
+    }
+  },
+  "commissions": {
+    "baseline": {
+      "schema_version": "0.1",
+      "run_id": "baseline",
+      "model": "claude-haiku-4-5",
+      "prompt": "Download the PDF page at {input}, read it, rebuild it as a single HTML <table>, and return only the HTML."
+    },
+    "terse-prompt": {
+      "schema_version": "0.1",
+      "run_id": "terse-prompt",
+      "model": "claude-haiku-4-5",
+      "prompt": "Parse the PDF at {input} into HTML and output the HTML only."
+    },
+    "step-by-step": {
+      "schema_version": "0.1",
+      "run_id": "step-by-step",
+      "model": "claude-haiku-4-5",
+      "prompt": "Download the PDF page at {input}, read it, rebuild it as a single HTML <table>, then re-read the original and verify your table matches before returning. Output only the HTML."
+    },
+    "few-shot": {
+      "schema_version": "0.1",
+      "run_id": "few-shot",
+      "model": "claude-haiku-4-5",
+      "system_prompt": "Example: a 2-row, 3-column 'Revenue by region' table becomes <table><tr><th>Region</th><th>Q1</th><th>Q2</th></tr>...</table>.",
+      "prompt": "Parse the PDF page at {input} into a single HTML <table>. Output only the HTML."
+    }
+  }
+}

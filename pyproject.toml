@@ -23,10 +23,16 @@ requires-python = ">=3.11"
 dependencies = [
     "avp",
     "avp-conformance",
-    "avp-anthropic",
     "avp-claude-agent-sdk",
-    "simple-supervisor-example",
+    "avp-cli",
 ]
+
+# Mirror avp-cli's benchmark extras here so `uv sync --extra parsebench` works
+# from the repo root (where everyone runs uv). These pull the heavy deps a
+# benchmark config can require; the CLI checks for them at run time.
+[project.optional-dependencies]
+huggingface = ["datasets>=3"]
+parsebench = ["datasets>=3", "rapidfuzz>=3"]
 
 [dependency-groups]
 dev = [
@@ -40,21 +46,19 @@ dev = [
 members = [
     "avp/bindings/python",
     "avp/core/conformance",
-    "sdks/avp-anthropic",
-    "supervisors/simple-supervisor-example",
+    "avp-cli",
     "agents/avp-claude-agent-sdk/python",
 ]
 
-# When any workspace member declares `avp`, `avp-anthropic`, etc. as a
+# When any workspace member declares `avp`, `avp-conformance`, etc. as a
 # dependency, resolve it from the workspace rather than PyPI. Critical:
 # there's an unrelated package on PyPI named `avp` (security tooling), and
 # without this override `pip install` would pull it down on a fresh machine.
 [tool.uv.sources]
 avp = { workspace = true }
 avp-conformance = { workspace = true }
-avp-anthropic = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
-simple-supervisor-example = { workspace = true }
+avp-cli = { workspace = true }
 
 [tool.uv]
 # Don't try to package the workspace root itself; no source code here.

@@ -4,10 +4,10 @@
 # you want before tagging a release.
 #
 # Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
-# under avp/; agents under agents/<name>/<lang>/; SDK adapters under sdks/;
-# supervisor examples under supervisors/. The uv (Python) workspace is rooted
-# at the repo root (root pyproject.toml + ruff.toml + uv.lock), so `uv` runs
-# from here and spans every Python member.
+# under avp/; agents under agents/<name>/<lang>/; the local CLI `avp` under
+# avp-cli/. The uv (Python) workspace is rooted at the repo root (root
+# pyproject.toml + ruff.toml + uv.lock), so `uv` runs from here and spans every
+# Python member.
 #
 # Cost notes: targets that hit a real LLM are clearly marked. The default
 # `make smoke` runs the entire matrix (all real-LLM tests + all examples)
@@ -25,21 +25,9 @@ UV := uv
 TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
-	sdks/avp-anthropic \
 	agents/avp-claude-agent-sdk/python \
-	supervisors/simple-supervisor-example
+	avp-cli
 
-# All examples. Each script self-detects missing preflight (API key,
-# claude_agent_sdk, the `claude` CLI) and exits 2. The run-an-example
-# loop treats exit 2 as a skip rather than a failure, so a run on a
-# workstation without the Claude Code CLI still completes the Anthropic-
-# only examples cleanly.
-EXAMPLES := \
-	supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
-	supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
-	supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
-	supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
-	supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
 
 
 .PHONY: help
@@ -64,11 +52,12 @@ help:
 	@echo "    make test-real-llm      real-LLM smoke tests for both agents"
 	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
 	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
-	@echo "    make examples           all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
+	@echo "    make examples           scaffold + run the demo eval end-to-end (self-skips without an agent CLI)"
 	@echo "    make smoke              check + bindings-test + test-real-llm + conformance-check + examples"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
+	@echo "    make avp <args>      run the local avp CLI (e.g. make avp eval list); flags via ARGS=\"...\""
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -95,13 +84,19 @@ GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 SANDBOX ?=
 
 
-# ── Free: validate case files + liveness-ping each agent (no model calls) ──────
-.PHONY: claude-ping goose-ping
+# ── Free: validate case files + liveness-ping + describe each agent (no model) ─
+.PHONY: claude-ping goose-ping claude-describe goose-describe
 claude-ping:
 	@$(UV) run avp-conformance ping --agent $(CLAUDE_MANIFEST)
 
 goose-ping:
 	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
+
+claude-describe:
+	@$(UV) run avp-conformance describe --agent $(CLAUDE_MANIFEST)
+
+goose-describe:
+	@$(UV) run avp-conformance describe --agent $(GOOSE_MANIFEST)
 
 
 .PHONY: conformance
@@ -109,8 +104,10 @@ conformance:
 	@$(UV) run avp-conformance validate
 	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
 	@$(MAKE) --no-print-directory claude-ping
+	@$(MAKE) --no-print-directory claude-describe
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-ping
+	@$(MAKE) --no-print-directory goose-describe
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
@@ -211,7 +208,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in sdks/avp-anthropic agents/avp-claude-agent-sdk/python; do \
+	for pkg in agents/avp-claude-agent-sdk/python; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
@@ -226,35 +223,25 @@ test-live:
 	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
-# Common run-an-example macro. Distinguishes:
+# The example is the CLI: scaffold the bundled demo eval (`avp init demo`) and
+# run it end-to-end against a real agent, printing the ranked board. Exit codes:
 #   exit 0 → pass
-#   exit 2 → preflight skip (missing API key / SDK / CLI); we report it but don't fail
+#   exit 2 → preflight skip (no agent toolchain present); reported, not a failure
 #   anything else → fail
-define run_examples
-	@failed=""; skipped=""; \
-	for ex in $(1); do \
-		echo ""; echo "==== $$ex ===="; \
-		$(UV) run python $$ex; \
-		rc=$$?; \
-		case $$rc in \
-			0) ;; \
-			2) skipped="$$skipped $$ex" ;; \
-			*) failed="$$failed $$ex" ;; \
-		esac; \
-	done; \
-	echo ""; \
-	if [ -n "$$skipped" ]; then echo "SKIPPED (preflight):$$skipped"; fi; \
-	if [ -n "$$failed" ]; then echo "FAILED:$$failed"; exit 1; fi; \
-	echo "All non-skipped examples passed."
-endef
-
-
 .PHONY: examples
 examples:
 	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
 		echo "error: ANTHROPIC_API_KEY is not set"; exit 2; \
 	fi
-	$(call run_examples,$(EXAMPLES))
+	@tmp=$$(mktemp -d); \
+	$(UV) run avp init demo --dir $$tmp --agent goose >/dev/null; \
+	echo ""; echo "==== avp eval run (demo) ===="; \
+	$(UV) run avp eval run $$tmp/demo.eval.json; rc=$$?; echo ""; \
+	case $$rc in \
+		0) echo "✓ example passed: demo eval" ;; \
+		2) echo "SKIPPED (preflight): demo eval" ;; \
+		*) echo "FAILED: demo eval"; exit 1 ;; \
+	esac
 
 
 .PHONY: smoke
@@ -268,6 +255,25 @@ smoke: check bindings-test test-real-llm conformance-check examples
 .PHONY: sync
 sync:
 	@$(UV) sync
+
+
+# ── Local CLI passthrough ─────────────────────────────────────────────────────
+# `make avp <args>` forwards to `uv run avp <args>`:
+#   make avp                         # the welcome / agent routing
+#   make avp init
+#   make avp eval list
+#   make avp commission validate avp/core/spec/v0.1/examples/commission.json
+# make consumes leading-dash flags itself, so pass those via ARGS:
+#   make avp ARGS="eval run my_eval.py --agent goose --json out.json"
+.PHONY: avp
+avp:
+	@$(UV) run avp $(filter-out avp,$(MAKECMDGOALS)) $(ARGS)
+
+# Let bare subcommand words (init, eval, ...) and path args be goals without a
+# rule. The recipe is a no-op; `avp` above collects them via MAKECMDGOALS. Only
+# matches goals that have no explicit rule, so real targets are unaffected.
+%:
+	@:
 
 
 # Default goal

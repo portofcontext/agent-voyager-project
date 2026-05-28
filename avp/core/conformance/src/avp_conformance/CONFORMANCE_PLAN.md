@@ -57,10 +57,10 @@ avp-conformance validate --suite v0.1
 
 ```json
 {
-  "command": ["uv", "run", "python", "-m", "avp_anthropic.conformance"],
+  "command": ["uv", "run", "python", "-m", "avp_claude_agent_sdk.conformance"],
   "cwd": ".",
   "env": { "AVP_CONFORMANCE_MODE": "1" },
-  "description": "avp-anthropic SDK adapter"
+  "description": "avp-claude-agent-sdk agent"
 }
 ```
 

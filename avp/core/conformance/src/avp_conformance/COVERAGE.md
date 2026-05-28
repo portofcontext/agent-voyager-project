@@ -101,9 +101,8 @@ least-baked part of v0.1 and there is no in-repo resolver service to dial.
   `mcp_servers`/`skills`/`subagents` but no resolver wired ->
   `error_occurred(resolver_not_configured)`, plus the happy path.
 - **Managed subagents.** `subagent_invoked` -> `subagent_returned` pairing,
-  shared frame `span_id`, `avp.subagent.run_id`. (The avp-anthropic traced client
-  has a `subagent()` helper, but no conformance case exercises the pair on a
-  real agent.)
+  shared frame `span_id`, `avp.subagent.run_id`. (No conformance case exercises
+  the pair on a real agent yet.)
 - **Managed skills.** Resolution + `agent_started` listing the skill. Inline
   skills (Commission carries file content, no resolver) are feasible sooner:
   goose materializes them, the claude SDK path is unverified.

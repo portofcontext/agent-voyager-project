@@ -3,6 +3,9 @@
 //! Implements the agent CLI contract consumed by `avp-conformance`:
 //!
 //! - `ping --out <path>` — write a single `{"type": "pong"}` line and exit.
+//! - `describe [--out <path>]` — print the agent's `AgentDescriptor` JSON (the
+//!   pre-flight capability surface). Boots a default agent to list its built-in
+//!   tools; degrades to an identity-only descriptor if the probe can't run.
 //! - `run --commission <json|path> [--built-in <json|path>] --out <path>` —
 //!   drive a live Goose run from the Commission and stream the AVP trajectory
 //!   as NDJSON to `--out`.
@@ -38,6 +41,11 @@ enum Cmd {
     Ping {
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Print the agent's AgentDescriptor JSON (to --out, or stdout if omitted).
+    Describe {
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// Run a Commission live against Goose, streaming the trajectory to --out.
     Run {
@@ -86,6 +94,15 @@ async fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Ping { out } => {
             std::fs::write(out, "{\"type\":\"pong\"}\n")?;
+            Ok(())
+        }
+        Cmd::Describe { out } => {
+            let descriptor = avp_goose::runner::describe().await?;
+            let text = serde_json::to_string_pretty(&descriptor)?;
+            match out {
+                Some(path) => std::fs::write(path, format!("{text}\n"))?,
+                None => println!("{text}"),
+            }
             Ok(())
         }
         Cmd::Run {

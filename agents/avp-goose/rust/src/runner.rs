@@ -302,6 +302,75 @@ fn flush_turn<S: Sink>(
     Ok(())
 }
 
+/// The agent's pre-flight `AgentDescriptor`: full capability surface (identity,
+/// default model, built-in tools) with no Commission and no run.
+///
+/// Heavy by design — it boots a default Goose `Agent` with its built-in
+/// extensions and lists their live tool registry, the same surface
+/// `agent_described` reports during a run. If the live probe can't complete
+/// (e.g. no provider creds to construct the provider), it degrades to an
+/// identity-only descriptor, which still validates against the spec.
+pub async fn describe() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
+    match describe_live().await {
+        Ok(descriptor) => Ok(descriptor),
+        Err(e) => {
+            eprintln!("avp-goose: describe probe failed ({e}); emitting identity-only descriptor");
+            serde_json::from_value(json!({
+                "agent_name": "goose",
+                "agent_version": GOOSE_VERSION,
+                "spec_version": "0.1",
+            }))
+            .map_err(|e| anyhow::anyhow!("building fallback descriptor: {e}"))
+        }
+    }
+}
+
+async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
+    // Throwaway data/config root so the probe never opens the user's goose store.
+    let path_root = std::env::temp_dir().join(format!("avp-goose-describe-{}", std::process::id()));
+    std::fs::create_dir_all(&path_root)?;
+    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
+
+    // No Commission: a minimal one yields goose's default built-in extensions
+    // (the surface the agent ships with). The model only labels the descriptor
+    // and configures the provider object; no model call fires.
+    let model_name = std::env::var("GOOSE_MODEL").unwrap_or_else(|_| "claude-haiku-4-5".to_string());
+    let commission: Commission = serde_json::from_value(json!({
+        "schema_version": "0.1",
+        "run_id": "describe",
+        "model": model_name,
+    }))?;
+    let cfg: GooseRunConfig = commission::from_commission(&commission);
+    let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
+
+    let agent = Arc::new(Agent::new());
+    let working_dir = path_root.join("workspace");
+    std::fs::create_dir_all(&working_dir)?;
+    let session = agent
+        .config
+        .session_manager
+        .create_session(working_dir, "describe".to_string(), SessionType::User, GooseMode::Auto)
+        .await?;
+    let session_id = session.id.clone();
+
+    let model_config = ModelConfig::new(&model_name)?;
+    let provider =
+        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
+    agent.update_provider(provider, &session_id).await?;
+    for result in agent.add_extensions_bulk(cfg.extensions.clone(), &session_id).await? {
+        if !result.success {
+            eprintln!(
+                "avp-goose: extension '{}' failed to load: {}",
+                result.name,
+                result.error.as_deref().unwrap_or("unknown error"),
+            );
+        }
+    }
+
+    // The pre-flight view carries no Commission MCP servers or skills.
+    build_descriptor(&agent, &session_id, &model_name, &HashSet::new(), &[]).await
+}
+
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
 /// returns rmcp tools whose `name` / `description` / `inputSchema` line up with
 /// `ToolDecl`; we keep just those three so extra rmcp fields don't trip the

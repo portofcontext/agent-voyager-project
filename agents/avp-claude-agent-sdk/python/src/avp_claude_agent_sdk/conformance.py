@@ -3,6 +3,10 @@
 Exposes the agent CLI contract consumed by `avp-conformance`:
 
 - `ping --out <path>` — write a single `{"type": "pong"}` line and exit.
+- `describe [--out <path>]` — print the agent's `AgentDescriptor` JSON (the
+  pre-flight capability surface: identity, models, tools, skills, MCP). No
+  model turn fires; if the capability probe is unavailable the descriptor
+  still validates with identity + default_model only.
 - `run --commission <json|path> [--built-in <json|path>] --out <path>` —
   run the agent against the given Commission and stream AVP trajectory
   events to the output file as NDJSON, one event per line.
@@ -26,6 +30,32 @@ from avp_conformance import load_built_in, load_commission
 
 def _cmd_ping(args: argparse.Namespace) -> int:
     Path(args.out).write_text(json.dumps({"type": "pong"}) + "\n")
+    return 0
+
+
+def _cmd_describe(args: argparse.Namespace) -> int:
+    """Print the agent's AgentDescriptor JSON (pre-flight: no model turn).
+
+    Boots a transient probe session to discover the live tool/skill/MCP surface;
+    on any probe failure the descriptor degrades to identity + default_model and
+    still validates. Heavy imports stay inside this command so `ping` stays
+    loop-free.
+    """
+    import asyncio
+
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp_claude_agent_sdk._client import _probe_describe
+    from avp_claude_agent_sdk._translator import translate_agent_descriptor
+
+    options = ClaudeAgentOptions(setting_sources=[], strict_mcp_config=True)
+    init_data, status = asyncio.run(_probe_describe(options))
+    descriptor = translate_agent_descriptor(options, init_data, status)
+    text = descriptor.model_dump_json(by_alias=True, exclude_none=True, indent=2)
+    if args.out:
+        Path(args.out).write_text(text + "\n")
+    else:
+        print(text)
     return 0
 
 
@@ -83,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     p_ping = sub.add_parser("ping", help='Write {"type": "pong"} to --out and exit.')
     p_ping.add_argument("--out", required=True)
     p_ping.set_defaults(func=_cmd_ping)
+
+    p_describe = sub.add_parser("describe", help="Print the agent's AgentDescriptor JSON.")
+    p_describe.add_argument("--out", required=False)
+    p_describe.set_defaults(func=_cmd_describe)
 
     p_run = sub.add_parser("run", help="Run the agent against a Commission (currently a stub).")
     p_run.add_argument("--commission", required=True)

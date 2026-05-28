@@ -1,0 +1,35 @@
+{
+  "eval": {
+    "name": "my-eval",
+    "dataset": {
+      "source": "inline",
+      "items": [
+        {
+          "id": "example-1",
+          "prompt": "Replace this with your task input.",
+          "expected": {
+            "answer": "what a correct result looks like"
+          }
+        }
+      ]
+    },
+    "scorer": {
+      "name": "structural-match",
+      "threshold": 1.0
+    }
+  },
+  "commissions": {
+    "baseline": {
+      "schema_version": "0.1",
+      "run_id": "baseline",
+      "model": "claude-haiku-4-5",
+      "prompt": "{input}"
+    },
+    "variant-a": {
+      "schema_version": "0.1",
+      "run_id": "variant-a",
+      "model": "claude-haiku-4-5",
+      "prompt": "{input}"
+    }
+  }
+}
