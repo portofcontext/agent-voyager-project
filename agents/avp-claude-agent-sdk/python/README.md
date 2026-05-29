@@ -2,18 +2,6 @@
 
 An [AVP](../../../avp/core/spec/v0.1)-compliant wrapper around the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Exposes [`AVPClaudeSDKClient`](src/avp_claude_agent_sdk/_client.py), a drop-in subclass of `ClaudeSDKClient` that emits a conforming AVP trajectory across `connect()` → `query()` / `receive_response()` → `disconnect()`.
 
-## Install
-
-This package is a member of the AVP uv workspace (rooted at the repo root).
-Install the workspace, then satisfy the agent's runtime preflight: the Claude
-Agent SDK shells out to the `claude` CLI, so that binary must be on PATH.
-
-```bash
-make sync                                  # from the repo root: installs the workspace
-npm install -g @anthropic-ai/claude-code   # the SDK shells out to this binary
-export ANTHROPIC_API_KEY=...               # or: claude /login
-```
-
 ## Usage
 
 This package is a conforming AVP agent. The local `avp` CLI knows it as

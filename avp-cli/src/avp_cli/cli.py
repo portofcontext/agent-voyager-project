@@ -3,13 +3,13 @@
     avp                              getting-started + agent routing (no args)
     avp init [KEY] [--dir D]         scaffold an eval (in place) + its commissions (to ~/.avp)
     avp eval run CONFIG              run an eval config, print a ranked board
-    avp eval commissions CONFIG      list the commissions an eval config references (no run)
     avp eval list                    list recent eval runs (with their ids)
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
-    avp eval clear                   delete all recorded runs + their outputs
+    avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
     avp commission list              list your portable commission library
-    avp commission show ID           render a library commission by id
-    avp commission validate ID|FILE  validate a library commission, or a Commission JSON file
+    avp commission describe ID       render a library commission by id
+    avp commission check ID|FILE     check a library commission, or a Commission JSON file
+    avp commission delete ID         remove a commission from your library
 
 An eval is a JSON config file authored in place (no code); commissions are
 portable artifacts in ~/.avp/commissions referenced by id. The CLI is the engine.
@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
 import webbrowser
 from pathlib import Path
 
@@ -66,31 +65,6 @@ def _tilde(p: Path) -> str:
     """Render a path with $HOME collapsed to ~ for tidy display."""
     home = Path.home()
     return f"~/{p.relative_to(home)}" if p.is_relative_to(home) else str(p)
-
-
-def _commission_line(s) -> None:
-    """One commission's id + key config for `eval commissions` (reads the wire Commission)."""
-    c = s.commission
-    bound = f"  [dim](agent: {s.agent})[/dim]" if s.agent else ""
-    console.out.print(f"  [bold {brand.SAIL}]{s.id}[/]{bound}")
-    if c.prompt:
-        console.out.print(f"    [dim]{c.prompt[:90]}[/dim]")
-    console.out.print(f"    model={c.model or '(agent default)'}")
-    if c.enabled_builtin_tools is not None:
-        console.out.print(f"    enabled_builtin_tools={c.enabled_builtin_tools or 'none'}")
-    if c.skills:
-        console.out.print(f"    skills={[sk.id for sk in c.skills]}")
-    if c.mcp_servers:
-        console.out.print(f"    mcp_servers={[m.id for m in c.mcp_servers]}")
-
-
-def _print_commissions(ev: Eval) -> None:
-    console.out.print(
-        f"[bold]{len(ev.setups)}[/bold] commissions over dataset "
-        f"'[cyan]{ev.dataset.name}[/cyan]' ({len(ev.dataset)} items)\n"
-    )
-    for s in ev.setups:
-        _commission_line(s)
 
 
 def _run_and_report(
@@ -343,10 +317,19 @@ def _cmd_init(args: argparse.Namespace) -> int:
 def _cmd_commission(args: argparse.Namespace) -> int:
     if args.commission_cmd == "list":
         return _cmd_commission_list()
-    if args.commission_cmd == "validate":
+    if args.commission_cmd == "check":
         return _cmd_commission_validate(args.target)
+    if args.commission_cmd == "delete":
+        if not library.delete(args.id):
+            console.error_panel(
+                f"no commission {args.id!r}",
+                f"not in your library ({_tilde(paths.commissions_dir())}) — see `avp commission list`.",
+            )
+            return 1
+        console.note(f"deleted commission {args.id}")
+        return 0
 
-    # show: a library id (the raw wire Commission) first, else a Commission JSON file
+    # describe: a library id (the raw wire Commission) first, else a Commission JSON file
     if library.exists(args.id):
         c = library.load(args.id)
         console.print_json(commission_mod.full_dict(c))
@@ -410,7 +393,7 @@ def _cmd_commission_list() -> int:
         table.add_row(cid, c.model or "[dim](agent default)[/dim]", c.prompt or "[dim]—[/dim]")
     console.out.print(table)
     console.note(f"in {_tilde(paths.commissions_dir())}")
-    console.note("avp commission show <id>  ·  see the full Commission")
+    console.note("avp commission describe <id>  ·  see the full Commission")
     return 0
 
 
@@ -618,10 +601,25 @@ def _resolve_run_id(args: argparse.Namespace) -> str:
     return state.new_id()
 
 
-def _cmd_eval_clear(args: argparse.Namespace) -> int:
-    """Delete all recorded runs + their output dirs under ~/.avp/runs."""
-    n = state.clear_runs()
-    console.note(f"cleared {n} run{'s' if n != 1 else ''} from {paths.runs_dir()}")
+def _cmd_eval_delete(args: argparse.Namespace) -> int:
+    """Delete one recorded run by id, or every run with `--all`."""
+    if args.all:
+        n = state.clear_runs()
+        console.note(f"deleted {n} run{'s' if n != 1 else ''} from {paths.runs_dir()}")
+        return 0
+    if not args.name:
+        console.error_panel(
+            "nothing to delete",
+            "name a run to delete (a voyage id from `avp eval list`), or pass --all "
+            "to delete every recorded run.",
+        )
+        return 1
+    if not state.delete_run(args.name):
+        console.error_panel(
+            f"no run {args.name!r}", "no recorded run with that id — see `avp eval list`."
+        )
+        return 1
+    console.note(f"deleted run {args.name}")
     return 0
 
 
@@ -630,17 +628,13 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         return _cmd_eval_view(args)
     if args.eval_cmd == "list":
         return _cmd_eval_list(args)
-    if args.eval_cmd == "clear":
-        return _cmd_eval_clear(args)
+    if args.eval_cmd == "delete":
+        return _cmd_eval_delete(args)
     try:
         ev = config.load_eval(args.path)
     except config.EvalConfigError as exc:
         console.error_panel("bad eval config", str(exc))
         return 1
-
-    if args.eval_cmd == "commissions":
-        _print_commissions(ev)
-        return 0
 
     if args.threshold is not None and hasattr(ev.scorer, "threshold"):
         ev.scorer.threshold = args.threshold
@@ -664,36 +658,6 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         quiet=args.quiet,
         config_path=args.path,
     )
-
-
-# ── show (visualize a trajectory) ──────────────────────────────────────────────
-
-
-def _cmd_show(args: argparse.Namespace) -> int:
-    p = Path(args.path)
-    if not p.is_file():
-        console.error_panel("not found", f"no trajectory file at {p}")
-        return 1
-    try:
-        run = viz.run_from_ndjson(p)
-    except Exception as exc:
-        console.error_panel("could not read trajectory", str(exc))
-        return 1
-
-    if not args.web:
-        # Terminal-native voyage view (default): no browser, no file.
-        console.out.print(viz.render_terminal(run))
-        console.note("tip: add --web for the constellation in your browser")
-        return 0
-
-    # The HTML constellation (agentvoyagerproject.com style).
-    out = Path(args.out) if args.out else Path(tempfile.gettempdir()) / f"avp-viz-{p.stem}.html"
-    out.write_text(viz.render_html(run))
-    console.note(f"wrote constellation to {out}")
-    if not args.no_open:
-        webbrowser.open(out.as_uri())
-        console.note("opened in your browser")
-    return 0
 
 
 # ── parser ─────────────────────────────────────────────────────────────────────
@@ -756,13 +720,20 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_run_args(
         esub.add_parser("run", help="Run an eval config and print the board"), needs_path=True
     )
-    p_commissions = esub.add_parser(
-        "commissions", help="List the commissions in an eval config (no run)"
-    )
-    p_commissions.add_argument("path", help="Path to an eval config (.eval.json)")
-
     esub.add_parser("list", help="List recent eval runs (newest first)")
-    esub.add_parser("clear", help="Delete all recorded runs + their outputs (~/.avp/runs)")
+    p_del = esub.add_parser("delete", help="Delete one recorded run by id (or --all for every run)")
+    p_del.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        metavar="ID",
+        help="Voyage id of the run to delete (from `avp eval list`)",
+    )
+    p_del.add_argument(
+        "--all",
+        action="store_true",
+        help="Delete every recorded run + its outputs (~/.avp/runs)",
+    )
 
     p_view = esub.add_parser(
         "view", help="Open a finished eval on agentvoyagerproject.com (encodes it into the URL)"
@@ -788,15 +759,19 @@ def _build_parser() -> argparse.ArgumentParser:
     com_p = groups.add_parser("commission", help="Build and inspect commissions in your library")
     csub = com_p.add_subparsers(dest="commission_cmd", required=True)
     csub.add_parser("list", help="List the commissions in your library (~/.avp/commissions)")
-    p_show = csub.add_parser(
-        "show",
-        help="Show a library commission (the raw wire Commission) by id, or a Commission file",
+    p_describe = csub.add_parser(
+        "describe",
+        help="Describe a library commission (the raw wire Commission) by id, or a Commission file",
     )
-    p_show.add_argument("id", help="A commission id from your library (or a Commission .json file)")
-    p_val = csub.add_parser("validate", help="Validate a library commission by id or path")
-    p_val.add_argument(
+    p_describe.add_argument(
+        "id", help="A commission id from your library (or a Commission .json file)"
+    )
+    p_check = csub.add_parser("check", help="Check a library commission by id or path")
+    p_check.add_argument(
         "target", help="A commission id from your library, or a path to a Commission .json file"
     )
+    p_cdel = csub.add_parser("delete", help="Delete a commission from your library by id")
+    p_cdel.add_argument("id", help="A commission id from your library")
 
     agent_p = groups.add_parser("agent", help="Inspect the agents you can run against")
     asub = agent_p.add_subparsers(dest="agent_cmd", required=True)
@@ -812,18 +787,6 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="json_out",
         action="store_true",
         help="Print the raw AgentDescriptor JSON (full tool input schemas)",
-    )
-
-    p_show_t = groups.add_parser(
-        "show", help="Visualize a trajectory (terminal by default; --web for the constellation)"
-    )
-    p_show_t.add_argument("path", help="Path to an NDJSON trajectory file")
-    p_show_t.add_argument(
-        "--web", action="store_true", help="Open the HTML constellation in a browser"
-    )
-    p_show_t.add_argument("--out", default=None, help="With --web: write the HTML here")
-    p_show_t.add_argument(
-        "--no-open", action="store_true", help="With --web: write the HTML but don't open a browser"
     )
 
     return parser
@@ -844,8 +807,6 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_commission(args)
     if args.group == "agent":
         return _cmd_agent(args)
-    if args.group == "show":
-        return _cmd_show(args)
     return 2
 
 

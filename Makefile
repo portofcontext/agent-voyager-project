@@ -42,7 +42,7 @@ help:
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
-	@echo "    make bindings        regenerate Rust + TS bindings from schemas"
+	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
@@ -262,7 +262,7 @@ sync:
 #   make avp                         # the welcome / agent routing
 #   make avp init
 #   make avp eval list
-#   make avp commission validate avp/core/spec/v0.1/examples/commission.json
+#   make avp commission check avp/core/spec/v0.1/examples/commission.json
 # make consumes leading-dash flags itself, so pass those via ARGS:
 #   make avp ARGS="eval run my_eval.py --agent goose --json out.json"
 .PHONY: avp

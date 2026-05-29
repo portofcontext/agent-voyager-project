@@ -45,6 +45,15 @@ def test_load_missing_id_errors(tmp_path) -> None:
         library.load("ghost", commissions_dir=tmp_path / "commissions")
 
 
+def test_delete_removes_a_commission(tmp_path) -> None:
+    d = tmp_path / "commissions"
+    library.save("terse", _c(prompt="{input}"), commissions_dir=d)
+    assert library.exists("terse", commissions_dir=d)
+    assert library.delete("terse", commissions_dir=d) is True
+    assert not library.exists("terse", commissions_dir=d)
+    assert library.delete("terse", commissions_dir=d) is False  # already gone
+
+
 def test_load_rejects_a_non_commission_file(tmp_path) -> None:
     d = tmp_path / "commissions"
     d.mkdir(parents=True)

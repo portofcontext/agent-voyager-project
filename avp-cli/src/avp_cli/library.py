@@ -75,6 +75,15 @@ def save(
     return p
 
 
+def delete(commission_id: str, *, commissions_dir: Path | None = None) -> bool:
+    """Remove a commission from the library by id. Returns False if it wasn't there."""
+    p = path_for(commission_id, commissions_dir=commissions_dir)
+    if not p.is_file():
+        return False
+    p.unlink()
+    return True
+
+
 def list_commissions(*, commissions_dir: Path | None = None) -> list[tuple[str, Commission]]:
     """Every commission in the library as (id, Commission), sorted by id."""
     out: list[tuple[str, Commission]] = []

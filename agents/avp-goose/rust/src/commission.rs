@@ -9,10 +9,14 @@
 //! not a provider, so the runner resolves the provider from the Goose
 //! environment (`GOOSE_PROVIDER`), the same way the CLI does.
 //!
-//! Inline `skills` enable the `skills` platform extension here; the runner
-//! materializes their SKILL.md files under the working dir's `.agents/skills`
-//! so Goose discovers them. Not yet mapped: per-server `env` / `headers`
-//! (carried as empty until the secret-handling story is settled).
+//! The default built-in surface mirrors stock goose: every `default_enabled`
+//! platform extension (developer, analyze, todo, apps, ext_manager, summon for
+//! subagents, tom, skills, …) plus the bundled goose-mcp built-ins. `skills` and
+//! `summon` are therefore on by default (not gated behind Commission fields);
+//! the runner still materializes inline `skills` SKILL.md files under the working
+//! dir's `.agents/skills` so that extension discovers them. `enabled_builtin_tools`
+//! subtractively filters the whole surface. Not yet mapped: per-server `env` /
+//! `headers` (carried as empty until the secret-handling story is settled).
 
 use std::collections::HashMap;
 use std::sync::Once;
@@ -48,13 +52,15 @@ pub struct GooseRunConfig {
 pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     let mut extensions = Vec::new();
 
-    // Goose's full built-in surface: the `developer` platform extension plus the
-    // bundled goose-mcp built-ins (registered by `register_builtins`). AVP
+    // Goose's full default built-in surface (every `default_enabled` platform
+    // extension + the bundled goose-mcp built-ins; see `builtin_extensions`). AVP
     // `enabled_builtin_tools` subtractively filters it (per spec; claude-agent-sdk
     // is the reference): `None` exposes everything, `[]` exposes none, and a list
     // exposes only the named tools. The names are descriptor-namespace (bare for
-    // `developer`, `<ext>__<tool>` for built-ins); `builtin_extensions` translates
-    // each to that extension's bare `available_tools` (see `available_for`).
+    // unprefixed platform extensions like `developer`, `<ext>__<tool>` otherwise);
+    // `builtin_extensions` translates each to that extension's bare
+    // `available_tools` (see `available_for`). `summon` (subagents) and `skills`
+    // are part of this default surface — not gated behind Commission fields.
     match commission.enabled_builtin_tools.as_deref() {
         None => extensions.extend(builtin_extensions(Vec::new())),
         Some([]) => {}
@@ -69,34 +75,6 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
         });
     }
 
-    // Inline skills: enable the skills platform extension so Goose discovers
-    // the files the runner writes to the working dir's `.agents/skills`.
-    if commission.skills.as_ref().is_some_and(|s| !s.is_empty()) {
-        extensions.push(ExtensionConfig::Platform {
-            name: "skills".to_string(),
-            description: "Discover and load skills from the filesystem".to_string(),
-            display_name: None,
-            bundled: None,
-            available_tools: Vec::new(),
-        });
-    }
-
-    // Subagents: enable the `summon` platform extension so the model can
-    // delegate to subagent recipes (scanned from the working dir's
-    // `.agents/recipes`). AVP's `enabled_builtin_subagents` is the signal to turn
-    // the capability on; the summonable recipes themselves come from the
-    // environment (the Commission carries names, not inline recipe definitions
-    // — see TECH_DEBT).
-    if commission.enabled_builtin_subagents.as_ref().is_some_and(|s| !s.is_empty()) {
-        extensions.push(ExtensionConfig::Platform {
-            name: "summon".to_string(),
-            description: "Load knowledge and delegate tasks to subagents".to_string(),
-            display_name: None,
-            bundled: None,
-            available_tools: Vec::new(),
-        });
-    }
-
     let response = commission.output_schema.as_ref().map(|schema| Response {
         json_schema: Some(serde_json::Value::Object(schema.clone())),
     });
@@ -107,21 +85,6 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
         prompt: commission.prompt.clone(),
         extensions,
         response,
-    }
-}
-
-/// Goose's default built-in tool extension (`developer`), optionally restricted
-/// to `available_tools` (empty = expose all of its tools). `developer` is a
-/// first-class PLATFORM extension served in-process from the goose library
-/// (`PLATFORM_EXTENSIONS`), like `skills`/`summon` above — NOT a `Builtin` (those
-/// resolve through the `goose-mcp` registry, which this embedding doesn't load).
-fn developer_extension(available_tools: Vec<String>) -> ExtensionConfig {
-    ExtensionConfig::Platform {
-        name: "developer".to_string(),
-        description: "Core developer tools".to_string(),
-        display_name: Some("Developer".to_string()),
-        bundled: Some(true),
-        available_tools,
     }
 }
 
@@ -159,14 +122,43 @@ fn available_for(enabled: &[String], prefix: Option<&str>) -> Vec<String> {
     if bare.is_empty() { vec![EXPOSE_NONE.to_string()] } else { bare }
 }
 
-/// Goose's full built-in surface: `developer` (platform) + every bundled goose-mcp
-/// built-in. `enabled` is the AVP allow-list in descriptor namespace; each
-/// extension is filtered to its own slice via [`available_for`] (empty `enabled`
-/// = every tool of every extension). The goose-mcp set is read from the registry
-/// so it tracks the pinned goose rev. Requires `register_builtins()` to have run
-/// before the agent loads these.
+/// Goose's full default built-in surface: every `default_enabled` platform
+/// extension (developer, analyze, todo, apps, ext_manager, summon, tom, skills, …
+/// read live from goose's `PLATFORM_EXTENSIONS` so it tracks the pinned rev) plus
+/// every bundled goose-mcp built-in. This mirrors what stock goose loads by
+/// default, so `avp agent describe` advertises it and an unfiltered run gets it.
+///
+/// `enabled` is the AVP allow-list in descriptor namespace; each extension is
+/// filtered to its own slice via [`available_for`] (empty `enabled` = every tool
+/// of every extension). Platform extensions whose tools surface unprefixed
+/// (`unprefixed_tools`, e.g. `developer`) are matched bare; everything else is
+/// matched `<ext>__<tool>`. Requires `register_builtins()` to have run before the
+/// agent loads the goose-mcp `Builtin`s.
 fn builtin_extensions(enabled: Vec<String>) -> Vec<ExtensionConfig> {
-    let mut exts = vec![developer_extension(available_for(&enabled, None))];
+    use goose::agents::platform_extensions::PLATFORM_EXTENSIONS;
+
+    let mut exts = Vec::new();
+
+    // Default-enabled platform extensions (goose's real default surface).
+    let mut platform: Vec<(&str, bool)> = PLATFORM_EXTENSIONS
+        .iter()
+        .filter(|(_, def)| def.default_enabled && !def.hidden)
+        .map(|(name, def)| (*name, def.unprefixed_tools))
+        .collect();
+    platform.sort_unstable_by_key(|(name, _)| *name);
+    for (name, unprefixed) in platform {
+        let prefix = if unprefixed { None } else { Some(name) };
+        exts.push(ExtensionConfig::Platform {
+            name: name.to_string(),
+            description: String::new(),
+            display_name: None,
+            bundled: Some(true),
+            available_tools: available_for(&enabled, prefix),
+        });
+    }
+
+    // Bundled goose-mcp built-ins (autovisualiser / computercontroller / memory /
+    // tutorial); their tools surface prefixed `<ext>__<tool>`.
     let mut names: Vec<&'static str> = goose_mcp::BUILTIN_EXTENSIONS.keys().copied().collect();
     names.sort_unstable();
     for name in names {
@@ -281,14 +273,24 @@ mod tests {
 
     #[test]
     fn default_loads_full_builtin_catalog() {
-        // None -> developer + every bundled goose-mcp built-in.
+        // None -> goose's full default surface: every default-enabled platform
+        // extension (incl. summon=subagents and skills) + every goose-mcp built-in.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m"
         })));
         let names = ext_names(&cfg);
-        assert!(names.contains(&"developer".to_string()), "{names:?}");
+        for platform in ["developer", "summon", "skills"] {
+            assert!(names.contains(&platform.to_string()), "missing {platform}: {names:?}");
+        }
         for builtin in goose_mcp::BUILTIN_EXTENSIONS.keys() {
             assert!(names.contains(&builtin.to_string()), "missing {builtin}: {names:?}");
+        }
+        // Every default-enabled platform extension goose ships is loaded.
+        use goose::agents::platform_extensions::PLATFORM_EXTENSIONS;
+        for (name, def) in PLATFORM_EXTENSIONS.iter() {
+            if def.default_enabled && !def.hidden {
+                assert!(names.contains(&name.to_string()), "missing default platform {name}: {names:?}");
+            }
         }
     }
 
@@ -386,27 +388,27 @@ mod tests {
     }
 
     #[test]
-    fn no_skills_means_no_skills_extension() {
+    fn summon_and_skills_load_by_default() {
+        // Goose enables summon (subagents) and skills by default, so an unfiltered
+        // Commission gets both — they are NOT gated behind Commission fields.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m"
         })));
-        assert!(!ext_names(&cfg).contains(&"skills".to_string()));
+        let names = ext_names(&cfg);
+        assert!(names.contains(&"summon".to_string()), "{names:?}");
+        assert!(names.contains(&"skills".to_string()), "{names:?}");
     }
 
     #[test]
-    fn enabled_builtin_subagents_enables_summon() {
+    fn empty_allowlist_omits_summon_and_skills_too() {
+        // [] hides the whole built-in surface, including the default platform
+        // extensions (summon/skills), not just the goose-mcp built-ins.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m",
-            "enabled_builtin_subagents": ["echoer"]
+            "enabled_builtin_tools": []
         })));
-        assert!(ext_names(&cfg).contains(&"summon".to_string()), "{:?}", ext_names(&cfg));
-    }
-
-    #[test]
-    fn no_subagents_means_no_summon() {
-        let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m"
-        })));
-        assert!(!ext_names(&cfg).contains(&"summon".to_string()));
+        let names = ext_names(&cfg);
+        assert!(!names.contains(&"summon".to_string()), "{names:?}");
+        assert!(!names.contains(&"skills".to_string()), "{names:?}");
     }
 }

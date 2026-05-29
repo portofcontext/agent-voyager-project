@@ -170,14 +170,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         })
         .collect();
 
-    // Commission-declared skills (materialized by `write_skills`), enumerated on
-    // the descriptor.
-    let skills: Vec<String> =
-        commission.skills.iter().flatten().map(|s| s.id.to_string()).collect();
-
     // Static descriptor from the agent's live tool registry (no probe needed).
+    // Skills are discovered from disk (built-ins + the working dir's `.agents/skills`,
+    // where `write_skills` materialized the Commission's inline skills).
     let descriptor =
-        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &skills).await?;
+        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &working_dir).await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -362,7 +359,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let session = agent
         .config
         .session_manager
-        .create_session(working_dir, "describe".to_string(), SessionType::User, GooseMode::Auto)
+        .create_session(working_dir.clone(), "describe".to_string(), SessionType::User, GooseMode::Auto)
         .await?;
     let session_id = session.id.clone();
 
@@ -382,7 +379,8 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 
     // The pre-flight view carries no Commission MCP servers or skills, and only
     // advertises a default_model if goose actually has one configured.
-    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &[]).await
+    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &working_dir)
+        .await
 }
 
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
@@ -394,7 +392,7 @@ async fn build_descriptor(
     session_id: &str,
     default_model: Option<&str>,
     mcp_servers: &HashSet<String>,
-    skills: &[String],
+    working_dir: &std::path::Path,
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
         tools.iter().map(|t| t.name.to_string()).collect()
@@ -426,10 +424,26 @@ async fn build_descriptor(
         .map(|id| json!({ "id": id, "status": "connected" }))
         .collect();
 
-    // The Commission's inline skills, materialized by `write_skills` and loaded
-    // on demand via Goose's `load_skill` tool. The descriptor enumerates them as
-    // the agent's available skills.
-    let skill_decls: Vec<Value> = skills.iter().map(|name| json!({ "name": name })).collect();
+    // Skills auto-available to the agent, loaded on demand via the `load_skill`
+    // tool: goose's bundled built-ins (e.g. `goose_doc_guide`) plus any discovered
+    // on the filesystem (the working dir's `.agents/skills` — including the
+    // Commission's inline skills materialized by `write_skills` — and the operator's
+    // configured skill dirs). Filesystem-based by design; a sandbox will scope what's
+    // visible later.
+    let skill_decls: Vec<Value> = goose::skills::discover_skills(Some(working_dir))
+        .iter()
+        .map(|s| json!({ "name": s.name }))
+        .collect();
+
+    // Subagents the model can `delegate` to via the `summon` extension: recipes /
+    // agents discovered on the filesystem (working-dir and configured dirs), the
+    // same filesystem-based discovery as skills. Goose ships no bundled recipes, so
+    // this is empty unless the environment provides some.
+    let subagent_decls: Vec<Value> =
+        goose::agents::platform_extensions::summon::discover_filesystem_sources(working_dir)
+            .iter()
+            .map(|s| json!({ "name": s.name }))
+            .collect();
 
     let mut descriptor = json!({
         "agent_name": "goose",
@@ -438,6 +452,7 @@ async fn build_descriptor(
         "tools": tools,
         "mcp_servers": mcp_server_decls,
         "skills": skill_decls,
+        "subagents": subagent_decls,
     });
     // Only advertise default_model when there actually is one.
     if let Some(model) = default_model {

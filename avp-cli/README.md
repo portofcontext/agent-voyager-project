@@ -56,7 +56,7 @@ Two kinds of artifact, two homes:
   same artifact the CLI runs is what the cloud consumes. The id is the filename;
   the eval engine fills `{input}` and assigns `run_id`/`supervisor` per run.
   `avp commission list` shows them all. Run outputs live under `~/.avp/runs/`
-  (cleared with `avp eval clear`).
+  (delete one with `avp eval delete <id>`, or all with `avp eval delete --all`).
 
 ## The eval config (no code)
 
@@ -98,7 +98,7 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
   fields only (`prompt`, `system_prompt`, `model`, `enabled_builtin_tools`,
   `skills`, `mcp_servers`, `output_schema`, `tags`, …). The id is the filename, not
   a field. `{input}` in `prompt` is a plain string the eval fills per case;
-  `run_id`/`supervisor` are assigned per run. `avp commission show <id>` prints the
+  `run_id`/`supervisor` are assigned per run. `avp commission describe <id>` prints the
   full Commission (nulls included) so you learn the real wire shape.
 - **`scorer`** — built into the CLI, chosen by name + params:
   - `exact-match` — answer text equals `expected` (normalized).
@@ -115,10 +115,11 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
 an eval file in place and installs its commissions into your library (an id you
 already have is left untouched):
 
+- **`capitals`** — the tiny capitals extraction above (the default off a
+  non-interactive terminal). Inline data, no extra deps, runs for pennies.
 - **`parsebench`** — PDF pages → HTML over the real
   `llamaindex/ParseBench` dataset, scored on structural fidelity. Needs
   `uv sync --extra parsebench`.
-- **`demo`** — the tiny capitals extraction above. Inline, no extra deps, runs for pennies.
 - **`custom`** — a minimal real eval you fill in with your own task and commissions.
 
 ## Commands
@@ -128,14 +129,15 @@ already have is left untouched):
 | `avp` | getting-started + agent routing |
 | `avp init [key] [--dir D]` | scaffold an eval (in place) + its commissions (to the library) |
 | `avp eval run CONFIG` | run a config, print the ranked board |
-| `avp eval commissions CONFIG` | list the commissions a config references (no run) |
 | `avp eval list` | list recent eval runs by voyage id (newest first) |
 | `avp eval view [ID]` | open an eval on agentvoyagerproject.com (default: most recent run) |
-| `avp eval clear` | delete all recorded runs + their outputs (`~/.avp/runs`) |
+| `avp eval delete ID [--all]` | delete one recorded run by id (or `--all` for every run, `~/.avp/runs`) |
 | `avp commission list` | list your portable commission library (`~/.avp/commissions`) |
-| `avp commission show ID` | render the Commission a library commission yields (`--input` to fill `{input}`) |
-| `avp commission validate ID\|FILE` | validate a library commission by id (or a wire Commission JSON file) |
-| `avp show TRAJECTORY.ndjson` | visualize a run in the terminal (a colored event voyage); `--web` opens the HTML constellation |
+| `avp commission describe ID` | render the Commission a library commission yields |
+| `avp commission check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |
+| `avp commission delete ID` | remove a commission from your library |
+| `avp agent list` | the agents you can run against + whether each is ready |
+| `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 
 Run flags (`run` / `demo`): `--agent goose,claude-code` (compare agents),
 `--model <id>` (override every commission's model), `--json out.json` (machine-readable

@@ -20,17 +20,21 @@ _START = [
 
 _COMMISSIONS = [
     ("avp commission list", "your commission library"),
-    ("avp commission show <id>", "render the Commission an id yields"),
-    ("avp commission validate <id>", "check a commission is valid"),
+    ("avp commission describe <id>", "render the Commission an id yields"),
+    ("avp commission check <id>", "check a commission is valid"),
+    ("avp commission delete <id>", "remove a commission from your library"),
 ]
 
 _EVAL = [
     ("avp eval run <config>", "run the eval"),
-    ("avp eval commissions <config>", "list the commissions an eval references"),
     ("avp eval list", "list recent eval runs"),
-    ("avp eval view", "visualize the latest eval"),
-    ("avp eval clear", "delete all recorded runs"),
-    ("avp show <trajectory.ndjson>", "replay one run (--web for the constellation)"),
+    ("avp eval view", "visualize the latest eval (on agentvoyagerproject.com)"),
+    ("avp eval delete <id>", "delete one recorded run (--all for every run)"),
+]
+
+_AGENTS = [
+    ("avp agent list", "the agents you can run"),
+    ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagentsP"),
 ]
 
 
@@ -51,6 +55,7 @@ def welcome() -> Group:
 
     return Group(
         section("Start here", _START),
+        section("Agents", _AGENTS),
         section("Commissions", _COMMISSIONS),
         section("Evals", _EVAL),
     )

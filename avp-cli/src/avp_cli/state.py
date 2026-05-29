@@ -4,7 +4,7 @@ a run wrote to a `--out` directory.
 A small JSONL history under the run-outputs root (`~/.avp/runs`, see `paths`).
 Each `avp eval run` appends one record; readers return runs newest-first, deduped
 by output directory, and filtered to those whose `trajectories*.json` still exist
-on disk. `avp eval clear` wipes it all.
+on disk. `avp eval delete <id>` removes one run; `avp eval delete --all` wipes them all.
 """
 
 from __future__ import annotations
@@ -163,3 +163,33 @@ def clear_runs(*, home: Path | None = None) -> int:
     n = len(recent_runs(limit=10_000, home=home))
     shutil.rmtree(home, ignore_errors=True)
     return n
+
+
+def delete_run(run_id: str, *, home: Path | None = None) -> bool:
+    """Delete one recorded run by id: its output dir(s) + every history entry for it.
+
+    Returns True if anything was deleted, False if no record had that id. Removes
+    all history records sharing the run's id or output dir (re-runs into the same
+    dir appended multiple), then rewrites the log without them.
+    """
+    home = home or _home()
+    path = _history_path(home)
+    if not path.is_file():
+        return False
+    records: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    out_dirs = {r.get("out_dir") for r in records if r.get("id") == run_id and r.get("out_dir")}
+    if not out_dirs:
+        return False
+    for d in out_dirs:
+        shutil.rmtree(d, ignore_errors=True)
+    kept = [r for r in records if r.get("id") != run_id and r.get("out_dir") not in out_dirs]
+    path.write_text("".join(json.dumps(r) + "\n" for r in kept))
+    return True

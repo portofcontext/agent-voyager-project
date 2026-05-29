@@ -2,7 +2,7 @@
 
 A commission in the library *is* a wire `Commission` (see `avp_cli.library`), so
 inspecting one is just loading + rendering it. `full_dict` keeps every field
-(nulls included) so `avp commission show` teaches the real, complete wire shape;
+(nulls included) so `avp commission describe` teaches the real, complete wire shape;
 `validate_file` checks a hand-written Commission JSON against the spec.
 """
 

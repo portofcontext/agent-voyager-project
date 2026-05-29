@@ -1,4 +1,4 @@
-"""Run history backing `avp eval list` / `view` / `clear` + voyage-id minting."""
+"""Run history backing `avp eval list` / `view` / `delete` + voyage-id minting."""
 
 from __future__ import annotations
 
@@ -124,6 +124,36 @@ def test_clear_runs_wipes_history_and_dirs(tmp_path) -> None:
     assert state.clear_runs(home=home) == 1
     assert not home.exists()
     assert state.recent_runs(home=home) == []
+
+
+def test_delete_run_removes_one_run_leaving_others(tmp_path) -> None:
+    home = tmp_path / "home"
+    for rid in ("swift-harbor", "calm-bay"):
+        d = home / rid
+        _seed_traj(d)
+        state.record_run(
+            run_id=rid, out_dir=d, dataset="d", agents=["goose"], commissions=["x"], home=home
+        )
+    assert state.delete_run("swift-harbor", home=home) is True
+    assert not (home / "swift-harbor").exists()  # its dir is gone
+    assert (home / "calm-bay").exists()  # the other survives
+    ids = [r["id"] for r in state.recent_runs(home=home)]
+    assert ids == ["calm-bay"]  # history no longer lists the deleted run
+
+
+def test_delete_run_unknown_id_is_false(tmp_path) -> None:
+    home = tmp_path / "home"
+    _seed_traj(home / "calm-bay")
+    state.record_run(
+        run_id="calm-bay",
+        out_dir=home / "calm-bay",
+        dataset="d",
+        agents=["goose"],
+        commissions=["x"],
+        home=home,
+    )
+    assert state.delete_run("ghost-ship", home=home) is False
+    assert (home / "calm-bay").exists()  # nothing touched
 
 
 def test_run_trajectories_returns_every_agent_file(tmp_path, monkeypatch) -> None:
