@@ -28,10 +28,10 @@ from pathlib import Path
 
 import questionary
 
-from avp_cli import brand, catalog, config, console, library, live, paths, state, viz
+from avp_cli import brand, catalog, config, console, library, live, paths, run_manifest, state, viz
 from avp_cli import commission as commission_mod
 from avp_cli.agents import DEFAULT_AGENT, known_agents, preflight, resolve_agent
-from avp_cli.eval.engine import Eval, RunObserver, RunResult, run_matrix
+from avp_cli.eval.engine import Eval, RunObserver, RunResult, run_matrix, setups_for
 from avp_cli.eval.report import board_table, comparison_table, dump_json, failures
 from avp_cli.observability import tool_tally
 from avp_cli.onboarding import welcome
@@ -71,7 +71,8 @@ def _tilde(p: Path) -> str:
 def _commission_line(s) -> None:
     """One commission's id + key config for `eval commissions` (reads the wire Commission)."""
     c = s.commission
-    console.out.print(f"  [bold {brand.SAIL}]{s.id}[/]")
+    bound = f"  [dim](agent: {s.agent})[/dim]" if s.agent else ""
+    console.out.print(f"  [bold {brand.SAIL}]{s.id}[/]{bound}")
     if c.prompt:
         console.out.print(f"    [dim]{c.prompt[:90]}[/dim]")
     console.out.print(f"    model={c.model or '(agent default)'}")
@@ -102,6 +103,7 @@ def _run_and_report(
     max_items: int | None,
     model: str | None,
     quiet: bool,
+    config_path: str | None = None,
 ) -> int:
     runnable = []
     for spec in agent_specs:
@@ -115,8 +117,22 @@ def _run_and_report(
         console.warn("no runnable agents; nothing to do.")
         return _SKIP
 
+    # Snapshot what this run uses BEFORE the matrix, so a crashed run still records
+    # its inputs and the record is immune to later edits of the library commissions.
+    run_manifest.write(
+        out,
+        run_id=run_id,
+        setups=ev.setups,
+        eval_config_path=config_path,
+        agents=[a.name for a in runnable],
+        model_override=model,
+        max_items=max_items,
+        threshold_override=getattr(ev.scorer, "threshold", None),
+    )
+
     compare = len(runnable) > 1  # multiple agents -> interleave by task + head-to-head
-    total = len(ev.setups) * (max_items or len(ev.dataset)) * len(runnable)
+    n_items = max_items or len(ev.dataset)
+    total = n_items * sum(len(setups_for(ev.setups, a.name)) for a in runnable)
     label = " vs ".join(a.name for a in runnable)
     # Live voyage when we have an interactive terminal; plain note lines otherwise.
     live_mode = not quiet and console.err.is_terminal
@@ -192,7 +208,7 @@ def _finish_run(ev: Eval, boards: list, out: Path, run_id: str) -> None:
         out_dir=out,
         dataset=ev.dataset.name,
         agents=[b.agent_label for b in boards],
-        commissions=[s.id for s in ev.setups],
+        commissions=list(dict.fromkeys(s.id for s in ev.setups)),
     )
 
     console.out.print()
@@ -520,6 +536,15 @@ def _cmd_eval_view(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # Point at the immutable input snapshot for this run, if present.
+    mani = run_manifest.read(files[0].parent)
+    if mani:
+        cids = ", ".join(mani.get("commissions", {}))
+        console.note(
+            f"config snapshot: {files[0].parent / run_manifest.MANIFEST_NAME}"
+            + (f"  (commissions: {cids})" if cids else "")
+        )
+
     payloads = [json.loads(f.read_text()) for f in files]
     runs = [(p.get("agent") or f.stem, p) for f, p in zip(files, payloads, strict=True)]
     available = [label for label, _ in runs]
@@ -637,6 +662,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         max_items=args.max_items,
         model=args.model,
         quiet=args.quiet,
+        config_path=args.path,
     )
 
 

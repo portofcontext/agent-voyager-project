@@ -13,8 +13,13 @@ Schema (eval.json):
       "agents": ["claude-code", "goose"],   # optional; --agent overrides at run time
       "dataset": { "source": "inline" | "file" | "huggingface", ... },
       "scorer":  { "name": "structural-match" | "exact-match" | "structural-fidelity", ...params },
-      "commissions": ["baseline", "terse", "few-shot"]   # ids in the library
+      "commissions": ["baseline", "terse", "few-shot"]   # ids in the library, run on every agent
     }
+
+`commissions` may instead be a per-agent map to bind each commission to one
+agent (the keys also supply `agents`, so the top-level key can be omitted):
+
+    "commissions": { "goose": ["baseline-goose"], "claude-code": ["baseline-claude"] }
 
 Dataset sources:
   inline:      { "source": "inline", "items": [ {"id","prompt","expected"} ] }
@@ -68,11 +73,16 @@ def eval_from_dict(
     dataset = _build_dataset(cfg["dataset"], name=name)
     scorer = _build_scorer(cfg["scorer"])
     commissions = _resolve_commissions(cfg["commissions"], commissions_dir=commissions_dir)
+    # The map form `{agent: [ids]}` names its agents in the keys; an explicit
+    # top-level "agents" still wins (and `--agent` overrides both at run time).
+    agents_spec = cfg.get("agents")
+    if agents_spec is None and isinstance(cfg["commissions"], dict):
+        agents_spec = list(cfg["commissions"].keys())
     return Eval(
         setups=commissions,
         dataset=dataset,
         scorer=scorer,
-        agents=_build_agents(cfg.get("agents")),
+        agents=_build_agents(agents_spec),
     )
 
 
@@ -182,21 +192,45 @@ def _load_huggingface(spec: dict[str, Any]) -> list[Item]:
 # ── commissions (referenced by id from the library) ─────────────────────────────
 
 
+def _load_setup(cid: Any, *, agent: str | None, commissions_dir: Path | None) -> Setup:
+    if not isinstance(cid, str):
+        raise EvalConfigError(
+            "commissions are referenced by id now, not inlined; save this one to your "
+            "library (a JSON file in ~/.avp/commissions/) and list its id here. "
+            f"got: {cid!r}"
+        )
+    try:
+        base = library.load(cid, commissions_dir=commissions_dir)
+    except library.CommissionError as exc:
+        raise EvalConfigError(str(exc)) from exc
+    return Setup(id=cid, commission=base, agent=agent)
+
+
 def _resolve_commissions(specs: Any, *, commissions_dir: Path | None) -> list[Setup]:
-    """Resolve the eval's `commissions: [<id>, ...]` against the library."""
+    """Resolve the eval's `commissions` against the library.
+
+    Two forms: a flat list `[<id>, ...]` (every commission runs on every agent),
+    or a per-agent map `{<agent>: [<id>, ...]}` (each commission is bound to its
+    agent, so an eval can give each agent a commission tuned in that agent's own
+    tool namespace).
+    """
+    if isinstance(specs, dict):
+        if not specs:
+            raise EvalConfigError('"commissions" map must not be empty')
+        commissions: list[Setup] = []
+        for agent_name, ids in specs.items():
+            if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+                raise EvalConfigError(
+                    f'"commissions"[{agent_name!r}] must be a non-empty list of commission ids'
+                )
+            for cid in ids:
+                commissions.append(
+                    _load_setup(cid, agent=agent_name, commissions_dir=commissions_dir)
+                )
+        return commissions
     if not isinstance(specs, list) or not specs:
-        raise EvalConfigError('"commissions" must be a non-empty list of commission ids')
-    commissions: list[Setup] = []
-    for spec in specs:
-        if not isinstance(spec, str):
-            raise EvalConfigError(
-                "commissions are referenced by id now, not inlined; save this one to your "
-                "library (a JSON file in ~/.avp/commissions/) and list its id here. "
-                f"got: {spec!r}"
-            )
-        try:
-            base = library.load(spec, commissions_dir=commissions_dir)
-        except library.CommissionError as exc:
-            raise EvalConfigError(str(exc)) from exc
-        commissions.append(Setup(id=spec, commission=base))
-    return commissions
+        raise EvalConfigError(
+            '"commissions" must be a non-empty list of commission ids, '
+            "or a {agent: [ids]} map to bind commissions to agents"
+        )
+    return [_load_setup(spec, agent=None, commissions_dir=commissions_dir) for spec in specs]

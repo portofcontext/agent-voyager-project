@@ -115,7 +115,7 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
 an eval file in place and installs its commissions into your library (an id you
 already have is left untouched):
 
-- **`parsebench`** — reproduce the Captain's Log: PDF pages → HTML over the real
+- **`parsebench`** — PDF pages → HTML over the real
   `llamaindex/ParseBench` dataset, scored on structural fidelity. Needs
   `uv sync --extra parsebench`.
 - **`demo`** — the tiny capitals extraction above. Inline, no extra deps, runs for pennies.

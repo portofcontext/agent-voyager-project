@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import sys
 
+import pytest
+
 from avp.commission import Commission
 from avp.content import TextBlock
 from avp.envelope import ZERO_SPAN_ID, new_span_id, new_trace_id
@@ -190,6 +192,31 @@ def test_structural_scorer_full_credit_passes() -> None:
     item = Item(id="i", prompt="", expected={"city": "Paris", "pop": 2})
     out = FinalOutput(None, {"city": "paris", "pop": 2.0}, "converged")  # case + 2==2.0
     assert s.score(item, out, _summary()).passed
+
+
+def test_fidelity_scores_cell_content_not_markup_chrome() -> None:
+    # A content-correct table wrapped in a styled HTML document + a ```html fence
+    # + prose, with different-but-equivalent tags, must score on its cell text,
+    # not be punished for the chrome. (Regression: raw token_set_ratio over the
+    # markup scored a perfect extraction ~0.6 because of the tag/CSS noise.)
+    pytest.importorskip("rapidfuzz")
+    from avp_cli.eval.scoring import FidelityScorer
+
+    ref = "<table><tr><th>City</th><th>Pop</th></tr><tr><td>Paris</td><td>2M</td></tr></table>"
+    chromed = (
+        'Sure, here it is:\n```html\n<!DOCTYPE html><html><head>'
+        "<style>td{color:red;font-family:Arial}</style></head><body>"
+        '<table border="1" class="data"><tr><th>City</th><th>Pop</th></tr>'
+        "<tr><td>Paris</td><td>2M</td></tr></table></body></html>\n```"
+    )
+    s = FidelityScorer(threshold=0.8)
+    item = Item(id="i", prompt="", expected=ref)
+    good = s.score(item, FinalOutput(chromed, None, "converged"), _summary())
+    assert good.value >= 0.95 and good.passed
+
+    wrong = "<table><tr><th>City</th><th>Pop</th></tr><tr><td>Berlin</td><td>9M</td></tr></table>"
+    bad = s.score(item, FinalOutput(wrong, None, "converged"), _summary())
+    assert not bad.passed  # wrong cell content still fails
 
 
 # ── Board aggregation + ranking ────────────────────────────────────────────────
@@ -466,3 +493,61 @@ def test_run_matrix_interleaves_agents_and_compares(tmp_path) -> None:
     # one board per agent, each scored
     assert [b.agent_label for b in boards] == ["alpha", "beta"]
     assert all(b.rows[0].accuracy == 1.0 for b in boards)
+
+
+def test_run_matrix_binds_commissions_to_their_agent(tmp_path) -> None:
+    """Seam: a commission bound to one agent (the `{agent: [ids]}` map form) runs
+    only on that agent; an unbound one still runs on every agent. Each board
+    carries only its agent's commissions, and no head-to-head fires for a
+    commission that ran on a single agent."""
+    from avp_conformance.manifest import AgentManifest
+
+    from avp_cli.agents import ResolvedAgent
+    from avp_cli.eval.engine import RunObserver, run_matrix
+
+    agent_script = tmp_path / "tiny_agent.py"
+    agent_script.write_text(_INLINE_AGENT)
+
+    def mk(name: str) -> ResolvedAgent:
+        return ResolvedAgent(
+            name=name,
+            manifest=AgentManifest(command=[sys.executable, str(agent_script)]),
+            manifest_cwd=tmp_path,
+        )
+
+    def bound(id_: str, agent: str | None) -> Setup:
+        return Setup(id=id_, commission=Commission(schema_version="0.1", run_id=id_), agent=agent)
+
+    agents = [mk("goose"), mk("claude-code")]
+    ev = Eval(
+        setups=[
+            bound("for-goose", "goose"),
+            bound("for-claude", "claude-code"),
+            bound("shared", None),
+        ],
+        dataset=Dataset(name="d", items=[Item(id="i1", prompt="x", expected="all done")]),
+        scorer=ExactMatchScorer(),
+    )
+
+    started: list[tuple[str, str]] = []
+    compares: list[str] = []
+    observer = RunObserver(
+        on_start=lambda n, t, agent, s, i: started.append((agent, s)),
+        on_compare=lambda s, i, pairs: compares.append(s),
+    )
+    boards = run_matrix(ev, agents, out_dir=tmp_path / "runs", observer=observer, compare=True)
+
+    # bound commissions ran only on their agent; the unbound one ran on both
+    assert ("goose", "for-goose") in started
+    assert ("claude-code", "for-claude") in started
+    assert ("claude-code", "for-goose") not in started
+    assert ("goose", "for-claude") not in started
+    assert ("goose", "shared") in started and ("claude-code", "shared") in started
+    # 1 (goose-only) + 1 (claude-only) + 2 (shared on both) = 4 runs total
+    assert len(started) == 4
+    # only the shared commission ran on >1 agent, so only it gets a head-to-head
+    assert compares == ["shared"]
+    # each board shows only its own agent's commissions
+    by_agent = {b.agent_label: {r.name for r in b.rows} for b in boards}
+    assert by_agent["goose"] == {"for-goose", "shared"}
+    assert by_agent["claude-code"] == {"for-claude", "shared"}

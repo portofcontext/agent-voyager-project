@@ -93,6 +93,9 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     std::fs::create_dir_all(&path_root)?;
     std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
+    // Register goose's bundled built-ins so `Builtin` extensions resolve in-process.
+    commission::register_builtins();
+
     let cfg: GooseRunConfig = commission::from_commission(commission);
     let model_name = cfg
         .model
@@ -174,7 +177,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
 
     // Static descriptor from the agent's live tool registry (no probe needed).
     let descriptor =
-        build_descriptor(&agent, &session_id, &model_name, &mcp_servers, &skills).await?;
+        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &skills).await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -331,10 +334,20 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     std::fs::create_dir_all(&path_root)?;
     std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
+    // Register goose's bundled built-ins so the full surface resolves in-process.
+    commission::register_builtins();
+
     // No Commission: a minimal one yields goose's default built-in extensions
-    // (the surface the agent ships with). The model only labels the descriptor
-    // and configures the provider object; no model call fires.
-    let model_name = std::env::var("GOOSE_MODEL").unwrap_or_else(|_| "claude-haiku-4-5".to_string());
+    // (the surface the agent ships with). Advertise goose's actually-configured
+    // model (env or config) as `default_model` — or nothing if it has none. A
+    // model is still needed to construct the provider for tool-listing (no model
+    // call fires), so fall back to a throwaway there only.
+    let configured_model = goose::config::Config::global()
+        .get_param::<String>("GOOSE_MODEL")
+        .ok();
+    let model_name = configured_model
+        .clone()
+        .unwrap_or_else(|| "claude-haiku-4-5".to_string());
     let commission: Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": "describe",
@@ -367,8 +380,9 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
         }
     }
 
-    // The pre-flight view carries no Commission MCP servers or skills.
-    build_descriptor(&agent, &session_id, &model_name, &HashSet::new(), &[]).await
+    // The pre-flight view carries no Commission MCP servers or skills, and only
+    // advertises a default_model if goose actually has one configured.
+    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &[]).await
 }
 
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
@@ -378,7 +392,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 async fn build_descriptor(
     agent: &Arc<Agent>,
     session_id: &str,
-    model: &str,
+    default_model: Option<&str>,
     mcp_servers: &HashSet<String>,
     skills: &[String],
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
@@ -417,16 +431,19 @@ async fn build_descriptor(
     // the agent's available skills.
     let skill_decls: Vec<Value> = skills.iter().map(|name| json!({ "name": name })).collect();
 
-    serde_json::from_value(json!({
+    let mut descriptor = json!({
         "agent_name": "goose",
         "agent_version": GOOSE_VERSION,
         "spec_version": "0.1",
-        "default_model": model,
         "tools": tools,
         "mcp_servers": mcp_server_decls,
         "skills": skill_decls,
-    }))
-    .map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
+    });
+    // Only advertise default_model when there actually is one.
+    if let Some(model) = default_model {
+        descriptor["default_model"] = json!(model);
+    }
+    serde_json::from_value(descriptor).map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }
 
 /// AVP usage from the provider tap: sum the per-inference `ProviderUsage`s

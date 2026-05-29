@@ -15,11 +15,25 @@
 //! (carried as empty until the secret-handling story is settled).
 
 use std::collections::HashMap;
+use std::sync::Once;
 
 use avp::commission::{AvpV01CommissionMcpServersItem, McpServerHttp, McpServerStdio};
 use avp::Commission;
 use goose::agents::extension::{Envs, ExtensionConfig};
 use goose::recipe::Response;
+
+/// Register goose's bundled built-in extension servers (goose-mcp:
+/// computercontroller / memory / tutorial / autovisualiser) into goose's global
+/// in-process `BUILTIN_REGISTRY`. Idempotent; MUST run before the agent loads any
+/// `Builtin` extension. The goose CLI does this at startup; the library embedding
+/// has to do it explicitly, or the registry stays empty and Builtins fail to
+/// resolve (which is why this connector historically only exposed `developer`).
+pub fn register_builtins() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        goose::builtin_extension::register_builtin_extensions(goose_mcp::BUILTIN_EXTENSIONS.clone());
+    });
+}
 
 /// Goose-side run configuration derived from a Commission.
 pub struct GooseRunConfig {
@@ -34,17 +48,17 @@ pub struct GooseRunConfig {
 pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     let mut extensions = Vec::new();
 
-    // Goose's built-in tool surface is the `developer` extension (goose's
-    // DEFAULT_EXTENSION), loaded by default — as the real goose CLI does, where
-    // `developer` ships enabled. AVP `enabled_builtin_tools` subtractively
-    // filters that surface (per spec; the claude-agent-sdk is the reference for
-    // this semantic): `None` exposes all developer tools, `[]` exposes none
-    // (developer not loaded), and a list exposes only the named tools via the
-    // extension's own `available_tools` allow-list.
+    // Goose's full built-in surface: the `developer` platform extension plus the
+    // bundled goose-mcp built-ins (registered by `register_builtins`). AVP
+    // `enabled_builtin_tools` subtractively filters it (per spec; claude-agent-sdk
+    // is the reference): `None` exposes everything, `[]` exposes none, and a list
+    // exposes only the named tools. The names are descriptor-namespace (bare for
+    // `developer`, `<ext>__<tool>` for built-ins); `builtin_extensions` translates
+    // each to that extension's bare `available_tools` (see `available_for`).
     match commission.enabled_builtin_tools.as_deref() {
-        None => extensions.push(developer_extension(Vec::new())),
+        None => extensions.extend(builtin_extensions(Vec::new())),
         Some([]) => {}
-        Some(names) => extensions.push(developer_extension(names.to_vec())),
+        Some(names) => extensions.extend(builtin_extensions(names.to_vec())),
     }
 
     // Commission-supplied MCP servers carry inline connection material.
@@ -109,6 +123,63 @@ fn developer_extension(available_tools: Vec<String>) -> ExtensionConfig {
         bundled: Some(true),
         available_tools,
     }
+}
+
+/// A name no goose tool uses. A non-empty `available_tools` holding only this
+/// exposes zero tools, which is how we say "this extension contributes nothing"
+/// (goose treats an *empty* `available_tools` as "expose all").
+const EXPOSE_NONE: &str = "__avp_expose_none__";
+
+/// Translate the AVP `enabled_builtin_tools` allow-list (descriptor-namespace
+/// names) into one extension's bare `available_tools`.
+///
+/// `enabled_builtin_tools` names tools the way the agent surfaces them, matching
+/// `descriptor.tools` and the model-facing names (the contract claude-agent-sdk
+/// uses): BARE for the unprefixed `developer` platform extension (`shell`), and
+/// `<ext>__<tool>` for every prefixed goose-mcp built-in
+/// (`computercontroller__pdf_tool`). But goose's own per-extension
+/// `available_tools` filter matches the BARE tool name, so we translate here.
+///
+/// `prefix` is `None` for the unprefixed `developer` extension, `Some("memory")`
+/// etc. for a prefixed built-in. An empty `enabled` is the `None` / "expose
+/// everything" case and yields an empty list (all tools). A non-empty `enabled`
+/// that names nothing in this extension yields `[EXPOSE_NONE]` so the extension
+/// is pruned rather than fully exposed.
+fn available_for(enabled: &[String], prefix: Option<&str>) -> Vec<String> {
+    if enabled.is_empty() {
+        return Vec::new(); // None: expose everything
+    }
+    let bare: Vec<String> = match prefix {
+        None => enabled.iter().filter(|n| !n.contains("__")).cloned().collect(),
+        Some(p) => {
+            let pfx = format!("{p}__");
+            enabled.iter().filter_map(|n| n.strip_prefix(&pfx).map(str::to_string)).collect()
+        }
+    };
+    if bare.is_empty() { vec![EXPOSE_NONE.to_string()] } else { bare }
+}
+
+/// Goose's full built-in surface: `developer` (platform) + every bundled goose-mcp
+/// built-in. `enabled` is the AVP allow-list in descriptor namespace; each
+/// extension is filtered to its own slice via [`available_for`] (empty `enabled`
+/// = every tool of every extension). The goose-mcp set is read from the registry
+/// so it tracks the pinned goose rev. Requires `register_builtins()` to have run
+/// before the agent loads these.
+fn builtin_extensions(enabled: Vec<String>) -> Vec<ExtensionConfig> {
+    let mut exts = vec![developer_extension(available_for(&enabled, None))];
+    let mut names: Vec<&'static str> = goose_mcp::BUILTIN_EXTENSIONS.keys().copied().collect();
+    names.sort_unstable();
+    for name in names {
+        exts.push(ExtensionConfig::Builtin {
+            name: name.to_string(),
+            description: String::new(),
+            display_name: None,
+            timeout: None,
+            bundled: Some(true),
+            available_tools: available_for(&enabled, Some(name)),
+        });
+    }
+    exts
 }
 
 fn stdio_extension(s: &McpServerStdio) -> ExtensionConfig {
@@ -177,6 +248,17 @@ mod tests {
         })
     }
 
+    fn builtin_available_tools(cfg: &GooseRunConfig, ext: &str) -> Option<Vec<String>> {
+        cfg.extensions.iter().find_map(|e| match e {
+            ExtensionConfig::Builtin {
+                name,
+                available_tools,
+                ..
+            } if name == ext => Some(available_tools.clone()),
+            _ => None,
+        })
+    }
+
     #[test]
     fn maps_builtins_mcp_and_skills_to_extensions() {
         let cfg = from_commission(&commission(json!({
@@ -188,11 +270,26 @@ mod tests {
             "skills": [{ "id": "researcher", "files": { "SKILL.md": "# research" } }]
         })));
         let names = ext_names(&cfg);
-        // `developer` loads by default (no enabled_builtin_tools override).
+        // The full built-in surface loads by default (no enabled_builtin_tools
+        // override): developer + the bundled goose-mcp built-ins.
         assert!(names.contains(&"developer".to_string()), "builtin: {names:?}");
+        assert!(names.contains(&"memory".to_string()), "goose-mcp builtin: {names:?}");
         assert!(names.contains(&"avptest".to_string()), "stdio mcp: {names:?}");
         assert!(names.contains(&"web".to_string()), "http mcp: {names:?}");
         assert!(names.contains(&"skills".to_string()), "skills platform: {names:?}");
+    }
+
+    #[test]
+    fn default_loads_full_builtin_catalog() {
+        // None -> developer + every bundled goose-mcp built-in.
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m"
+        })));
+        let names = ext_names(&cfg);
+        assert!(names.contains(&"developer".to_string()), "{names:?}");
+        for builtin in goose_mcp::BUILTIN_EXTENSIONS.keys() {
+            assert!(names.contains(&builtin.to_string()), "missing {builtin}: {names:?}");
+        }
     }
 
     #[test]
@@ -205,26 +302,49 @@ mod tests {
     }
 
     #[test]
-    fn empty_enabled_builtin_tools_omits_developer() {
-        // [] -> no built-in tools: developer is not loaded at all.
+    fn empty_enabled_builtin_tools_omits_all_builtins() {
+        // [] -> no built-in tools: neither developer nor any goose-mcp built-in.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m",
             "enabled_builtin_tools": []
         })));
-        assert!(!ext_names(&cfg).contains(&"developer".to_string()));
+        let names = ext_names(&cfg);
+        assert!(!names.contains(&"developer".to_string()), "{names:?}");
+        for builtin in goose_mcp::BUILTIN_EXTENSIONS.keys() {
+            assert!(!names.contains(&builtin.to_string()), "leaked {builtin}: {names:?}");
+        }
     }
 
     #[test]
     fn enabled_builtin_tools_subset_sets_available_tools() {
-        // [names] -> developer restricted to those tools via available_tools.
+        // A bare name targets the unprefixed `developer` extension; its filter
+        // matches the bare tool name. Other extensions get no match, so they are
+        // pruned (EXPOSE_NONE) rather than fully exposed.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "m",
-            "enabled_builtin_tools": ["developer__shell"]
+            "enabled_builtin_tools": ["shell"]
+        })));
+        assert_eq!(developer_available_tools(&cfg), Some(vec!["shell".to_string()]));
+        assert_eq!(
+            builtin_available_tools(&cfg, "computercontroller"),
+            Some(vec![EXPOSE_NONE.to_string()])
+        );
+    }
+
+    #[test]
+    fn enabled_builtin_tools_prefixed_name_targets_its_builtin_bare() {
+        // A `<ext>__<tool>` descriptor name (what `avp agent describe` shows for a
+        // goose-mcp built-in) is translated to that extension's BARE
+        // `available_tools` entry, while the unprefixed `developer` is pruned.
+        let cfg = from_commission(&commission(json!({
+            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "enabled_builtin_tools": ["computercontroller__pdf_tool", "computercontroller__web_scrape"]
         })));
         assert_eq!(
-            developer_available_tools(&cfg),
-            Some(vec!["developer__shell".to_string()])
+            builtin_available_tools(&cfg, "computercontroller"),
+            Some(vec!["pdf_tool".to_string(), "web_scrape".to_string()])
         );
+        assert_eq!(developer_available_tools(&cfg), Some(vec![EXPOSE_NONE.to_string()]));
     }
 
     #[test]

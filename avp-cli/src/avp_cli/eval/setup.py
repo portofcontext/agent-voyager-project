@@ -25,10 +25,18 @@ _SUPERVISOR = SupervisorPreamble(name="avp-cli", version="0.1.0")
 
 @dataclass(frozen=True)
 class Setup:
-    """One commission under test: its id + the base wire Commission it runs."""
+    """One commission under test: its id + the base wire Commission it runs.
+
+    `agent` optionally binds the commission to a single agent (a registry name
+    or manifest path). `None` means it runs on every agent in the eval (the
+    default cross-product). Binding lets one eval give each agent a commission
+    tuned for it, e.g. an `enabled_builtin_tools` allow-list expressed in that
+    agent's own tool namespace.
+    """
 
     id: str
     commission: Commission
+    agent: str | None = None
 
     @property
     def model(self) -> str | None:

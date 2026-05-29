@@ -256,7 +256,13 @@ def to_trajectories_payload(board: Any, *, eval_version: str, ev: Any = None) ->
         "by_commission": by_commission,
     }
     if ev is not None:
-        payload["commissions"] = {s.id: _commission_meta(s) for s in ev.setups}
+        # Only this agent's commissions: a commission bound to another agent
+        # isn't part of this board.
+        from avp_cli.eval.engine import setups_for
+
+        payload["commissions"] = {
+            s.id: _commission_meta(s) for s in setups_for(ev.setups, board.agent_label)
+        }
     return payload
 
 

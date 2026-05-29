@@ -8,7 +8,7 @@ custom scorer understands.
 
 Keep datasets small. The whole matrix is `len(setups) * len(items)` real agent
 runs, each a subprocess against a model, so a 3-setup, 5-item eval is 15 paid
-runs. The bundled demo ships 3 items on purpose.
+runs. Keep splits small (the catalog evals slice their datasets down on purpose).
 """
 
 from __future__ import annotations

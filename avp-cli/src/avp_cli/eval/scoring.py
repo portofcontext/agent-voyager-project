@@ -21,10 +21,16 @@ reward efficiency (fewer turns, no tool errors).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from avp_cli.observability import Summary
+
+# <style>…</style> / <script>…</script> bodies, markdown code fences, and any tag.
+_CHROME = re.compile(r"<(style|script)\b.*?</\1>", re.S | re.I)
+_FENCE = re.compile(r"```\w*")
+_TAG = re.compile(r"<[^>]+>")
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,21 @@ class Scorer(Protocol):
 
 def _normalize(text: str) -> str:
     return " ".join(text.split()).strip().lower()
+
+
+def _table_text(markup: str) -> str:
+    """The visible cell text of an HTML/markdown table, markup removed.
+
+    Fidelity scores whether the agent reproduced the table's *content*, not
+    whether it emitted byte-identical markup. We drop `<style>`/`<script>`
+    bodies, markdown code fences, and every tag, then normalize whitespace and
+    case. So a correct extraction wrapped in a styled `<html>` document or a
+    ```html fence scores on its cell text, not on the chrome around it.
+    """
+    t = _CHROME.sub(" ", markup)
+    t = _FENCE.sub(" ", t)
+    t = _TAG.sub(" ", t)
+    return _normalize(t)
 
 
 @dataclass
@@ -116,12 +137,18 @@ def _values_match(want: Any, have: Any) -> bool:
 
 @dataclass
 class FidelityScorer:
-    """Directional structural fidelity of HTML output vs a reference (0..1).
+    """Content fidelity of a table answer vs a reference table (0..1).
 
-    Uses rapidfuzz `token_set_ratio` over normalized text, the same directional
-    metric the platform's ParseBench v0 scorer uses (a stand-in for the official
-    GTRM evaluator). `output.text` is the agent's HTML; `item.expected` is the
-    reference HTML. Requires the `parsebench` extra (rapidfuzz).
+    The agent is asked for an HTML `<table>`; the reference (`item.expected`) is
+    also a table. We compare the tables' visible cell *text* (via `_table_text`,
+    which strips chrome/markup) with rapidfuzz `token_set_ratio`, so a correct
+    extraction is not penalized for emitting different-but-equivalent markup
+    (extra `<style>`, `colspan`, a ```html fence, `<strong>`, etc.). `token_set`
+    (not `sort`) is deliberate: agents wrap the table in prose ("Here's the
+    table:", "Perfect, I verified…"), and the set ratio scores the cell-text
+    intersection rather than punishing those extra leading tokens. This scores
+    content only; it does not verify row/column topology (see the structure-aware
+    scorer for that). Requires the `parsebench` extra (rapidfuzz).
     """
 
     threshold: float = 0.8
@@ -132,7 +159,7 @@ class FidelityScorer:
 
         reference = item.expected if isinstance(item.expected, str) else json.dumps(item.expected)
         got = output.text or ""
-        value = fuzz.token_set_ratio(_normalize(reference), _normalize(got)) / 100.0
+        value = fuzz.token_set_ratio(_table_text(reference), _table_text(got)) / 100.0
         passed = value >= self.threshold
         detail = "" if passed else f"fidelity {value:.2f} < threshold {self.threshold}"
         return Score(value=value, passed=passed, detail=detail)

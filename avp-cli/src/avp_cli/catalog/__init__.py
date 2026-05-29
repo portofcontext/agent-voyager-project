@@ -4,7 +4,8 @@ Each packaged entry is a `{eval, commissions}` document. `avp init <key>`
 **installs** its commissions into the portable library (`~/.avp/commissions/`,
 skipping any id you already have) and writes the eval file *in place* as
 `<key>.eval.json` so you can edit and commit it. The eval references the
-commissions by id. `demo` is the smallest entry — a runnable eval in seconds.
+commissions by id. `capitals` is the smallest entry (the default off a
+non-interactive terminal): inline data, runs in seconds for pennies, no extra deps.
 """
 
 from __future__ import annotations
@@ -38,17 +39,17 @@ class ScaffoldResult:
 # Ordered for the picker. Each `file` is a `{eval, commissions}` JSON in this package.
 ENTRIES: list[CatalogEntry] = [
     CatalogEntry(
-        key="parsebench",
-        title="ParseBench (tables)",
-        description="Reproduce the Captain's Log: PDF pages to HTML, scored on structural fidelity. Real LlamaIndex benchmark.",
-        file="parsebench.json",
-        needs=["parsebench"],
+        key="capitals",
+        title="Capitals (structured extraction)",
+        description="Tiny structured-extraction sample. Inline data, runs for pennies, no extra deps.",
+        file="capitals.json",
     ),
     CatalogEntry(
-        key="demo",
-        title="Capitals demo",
-        description="Tiny structured-extraction demo. Inline data, runs for pennies, no extra deps.",
-        file="demo.json",
+        key="parsebench",
+        title="ParseBench (tables)",
+        description="PDF pages to HTML, scored on structural fidelity. Real LlamaIndex benchmark.",
+        file="parsebench.json",
+        needs=["parsebench"],
     ),
     CatalogEntry(
         key="custom",
@@ -93,9 +94,13 @@ def scaffold(
 
     The eval file goes to `<dest>/<key>.eval.json` (or a `-2`, `-3`, ... suffix if
     that name is taken) and references the commissions by id. Commissions go to the
-    library; an id you already have is left untouched (reported in `skipped`). When
-    `agents` is given, the eval pins them in an `"agents"` key so `avp eval run`
-    targets them without `--agent`.
+    library; an id you already have is left untouched (reported in `skipped`).
+
+    The eval's `commissions` block is taken verbatim from the entry when present
+    (so an entry can bind commissions to agents via the `{agent: [ids]}` map);
+    otherwise it defaults to a flat list of every installed id. When `agents` is
+    given and the entry doesn't already bind agents via a map, they're pinned in
+    an `"agents"` key so `avp eval run` targets them without `--agent`.
     """
     doc = load(entry)
     commissions: dict[str, Any] = doc["commissions"]  # {id: wire Commission}
@@ -111,10 +116,13 @@ def scaffold(
     target = _unique_eval_path(dest_dir, entry.key)
     eval_spec = doc["eval"]
     eval_doc: dict[str, Any] = {"name": eval_spec.get("name", entry.key)}
-    if agents:
+    binding = eval_spec.get("commissions", list(commissions.keys()))
+    # A map binding names its agents in the keys; only pin a separate "agents"
+    # key for the flat-list form.
+    if agents and not isinstance(binding, dict):
         eval_doc["agents"] = agents
     eval_doc["dataset"] = eval_spec["dataset"]
     eval_doc["scorer"] = eval_spec["scorer"]
-    eval_doc["commissions"] = list(commissions.keys())
+    eval_doc["commissions"] = binding
     target.write_text(json.dumps(eval_doc, indent=2) + "\n")
     return ScaffoldResult(eval_path=target, installed=installed, skipped=skipped)

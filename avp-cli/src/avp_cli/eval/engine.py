@@ -48,6 +48,14 @@ class Eval:
     agents: list[str] = field(default_factory=list)
 
 
+def setups_for(setups: list[Setup], agent_name: str) -> list[Setup]:
+    """The setups that run on `agent_name`: unbound (`agent is None`) plus those
+    bound to it. A bound setup is invisible to every other agent, so this is the
+    single source of truth for the matrix, its progress total, and per-agent
+    board / payload assembly."""
+    return [s for s in setups if s.agent is None or s.agent == agent_name]
+
+
 # ── Final-answer extraction ────────────────────────────────────────────────
 
 
@@ -265,7 +273,7 @@ def run_matrix(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     items = list(ev.dataset.items)[:max_items] if max_items else list(ev.dataset.items)
-    total = len(ev.setups) * len(items) * len(agents)
+    total = len(items) * sum(len(setups_for(ev.setups, a.name)) for a in agents)
     n = 0
 
     # acc[agent.name][commission.id] -> list[RunResult]
@@ -278,6 +286,8 @@ def run_matrix(
             for item in items:
                 pairs: list[tuple[str, RunResult]] = []
                 for agent in agents:
+                    if setup.agent is not None and setup.agent != agent.name:
+                        continue  # commission bound to a different agent
                     n += 1
                     if obs.on_start:
                         obs.on_start(n, total, agent.name, setup.id, item.id)
@@ -295,14 +305,19 @@ def run_matrix(
                     if obs.on_end:
                         obs.on_end(n, total, agent.name, result)
                     pairs.append((agent.name, result))
-                if compare and obs.on_compare and len(agents) > 1:
+                # Head-to-head only when this commission actually ran on >1 agent.
+                if compare and obs.on_compare and len(pairs) > 1:
                     obs.on_compare(setup.id, item.id, pairs)
     except KeyboardInterrupt:
         interrupted = True
 
     boards: list[Board] = []
     for agent in agents:
-        rows = [_aggregate(s, acc[agent.name][s.id]) for s in ev.setups if acc[agent.name][s.id]]
+        rows = [
+            _aggregate(s, acc[agent.name][s.id])
+            for s in setups_for(ev.setups, agent.name)
+            if acc[agent.name][s.id]
+        ]
         boards.append(
             Board(
                 dataset_name=ev.dataset.name,

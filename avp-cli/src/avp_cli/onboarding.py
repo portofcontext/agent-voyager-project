@@ -15,7 +15,7 @@ from rich.text import Text
 from avp_cli import brand
 
 _START = [
-    ("avp init", "create an eval to run: pick from the catalog (try 'demo')"),
+    ("avp init", "create an eval to run: pick a benchmark from the catalog"),
 ]
 
 _COMMISSIONS = [

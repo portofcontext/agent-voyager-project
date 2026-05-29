@@ -43,6 +43,28 @@ def test_eval_from_dict_resolves_commission_ids(lib) -> None:
     assert isinstance(ev.scorer, ExactMatchScorer)
 
 
+def test_commissions_map_binds_each_id_to_its_agent(tmp_path) -> None:
+    # The `{agent: [ids]}` form binds each commission to an agent and supplies
+    # `agents` from its keys (no separate "agents" key needed).
+    d = tmp_path / "commissions"
+    _save(d, "for-goose", prompt="{input}")
+    _save(d, "for-claude", prompt="{input}")
+    cfg = _cfg(commissions={"goose": ["for-goose"], "claude-code": ["for-claude"]})
+    ev = config.eval_from_dict(cfg, commissions_dir=d)
+    assert {(s.id, s.agent) for s in ev.setups} == {
+        ("for-goose", "goose"),
+        ("for-claude", "claude-code"),
+    }
+    assert ev.agents == ["goose", "claude-code"]
+
+
+def test_commissions_map_rejects_non_list_value(tmp_path) -> None:
+    d = tmp_path / "commissions"
+    _save(d, "baseline", prompt="{input}")
+    with pytest.raises(config.EvalConfigError, match="non-empty list"):
+        config.eval_from_dict(_cfg(commissions={"goose": "baseline"}), commissions_dir=d)
+
+
 def test_missing_required_key_errors() -> None:
     with pytest.raises(config.EvalConfigError, match="commissions"):
         config.eval_from_dict({"dataset": _DATASET, "scorer": {"name": "exact-match"}})
@@ -117,37 +139,39 @@ def test_scaffold_installs_wire_commissions_and_eval_reloads(tmp_path) -> None:
     # Seam: scaffold writes wire Commissions to the library + an eval in place;
     # load_eval reads the eval and resolves its commission ids from the library.
     lib = tmp_path / "commissions"
-    result = catalog.scaffold(catalog.get("demo"), tmp_path, agents=["goose"], commissions_dir=lib)
-    assert result.installed == ["baseline", "terse", "few-shot"]
+    result = catalog.scaffold(
+        catalog.get("custom"), tmp_path, agents=["goose"], commissions_dir=lib
+    )
+    assert result.installed == ["baseline", "variant-a"]
     # the installed file is a pure wire Commission
     assert isinstance(library.load("baseline", commissions_dir=lib), Commission)
     ev = config.load_eval(result.eval_path, commissions_dir=lib)
     assert ev.agents == ["goose"]
-    assert [s.id for s in ev.setups] == ["baseline", "terse", "few-shot"]
+    assert [s.id for s in ev.setups] == ["baseline", "variant-a"]
 
 
 def test_scaffold_skips_existing_commission(tmp_path) -> None:
     lib = tmp_path / "commissions"
     _save(lib, "baseline", prompt="mine", model="m")
-    result = catalog.scaffold(catalog.get("demo"), tmp_path, commissions_dir=lib)
+    result = catalog.scaffold(catalog.get("custom"), tmp_path, commissions_dir=lib)
     assert "baseline" in result.skipped  # left my version untouched
     assert library.load("baseline", commissions_dir=lib).prompt == "mine"
 
 
 def test_scaffold_without_agents_omits_the_key(tmp_path) -> None:
     lib = tmp_path / "commissions"
-    result = catalog.scaffold(catalog.get("demo"), tmp_path, commissions_dir=lib)
+    result = catalog.scaffold(catalog.get("custom"), tmp_path, commissions_dir=lib)
     assert "agents" not in json.loads(result.eval_path.read_text())
 
 
 def test_scaffold_twice_creates_a_second_file(tmp_path) -> None:
     lib = tmp_path / "commissions"
-    first = catalog.scaffold(catalog.get("demo"), tmp_path, commissions_dir=lib)
-    second = catalog.scaffold(catalog.get("demo"), tmp_path, commissions_dir=lib)
-    assert first.eval_path.name == "demo.eval.json"
-    assert second.eval_path.name == "demo-2.eval.json"
+    first = catalog.scaffold(catalog.get("custom"), tmp_path, commissions_dir=lib)
+    second = catalog.scaffold(catalog.get("custom"), tmp_path, commissions_dir=lib)
+    assert first.eval_path.name == "custom.eval.json"
+    assert second.eval_path.name == "custom-2.eval.json"
     assert second.installed == []
-    assert sorted(second.skipped) == ["baseline", "few-shot", "terse"]
+    assert sorted(second.skipped) == ["baseline", "variant-a"]
 
 
 @pytest.mark.parametrize("entry", catalog.ENTRIES, ids=lambda e: e.key)

@@ -21,15 +21,6 @@
             "country": "Japan",
             "population_millions": 14
           }
-        },
-        {
-          "id": "canberra",
-          "prompt": "Canberra is Australia's capital, with roughly 0.4 million residents.",
-          "expected": {
-            "city": "Canberra",
-            "country": "Australia",
-            "population_millions": 0.4
-          }
         }
       ]
     },
@@ -39,9 +30,9 @@
     }
   },
   "commissions": {
-    "baseline": {
+    "capitals-baseline": {
       "schema_version": "0.1",
-      "run_id": "baseline",
+      "run_id": "capitals-baseline",
       "model": "claude-haiku-4-5",
       "prompt": "Extract the structured facts from this sentence: {input}",
       "output_schema": {
@@ -55,25 +46,9 @@
         "additionalProperties": false
       }
     },
-    "terse": {
+    "capitals-few-shot": {
       "schema_version": "0.1",
-      "run_id": "terse",
-      "model": "claude-haiku-4-5",
-      "prompt": "Return ONLY JSON with keys city, country, population_millions for this sentence: {input}",
-      "output_schema": {
-        "type": "object",
-        "properties": {
-          "city": { "type": "string" },
-          "country": { "type": "string" },
-          "population_millions": { "type": "number" }
-        },
-        "required": ["city", "country", "population_millions"],
-        "additionalProperties": false
-      }
-    },
-    "few-shot": {
-      "schema_version": "0.1",
-      "run_id": "few-shot",
+      "run_id": "capitals-few-shot",
       "model": "claude-haiku-4-5",
       "system_prompt": "You extract facts as JSON. Example:\nInput: \"Berlin is the capital of Germany, about 3.7 million people.\"\nOutput: {\"city\": \"Berlin\", \"country\": \"Germany\", \"population_millions\": 3.7}",
       "prompt": "Now do the same for: {input}",
