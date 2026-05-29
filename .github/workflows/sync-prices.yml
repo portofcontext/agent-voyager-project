@@ -2,9 +2,10 @@ name: Sync model prices
 
 # Keep the bundled price table (the single canonical `prices.json` in
 # avp/bindings/python, which the Rust crate embeds via include_str!) tracking
-# models.dev, so no one hand-maintains pricing. Runs daily; opens a PR only when
-# the model prices actually change (the snapshot date alone never triggers one).
-# Also runnable on demand from the Actions tab.
+# models.dev, so no one hand-maintains pricing. Runs nightly and commits the
+# refreshed table straight to main, but only when the model prices actually
+# change (the snapshot date alone never triggers a commit). Also runnable on
+# demand from the Actions tab.
 
 on:
   schedule:
@@ -12,8 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # push the update branch
-  pull-requests: write # open the PR
+  contents: write # commit the refreshed table to main
 
 jobs:
   sync:
@@ -44,24 +44,12 @@ jobs:
         if: steps.check.outputs.changed == 'true'
         run: python avp/scripts/sync-prices.py --write
 
-      - name: Open or update the sync PR
+      - name: Commit the refreshed table to main
         if: steps.check.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          BRANCH=chore/sync-model-prices
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
           git add avp/bindings/python/src/avp/data/prices.json
           git commit -m "chore: sync model prices from models.dev ($(date -u +%F))"
-          # Force-push the fixed branch: updates an open PR in place, or seeds a new one.
-          git push -f -u origin "$BRANCH"
-          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
-            gh pr create \
-              --base main \
-              --head "$BRANCH" \
-              --title "chore: sync model prices from models.dev" \
-              --body "Automated daily sync of the bundled \`prices.json\` (rust + python) from [models.dev](https://models.dev/api.json). Opened because model prices changed; the snapshot date alone does not trigger this. Diff is large (the full ~4600-model mirror): skim for unexpected swings, especially on models we run."
-          fi
+          git push origin HEAD:main

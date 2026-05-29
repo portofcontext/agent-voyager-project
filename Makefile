@@ -152,10 +152,6 @@ schemas:
 sync-prices:
 	@$(UV) run python avp/scripts/sync-prices.py --write
 
-.PHONY: sync-prices-check
-sync-prices-check:
-	@$(UV) run python avp/scripts/sync-prices.py --check
-
 
 .PHONY: bindings
 bindings:
