@@ -54,6 +54,7 @@ help:
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
+	@echo "    make build-agents    build both agents' artifacts into dist/agents for local install"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -221,6 +222,30 @@ test-live:
 .PHONY: sync
 sync:
 	@$(UV) sync
+
+
+# Build both agents' local artifacts into dist/agents, then print the
+# `avp agent install` commands to register them. This is the contributor loop
+# for testing a new agent build before cutting a GitHub release: build here,
+# install locally, run an eval against it. (The goose build needs the Rust
+# toolchain + Goose's system deps; the wheels need uv.)
+.PHONY: build-agents
+build-agents:
+	@rm -rf dist/agents && mkdir -p dist/agents
+	@echo "→ building goose binary (cargo, --features conformance)..."
+	@cd agents/avp-goose/rust && cargo build --release --features conformance --bin avp-goose-conformance
+	@cp agents/avp-goose/rust/target/release/avp-goose-conformance dist/agents/
+	@echo "→ building claude-code wheels (avp + avp-conformance + agent)..."
+	@$(UV) build --package avp --out-dir dist/agents
+	@$(UV) build --package avp-conformance --out-dir dist/agents
+	@$(UV) build --package avp-claude-agent-sdk --out-dir dist/agents
+	@echo ""
+	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
+	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
+	@echo "  uv run avp agent install claude-code \\"
+	@echo "    --wheel dist/agents/avp-*.whl \\"
+	@echo "    --wheel dist/agents/avp_conformance-*.whl \\"
+	@echo "    --wheel dist/agents/avp_claude_agent_sdk-*.whl"
 
 
 # Default goal

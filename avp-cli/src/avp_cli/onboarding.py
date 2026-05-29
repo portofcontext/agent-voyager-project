@@ -34,8 +34,9 @@ _EVAL = [
 ]
 
 _AGENTS = [
-    ("avp agent list", "the agents you can run"),
-    ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagentsP"),
+    ("avp agent list", "the agents you can run, and whether each is installed"),
+    ("avp agent install <name>", "install a prebuilt agent (release, or --binary/--wheel local)"),
+    ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagents"),
 ]
 
 

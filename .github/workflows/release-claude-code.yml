@@ -1,0 +1,65 @@
+name: Release claude-code agent
+
+# Publishes the claude-code agent's wheels as a GitHub release, which
+# `avp agent install claude-code` then downloads and installs into a managed
+# venv. We ship the unpublished in-repo `avp` wheel alongside the agent wheel so
+# the installer resolves it via --find-links (PyPI's unrelated `avp` is never
+# pulled); the agent's third-party deps (claude-agent-sdk) still come from PyPI.
+#
+# Triggered by pushing a tag `agent-claude-code-v<version>` (e.g.
+# agent-claude-code-v0.0.1), or run manually with an explicit version.
+
+on:
+  push:
+    tags: ["agent-claude-code-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.0.1 (tag becomes agent-claude-code-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    name: Build wheels + publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the agent + its in-repo dependency wheels
+        # avp (wire types) and avp-conformance (load_commission/load_built_in the
+        # conformance entrypoint imports) are unpublished, so ship them alongside
+        # the agent wheel; the installer installs all three by path.
+        run: |
+          uv build --package avp --out-dir dist
+          uv build --package avp-conformance --out-dir dist
+          uv build --package avp-claude-agent-sdk --out-dir dist
+
+      - name: Roll up checksums
+        run: cd dist && shasum -a 256 *.whl > SHA256SUMS
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="agent-claude-code-v${{ inputs.version }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          gh release create "$TAG" dist/*.whl dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "claude-code agent $TAG" \
+            --notes "Wheels for the claude-code agent (+ the avp wire-types wheel). Install with: avp agent install claude-code --version ${TAG#agent-claude-code-v}" \
+            || gh release upload "$TAG" dist/*.whl dist/SHA256SUMS --repo "${{ github.repository }}" --clobber

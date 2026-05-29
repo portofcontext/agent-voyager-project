@@ -1,0 +1,103 @@
+name: Release goose agent
+
+# Publishes the prebuilt avp-goose-conformance binary for each supported target
+# as a GitHub release, which `avp agent install goose` then downloads. Triggered
+# by pushing a tag `agent-goose-v<version>` (e.g. agent-goose-v0.0.1), or run
+# manually from the Actions tab with an explicit version.
+#
+# Each target is built natively on its own runner (no cross-compilation). The
+# Goose crate is a heavy git dependency; if a build fails on a missing system
+# library, add it to the per-OS "system build deps" step rather than here.
+
+on:
+  push:
+    tags: ["agent-goose-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.0.1 (tag becomes agent-goose-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+defaults:
+  run:
+    working-directory: agents/avp-goose/rust
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, runner: macos-14 }
+          - { target: x86_64-apple-darwin, runner: macos-13 }
+          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System build deps (Linux)
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake pkg-config libssl-dev
+
+      - name: System build deps (macOS)
+        if: runner.os == 'macOS'
+        working-directory: .
+        run: brew install protobuf cmake pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the conformance binary
+        run: cargo build --release --features conformance --bin avp-goose-conformance
+
+      - name: Package the binary
+        run: |
+          asset="avp-goose-conformance-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C target/release avp-goose-conformance
+          shasum -a 256 "$asset" > "$asset.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goose-${{ matrix.target }}
+          path: agents/avp-goose/rust/avp-goose-conformance-${{ matrix.target }}.tar.gz*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Roll up checksums
+        working-directory: .
+        run: cat dist/*.sha256 > dist/SHA256SUMS && rm -f dist/*.sha256
+
+      - name: Create or update the release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="agent-goose-v${{ inputs.version }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          gh release create "$TAG" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "goose agent $TAG" \
+            --notes "Prebuilt avp-goose-conformance binaries. Install with: avp agent install goose --version ${TAG#agent-goose-v}" \
+            || gh release upload "$TAG" dist/* --repo "${{ github.repository }}" --clobber

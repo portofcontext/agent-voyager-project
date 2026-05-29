@@ -6,6 +6,7 @@
     avp eval list                    list recent eval runs (with their ids)
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
+    avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel local)
     avp commission create [ID]       build a commission into your library (wizard, or pass flags)
     avp commission list              list your portable commission library
     avp commission describe ID       render a library commission by id
@@ -627,25 +628,83 @@ def _cmd_commission_list() -> int:
 def _cmd_agent(args: argparse.Namespace) -> int:
     if args.agent_cmd == "list":
         return _cmd_agent_list()
+    if args.agent_cmd == "install":
+        return _cmd_agent_install(args)
+    if args.agent_cmd == "uninstall":
+        return _cmd_agent_uninstall(args)
     return _cmd_agent_describe(args.name, json_out=args.json_out)
 
 
 def _cmd_agent_list() -> int:
-    """List known agents and whether their local toolchain is ready."""
+    """List known agents: whether each is installed and ready to run."""
     from rich.table import Table
+
+    from avp_cli import agent_install
+    from avp_cli.agents import has_dev_fallback
 
     table = Table(title="agents", header_style="bold")
     table.add_column("name", style=f"bold {brand.SAIL}", no_wrap=True)
+    table.add_column("installed")
     table.add_column("status")
-    table.add_column("command", overflow="fold", style="dim")
     for name in known_agents():
-        agent = resolve_agent(name)
-        reason = preflight(name)
-        status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
-        table.add_row(name, status, " ".join(agent.manifest.command))
+        info = agent_install.installed_info(name)
+        dev = has_dev_fallback(name)
+        if info:
+            installed = f"v{info.get('version', '?')} ({info.get('source', '?')})"
+        elif dev:
+            installed = "[dim]in-repo (dev)[/dim]"
+        else:
+            installed = "[yellow]not installed[/yellow]"
+        if info or dev:
+            reason = preflight(name)
+            status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
+        else:
+            status = f"[yellow]run: avp agent install {name}[/yellow]"
+        table.add_row(name, installed, status)
     console.out.print(table)
+    console.note("avp agent install <name>   ·  install the prebuilt agent")
     console.note("avp agent describe <name>  ·  see its tools, models, skills")
     return 0
+
+
+def _cmd_agent_install(args: argparse.Namespace) -> int:
+    """Install a prebuilt agent from a release, or from local artifacts."""
+    from avp_cli import agent_install
+
+    try:
+        result = agent_install.install(
+            args.name,
+            version=args.version,
+            binary=args.binary,
+            wheels=args.wheel or None,
+            force=args.force,
+        )
+    except agent_install.InstallError as exc:
+        console.error_panel(f"couldn't install '{args.name}'", str(exc))
+        return 1
+    console.out.print(
+        f"[green]✓[/] installed [bold {brand.SAIL}]{result.name}[/] "
+        f"(v{result.version}, {result.source} {result.kind}) → {_tilde(result.install_dir)}"
+    )
+    reason = preflight(result.name)
+    if reason is not None:
+        console.warn(f"runtime prerequisite still needed: {reason}")
+    console.note(f"avp agent describe {result.name}  ·  verify it boots")
+    return 0
+
+
+def _cmd_agent_uninstall(args: argparse.Namespace) -> int:
+    """Remove an installed agent from ~/.avp/agents."""
+    from avp_cli import agent_install
+
+    if agent_install.uninstall(args.name):
+        console.note(f"uninstalled agent {args.name}")
+        return 0
+    console.error_panel(
+        f"'{args.name}' is not installed",
+        f"nothing at {_tilde(paths.agents_dir() / args.name)} — see `avp agent list`.",
+    )
+    return 1
 
 
 def _cmd_agent_describe(name: str, *, json_out: bool) -> int:
@@ -1046,9 +1105,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_cdel = csub.add_parser("delete", help="Delete a commission from your library by id")
     p_cdel.add_argument("id", help="A commission id from your library")
 
-    agent_p = groups.add_parser("agent", help="Inspect the agents you can run against")
+    agent_p = groups.add_parser("agent", help="Install and inspect the agents you can run against")
     asub = agent_p.add_subparsers(dest="agent_cmd", required=True)
-    asub.add_parser("list", help="List known agents and whether their toolchain is ready")
+    asub.add_parser("list", help="List known agents, whether each is installed and ready")
     p_adesc = asub.add_parser(
         "describe", help="Print an agent's AgentDescriptor (its tools, models, skills, MCP)"
     )
@@ -1061,6 +1120,33 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the raw AgentDescriptor JSON (full tool input schemas)",
     )
+
+    p_ainstall = asub.add_parser(
+        "install", help="Install a prebuilt agent (from a GitHub release, or local artifacts)"
+    )
+    p_ainstall.add_argument("name", help=f"Agent to install ({', '.join(known_agents())})")
+    p_ainstall.add_argument(
+        "--version", default=None, help="Release version to install (e.g. 0.0.1). Default: latest."
+    )
+    p_ainstall.add_argument(
+        "--binary",
+        default=None,
+        metavar="PATH",
+        help="Install a binary agent from this local executable, skipping the release "
+        "(the local-package dev loop).",
+    )
+    p_ainstall.add_argument(
+        "--wheel",
+        action="append",
+        metavar="WHL",
+        help="Install a Python agent from local wheel(s), skipping the release (repeatable).",
+    )
+    p_ainstall.add_argument(
+        "--force", action="store_true", help="Reinstall over an existing install"
+    )
+
+    p_auninstall = asub.add_parser("uninstall", help="Remove an installed agent")
+    p_auninstall.add_argument("name", help="Installed agent name")
 
     return parser
 

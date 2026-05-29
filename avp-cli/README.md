@@ -136,8 +136,10 @@ already have is left untouched):
 | `avp commission describe ID` | render the Commission a library commission yields |
 | `avp commission check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |
 | `avp commission delete ID` | remove a commission from your library |
-| `avp agent list` | the agents you can run against + whether each is ready |
+| `avp agent list` | the agents you can run against: whether each is installed and ready |
+| `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
+| `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
 
 Run flags (`run` / `demo`): `--agent goose,claude-code` (compare agents),
 `--model <id>` (override every commission's model), `--json out.json` (machine-readable
@@ -157,6 +159,41 @@ the moment they both finish a task, and at the end you get one board per agent
 plus a head-to-head table (commissions × agents, each agent's mean accuracy and
 $/run in the caption). Cheap way to see, e.g., that one agent matches another's
 accuracy at a fraction of the cost.
+
+## Agents: install + local dev
+
+The CLI resolves an agent from one of three places, in order: an explicit
+`--agent path/to/avp-conformance.json`; an **installed** agent under
+`~/.avp/agents/<name>/`; or, when you're in a source checkout, the in-repo
+agent (the dev fallback, which builds from source). Normal use is to install
+the prebuilt agent once:
+
+```bash
+uv run avp agent install goose          # latest release, or --version 0.0.1
+uv run avp agent install claude-code
+uv run avp agent list                   # shows installed version + readiness
+```
+
+A binary agent (goose) installs a prebuilt executable; a Python agent
+(claude-code) installs into a managed venv. Remote install needs the `gh` CLI;
+the claude-code agent also needs the `claude` CLI on PATH at run time.
+
+**Testing your own agent or a new version (no release needed).** Build the
+artifacts and point the CLI at them locally:
+
+```bash
+make build-agents     # builds into dist/agents and prints the install commands
+
+uv run avp agent install goose --binary dist/agents/avp-goose-conformance --force
+uv run avp agent install claude-code --force \
+  --wheel dist/agents/avp-*.whl \
+  --wheel dist/agents/avp_conformance-*.whl \
+  --wheel dist/agents/avp_claude_agent_sdk-*.whl
+```
+
+That's the contributor loop: build, install locally, run an eval against it.
+A third-party agent needs no install at all, just `--agent <its manifest>`.
+Set `AVP_AGENT_REPO` to install releases from a fork.
 
 ## Visualize a run
 
@@ -200,7 +237,7 @@ Layout:
 ```
 src/avp_cli/
   cli.py            # the `avp` umbrella: init / eval / commission (rich output)
-  paths.py          # the ~/.avp asset root (AVP_HOME): commissions/ + runs/
+  paths.py          # the ~/.avp asset root (AVP_HOME): commissions/ + runs/ + agents/
   library.py        # the portable commission library (~/.avp/commissions/<id>.json)
   config.py         # load an eval JSON config -> internal engine (the config-not-code seam)
   commission.py     # inspect a Commission a library commission yields (show / validate)
@@ -208,7 +245,8 @@ src/avp_cli/
   brand.py          # the AVP ship logo + palette for the terminal
   viz.py            # trajectory -> standalone HTML constellation (avp show)
   agent.py          # run_agent: the `run --commission --out` manifest contract
-  agents.py         # the goose / claude-code registry + preflight
+  agents.py         # agent sources + resolution (installed > dev fallback) + preflight
+  agent_install.py  # `avp agent install`: fetch a release / install local artifacts
   observability.py  # summarize: reduce a trajectory to per-run facts
   onboarding.py     # the WELCOME / agent-routing text
   state.py          # recent-run history under ~/.avp/runs (eval list / view / clear)
