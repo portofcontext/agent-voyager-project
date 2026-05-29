@@ -204,7 +204,7 @@ def test_fidelity_scores_cell_content_not_markup_chrome() -> None:
 
     ref = "<table><tr><th>City</th><th>Pop</th></tr><tr><td>Paris</td><td>2M</td></tr></table>"
     chromed = (
-        'Sure, here it is:\n```html\n<!DOCTYPE html><html><head>'
+        "Sure, here it is:\n```html\n<!DOCTYPE html><html><head>"
         "<style>td{color:red;font-family:Arial}</style></head><body>"
         '<table border="1" class="data"><tr><th>City</th><th>Pop</th></tr>'
         "<tr><td>Paris</td><td>2M</td></tr></table></body></html>\n```"
