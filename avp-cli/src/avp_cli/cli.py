@@ -6,6 +6,7 @@
     avp eval list                    list recent eval runs (with their ids)
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
+    avp commission create [ID]       build a commission into your library (wizard, or pass flags)
     avp commission list              list your portable commission library
     avp commission describe ID       render a library commission by id
     avp commission check ID|FILE     check a library commission, or a Commission JSON file
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import webbrowser
 from pathlib import Path
@@ -315,6 +317,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_commission(args: argparse.Namespace) -> int:
+    if args.commission_cmd == "create":
+        return _cmd_commission_create(args)
     if args.commission_cmd == "list":
         return _cmd_commission_list()
     if args.commission_cmd == "check":
@@ -348,6 +352,226 @@ def _cmd_commission(args: argparse.Namespace) -> int:
         return 1
     console.print_json(commission_mod.full_dict(c))
     return 0
+
+
+_ID_RE = re.compile(r"^[a-z0-9_-]+$")
+
+# Flags that, if any are set, mean "the caller specified this commission via
+# flags" — so we skip the interactive wizard even on a TTY. `--agent` is NOT
+# here: it just pre-selects the anchor for the wizard's pickers.
+_CONTENT_FLAG_ATTRS = (
+    "from_id",
+    "model",
+    "prompt",
+    "system_prompt",
+    "enable_tools",
+    "enable_subagents",
+    "enable_skills",
+    "enable_mcp",
+    "tags",
+)
+
+
+def _describe_for_create(spec: str) -> tuple[object | None, str | None]:
+    """Resolve an agent spec and fetch its Descriptor; (descriptor, error)."""
+    from avp_cli.agent import describe_agent
+
+    try:
+        agent = resolve_agent(spec)
+    except SystemExit as exc:  # resolve_agent raises this on a missing manifest
+        return None, str(exc)
+    reason = preflight(agent.name)
+    if reason is not None:
+        return None, reason
+    return describe_agent(agent.manifest, agent.manifest_cwd)
+
+
+def _cmd_commission_create(args: argparse.Namespace) -> int:
+    """Build a wire Commission into the library, via wizard or flags.
+
+    Flags fully specify a commission for non-interactive / coding-agent use; with
+    none of them on a TTY, an interactive wizard fills the fields. Either way the
+    bulky fields (`output_schema`, inline `mcp_servers` / `skills`) come from a
+    cloned base (`--from <id>`), not inline authoring; edit the JSON for the rest.
+    """
+    flag_mode = any(getattr(args, a) is not None for a in _CONTENT_FLAG_ATTRS)
+    interactive = sys.stdin.isatty() and console.err.is_terminal and not flag_mode
+
+    cid = args.id
+    if not cid and interactive:
+        cid = questionary.text(
+            "Commission id (becomes <id>.json in your library):",
+            qmark=brand.SAILBOAT,
+            style=_PICKER_STYLE,
+            validate=lambda s: bool(_ID_RE.match(s.strip())) or "use a-z, 0-9, '-', '_'",
+        ).ask()
+        if cid is None:
+            raise SystemExit(0)
+        cid = cid.strip()
+    if not cid:
+        console.error_panel(
+            "commission id required",
+            "pass one: `avp commission create <id> [flags]` (or run it on a TTY for the wizard).",
+        )
+        return 1
+    if not _ID_RE.match(cid):
+        console.error_panel(
+            "invalid commission id",
+            f"{cid!r}: use lowercase letters, digits, '-' and '_' (it becomes <id>.json).",
+        )
+        return 1
+    if library.exists(cid) and not args.force:
+        console.error_panel(
+            f"commission {cid!r} already exists",
+            f"in {_tilde(paths.commissions_dir())} — pass --force to overwrite, or pick another id.",
+        )
+        return 1
+
+    base = None
+    if args.from_id:
+        try:
+            base = library.load(args.from_id)
+        except library.CommissionError as exc:
+            console.error_panel(f"can't clone {args.from_id!r}", str(exc))
+            return 1
+
+    # Anchor agent: pre-selected by --agent, else picked in the wizard. Describing
+    # it unlocks the enabled_* pickers and validates enabled_* names.
+    descriptor = None
+    agent_spec = args.agent
+    if agent_spec is None and interactive:
+        agent_spec = _pick_anchor_agent()
+    if agent_spec:
+        descriptor, err = _describe_for_create(agent_spec)
+        if descriptor is None:
+            console.warn(
+                f"couldn't describe '{agent_spec}': {err}. "
+                "Continuing without its tool/skill pickers + validation."
+            )
+
+    model = args.model
+    prompt = args.prompt
+    system_prompt = args.system_prompt
+    enabled = {
+        "enabled_builtin_tools": args.enable_tools,
+        "enabled_builtin_subagents": args.enable_subagents,
+        "enabled_builtin_skills": args.enable_skills,
+        "enabled_builtin_mcp_servers": args.enable_mcp,
+    }
+    if interactive:
+        model = _ask_text(
+            "Model (blank for the agent's default):",
+            (base.model if base else None) or (descriptor.default_model if descriptor else None),
+        )
+        prompt = _ask_text(
+            "User prompt (use {input} where the dataset case goes; blank to skip):",
+            base.prompt if base else None,
+        )
+        system_prompt = _ask_text(
+            "System prompt (blank to skip):", base.system_prompt if base else None
+        )
+        if descriptor is not None:
+            enabled = _ask_enabled(descriptor, base)
+
+    try:
+        c = commission_mod.build_commission(
+            cid,
+            base=base,
+            model=model,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            tags=args.tags,
+            descriptor=descriptor,
+            **enabled,
+        )
+    except commission_mod.BuildError as exc:
+        console.error_panel("can't build that commission", str(exc))
+        return 1
+
+    library.save(cid, c, overwrite=args.force)
+    console.out.print(
+        f"[green]✓[/] created [bold {brand.SAIL}]{cid}[/] in {_tilde(paths.commissions_dir())}"
+    )
+    console.note(f"avp commission describe {cid}  ·  see the full wire Commission")
+    console.note(f'reference it in an eval\'s "commissions" list as "{cid}"')
+    return 0
+
+
+def _pick_anchor_agent() -> str | None:
+    """Wizard step: pick the agent to build against (or skip for a plain commission)."""
+    choices = [
+        questionary.Choice(title="None - do not use agent built-in capabilities", value=""),
+        *(questionary.Choice(title=n, value=n) for n in known_agents()),
+    ]
+    pick = questionary.select(
+        "Build against which agent? (unlocks its tool / skill / subagent pickers)",
+        choices=choices,
+        qmark=brand.SAILBOAT,
+        pointer="»",
+        instruction=" ",
+        style=_PICKER_STYLE,
+    ).ask()
+    if pick is None:  # Esc / Ctrl-C
+        raise SystemExit(0)
+    return pick or None
+
+
+def _ask_text(message: str, default: str | None) -> str | None:
+    """Wizard text input prefilled with `default`; returns the trimmed value or None."""
+    ans = questionary.text(
+        message, default=default or "", qmark=brand.SAILBOAT, style=_PICKER_STYLE
+    ).ask()
+    if ans is None:
+        raise SystemExit(0)
+    return ans.strip() or None
+
+
+def _ask_enabled(descriptor, base) -> dict[str, list[str] | None]:
+    """Per builtin category, optionally restrict to a subset of what the agent has.
+
+    Skipping the restriction leaves the field `None` (every entry exposed, the
+    default); restricting then selecting nothing yields `[]` (expose none).
+    """
+    cats = [
+        ("enabled_builtin_tools", "tools", [t.name for t in descriptor.tools or []]),
+        ("enabled_builtin_subagents", "subagents", [s.name for s in descriptor.subagents or []]),
+        ("enabled_builtin_skills", "skills", [s.name for s in descriptor.skills or []]),
+        (
+            "enabled_builtin_mcp_servers",
+            "MCP servers",
+            [m.id for m in descriptor.mcp_servers or []],
+        ),
+    ]
+    out: dict[str, list[str] | None] = {}
+    for field, label, names in cats:
+        if not names:
+            out[field] = None
+            continue
+        base_val = getattr(base, field) if base else None
+        restrict = questionary.confirm(
+            f"Restrict which {label} the agent may use? (default: expose all {len(names)})",
+            default=base_val is not None,
+            qmark=brand.SAILBOAT,
+            style=_PICKER_STYLE,
+        ).ask()
+        if restrict is None:
+            raise SystemExit(0)
+        if not restrict:
+            out[field] = None
+            continue
+        preselected = set(base_val or [])
+        sel = questionary.checkbox(
+            f"Select {label} to expose (none selected = expose none):",
+            choices=[questionary.Choice(title=n, value=n, checked=n in preselected) for n in names],
+            qmark=brand.SAILBOAT,
+            pointer="»",
+            instruction="(space to toggle, enter to confirm)",
+            style=_PICKER_STYLE,
+        ).ask()
+        if sel is None:
+            raise SystemExit(0)
+        out[field] = sel
+    return out
 
 
 def _cmd_commission_validate(target: str) -> int:
@@ -758,6 +982,55 @@ def _build_parser() -> argparse.ArgumentParser:
 
     com_p = groups.add_parser("commission", help="Build and inspect commissions in your library")
     csub = com_p.add_subparsers(dest="commission_cmd", required=True)
+    p_create = csub.add_parser(
+        "create",
+        help="Build a commission into your library (interactive wizard, or fully via flags)",
+    )
+    p_create.add_argument(
+        "id", nargs="?", default=None, help="Commission id (becomes <id>.json; prompts if a TTY)"
+    )
+    p_create.add_argument(
+        "--from",
+        dest="from_id",
+        default=None,
+        metavar="ID",
+        help="Clone an existing library commission as the base (carries its output_schema, "
+        "mcp_servers, skills); other flags override on top.",
+    )
+    p_create.add_argument(
+        "--agent",
+        default=None,
+        help=f"Anchor agent for the enabled-* pickers + validation ({', '.join(known_agents())}, "
+        "or a manifest path).",
+    )
+    p_create.add_argument("--model", default=None, help="Model (e.g. claude-haiku-4-5)")
+    p_create.add_argument(
+        "--prompt", default=None, help="User prompt; use {input} where the dataset case goes"
+    )
+    p_create.add_argument("--system-prompt", dest="system_prompt", default=None)
+    p_create.add_argument(
+        "--enable-tool",
+        dest="enable_tools",
+        action="append",
+        metavar="NAME",
+        help="Expose only this builtin tool (repeatable); validated against --agent. "
+        "Omit to expose all the agent's tools.",
+    )
+    p_create.add_argument(
+        "--enable-subagent", dest="enable_subagents", action="append", metavar="NAME"
+    )
+    p_create.add_argument("--enable-skill", dest="enable_skills", action="append", metavar="NAME")
+    p_create.add_argument(
+        "--enable-mcp",
+        dest="enable_mcp",
+        action="append",
+        metavar="ID",
+        help="Expose only this builtin MCP server (repeatable).",
+    )
+    p_create.add_argument("--tag", dest="tags", action="append", metavar="TAG")
+    p_create.add_argument(
+        "--force", action="store_true", help="Overwrite an existing commission with this id"
+    )
     csub.add_parser("list", help="List the commissions in your library (~/.avp/commissions)")
     p_describe = csub.add_parser(
         "describe",

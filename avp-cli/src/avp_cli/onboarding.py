@@ -19,6 +19,7 @@ _START = [
 ]
 
 _COMMISSIONS = [
+    ("avp commission create [id]", "build a commission"),
     ("avp commission list", "your commission library"),
     ("avp commission describe <id>", "render the Commission an id yields"),
     ("avp commission check <id>", "check a commission is valid"),
