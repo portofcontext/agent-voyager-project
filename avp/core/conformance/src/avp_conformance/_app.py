@@ -25,6 +25,7 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
+from avp.descriptor import AgentDescriptor
 from avp_conformance._match import match_case
 from avp_conformance._utils import discover_suite, load_case, load_manifest
 from avp_conformance.case import TestCase
@@ -223,6 +224,77 @@ def ping(
             raise typer.Exit(code=1)
 
         typer.echo("PASS  ping")
+    finally:
+        out_path.unlink(missing_ok=True)
+        for path in cleanup:
+            path.unlink(missing_ok=True)
+
+
+# ── describe ──────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def describe(
+    agent: Annotated[
+        Path,
+        typer.Option("--agent", help="Path to the agent manifest JSON."),
+    ],
+    sandbox: Annotated[
+        bool,
+        typer.Option("--sandbox/--no-sandbox", help="Wrap the agent in `srt` sandbox."),
+    ] = False,
+    timeout: Annotated[
+        float,
+        typer.Option("--timeout", help="Seconds to wait for the agent's describe."),
+    ] = 60.0,
+) -> None:
+    """Verify the agent at --agent emits a spec-valid AgentDescriptor from `describe`.
+
+    The pre-flight contract every agent must honor (alongside `ping`/`run`): a
+    free, no-model `describe` that prints its capability surface. Validated
+    against the `AgentDescriptor` spec model.
+    """
+    manifest = load_manifest(agent)
+    cwd = _resolve_cwd(agent, manifest)
+    command = _resolve_command(manifest.command)
+    cleanup: list[Path] = []
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        out_path = Path(f.name)
+
+    try:
+        prefix = _sandbox_prefix(sandbox, cwd, cleanup)
+        cmd = [*prefix, *command, "describe", "--out", str(out_path)]
+        env = {**os.environ, **manifest.env}
+        result = subprocess.run(
+            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+        )
+
+        if result.returncode != 0:
+            typer.echo(f"FAIL  describe  exit={result.returncode}", err=True)
+            if result.stderr:
+                typer.echo(f"      stderr: {result.stderr[-500:].strip()}", err=True)
+            raise typer.Exit(code=1)
+
+        try:
+            payload = json.loads(out_path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            typer.echo(f"FAIL  describe  --out is not JSON: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+        try:
+            descriptor = AgentDescriptor.model_validate(payload)
+        except ValidationError as e:
+            typer.echo("FAIL  describe  --out is not a valid AgentDescriptor:", err=True)
+            for line in str(e).splitlines():
+                typer.echo(f"      {line}", err=True)
+            raise typer.Exit(code=1) from None
+
+        n_tools = len(descriptor.tools or [])
+        typer.echo(
+            f"PASS  describe  {descriptor.agent_name} v{descriptor.agent_version} "
+            f"({n_tools} tool{'s' if n_tools != 1 else ''})"
+        )
     finally:
         out_path.unlink(missing_ok=True)
         for path in cleanup:

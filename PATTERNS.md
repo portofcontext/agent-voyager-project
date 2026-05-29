@@ -35,66 +35,21 @@ async with AVPClaudeSDKClient(commission=commission, sink=sink) as client:
 
 ## Instrument your own loop
 
-You own the `messages.create` / `chat.completions.create` loop. AVP slots in around it. You can adopt incrementally: start with observability, then add Commission honoring when the supervisor needs to drive run config.
+You own the `messages.create` / `chat.completions.create` loop. AVP slots in around it: you emit the wire events yourself to an `EventSink`. The `avp` binding ships the event types, the `EventSink` protocol, and stdio / jsonl sinks; it imposes no base class or driver protocol, so your loop stays yours and you add emission at the points that map to AVP events.
 
-### Phase 1 — drop in tracing
+**When to pick.** You own the agentic loop with a direct API integration and want AVP without restructuring it.
 
-Wrap your existing SDK client. Every model call emits one `assistant_message` (carrying `avp.content`, `avp.usage`, and `avp.cost_usd`), and tool dispatches you bracket with `client.tool(...)` emit `tool_invoked` / `tool_returned`. Cost / token totals come from reducing the per-turn `assistant_message` deltas at the consumer. Your loop body is unchanged. The Commission is treated as a label: `run_id`, `model`, `prompt` get recorded, but supervisor-managed config doesn't apply yet.
+**What you emit.** Open with the prelude (`run_requested` → `agent_described` → `agent_started`), then per turn one `assistant_message` (carrying `avp.content`, `avp.usage`, `avp.cost_usd`), with `tool_invoked` / `tool_returned` around each dispatch; close with `agent_stopped` and a stop reason. You publish per-turn deltas, not cumulative snapshots: the consumer reduces cost / token totals from the `assistant_message` deltas.
 
-**Composition.**
-
-```python
-with AnthropicTracedClient(anthropic.Anthropic(), commission=commission, on_event=on_event) as client:
-    while ...:
-        resp = client.messages.create(model=commission.model, messages=msgs, tools=my_tools)
-        # dispatch tools via `with client.tool(...): ...`
-        if resp.stop_reason == "end_turn":
-            client.converged()
-            break
-```
-
-**Worked examples.** `supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py` (Anthropic Messages API) and `07_claude_agent_traced_client.py` (Claude Agent SDK as a black box, observed from outside).
-
-### Phase 2 — layer in Commission
-
-Now the supervisor's Commission starts driving real configuration of the run: which built-in tools the model sees (`enabled_builtin_tools`), what MCP servers are wired (the inline `mcp_servers[]` entries the agent dials), and what skill content is injected into the system prompt (the inline `skills[]` entries). Managed assets carry their connection material on the Commission, so there is no resolver round-trip in this path.
-
-You add: Commission-to-API helpers. The loop body itself doesn't change; what changes is what you pass into it.
-
-**Composition.**
-
-```python
-# 1. Build per-API params from the Commission's inline assets.
-tools = build_anthropic_tools(commission, builtins=my_local_tools)   # filtered by enabled_builtin_tools
-system_prompt = commission.system_prompt or ""
-for skill in commission.skills or []:
-    system_prompt += "\n\n" + skill.content   # materialize inline skill content
-
-# 2. Instrument the client; the loop body is unchanged.
-with AnthropicTracedClient(anthropic.Anthropic(), commission=commission, on_event=on_event) as client:
-    while ...:
-        resp = client.messages.create(
-            model=commission.model, system=system_prompt, messages=msgs, tools=tools, ...
-        )
-        # dispatch tools via `with client.tool(...): ...`
-        if resp.stop_reason == "end_turn":
-            client.converged()
-            break
-```
-
-**Worked example.** `supervisors/simple-supervisor-example/examples/08_anthropic_external_loop_with_commission.py`.
+**Honoring the Commission.** Translate the Commission's fields into your API params before the run starts: `enabled_builtin_tools` filters the tool list you hand the model, inline `mcp_servers[]` are dialed by your MCP client, and inline `skills[]` content is materialized into the system prompt. Managed assets carry their connection material on the Commission, so there is no resolver round-trip in this path.
 
 ## Conformance
 
 Conformance is certified by driving a conforming agent's `run` entrypoint against a real model and matching the emitted trajectory: the cross-agent suite lives at `avp/core/conformance/src/avp_conformance/cases/v0.1/` and is driven by the `avp-conformance` CLI (`check --agent <manifest> --suite v0.1`). There is no shared reference-agent base class; each agent inlines its own loop, and the harness validates the trajectory both case-by-case and against universal span-tree invariants. `COVERAGE.md` in that directory maps what the suite covers and the deliberate gaps.
 
-The reference agent at `supervisors/simple-supervisor-example/examples/_anthropic_reference_agent.py` is the worked "Instrument your own loop" example built on the `avp-anthropic` adapter; it is a teaching artifact, not a production integration path. For a product, one of the two paths above is what you want.
-
 ## How this maps to packaging
 
-The packaging layer (what code lives in which package) is a separate axis covered in `CLAUDE.md` "Agents vs SDK adapters":
+The packaging layer (what code lives in which package) is the agents-and-supervisors axis covered in `CLAUDE.md` "Agents and supervisors":
 
-- **Agents** (`agents/`) own the loop. `avp-claude-agent-sdk` is a "Wrap an Agent SDK" agent; `avp-goose` is an in-process observer of Goose.
-- **SDK adapters** (`sdks/`) translate one provider API to AVP and ship pieces (a per-turn translator, a traced client, Commission-to-API helpers) that the "Instrument your own loop" path composes directly. `avp-anthropic` is an adapter.
-
-A reference agent built on an adapter (e.g. `_anthropic_reference_agent.py`) inlines its own loop over the adapter's per-turn translator; the wire-types binding ships no agent base class to inherit from.
+- **Agents** (`agents/`) own the loop and honor the `run --commission --out` contract. `avp-claude-agent-sdk` is a "Wrap an Agent SDK" agent; `avp-goose` is an in-process observer of Goose.
+- **The local CLI** (`avp-cli/`, command `avp`) commissions agents and consumes their trajectories: it runs setups (Commission variants) over a dataset against the agents and ranks a board.

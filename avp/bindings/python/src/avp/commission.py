@@ -92,7 +92,7 @@ class SupervisorPreamble(BaseModel):
     the wire); supervisor attribution lives inside `data`.
 
     `name` SHOULD be a stable identifier for the supervisor implementation
-    or instance (e.g. `"simple-supervisor-example"`, `"acme.scheduler"`).
+    or instance (e.g. `"avp-cli"`, `"acme.scheduler"`).
     `version` is optional but recommended; it travels with the trajectory
     and lets auditors correlate a run with the exact supervisor build
     that requested it.

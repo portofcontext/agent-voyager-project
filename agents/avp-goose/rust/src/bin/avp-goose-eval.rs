@@ -18,7 +18,8 @@ use std::process::{Command, Stdio};
 use serde_json::{json, Value};
 
 /// Canonical AVP trajectory-event schema (source of truth for conformance).
-const TRAJECTORY_SCHEMA: &str = include_str!("../../../../spec/v0.1/trajectory.schema.json");
+const TRAJECTORY_SCHEMA: &str =
+    include_str!("../../../../../avp/core/spec/v0.1/trajectory.schema.json");
 
 /// A provider/model the matrix runs every setup against.
 struct Target {

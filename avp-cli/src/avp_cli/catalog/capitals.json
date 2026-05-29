@@ -1,0 +1,67 @@
+{
+  "eval": {
+    "name": "capitals-extraction",
+    "dataset": {
+      "source": "inline",
+      "items": [
+        {
+          "id": "paris",
+          "prompt": "Paris is the capital of France; about 2 million people live there.",
+          "expected": {
+            "city": "Paris",
+            "country": "France",
+            "population_millions": 2
+          }
+        },
+        {
+          "id": "tokyo",
+          "prompt": "Tokyo, the capital of Japan, is home to around 14 million.",
+          "expected": {
+            "city": "Tokyo",
+            "country": "Japan",
+            "population_millions": 14
+          }
+        }
+      ]
+    },
+    "scorer": {
+      "name": "structural-match",
+      "threshold": 1.0
+    }
+  },
+  "commissions": {
+    "capitals-baseline": {
+      "schema_version": "0.1",
+      "run_id": "capitals-baseline",
+      "model": "claude-haiku-4-5",
+      "prompt": "Extract the structured facts from this sentence: {input}",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" },
+          "country": { "type": "string" },
+          "population_millions": { "type": "number" }
+        },
+        "required": ["city", "country", "population_millions"],
+        "additionalProperties": false
+      }
+    },
+    "capitals-few-shot": {
+      "schema_version": "0.1",
+      "run_id": "capitals-few-shot",
+      "model": "claude-haiku-4-5",
+      "system_prompt": "You extract facts as JSON. Example:\nInput: \"Berlin is the capital of Germany, about 3.7 million people.\"\nOutput: {\"city\": \"Berlin\", \"country\": \"Germany\", \"population_millions\": 3.7}",
+      "prompt": "Now do the same for: {input}",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" },
+          "country": { "type": "string" },
+          "population_millions": { "type": "number" }
+        },
+        "required": ["city", "country", "population_millions"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

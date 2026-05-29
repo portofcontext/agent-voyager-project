@@ -93,6 +93,9 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     std::fs::create_dir_all(&path_root)?;
     std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
+    // Register goose's bundled built-ins so `Builtin` extensions resolve in-process.
+    commission::register_builtins();
+
     let cfg: GooseRunConfig = commission::from_commission(commission);
     let model_name = cfg
         .model
@@ -167,14 +170,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         })
         .collect();
 
-    // Commission-declared skills (materialized by `write_skills`), enumerated on
-    // the descriptor.
-    let skills: Vec<String> =
-        commission.skills.iter().flatten().map(|s| s.id.to_string()).collect();
-
     // Static descriptor from the agent's live tool registry (no probe needed).
+    // Skills are discovered from disk (built-ins + the working dir's `.agents/skills`,
+    // where `write_skills` materialized the Commission's inline skills).
     let descriptor =
-        build_descriptor(&agent, &session_id, &model_name, &mcp_servers, &skills).await?;
+        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &working_dir).await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -302,6 +302,87 @@ fn flush_turn<S: Sink>(
     Ok(())
 }
 
+/// The agent's pre-flight `AgentDescriptor`: full capability surface (identity,
+/// default model, built-in tools) with no Commission and no run.
+///
+/// Heavy by design — it boots a default Goose `Agent` with its built-in
+/// extensions and lists their live tool registry, the same surface
+/// `agent_described` reports during a run. If the live probe can't complete
+/// (e.g. no provider creds to construct the provider), it degrades to an
+/// identity-only descriptor, which still validates against the spec.
+pub async fn describe() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
+    match describe_live().await {
+        Ok(descriptor) => Ok(descriptor),
+        Err(e) => {
+            eprintln!("avp-goose: describe probe failed ({e}); emitting identity-only descriptor");
+            serde_json::from_value(json!({
+                "agent_name": "goose",
+                "agent_version": GOOSE_VERSION,
+                "spec_version": "0.1",
+            }))
+            .map_err(|e| anyhow::anyhow!("building fallback descriptor: {e}"))
+        }
+    }
+}
+
+async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
+    // Throwaway data/config root so the probe never opens the user's goose store.
+    let path_root = std::env::temp_dir().join(format!("avp-goose-describe-{}", std::process::id()));
+    std::fs::create_dir_all(&path_root)?;
+    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
+
+    // Register goose's bundled built-ins so the full surface resolves in-process.
+    commission::register_builtins();
+
+    // No Commission: a minimal one yields goose's default built-in extensions
+    // (the surface the agent ships with). Advertise goose's actually-configured
+    // model (env or config) as `default_model` — or nothing if it has none. A
+    // model is still needed to construct the provider for tool-listing (no model
+    // call fires), so fall back to a throwaway there only.
+    let configured_model = goose::config::Config::global()
+        .get_param::<String>("GOOSE_MODEL")
+        .ok();
+    let model_name = configured_model
+        .clone()
+        .unwrap_or_else(|| "claude-haiku-4-5".to_string());
+    let commission: Commission = serde_json::from_value(json!({
+        "schema_version": "0.1",
+        "run_id": "describe",
+        "model": model_name,
+    }))?;
+    let cfg: GooseRunConfig = commission::from_commission(&commission);
+    let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
+
+    let agent = Arc::new(Agent::new());
+    let working_dir = path_root.join("workspace");
+    std::fs::create_dir_all(&working_dir)?;
+    let session = agent
+        .config
+        .session_manager
+        .create_session(working_dir.clone(), "describe".to_string(), SessionType::User, GooseMode::Auto)
+        .await?;
+    let session_id = session.id.clone();
+
+    let model_config = ModelConfig::new(&model_name)?;
+    let provider =
+        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
+    agent.update_provider(provider, &session_id).await?;
+    for result in agent.add_extensions_bulk(cfg.extensions.clone(), &session_id).await? {
+        if !result.success {
+            eprintln!(
+                "avp-goose: extension '{}' failed to load: {}",
+                result.name,
+                result.error.as_deref().unwrap_or("unknown error"),
+            );
+        }
+    }
+
+    // The pre-flight view carries no Commission MCP servers or skills, and only
+    // advertises a default_model if goose actually has one configured.
+    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &working_dir)
+        .await
+}
+
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
 /// returns rmcp tools whose `name` / `description` / `inputSchema` line up with
 /// `ToolDecl`; we keep just those three so extra rmcp fields don't trip the
@@ -309,9 +390,9 @@ fn flush_turn<S: Sink>(
 async fn build_descriptor(
     agent: &Arc<Agent>,
     session_id: &str,
-    model: &str,
+    default_model: Option<&str>,
     mcp_servers: &HashSet<String>,
-    skills: &[String],
+    working_dir: &std::path::Path,
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
         tools.iter().map(|t| t.name.to_string()).collect()
@@ -343,21 +424,41 @@ async fn build_descriptor(
         .map(|id| json!({ "id": id, "status": "connected" }))
         .collect();
 
-    // The Commission's inline skills, materialized by `write_skills` and loaded
-    // on demand via Goose's `load_skill` tool. The descriptor enumerates them as
-    // the agent's available skills.
-    let skill_decls: Vec<Value> = skills.iter().map(|name| json!({ "name": name })).collect();
+    // Skills auto-available to the agent, loaded on demand via the `load_skill`
+    // tool: goose's bundled built-ins (e.g. `goose_doc_guide`) plus any discovered
+    // on the filesystem (the working dir's `.agents/skills` — including the
+    // Commission's inline skills materialized by `write_skills` — and the operator's
+    // configured skill dirs). Filesystem-based by design; a sandbox will scope what's
+    // visible later.
+    let skill_decls: Vec<Value> = goose::skills::discover_skills(Some(working_dir))
+        .iter()
+        .map(|s| json!({ "name": s.name }))
+        .collect();
 
-    serde_json::from_value(json!({
+    // Subagents the model can `delegate` to via the `summon` extension: recipes /
+    // agents discovered on the filesystem (working-dir and configured dirs), the
+    // same filesystem-based discovery as skills. Goose ships no bundled recipes, so
+    // this is empty unless the environment provides some.
+    let subagent_decls: Vec<Value> =
+        goose::agents::platform_extensions::summon::discover_filesystem_sources(working_dir)
+            .iter()
+            .map(|s| json!({ "name": s.name }))
+            .collect();
+
+    let mut descriptor = json!({
         "agent_name": "goose",
         "agent_version": GOOSE_VERSION,
         "spec_version": "0.1",
-        "default_model": model,
         "tools": tools,
         "mcp_servers": mcp_server_decls,
         "skills": skill_decls,
-    }))
-    .map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
+        "subagents": subagent_decls,
+    });
+    // Only advertise default_model when there actually is one.
+    if let Some(model) = default_model {
+        descriptor["default_model"] = json!(model);
+    }
+    serde_json::from_value(descriptor).map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }
 
 /// AVP usage from the provider tap: sum the per-inference `ProviderUsage`s

@@ -2,17 +2,6 @@
 
 An [AVP](../../../avp/core/spec/v0.1)-compliant wrapper around the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Exposes [`AVPClaudeSDKClient`](src/avp_claude_agent_sdk/_client.py), a drop-in subclass of `ClaudeSDKClient` that emits a conforming AVP trajectory across `connect()` → `query()` / `receive_response()` → `disconnect()`.
 
-## Install
-
-> [!NOTE]
-> TODO: install instructions
-
-## Usage
-
-> [!NOTE]
-> TODO: minimal example
-
-
 ## What it does
 
 For every run of a `claude-agent-sdk` session, this package produces the AVP event stream:

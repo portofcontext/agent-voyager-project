@@ -3,21 +3,29 @@
   "run_id": "auth-refactor-20260502-abc123",
 
   "supervisor": {
-    "name": "simple-supervisor-example",
+    "name": "avp-cli",
     "version": "0.1.0"
   },
 
   "mcp_servers": [
-    { "id": "corp-directory", "ref": { "vault": "prod", "key": "corp-dir-mcp" } }
+    {
+      "id": "corp-directory",
+      "type": "http",
+      "url": "https://mcp.corp.example/sse",
+      "headers": { "Authorization": "Bearer ${CORP_DIR_TOKEN}" }
+    }
   ],
 
   "skills": [
-    { "id": "style-guide", "ref": { "type": "custom", "skill_id": "skill_styleguide_v3" } }
+    {
+      "id": "style-guide",
+      "files": {
+        "SKILL.md": "---\nname: style-guide\ndescription: House Rust style conventions.\n---\n\nPrefer explicit error types over `anyhow` in library code. Document every public item."
+      }
+    }
   ],
 
-  "subagents": [
-    { "id": "researcher", "ref": "sk_subagent_researcher_v1" }
-  ],
+  "enabled_builtin_tools": ["read_file", "write_file", "bash"],
 
   "output_schema": null,
 

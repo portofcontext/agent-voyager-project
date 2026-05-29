@@ -41,7 +41,7 @@ ignore = [
 "avp/src/avp/conformance/harness.py" = ["SLF001"]
 
 [lint.isort]
-known-first-party = ["avp", "avp_anthropic", "avp_claude_agent_sdk"]
+known-first-party = ["avp", "avp_claude_agent_sdk", "avp_cli"]
 
 [format]
 quote-style = "double"

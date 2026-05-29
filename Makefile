@@ -1,18 +1,17 @@
 # AVP: orchestration commands for the multi-language repo.
 #
-# Default target prints help. Use `make smoke` for the full $$ sanity check
-# you want before tagging a release.
+# Default target prints help. `make check` is the free pre-commit floor
+# (format / lint / unit tests / conformance / bindings drift).
 #
 # Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
-# under avp/; agents under agents/<name>/<lang>/; SDK adapters under sdks/;
-# supervisor examples under supervisors/. The uv (Python) workspace is rooted
-# at the repo root (root pyproject.toml + ruff.toml + uv.lock), so `uv` runs
-# from here and spans every Python member.
+# under avp/; agents under agents/<name>/<lang>/; the local CLI `avp` under
+# avp-cli/. The uv (Python) workspace is rooted at the repo root (root
+# pyproject.toml + ruff.toml + uv.lock), so `uv` runs from here and spans every
+# Python member.
 #
-# Cost notes: targets that hit a real LLM are clearly marked. The default
-# `make smoke` runs the entire matrix (all real-LLM tests + all examples)
-# and currently costs roughly $0.10 to $0.20 on Haiku. The free checks
-# (`make check`) cover format / lint / unit tests / conformance.
+# Cost notes: targets that hit a real LLM are clearly marked (the paid block in
+# `make help`) and require ANTHROPIC_API_KEY; they run roughly $0.10 to $0.20 on
+# Haiku. Everything `make check` covers is free.
 
 SHELL := /usr/bin/env bash
 
@@ -25,21 +24,9 @@ UV := uv
 TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
-	sdks/avp-anthropic \
 	agents/avp-claude-agent-sdk/python \
-	supervisors/simple-supervisor-example
+	avp-cli
 
-# All examples. Each script self-detects missing preflight (API key,
-# claude_agent_sdk, the `claude` CLI) and exits 2. The run-an-example
-# loop treats exit 2 as a skip rather than a failure, so a run on a
-# workstation without the Claude Code CLI still completes the Anthropic-
-# only examples cleanly.
-EXAMPLES := \
-	supervisors/simple-supervisor-example/examples/01_anthropic_cost_bounded.py \
-	supervisors/simple-supervisor-example/examples/03_claude_code_audited.py \
-	supervisors/simple-supervisor-example/examples/05_anthropic_subagent_delegation.py \
-	supervisors/simple-supervisor-example/examples/06_anthropic_traced_client.py \
-	supervisors/simple-supervisor-example/examples/07_claude_agent_traced_client.py
 
 
 .PHONY: help
@@ -54,7 +41,7 @@ help:
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
-	@echo "    make bindings        regenerate Rust + TS bindings from schemas"
+	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
@@ -64,8 +51,6 @@ help:
 	@echo "    make test-real-llm      real-LLM smoke tests for both agents"
 	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
 	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
-	@echo "    make examples           all 5 examples (03 / 07 self-skip without \`claude\` CLI)"
-	@echo "    make smoke              check + bindings-test + test-real-llm + conformance-check + examples"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
@@ -95,13 +80,19 @@ GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 SANDBOX ?=
 
 
-# ── Free: validate case files + liveness-ping each agent (no model calls) ──────
-.PHONY: claude-ping goose-ping
+# ── Free: validate case files + liveness-ping + describe each agent (no model) ─
+.PHONY: claude-ping goose-ping claude-describe goose-describe
 claude-ping:
 	@$(UV) run avp-conformance ping --agent $(CLAUDE_MANIFEST)
 
 goose-ping:
 	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
+
+claude-describe:
+	@$(UV) run avp-conformance describe --agent $(CLAUDE_MANIFEST)
+
+goose-describe:
+	@$(UV) run avp-conformance describe --agent $(GOOSE_MANIFEST)
 
 
 .PHONY: conformance
@@ -109,8 +100,10 @@ conformance:
 	@$(UV) run avp-conformance validate
 	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
 	@$(MAKE) --no-print-directory claude-ping
+	@$(MAKE) --no-print-directory claude-describe
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-ping
+	@$(MAKE) --no-print-directory goose-describe
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
@@ -158,10 +151,6 @@ schemas:
 .PHONY: sync-prices
 sync-prices:
 	@$(UV) run python avp/scripts/sync-prices.py --write
-
-.PHONY: sync-prices-check
-sync-prices-check:
-	@$(UV) run python avp/scripts/sync-prices.py --check
 
 
 .PHONY: bindings
@@ -211,7 +200,7 @@ test-real-llm:
 		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
 	fi
 	@failed=""; \
-	for pkg in sdks/avp-anthropic agents/avp-claude-agent-sdk/python; do \
+	for pkg in agents/avp-claude-agent-sdk/python; do \
 		echo ""; echo "==== $$pkg (real-LLM) ===="; \
 		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
@@ -224,42 +213,6 @@ test-live:
 	@command -v uv >/dev/null 2>&1 || { echo "error: uv is required (the bundled MCP server runs via uv run)"; exit 2; }
 	@echo "Running gated avp-goose live tests (mcp_connect is key-free; live_mcp / live_skills / live_subagent call a real model)."
 	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
-
-
-# Common run-an-example macro. Distinguishes:
-#   exit 0 → pass
-#   exit 2 → preflight skip (missing API key / SDK / CLI); we report it but don't fail
-#   anything else → fail
-define run_examples
-	@failed=""; skipped=""; \
-	for ex in $(1); do \
-		echo ""; echo "==== $$ex ===="; \
-		$(UV) run python $$ex; \
-		rc=$$?; \
-		case $$rc in \
-			0) ;; \
-			2) skipped="$$skipped $$ex" ;; \
-			*) failed="$$failed $$ex" ;; \
-		esac; \
-	done; \
-	echo ""; \
-	if [ -n "$$skipped" ]; then echo "SKIPPED (preflight):$$skipped"; fi; \
-	if [ -n "$$failed" ]; then echo "FAILED:$$failed"; exit 1; fi; \
-	echo "All non-skipped examples passed."
-endef
-
-
-.PHONY: examples
-examples:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set"; exit 2; \
-	fi
-	$(call run_examples,$(EXAMPLES))
-
-
-.PHONY: smoke
-smoke: check bindings-test test-real-llm conformance-check examples
-	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + conformance suite + all examples passed."
 
 
 # ── Other ─────────────────────────────────────────────────────────────────────
