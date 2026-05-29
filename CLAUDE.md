@@ -149,7 +149,7 @@ uv run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-
 uv run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
 ```
 
-## End-to-end sanity: `make smoke`
+## Real-model checks after wire / agent changes
 
 `make check` (format + lint + tests + conformance + bindings drift
 detection) is the **free pre-commit floor**. Run it on every change.
@@ -158,13 +158,12 @@ Drift detection catches the case where the AVP Pydantic models
 changed but the generated Rust / TypeScript bindings under `avp/bindings/rust/`
 and `avp/bindings/typescript/` weren't regenerated.
 
-`make smoke` is the **paid pre-merge ceiling**. It runs `check`, then the
-Rust + TS bindings test suites (`cargo test` + `npm test` against the
-generated types), then the real-LLM test matrix for both agents, then
-every example end-to-end against real models. Costs ~$0.10 to $0.20
-on Haiku.
+The **paid** checks cost real money and need `ANTHROPIC_API_KEY` (~$0.10 to
+$0.20 on Haiku): `make test-real-llm` (real-LLM tests for both agents),
+`make conformance-check` (the v0.1 suite on a real model), and
+`make bindings-test` (`cargo test` + `npm test` against the generated types).
 
-Run `make smoke` whenever you've changed something that could pass unit /
+Run the paid checks whenever you've changed something that could pass unit /
 seam tests but break real-model integration. Concretely, that's any of:
 
 - **Wire format**: `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py`,
@@ -182,8 +181,8 @@ seam tests but break real-model integration. Concretely, that's any of:
   `model`, `system_prompt`, and inline `mcp_servers` / `skills` reach what the
   model actually sees.
 
-Skip `make smoke` only for doc-only changes, internal refactors with no
-observable wire impact, or test-only changes. When in doubt, run it.
+Skip the paid checks only for doc-only changes, internal refactors with no
+observable wire impact, or test-only changes. When in doubt, run them.
 The real-LLM tests have caught silent bugs that no mock could surface
 (model-side flakiness, SDK-version drift, cost-calculation arithmetic
 that compiled fine but undercounted by 30%).
@@ -234,7 +233,8 @@ Python member across those trees.
   build, run, and iterate on Commissions. **An eval is a JSON config file, not
   code**
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
-- `Makefile`: `make help` lists all targets; `make smoke` is the pre-merge
-  full-matrix sanity check (see above).
+- `Makefile`: `make help` lists all targets; `make check` is the free
+  pre-commit floor, with paid real-model targets (`test-real-llm`,
+  `conformance-check`) for wire / agent-loop changes (see above).
 - `FOUNDATIONS.md`: what AVP is built on (CloudEvents, OTel GenAI, OTel spans,
   JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes.

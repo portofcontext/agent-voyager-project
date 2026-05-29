@@ -2,28 +2,6 @@
 
 An [AVP](../../../avp/core/spec/v0.1)-compliant wrapper around the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Exposes [`AVPClaudeSDKClient`](src/avp_claude_agent_sdk/_client.py), a drop-in subclass of `ClaudeSDKClient` that emits a conforming AVP trajectory across `connect()` → `query()` / `receive_response()` → `disconnect()`.
 
-## Usage
-
-This package is a conforming AVP agent. The local `avp` CLI knows it as
-`claude-code` (and runs it by default), so the simplest run is to drive it
-through an eval and read the ranked board:
-
-```bash
-uv run avp eval demo --agent claude-code   # bundled demo eval; claude-code is the default agent
-```
-
-`avp eval` composes a Commission per setup, runs this agent via its `run
---commission <file> --out <ndjson>` manifest contract, reduces the emitted
-trajectory, scores it, and ranks a board. To run your own task, scaffold a
-config with `uv run avp init` and run `uv run avp eval run <config> --agent
-claude-code`. See [`avp-cli/`](../../../avp-cli/) for the full CLI.
-
-For Python integrators who own their own loop, `AVPClaudeSDKClient` is the
-drop-in: construct it with a `commission=` and a `sink=` in place of
-`ClaudeSDKClient(options=...)`, and the conforming trajectory is on the wire by
-the time your `receive_response()` handler runs.
-
-
 ## What it does
 
 For every run of a `claude-agent-sdk` session, this package produces the AVP event stream:

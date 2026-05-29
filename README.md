@@ -50,7 +50,7 @@ cd agent-voyager-project
 make sync && make check
 ```
 
-`make help` lists every target. `make check` is the free floor (format, lint, tests, conformance, bindings drift). `make smoke` runs the full matrix against real Anthropic models and costs about $0.10 to $0.20 per run. See [CLAUDE.md](CLAUDE.md) to contribute and [`proposals/`](proposals/) for the spec RFC process.
+`make help` lists every target. `make check` is the free floor (format, lint, tests, conformance, bindings drift). The paid targets (`make test-real-llm`, `make conformance-check`) run against real Anthropic models and cost about $0.10 to $0.20 per run. See [CLAUDE.md](CLAUDE.md) to contribute and [`proposals/`](proposals/) for the spec RFC process.
 
 ## What AVP defines
 

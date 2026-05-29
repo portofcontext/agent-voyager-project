@@ -221,7 +221,7 @@ src/avp_cli/
     report.py       #   board_table (rich) + dump_json
 ```
 
-The CLI is its own example: `uv run avp init demo` scaffolds the bundled demo
-eval and `uv run avp eval run demo.eval.json` runs it end-to-end against a real
-agent (`make examples` runs exactly this). For agent-side integration examples
-(the drop-in `AVPClaudeSDKClient`), see `agents/avp-claude-agent-sdk/python/`.
+The CLI is its own example: `uv run avp init capitals` scaffolds the bundled
+capitals eval and `uv run avp eval run capitals.eval.json` runs it end-to-end
+against a real agent. For agent-side integration examples (the drop-in
+`AVPClaudeSDKClient`), see `agents/avp-claude-agent-sdk/python/`.

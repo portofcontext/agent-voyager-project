@@ -1,7 +1,7 @@
 # AVP: orchestration commands for the multi-language repo.
 #
-# Default target prints help. Use `make smoke` for the full $$ sanity check
-# you want before tagging a release.
+# Default target prints help. `make check` is the free pre-commit floor
+# (format / lint / unit tests / conformance / bindings drift).
 #
 # Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
 # under avp/; agents under agents/<name>/<lang>/; the local CLI `avp` under
@@ -9,10 +9,9 @@
 # pyproject.toml + ruff.toml + uv.lock), so `uv` runs from here and spans every
 # Python member.
 #
-# Cost notes: targets that hit a real LLM are clearly marked. The default
-# `make smoke` runs the entire matrix (all real-LLM tests + all examples)
-# and currently costs roughly $0.10 to $0.20 on Haiku. The free checks
-# (`make check`) cover format / lint / unit tests / conformance.
+# Cost notes: targets that hit a real LLM are clearly marked (the paid block in
+# `make help`) and require ANTHROPIC_API_KEY; they run roughly $0.10 to $0.20 on
+# Haiku. Everything `make check` covers is free.
 
 SHELL := /usr/bin/env bash
 
@@ -52,12 +51,9 @@ help:
 	@echo "    make test-real-llm      real-LLM smoke tests for both agents"
 	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
 	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
-	@echo "    make examples           scaffold + run the demo eval end-to-end (self-skips without an agent CLI)"
-	@echo "    make smoke              check + bindings-test + test-real-llm + conformance-check + examples"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
-	@echo "    make avp <args>      run the local avp CLI (e.g. make avp eval list); flags via ARGS=\"...\""
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -223,57 +219,12 @@ test-live:
 	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
-# The example is the CLI: scaffold the bundled demo eval (`avp init demo`) and
-# run it end-to-end against a real agent, printing the ranked board. Exit codes:
-#   exit 0 → pass
-#   exit 2 → preflight skip (no agent toolchain present); reported, not a failure
-#   anything else → fail
-.PHONY: examples
-examples:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set"; exit 2; \
-	fi
-	@tmp=$$(mktemp -d); \
-	$(UV) run avp init demo --dir $$tmp --agent goose >/dev/null; \
-	echo ""; echo "==== avp eval run (demo) ===="; \
-	$(UV) run avp eval run $$tmp/demo.eval.json; rc=$$?; echo ""; \
-	case $$rc in \
-		0) echo "✓ example passed: demo eval" ;; \
-		2) echo "SKIPPED (preflight): demo eval" ;; \
-		*) echo "FAILED: demo eval"; exit 1 ;; \
-	esac
-
-
-.PHONY: smoke
-smoke: check bindings-test test-real-llm conformance-check examples
-	@echo ""; echo "✓ smoke complete: free checks + bindings tests + real-LLM tests + conformance suite + all examples passed."
-
-
 # ── Other ─────────────────────────────────────────────────────────────────────
 
 
 .PHONY: sync
 sync:
 	@$(UV) sync
-
-
-# ── Local CLI passthrough ─────────────────────────────────────────────────────
-# `make avp <args>` forwards to `uv run avp <args>`:
-#   make avp                         # the welcome / agent routing
-#   make avp init
-#   make avp eval list
-#   make avp commission check avp/core/spec/v0.1/examples/commission.json
-# make consumes leading-dash flags itself, so pass those via ARGS:
-#   make avp ARGS="eval run my_eval.py --agent goose --json out.json"
-.PHONY: avp
-avp:
-	@$(UV) run avp $(filter-out avp,$(MAKECMDGOALS)) $(ARGS)
-
-# Let bare subcommand words (init, eval, ...) and path args be goals without a
-# rule. The recipe is a no-op; `avp` above collects them via MAKECMDGOALS. Only
-# matches goals that have no explicit rule, so real targets are unaffected.
-%:
-	@:
 
 
 # Default goal
