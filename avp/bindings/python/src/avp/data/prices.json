@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-05-31",
+  "$snapshot_date": "2026-06-01",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -1721,34 +1721,34 @@
       "cache_write": 6.25
     },
     "amazon-bedrock/eu.anthropic.claude-opus-4-6-v1": {
-      "input": 5.0,
-      "output": 25.0,
-      "cache_read": 0.5,
-      "cache_write": 6.25
+      "input": 5.5,
+      "output": 27.5,
+      "cache_read": 0.55,
+      "cache_write": 6.875
     },
     "amazon-bedrock/eu.anthropic.claude-opus-4-7": {
-      "input": 5.0,
-      "output": 25.0,
-      "cache_read": 0.5,
-      "cache_write": 6.25
+      "input": 5.5,
+      "output": 27.5,
+      "cache_read": 0.55,
+      "cache_write": 6.875
     },
     "amazon-bedrock/eu.anthropic.claude-opus-4-8": {
-      "input": 5.0,
-      "output": 25.0,
-      "cache_read": 0.5,
-      "cache_write": 6.25
+      "input": 5.5,
+      "output": 27.5,
+      "cache_read": 0.55,
+      "cache_write": 6.875
     },
     "amazon-bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0": {
-      "input": 3.0,
-      "output": 15.0,
-      "cache_read": 0.3,
-      "cache_write": 3.75
+      "input": 3.3,
+      "output": 16.5,
+      "cache_read": 0.33,
+      "cache_write": 4.125
     },
     "amazon-bedrock/eu.anthropic.claude-sonnet-4-6": {
-      "input": 3.0,
-      "output": 15.0,
-      "cache_read": 0.3,
-      "cache_write": 3.75
+      "input": 3.3,
+      "output": 16.5,
+      "cache_read": 0.33,
+      "cache_write": 4.125
     },
     "amazon-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "input": 1.0,
@@ -3918,10 +3918,6 @@
       "input": 0.497,
       "output": 4.881
     },
-    "cloudflare-workers-ai/@cf/google/gemma-3-12b-it": {
-      "input": 0.345,
-      "output": 0.556
-    },
     "cloudflare-workers-ai/@cf/google/gemma-4-26b-a4b-it": {
       "input": 0.1,
       "output": 0.3
@@ -3929,22 +3925,6 @@
     "cloudflare-workers-ai/@cf/ibm-granite/granite-4.0-h-micro": {
       "input": 0.017,
       "output": 0.112
-    },
-    "cloudflare-workers-ai/@cf/meta/llama-2-7b-chat-fp16": {
-      "input": 0.556,
-      "output": 6.667
-    },
-    "cloudflare-workers-ai/@cf/meta/llama-3-8b-instruct": {
-      "input": 0.282,
-      "output": 0.827
-    },
-    "cloudflare-workers-ai/@cf/meta/llama-3-8b-instruct-awq": {
-      "input": 0.123,
-      "output": 0.266
-    },
-    "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-awq": {
-      "input": 0.123,
-      "output": 0.266
     },
     "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8": {
       "input": 0.152,
@@ -3974,18 +3954,9 @@
       "input": 0.484,
       "output": 0.03
     },
-    "cloudflare-workers-ai/@cf/mistral/mistral-7b-instruct-v0.1": {
-      "input": 0.11,
-      "output": 0.19
-    },
     "cloudflare-workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct": {
       "input": 0.351,
       "output": 0.555
-    },
-    "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.5": {
-      "input": 0.6,
-      "output": 3.0,
-      "cache_read": 0.1
     },
     "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.6": {
       "input": 0.95,
@@ -14347,6 +14318,11 @@
       "output": 1.2,
       "cache_read": 0.06
     },
+    "opencode-go/minimax-m3": {
+      "input": 0.6,
+      "output": 2.4,
+      "cache_read": 0.12
+    },
     "opencode-go/qwen3.5-plus": {
       "input": 0.2,
       "output": 1.2,
@@ -14430,6 +14406,11 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "opencode/deepseek-v4-flash": {
+      "input": 0.14,
+      "output": 0.28,
+      "cache_read": 0.03
     },
     "opencode/deepseek-v4-flash-free": {
       "input": 0.0,
@@ -14661,6 +14642,11 @@
       "output": 1.2,
       "cache_read": 0.06
     },
+    "opencode/minimax-m3-free": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0
+    },
     "opencode/nemotron-3-super-free": {
       "input": 0.0,
       "output": 0.0,
@@ -14715,10 +14701,6 @@
     "openrouter/aion-labs/aion-rp-llama-3.1-8b": {
       "input": 0.8,
       "output": 1.6
-    },
-    "openrouter/alfredpros/codellama-7b-instruct-solidity": {
-      "input": 0.8,
-      "output": 1.2
     },
     "openrouter/allenai/olmo-3-32b-think": {
       "input": 0.15,
@@ -14864,14 +14846,6 @@
       "input": 0.75,
       "output": 1.2
     },
-    "openrouter/baidu/ernie-4.5-21b-a3b": {
-      "input": 0.07,
-      "output": 0.28
-    },
-    "openrouter/baidu/ernie-4.5-21b-a3b-thinking": {
-      "input": 0.07,
-      "output": 0.28
-    },
     "openrouter/baidu/ernie-4.5-300b-a47b": {
       "input": 0.28,
       "output": 1.1
@@ -14978,10 +14952,6 @@
       "input": 0.0983,
       "output": 0.1966,
       "cache_read": 0.0197
-    },
-    "openrouter/deepseek/deepseek-v4-flash:free": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/deepseek/deepseek-v4-pro": {
       "input": 0.435,
@@ -15163,9 +15133,9 @@
       "cache_read": 0.002
     },
     "openrouter/inclusionai/ring-2.6-1t": {
-      "input": 0.075,
-      "output": 0.625,
-      "cache_read": 0.015
+      "input": 0.3,
+      "output": 2.5,
+      "cache_read": 0.06
     },
     "openrouter/inflection/inflection-3-pi": {
       "input": 2.5,
@@ -15292,10 +15262,6 @@
       "input": 0.15,
       "output": 1.15
     },
-    "openrouter/minimax/minimax-m2.5:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/minimax/minimax-m2.7": {
       "input": 0.26,
       "output": 1.2
@@ -15309,16 +15275,6 @@
       "input": 0.4,
       "output": 2.0,
       "cache_read": 0.04
-    },
-    "openrouter/mistralai/devstral-medium": {
-      "input": 0.4,
-      "output": 2.0,
-      "cache_read": 0.04
-    },
-    "openrouter/mistralai/devstral-small": {
-      "input": 0.1,
-      "output": 0.3,
-      "cache_read": 0.01
     },
     "openrouter/mistralai/ministral-14b-2512": {
       "input": 0.2,
@@ -15341,11 +15297,6 @@
       "cache_read": 0.2
     },
     "openrouter/mistralai/mistral-large-2407": {
-      "input": 2.0,
-      "output": 6.0,
-      "cache_read": 0.2
-    },
-    "openrouter/mistralai/mistral-large-2411": {
       "input": 2.0,
       "output": 6.0,
       "cache_read": 0.2
@@ -15396,11 +15347,6 @@
       "output": 0.2
     },
     "openrouter/mistralai/mixtral-8x22b-instruct": {
-      "input": 2.0,
-      "output": 6.0,
-      "cache_read": 0.2
-    },
-    "openrouter/mistralai/pixtral-large-2411": {
       "input": 2.0,
       "output": 6.0,
       "cache_read": 0.2
@@ -16141,6 +16087,11 @@
       "input": 0.45,
       "output": 0.65
     },
+    "openrouter/upstage/solar-pro-3": {
+      "input": 0.15,
+      "output": 0.6,
+      "cache_read": 0.015
+    },
     "openrouter/writer/palmyra-x5": {
       "input": 0.6,
       "output": 6.0
@@ -16169,16 +16120,6 @@
       "input": 0.1,
       "output": 0.3,
       "cache_read": 0.01
-    },
-    "openrouter/xiaomi/mimo-v2-omni": {
-      "input": 0.4,
-      "output": 2.0,
-      "cache_read": 0.08
-    },
-    "openrouter/xiaomi/mimo-v2-pro": {
-      "input": 1.0,
-      "output": 3.0,
-      "cache_read": 0.2
     },
     "openrouter/xiaomi/mimo-v2.5": {
       "input": 0.14,
@@ -20484,21 +20425,21 @@
       "output": 3.1
     },
     "wafer.ai/GLM-5.1": {
-      "input": 1.2,
-      "output": 3.6,
-      "cache_read": 0.12,
+      "input": 1.0,
+      "output": 3.2,
+      "cache_read": 0.1,
       "cache_write": 0.0
     },
     "wafer.ai/Kimi-K2.6": {
-      "input": 0.88,
-      "output": 3.84,
-      "cache_read": 0.09,
+      "input": 0.68,
+      "output": 3.15,
+      "cache_read": 0.07,
       "cache_write": 0.0
     },
     "wafer.ai/Qwen3.5-397B-A17B": {
-      "input": 0.48,
-      "output": 2.88,
-      "cache_read": 0.05,
+      "input": 0.43,
+      "output": 2.6,
+      "cache_read": 0.04,
       "cache_write": 0.0
     },
     "wafer.ai/Qwen3.6-35B-A3B": {
