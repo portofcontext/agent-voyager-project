@@ -175,8 +175,10 @@ uv run avp agent list                   # shows installed version + readiness
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
-(claude-code) installs into a managed venv. Remote install needs the `gh` CLI;
-the claude-code agent also needs the `claude` CLI on PATH at run time.
+(claude-code) installs into a managed venv (needs `uv`). Release downloads go over
+plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
+fork or to avoid API rate limits. The claude-code agent also needs Node and the
+`claude` CLI on PATH at run time.
 
 **Testing your own agent or a new version (no release needed).** Build the
 artifacts and point the CLI at them locally:

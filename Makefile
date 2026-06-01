@@ -55,6 +55,7 @@ help:
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
 	@echo "    make build-agents    build both agents' artifacts into dist/agents for local install"
+	@echo "    make onboarding-smoke  run the README Quickstart in a clean container (AGENT=goose|claude-code|all, PAID=1)"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -222,6 +223,18 @@ test-live:
 .PHONY: sync
 sync:
 	@$(UV) sync
+
+
+# Clean-room onboarding test: run the README Quickstart for AGENT (default goose)
+# inside a fresh container, shipping the WORKING TREE in so it catches regressions
+# before they're pushed. Free by default (stops at `describe`); set PAID=1 (needs
+# ANTHROPIC_API_KEY) to also run a real eval.
+#   make onboarding-smoke
+#   make onboarding-smoke AGENT=claude-code
+#   make onboarding-smoke PAID=1
+.PHONY: onboarding-smoke
+onboarding-smoke:
+	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) bash scripts/onboarding-smoke.sh $(if $(AGENT),$(AGENT),goose)
 
 
 # Build both agents' local artifacts into dist/agents, then print the

@@ -32,13 +32,68 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 ---
 
+## Quickstart
+
+Set up the CLI and run your first scored agent comparison in about five minutes, on **macOS or Linux**. Each step installs only what it needs, so you reach a result before taking on the heavier (optional) agent.
+
+### 1 · Get the CLI
+
+[uv](https://github.com/astral-sh/uv) runs everything (the CLI isn't published yet, so you invoke it as `uv run avp`):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
+git clone https://github.com/portofcontext/agent-voyager-project
+cd agent-voyager-project && uv sync
+```
+
+### 2 · Install an agent
+
+Agents are prebuilt GitHub releases, fetched over plain HTTPS (no build, no auth). `goose` needs nothing else:
+
+```bash
+uv run avp agent install goose
+uv run avp agent list                                  # goose → "ready"
+```
+
+### 3 · Run an eval
+
+The capitals example runs on Claude, so set an `ANTHROPIC_API_KEY` (or sign in with `claude login`). That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+uv run avp init capitals --agent goose
+uv run avp eval run capitals.eval.json
+```
+
+This runs the agent on each task and prints a **scorecard** — every commission (one agent-config variant) scored and ranked by accuracy, pass-rate, cost per run, and turns:
+
+```
+avp eval · capitals-extraction · 2 items · agent=goose
+ #  commission         accuracy  pass_rate    $/run  turns/run
+ 1  capitals-few-shot      100%       100%  $0.0164        2.0
+ 2  capitals-baseline      100%       100%  $0.0166        2.0
+```
+
+`uv run avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
+
+### 4 · Add a second agent and compare (optional)
+
+Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the one path that also needs [Node 18+](https://nodejs.org):
+
+```bash
+npm install -g @anthropic-ai/claude-code               # the claude CLI
+uv run avp agent install claude-code
+uv run avp init capitals --agent goose,claude-code
+uv run avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
+```
+
+> **Verify the whole path in a throwaway container:** `make onboarding-smoke` (or `AGENT=all` for both agents) reproduces this on a clean machine, so you can confirm onboarding without touching your own setup. Add `PAID=1` (with `ANTHROPIC_API_KEY` set) to include the eval.
+
 ## Use AVP
 
 - **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools; [`avp-goose`](agents/avp-goose/rust/) is an in-process observer of Block's Goose.
 - **Build, run, and iterate on Commissions:** [`avp`](avp-cli/), the local CLI, scaffolds a Commission, runs setups (Commission variants) over a dataset against the real agents, and ranks a board by accuracy / pass-rate / cost / turns.
 - **Consume a trajectory from another language:** typed bindings generated from the same JSON Schemas the Python types use, so they cannot drift: [Python](avp/bindings/python/), [Rust](avp/bindings/rust/), [TypeScript](avp/bindings/typescript/).
-
-For an end-to-end walkthrough that builds a Commission, runs an agent, and ranks a board, see [`avp-cli/`](avp-cli/).
 
 ## Develop AVP
 
