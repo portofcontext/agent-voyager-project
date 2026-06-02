@@ -21,8 +21,9 @@ reward efficiency (fewer turns, no tool errors).
 from __future__ import annotations
 
 import json
+import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from avp_cli.observability import Summary
@@ -163,3 +164,97 @@ class FidelityScorer:
         passed = value >= self.threshold
         detail = "" if passed else f"fidelity {value:.2f} < threshold {self.threshold}"
         return Score(value=value, passed=passed, detail=detail)
+
+
+# ── LLM-judge scorer (free-form answers, BrowseComp-style grading) ───────────
+
+# The BrowseComp response-format wrapper. Put this around the question in a
+# commission's `prompt` (with the question slot as `{input}`) so the agent
+# emits an "Exact Answer:" line the grader can extract. Verbatim from
+# openai/simple-evals `browsecomp_eval.py` QUERY_TEMPLATE (the `{Question}` slot
+# becomes `{input}` for the AVP commission's substitution).
+BROWSECOMP_QUERY_TEMPLATE = """{input}
+
+Your response should be in the following format:
+Explanation: {{your explanation for your final answer}}
+Exact Answer: {{your succinct, final answer}}
+Confidence: {{your confidence score between 0% and 100% for your answer}}""".strip()
+
+# The grader prompt. `{question}` / `{response}` / `{correct_answer}` are filled
+# per run. Verbatim from openai/simple-evals `browsecomp_eval.py` GRADER_TEMPLATE.
+BROWSECOMP_GRADER_TEMPLATE = """
+Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
+
+[question]: {question}
+
+[response]: {response}
+
+Your judgement must be in the format and criteria specified below:
+
+extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
+
+[correct_answer]: {correct_answer}
+
+reasoning: Explain why the extracted_final_answer is correct or incorrect based on [correct_answer], focusing only on if there are meaningful differences between [correct_answer] and the extracted_final_answer. Do not comment on any background to the problem, do not attempt to solve the problem, do not argue for any answer different than [correct_answer], focus only on whether the answers match.
+
+correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] given above, or is within a small margin of error for numerical problems. Answer 'no' otherwise, i.e. if there if there is any inconsistency, ambiguity, non-equivalency, or if the extracted answer is incorrect.
+
+confidence: The extracted confidence score between 0|%| and 100|%| from [response]. Put 100 if there is no confidence score available.
+""".strip()
+
+_CORRECT_RE = re.compile(r"correct:\s*(yes|no)", re.I)
+_CONFIDENCE_RE = re.compile(r"confidence:\s*(\d+)", re.I)
+_EXTRACTED_RE = re.compile(r"extracted_final_answer:\s*(.+)", re.I)
+
+
+@dataclass
+class LLMJudgeScorer:
+    """Grade a free-form answer with a grader model (BrowseComp-style).
+
+    The judge sees the raw question (`item.prompt`), the agent's full response
+    (`output.text`), and the reference answer (`item.expected`), and returns
+    `correct: yes|no`. `value`/`passed` are 1.0/True iff the grader says yes, so
+    accuracy on the board is the fraction the grader marked correct (the metric
+    `browsecomp_eval.py` reports). Confidence is parsed into `detail` only; it is
+    not aggregated (no calibration metric on the board yet).
+
+    Crosses a new seam (scorer ↔ grader model) — the one network-calling scorer.
+    Needs the `llm-judge` extra (the `anthropic` SDK) and `ANTHROPIC_API_KEY`.
+    Tests inject a fake `client`; production lazily builds `anthropic.Anthropic()`.
+    """
+
+    grader_model: str = "claude-opus-4-8"
+    template: str = BROWSECOMP_GRADER_TEMPLATE
+    max_tokens: int = 2048
+    name: str = "llm-judge"
+    client: Any = field(default=None, repr=False)
+
+    def _grade(self, prompt: str) -> str:
+        if self.client is None:
+            import anthropic  # provided by the `llm-judge` extra
+
+            self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        msg = self.client.messages.create(
+            model=self.grader_model,
+            max_tokens=self.max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+
+    def score(self, item: Any, output: FinalOutput, summary: Summary) -> Score:
+        prompt = self.template.format(
+            question=item.prompt,
+            response=output.text or "",
+            correct_answer="" if item.expected is None else str(item.expected),
+        )
+        verdict = self._grade(prompt)
+        m = _CORRECT_RE.search(verdict)
+        correct = bool(m and m.group(1).lower() == "yes")
+        conf = _CONFIDENCE_RE.search(verdict)
+        extracted = _EXTRACTED_RE.search(verdict)
+        bits = []
+        if extracted:
+            bits.append(extracted.group(1).strip()[:80])
+        if conf:
+            bits.append(f"conf {conf.group(1)}")
+        return Score(value=1.0 if correct else 0.0, passed=correct, detail=" | ".join(bits))

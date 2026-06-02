@@ -98,6 +98,7 @@ def _run_and_report(
     sandbox_enabled: bool = False,
     env_mat=None,
     config_path: str | None = None,
+    timeout_s: float = 300.0,
 ) -> int:
     runnable = []
     for spec in agent_specs:
@@ -139,6 +140,7 @@ def _run_and_report(
                 out_dir=out,
                 max_items=max_items,
                 model=model,
+                timeout_s=timeout_s,
                 observer=vl.observer(),
                 compare=compare,
                 sandbox=sandbox_enabled,
@@ -152,6 +154,7 @@ def _run_and_report(
             out_dir=out,
             max_items=max_items,
             model=model,
+            timeout_s=timeout_s,
             observer=observer,
             compare=compare,
             sandbox=sandbox_enabled,
@@ -982,6 +985,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         sandbox_enabled=sandbox_enabled,
         env_mat=env_mat,
         config_path=args.path,
+        timeout_s=args.timeout,
     )
 
 
@@ -1317,6 +1321,12 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
     )
     p.add_argument(
         "--max-items", type=int, default=None, help="Cap items per commission (cost control)"
+    )
+    p.add_argument(
+        "--timeout",
+        type=float,
+        default=300.0,
+        help="Max seconds per run before it's recorded as an error (default: 300)",
     )
     p.add_argument(
         "--sandbox",

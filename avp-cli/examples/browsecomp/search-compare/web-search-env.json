@@ -1,0 +1,5 @@
+{
+  "expose": {
+    "net": ["mcp.exa.ai", "*.exa.ai", "api.linkup.so", "*.linkup.so"]
+  }
+}
