@@ -1,0 +1,8 @@
+{
+  "runtimes": ["python@3.12"],
+  "packages": { "pip": ["six"] },
+  "files": {
+    "README.md": "seeded by avp env\n"
+  },
+  "expose": { "net": ["api.anthropic.com"] }
+}

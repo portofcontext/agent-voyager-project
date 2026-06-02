@@ -25,6 +25,7 @@ from avp.content import TextBlock
 from avp.trajectory import AgentStoppedEvent, AssistantMessageEvent, ToolInvokedEvent
 from avp_cli.agent import run_agent
 from avp_cli.agents import ResolvedAgent
+from avp_cli.environment import Materialized
 from avp_cli.eval.dataset import Dataset, Item
 from avp_cli.eval.scoring import FinalOutput, Score, Scorer
 from avp_cli.eval.setup import Setup
@@ -224,6 +225,8 @@ def _execute(
     model_override: str | None,
     timeout_s: float,
     on_event: Callable[[Any], None] | None,
+    sandbox: bool,
+    env_mat: Materialized | None,
 ) -> RunResult:
     """Run one (agent, commission, item) cell and score it into a RunResult."""
     run_id = f"{agent.name}-{setup.id}-{item.id}"
@@ -236,6 +239,8 @@ def _execute(
         out_path=traj_path,
         timeout_s=timeout_s,
         on_event=on_event,
+        sandbox=sandbox,
+        env_mat=env_mat,
     )
     if err is not None or events is None:
         return RunResult(setup.id, item.id, spawn_error=err or "no events")
@@ -261,6 +266,8 @@ def run_matrix(
     timeout_s: float = 300.0,
     observer: RunObserver | None = None,
     compare: bool = False,
+    sandbox: bool = False,
+    env_mat: Materialized | None = None,
 ) -> list[Board]:
     """Run every (setup, item) against every agent and return one Board per agent.
 
@@ -300,6 +307,8 @@ def run_matrix(
                         model_override=model,
                         timeout_s=timeout_s,
                         on_event=obs.on_event,
+                        sandbox=sandbox,
+                        env_mat=env_mat,
                     )
                     acc[agent.name][setup.id].append(result)
                     if obs.on_end:
@@ -339,6 +348,8 @@ def run_eval(
     model: str | None = None,
     timeout_s: float = 300.0,
     observer: RunObserver | None = None,
+    sandbox: bool = False,
+    env_mat: Materialized | None = None,
 ) -> Board:
     """Run the matrix against a single `agent` and return its ranked `Board`.
 
@@ -353,6 +364,8 @@ def run_eval(
         timeout_s=timeout_s,
         observer=observer,
         compare=False,
+        sandbox=sandbox,
+        env_mat=env_mat,
     )[0]
 
 

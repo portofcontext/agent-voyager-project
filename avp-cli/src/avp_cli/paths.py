@@ -30,6 +30,11 @@ def runs_dir() -> Path:
     return avp_home() / "runs"
 
 
+def environments_dir() -> Path:
+    """Declarative agent environments: `~/.avp/environments/<name>.json`."""
+    return avp_home() / "environments"
+
+
 def agents_dir() -> Path:
     """Installed agents: `~/.avp/agents/<name>/`.
 

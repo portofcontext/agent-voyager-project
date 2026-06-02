@@ -15,6 +15,7 @@ from rich.text import Text
 from avp_cli import brand
 
 _START = [
+    ('avp run "task" --agent A --env E', "commission an agent to do a task inside an environment"),
     ("avp init", "create an eval to run: pick a benchmark from the catalog"),
 ]
 
@@ -39,6 +40,13 @@ _AGENTS = [
     ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagents"),
 ]
 
+_ENV = [
+    ("avp env create <name>", "create an environment (--runtime/--pip/--file/--net ...)"),
+    ("avp env list", "your declarative environments (~/.avp/environments)"),
+    ("avp env show <name>", "what an environment provisions + curates"),
+    ("avp env run <name> -- <cmd>", "run a command inside an environment (provisioned + confined)"),
+]
+
 
 def _cmd_grid(rows: list[tuple[str, str]]) -> Table:
     grid = Table.grid(padding=(0, 3))
@@ -58,6 +66,7 @@ def welcome() -> Group:
     return Group(
         section("Start here", _START),
         section("Agents", _AGENTS),
+        section("Environments", _ENV),
         section("Commissions", _COMMISSIONS),
         section("Evals", _EVAL),
     )

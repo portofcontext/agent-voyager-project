@@ -143,7 +143,9 @@ already have is left untouched):
 
 Run flags (`run` / `demo`): `--agent goose,claude-code` (compare agents),
 `--model <id>` (override every commission's model), `--json out.json` (machine-readable
-board + per-run trajectory pointers), `--threshold T`, `--max-items N`, `--quiet`.
+board + per-run trajectory pointers), `--threshold T`, `--max-items N`,
+`--sandbox auto|on|off` (confine each agent run with [srt](https://github.com/anthropic-experimental/sandbox-runtime);
+`auto` sandboxes when srt is installed, else runs unsandboxed), `--quiet`.
 
 **Live progress.** In a terminal, each run animates on one line as it sails: a
 growing voyage of brand-colored glyphs (`●` model turns, `◆` tool calls) with a

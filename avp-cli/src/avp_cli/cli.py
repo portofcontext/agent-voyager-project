@@ -6,7 +6,10 @@
     avp eval list                    list recent eval runs (with their ids)
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
+    avp run "TASK" --agent A [--env E]   commission an agent to do a task (inside an env, confined)
     avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel local)
+    avp env create NAME [flags]      create a declarative environment (--runtime/--pip/--file/--net ...)
+    avp env run NAME -- CMD          run a command inside a declarative environment (provisioned + confined)
     avp commission create [ID]       build a commission into your library (wizard, or pass flags)
     avp commission list              list your portable commission library
     avp commission describe ID       render a library commission by id
@@ -30,7 +33,19 @@ from pathlib import Path
 
 import questionary
 
-from avp_cli import brand, catalog, config, console, library, live, paths, run_manifest, state, viz
+from avp_cli import (
+    brand,
+    catalog,
+    config,
+    console,
+    library,
+    live,
+    paths,
+    run_manifest,
+    sandbox,
+    state,
+    viz,
+)
 from avp_cli import commission as commission_mod
 from avp_cli.agents import DEFAULT_AGENT, known_agents, preflight, resolve_agent
 from avp_cli.eval.engine import Eval, RunObserver, RunResult, run_matrix, setups_for
@@ -80,6 +95,8 @@ def _run_and_report(
     max_items: int | None,
     model: str | None,
     quiet: bool,
+    sandbox_enabled: bool = False,
+    env_mat=None,
     config_path: str | None = None,
 ) -> int:
     runnable = []
@@ -124,6 +141,8 @@ def _run_and_report(
                 model=model,
                 observer=vl.observer(),
                 compare=compare,
+                sandbox=sandbox_enabled,
+                env_mat=env_mat,
             )
     else:
         observer = None if quiet else _note_observer(total, compare=compare)
@@ -135,6 +154,8 @@ def _run_and_report(
             model=model,
             observer=observer,
             compare=compare,
+            sandbox=sandbox_enabled,
+            env_mat=env_mat,
         )
 
     for board in boards:
@@ -921,11 +942,30 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 
     if args.threshold is not None and hasattr(ev.scorer, "threshold"):
         ev.scorer.threshold = args.threshold
+    # Resolve the sandbox mode once (not per run): print one status note, and turn
+    # `--sandbox on` with no srt into a clean exit instead of a per-cell failure.
+    try:
+        sandbox_enabled, note = sandbox.decide(args.sandbox)
+    except sandbox.SandboxUnavailable as exc:
+        console.error_panel("sandbox unavailable", str(exc))
+        return _SKIP
+    if note:
+        console.note(note)
+    if args.env and not sandbox_enabled:
+        console.note("environment provisioned but NOT confined (no srt / --sandbox off)")
     # One voyage per run: a default run lands in its own subdir (so runs don't
     # clobber each other and each has a stable home `view <id>` resolves to); an
     # explicit --out is taken literally.
     run_id = _resolve_run_id(args)
     out = Path(args.out) if args.out else _default_out_dir() / run_id
+    env_mat = None
+    if args.env:
+        try:
+            env_mat = _materialize_env(args.env, out)
+        except Exception as exc:
+            console.error_panel(f"environment '{args.env}'", str(exc))
+            return 1
+        console.note(f"environment: {args.env} → {_tilde(env_mat.workspace)}")
     if args.agent:
         agent_specs = [s.strip() for s in args.agent.split(",") if s.strip()]
     else:
@@ -939,8 +979,303 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         max_items=args.max_items,
         model=args.model,
         quiet=args.quiet,
+        sandbox_enabled=sandbox_enabled,
+        env_mat=env_mat,
         config_path=args.path,
     )
+
+
+def _resolve_env_file(spec: str) -> Path:
+    """An env spec is a path to a JSON file, or a name in ~/.avp/environments."""
+    from avp_cli import environment as env_mod
+
+    p = Path(spec)
+    if p.is_file():
+        return p
+    named = paths.environments_dir() / f"{spec}.json"
+    if named.is_file():
+        return named
+    raise env_mod.EnvError(
+        f"not a file, and no environment named {spec!r} in {_tilde(paths.environments_dir())}"
+    )
+
+
+def _materialize_env(spec: str, out: Path):
+    """Resolve + build an environment under `<out>/env`. Raises EnvError / OSError /
+    JSONDecodeError."""
+    from avp_cli import environment as env_mod
+
+    p = _resolve_env_file(spec)
+    block = json.loads(p.read_text())
+    return env_mod.materialize(env_mod.Environment.parse(block), out / "env", base_dir=p.parent)
+
+
+# ── env ───────────────────────────────────────────────────────────────────────
+
+
+def _task_event(ev) -> None:
+    """Compact live progress for a single task run: one line per tool call + stop."""
+    from avp.trajectory import AgentStoppedEvent, ToolInvokedEvent
+
+    if isinstance(ev, ToolInvokedEvent):
+        console.note(f"  ⚒ {ev.data.tool_name}")
+    elif isinstance(ev, AgentStoppedEvent):
+        console.note(f"  ■ {ev.data.reason}")
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """Commission one agent to do one task, optionally inside an environment.
+
+    The task is the Commission prompt; the env (if given) supplies the working
+    context (code via `paths`, fixtures via `files`, a runtime). The workspace
+    persists so you can inspect what the agent changed.
+    """
+    from avp.commission import Commission
+    from avp_cli.agent import run_agent
+    from avp_cli.eval.engine import extract_final_output
+    from avp_cli.observability import summarize
+
+    agent = resolve_agent(args.agent)
+    reason = preflight(agent.name)
+    if reason is not None:
+        console.error_panel(f"can't run '{agent.name}'", reason)
+        return _SKIP
+    try:
+        sandbox_enabled, note = sandbox.decide(args.sandbox)
+    except sandbox.SandboxUnavailable as exc:
+        console.error_panel("sandbox unavailable", str(exc))
+        return _SKIP
+    if note:
+        console.note(note)
+
+    run_id = state.new_id()
+    rundir = paths.runs_dir() / run_id
+    rundir.mkdir(parents=True, exist_ok=True)
+
+    env_mat = None
+    if args.env:
+        if not sandbox_enabled:
+            console.note("environment provisioned but NOT confined (no srt / --sandbox off)")
+        try:
+            env_mat = _materialize_env(args.env, rundir)
+        except Exception as exc:
+            console.error_panel(f"environment '{args.env}'", str(exc))
+            return 1
+
+    commission = Commission(
+        schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
+    )
+    traj = rundir / "trajectory.ndjson"
+    where = f" in {args.env}" if args.env else ""
+    console.note(f"{agent.name} working on the task{where} …")
+    events, err = run_agent(
+        agent.manifest,
+        agent.manifest_cwd,
+        commission,
+        out_path=traj,
+        timeout_s=args.timeout,
+        on_event=_task_event,
+        sandbox=sandbox_enabled,
+        env_mat=env_mat,
+    )
+    if err is not None or events is None:
+        console.error_panel(f"'{agent.name}' run failed", err or "no events")
+        return 1
+
+    summary = summarize(events)
+    final = extract_final_output(events)
+    console.out.print()
+    if summary:
+        tally = f"  {tool_tally(summary)}" if tool_tally(summary) else ""
+        console.out.print(
+            f"[bold {brand.SAIL}]done[/]  {summary.total_turns} turns · "
+            f"${summary.total_cost_usd:.4f}{tally}"
+        )
+    if final.text:
+        console.out.print(final.text.strip())
+    console.note(f"trajectory: {_tilde(traj)}")
+    if env_mat:
+        console.note(f"workspace (inspect what changed): {_tilde(env_mat.workspace)}")
+    return 0
+
+
+def _cmd_env(args: argparse.Namespace) -> int:
+    if args.env_cmd == "list":
+        return _cmd_env_list()
+    if args.env_cmd == "create":
+        return _cmd_env_create(args)
+    if args.env_cmd == "show":
+        return _cmd_env_show(args.env)
+    if args.env_cmd == "delete":
+        return _cmd_env_delete(args.name)
+    return _cmd_env_run(args)
+
+
+def _cmd_env_create(args: argparse.Namespace) -> int:
+    """Write an environment to ~/.avp/environments/<name>.json from flags."""
+    from avp_cli import environment as env_mod
+
+    if not _ID_RE.match(args.name):
+        console.error_panel(
+            "invalid environment name", f"{args.name!r}: use lowercase letters, digits, '-', '_'."
+        )
+        return 1
+    dest = paths.environments_dir() / f"{args.name}.json"
+    if dest.exists() and not args.force:
+        console.error_panel(
+            f"environment {args.name!r} already exists",
+            f"in {_tilde(paths.environments_dir())} — pass --force, or pick another name.",
+        )
+        return 1
+    # Resolve --path to absolute now (so it still resolves when materialized from
+    # ~/.avp later) and fail early if it's missing.
+    abs_paths = []
+    for p in args.path or ():
+        rp = Path(p)
+        if not rp.exists():
+            console.error_panel("path not found", f"{p!r} does not exist")
+            return 1
+        abs_paths.append(str(rp.resolve()))
+    try:
+        block = env_mod.build_block(
+            runtimes=tuple(args.runtime or ()),
+            pip=tuple(args.pip or ()),
+            npm=tuple(args.npm or ()),
+            paths=tuple(abs_paths),
+            files=tuple(args.file or ()),
+            setup=tuple(args.setup or ()),
+            write=tuple(args.write or ()),
+            net=tuple(args.net or ()),
+        )
+    except env_mod.EnvError as exc:
+        console.error_panel("can't build that environment", str(exc))
+        return 1
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(block, indent=2) + "\n")
+    console.out.print(
+        f"[green]✓[/] created environment [bold {brand.SAIL}]{args.name}[/] → {_tilde(dest)}"
+    )
+    console.note(f"avp env show {args.name}   ·   avp env run {args.name} -- <command>")
+    return 0
+
+
+def _cmd_env_delete(name: str) -> int:
+    """Remove an environment from ~/.avp/environments."""
+    dest = paths.environments_dir() / f"{name}.json"
+    if not dest.is_file():
+        console.error_panel(
+            f"no environment {name!r}", f"nothing at {_tilde(dest)} — see `avp env list`."
+        )
+        return 1
+    dest.unlink()
+    console.note(f"deleted environment {name}")
+    return 0
+
+
+def _cmd_env_list() -> int:
+    """List named environments in ~/.avp/environments."""
+    from rich.table import Table
+
+    from avp_cli import environment as env_mod
+
+    d = paths.environments_dir()
+    files = sorted(d.glob("*.json")) if d.is_dir() else []
+    if not files:
+        console.note(
+            f"no environments in {_tilde(d)} — drop an env JSON there, "
+            "or pass a path to `avp env show/run`."
+        )
+        return 0
+    table = Table(title="environments", header_style="bold")
+    table.add_column("name", style=f"bold {brand.SAIL}", no_wrap=True)
+    table.add_column("runtimes")
+    table.add_column("packages")
+    for f in files:
+        try:
+            e = env_mod.Environment.parse(json.loads(f.read_text()))
+        except (env_mod.EnvError, json.JSONDecodeError, OSError):
+            continue
+        pkgs = ", ".join(f"{k}:{len(v)}" for k, v in e.packages.items())
+        table.add_row(f.stem, ", ".join(e.runtimes) or "[dim]—[/dim]", pkgs or "[dim]—[/dim]")
+    console.out.print(table)
+    console.note("avp env show <name>   ·   avp env run <name> -- <command>")
+    return 0
+
+
+def _cmd_env_show(spec: str) -> int:
+    """Render an environment without building it."""
+    from avp_cli import environment as env_mod
+
+    try:
+        p = _resolve_env_file(spec)
+        e = env_mod.Environment.parse(json.loads(p.read_text()))
+    except (env_mod.EnvError, json.JSONDecodeError, OSError) as exc:
+        console.error_panel(f"environment '{spec}'", str(exc))
+        return 1
+    console.out.print(f"[bold {brand.SAIL}]{spec}[/]  ·  {_tilde(p)}")
+    if e.runtimes:
+        console.out.print(f"  runtimes: {', '.join(e.runtimes)}")
+    for eco, pkgs in e.packages.items():
+        console.out.print(f"  {eco}: {', '.join(pkgs)}")
+    if e.paths:
+        console.out.print(f"  paths: {', '.join(e.paths)}")
+    if e.files:
+        console.out.print(f"  files: {', '.join(e.files)}")
+    if e.setup:
+        console.out.print(f"  setup: {len(e.setup)} command(s)")
+    if e.expose.write:
+        console.out.print(f"  writable: {', '.join(e.expose.write)}")
+    if e.expose.net:
+        console.out.print(f"  network: {', '.join(e.expose.net)}")
+    console.note(f"avp env run {spec} -- <command>   ·   run a command inside it")
+    return 0
+
+
+def _cmd_env_run(args: argparse.Namespace) -> int:
+    """Materialize an environment and run a command inside it (provisioned + confined)."""
+    import shutil as _shutil
+    import subprocess
+    import tempfile
+
+    from avp_cli import environment as env_mod
+
+    command = list(args.command)
+    if command and command[0] == "--":  # argparse REMAINDER keeps the separator
+        command = command[1:]
+    if not command:
+        console.error_panel("no command", "usage: avp env run [--sandbox X] <env> -- <command> ...")
+        return 1
+    try:
+        sandbox_enabled, note = sandbox.decide(args.sandbox)
+    except sandbox.SandboxUnavailable as exc:
+        console.error_panel("sandbox unavailable", str(exc))
+        return _SKIP
+    if note:
+        console.note(note)
+
+    root = Path(tempfile.mkdtemp(prefix="avp-env-"))
+    try:
+        try:
+            mat = _materialize_env(args.env, root)
+        except Exception as exc:
+            console.error_panel(f"environment '{args.env}'", str(exc))
+            return 1
+        argv, cwd, proc_env = env_mod.launch_env(command, mat)
+        with tempfile.TemporaryDirectory() as tmp:
+            if sandbox_enabled:
+                settings = sandbox.settings_file(
+                    Path(tmp),
+                    write_paths=[tmp, str(cwd), *mat.write_paths, str(mat.prefix)],
+                    allow_domains=mat.net,
+                )
+                argv = [*sandbox.prefix(settings), *argv]
+            console.note(
+                f"running in {_tilde(mat.workspace)} "
+                f"({'sandboxed' if sandbox_enabled else 'unconfined'})"
+            )
+            return subprocess.run(argv, cwd=cwd, env=proc_env).returncode
+    finally:
+        _shutil.rmtree(root, ignore_errors=True)
 
 
 # ── parser ─────────────────────────────────────────────────────────────────────
@@ -976,6 +1311,19 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
     )
     p.add_argument(
         "--max-items", type=int, default=None, help="Cap items per commission (cost control)"
+    )
+    p.add_argument(
+        "--sandbox",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Confine agent runs with srt: auto (sandbox if srt is installed, else run "
+        "unsandboxed), on (require srt), off. Default: auto.",
+    )
+    p.add_argument(
+        "--env",
+        default=None,
+        help="Run agents inside a declarative environment (a path to an env JSON, or a name "
+        "in ~/.avp/environments). Provisions toolchains/files; confined under --sandbox.",
     )
     p.add_argument("--quiet", action="store_true", help="Suppress per-run progress on stderr")
 
@@ -1148,6 +1496,91 @@ def _build_parser() -> argparse.ArgumentParser:
     p_auninstall = asub.add_parser("uninstall", help="Remove an installed agent")
     p_auninstall.add_argument("name", help="Installed agent name")
 
+    run_p = groups.add_parser(
+        "run", help="Commission an agent to do a task, optionally inside an environment"
+    )
+    run_p.add_argument("prompt", help="The task for the agent")
+    run_p.add_argument(
+        "--agent",
+        required=True,
+        help=f"Agent to run ({', '.join(known_agents())}, or a manifest path)",
+    )
+    run_p.add_argument(
+        "--env", default=None, help="Environment to run inside (a name or a path to an env JSON)"
+    )
+    run_p.add_argument("--model", default=None, help="Model override (else the agent's default)")
+    run_p.add_argument(
+        "--sandbox",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Confine with srt: auto (sandbox if srt is installed), on, off. Default: auto.",
+    )
+    run_p.add_argument(
+        "--timeout", type=float, default=600.0, help="Max seconds for the run (default: 600)"
+    )
+
+    env_p = groups.add_parser(
+        "env", help="Define + run agent environments (provision a toolchain, run confined)"
+    )
+    ensub = env_p.add_subparsers(dest="env_cmd", required=True)
+    ensub.add_parser("list", help="List named environments (~/.avp/environments)")
+    p_ecreate = ensub.add_parser("create", help="Create an environment in your library")
+    p_ecreate.add_argument("name", help="Environment name (becomes <name>.json)")
+    p_ecreate.add_argument(
+        "--runtime",
+        action="append",
+        metavar="LANG@VER",
+        help="Add a language runtime, e.g. python@3.12 or node@20 (repeatable)",
+    )
+    p_ecreate.add_argument("--pip", action="append", metavar="PKG", help="pip package (repeatable)")
+    p_ecreate.add_argument("--npm", action="append", metavar="PKG", help="npm package (repeatable)")
+    p_ecreate.add_argument(
+        "--path",
+        action="append",
+        metavar="SRC",
+        help="Copy a local file or directory into the env workspace (repeatable). "
+        "Re-copied each run, so edits to SRC are picked up.",
+    )
+    p_ecreate.add_argument(
+        "--file",
+        action="append",
+        metavar="PATH=SRC",
+        help="Seed a file: PATH=inline-content, or PATH=@localfile (repeatable)",
+    )
+    p_ecreate.add_argument(
+        "--setup",
+        action="append",
+        metavar="CMD",
+        help="Command run after provisioning (repeatable)",
+    )
+    p_ecreate.add_argument(
+        "--write",
+        action="append",
+        metavar="PATH",
+        help="Extra writable path under srt (repeatable)",
+    )
+    p_ecreate.add_argument(
+        "--net", action="append", metavar="DOMAIN", help="Allowed network domain (repeatable)"
+    )
+    p_ecreate.add_argument("--force", action="store_true", help="Overwrite an existing environment")
+    p_eshow = ensub.add_parser("show", help="Show an environment (a name or a path to an env JSON)")
+    p_eshow.add_argument("env", help="Environment name (in ~/.avp/environments) or a path")
+    p_erun = ensub.add_parser(
+        "run", help="Run a command inside an environment (provisioned + confined)"
+    )
+    p_erun.add_argument(
+        "--sandbox",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Confine with srt: auto (sandbox if srt is installed), on, off. Default: auto.",
+    )
+    p_erun.add_argument("env", help="Environment name or path to an env JSON")
+    p_erun.add_argument(
+        "command", nargs=argparse.REMAINDER, help="Command to run inside the env, after `--`"
+    )
+    p_edel = ensub.add_parser("delete", help="Delete an environment from your library")
+    p_edel.add_argument("name", help="Environment name")
+
     return parser
 
 
@@ -1166,6 +1599,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_commission(args)
     if args.group == "agent":
         return _cmd_agent(args)
+    if args.group == "env":
+        return _cmd_env(args)
+    if args.group == "run":
+        return _cmd_run(args)
     return 2
 
 

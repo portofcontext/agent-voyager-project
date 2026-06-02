@@ -28,6 +28,8 @@ from pydantic import BaseModel
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
+from avp_cli import sandbox as sandbox_mod
+from avp_cli.environment import Materialized
 
 # How often the streaming path re-reads the growing --out file (seconds).
 _TAIL_INTERVAL = 0.06
@@ -49,6 +51,8 @@ def run_agent(
     out_path: str | Path,
     timeout_s: float = 300.0,
     on_event: Callable[[BaseModel | dict[str, Any]], None] | None = None,
+    sandbox: bool = False,
+    env_mat: Materialized | None = None,
 ) -> tuple[list[BaseModel | dict[str, Any]] | None, str | None]:
     """Run the agent for one Commission. Returns (events, error).
 
@@ -62,19 +66,51 @@ def run_agent(
     list is always re-parsed from the finished file, so it stays authoritative
     regardless of what the live tail saw. A `KeyboardInterrupt` terminates the
     child and propagates (the caller decides whether to stop the matrix).
+
+    When `sandbox` is True the command is wrapped in `srt` (the caller resolves
+    availability first via `sandbox.decide`): writes are confined to this run's
+    scratch + `--out` dir + the agent's install dir and HOME state, so a rogue
+    model can't touch the project tree or the rest of the machine.
+
+    When `env_mat` is given (a materialized declarative environment), the agent
+    runs with `cwd` = the env's workspace and the env's toolchain prefix on
+    `PATH`, so its tool calls (e.g. `python ...`) hit the provisioned toolchain.
+    Its `expose` write/network grants are folded into the srt view.
     """
     out = Path(out_path)
     env = {**os.environ, **manifest.env}
+    run_cwd = env_mat.workspace if env_mat else manifest_cwd
+    if env_mat:
+        env.update(env_mat.env_vars)
+        # Place the agent IN the env: it roots itself here via its native
+        # mechanism. `AVP_WORKSPACE` is the working tree (provisioned code/files);
+        # `AVP_ENV_ROOT` is the env home where the agent's own run state belongs
+        # (e.g. goose sets GOOSE_PATH_ROOT from it). cwd is set too for agents that
+        # simply inherit it (the Claude Agent SDK). All under one fresh env per run.
+        env["AVP_WORKSPACE"] = str(env_mat.workspace)
+        env["AVP_ENV_ROOT"] = str(env_mat.workspace.parent)
+        if env_mat.path_additions:
+            env["PATH"] = os.pathsep.join([*env_mat.path_additions, env.get("PATH", "")])
 
     with tempfile.TemporaryDirectory() as tmp:
         commission_path = Path(tmp) / "commission.json"
         commission_path.write_text(commission.model_dump_json(by_alias=True, exclude_none=True))
         cmd = [*manifest.command, "run", "--commission", str(commission_path), "--out", str(out)]
+        if sandbox:
+            write_paths = [tmp, str(out.parent), str(run_cwd), *sandbox_mod.home_state_dirs()]
+            allow_domains: list[str] = []
+            if env_mat:
+                write_paths += [*env_mat.write_paths, str(env_mat.prefix)]
+                allow_domains = env_mat.net
+            settings = sandbox_mod.settings_file(
+                Path(tmp), write_paths=write_paths, allow_domains=allow_domains
+            )
+            cmd = [*sandbox_mod.prefix(settings), *cmd]
         stderr_path = Path(tmp) / "stderr.log"
         if on_event is None:
-            err = _run_blocking(cmd, manifest_cwd, env, timeout_s)
+            err = _run_blocking(cmd, run_cwd, env, timeout_s)
         else:
-            err = _run_streaming(cmd, manifest_cwd, env, out, stderr_path, timeout_s, on_event)
+            err = _run_streaming(cmd, run_cwd, env, out, stderr_path, timeout_s, on_event)
         if err is not None:
             return None, err
 

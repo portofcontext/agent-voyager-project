@@ -82,14 +82,17 @@ fn write_skills(commission: &Commission, working_dir: &std::path::Path) -> anyho
 
 /// Run a Commission live against Goose, emitting the trajectory to `sink`.
 pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()> {
-    // Isolate Goose's data + config under a throwaway root so a live run never
-    // opens the user's production session store, and so the agent's environment
-    // is defined by the Commission rather than the user's ambient goose config.
-    // Must be set before the first Goose `Config` / `SessionManager` access
-    // (both are process-global `LazyLock`s). The provider key still resolves
-    // from the OS keychain, which is path-independent.
+    // Goose's data + config root. When the supervisor has placed this agent in an
+    // environment it passes `$AVP_ENV_ROOT` (the env home), so Goose's run-scoped
+    // state (`.agents/skills`, `.agents/recipes`, sessions) lives in that env;
+    // otherwise we mint a throwaway root so a live run never opens the user's
+    // production session store. Must be set before the first Goose `Config` /
+    // `SessionManager` access (both are process-global `LazyLock`s). The provider
+    // key still resolves from the OS keychain, which is path-independent.
     let run_id = commission.run_id.to_string();
-    let path_root = std::env::temp_dir().join(format!("avp-goose-{run_id}"));
+    let path_root = std::env::var_os("AVP_ENV_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join(format!("avp-goose-{run_id}")));
     std::fs::create_dir_all(&path_root)?;
     std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
@@ -103,13 +106,15 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         .ok_or_else(|| anyhow::anyhow!("Commission has no model"))?;
     let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
 
-    // Agent + session. The working dir is an isolated workspace under the run's
-    // path root, not the user's CWD: the Commission defines the environment, and
-    // Goose writes run-scoped state there (`.agents/skills`, `.agents/recipes`)
-    // which must not pollute the caller's directory. (If a future use case needs
-    // the agent to operate on the caller's project tree, make this configurable.)
+    // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
+    // provides one (so a provisioned environment's code/files actually reach the
+    // agent), else an isolated workspace under the run's path root so Goose's
+    // run-scoped state (`.agents/skills`, `.agents/recipes`) doesn't pollute the
+    // caller's directory.
     let agent = Arc::new(Agent::new());
-    let working_dir = path_root.join("workspace");
+    let working_dir = std::env::var_os("AVP_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| path_root.join("workspace"));
     std::fs::create_dir_all(&working_dir)?;
     let session = agent
         .config

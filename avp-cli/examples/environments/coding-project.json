@@ -1,0 +1,5 @@
+{
+  "runtimes": ["python@3.12"],
+  "paths": ["project"],
+  "expose": { "net": ["api.anthropic.com"] }
+}

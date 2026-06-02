@@ -76,6 +76,8 @@ avp eval · capitals-extraction · 2 items · agent=goose
 
 `uv run avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
+> **Sandboxing (optional, zero extra config):** agent runs are unconfined by default. Install [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install -g @anthropic-ai/sandbox-runtime`) and `avp eval` automatically confines each run — the agent can't write outside its own workspace or reach non-model network. Force it with `--sandbox on`, turn it off with `--sandbox off`.
+
 ### 4 · Add a second agent and compare (optional)
 
 Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the one path that also needs [Node 18+](https://nodejs.org):
