@@ -92,15 +92,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Commission (not the operator's ~/.claude). Without this the claude CLI
     # picks up ambient MCP servers, making agent_started non-reproducible.
     # Run in the supervisor-provided workspace when set (the env's provisioned
-    # code/files); otherwise the SDK defaults to the process CWD. Disable Claude
-    # Code's OWN sandbox: AVP owns confinement (srt) and the workspace, so the
-    # agent must edit the real workspace, not an internal overlay it discards on
-    # exit. (When AVP isn't sandboxing, this is unconfined by choice, like goose.)
+    # code/files); otherwise the SDK defaults to the process CWD. `bypassPermissions`
+    # is required for headless runs: in the default mode the Edit/Bash tools hit a
+    # permission prompt with no approver, so the model "edits" but nothing is applied.
+    # AVP owns confinement (srt), so auto-executing tools here is the right posture.
     options = ClaudeAgentOptions(
         setting_sources=[],
         strict_mcp_config=True,
         cwd=os.environ.get("AVP_WORKSPACE"),
-        sandbox={"enabled": False},
+        permission_mode="bypassPermissions",
     )
 
     async def agent_main(client: AVPClaudeSDKClient) -> None:
