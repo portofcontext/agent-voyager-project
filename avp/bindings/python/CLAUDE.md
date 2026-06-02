@@ -1,8 +1,4 @@
-# avp — refactor in progress
-
-This package is being rewritten to be small and focused. The previous
-implementation was AI-generated and grew into sprawl; it's archived under
-`src/avp/archive/`. Do NOT import from there. It exists for review only.
+# avp — spec + thin SDK
 
 ## Goal: spec + thin SDK. Nothing more.
 
@@ -35,8 +31,6 @@ that keeps regrowing.
 
 ## Working rules
 
-- **Don't import from `archive/`.** Read it if useful, copy a small piece if
-  it earns its place, but don't depend on it.
 - **Add code only when the spec requires it or a second concrete caller
   already exists.** No helpers for hypothetical callers. If a pattern appears
   in one place, leave it inline.
@@ -46,7 +40,7 @@ that keeps regrowing.
 - **If a change adds more than ~50 lines outside the spec-derived Pydantic
   models, stop and check whether it really belongs in `avp` vs. in the
   integrator package.**
-- **No regrowth of removed concepts.** If an idea was archived (driver
-  protocols, opinionated tracer, dispatch helpers), don't reintroduce it
-  under a different name. If the concept genuinely returns, raise it
+- **No regrowth of removed concepts.** If an idea was removed in the rewrite
+  (driver protocols, opinionated tracer, dispatch helpers), don't reintroduce
+  it under a different name. If the concept genuinely returns, raise it
   explicitly first.
