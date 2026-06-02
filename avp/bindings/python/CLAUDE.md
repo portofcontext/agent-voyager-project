@@ -1,8 +1,4 @@
-# avp — refactor in progress
-
-This package was rewritten to be small and focused. The previous
-implementation was AI-generated and grew into sprawl; it has been removed
-(it lived under `src/avp/archive/`; see git history if you need it).
+# avp — spec + thin SDK
 
 ## Goal: spec + thin SDK. Nothing more.
 
