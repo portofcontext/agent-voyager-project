@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from avp.content import TextBlock
 from avp.trajectory import AgentStoppedEvent, AssistantMessageEvent, ToolInvokedEvent
-from avp_cli.agent import run_agent
+from avp_cli.agent import read_trajectory, run_agent
 from avp_cli.agents import ResolvedAgent
 from avp_cli.environment import Materialized
 from avp_cli.eval.dataset import Dataset, Item
@@ -256,6 +256,36 @@ def _execute(
     )
 
 
+def _resume_cell(traj_path: Path, ev: Eval, setup: Setup, item: Item) -> RunResult | None:
+    """Reuse a previously completed cell instead of re-running the agent.
+
+    A cell counts as done only if its trajectory file exists and ends in a
+    terminal `agent_stopped` event; a file truncated by a kill / crash / sleep
+    has no terminal event, so we return None and the caller re-runs it. The agent
+    run (the paid, slow part) is skipped; the cell is still re-scored from its
+    saved events (the scorer may call a grader model). Returns None on any read
+    error so a corrupt file just re-runs.
+    """
+    if not traj_path.is_file():
+        return None
+    try:
+        events = read_trajectory(traj_path)
+    except (OSError, ValueError):
+        return None
+    if not any(isinstance(e, AgentStoppedEvent) for e in events):
+        return None  # partial / killed mid-run -> re-run the whole cell
+    summary = summarize(events)
+    output = extract_final_output(events)
+    return RunResult(
+        setup_name=setup.id,
+        item_id=item.id,
+        score=ev.scorer.score(item, output, summary),
+        summary=summary,
+        output=output,
+        trajectory_path=str(traj_path),
+    )
+
+
 def run_matrix(
     ev: Eval,
     agents: list[ResolvedAgent],
@@ -268,6 +298,7 @@ def run_matrix(
     compare: bool = False,
     sandbox: bool = False,
     env_mat: Materialized | None = None,
+    resume: bool = False,
 ) -> list[Board]:
     """Run every (setup, item) against every agent and return one Board per agent.
 
@@ -275,6 +306,10 @@ def run_matrix(
     observer can show a head-to-head the moment they all finish). `compare`
     enables the per-task `on_compare` callback. Ctrl-C stops the matrix and
     returns Boards of whatever finished, each `interrupted=True`.
+
+    With `resume`, a cell whose trajectory file is already complete (ends in a
+    terminal `agent_stopped`) is reused instead of re-run; partial / missing cells
+    run normally. Reused cells are re-scored from their saved events.
     """
     obs = observer or RunObserver()
     out = Path(out_dir)
@@ -298,18 +333,23 @@ def run_matrix(
                     n += 1
                     if obs.on_start:
                         obs.on_start(n, total, agent.name, setup.id, item.id)
-                    result = _execute(
-                        ev,
-                        agent,
-                        setup,
-                        item,
-                        out=out,
-                        model_override=model,
-                        timeout_s=timeout_s,
-                        on_event=obs.on_event,
-                        sandbox=sandbox,
-                        env_mat=env_mat,
-                    )
+                    run_id = f"{agent.name}-{setup.id}-{item.id}"
+                    result = None
+                    if resume:
+                        result = _resume_cell(out / f"{run_id}.ndjson", ev, setup, item)
+                    if result is None:
+                        result = _execute(
+                            ev,
+                            agent,
+                            setup,
+                            item,
+                            out=out,
+                            model_override=model,
+                            timeout_s=timeout_s,
+                            on_event=obs.on_event,
+                            sandbox=sandbox,
+                            env_mat=env_mat,
+                        )
                     acc[agent.name][setup.id].append(result)
                     if obs.on_end:
                         obs.on_end(n, total, agent.name, result)
@@ -350,6 +390,7 @@ def run_eval(
     observer: RunObserver | None = None,
     sandbox: bool = False,
     env_mat: Materialized | None = None,
+    resume: bool = False,
 ) -> Board:
     """Run the matrix against a single `agent` and return its ranked `Board`.
 
@@ -366,6 +407,7 @@ def run_eval(
         compare=False,
         sandbox=sandbox,
         env_mat=env_mat,
+        resume=resume,
     )[0]
 
 

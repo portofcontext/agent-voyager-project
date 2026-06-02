@@ -130,12 +130,21 @@ def run_agent(
 
     if not out.exists():
         return None, "agent exited 0 but wrote no trajectory"
+    return read_trajectory(out), None
+
+
+def read_trajectory(path: Path) -> list[BaseModel | dict[str, Any]]:
+    """Parse a finished NDJSON trajectory file into events (custom types as dicts).
+
+    The inverse of what an agent's `--out` stream produces; used both to return a
+    run's events and to re-read a previously completed run for `--resume`.
+    """
     events: list[BaseModel | dict[str, Any]] = []
-    for line in out.read_text().splitlines():
+    for line in path.read_text().splitlines():
         line = line.strip()
         if line:
             events.append(parse_event(json.loads(line)))
-    return events, None
+    return events
 
 
 def describe_agent(

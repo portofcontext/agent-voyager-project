@@ -454,6 +454,92 @@ def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path) -> None:
     assert (out_dir / "scripted-solo-i1.ndjson").exists()
 
 
+# A "poison" agent that always exits non-zero without writing a trajectory. Used
+# by the resume tests: if the engine actually runs it the cell errors, so a cell
+# that ends up passing can only have been reused from disk (never re-run).
+_POISON_AGENT = "import sys; sys.exit(2)"
+
+
+def _seed_trajectory(path, *, complete: bool, text: str = "all done") -> None:
+    """Write a trajectory file for a resumed cell. `complete` appends a terminal
+    `agent_stopped`; without it the file looks like a killed mid-run trajectory."""
+    trace = new_trace_id()
+
+    def sp(parent: str = ZERO_SPAN_ID) -> dict:
+        return {"trace_id": trace, "span_id": new_span_id(), "parent_span_id": parent}
+
+    events: list = [
+        AssistantMessageEvent(
+            subject="r",
+            data=AssistantMessageData(
+                **sp(),
+                step=1,
+                duration_ms=1,
+                content=[TextBlock(text=text)],
+                usage=Usage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+            ),
+        )
+    ]
+    if complete:
+        events.append(
+            AgentStoppedEvent(
+                subject="r",
+                data=AgentStoppedData(**sp(), reason=StopReason.converged, output=text),
+            )
+        )
+    path.write_text(
+        "\n".join(e.model_dump_json(by_alias=True, exclude_none=True) for e in events) + "\n"
+    )
+
+
+def _poison_agent(tmp_path):
+    from avp_conformance.manifest import AgentManifest
+
+    from avp_cli.agents import ResolvedAgent
+
+    return ResolvedAgent(
+        name="poison",
+        manifest=AgentManifest(command=[sys.executable, "-c", _POISON_AGENT]),
+        manifest_cwd=tmp_path,
+    )
+
+
+def _solo_eval() -> Eval:
+    return Eval(
+        setups=[_setup("solo")],
+        dataset=Dataset(name="d", items=[Item(id="i1", prompt="x", expected="all done")]),
+        scorer=ExactMatchScorer(),
+    )
+
+
+def test_resume_reuses_finished_cell_without_running_agent(tmp_path) -> None:
+    # Crossing the resume seam: a finished trajectory on disk is re-read and
+    # re-scored; the (poison) agent is never spawned. Baseline first: with no
+    # resume the poison agent runs and the cell errors.
+    ev, agent = _solo_eval(), _poison_agent(tmp_path)
+    crashed = run_eval(ev, agent=agent, out_dir=tmp_path / "fresh")
+    assert crashed.rows[0].n_errors == 1
+
+    out_dir = tmp_path / "runs"
+    out_dir.mkdir()
+    _seed_trajectory(out_dir / "poison-solo-i1.ndjson", complete=True)
+    board = run_eval(ev, agent=agent, out_dir=out_dir, resume=True)
+    assert board.rows[0].n_errors == 0  # reused, not re-run (poison would have errored)
+    assert board.rows[0].accuracy == 1.0  # re-scored from the saved "all done"
+
+
+def test_resume_reruns_partial_cell(tmp_path) -> None:
+    # A trajectory with no terminal agent_stopped (killed mid-run) is NOT reused;
+    # the cell re-runs — and the poison agent makes that visible as an error.
+    ev, agent = _solo_eval(), _poison_agent(tmp_path)
+    out_dir = tmp_path / "runs"
+    out_dir.mkdir()
+    _seed_trajectory(out_dir / "poison-solo-i1.ndjson", complete=False)
+    board = run_eval(ev, agent=agent, out_dir=out_dir, resume=True)
+    assert board.rows[0].n_errors == 1
+
+
 def test_run_eval_streams_events_to_observer(tmp_path) -> None:
     """With an observer.on_event, run_agent tails the trajectory and the engine
     feeds each event through — the live-progress seam, no LLM."""
