@@ -41,6 +41,10 @@ MANIFEST
 avp-workspace/
 .anthropic-key
 
+# Decrypted BrowseComp data (canary-protected benchmark; keep local, never commit)
+browse_comp*.jsonl
+**/browse_comp*.jsonl
+
 .claude/
 
 .ruff_cache

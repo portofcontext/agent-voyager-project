@@ -12,7 +12,7 @@ Schema (eval.json):
       "name": "parsebench-table",
       "agents": ["claude-code", "goose"],   # optional; --agent overrides at run time
       "dataset": { "source": "inline" | "file" | "huggingface", ... },
-      "scorer":  { "name": "structural-match" | "exact-match" | "structural-fidelity", ...params },
+      "scorer":  { "name": "structural-match" | "exact-match" | "structural-fidelity" | "llm-judge", ...params },
       "commissions": ["baseline", "terse", "few-shot"]   # ids in the library, run on every agent
     }
 
@@ -41,6 +41,7 @@ from avp_cli.eval.engine import Eval
 from avp_cli.eval.scoring import (
     ExactMatchScorer,
     FidelityScorer,
+    LLMJudgeScorer,
     Scorer,
     StructuralMatchScorer,
 )
@@ -96,7 +97,7 @@ def _build_agents(spec: Any) -> list[str]:
 
 # ── scorer registry ────────────────────────────────────────────────────────
 
-_SCORERS = ("exact-match", "structural-match", "structural-fidelity")
+_SCORERS = ("exact-match", "structural-match", "structural-fidelity", "llm-judge")
 
 
 def _build_scorer(spec: dict[str, Any]) -> Scorer:
@@ -116,6 +117,19 @@ def _build_scorer(spec: dict[str, Any]) -> Scorer:
                 "uv sync --extra parsebench"
             ) from exc
         return FidelityScorer(threshold=float(spec.get("threshold", 0.8)))
+    if name == "llm-judge":
+        try:
+            import anthropic  # noqa: F401
+        except ImportError as exc:
+            raise EvalConfigError(
+                "scorer 'llm-judge' needs the llm-judge extra: uv sync --extra llm-judge"
+            ) from exc
+        kwargs: dict[str, Any] = {}
+        if "model" in spec:
+            kwargs["grader_model"] = spec["model"]
+        if "template" in spec:
+            kwargs["template"] = spec["template"]
+        return LLMJudgeScorer(**kwargs)
     raise EvalConfigError(f"unknown scorer {name!r}; choose from {', '.join(_SCORERS)}")
 
 

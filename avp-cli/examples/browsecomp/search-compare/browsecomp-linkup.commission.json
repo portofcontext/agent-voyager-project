@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1",
+  "run_id": "browsecomp-linkup",
+  "model": "claude-opus-4-8",
+  "system_prompt": "You are answering a hard research question that requires browsing the live web. For ALL web research you MUST use only the Linkup tools (the `mcp__linkup__*` tools, e.g. the Linkup web-search tool). Do NOT use the built-in WebSearch or WebFetch tools, and do not answer from memory alone. Search iteratively: run multiple Linkup searches, follow and read promising sources, and cross-check before committing to a final answer.",
+  "mcp_servers": [
+    {
+      "type": "stdio",
+      "id": "linkup",
+      "command": ["linkup-mcp-server", "apiKey=YOUR_LINKUP_API_KEY"]
+    }
+  ],
+  "prompt": "{input}\n\nYour response should be in the following format:\nExplanation: {your explanation for your final answer}\nExact Answer: {your succinct, final answer}\nConfidence: {your confidence score between 0% and 100% for your answer}"
+}

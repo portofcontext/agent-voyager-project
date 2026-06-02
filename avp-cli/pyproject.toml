@@ -17,10 +17,12 @@ dependencies = ["avp==0.1.0", "avp-conformance==0.1.0", "rich>=13", "questionary
 [project.optional-dependencies]
 claude-agent = ["avp-claude-agent-sdk==0.1.0"]
 # Capabilities a benchmark config can require: `huggingface` to load HF datasets,
-# `parsebench` for the ParseBench fidelity scorer (rapidfuzz). The CLI checks for
-# these at run time and tells the user which extra to install.
+# `parsebench` for the ParseBench fidelity scorer (rapidfuzz), `llm-judge` for the
+# grader-model scorer (anthropic). The CLI checks for these at run time and tells
+# the user which extra to install.
 huggingface = ["datasets>=3"]
 parsebench = ["datasets>=3", "rapidfuzz>=3"]
+llm-judge = ["anthropic>=0.40"]
 dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.scripts]

@@ -1,0 +1,16 @@
+{
+  "name": "browsecomp",
+  "agents": ["claude-code"],
+  "dataset": {
+    "source": "file",
+    "path": "browse_comp.jsonl",
+    "input": "{problem}",
+    "expected_field": "answer",
+    "id_field": "id"
+  },
+  "scorer": {
+    "name": "llm-judge",
+    "model": "claude-opus-4-8"
+  },
+  "commissions": ["browsecomp-claude"]
+}

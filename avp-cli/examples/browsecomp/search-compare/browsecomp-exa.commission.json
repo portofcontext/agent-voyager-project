@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1",
+  "run_id": "browsecomp-exa",
+  "model": "claude-opus-4-8",
+  "system_prompt": "You are answering a hard research question that requires browsing the live web. For ALL web research you MUST use only the Exa tools (the `mcp__exa__*` tools, e.g. `mcp__exa__web_search_exa`). Do NOT use the built-in WebSearch or WebFetch tools, and do not answer from memory alone. Search iteratively: run multiple Exa searches, follow and read promising sources, and cross-check before committing to a final answer.",
+  "mcp_servers": [
+    {
+      "type": "http",
+      "id": "exa",
+      "url": "https://mcp.exa.ai/mcp?exaApiKey=YOUR_EXA_API_KEY&tools=web_search_exa,web_fetch_exa"
+    }
+  ],
+  "prompt": "{input}\n\nYour response should be in the following format:\nExplanation: {your explanation for your final answer}\nExact Answer: {your succinct, final answer}\nConfidence: {your confidence score between 0% and 100% for your answer}"
+}

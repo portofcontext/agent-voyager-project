@@ -1,0 +1,6 @@
+{
+  "schema_version": "0.1",
+  "run_id": "browsecomp-claude",
+  "model": "claude-opus-4-8",
+  "prompt": "{input}\n\nYour response should be in the following format:\nExplanation: {your explanation for your final answer}\nExact Answer: {your succinct, final answer}\nConfidence: {your confidence score between 0% and 100% for your answer}"
+}

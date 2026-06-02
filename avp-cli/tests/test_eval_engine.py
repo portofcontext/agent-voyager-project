@@ -219,6 +219,61 @@ def test_fidelity_scores_cell_content_not_markup_chrome() -> None:
     assert not bad.passed  # wrong cell content still fails
 
 
+# ── llm-judge scorer (scorer ↔ grader-model seam) ───────────────────────────
+
+
+class _FakeBlock:
+    type = "text"
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class _FakeMessages:
+    """Records the grader prompt and replays a canned grader response."""
+
+    def __init__(self, reply: str, seen: dict) -> None:
+        self._reply, self._seen = reply, seen
+
+    def create(self, *, model, max_tokens, messages):
+        self._seen["model"] = model
+        self._seen["prompt"] = messages[0]["content"]
+        return type("Msg", (), {"content": [_FakeBlock(self._reply)]})()
+
+
+class _FakeClient:
+    def __init__(self, reply: str, seen: dict) -> None:
+        self.messages = _FakeMessages(reply, seen)
+
+
+def test_llm_judge_interpolates_and_reads_correct_yes() -> None:
+    from avp_cli.eval.scoring import LLMJudgeScorer
+
+    seen: dict = {}
+    reply = "extracted_final_answer: 1988-96\nreasoning: matches.\ncorrect: yes\nconfidence: 90"
+    s = LLMJudgeScorer(client=_FakeClient(reply, seen))
+    item = Item(
+        id="i", prompt="Which years did the author work as a probation officer?", expected="1988-96"
+    )
+    out = FinalOutput("Explanation: ...\nExact Answer: 1988-96\nConfidence: 90%", None, "converged")
+    score = s.score(item, out, _summary())
+    assert score.value == 1.0 and score.passed
+    # the seam: question / response / correct_answer all reach the grader prompt
+    assert "probation officer" in seen["prompt"]
+    assert "Exact Answer: 1988-96" in seen["prompt"]
+    assert "[correct_answer]: 1988-96" in seen["prompt"]
+    assert "1988-96" in score.detail and "conf 90" in score.detail
+
+
+def test_llm_judge_reads_correct_no() -> None:
+    from avp_cli.eval.scoring import LLMJudgeScorer
+
+    s = LLMJudgeScorer(client=_FakeClient("correct: no\nconfidence: 40", {}))
+    item = Item(id="i", prompt="q", expected="right answer")
+    score = s.score(item, FinalOutput("Exact Answer: wrong", None, "converged"), _summary())
+    assert score.value == 0.0 and not score.passed
+
+
 # ── Board aggregation + ranking ────────────────────────────────────────────────
 
 
