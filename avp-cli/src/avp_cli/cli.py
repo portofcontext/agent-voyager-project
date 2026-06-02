@@ -99,6 +99,7 @@ def _run_and_report(
     env_mat=None,
     config_path: str | None = None,
     timeout_s: float = 300.0,
+    resume: bool = False,
 ) -> int:
     runnable = []
     for spec in agent_specs:
@@ -145,6 +146,7 @@ def _run_and_report(
                 compare=compare,
                 sandbox=sandbox_enabled,
                 env_mat=env_mat,
+                resume=resume,
             )
     else:
         observer = None if quiet else _note_observer(total, compare=compare)
@@ -159,6 +161,7 @@ def _run_and_report(
             compare=compare,
             sandbox=sandbox_enabled,
             env_mat=env_mat,
+            resume=resume,
         )
 
     for board in boards:
@@ -930,6 +933,46 @@ def _cmd_eval_delete(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_resume_dir(args: argparse.Namespace) -> Path | None:
+    """The output dir of the run `--resume` names: an explicit `--out`, the run's
+    recorded dir, or the default `<runs>/<id>`. Errors (returns None) if none exist
+    on disk, since there'd be nothing to resume."""
+    candidates = []
+    if args.out:
+        candidates.append(Path(args.out))
+    rec = state.find_run(args.resume)
+    if rec:
+        candidates.append(Path(rec["out_dir"]))
+    candidates.append(_default_out_dir() / args.resume)
+    for c in candidates:
+        if c.is_dir():
+            return c
+    console.error_panel(
+        f"can't resume {args.resume!r}",
+        "no run dir found. Pass an id from `avp eval list`, or `--out <dir>` "
+        "pointing at the run's trajectories.",
+    )
+    return None
+
+
+def _resume_drift(out: Path, ev: Eval) -> str | None:
+    """Why resuming `out` with the current eval would be unsafe, or None if it's
+    consistent. Splicing a different config into an old run dir would build one
+    board from two different evals; the run manifest is the source of truth for
+    what originally ran."""
+    mani = run_manifest.read(out)
+    if not mani:
+        return None  # older run without a manifest: trust the caller
+    was = set(mani.get("commissions", {}))
+    now = {s.id for s in ev.setups}
+    if was and was != now:
+        return (
+            f"this run's commissions were {sorted(was)}, but the config now has "
+            f"{sorted(now)}. Resume the original config, or start a fresh run."
+        )
+    return None
+
+
 def _cmd_eval(args: argparse.Namespace) -> int:
     if args.eval_cmd == "view":
         return _cmd_eval_view(args)
@@ -959,8 +1002,19 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     # One voyage per run: a default run lands in its own subdir (so runs don't
     # clobber each other and each has a stable home `view <id>` resolves to); an
     # explicit --out is taken literally.
-    run_id = _resolve_run_id(args)
-    out = Path(args.out) if args.out else _default_out_dir() / run_id
+    if args.resume:
+        run_id = args.resume
+        out = _resolve_resume_dir(args)
+        if out is None:
+            return 1
+        drift = _resume_drift(out, ev)
+        if drift is not None:
+            console.error_panel("can't resume: config changed", drift)
+            return 1
+        console.note(f"resuming {run_id}: reusing finished cells in {_tilde(out)}")
+    else:
+        run_id = _resolve_run_id(args)
+        out = Path(args.out) if args.out else _default_out_dir() / run_id
     env_mat = None
     if args.env:
         try:
@@ -986,6 +1040,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         env_mat=env_mat,
         config_path=args.path,
         timeout_s=args.timeout,
+        resume=bool(args.resume),
     )
 
 
@@ -1327,6 +1382,12 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
         type=float,
         default=300.0,
         help="Max seconds per run before it's recorded as an error (default: 300)",
+    )
+    p.add_argument(
+        "--resume",
+        metavar="RUN_ID",
+        default=None,
+        help="Resume a run by id: reuse cells whose trajectory finished, re-run the rest",
     )
     p.add_argument(
         "--sandbox",
