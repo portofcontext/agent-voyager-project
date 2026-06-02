@@ -140,10 +140,17 @@ already have is left untouched):
 | `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 | `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
+| `avp run "TASK" --agent A [--env E]` | commission an agent to do a task, placed in an env (confined) |
+| `avp env create NAME` | create an environment (`--runtime`/`--pip`/`--path`/`--file`/`--setup`/`--net`) |
+| `avp env list` | list your environments (`~/.avp/environments`) |
+| `avp env show NAME\|PATH` | what an environment provisions + curates |
+| `avp env run NAME -- CMD` | run a command inside an environment (provisioned + confined) |
+| `avp env delete NAME` | remove an environment |
 
-Run flags (`run` / `demo`): `--agent goose,claude-code` (compare agents),
-`--model <id>` (override every commission's model), `--json out.json` (machine-readable
-board + per-run trajectory pointers), `--threshold T`, `--max-items N`,
+Eval-run flags (`eval run`): `--agent goose,claude-code` (compare agents),
+`--model <id>` (override every commission's model), `--env <name\|path>` (run agents inside an
+environment), `--json out.json` (machine-readable board + per-run trajectory pointers),
+`--threshold T`, `--max-items N`,
 `--sandbox auto|on|off` (confine each agent run with [srt](https://github.com/anthropic-experimental/sandbox-runtime);
 `auto` sandboxes when srt is installed, else runs unsandboxed), `--quiet`.
 
@@ -198,6 +205,34 @@ uv run avp agent install claude-code --force \
 That's the contributor loop: build, install locally, run an eval against it.
 A third-party agent needs no install at all, just `--agent <its manifest>`.
 Set `AVP_AGENT_REPO` to install releases from a fork.
+
+## Environments + `avp run`
+
+An **environment** is a CLI-side asset (the AVP spec never sees it) describing a
+user-space world to run an agent in: a toolchain, packages, seeded files/dirs, and
+the srt confinement policy. It lives at `~/.avp/environments/<name>.json`.
+
+```bash
+uv run avp env create datasci \
+  --runtime python@3.12 --pip pandas \
+  --path ./my-repo \                 # copy a real codebase in (skips .git/node_modules/caches)
+  --file TASK.md=@./task.md          # seed a file inline, or from a local path with @
+
+uv run avp env show datasci
+uv run avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
+uv run avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
+```
+
+`avp run` **places** the installed agent in the env (the env becomes its home),
+commissions it with the task, streams the trajectory, and persists the workspace
+under `~/.avp/runs/<id>/env/workspace` so you can inspect what changed. With `srt`
+installed the run is confined: writes stay inside the workspace, the rest of the
+machine is read-only. Block fields: `runtimes` (`python@3.12`, …), `packages`
+(`{pip: [...]}`), `paths` (dirs/files copied in fresh each run), `files`
+(inline or `@local`), `setup` (commands), `expose` (`write` / `net`). Provisioners
+today: `python` via uv; node/go validate in the schema and install via `setup` until
+their provisioners ship. `avp eval run --env <name>` runs a whole eval inside the
+same environment.
 
 ## Visualize a run
 

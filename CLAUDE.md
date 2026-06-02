@@ -231,7 +231,12 @@ Python member across those trees.
 - `agents/avp-goose/rust/`: in-process Rust observer of Block's Goose agent (the `avp-goose` crate), including its `avp-goose-conformance` binary.
 - `avp-cli/`: the local CLI `avp` (import root `avp_cli`, console script `avp`):
   build, run, and iterate on Commissions. **An eval is a JSON config file, not
-  code**
+  code.** Also: declarative **environments** (`avp env`, CLI-side only; the spec
+  never sees them) that provision a user-space toolchain + workspace, **`avp run`**
+  to place an agent in an env and give it a task, and **srt** confinement
+  (`--sandbox`) shared by `eval`/`run`. Env/sandbox internals: `avp_cli/environment.py`,
+  `avp_cli/sandbox.py`; the supervisor↔agent workspace convention is `AVP_WORKSPACE`
+  / `AVP_ENV_ROOT`.
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make check` is the free
   pre-commit floor, with paid real-model targets (`test-real-llm`,

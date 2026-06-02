@@ -76,7 +76,7 @@ avp eval · capitals-extraction · 2 items · agent=goose
 
 `uv run avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
-> **Sandboxing (optional, zero extra config):** agent runs are unconfined by default. Install [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install -g @anthropic-ai/sandbox-runtime`) and `avp eval` automatically confines each run — the agent can't write outside its own workspace or reach non-model network. Force it with `--sandbox on`, turn it off with `--sandbox off`.
+> **Sandboxing (optional, zero extra config):** agent runs are unconfined by default. Install [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install -g @anthropic-ai/sandbox-runtime`) and `avp eval` / `avp run` automatically confine each run — the agent can't write outside its own workspace or reach non-model network. Force it with `--sandbox on`, turn it off with `--sandbox off`.
 
 ### 4 · Add a second agent and compare (optional)
 
@@ -91,8 +91,23 @@ uv run avp eval run capitals.eval.json                 # a scorecard per agent +
 
 > **Verify the whole path in a throwaway container:** `make onboarding-smoke` (or `AGENT=all` for both agents) reproduces this on a clean machine, so you can confirm onboarding without touching your own setup. Add `PAID=1` (with `ANTHROPIC_API_KEY` set) to include the eval.
 
+## Run an agent on a task, in an environment
+
+Beyond evals, `avp` can drop an installed agent into a declarative **environment** (a provisioned toolchain plus a real codebase) and hand it a task, confined by srt. The environment is the agent's home; the rest of your machine stays read-only.
+
+```bash
+# define an environment: a Python runtime + a directory of code to work on
+uv run avp env create myproj --runtime python@3.12 --path ./my-project
+
+# commission an agent to do a task inside it (sandboxed when srt is installed)
+uv run avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
+```
+
+Each run gets a fresh copy of the environment; `avp run` prints where the workspace landed so you can inspect what the agent changed. `--path` re-copies your source each run (skipping `.git`/`node_modules`/caches), so it's a tight curate-with-an-agent loop. `avp env run myproj -- <cmd>` runs an arbitrary command in the same environment (no agent) to see what's provisioned.
+
 ## Use AVP
 
+- **Drop an agent into a sandboxed environment and give it a task:** `avp run --agent A --env E "<task>"` provisions a toolchain + your code, places the agent in it, and runs it confined. Full reference in [`avp-cli/`](avp-cli/).
 - **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools; [`avp-goose`](agents/avp-goose/rust/) is an in-process observer of Block's Goose.
 - **Build, run, and iterate on Commissions:** [`avp`](avp-cli/), the local CLI, scaffolds a Commission, runs setups (Commission variants) over a dataset against the real agents, and ranks a board by accuracy / pass-rate / cost / turns.
 - **Consume a trajectory from another language:** typed bindings generated from the same JSON Schemas the Python types use, so they cannot drift: [Python](avp/bindings/python/), [Rust](avp/bindings/rust/), [TypeScript](avp/bindings/typescript/).
