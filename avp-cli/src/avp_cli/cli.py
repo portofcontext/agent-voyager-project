@@ -1265,7 +1265,13 @@ def _cmd_env_run(args: argparse.Namespace) -> int:
             if sandbox_enabled:
                 settings = sandbox.settings_file(
                     Path(tmp),
-                    write_paths=[tmp, str(cwd), *mat.write_paths, str(mat.prefix)],
+                    write_paths=[
+                        tempfile.gettempdir(),
+                        str(cwd),
+                        str(mat.workspace.parent),  # env root (agent run state)
+                        *mat.write_paths,
+                        str(mat.prefix),
+                    ],
                     allow_domains=mat.net,
                 )
                 argv = [*sandbox.prefix(settings), *argv]

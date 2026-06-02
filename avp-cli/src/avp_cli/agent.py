@@ -97,10 +97,24 @@ def run_agent(
         commission_path.write_text(commission.model_dump_json(by_alias=True, exclude_none=True))
         cmd = [*manifest.command, "run", "--commission", str(commission_path), "--out", str(out)]
         if sandbox:
-            write_paths = [tmp, str(out.parent), str(run_cwd), *sandbox_mod.home_state_dirs()]
+            # Allow the whole OS temp dir (agents drop scratch + DBs directly under
+            # it, not just our run subdir), the --out dir, the working dir, and the
+            # agent's HOME state. For an env, also the env ROOT (where the agent
+            # roots its run state, e.g. goose's GOOSE_PATH_ROOT) plus its workspace
+            # and prefix. The user's project dir stays read-only.
+            write_paths = [
+                tempfile.gettempdir(),
+                str(out.parent),
+                str(run_cwd),
+                *sandbox_mod.home_state_dirs(),
+            ]
             allow_domains: list[str] = []
             if env_mat:
-                write_paths += [*env_mat.write_paths, str(env_mat.prefix)]
+                write_paths += [
+                    str(env_mat.workspace.parent),
+                    *env_mat.write_paths,
+                    str(env_mat.prefix),
+                ]
                 allow_domains = env_mat.net
             settings = sandbox_mod.settings_file(
                 Path(tmp), write_paths=write_paths, allow_domains=allow_domains

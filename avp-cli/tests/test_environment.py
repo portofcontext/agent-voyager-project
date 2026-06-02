@@ -196,6 +196,10 @@ def test_run_agent_launches_into_env(tmp_path, monkeypatch) -> None:
     assert cap["env"]["PATH"].split(":")[0] == bindir  # prefix bin on PATH first
     assert cap["cmd"][:2] == ["SRT", "--"]  # sandbox wrap present
     assert str(ws) in seen["write"] and str(tmp_path / "out") in seen["write"]
+    import tempfile
+
+    assert tempfile.gettempdir() in seen["write"]  # whole OS temp (agents scratch under it)
+    assert str(tmp_path) in seen["write"]  # env root (workspace.parent) for the agent's run state
     assert "api.x.test" in seen["allow"]  # env network folded into the srt view
 
 
