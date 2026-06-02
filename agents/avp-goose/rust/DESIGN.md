@@ -216,8 +216,8 @@ Observing Goose in-process keeps the connector small:
   `make schemas` + `make bindings`; now drift-clean (`make bindings-check`
   passes). Also fixed stale hand-written resolver docs in `rust/avp/src/lib.rs`
   and `typescript/avp/src/index.ts`, and modernized `rust/avp/tests/roundtrip.rs`
-  off removed event types (`model_turn_ended`, `refusal_recorded`) onto
-  current ones (`assistant_message`, `agent_stopped reason=refused`).
+  off the pre-v0.1 event types onto current ones (`assistant_message`,
+  `agent_stopped reason=refused`).
 - **Trajectory union discrimination (fixed).** typify ignored the schema's
   OpenAPI `discriminator` and emitted `#[serde(untagged)]` for the `type`-
   discriminated Rust unions (trajectory Event, content blocks, Commission

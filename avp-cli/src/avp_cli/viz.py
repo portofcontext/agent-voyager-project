@@ -65,20 +65,23 @@ def _result_text(result: Any) -> str:
 
 
 def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
-    """Map one AVP event to the viz RunEvent shape (or None to drop it).
+    """Project one AVP wire event onto the viz RunEvent (or None to drop it).
 
-    Beyond the layout fields (type/step/tool/tokens) each event carries the
-    detail the inspector shows: the model's text + per-turn cost, a tool's input
-    and result preview, the run's final output, an error's message.
+    The `type` is the event's real wire type (`avp.assistant_message`,
+    `avp.tool_invoked`, ...) verbatim, and every field carries its wire
+    attribute name (`input_tokens`, `tool_name`, `reason`). This is a thin
+    projection, not a re-vocabulary: the only departures from a raw event dump
+    are dropping the span/envelope plumbing and capping huge string leaves so
+    the whole eval still fits in a /view URL (the inspector shows the cap).
     """
     if isinstance(ev, AssistantMessageEvent):
         d = ev.data
         out: dict[str, Any] = {
             "seq": seq,
-            "type": "model_turn_ended",
+            "type": ev.type,
             "step": d.step,
-            "tokens_in": d.usage.input_tokens,
-            "tokens_out": d.usage.output_tokens,
+            "input_tokens": d.usage.input_tokens,
+            "output_tokens": d.usage.output_tokens,
             "cost_usd": d.cost_usd,
             "duration_ms": d.duration_ms,
         }
@@ -86,24 +89,24 @@ def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
         if text:
             out["text"] = _cap(text)
         if d.response_model:
-            out["model"] = d.response_model
+            out["response_model"] = d.response_model
         return out
     if isinstance(ev, ToolInvokedEvent):
         d = ev.data
-        out = {"seq": seq, "type": "tool_invoked", "step": d.step, "tool": d.tool_name}
+        out = {"seq": seq, "type": ev.type, "step": d.step, "tool_name": d.tool_name}
         if d.tool_input:
             out["tool_input"] = _cap_obj(d.tool_input)
         if d.tool_dispatch_target:
-            out["dispatch"] = d.tool_dispatch_target
+            out["tool_dispatch_target"] = d.tool_dispatch_target
         return out
     if isinstance(ev, ToolReturnedEvent):
         d = ev.data
         result = _result_text(d.tool_result)
         out = {
             "seq": seq,
-            "type": "tool_returned",
+            "type": ev.type,
             "step": d.step,
-            "tool": d.tool_name,
+            "tool_name": d.tool_name,
             "duration_ms": d.duration_ms,
             "result_chars": len(result),
         }
@@ -113,16 +116,16 @@ def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
             out["is_error"] = True
         return out
     if isinstance(ev, AgentStartedEvent):
-        return {"seq": seq, "type": "agent_started"}
+        return {"seq": seq, "type": ev.type}
     if isinstance(ev, AgentStoppedEvent):
-        out = {"seq": seq, "type": "agent_stopped", "stop_reason": str(ev.data.reason)}
+        out = {"seq": seq, "type": ev.type, "reason": str(ev.data.reason)}
         if ev.data.output is not None:
             out["output"] = _cap(ev.data.output)
         return out
     if isinstance(ev, ErrorOccurredEvent):
         return {
             "seq": seq,
-            "type": "error_occurred",
+            "type": ev.type,
             "error_code": str(ev.data.error_code),
             "error_message": _cap(ev.data.error_message),
         }
