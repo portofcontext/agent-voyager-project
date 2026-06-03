@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-02",
+  "$snapshot_date": "2026-06-03",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -1391,6 +1391,84 @@
       "output": 7.5,
       "cache_read": 0.5,
       "cache_write": 3.125
+    },
+    "alibaba-token-plan/MiniMax-M2.5": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/deepseek-v3.2": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "alibaba-token-plan/deepseek-v4-flash": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0
+    },
+    "alibaba-token-plan/deepseek-v4-pro": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0
+    },
+    "alibaba-token-plan/glm-5": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/glm-5.1": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/kimi-k2.5": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/kimi-k2.6": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/qwen-image-2.0": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "alibaba-token-plan/qwen-image-2.0-pro": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "alibaba-token-plan/qwen3.6-flash": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/qwen3.6-plus": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/qwen3.7-max": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "alibaba-token-plan/wan2.7-image": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "alibaba-token-plan/wan2.7-image-pro": {
+      "input": 0.0,
+      "output": 0.0
     },
     "alibaba/qvq-max": {
       "input": 1.2,
@@ -3536,7 +3614,7 @@
     "claudinio/claudinio": {
       "input": 0.5,
       "output": 2.0,
-      "cache_read": 0.05
+      "cache_read": 0.15
     },
     "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5": {
       "input": 0.3,
@@ -10393,10 +10471,9 @@
       "cache_write": 0.375
     },
     "minimax-cn/MiniMax-M3": {
-      "input": 0.3,
-      "output": 1.2,
-      "cache_read": 0.06,
-      "cache_write": 0.375
+      "input": 0.6,
+      "output": 2.4,
+      "cache_read": 0.12
     },
     "minimax-coding-plan/MiniMax-M2": {
       "input": 0.0,
@@ -10469,16 +10546,19 @@
       "cache_write": 0.375
     },
     "minimax/MiniMax-M3": {
-      "input": 0.3,
-      "output": 1.2,
-      "cache_read": 0.06,
-      "cache_write": 0.375
+      "input": 0.6,
+      "output": 2.4,
+      "cache_read": 0.12
     },
     "mistral/codestral-latest": {
       "input": 0.3,
       "output": 0.9
     },
     "mistral/devstral-2512": {
+      "input": 0.4,
+      "output": 2.0
+    },
+    "mistral/devstral-latest": {
       "input": 0.4,
       "output": 2.0
     },
@@ -10569,6 +10649,10 @@
     "mistral/open-mistral-7b": {
       "input": 0.25,
       "output": 0.25
+    },
+    "mistral/open-mistral-nemo": {
+      "input": 0.15,
+      "output": 0.15
     },
     "mistral/open-mixtral-8x22b": {
       "input": 2.0,
@@ -14872,10 +14956,6 @@
       "input": 0.75,
       "output": 1.2
     },
-    "openrouter/baidu/ernie-4.5-300b-a47b": {
-      "input": 0.28,
-      "output": 1.1
-    },
     "openrouter/baidu/ernie-4.5-vl-28b-a3b": {
       "input": 0.14,
       "output": 0.56
@@ -15148,9 +15228,9 @@
       "cache_read": 0.002
     },
     "openrouter/inclusionai/ring-2.6-1t": {
-      "input": 0.3,
-      "output": 2.5,
-      "cache_read": 0.06
+      "input": 0.075,
+      "output": 0.625,
+      "cache_read": 0.015
     },
     "openrouter/inflection/inflection-3-pi": {
       "input": 2.5,
