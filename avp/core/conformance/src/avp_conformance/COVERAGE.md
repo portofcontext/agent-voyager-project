@@ -2,7 +2,7 @@
 
 What the cross-agent conformance suite covers, and what it deliberately does
 not yet. This is a rationale map, not a status checklist: the live case count
-comes from `avp-conformance` at runtime (`uv run avp-conformance validate`),
+comes from `avp-conformance` at runtime (`avp-conformance validate`),
 never from this file.
 
 Coverage is layered. Below the conformance cases sit the JSON Schemas (every

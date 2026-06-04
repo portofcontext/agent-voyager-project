@@ -38,12 +38,13 @@ Set up the CLI and run your first scored agent comparison in about five minutes,
 
 ### 1 · Get the CLI (and Docker)
 
-Two prerequisites. [uv](https://github.com/astral-sh/uv) runs everything (the CLI isn't published yet, so you invoke it as `uv run avp`), and a **Docker daemon** backs the sandbox every agent run executes in — [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) all work; just have one running.
+Two prerequisites. [uv](https://github.com/astral-sh/uv) builds the CLI (it isn't published yet), and a **Docker daemon** backs the sandbox every agent run executes in — [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) all work; just have one running.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
 git clone https://github.com/portofcontext/agent-voyager-project
 cd agent-voyager-project && uv sync
+source .venv/bin/activate                              # puts `avp` on PATH
 ```
 
 ```bash
@@ -52,13 +53,13 @@ brew install --cask docker      # Docker Desktop, then launch it
 brew install colima docker && colima start
 ```
 
-### 2 · Install an agent
+### 2 · Install agents
 
 Agents are prebuilt GitHub releases, fetched over plain HTTPS (no build, no auth). `goose` needs nothing else:
 
 ```bash
-uv run avp agent install goose
-uv run avp agent list                                  # goose → "ready"
+avp agent install goose
+avp agent list                                  # goose → "ready"
 ```
 
 ### 3 · Run an eval
@@ -67,8 +68,8 @@ The capitals example runs on Claude, so set an `ANTHROPIC_API_KEY` (or sign in w
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-uv run avp init capitals --agent goose
-uv run avp eval run capitals.eval.json
+avp init capitals --agent goose
+avp eval run capitals.eval.json
 ```
 
 The first run sets up the sandbox stack (starts the managed server, builds the
@@ -83,7 +84,7 @@ avp eval · capitals-extraction · 2 items · agent=goose
  2  capitals-baseline      100%       100%  $0.0166        2.0
 ```
 
-`uv run avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
+`avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
 > **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist. The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
 
@@ -93,9 +94,9 @@ Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the
 
 ```bash
 npm install -g @anthropic-ai/claude-code               # the claude CLI
-uv run avp agent install claude-code
-uv run avp init capitals --agent goose,claude-code
-uv run avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
+avp agent install claude-code
+avp init capitals --agent goose,claude-code
+avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
 ```
 
 > **Verify the whole path in a throwaway container:** `make onboarding-smoke` (or `AGENT=all` for both agents) reproduces this on a clean machine, so you can confirm onboarding without touching your own setup. Add `PAID=1` (with `ANTHROPIC_API_KEY` set) to include the eval.
@@ -106,10 +107,10 @@ Beyond evals, `avp` can drop an agent into a declarative **environment** (a cont
 
 ```bash
 # define an environment: a base image + a directory of code to work on
-uv run avp env create myproj --image python:3.12-slim --path ./my-project
+avp env create myproj --image python:3.12-slim --path ./my-project
 
 # commission an agent to do a task inside it (always sandboxed)
-uv run avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
+avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
 Each run gets a fresh copy of the environment; `avp run` prints where the workspace landed so you can inspect what the agent changed. `--path` re-copies your source each run (skipping `.git`/`node_modules`/caches), so it's a tight curate-with-an-agent loop. `avp env run myproj -- <cmd>` runs an arbitrary command in the same environment (no agent) to see what's provisioned.

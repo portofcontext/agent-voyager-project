@@ -143,10 +143,10 @@ conformance` before committing wire-format changes:
 ```bash
 make conformance                                  # validate + ping per agent (free; no model)
 
-# or directly via uv (workspace rooted at repo root):
-uv run avp-conformance validate                                  # TestCase-validate every packaged case file
-uv run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
-uv run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
+# or directly (the workspace venv puts the CLIs on PATH):
+avp-conformance validate                                  # TestCase-validate every packaged case file
+avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
+avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
 ```
 
 ## Real-model checks after wire / agent changes

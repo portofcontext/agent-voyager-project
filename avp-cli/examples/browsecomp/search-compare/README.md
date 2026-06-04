@@ -32,7 +32,7 @@ sed 's/YOUR_EXA_API_KEY/<exa-key>/'       browsecomp-exa.commission.json    > ~/
 sed 's/YOUR_LINKUP_API_KEY/<linkup-key>/' browsecomp-linkup.commission.json > ~/.avp/commissions/browsecomp-linkup.json
 
 export ANTHROPIC_API_KEY=...
-uv run avp eval run browsecomp-search-compare.eval.json \
+avp eval run browsecomp-search-compare.eval.json \
   --max-items 10 --timeout 600 --sandbox on --env web-search-env.json
 ```
 

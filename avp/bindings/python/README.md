@@ -44,7 +44,7 @@ Then:
 
 ```bash
 uv run python -m pytest avp/bindings/python   # this package's tests
-uv run avp-conformance validate               # validate every packaged conformance case
+avp-conformance validate               # validate every packaged conformance case
 ```
 
 ## Package layout

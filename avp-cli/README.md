@@ -28,10 +28,11 @@ bar. They measure different things, and a good benchmark reports both.
 
 ```bash
 make sync                       # from the repo root: installs the workspace
+source .venv/bin/activate       # puts `avp` on PATH
 
-uv run avp init                 # pick a benchmark (try 'demo'): writes an eval here + commissions to ~/.avp
-uv run avp eval run <config>    # run it against a real agent, print the board; iterate
-uv run avp eval view            # open the most recent run on agentvoyagerproject.com
+avp init                 # pick a benchmark (try 'demo'): writes an eval here + commissions to ~/.avp
+avp eval run <config>    # run it against a real agent, print the board; iterate
+avp eval view            # open the most recent run on agentvoyagerproject.com
 ```
 
 Or use the Make passthrough: `make avp init`, `make avp eval list`.
@@ -187,9 +188,9 @@ agent (the dev fallback, which builds from source). Normal use is to install
 the prebuilt agent once:
 
 ```bash
-uv run avp agent install goose          # latest release, or --version 0.0.1
-uv run avp agent install claude-code
-uv run avp agent list                   # shows installed version + readiness
+avp agent install goose          # latest release, or --version 0.0.1
+avp agent install claude-code
+avp agent list                   # shows installed version + readiness
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
@@ -209,8 +210,8 @@ artifacts and point the CLI at them locally:
 ```bash
 make build-agents     # builds into dist/agents and prints the install commands
 
-uv run avp agent install goose --binary dist/agents/avp-goose-conformance --force
-uv run avp agent install claude-code --force \
+avp agent install goose --binary dist/agents/avp-goose-conformance --force
+avp agent install claude-code --force \
   --wheel dist/agents/avp-*.whl \
   --wheel dist/agents/avp_conformance-*.whl \
   --wheel dist/agents/avp_claude_agent_sdk-*.whl
@@ -229,14 +230,14 @@ comes from the host machine; everything the agent sees is declared. It lives at
 `~/.avp/environments/<name>.json`.
 
 ```bash
-uv run avp env create datasci \
+avp env create datasci \
   --image python:3.12-slim --pip pandas \
   --path ./my-repo \                 # copy a real codebase in (skips .git/node_modules/caches)
   --file TASK.md=@./task.md          # seed a file inline, or from a local path with @
 
-uv run avp env show datasci
-uv run avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
-uv run avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
+avp env show datasci
+avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
+avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
 ```
 
 `avp run` compiles the env + the agent's container recipe into a derived image
@@ -324,7 +325,7 @@ src/avp_cli/
     report.py       #   board_table (rich) + dump_json
 ```
 
-The CLI is its own example: `uv run avp init capitals` scaffolds the bundled
-capitals eval and `uv run avp eval run capitals.eval.json` runs it end-to-end
+The CLI is its own example: `avp init capitals` scaffolds the bundled
+capitals eval and `avp eval run capitals.eval.json` runs it end-to-end
 against a real agent. For agent-side integration examples (the drop-in
 `AVPClaudeSDKClient`), see `agents/avp-claude-agent-sdk/python/`.
