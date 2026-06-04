@@ -54,10 +54,13 @@ _WORKSPACE_MNT = "/avp/workspace"
 _IO_MNT = "/avp/io"
 
 # Host env vars forwarded into the sandbox: model-provider credentials and
-# agent routing knobs. The rest of the host environment stays on the host;
+# agent routing knobs. CLAUDE_ covers CLAUDE_CODE_OAUTH_TOKEN (the
+# `claude setup-token` subscription credential the claude CLI accepts in
+# place of an API key). The rest of the host environment stays on the host;
 # the sandbox env is otherwise fully declared.
 _ENV_PASSTHROUGH_PREFIXES = (
     "ANTHROPIC_",
+    "CLAUDE_",
     "OPENAI_",
     "GOOGLE_",
     "GEMINI_",

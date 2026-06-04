@@ -47,10 +47,13 @@ stack's health.
 
 **Credentials.** Agents resolve their own credentials, exactly as they would
 standalone; the CLI forwards your model-provider environment into the sandbox
-(`ANTHROPIC_*`, `OPENAI_*`, `GOOGLE_*`/`GEMINI_*`, `MISTRAL_*`, `OPENROUTER_*`,
-and `GOOSE_*` routing vars). Set up whatever your chosen agent expects (for an
-Anthropic-backed run, `export ANTHROPIC_API_KEY=...`). The CLI reads no keys and
-assumes no provider; nothing else from your host environment reaches the agent.
+(`ANTHROPIC_*`, `CLAUDE_*`, `OPENAI_*`, `GOOGLE_*`/`GEMINI_*`, `MISTRAL_*`,
+`OPENROUTER_*`, and `GOOSE_*` routing vars). Set up whatever your chosen agent
+expects: for an Anthropic-backed run, `export ANTHROPIC_API_KEY=...` (a platform
+API key — goose calls the API directly and needs one). The claude-code agent can
+instead run on a Claude subscription: `claude setup-token` and export the result
+as `CLAUDE_CODE_OAUTH_TOKEN`. The CLI reads no keys and assumes no provider;
+nothing else from your host environment reaches the agent.
 
 ## Where things live
 
