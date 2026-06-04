@@ -214,7 +214,10 @@ def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
     if built == tag and not quiet:
         console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
-        name=agent.name, image=built, command=recipe.command, env=agent.manifest.env
+        name=agent.name,
+        image=built,
+        command=recipe.command,
+        env={**dict(recipe.env), **agent.manifest.env},
     )
 
 

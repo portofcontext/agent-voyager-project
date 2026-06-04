@@ -37,10 +37,14 @@ class ContainerRecipe:
     release downloads / pip installs happen once per image, not per run.
     `command`: the in-sandbox argv prefix honoring the run contract
     (`<command> run --commission <path> --out <path>`).
+    `env`: agent-required sandbox env vars (e.g. claude-code needs
+    `IS_SANDBOX=1` to allow bypassPermissions as the container's root user);
+    not part of the image, so it doesn't affect the content hash.
     """
 
     install: tuple[str, ...]
     command: tuple[str, ...]
+    env: tuple[tuple[str, str], ...] = ()
 
 
 def dockerfile(env: Environment, recipe: ContainerRecipe) -> str:

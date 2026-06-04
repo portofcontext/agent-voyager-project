@@ -34,6 +34,10 @@ class ContainerSpec(BaseModel):
         min_length=1,
         description="Argv list used to run the agent inside the sandbox.",
     )
+    env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Environment variables the agent requires inside the sandbox.",
+    )
 
 
 class AgentManifest(BaseModel):

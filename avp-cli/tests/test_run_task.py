@@ -108,3 +108,13 @@ def test_run_fails_fast_without_docker(avp_home, monkeypatch) -> None:
     monkeypatch.setattr(cli.osb, "ensure_server", no_docker)
     # sandbox is mandatory: no Docker -> exit 2 before any work
     assert cli.main(["run", "--agent", "goose", "x"]) == 2
+
+
+def test_builtin_claude_recipe_carries_is_sandbox_env() -> None:
+    # The claude CLI refuses bypassPermissions as the container's root user
+    # unless IS_SANDBOX=1; the recipe is where that knowledge lives.
+    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
+
+    recipe = _builtin_recipe(AGENT_SOURCES["claude-code"])
+    assert ("IS_SANDBOX", "1") in recipe.env
+    assert _builtin_recipe(AGENT_SOURCES["goose"]).env == ()

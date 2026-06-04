@@ -124,6 +124,9 @@ def _builtin_recipe(source: AgentSource) -> ContainerRecipe:
             f"pip install --no-cache-dir {wheels}",
         ),
         command=("python", "-m", source.module or ""),
+        # The claude CLI refuses bypassPermissions as root (the container's
+        # default user) unless it's told it is already inside a sandbox. It is.
+        env=(("IS_SANDBOX", "1"),),
     )
 
 
@@ -139,7 +142,11 @@ def container_recipe(agent: ResolvedAgent) -> ContainerRecipe:
     agent with neither cannot run (runs are always sandboxed)."""
     spec = agent.manifest.container
     if spec is not None:
-        return ContainerRecipe(install=tuple(spec.install), command=tuple(spec.command))
+        return ContainerRecipe(
+            install=tuple(spec.install),
+            command=tuple(spec.command),
+            env=tuple(spec.env.items()),
+        )
     source = AGENT_SOURCES.get(agent.name)
     if source is not None and source.container_version:
         return _builtin_recipe(source)
