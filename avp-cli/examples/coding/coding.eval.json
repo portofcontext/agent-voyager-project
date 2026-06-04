@@ -1,0 +1,26 @@
+{
+  "name": "coding-katas",
+  "agents": ["claude-code", "goose"],
+  "dataset": {
+    "source": "inline",
+    "items": [
+      {
+        "id": "sum-squares",
+        "prompt": "Compute the sum of the squares of the integers 1 through 100.",
+        "expected": "338350"
+      },
+      {
+        "id": "fib-20",
+        "prompt": "Compute the 20th Fibonacci number, where F(1) = F(2) = 1.",
+        "expected": "6765"
+      },
+      {
+        "id": "primes-below-1000",
+        "prompt": "Count how many prime numbers are strictly less than 1000.",
+        "expected": "168"
+      }
+    ]
+  },
+  "scorer": { "name": "exact-match" },
+  "commissions": ["coding-solver"]
+}
