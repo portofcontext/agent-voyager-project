@@ -12,7 +12,6 @@ Docker running, agents installed, ≈ $0.50 on Haiku (8 runs):
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-export GOOSE_PROVIDER=anthropic
 
 uv run avp commission create coding-solver \
   --model claude-haiku-4-5 \
