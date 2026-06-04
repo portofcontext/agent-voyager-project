@@ -18,6 +18,11 @@
         "id": "primes-below-1000",
         "prompt": "Count how many prime numbers are strictly less than 1000.",
         "expected": "168"
+      },
+      {
+        "id": "hamming-10000",
+        "prompt": "Find the 10,000th positive integer (in increasing order, starting from 1) whose prime factorization contains no prime other than 2, 3, or 5.",
+        "expected": "288325195312500000"
       }
     ]
   },
