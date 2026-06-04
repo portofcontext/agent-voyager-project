@@ -143,10 +143,10 @@ conformance` before committing wire-format changes:
 ```bash
 make conformance                                  # validate + ping per agent (free; no model)
 
-# or directly via uv (workspace rooted at repo root):
-uv run avp-conformance validate                                  # TestCase-validate every packaged case file
-uv run avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
-uv run avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
+# or directly (the workspace venv puts the CLIs on PATH):
+avp-conformance validate                                  # TestCase-validate every packaged case file
+avp-conformance ping  --agent <path/to/avp-conformance.json>  # liveness-check an agent binary
+avp-conformance check --agent <path/to/avp-conformance.json> --suite v0.1  # run cases against the agent (paid; real model)
 ```
 
 ## Real-model checks after wire / agent changes
@@ -231,12 +231,15 @@ Python member across those trees.
 - `agents/avp-goose/rust/`: in-process Rust observer of Block's Goose agent (the `avp-goose` crate), including its `avp-goose-conformance` binary.
 - `avp-cli/`: the local CLI `avp` (import root `avp_cli`, console script `avp`):
   build, run, and iterate on Commissions. **An eval is a JSON config file, not
-  code.** Also: declarative **environments** (`avp env`, CLI-side only; the spec
-  never sees them) that provision a user-space toolchain + workspace, **`avp run`**
-  to place an agent in an env and give it a task, and **srt** confinement
-  (`--sandbox`) shared by `eval`/`run`. Env/sandbox internals: `avp_cli/environment.py`,
-  `avp_cli/sandbox.py`; the supervisor↔agent workspace convention is `AVP_WORKSPACE`
-  / `AVP_ENV_ROOT`.
+  code.** Every run executes in an OpenSandbox container (mandatory; Docker is
+  the one prerequisite — the CLI manages its own local control-plane server).
+  Declarative **environments** (`avp env`, CLI-side only; the spec never sees
+  them) are image-first (image/packages/paths/files/setup/net/resources) and
+  compile with the agent's container recipe into cached derived images;
+  **`avp run`** places an agent in an env and gives it a task. Internals:
+  `avp_cli/{osb,images,environment,agent}.py`; the supervisor↔agent workspace
+  convention is `AVP_WORKSPACE` / `AVP_ENV_ROOT` (mounted at `/avp/workspace` /
+  `/avp` in-sandbox). Real-sandbox seam tests: `make test-docker`.
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make check` is the free
   pre-commit floor, with paid real-model targets (`test-real-llm`,

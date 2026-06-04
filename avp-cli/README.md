@@ -28,19 +28,32 @@ bar. They measure different things, and a good benchmark reports both.
 
 ```bash
 make sync                       # from the repo root: installs the workspace
+source .venv/bin/activate       # puts `avp` on PATH
 
-uv run avp init                 # pick a benchmark (try 'demo'): writes an eval here + commissions to ~/.avp
-uv run avp eval run <config>    # run it against a real agent, print the board; iterate
-uv run avp eval view            # open the most recent run on agentvoyagerproject.com
+avp init                 # pick a benchmark (try 'demo'): writes an eval here + commissions to ~/.avp
+avp eval run <config>    # run it against a real agent, print the board; iterate
+avp eval view            # open the most recent run on agentvoyagerproject.com
 ```
 
 Or use the Make passthrough: `make avp init`, `make avp eval list`.
 
-**Credentials.** Each agent runs as a subprocess that inherits your environment
-and resolves its own credentials, exactly as it would standalone. Set up whatever
-your chosen agent expects (for an Anthropic-backed run, `export
-ANTHROPIC_API_KEY=...`; Goose also honors `GOOSE_PROVIDER` + that provider's key).
-The CLI reads no keys and assumes no provider.
+**Docker is the one prerequisite.** Every agent run executes inside an
+[OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container; the
+CLI manages the rest itself (a local control-plane server under
+`~/.avp/opensandbox/`, derived images, egress policy). Have Docker Desktop,
+OrbStack, or colima running and you're set; the first run pulls/builds images
+and is slower, every later run reuses them. `avp sandbox status` shows the
+stack's health.
+
+**Credentials.** Agents resolve their own credentials, exactly as they would
+standalone; the CLI forwards your model-provider environment into the sandbox
+(`ANTHROPIC_*`, `CLAUDE_*`, `OPENAI_*`, `GOOGLE_*`/`GEMINI_*`, `MISTRAL_*`,
+`OPENROUTER_*`, and `GOOSE_*` routing vars). Set up whatever your chosen agent
+expects: for an Anthropic-backed run, `export ANTHROPIC_API_KEY=...` (a platform
+API key — goose calls the API directly and needs one). The claude-code agent can
+instead run on a Claude subscription: `claude setup-token` and export the result
+as `CLAUDE_CODE_OAUTH_TOKEN`. The CLI reads no keys and assumes no provider;
+nothing else from your host environment reaches the agent.
 
 ## Where things live
 
@@ -140,19 +153,19 @@ already have is left untouched):
 | `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 | `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
-| `avp run "TASK" --agent A [--env E]` | commission an agent to do a task, placed in an env (confined) |
-| `avp env create NAME` | create an environment (`--runtime`/`--pip`/`--path`/`--file`/`--setup`/`--net`) |
+| `avp run "TASK" --agent A [--env E]` | commission an agent to do a task in a sandbox |
+| `avp env create NAME` | create an environment (`--image`/`--apt`/`--pip`/`--path`/`--file`/`--setup`/`--net`/`--cpu`/`--memory`) |
 | `avp env list` | list your environments (`~/.avp/environments`) |
-| `avp env show NAME\|PATH` | what an environment provisions + curates |
-| `avp env run NAME -- CMD` | run a command inside an environment (provisioned + confined) |
+| `avp env show NAME\|PATH` | what an environment's sandbox world contains |
+| `avp env run NAME -- CMD` | run a command inside an environment's sandbox |
 | `avp env delete NAME` | remove an environment |
+| `avp sandbox status` | Docker + managed-server health, live sandbox count |
+| `avp sandbox stop` | stop the managed sandbox server |
 
 Eval-run flags (`eval run`): `--agent goose,claude-code` (compare agents),
 `--model <id>` (override every commission's model), `--env <name\|path>` (run agents inside an
 environment), `--json out.json` (machine-readable board + per-run trajectory pointers),
-`--threshold T`, `--max-items N`,
-`--sandbox auto|on|off` (confine each agent run with [srt](https://github.com/anthropic-experimental/sandbox-runtime);
-`auto` sandboxes when srt is installed, else runs unsandboxed), `--quiet`.
+`--threshold T`, `--max-items N`, `--quiet`.
 
 **Live progress.** In a terminal, each run animates on one line as it sails: a
 growing voyage of brand-colored glyphs (`●` model turns, `◆` tool calls) with a
@@ -178,16 +191,21 @@ agent (the dev fallback, which builds from source). Normal use is to install
 the prebuilt agent once:
 
 ```bash
-uv run avp agent install goose          # latest release, or --version 0.0.1
-uv run avp agent install claude-code
-uv run avp agent list                   # shows installed version + readiness
+avp agent install goose          # latest release, or --version 0.0.1
+avp agent install claude-code
+avp agent list                   # shows installed version + readiness
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
 (claude-code) installs into a managed venv (needs `uv`). Release downloads go over
 plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
-fork or to avoid API rate limits. The claude-code agent also needs Node and the
-`claude` CLI on PATH at run time.
+fork or to avoid API rate limits. The host install serves `avp agent describe`
+(the free pre-flight view); actual runs install the agent's **Linux build into
+the sandbox image** via its container recipe, so run-time dependencies (e.g.
+the claude-code agent's Node + `claude` CLI) live in the image, not on your
+machine. A third-party agent declares its own recipe in its manifest's
+`container` block (`{"install": ["<Dockerfile RUN step>", ...], "command":
+["<argv>", ...]}`).
 
 **Testing your own agent or a new version (no release needed).** Build the
 artifacts and point the CLI at them locally:
@@ -195,8 +213,8 @@ artifacts and point the CLI at them locally:
 ```bash
 make build-agents     # builds into dist/agents and prints the install commands
 
-uv run avp agent install goose --binary dist/agents/avp-goose-conformance --force
-uv run avp agent install claude-code --force \
+avp agent install goose --binary dist/agents/avp-goose-conformance --force
+avp agent install claude-code --force \
   --wheel dist/agents/avp-*.whl \
   --wheel dist/agents/avp_conformance-*.whl \
   --wheel dist/agents/avp_claude_agent_sdk-*.whl
@@ -208,31 +226,38 @@ Set `AVP_AGENT_REPO` to install releases from a fork.
 
 ## Environments + `avp run`
 
-An **environment** is a CLI-side asset (the AVP spec never sees it) describing a
-user-space world to run an agent in: a toolchain, packages, seeded files/dirs, and
-the srt confinement policy. It lives at `~/.avp/environments/<name>.json`.
+An **environment** is a CLI-side asset (the AVP spec never sees it) describing
+the container world an agent runs in: a base image, packages, seeded
+files/dirs, setup commands, an egress allowlist, and resource caps. Nothing
+comes from the host machine; everything the agent sees is declared. It lives at
+`~/.avp/environments/<name>.json`.
 
 ```bash
-uv run avp env create datasci \
-  --runtime python@3.12 --pip pandas \
+avp env create datasci \
+  --image python:3.12-slim --pip pandas \
   --path ./my-repo \                 # copy a real codebase in (skips .git/node_modules/caches)
   --file TASK.md=@./task.md          # seed a file inline, or from a local path with @
 
-uv run avp env show datasci
-uv run avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
-uv run avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
+avp env show datasci
+avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
+avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
 ```
 
-`avp run` **places** the installed agent in the env (the env becomes its home),
-commissions it with the task, streams the trajectory, and persists the workspace
-under `~/.avp/runs/<id>/env/workspace` so you can inspect what changed. With `srt`
-installed the run is confined: writes stay inside the workspace, the rest of the
-machine is read-only. Block fields: `runtimes` (`python@3.12`, …), `packages`
-(`{pip: [...]}`), `paths` (dirs/files copied in fresh each run), `files`
-(inline or `@local`), `setup` (commands), `expose` (`write` / `net`). Provisioners
-today: `python` via uv; node/go validate in the schema and install via `setup` until
-their provisioners ship. `avp eval run --env <name>` runs a whole eval inside the
-same environment.
+`avp run` compiles the env + the agent's container recipe into a derived image
+(`avp-env:<content-hash>`, built once, then cached), seeds the workspace on the
+host, boots a sandbox with the workspace bind-mounted, runs `setup`, then
+commissions the agent. The trajectory streams live; the workspace persists
+under `~/.avp/runs/<id>/workspace` so you can inspect what changed. The
+container is the write boundary, and the network is a default-deny egress
+allowlist (model-provider APIs + GitHub + the env's `net`).
+
+Block fields: `image` (default `python:3.12-slim`), `packages`
+(`{apt: [...], pip: [...]}`, baked into the image), `paths` (dirs/files copied
+into the workspace fresh each run), `files` (inline or `@local`), `setup`
+(commands run in the sandbox workspace before the agent; network access needs
+`net`), `net` (extra egress domains), `resources` (`{cpu, memory}`).
+`avp eval run --env <name>` runs a whole eval inside the same environment (one
+workspace shared across cells, one fresh sandbox per cell).
 
 ## Visualize a run
 
@@ -267,9 +292,11 @@ is: run the eval → view it → write.
 
 `avp eval` drives any conforming AVP agent through the same contract the
 conformance harness uses: `<agent> run --commission <file> --out <ndjson>`,
-declared in the agent's `avp-conformance.json`. For each commission/item it loads
-the config, composes a Commission, runs the agent, reduces the trajectory, extracts
-the final answer, scores it by the named scorer, and ranks a `Board`.
+declared in the agent's `avp-conformance.json` — executed inside an OpenSandbox
+container built from the env's derived image. For each commission/item it
+composes a Commission, boots a fresh sandbox (workspace + io dirs
+bind-mounted), runs the agent, reduces the trajectory, extracts the final
+answer, scores it by the named scorer, and ranks a `Board`.
 
 Layout:
 
@@ -283,8 +310,11 @@ src/avp_cli/
   console.py        # rich Console + stdout(results)/stderr(progress) discipline
   brand.py          # the AVP ship logo + palette for the terminal
   viz.py            # trajectory -> standalone HTML constellation (avp show)
-  agent.py          # run_agent: the `run --commission --out` manifest contract
-  agents.py         # agent sources + resolution (installed > dev fallback) + preflight
+  osb.py            # the managed OpenSandbox control plane (config, spawn, egress policy)
+  images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
+  environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding
+  agent.py          # run_agent: the run contract executed inside a sandbox
+  agents.py         # agent sources + resolution (installed > dev fallback) + container recipes
   agent_install.py  # `avp agent install`: fetch a release / install local artifacts
   observability.py  # summarize: reduce a trajectory to per-run facts
   onboarding.py     # the WELCOME / agent-routing text
@@ -298,7 +328,7 @@ src/avp_cli/
     report.py       #   board_table (rich) + dump_json
 ```
 
-The CLI is its own example: `uv run avp init capitals` scaffolds the bundled
-capitals eval and `uv run avp eval run capitals.eval.json` runs it end-to-end
+The CLI is its own example: `avp init capitals` scaffolds the bundled
+capitals eval and `avp eval run capitals.eval.json` runs it end-to-end
 against a real agent. For agent-side integration examples (the drop-in
 `AVPClaudeSDKClient`), see `agents/avp-claude-agent-sdk/python/`.

@@ -74,9 +74,7 @@ def current_target() -> str:
         return f"{arch}-apple-darwin"
     if system == "Linux":
         return f"{arch}-unknown-linux-gnu"
-    raise InstallError(
-        f"unsupported platform {system!r} (prebuilt agents + srt are macOS/Linux only)"
-    )
+    raise InstallError(f"unsupported platform {system!r} (prebuilt agents are macOS/Linux only)")
 
 
 def install(

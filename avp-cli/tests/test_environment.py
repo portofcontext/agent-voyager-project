@@ -1,42 +1,44 @@
-"""Declarative environments: parse the block, seed files, materialize a prefix.
+"""Declarative environments: parse the image-first block, seed the workspace,
+and compile (env, agent recipe) to a cached Dockerfile.
 
 Environments are a CLI-side concept (the spec never learns the word): they
-provision a user-space toolchain prefix + a seeded workspace, then the agent
-runs against it under srt. These tests cover parse / file-seeding / the
-materialize dispatch with the provisioner stubbed; a real uv-backed smoke lives
-in `test_environment_smoke.py`.
-"""
+describe the container world an agent runs in. Nothing here touches Docker;
+the real-build path is covered by the docker-gated seam test."""
 
 from __future__ import annotations
 
 import pytest
 
 from avp_cli import environment as env
+from avp_cli import images
 
 # ── parse ─────────────────────────────────────────────────────────────────────
 
 
-def test_parse_minimal_is_all_empty() -> None:
+def test_parse_minimal_defaults_image() -> None:
     e = env.Environment.parse({})
-    assert e.runtimes == [] and e.packages == {} and e.files == {}
-    assert e.setup == [] and e.expose.write == [] and e.expose.net == []
+    assert e.image == env.DEFAULT_IMAGE
+    assert e.packages == {} and e.files == {} and e.setup == []
+    assert e.net == [] and e.resources == {}
 
 
 def test_parse_full_block() -> None:
     e = env.Environment.parse(
         {
-            "runtimes": ["python@3.12"],
-            "packages": {"pip": ["six"]},
+            "image": "python:3.12-slim",
+            "packages": {"apt": ["git"], "pip": ["six"]},
             "files": {"a.txt": "hi"},
-            "setup": ["echo hi"],
-            "expose": {"write": ["./out"], "net": ["api.x.test"]},
+            "setup": ["pip install -e ."],
+            "net": ["api.x.test"],
+            "resources": {"cpu": "2", "memory": "4Gi"},
         }
     )
-    assert e.runtimes == ["python@3.12"]
-    assert e.packages == {"pip": ["six"]}
+    assert e.image == "python:3.12-slim"
+    assert e.packages == {"apt": ["git"], "pip": ["six"]}
     assert e.files == {"a.txt": "hi"}
-    assert e.setup == ["echo hi"]
-    assert e.expose.write == ["./out"] and e.expose.net == ["api.x.test"]
+    assert e.setup == ["pip install -e ."]
+    assert e.net == ["api.x.test"]
+    assert e.resources == {"cpu": "2", "memory": "4Gi"}
 
 
 def test_parse_rejects_non_object() -> None:
@@ -49,26 +51,22 @@ def test_parse_rejects_unknown_key() -> None:
         env.Environment.parse({"nope": 1})
 
 
-# ── tool spec ─────────────────────────────────────────────────────────────────
+def test_parse_points_old_specs_at_the_new_model() -> None:
+    # The pre-container shape gets a teaching error, not a generic "unknown key".
+    with pytest.raises(env.EnvError, match="container images now"):
+        env.Environment.parse({"runtimes": ["python@3.12"]})
+    with pytest.raises(env.EnvError, match="'net' instead of 'expose'"):
+        env.Environment.parse({"expose": {"write": ["./out"]}})
 
 
-def test_parse_runtime_with_and_without_version() -> None:
-    assert env.parse_runtime("python@3.12") == ("python", "3.12")
-    assert env.parse_runtime("python") == ("python", None)
+def test_parse_rejects_unknown_ecosystem_and_resource() -> None:
+    with pytest.raises(env.EnvError, match="ecosystem"):
+        env.Environment.parse({"packages": {"npm": ["left-pad"]}})
+    with pytest.raises(env.EnvError, match="resource"):
+        env.Environment.parse({"resources": {"gpu": "1"}})
 
 
-def test_parse_runtime_accepts_known_unimplemented_langs() -> None:
-    # The schema is language-agnostic: node/go validate even before we ship their
-    # provisioner. materialize() is where "not implemented yet" surfaces.
-    assert env.parse_runtime("node@20") == ("node", "20")
-
-
-def test_parse_runtime_rejects_unknown_lang() -> None:
-    with pytest.raises(env.EnvError, match="unsupported"):
-        env.parse_runtime("cobol@85")
-
-
-# ── seed_files ────────────────────────────────────────────────────────────────
+# ── seed_workspace / seed_files ───────────────────────────────────────────────
 
 
 def test_seed_files_inline_and_nested(tmp_path) -> None:
@@ -103,104 +101,45 @@ def test_seed_files_blocks_escape_from_workspace(tmp_path) -> None:
         env.seed_files({"../evil.txt": "x"}, ws, base_dir=tmp_path)
 
 
-# ── materialize dispatch (provisioner stubbed; no uv) ─────────────────────────
+def test_seed_workspace_copies_a_directory_tree(tmp_path) -> None:
+    src = tmp_path / "code" / "pkg"
+    src.mkdir(parents=True)
+    (src.parent / "main.py").write_text("print('hi')")
+    (src / "util.py").write_text("x = 1")
+    e = env.Environment.parse({"paths": [str(tmp_path / "code")]})
+    ws = env.seed_workspace(e, tmp_path / "run" / "work", base_dir=tmp_path)
+    assert (ws / "main.py").read_text() == "print('hi')"
+    assert (ws / "pkg" / "util.py").read_text() == "x = 1"  # tree preserved
 
 
-def test_materialize_seeds_files_and_view(tmp_path, monkeypatch) -> None:
-    calls: list[tuple[str, str | None]] = []
-
-    def fake_python(prefix, version, pip, mat):
-        calls.append(("python", version))
-        mat.path_additions.append(str(prefix / "python" / "bin"))
-
-    monkeypatch.setitem(env._PROVISIONERS, "python", fake_python)
-
-    e = env.Environment.parse(
-        {
-            "runtimes": ["python@3.12"],
-            "packages": {"pip": ["six"]},
-            "files": {"hello.txt": "hi"},
-            "expose": {"write": ["./out"], "net": ["api.x.test"]},
-        }
-    )
-    root = tmp_path / "env"
-    mat = env.materialize(e, root, base_dir=tmp_path)
-
-    assert calls == [("python", "3.12")]  # provisioner dispatched with the version
-    assert (mat.workspace / "hello.txt").read_text() == "hi"  # files seeded
-    assert str(mat.workspace) in mat.write_paths  # workspace always writable
-    assert any("out" in p for p in mat.write_paths)  # expose.write folded in
-    assert "api.x.test" in mat.net
-    assert any(p.endswith("python/bin") for p in mat.path_additions)
+def test_seed_workspace_copies_a_single_file(tmp_path) -> None:
+    (tmp_path / "notes.md").write_text("hello")
+    e = env.Environment.parse({"paths": [str(tmp_path / "notes.md")]})
+    ws = env.seed_workspace(e, tmp_path / "work", base_dir=tmp_path)
+    assert (ws / "notes.md").read_text() == "hello"
 
 
-def test_materialize_unimplemented_tool_errors(tmp_path) -> None:
-    e = env.Environment.parse({"runtimes": ["node@20"]})
-    with pytest.raises(env.EnvError, match="not implemented"):
-        env.materialize(e, tmp_path / "env", base_dir=tmp_path)
+def test_seed_workspace_path_missing_errors(tmp_path) -> None:
+    e = env.Environment.parse({"paths": ["does-not-exist"]})
+    with pytest.raises(env.EnvError, match="not found"):
+        env.seed_workspace(e, tmp_path / "work", base_dir=tmp_path)
 
 
-# ── run_agent runs inside a materialized env (machinery stubbed) ──────────────
-
-
-def test_run_agent_launches_into_env(tmp_path, monkeypatch) -> None:
-    from avp_conformance.manifest import AgentManifest
-
-    from avp.commission import Commission
-    from avp_cli import agent as agent_mod
-
-    cap: dict = {}
-    seen: dict = {}
-
-    def fake_blocking(cmd, cwd, run_env, timeout_s):
-        cap["cmd"], cap["cwd"], cap["env"] = cmd, cwd, run_env
-        from pathlib import Path
-
-        Path(cmd[cmd.index("--out") + 1]).write_text("")
-        return None
-
-    def fake_settings(directory, *, write_paths, allow_domains):
-        seen["write"], seen["allow"] = write_paths, allow_domains
-        from pathlib import Path
-
-        p = Path(directory) / "s.json"
-        p.write_text("{}")
-        return p
-
-    monkeypatch.setattr(agent_mod, "_run_blocking", fake_blocking)
-    monkeypatch.setattr(agent_mod.sandbox_mod, "settings_file", fake_settings)
-    monkeypatch.setattr(agent_mod.sandbox_mod, "prefix", lambda _s: ["SRT", "--"])
-
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    bindir = str(tmp_path / "prefix" / "python" / "bin")
-    mat = env.Materialized(
-        prefix=tmp_path / "prefix",
-        workspace=ws,
-        path_additions=[bindir],
-        env_vars={"VIRTUAL_ENV": str(tmp_path / "prefix" / "python")},
-        write_paths=[str(ws), str(tmp_path / "out")],
-        net=["api.x.test"],
-    )
-    manifest = AgentManifest(command=["my-agent"], cwd=".", env={})
-    commission = Commission(schema_version="0.1", run_id="r", prompt="hi")
-
-    agent_mod.run_agent(
-        manifest, tmp_path, commission, out_path=tmp_path / "t.ndjson", sandbox=True, env_mat=mat
-    )
-
-    assert cap["cwd"] == ws  # runs in the env workspace, not the manifest dir
-    assert cap["env"]["AVP_WORKSPACE"] == str(ws)  # working tree the agent roots into
-    assert cap["env"]["AVP_ENV_ROOT"] == str(ws.parent)  # env home for the agent's run state
-    assert cap["env"]["VIRTUAL_ENV"].endswith("python")
-    assert cap["env"]["PATH"].split(":")[0] == bindir  # prefix bin on PATH first
-    assert cap["cmd"][:2] == ["SRT", "--"]  # sandbox wrap present
-    assert str(ws) in seen["write"] and str(tmp_path / "out") in seen["write"]
-    import tempfile
-
-    assert tempfile.gettempdir() in seen["write"]  # whole OS temp (agents scratch under it)
-    assert str(tmp_path) in seen["write"]  # env root (workspace.parent) for the agent's run state
-    assert "api.x.test" in seen["allow"]  # env network folded into the srt view
+def test_seed_workspace_skips_noise(tmp_path) -> None:
+    src = tmp_path / "repo"
+    (src / "pkg").mkdir(parents=True)
+    (src / "main.py").write_text("x")
+    (src / "pkg" / "util.py").write_text("y")
+    for noise in (".git/config", "node_modules/dep/index.js", "__pycache__/m.pyc", ".venv/bin/py"):
+        f = src / noise
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("noise")
+    (src / "stale.pyc").write_text("z")
+    e = env.Environment.parse({"paths": [str(src)]})
+    ws = env.seed_workspace(e, tmp_path / "work", base_dir=tmp_path)
+    assert (ws / "main.py").is_file() and (ws / "pkg" / "util.py").is_file()  # code copied
+    for skipped in (".git", "node_modules", "__pycache__", ".venv", "stale.pyc"):
+        assert not (ws / skipped).exists(), f"{skipped} should have been ignored"
 
 
 # ── build_block / parse_file_arg (the `avp env create` builder) ───────────────
@@ -219,19 +158,20 @@ def test_parse_file_arg_rejects_no_equals() -> None:
 
 def test_build_block_assembles_and_validates() -> None:
     block = env.build_block(
-        runtimes=["python@3.12"], pip=["pandas"], files=["a.py=import pandas"], net=["api.x.test"]
+        image="python:3.12-slim",
+        apt=("git",),
+        pip=("pandas",),
+        files=("a.py=import pandas",),
+        net=("api.x.test",),
+        cpu="2",
     )
     assert block == {
-        "runtimes": ["python@3.12"],
-        "packages": {"pip": ["pandas"]},
+        "image": "python:3.12-slim",
+        "packages": {"apt": ["git"], "pip": ["pandas"]},
         "files": {"a.py": "import pandas"},
-        "expose": {"net": ["api.x.test"]},
+        "net": ["api.x.test"],
+        "resources": {"cpu": "2"},
     }
-
-
-def test_build_block_validates_tool_names() -> None:
-    with pytest.raises(env.EnvError, match="unsupported"):
-        env.build_block(runtimes=["cobol@85"])
 
 
 def test_build_block_empty_is_valid() -> None:
@@ -242,66 +182,54 @@ def test_build_block_paths() -> None:
     assert env.build_block(paths=("/abs/code",)) == {"paths": ["/abs/code"]}
 
 
-# ── paths: copy a local dir/file into the workspace ───────────────────────────
+# ── dockerfile compilation + tag hashing ──────────────────────────────────────
+
+_RECIPE = images.ContainerRecipe(
+    install=("curl -L https://example.test/agent -o /usr/local/bin/agent",),
+    command=("agent",),
+)
 
 
-def test_parse_paths() -> None:
-    assert env.Environment.parse({"paths": ["code", "data"]}).paths == ["code", "data"]
-
-
-def test_materialize_copies_a_directory_tree(tmp_path) -> None:
-    src = tmp_path / "code" / "pkg"
-    src.mkdir(parents=True)
-    (src.parent / "main.py").write_text("print('hi')")
-    (src / "util.py").write_text("x = 1")
-    e = env.Environment.parse({"paths": [str(tmp_path / "code")]})
-    mat = env.materialize(e, tmp_path / "env", base_dir=tmp_path)
-    assert (mat.workspace / "main.py").read_text() == "print('hi')"
-    assert (mat.workspace / "pkg" / "util.py").read_text() == "x = 1"  # tree preserved
-
-
-def test_materialize_copies_a_single_file(tmp_path) -> None:
-    (tmp_path / "notes.md").write_text("hello")
-    e = env.Environment.parse({"paths": [str(tmp_path / "notes.md")]})
-    mat = env.materialize(e, tmp_path / "env", base_dir=tmp_path)
-    assert (mat.workspace / "notes.md").read_text() == "hello"
-
-
-def test_materialize_path_missing_errors(tmp_path) -> None:
-    e = env.Environment.parse({"paths": ["does-not-exist"]})
-    with pytest.raises(env.EnvError, match="not found"):
-        env.materialize(e, tmp_path / "env", base_dir=tmp_path)
-
-
-def test_materialize_path_skips_noise(tmp_path) -> None:
-    src = tmp_path / "repo"
-    (src / "pkg").mkdir(parents=True)
-    (src / "main.py").write_text("x")
-    (src / "pkg" / "util.py").write_text("y")
-    for noise in (".git/config", "node_modules/dep/index.js", "__pycache__/m.pyc", ".venv/bin/py"):
-        f = src / noise
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("noise")
-    (src / "stale.pyc").write_text("z")
-    mat = env.materialize(
-        env.Environment.parse({"paths": [str(src)]}), tmp_path / "e", base_dir=tmp_path
+def test_dockerfile_layers_in_cache_stable_order() -> None:
+    e = env.Environment.parse(
+        {"image": "python:3.12-slim", "packages": {"apt": ["git"], "pip": ["six"]}}
     )
-    ws = mat.workspace
-    assert (ws / "main.py").is_file() and (ws / "pkg" / "util.py").is_file()  # code copied
-    for skipped in (".git", "node_modules", "__pycache__", ".venv", "stale.pyc"):
-        assert not (ws / skipped).exists(), f"{skipped} should have been ignored"
+    df = images.dockerfile(e, _RECIPE)
+    lines = df.strip().splitlines()
+    assert lines[0] == "FROM python:3.12-slim"
+    assert "apt-get install -y --no-install-recommends git" in lines[1]
+    assert lines[2] == "RUN pip install --no-cache-dir six"
+    assert lines[3].startswith("RUN curl -L")  # agent install is the last layer
 
 
-def test_launch_env_sets_cwd_path_and_vars(tmp_path) -> None:
-    bindir = str(tmp_path / "p" / "python" / "bin")
-    mat = env.Materialized(
-        prefix=tmp_path / "p",
-        workspace=tmp_path / "ws",
-        path_additions=[bindir],
-        env_vars={"VIRTUAL_ENV": str(tmp_path / "p" / "python")},
-    )
-    argv, cwd, proc_env = env.launch_env(["python", "-c", "1"], mat)
-    assert argv == ["python", "-c", "1"]
-    assert cwd == tmp_path / "ws"
-    assert proc_env["PATH"].split(":")[0] == bindir  # prefix bin first
-    assert proc_env["VIRTUAL_ENV"].endswith("python")
+def test_dockerfile_omits_empty_layers() -> None:
+    df = images.dockerfile(env.Environment.parse({}), _RECIPE)
+    assert "apt-get" not in df and "pip install" not in df
+
+
+def test_image_tag_is_content_addressed() -> None:
+    a = env.Environment.parse({"packages": {"pip": ["six"]}})
+    b = env.Environment.parse({"packages": {"pip": ["six"]}})
+    c = env.Environment.parse({"packages": {"pip": ["seven"]}})
+    assert images.image_tag(a, _RECIPE) == images.image_tag(b, _RECIPE)  # same shape, same tag
+    assert images.image_tag(a, _RECIPE) != images.image_tag(c, _RECIPE)  # content change, new tag
+    other = images.ContainerRecipe(install=("true",), command=("agent",))
+    assert images.image_tag(a, _RECIPE) != images.image_tag(a, other)  # agent change, new tag
+
+
+def test_ensure_image_reuses_existing_tag(monkeypatch) -> None:
+    e = env.Environment.parse({})
+    calls: list[list[str]] = []
+
+    class FakeDone:
+        returncode = 0
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return FakeDone()
+
+    monkeypatch.setattr(images.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(images.subprocess, "run", fake_run)
+    tag = images.ensure_image(e, _RECIPE)
+    assert tag == images.image_tag(e, _RECIPE)
+    assert calls and calls[0][1:3] == ["image", "inspect"]  # cache probe only, no build

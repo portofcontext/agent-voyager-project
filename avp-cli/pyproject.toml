@@ -11,8 +11,18 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 # avp-conformance ships the AgentManifest model + the run-an-agent contract this
 # tool drives (`run --commission --out`); avp ships the wire types; rich is the
-# developer-facing output layer.
-dependencies = ["avp==0.1.0", "avp-conformance==0.1.0", "rich>=13", "questionary>=2"]
+# developer-facing output layer. opensandbox/opensandbox-server are the sandbox
+# engine (containers via a CLI-managed local control plane); they are pinned
+# exactly and bumped together — the project warns of SDK/server version-skew
+# breakage on nullable fields.
+dependencies = [
+    "avp==0.1.0",
+    "avp-conformance==0.1.0",
+    "rich>=13",
+    "questionary>=2",
+    "opensandbox==0.1.9",
+    "opensandbox-server==0.1.14",
+]
 
 [project.optional-dependencies]
 claude-agent = ["avp-claude-agent-sdk==0.1.0"]
@@ -36,3 +46,6 @@ packages = ["src/avp_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "docker: needs a running Docker daemon (the real-sandbox seam tests; `make test-docker`)",
+]

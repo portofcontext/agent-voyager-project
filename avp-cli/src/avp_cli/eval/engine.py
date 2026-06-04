@@ -23,9 +23,7 @@ from pydantic import BaseModel
 
 from avp.content import TextBlock
 from avp.trajectory import AgentStoppedEvent, AssistantMessageEvent, ToolInvokedEvent
-from avp_cli.agent import read_trajectory, run_agent
-from avp_cli.agents import ResolvedAgent
-from avp_cli.environment import Materialized
+from avp_cli.agent import SandboxContext, SandboxedAgent, read_trajectory, run_agent
 from avp_cli.eval.dataset import Dataset, Item
 from avp_cli.eval.scoring import FinalOutput, Score, Scorer
 from avp_cli.eval.setup import Setup
@@ -217,7 +215,8 @@ def _mean(xs: list[float]) -> float:
 
 def _execute(
     ev: Eval,
-    agent: ResolvedAgent,
+    agent: SandboxedAgent,
+    sandbox_ctx: SandboxContext,
     setup: Setup,
     item: Item,
     *,
@@ -225,22 +224,18 @@ def _execute(
     model_override: str | None,
     timeout_s: float,
     on_event: Callable[[Any], None] | None,
-    sandbox: bool,
-    env_mat: Materialized | None,
 ) -> RunResult:
     """Run one (agent, commission, item) cell and score it into a RunResult."""
     run_id = f"{agent.name}-{setup.id}-{item.id}"
     commission = setup.to_commission(item, run_id, model_override=model_override)
     traj_path = out / f"{run_id}.ndjson"
     events, err = run_agent(
-        agent.manifest,
-        agent.manifest_cwd,
+        agent,
+        sandbox_ctx,
         commission,
         out_path=traj_path,
         timeout_s=timeout_s,
         on_event=on_event,
-        sandbox=sandbox,
-        env_mat=env_mat,
     )
     if err is not None or events is None:
         return RunResult(setup.id, item.id, spawn_error=err or "no events")
@@ -288,7 +283,8 @@ def _resume_cell(traj_path: Path, ev: Eval, setup: Setup, item: Item) -> RunResu
 
 def run_matrix(
     ev: Eval,
-    agents: list[ResolvedAgent],
+    agents: list[SandboxedAgent],
+    sandbox_ctx: SandboxContext,
     *,
     out_dir: str | Path,
     max_items: int | None = None,
@@ -296,8 +292,6 @@ def run_matrix(
     timeout_s: float = 300.0,
     observer: RunObserver | None = None,
     compare: bool = False,
-    sandbox: bool = False,
-    env_mat: Materialized | None = None,
     resume: bool = False,
 ) -> list[Board]:
     """Run every (setup, item) against every agent and return one Board per agent.
@@ -341,14 +335,13 @@ def run_matrix(
                         result = _execute(
                             ev,
                             agent,
+                            sandbox_ctx,
                             setup,
                             item,
                             out=out,
                             model_override=model,
                             timeout_s=timeout_s,
                             on_event=obs.on_event,
-                            sandbox=sandbox,
-                            env_mat=env_mat,
                         )
                     acc[agent.name][setup.id].append(result)
                     if obs.on_end:
@@ -382,14 +375,13 @@ def run_matrix(
 def run_eval(
     ev: Eval,
     *,
-    agent: ResolvedAgent,
+    agent: SandboxedAgent,
+    sandbox_ctx: SandboxContext,
     out_dir: str | Path,
     max_items: int | None = None,
     model: str | None = None,
     timeout_s: float = 300.0,
     observer: RunObserver | None = None,
-    sandbox: bool = False,
-    env_mat: Materialized | None = None,
     resume: bool = False,
 ) -> Board:
     """Run the matrix against a single `agent` and return its ranked `Board`.
@@ -399,14 +391,13 @@ def run_eval(
     return run_matrix(
         ev,
         [agent],
+        sandbox_ctx,
         out_dir=out_dir,
         max_items=max_items,
         model=model,
         timeout_s=timeout_s,
         observer=observer,
         compare=False,
-        sandbox=sandbox,
-        env_mat=env_mat,
         resume=resume,
     )[0]
 

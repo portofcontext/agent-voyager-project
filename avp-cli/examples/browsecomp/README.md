@@ -23,7 +23,7 @@ A second example, comparing web-search backends (Exa vs Linkup), lives in
 uv sync --extra llm-judge
 
 # 2. install the agent (self-contained; just needs the `claude` CLI on PATH)
-uv run avp agent install claude-code
+avp agent install claude-code
 
 # 3. install the commission into your library (~/.avp/commissions)
 cp browsecomp-claude.commission.json ~/.avp/commissions/browsecomp-claude.json
@@ -45,7 +45,7 @@ Both the agent runs and the grader calls are paid, so start with a tiny slice:
 
 ```bash
 export ANTHROPIC_API_KEY=...
-uv run avp eval run browsecomp.eval.json --max-items 3
+avp eval run browsecomp.eval.json --max-items 3
 ```
 
 Scale `--max-items` up once a small run looks clean. The full set is 1266 items.

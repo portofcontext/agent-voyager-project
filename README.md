@@ -34,36 +34,49 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 ## Quickstart
 
-Set up the CLI and run your first scored agent comparison in about five minutes, on **macOS or Linux**. Each step installs only what it needs, so you reach a result before taking on the heavier (optional) agent.
+Install and run AVP with the CLI. Currently supports on **macOS and Linux**.
 
-### 1 · Get the CLI
+### 1 · Install and run Docker
 
-[uv](https://github.com/astral-sh/uv) runs everything (the CLI isn't published yet, so you invoke it as `uv run avp`):
+Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works. Skip if you already have Docker running.
+
+```bash
+brew install --cask docker      # Docker Desktop, then launch it
+# or: brew install colima docker && colima start
+```
+
+### 2 · Install the avp CLI
+
+[uv](https://github.com/astral-sh/uv) builds it (it isn't published yet):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
 git clone https://github.com/portofcontext/agent-voyager-project
 cd agent-voyager-project && uv sync
+source .venv/bin/activate                              # puts `avp` on PATH
 ```
 
-### 2 · Install an agent
+### 3 · Install agents
 
 Agents are prebuilt GitHub releases, fetched over plain HTTPS (no build, no auth). `goose` needs nothing else:
 
 ```bash
-uv run avp agent install goose
-uv run avp agent list                                  # goose → "ready"
+avp agent install goose
+avp agent list                                  # goose → "ready"
 ```
 
-### 3 · Run an eval
+### 4 · Run an eval
 
 The capitals example runs on Claude, so set an `ANTHROPIC_API_KEY` (or sign in with `claude login`). That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-uv run avp init capitals --agent goose
-uv run avp eval run capitals.eval.json
+avp init capitals --agent goose
+avp eval run capitals.eval.json
 ```
+
+The first run sets up the sandbox stack (starts the managed server, builds the
+agent's image); later runs reuse all of it and start in a couple of seconds.
 
 This runs the agent on each task and prints a **scorecard** — every commission (one agent-config variant) scored and ranked by accuracy, pass-rate, cost per run, and turns:
 
@@ -74,40 +87,38 @@ avp eval · capitals-extraction · 2 items · agent=goose
  2  capitals-baseline      100%       100%  $0.0166        2.0
 ```
 
-`uv run avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
+`avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
-> **Sandboxing (optional, zero extra config):** agent runs are unconfined by default. Install [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install -g @anthropic-ai/sandbox-runtime`) and `avp eval` / `avp run` automatically confine each run — the agent can't write outside its own workspace or reach non-model network. Force it with `--sandbox on`, turn it off with `--sandbox off`.
+> **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist (enforcement needs kernel netfilter support; `make test-docker` verifies it on your host). The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
 
-### 4 · Add a second agent and compare (optional)
+### 5 · Add a second agent and compare (optional)
 
 Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the one path that also needs [Node 18+](https://nodejs.org):
 
 ```bash
 npm install -g @anthropic-ai/claude-code               # the claude CLI
-uv run avp agent install claude-code
-uv run avp init capitals --agent goose,claude-code
-uv run avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
+avp agent install claude-code
+avp init capitals --agent goose,claude-code
+avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
 ```
-
-> **Verify the whole path in a throwaway container:** `make onboarding-smoke` (or `AGENT=all` for both agents) reproduces this on a clean machine, so you can confirm onboarding without touching your own setup. Add `PAID=1` (with `ANTHROPIC_API_KEY` set) to include the eval.
 
 ## Run an agent on a task, in an environment
 
-Beyond evals, `avp` can drop an installed agent into a declarative **environment** (a provisioned toolchain plus a real codebase) and hand it a task, confined by srt. The environment is the agent's home; the rest of your machine stays read-only.
+Beyond evals, `avp` can drop an agent into a declarative **environment** (a container image plus a real codebase) and hand it a task. The environment is the agent's whole world; your machine isn't part of it.
 
 ```bash
-# define an environment: a Python runtime + a directory of code to work on
-uv run avp env create myproj --runtime python@3.12 --path ./my-project
+# define an environment: a base image + a directory of code to work on
+avp env create myproj --image python:3.12-slim --path ./my-project
 
-# commission an agent to do a task inside it (sandboxed when srt is installed)
-uv run avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
+# commission an agent to do a task inside it (always sandboxed)
+avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
 Each run gets a fresh copy of the environment; `avp run` prints where the workspace landed so you can inspect what the agent changed. `--path` re-copies your source each run (skipping `.git`/`node_modules`/caches), so it's a tight curate-with-an-agent loop. `avp env run myproj -- <cmd>` runs an arbitrary command in the same environment (no agent) to see what's provisioned.
 
 ## Use AVP
 
-- **Drop an agent into a sandboxed environment and give it a task:** `avp run --agent A --env E "<task>"` provisions a toolchain + your code, places the agent in it, and runs it confined. Full reference in [`avp-cli/`](avp-cli/).
+- **Drop an agent into a sandboxed environment and give it a task:** `avp run --agent A --env E "<task>"` builds the env's image, seeds your code into the workspace, and runs the agent in a container. Full reference in [`avp-cli/`](avp-cli/).
 - **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools; [`avp-goose`](agents/avp-goose/rust/) is an in-process observer of Block's Goose.
 - **Build, run, and iterate on Commissions:** [`avp`](avp-cli/), the local CLI, scaffolds a Commission, runs setups (Commission variants) over a dataset against the real agents, and ranks a board by accuracy / pass-rate / cost / turns.
 - **Consume a trajectory from another language:** typed bindings generated from the same JSON Schemas the Python types use, so they cannot drift: [Python](avp/bindings/python/), [Rust](avp/bindings/rust/), [TypeScript](avp/bindings/typescript/).

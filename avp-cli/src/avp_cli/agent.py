@@ -1,13 +1,20 @@
-"""Run a real AVP agent against one Commission and collect its trajectory.
+"""Run a real AVP agent against one Commission, inside a sandbox.
 
-Every conforming AVP agent ships an `avp-conformance.json` manifest and honors
-the same run contract the conformance harness uses:
+Every conforming AVP agent honors the same run contract the conformance
+harness uses:
 
-    <manifest.command> run --commission <path> --out <ndjson>
+    <command> run --commission <path> --out <ndjson>
 
-So driving Goose or Claude Code is identical: load the manifest, write the
-Commission to a file, spawn the command with the manifest's cwd/env, and read
-the NDJSON trajectory back from `--out`. No bespoke per-agent glue.
+Here that command executes inside an OpenSandbox container built from the
+environment's derived image (see `avp_cli.images`): the per-run host workspace
+and an io dir are bind-mounted in, the Commission goes in as a file, and the
+NDJSON trajectory lands back on the host where it is tailed live and parsed.
+The host machine is not part of the agent's world; everything the agent sees
+is declared (image, mounts, env vars, egress policy).
+
+`describe_agent` stays a host-side subprocess: it is the free pre-flight view
+(no model turn, no tools), driven from the agent's manifest like the
+conformance harness does.
 """
 
 from __future__ import annotations
@@ -15,24 +22,82 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shlex
+import shutil
 import subprocess
-import tempfile
 import time
+import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from avp_conformance.manifest import AgentManifest
+from opensandbox import SandboxSync
+from opensandbox.models.execd import RunCommandOpts
+from opensandbox.models.sandboxes import Host, Volume
 from pydantic import BaseModel
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
-from avp_cli import sandbox as sandbox_mod
-from avp_cli.environment import Materialized
+from avp_cli import osb, paths
 
 # How often the streaming path re-reads the growing --out file (seconds).
 _TAIL_INTERVAL = 0.06
+
+# In-sandbox layout: one rw mount for the (possibly run-shared) workspace, one
+# rw mount for this run's io (commission in, trajectory + stderr out).
+_WORKSPACE_MNT = "/avp/workspace"
+_IO_MNT = "/avp/io"
+
+# Host env vars forwarded into the sandbox: model-provider credentials and
+# agent routing knobs. CLAUDE_ covers CLAUDE_CODE_OAUTH_TOKEN (the
+# `claude setup-token` subscription credential the claude CLI accepts in
+# place of an API key). The rest of the host environment stays on the host;
+# the sandbox env is otherwise fully declared.
+_ENV_PASSTHROUGH_PREFIXES = (
+    "ANTHROPIC_",
+    "CLAUDE_",
+    "OPENAI_",
+    "GOOGLE_",
+    "GEMINI_",
+    "MISTRAL_",
+    "OPENROUTER_",
+    "GOOSE_",
+)
+
+# Sandbox lifetime margin beyond the run timeout: covers image boot, setup
+# commands, and trajectory readback before the server reaps the sandbox.
+_SANDBOX_TTL_MARGIN_S = 180.0
+
+_DEFAULT_RESOURCES = {"cpu": "2", "memory": "4Gi"}
+
+
+@dataclass(frozen=True)
+class SandboxedAgent:
+    """An agent resolved to its in-sandbox form: the derived image that has it
+    installed, the argv that runs it there, and its manifest env."""
+
+    name: str
+    image: str
+    command: tuple[str, ...]
+    env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class SandboxContext:
+    """The run-level sandbox facts shared by every cell of an eval (or the one
+    cell of `avp run`): server connection, the seeded host workspace, and the
+    environment's setup / egress / resource asks."""
+
+    connection: osb.Connection
+    workspace: Path
+    setup: list[str] = field(default_factory=list)
+    net: list[str] = field(default_factory=list)
+    resources: dict[str, str] = field(default_factory=dict)
 
 
 def load_manifest(path: str | Path) -> tuple[AgentManifest, Path]:
@@ -44,93 +109,183 @@ def load_manifest(path: str | Path) -> tuple[AgentManifest, Path]:
 
 
 def run_agent(
-    manifest: AgentManifest,
-    manifest_cwd: Path,
+    agent: SandboxedAgent,
+    ctx: SandboxContext,
     commission: Commission,
     *,
     out_path: str | Path,
     timeout_s: float = 300.0,
     on_event: Callable[[BaseModel | dict[str, Any]], None] | None = None,
-    sandbox: bool = False,
-    env_mat: Materialized | None = None,
 ) -> tuple[list[BaseModel | dict[str, Any]] | None, str | None]:
-    """Run the agent for one Commission. Returns (events, error).
+    """Run the agent for one Commission in a fresh sandbox. Returns (events, error).
 
     On success `error` is None and `events` is the parsed NDJSON trajectory
     (custom event types pass through as dicts). On failure `events` is None and
-    `error` is a short diagnostic (subprocess nonzero exit, timeout, etc.) so
-    one bad run is recorded per-cell rather than aborting the matrix.
+    `error` is a short diagnostic (nonzero exit, timeout, sandbox create
+    failure) so one bad run is recorded per-cell rather than aborting a matrix.
 
-    If `on_event` is given, the agent's `--out` file is tailed while it runs and
-    `on_event` is called per trajectory event for live progress. The returned
-    list is always re-parsed from the finished file, so it stays authoritative
-    regardless of what the live tail saw. A `KeyboardInterrupt` terminates the
-    child and propagates (the caller decides whether to stop the matrix).
+    If `on_event` is given, the trajectory file is tailed on the host (through
+    the io bind mount) while the agent runs and `on_event` fires per event for
+    live progress. The returned list is always re-parsed from the finished
+    file, so it stays authoritative regardless of what the live tail saw.
 
-    When `sandbox` is True the command is wrapped in `srt` (the caller resolves
-    availability first via `sandbox.decide`): writes are confined to this run's
-    scratch + `--out` dir + the agent's install dir and HOME state, so a rogue
-    model can't touch the project tree or the rest of the machine.
-
-    When `env_mat` is given (a materialized declarative environment), the agent
-    runs with `cwd` = the env's workspace and the env's toolchain prefix on
-    `PATH`, so its tool calls (e.g. `python ...`) hit the provisioned toolchain.
-    Its `expose` write/network grants are folded into the srt view.
+    The sandbox is always killed before returning; the workspace mount is the
+    only place agent writes survive.
     """
     out = Path(out_path)
-    env = {**os.environ, **manifest.env}
-    run_cwd = env_mat.workspace if env_mat else manifest_cwd
-    if env_mat:
-        env.update(env_mat.env_vars)
-        # Place the agent IN the env: it roots itself here via its native
-        # mechanism. `AVP_WORKSPACE` is the working tree (provisioned code/files);
-        # `AVP_ENV_ROOT` is the env home where the agent's own run state belongs
-        # (e.g. goose sets GOOSE_PATH_ROOT from it). cwd is set too for agents that
-        # simply inherit it (the Claude Agent SDK). All under one fresh env per run.
-        env["AVP_WORKSPACE"] = str(env_mat.workspace)
-        env["AVP_ENV_ROOT"] = str(env_mat.workspace.parent)
-        if env_mat.path_additions:
-            env["PATH"] = os.pathsep.join([*env_mat.path_additions, env.get("PATH", "")])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # io lives under ~/.avp: the server's allowed_host_paths confines bind
+    # mounts there, and --out may point anywhere on the host. The trajectory
+    # is moved to `out` once the run settles.
+    io_dir = paths.avp_home() / "tmp" / uuid.uuid4().hex
+    io_dir.mkdir(parents=True)
+    traj_host = io_dir / "trajectory.ndjson"
+    (io_dir / "commission.json").write_text(
+        commission.model_dump_json(by_alias=True, exclude_none=True)
+    )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        commission_path = Path(tmp) / "commission.json"
-        commission_path.write_text(commission.model_dump_json(by_alias=True, exclude_none=True))
-        cmd = [*manifest.command, "run", "--commission", str(commission_path), "--out", str(out)]
-        if sandbox:
-            # Allow the whole OS temp dir (agents drop scratch + DBs directly under
-            # it, not just our run subdir), the --out dir, the working dir, and the
-            # agent's HOME state. For an env, also the env ROOT (where the agent
-            # roots its run state, e.g. goose's GOOSE_PATH_ROOT) plus its workspace
-            # and prefix. The user's project dir stays read-only.
-            write_paths = [
-                tempfile.gettempdir(),
-                str(out.parent),
-                str(run_cwd),
-                *sandbox_mod.home_state_dirs(),
-            ]
-            allow_domains: list[str] = []
-            if env_mat:
-                write_paths += [
-                    str(env_mat.workspace.parent),
-                    *env_mat.write_paths,
-                    str(env_mat.prefix),
-                ]
-                allow_domains = env_mat.net
-            settings = sandbox_mod.settings_file(
-                Path(tmp), write_paths=write_paths, allow_domains=allow_domains
+    try:
+        try:
+            box = SandboxSync.create(
+                agent.image,
+                connection_config=ctx.connection.config(),
+                env=_sandbox_env(agent),
+                volumes=[
+                    Volume(
+                        name="workspace",
+                        host=Host(path=str(ctx.workspace.resolve())),
+                        mount_path=_WORKSPACE_MNT,
+                    ),
+                    Volume(name="io", host=Host(path=str(io_dir)), mount_path=_IO_MNT),
+                ],
+                network_policy=osb.network_policy(ctx.net),
+                resource={**_DEFAULT_RESOURCES, **ctx.resources},
+                timeout=timedelta(seconds=timeout_s + _SANDBOX_TTL_MARGIN_S),
             )
-            cmd = [*sandbox_mod.prefix(settings), *cmd]
-        stderr_path = Path(tmp) / "stderr.log"
-        if on_event is None:
-            err = _run_blocking(cmd, run_cwd, env, timeout_s)
-        else:
-            err = _run_streaming(cmd, run_cwd, env, out, stderr_path, timeout_s, on_event)
+        except Exception as exc:
+            return None, f"sandbox create failed: {exc}"
+        try:
+            err = _run_setup(box, ctx.setup)
+            if err is None:
+                argv = [
+                    *agent.command,
+                    "run",
+                    "--commission",
+                    f"{_IO_MNT}/commission.json",
+                    "--out",
+                    f"{_IO_MNT}/trajectory.ndjson",
+                ]
+                command = f"{shlex.join(argv)} 2>{_IO_MNT}/stderr.log"
+                if on_event is None:
+                    err = _exec(box, command, timeout_s, io_dir)
+                else:
+                    err = _exec_streaming(box, command, timeout_s, io_dir, traj_host, on_event)
+        finally:
+            with contextlib.suppress(Exception):  # reaped by TTL if the kill call fails
+                box.kill()
         if err is not None:
             return None, err
+        if not traj_host.exists():
+            return None, "agent exited 0 but wrote no trajectory"
+        if traj_host != out:
+            shutil.move(traj_host, out)
+        return read_trajectory(out), None
+    finally:
+        shutil.rmtree(io_dir, ignore_errors=True)
 
-    if not out.exists():
-        return None, "agent exited 0 but wrote no trajectory"
-    return read_trajectory(out), None
+
+def _sandbox_env(agent: SandboxedAgent) -> dict[str, str]:
+    """The declared sandbox environment: forwarded provider credentials, the
+    manifest's env, and the AVP workspace convention (the agent roots itself
+    via AVP_WORKSPACE / AVP_ENV_ROOT, e.g. goose sets GOOSE_PATH_ROOT)."""
+    env = {k: v for k, v in os.environ.items() if k.startswith(_ENV_PASSTHROUGH_PREFIXES)}
+    env.update(agent.env)
+    env["AVP_WORKSPACE"] = _WORKSPACE_MNT
+    env["AVP_ENV_ROOT"] = "/avp"
+    return env
+
+
+def _run_setup(box: SandboxSync, setup: list[str]) -> str | None:
+    """Run the env's setup commands in the workspace; first failure reports."""
+    for command in setup:
+        try:
+            execution = box.commands.run(
+                command,
+                opts=RunCommandOpts(
+                    working_directory=_WORKSPACE_MNT, timeout=timedelta(minutes=10)
+                ),
+            )
+        except Exception as exc:
+            return f"setup failed ({command!r}): {exc}"
+        if execution.exit_code not in (0, None):
+            tail = _logs_tail(execution)
+            return f"setup exit {execution.exit_code} ({command!r}): {tail}"
+    return None
+
+
+def _exec(box: SandboxSync, command: str, timeout_s: float, io_dir: Path) -> str | None:
+    """Run the agent command and wait; return an error string or None."""
+    try:
+        execution = box.commands.run(
+            command,
+            opts=RunCommandOpts(
+                working_directory=_WORKSPACE_MNT, timeout=timedelta(seconds=timeout_s)
+            ),
+        )
+    except Exception as exc:
+        return _timeout_or(f"agent run failed: {exc}", exc, timeout_s)
+    return _exit_error(execution, io_dir)
+
+
+def _exec_streaming(
+    box: SandboxSync,
+    command: str,
+    timeout_s: float,
+    io_dir: Path,
+    traj_host: Path,
+    on_event: Callable[[BaseModel | dict[str, Any]], None],
+) -> str | None:
+    """Run the agent command in a worker thread while tailing the growing
+    trajectory file (visible on the host through the io bind mount)."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_exec, box, command, timeout_s, io_dir)
+        deadline = time.monotonic() + timeout_s + _SANDBOX_TTL_MARGIN_S
+        pos = 0
+        buf = ""
+        try:
+            while not future.done():
+                pos, buf = _drain(traj_host, pos, buf, on_event)
+                if time.monotonic() > deadline:  # belt-and-suspenders over execd's timeout
+                    return f"timed out after {timeout_s:.0f}s"
+                time.sleep(_TAIL_INTERVAL)
+        except KeyboardInterrupt:
+            with contextlib.suppress(Exception):
+                box.kill()  # unblocks the worker; the caller decides what stops
+            raise
+        _drain(traj_host, pos, buf, on_event)  # lines written between last poll and exit
+        return future.result()
+
+
+def _exit_error(execution: Any, io_dir: Path) -> str | None:
+    if execution.exit_code in (0, None):
+        return None
+    stderr = io_dir / "stderr.log"
+    tail = ""
+    if stderr.exists():
+        tail = "\n".join(stderr.read_text().strip().splitlines()[-3:])
+    return f"exit {execution.exit_code}: {tail or _logs_tail(execution) or '(no stderr)'}"
+
+
+def _logs_tail(execution: Any, lines: int = 3) -> str:
+    chunks = [log.text for log in (execution.logs.stderr or execution.logs.stdout or [])]
+    return "\n".join("".join(chunks).strip().splitlines()[-lines:])
+
+
+def _timeout_or(message: str, exc: Exception, timeout_s: float) -> str:
+    """execd surfaces a run timeout as an SDK exception; report it as ours."""
+    if "timeout" in str(exc).lower() or "timed out" in str(exc).lower():
+        return f"timed out after {timeout_s:.0f}s"
+    return message
 
 
 def read_trajectory(path: Path) -> list[BaseModel | dict[str, Any]]:
@@ -156,8 +311,11 @@ def describe_agent(
     """Fetch an agent's self-description via `<command> describe --out <file>`.
 
     This is the spec's pre-flight view: the agent boots, lists its surface, and
-    exits without a model turn, so it's free. Returns (descriptor, error).
+    exits without a model turn, so it's free, and it runs on the host (no
+    sandbox; nothing untrusted executes).
     """
+    import tempfile
+
     env = {**os.environ, **manifest.env}
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "descriptor.json"
@@ -174,7 +332,7 @@ def describe_agent(
 
 
 def _run_blocking(cmd: list[str], cwd: Path, env: dict[str, str], timeout_s: float) -> str | None:
-    """Spawn and wait; return an error string or None on clean exit."""
+    """Spawn a host subprocess and wait; return an error string or None."""
     try:
         result = subprocess.run(
             cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout_s
@@ -186,55 +344,6 @@ def _run_blocking(cmd: list[str], cwd: Path, env: dict[str, str], timeout_s: flo
     if result.returncode != 0:
         tail = "\n".join(result.stderr.strip().splitlines()[-3:]) or "(no stderr)"
         return f"exit {result.returncode}: {tail}"
-    return None
-
-
-def _run_streaming(
-    cmd: list[str],
-    cwd: Path,
-    env: dict[str, str],
-    out: Path,
-    stderr_path: Path,
-    timeout_s: float,
-    on_event: Callable[[BaseModel | dict[str, Any]], None],
-) -> str | None:
-    """Spawn, tail the growing `out` file into `on_event`, return error or None.
-
-    The child is always terminated on exit from this function (timeout, error,
-    or a propagating KeyboardInterrupt) via the `finally` block.
-    """
-    with stderr_path.open("w") as errf:
-        try:
-            proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=errf)
-        except OSError as exc:
-            return f"spawn failed: {exc}"
-        start = time.monotonic()
-        pos = 0
-        buf = ""
-        timed_out = False
-        try:
-            while True:
-                pos, buf = _drain(out, pos, buf, on_event)
-                if proc.poll() is not None:
-                    break
-                if time.monotonic() - start > timeout_s:
-                    timed_out = True
-                    break
-                time.sleep(_TAIL_INTERVAL)
-        finally:
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-        if timed_out:
-            return f"timed out after {timeout_s:.0f}s"
-        _drain(out, pos, buf, on_event)  # any lines written between last poll and exit
-
-    if proc.returncode != 0:
-        tail = "\n".join(stderr_path.read_text().strip().splitlines()[-3:]) or "(no stderr)"
-        return f"exit {proc.returncode}: {tail}"
     return None
 
 
@@ -252,7 +361,6 @@ def _drain(
             pos = f.tell()
     except (OSError, UnicodeDecodeError):
         return pos, buf  # transient (mid-write / partial multibyte); retry next tick
-
     while "\n" in buf:
         line, buf = buf.split("\n", 1)
         line = line.strip()

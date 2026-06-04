@@ -1,8 +1,8 @@
 {
-  "runtimes": ["python@3.12"],
+  "image": "python:3.12-slim",
   "packages": { "pip": ["six"] },
   "files": {
     "README.md": "seeded by avp env\n"
   },
-  "expose": { "net": ["api.anthropic.com"] }
+  "net": ["api.anthropic.com"]
 }

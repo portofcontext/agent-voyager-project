@@ -6,10 +6,11 @@
     avp eval list                    list recent eval runs (with their ids)
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
-    avp run "TASK" --agent A [--env E]   commission an agent to do a task (inside an env, confined)
+    avp run "TASK" --agent A [--env E]   commission an agent to do a task (in a sandbox)
     avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel local)
-    avp env create NAME [flags]      create a declarative environment (--runtime/--pip/--file/--net ...)
-    avp env run NAME -- CMD          run a command inside a declarative environment (provisioned + confined)
+    avp env create NAME [flags]      create a declarative environment (--image/--pip/--file/--net ...)
+    avp env run NAME -- CMD          run a command inside a declarative environment (sandboxed)
+    avp sandbox status|stop          inspect or stop the managed sandbox server
     avp commission create [ID]       build a commission into your library (wizard, or pass flags)
     avp commission list              list your portable commission library
     avp commission describe ID       render a library commission by id
@@ -18,8 +19,9 @@
 
 An eval is a JSON config file authored in place (no code); commissions are
 portable artifacts in ~/.avp/commissions referenced by id. The CLI is the engine.
-The agent supplies its own credentials from the environment. When no agent's
-toolchain is present a run exits 2 (a preflight skip).
+Every run executes inside an OpenSandbox container (Docker is the one
+prerequisite; the CLI manages the rest); provider credentials forward from the
+host environment into the sandbox. When the sandbox stack can't run, exit is 2.
 """
 
 from __future__ import annotations
@@ -38,22 +40,31 @@ from avp_cli import (
     catalog,
     config,
     console,
+    images,
     library,
     live,
+    osb,
     paths,
     run_manifest,
-    sandbox,
     state,
     viz,
 )
 from avp_cli import commission as commission_mod
-from avp_cli.agents import DEFAULT_AGENT, known_agents, preflight, resolve_agent
+from avp_cli.agent import SandboxContext, SandboxedAgent
+from avp_cli.agents import (
+    DEFAULT_AGENT,
+    NoContainerRecipe,
+    container_recipe,
+    known_agents,
+    preflight,
+    resolve_agent,
+)
 from avp_cli.eval.engine import Eval, RunObserver, RunResult, run_matrix, setups_for
 from avp_cli.eval.report import board_table, comparison_table, dump_json, failures
 from avp_cli.observability import tool_tally
 from avp_cli.onboarding import welcome
 
-_SKIP = 2  # no agent toolchain present; skip cleanly rather than error
+_SKIP = 2  # the sandbox stack / agent can't run here; skip cleanly rather than error
 
 # Branded picker palette: sail-gold marker/pointer/answer, sky highlight, and
 # gold titles with dim descriptions in the choice rows.
@@ -95,8 +106,8 @@ def _run_and_report(
     max_items: int | None,
     model: str | None,
     quiet: bool,
-    sandbox_enabled: bool = False,
-    env_mat=None,
+    sandbox_ctx: SandboxContext,
+    env_obj,
     config_path: str | None = None,
     timeout_s: float = 300.0,
     resume: bool = False,
@@ -104,11 +115,9 @@ def _run_and_report(
     runnable = []
     for spec in agent_specs:
         agent = resolve_agent(spec)
-        reason = preflight(agent.name)
-        if reason is not None:
-            console.warn(f"skipping agent '{agent.name}': {reason}")
-        else:
-            runnable.append(agent)
+        prepared = _prepare_agent(agent, env_obj, quiet=quiet)
+        if prepared is not None:
+            runnable.append(prepared)
     if not runnable:
         console.warn("no runnable agents; nothing to do.")
         return _SKIP
@@ -138,14 +147,13 @@ def _run_and_report(
             boards = run_matrix(
                 ev,
                 runnable,
+                sandbox_ctx,
                 out_dir=out,
                 max_items=max_items,
                 model=model,
                 timeout_s=timeout_s,
                 observer=vl.observer(),
                 compare=compare,
-                sandbox=sandbox_enabled,
-                env_mat=env_mat,
                 resume=resume,
             )
     else:
@@ -153,14 +161,13 @@ def _run_and_report(
         boards = run_matrix(
             ev,
             runnable,
+            sandbox_ctx,
             out_dir=out,
             max_items=max_items,
             model=model,
             timeout_s=timeout_s,
             observer=observer,
             compare=compare,
-            sandbox=sandbox_enabled,
-            env_mat=env_mat,
             resume=resume,
         )
 
@@ -185,6 +192,65 @@ def _run_and_report(
 
     _finish_run(ev, boards, out, run_id)
     return 0
+
+
+def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
+    """Resolve one agent to its sandbox form: recipe + derived image (built or
+    reused). Returns None (with a warning) when the agent can't run."""
+    try:
+        recipe = container_recipe(agent)
+    except NoContainerRecipe as exc:
+        console.warn(f"skipping agent '{agent.name}': {exc}")
+        return None
+    tag = images.image_tag(env_obj, recipe)
+    on_line = None
+    if not quiet:
+        on_line = lambda line: console.err.print(line, style="dim", markup=False, highlight=False)  # noqa: E731
+    try:
+        built = images.ensure_image(env_obj, recipe, on_line=on_line)
+    except images.ImageBuildError as exc:
+        console.warn(f"skipping agent '{agent.name}': {exc}")
+        return None
+    if built == tag and not quiet:
+        console.note(f"sandbox image for {agent.name}: {built}")
+    return SandboxedAgent(
+        name=agent.name,
+        image=built,
+        command=recipe.command,
+        env={**dict(recipe.env), **agent.manifest.env},
+    )
+
+
+def _prepare_sandbox(env_spec: str | None, workspace_root: Path):
+    """Parse the env (or the default), bring up the sandbox server, and seed the
+    run workspace. Returns (env_obj, SandboxContext); raises EnvError /
+    SandboxUnavailable / OSError / JSONDecodeError."""
+    from avp_cli import environment as env_mod
+
+    if env_spec:
+        p = _resolve_env_file(env_spec)
+        env_obj = env_mod.Environment.parse(json.loads(p.read_text()))
+        base_dir = p.parent
+    else:
+        env_obj = env_mod.Environment.parse({})
+        base_dir = Path.cwd()
+    conn = osb.ensure_server()
+    workspace = env_mod.seed_workspace(env_obj, workspace_root / "workspace", base_dir=base_dir)
+    return env_obj, SandboxContext(
+        connection=conn,
+        workspace=workspace,
+        setup=env_obj.setup,
+        net=env_obj.net,
+        resources=env_obj.resources,
+    )
+
+
+def _workspace_root(out: Path, run_id: str) -> Path:
+    """Where the run's workspace lives: under `out` when that's inside ~/.avp
+    (the sandbox server only bind-mounts paths there), else under ~/.avp/runs."""
+    home = paths.avp_home().resolve()
+    o = out.resolve()
+    return o if o.is_relative_to(home) else paths.runs_dir() / run_id
 
 
 def _finish_run(ev: Eval, boards: list, out: Path, run_id: str) -> None:
@@ -988,17 +1054,6 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 
     if args.threshold is not None and hasattr(ev.scorer, "threshold"):
         ev.scorer.threshold = args.threshold
-    # Resolve the sandbox mode once (not per run): print one status note, and turn
-    # `--sandbox on` with no srt into a clean exit instead of a per-cell failure.
-    try:
-        sandbox_enabled, note = sandbox.decide(args.sandbox)
-    except sandbox.SandboxUnavailable as exc:
-        console.error_panel("sandbox unavailable", str(exc))
-        return _SKIP
-    if note:
-        console.note(note)
-    if args.env and not sandbox_enabled:
-        console.note("environment provisioned but NOT confined (no srt / --sandbox off)")
     # One voyage per run: a default run lands in its own subdir (so runs don't
     # clobber each other and each has a stable home `view <id>` resolves to); an
     # explicit --out is taken literally.
@@ -1015,14 +1070,18 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     else:
         run_id = _resolve_run_id(args)
         out = Path(args.out) if args.out else _default_out_dir() / run_id
-    env_mat = None
+    # Bring up the sandbox stack once (not per cell): Docker preflight, the
+    # managed server, and the seeded run workspace every cell mounts.
+    try:
+        env_obj, sandbox_ctx = _prepare_sandbox(args.env, _workspace_root(out, run_id))
+    except osb.SandboxUnavailable as exc:
+        console.error_panel("sandbox unavailable", str(exc))
+        return _SKIP
+    except Exception as exc:
+        console.error_panel(f"environment '{args.env}'", str(exc))
+        return 1
     if args.env:
-        try:
-            env_mat = _materialize_env(args.env, out)
-        except Exception as exc:
-            console.error_panel(f"environment '{args.env}'", str(exc))
-            return 1
-        console.note(f"environment: {args.env} → {_tilde(env_mat.workspace)}")
+        console.note(f"environment: {args.env} → {_tilde(sandbox_ctx.workspace)}")
     if args.agent:
         agent_specs = [s.strip() for s in args.agent.split(",") if s.strip()]
     else:
@@ -1036,8 +1095,8 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         max_items=args.max_items,
         model=args.model,
         quiet=args.quiet,
-        sandbox_enabled=sandbox_enabled,
-        env_mat=env_mat,
+        sandbox_ctx=sandbox_ctx,
+        env_obj=env_obj,
         config_path=args.path,
         timeout_s=args.timeout,
         resume=bool(args.resume),
@@ -1057,16 +1116,6 @@ def _resolve_env_file(spec: str) -> Path:
     raise env_mod.EnvError(
         f"not a file, and no environment named {spec!r} in {_tilde(paths.environments_dir())}"
     )
-
-
-def _materialize_env(spec: str, out: Path):
-    """Resolve + build an environment under `<out>/env`. Raises EnvError / OSError /
-    JSONDecodeError."""
-    from avp_cli import environment as env_mod
-
-    p = _resolve_env_file(spec)
-    block = json.loads(p.read_text())
-    return env_mod.materialize(env_mod.Environment.parse(block), out / "env", base_dir=p.parent)
 
 
 # ── env ───────────────────────────────────────────────────────────────────────
@@ -1095,31 +1144,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from avp_cli.observability import summarize
 
     agent = resolve_agent(args.agent)
-    reason = preflight(agent.name)
-    if reason is not None:
-        console.error_panel(f"can't run '{agent.name}'", reason)
-        return _SKIP
-    try:
-        sandbox_enabled, note = sandbox.decide(args.sandbox)
-    except sandbox.SandboxUnavailable as exc:
-        console.error_panel("sandbox unavailable", str(exc))
-        return _SKIP
-    if note:
-        console.note(note)
-
     run_id = state.new_id()
     rundir = paths.runs_dir() / run_id
     rundir.mkdir(parents=True, exist_ok=True)
 
-    env_mat = None
-    if args.env:
-        if not sandbox_enabled:
-            console.note("environment provisioned but NOT confined (no srt / --sandbox off)")
-        try:
-            env_mat = _materialize_env(args.env, rundir)
-        except Exception as exc:
-            console.error_panel(f"environment '{args.env}'", str(exc))
-            return 1
+    try:
+        env_obj, sandbox_ctx = _prepare_sandbox(args.env, rundir)
+    except osb.SandboxUnavailable as exc:
+        console.error_panel("sandbox unavailable", str(exc))
+        return _SKIP
+    except Exception as exc:
+        console.error_panel(f"environment '{args.env}'", str(exc))
+        return 1
+    prepared = _prepare_agent(agent, env_obj, quiet=False)
+    if prepared is None:
+        return _SKIP
 
     commission = Commission(
         schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
@@ -1128,14 +1167,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     where = f" in {args.env}" if args.env else ""
     console.note(f"{agent.name} working on the task{where} …")
     events, err = run_agent(
-        agent.manifest,
-        agent.manifest_cwd,
+        prepared,
+        sandbox_ctx,
         commission,
         out_path=traj,
         timeout_s=args.timeout,
         on_event=_task_event,
-        sandbox=sandbox_enabled,
-        env_mat=env_mat,
     )
     if err is not None or events is None:
         console.error_panel(f"'{agent.name}' run failed", err or "no events")
@@ -1153,8 +1190,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if final.text:
         console.out.print(final.text.strip())
     console.note(f"trajectory: {_tilde(traj)}")
-    if env_mat:
-        console.note(f"workspace (inspect what changed): {_tilde(env_mat.workspace)}")
+    console.note(f"workspace (inspect what changed): {_tilde(sandbox_ctx.workspace)}")
     return 0
 
 
@@ -1197,14 +1233,15 @@ def _cmd_env_create(args: argparse.Namespace) -> int:
         abs_paths.append(str(rp.resolve()))
     try:
         block = env_mod.build_block(
-            runtimes=tuple(args.runtime or ()),
+            image=args.image,
+            apt=tuple(args.apt or ()),
             pip=tuple(args.pip or ()),
-            npm=tuple(args.npm or ()),
             paths=tuple(abs_paths),
             files=tuple(args.file or ()),
             setup=tuple(args.setup or ()),
-            write=tuple(args.write or ()),
             net=tuple(args.net or ()),
+            cpu=args.cpu,
+            memory=args.memory,
         )
     except env_mod.EnvError as exc:
         console.error_panel("can't build that environment", str(exc))
@@ -1247,7 +1284,7 @@ def _cmd_env_list() -> int:
         return 0
     table = Table(title="environments", header_style="bold")
     table.add_column("name", style=f"bold {brand.SAIL}", no_wrap=True)
-    table.add_column("runtimes")
+    table.add_column("image")
     table.add_column("packages")
     for f in files:
         try:
@@ -1255,7 +1292,7 @@ def _cmd_env_list() -> int:
         except (env_mod.EnvError, json.JSONDecodeError, OSError):
             continue
         pkgs = ", ".join(f"{k}:{len(v)}" for k, v in e.packages.items())
-        table.add_row(f.stem, ", ".join(e.runtimes) or "[dim]—[/dim]", pkgs or "[dim]—[/dim]")
+        table.add_row(f.stem, e.image, pkgs or "[dim]—[/dim]")
     console.out.print(table)
     console.note("avp env show <name>   ·   avp env run <name> -- <command>")
     return 0
@@ -1272,8 +1309,7 @@ def _cmd_env_show(spec: str) -> int:
         console.error_panel(f"environment '{spec}'", str(exc))
         return 1
     console.out.print(f"[bold {brand.SAIL}]{spec}[/]  ·  {_tilde(p)}")
-    if e.runtimes:
-        console.out.print(f"  runtimes: {', '.join(e.runtimes)}")
+    console.out.print(f"  image: {e.image}")
     for eco, pkgs in e.packages.items():
         console.out.print(f"  {eco}: {', '.join(pkgs)}")
     if e.paths:
@@ -1282,65 +1318,116 @@ def _cmd_env_show(spec: str) -> int:
         console.out.print(f"  files: {', '.join(e.files)}")
     if e.setup:
         console.out.print(f"  setup: {len(e.setup)} command(s)")
-    if e.expose.write:
-        console.out.print(f"  writable: {', '.join(e.expose.write)}")
-    if e.expose.net:
-        console.out.print(f"  network: {', '.join(e.expose.net)}")
+    if e.net:
+        console.out.print(f"  network: {', '.join(e.net)}")
+    if e.resources:
+        console.out.print("  resources: " + ", ".join(f"{k}={v}" for k, v in e.resources.items()))
     console.note(f"avp env run {spec} -- <command>   ·   run a command inside it")
     return 0
 
 
 def _cmd_env_run(args: argparse.Namespace) -> int:
-    """Materialize an environment and run a command inside it (provisioned + confined)."""
-    import shutil as _shutil
-    import subprocess
-    import tempfile
+    """Run a command inside an environment's sandbox (image + workspace + egress).
 
-    from avp_cli import environment as env_mod
+    The same world an agent would get, minus the agent: the env's derived image
+    (no agent recipe), the seeded workspace mounted rw, setup run, default-deny
+    egress. The workspace persists under ~/.avp/runs for inspection.
+    """
+    import contextlib as _contextlib
+    import shlex as _shlex
+    from datetime import timedelta
+
+    from opensandbox import SandboxSync
+    from opensandbox.models.execd import RunCommandOpts
+    from opensandbox.models.sandboxes import Host, Volume
+
+    from avp_cli.agent import _WORKSPACE_MNT, _run_setup
 
     command = list(args.command)
     if command and command[0] == "--":  # argparse REMAINDER keeps the separator
         command = command[1:]
     if not command:
-        console.error_panel("no command", "usage: avp env run [--sandbox X] <env> -- <command> ...")
+        console.error_panel("no command", "usage: avp env run <env> -- <command> ...")
         return 1
+
+    run_id = state.new_id()
+    rundir = paths.runs_dir() / run_id
     try:
-        sandbox_enabled, note = sandbox.decide(args.sandbox)
-    except sandbox.SandboxUnavailable as exc:
+        env_obj, ctx = _prepare_sandbox(args.env, rundir)
+    except osb.SandboxUnavailable as exc:
         console.error_panel("sandbox unavailable", str(exc))
         return _SKIP
-    if note:
-        console.note(note)
-
-    root = Path(tempfile.mkdtemp(prefix="avp-env-"))
+    except Exception as exc:
+        console.error_panel(f"environment '{args.env}'", str(exc))
+        return 1
     try:
-        try:
-            mat = _materialize_env(args.env, root)
-        except Exception as exc:
-            console.error_panel(f"environment '{args.env}'", str(exc))
-            return 1
-        argv, cwd, proc_env = env_mod.launch_env(command, mat)
-        with tempfile.TemporaryDirectory() as tmp:
-            if sandbox_enabled:
-                settings = sandbox.settings_file(
-                    Path(tmp),
-                    write_paths=[
-                        tempfile.gettempdir(),
-                        str(cwd),
-                        str(mat.workspace.parent),  # env root (agent run state)
-                        *mat.write_paths,
-                        str(mat.prefix),
-                    ],
-                    allow_domains=mat.net,
+        image = images.ensure_image(
+            env_obj,
+            images.ContainerRecipe(install=(), command=()),
+            on_line=lambda line: console.err.print(
+                line, style="dim", markup=False, highlight=False
+            ),
+        )
+    except images.ImageBuildError as exc:
+        console.error_panel(f"environment '{args.env}'", str(exc))
+        return 1
+
+    console.note(f"running in {_tilde(ctx.workspace)} (sandboxed)")
+    try:
+        box = SandboxSync.create(
+            image,
+            connection_config=ctx.connection.config(),
+            volumes=[
+                Volume(
+                    name="workspace",
+                    host=Host(path=str(ctx.workspace.resolve())),
+                    mount_path=_WORKSPACE_MNT,
                 )
-                argv = [*sandbox.prefix(settings), *argv]
-            console.note(
-                f"running in {_tilde(mat.workspace)} "
-                f"({'sandboxed' if sandbox_enabled else 'unconfined'})"
-            )
-            return subprocess.run(argv, cwd=cwd, env=proc_env).returncode
+            ],
+            network_policy=osb.network_policy(ctx.net),
+            resource=ctx.resources or None,
+            timeout=timedelta(hours=1),
+        )
+    except Exception as exc:
+        console.error_panel("sandbox create failed", str(exc))
+        return 1
+    try:
+        err = _run_setup(box, ctx.setup)
+        if err is not None:
+            console.error_panel("setup failed", err)
+            return 1
+        execution = box.commands.run(
+            _shlex.join(command),
+            opts=RunCommandOpts(working_directory=_WORKSPACE_MNT, timeout=timedelta(hours=1)),
+        )
+        for log in execution.logs.stdout or []:
+            console.out.print(log.text, end="", markup=False, highlight=False)
+        for log in execution.logs.stderr or []:
+            console.err.print(log.text, end="", markup=False, highlight=False)
+        return execution.exit_code or 0
     finally:
-        _shutil.rmtree(root, ignore_errors=True)
+        with _contextlib.suppress(Exception):
+            box.kill()
+
+
+def _cmd_sandbox(args: argparse.Namespace) -> int:
+    if args.sandbox_cmd == "stop":
+        if osb.stop_server():
+            console.note("sandbox server stopped")
+        else:
+            console.note("no managed sandbox server is running")
+        return 0
+    status = osb.server_status()
+    console.out.print(f"  docker: {status['docker']}")
+    console.out.print(
+        f"  config: {status['config']}" + ("" if status["configured"] else " (not yet generated)")
+    )
+    if "domain" in status:
+        health = "healthy" if status.get("healthy") else "not running"
+        console.out.print(f"  server: {status['domain']} ({health})")
+        if status.get("sandboxes") is not None:
+            console.out.print(f"  sandboxes: {status['sandboxes']}")
+    return 0
 
 
 # ── parser ─────────────────────────────────────────────────────────────────────
@@ -1390,17 +1477,10 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
         help="Resume a run by id: reuse cells whose trajectory finished, re-run the rest",
     )
     p.add_argument(
-        "--sandbox",
-        choices=("auto", "on", "off"),
-        default="auto",
-        help="Confine agent runs with srt: auto (sandbox if srt is installed, else run "
-        "unsandboxed), on (require srt), off. Default: auto.",
-    )
-    p.add_argument(
         "--env",
         default=None,
         help="Run agents inside a declarative environment (a path to an env JSON, or a name "
-        "in ~/.avp/environments). Provisions toolchains/files; confined under --sandbox.",
+        "in ~/.avp/environments). Defines the sandbox image, workspace, and egress.",
     )
     p.add_argument("--quiet", action="store_true", help="Suppress per-run progress on stderr")
 
@@ -1587,30 +1667,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_p.add_argument("--model", default=None, help="Model override (else the agent's default)")
     run_p.add_argument(
-        "--sandbox",
-        choices=("auto", "on", "off"),
-        default="auto",
-        help="Confine with srt: auto (sandbox if srt is installed), on, off. Default: auto.",
-    )
-    run_p.add_argument(
         "--timeout", type=float, default=600.0, help="Max seconds for the run (default: 600)"
     )
 
     env_p = groups.add_parser(
-        "env", help="Define + run agent environments (provision a toolchain, run confined)"
+        "env", help="Define + run agent environments (a container image + workspace + egress)"
     )
     ensub = env_p.add_subparsers(dest="env_cmd", required=True)
     ensub.add_parser("list", help="List named environments (~/.avp/environments)")
     p_ecreate = ensub.add_parser("create", help="Create an environment in your library")
     p_ecreate.add_argument("name", help="Environment name (becomes <name>.json)")
     p_ecreate.add_argument(
-        "--runtime",
-        action="append",
-        metavar="LANG@VER",
-        help="Add a language runtime, e.g. python@3.12 or node@20 (repeatable)",
+        "--image",
+        default=None,
+        metavar="IMAGE",
+        help="Base container image (default: python:3.12-slim)",
     )
+    p_ecreate.add_argument("--apt", action="append", metavar="PKG", help="apt package (repeatable)")
     p_ecreate.add_argument("--pip", action="append", metavar="PKG", help="pip package (repeatable)")
-    p_ecreate.add_argument("--npm", action="append", metavar="PKG", help="npm package (repeatable)")
     p_ecreate.add_argument(
         "--path",
         action="append",
@@ -1628,35 +1702,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--setup",
         action="append",
         metavar="CMD",
-        help="Command run after provisioning (repeatable)",
+        help="Command run in the sandbox workspace before the agent (repeatable)",
     )
     p_ecreate.add_argument(
-        "--write",
-        action="append",
-        metavar="PATH",
-        help="Extra writable path under srt (repeatable)",
+        "--net", action="append", metavar="DOMAIN", help="Allowed egress domain (repeatable)"
     )
-    p_ecreate.add_argument(
-        "--net", action="append", metavar="DOMAIN", help="Allowed network domain (repeatable)"
-    )
+    p_ecreate.add_argument("--cpu", default=None, metavar="N", help='CPU cap (e.g. "2")')
+    p_ecreate.add_argument("--memory", default=None, metavar="SIZE", help='Memory cap (e.g. "4Gi")')
     p_ecreate.add_argument("--force", action="store_true", help="Overwrite an existing environment")
     p_eshow = ensub.add_parser("show", help="Show an environment (a name or a path to an env JSON)")
     p_eshow.add_argument("env", help="Environment name (in ~/.avp/environments) or a path")
-    p_erun = ensub.add_parser(
-        "run", help="Run a command inside an environment (provisioned + confined)"
-    )
-    p_erun.add_argument(
-        "--sandbox",
-        choices=("auto", "on", "off"),
-        default="auto",
-        help="Confine with srt: auto (sandbox if srt is installed), on, off. Default: auto.",
-    )
+    p_erun = ensub.add_parser("run", help="Run a command inside an environment's sandbox")
     p_erun.add_argument("env", help="Environment name or path to an env JSON")
     p_erun.add_argument(
         "command", nargs=argparse.REMAINDER, help="Command to run inside the env, after `--`"
     )
     p_edel = ensub.add_parser("delete", help="Delete an environment from your library")
     p_edel.add_argument("name", help="Environment name")
+
+    sandbox_p = groups.add_parser("sandbox", help="The managed sandbox server (OpenSandbox)")
+    ssub = sandbox_p.add_subparsers(dest="sandbox_cmd", required=True)
+    ssub.add_parser("status", help="Docker + server health, config path, live sandbox count")
+    ssub.add_parser("stop", help="Stop the managed sandbox server")
 
     return parser
 
@@ -1680,6 +1747,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_env(args)
     if args.group == "run":
         return _cmd_run(args)
+    if args.group == "sandbox":
+        return _cmd_sandbox(args)
     return 2
 
 

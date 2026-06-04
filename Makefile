@@ -34,7 +34,8 @@ help:
 	@echo "AVP: orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
-	@echo "    make test            pytest across every package, real-LLM excluded"
+	@echo "    make test            pytest across every package, real-LLM + docker excluded"
+	@echo "    make test-docker     real-sandbox seam tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
 	@echo "    make lint            ruff check"
 	@echo "    make format          ruff format (writes)"
@@ -66,10 +67,20 @@ test:
 	@failed=""; \
 	for pkg in $(TEST_PKGS); do \
 		echo "==== $$pkg (test) ===="; \
-		(cd $$pkg && uv run python -m pytest -m "not real_llm" -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
+		(cd $$pkg && uv run python -m pytest -m "not real_llm and not docker" -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
 	done; \
 	if [ -n "$$failed" ]; then echo ""; echo "FAILED packages:$$failed"; exit 1; fi; \
 	echo ""; echo "All package tests passed."
+
+
+# The real-sandbox seam tests: a managed OpenSandbox server over the local
+# Docker daemon, a stock-image sandbox, the run contract + trajectory bind-mount
+# round trip, and egress-deny enforcement. Free (no model), needs Docker.
+# Egress enforcement is REQUIRED here (the strict local gate); in CI the same
+# test skips when the runner's kernel can't support the sidecar's hooks.
+.PHONY: test-docker
+test-docker:
+	@cd avp-cli && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker_seam.py -m docker -v
 
 
 # Manifest paths, relative to the repo root the harness runs from.
