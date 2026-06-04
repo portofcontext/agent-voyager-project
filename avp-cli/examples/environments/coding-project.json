@@ -1,5 +1,5 @@
 {
-  "runtimes": ["python@3.12"],
+  "image": "python:3.12-slim",
   "paths": ["project"],
-  "expose": { "net": ["api.anthropic.com"] }
+  "net": ["api.anthropic.com"]
 }

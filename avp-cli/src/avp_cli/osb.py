@@ -8,10 +8,9 @@ config under `~/.avp/opensandbox/` on first use, spawns it detached, and reuses
 a healthy instance across invocations. Call sites then drive sandboxes through
 the `opensandbox` SDK with the returned connection.
 
-Policy posture carries over from the srt era with the boundary moved: the
-container replaces the write-allowlist (the host filesystem simply isn't
-there), bind mounts are restricted to `~/.avp` via the server's
-`allowed_host_paths`, and the network stays an explicit egress allowlist
+The policy posture: the container is the write boundary (the host filesystem
+simply isn't there), bind mounts are restricted to `~/.avp` via the server's
+`allowed_host_paths`, and the network is an explicit egress allowlist
 (default-deny + the model-provider domains below + the env's `net`).
 """
 
