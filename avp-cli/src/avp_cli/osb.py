@@ -93,10 +93,7 @@ def docker_available() -> str | None:
     except subprocess.TimeoutExpired:
         return "Docker is not responding (`docker info` timed out). Is the daemon starting up?"
     if probe.returncode != 0:
-        return (
-            "the Docker daemon is not running. Start Docker Desktop / "
-            "`colima start` and retry."
-        )
+        return "the Docker daemon is not running. Start Docker Desktop / `colima start` and retry."
     return None
 
 
@@ -236,8 +233,13 @@ def _spawn_server() -> None:
     log_path = _log_path()
     with log_path.open("ab") as log:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "opensandbox_server.cli", "--config",
-             str(server_dir() / "config.toml")],
+            [
+                sys.executable,
+                "-m",
+                "opensandbox_server.cli",
+                "--config",
+                str(server_dir() / "config.toml"),
+            ],
             stdout=log,
             stderr=log,
             stdin=subprocess.DEVNULL,

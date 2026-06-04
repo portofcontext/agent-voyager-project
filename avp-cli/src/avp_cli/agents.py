@@ -14,8 +14,10 @@ harness drives. An agent can come from one of three places, tried in order by
 
 `AGENT_SOURCES` describes, per known agent, how it's distributed (a prebuilt
 binary vs. a Python wheel set) and where its dev-fallback manifest lives; the
-installer (`avp_cli.agent_install`) consumes it. `preflight` reports why an agent
-can't run locally so the CLI can skip cleanly instead of erroring.
+installer (`avp_cli.agent_install`) consumes it. `preflight` reports why an
+agent can't run *on the host* (the `describe` path); actual runs happen inside
+a sandbox, where `container_recipe` supplies the Linux install + run recipe
+(from the manifest's `container` block, or built in here for known agents).
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from avp_conformance.manifest import AgentManifest
 
 from avp_cli import paths
 from avp_cli.agent import load_manifest
+from avp_cli.images import ContainerRecipe
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,9 @@ class AgentSource:
     kind: str  # "binary" | "python"
     tag_prefix: str
     dev_manifest: str
+    # The release version whose Linux artifacts the container recipe installs.
+    # Pinned so the derived image is content-addressed; bump with releases.
+    container_version: str = ""
     # binary agents
     binary_name: str | None = None
     # python agents: `python -m <module>`, install `dist` (pulls third-party
@@ -62,6 +68,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="binary",
         tag_prefix="agent-goose",
         dev_manifest="agents/avp-goose/rust/avp-conformance.json",
+        container_version="0.0.2",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -69,6 +76,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
+        container_version="0.0.2",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
@@ -76,6 +84,71 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         wheel_dists=("avp", "avp-conformance", "avp-claude-agent-sdk"),
     ),
 }
+
+_RELEASE_DL = "https://github.com/portofcontext/agent-voyager-project/releases/download"
+
+
+def _builtin_recipe(source: AgentSource) -> ContainerRecipe:
+    """The container recipe for an in-tree agent, pinned to `container_version`.
+
+    Install steps run at image-build time (full network); `$(uname -m)` picks
+    the asset for the image's arch (aarch64 on Apple Silicon, x86_64 on amd64),
+    matching the release's `-unknown-linux-gnu` artifact names.
+    """
+    tag = f"{source.tag_prefix}-v{source.container_version}"
+    if source.kind == "binary":
+        asset = f"{source.binary_name}-$(uname -m)-unknown-linux-gnu.tar.gz"
+        return ContainerRecipe(
+            install=(
+                "apt-get update && apt-get install -y --no-install-recommends "
+                "curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+                f"curl -fsSL {_RELEASE_DL}/{tag}/{asset} | tar -xz -C /usr/local/bin "
+                f"&& chmod +x /usr/local/bin/{source.binary_name}",
+            ),
+            command=(source.binary_name or source.name,),
+        )
+    # Python agent: the in-repo wheels come off the GitHub release (they are not
+    # on PyPI); third-party deps resolve from PyPI at build time. Node ships the
+    # `claude` CLI the agent shells out to. Assumes a python base image (the
+    # default env image is one); a wrong base fails loudly in the build log.
+    version = "0.1.0"  # wheel version on the release
+    wheels = " ".join(
+        f"{_RELEASE_DL}/{tag}/{d.replace('-', '_')}-{version}-py3-none-any.whl"
+        for d in source.wheel_dists
+    )
+    return ContainerRecipe(
+        install=(
+            "apt-get update && apt-get install -y --no-install-recommends "
+            "nodejs npm ca-certificates && rm -rf /var/lib/apt/lists/*",
+            "npm install -g @anthropic-ai/claude-code",
+            f"pip install --no-cache-dir {wheels}",
+        ),
+        command=("python", "-m", source.module or ""),
+    )
+
+
+class NoContainerRecipe(Exception):
+    """The agent can't run: no `container` block and no built-in recipe."""
+
+
+def container_recipe(agent: ResolvedAgent) -> ContainerRecipe:
+    """How `agent` gets into and runs inside a sandbox image.
+
+    A manifest's `container` block wins (third-party agents describe
+    themselves); known agents fall back to the built-in pinned recipe. An
+    agent with neither cannot run (runs are always sandboxed)."""
+    spec = agent.manifest.container
+    if spec is not None:
+        return ContainerRecipe(install=tuple(spec.install), command=tuple(spec.command))
+    source = AGENT_SOURCES.get(agent.name)
+    if source is not None and source.container_version:
+        return _builtin_recipe(source)
+    raise NoContainerRecipe(
+        f"agent '{agent.name}' has no container recipe: runs execute in a Linux "
+        "sandbox, so its manifest needs a `container` block "
+        '({"install": ["<RUN step>", ...], "command": ["<argv>", ...]}).'
+    )
+
 
 DEFAULT_AGENT = "claude-code"
 

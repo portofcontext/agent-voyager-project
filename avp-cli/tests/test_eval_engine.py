@@ -358,9 +358,10 @@ def test_render_and_dump_round_trip() -> None:
 # ── Seam: run_eval drives a real agent's run contract (no LLM) ─────────────────
 
 # A dependency-free agent honoring the AVP run contract
-# (`run --commission <path> --out <path>`), emitting a canned trajectory. This
-# is exactly how the conformance harness drives Goose and Claude Code, so the
-# test crosses the supervisor↔agent subprocess seam without an LLM.
+# (`run --commission <path> --out <path>`), emitting a canned trajectory. The
+# sandbox boundary is simulated by tests.fakebox (commands execute on the host
+# with mount paths substituted), so the run contract, the NDJSON trajectory,
+# and run_agent's tail loop all stay real — no Docker, no LLM.
 _INLINE_AGENT = """\
 import argparse, json
 from pathlib import Path
@@ -421,27 +422,45 @@ Path(a.out).write_text("\\n".join(e.model_dump_json(by_alias=True, exclude_none=
 """
 
 
-def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path) -> None:
-    from avp_conformance.manifest import AgentManifest
+def _sandboxed(name: str, agent_script):
+    from avp_cli.agent import SandboxedAgent
 
-    from avp_cli.agents import ResolvedAgent
+    return SandboxedAgent(name=name, image="img:test", command=(sys.executable, str(agent_script)))
 
+
+def _ctx(tmp_path):
+    from avp_cli import osb
+    from avp_cli.agent import SandboxContext
+
+    ws = tmp_path / "ws"
+    ws.mkdir(exist_ok=True)
+    return SandboxContext(
+        connection=osb.Connection(domain="127.0.0.1:1", api_key="k"), workspace=ws
+    )
+
+
+@pytest.fixture
+def sandbox_seam(tmp_path, monkeypatch):
+    """The simulated sandbox boundary + an isolated AVP_HOME for run_agent's io."""
+    from fakebox import install
+
+    monkeypatch.setenv("AVP_HOME", str(tmp_path / "avp-home"))
+    return install(monkeypatch)
+
+
+def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path, sandbox_seam) -> None:
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)
     out_dir = tmp_path / "runs"
 
-    agent = ResolvedAgent(
-        name="scripted",
-        manifest=AgentManifest(command=[sys.executable, str(agent_script)]),
-        manifest_cwd=tmp_path,
-    )
+    agent = _sandboxed("scripted", agent_script)
     ev = Eval(
         setups=[_setup("solo")],
         dataset=Dataset(name="d", items=[Item(id="i1", prompt="anything", expected="all done")]),
         scorer=ExactMatchScorer(),
     )
 
-    board = run_eval(ev, agent=agent, out_dir=out_dir)
+    board = run_eval(ev, agent=agent, sandbox_ctx=_ctx(tmp_path), out_dir=out_dir)
 
     assert len(board.rows) == 1
     row = board.rows[0]
@@ -494,14 +513,10 @@ def _seed_trajectory(path, *, complete: bool, text: str = "all done") -> None:
 
 
 def _poison_agent(tmp_path):
-    from avp_conformance.manifest import AgentManifest
+    from avp_cli.agent import SandboxedAgent
 
-    from avp_cli.agents import ResolvedAgent
-
-    return ResolvedAgent(
-        name="poison",
-        manifest=AgentManifest(command=[sys.executable, "-c", _POISON_AGENT]),
-        manifest_cwd=tmp_path,
+    return SandboxedAgent(
+        name="poison", image="img:test", command=(sys.executable, "-c", _POISON_AGENT)
     )
 
 
@@ -513,48 +528,41 @@ def _solo_eval() -> Eval:
     )
 
 
-def test_resume_reuses_finished_cell_without_running_agent(tmp_path) -> None:
+def test_resume_reuses_finished_cell_without_running_agent(tmp_path, sandbox_seam) -> None:
     # Crossing the resume seam: a finished trajectory on disk is re-read and
     # re-scored; the (poison) agent is never spawned. Baseline first: with no
     # resume the poison agent runs and the cell errors.
-    ev, agent = _solo_eval(), _poison_agent(tmp_path)
-    crashed = run_eval(ev, agent=agent, out_dir=tmp_path / "fresh")
+    ev, agent, ctx = _solo_eval(), _poison_agent(tmp_path), _ctx(tmp_path)
+    crashed = run_eval(ev, agent=agent, sandbox_ctx=ctx, out_dir=tmp_path / "fresh")
     assert crashed.rows[0].n_errors == 1
 
     out_dir = tmp_path / "runs"
     out_dir.mkdir()
     _seed_trajectory(out_dir / "poison-solo-i1.ndjson", complete=True)
-    board = run_eval(ev, agent=agent, out_dir=out_dir, resume=True)
+    board = run_eval(ev, agent=agent, sandbox_ctx=ctx, out_dir=out_dir, resume=True)
     assert board.rows[0].n_errors == 0  # reused, not re-run (poison would have errored)
     assert board.rows[0].accuracy == 1.0  # re-scored from the saved "all done"
 
 
-def test_resume_reruns_partial_cell(tmp_path) -> None:
+def test_resume_reruns_partial_cell(tmp_path, sandbox_seam) -> None:
     # A trajectory with no terminal agent_stopped (killed mid-run) is NOT reused;
     # the cell re-runs — and the poison agent makes that visible as an error.
     ev, agent = _solo_eval(), _poison_agent(tmp_path)
     out_dir = tmp_path / "runs"
     out_dir.mkdir()
     _seed_trajectory(out_dir / "poison-solo-i1.ndjson", complete=False)
-    board = run_eval(ev, agent=agent, out_dir=out_dir, resume=True)
+    board = run_eval(ev, agent=agent, sandbox_ctx=_ctx(tmp_path), out_dir=out_dir, resume=True)
     assert board.rows[0].n_errors == 1
 
 
-def test_run_eval_streams_events_to_observer(tmp_path) -> None:
+def test_run_eval_streams_events_to_observer(tmp_path, sandbox_seam) -> None:
     """With an observer.on_event, run_agent tails the trajectory and the engine
     feeds each event through — the live-progress seam, no LLM."""
-    from avp_conformance.manifest import AgentManifest
-
-    from avp_cli.agents import ResolvedAgent
     from avp_cli.eval.engine import RunObserver
 
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)
-    agent = ResolvedAgent(
-        name="scripted",
-        manifest=AgentManifest(command=[sys.executable, str(agent_script)]),
-        manifest_cwd=tmp_path,
-    )
+    agent = _sandboxed("scripted", agent_script)
     ev = Eval(
         setups=[_setup("solo")],
         dataset=Dataset(name="d", items=[Item(id="i1", prompt="x", expected="all done")]),
@@ -570,7 +578,9 @@ def test_run_eval_streams_events_to_observer(tmp_path) -> None:
         on_end=lambda n, t, agent, r: ends.append((agent, r)),
     )
 
-    board = run_eval(ev, agent=agent, out_dir=tmp_path / "runs", observer=observer)
+    board = run_eval(
+        ev, agent=agent, sandbox_ctx=_ctx(tmp_path), out_dir=tmp_path / "runs", observer=observer
+    )
 
     assert starts == [(1, 1, "scripted", "solo", "i1")]
     # the scripted agent emits a model turn + a tool round-trip + agent_stopped
@@ -593,25 +603,15 @@ def test_tool_tally_is_busiest_first_and_compact() -> None:
     assert tool_tally(Summary(run_id="r")) == ""  # no tools
 
 
-def test_run_matrix_interleaves_agents_and_compares(tmp_path) -> None:
+def test_run_matrix_interleaves_agents_and_compares(tmp_path, sandbox_seam) -> None:
     """Two agents over one task: task-major order (both agents per item) and an
     on_compare callback fires once per task with both results."""
-    from avp_conformance.manifest import AgentManifest
-
-    from avp_cli.agents import ResolvedAgent
     from avp_cli.eval.engine import RunObserver, run_matrix
 
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)
 
-    def mk(name: str) -> ResolvedAgent:
-        return ResolvedAgent(
-            name=name,
-            manifest=AgentManifest(command=[sys.executable, str(agent_script)]),
-            manifest_cwd=tmp_path,
-        )
-
-    agents = [mk("alpha"), mk("beta")]
+    agents = [_sandboxed("alpha", agent_script), _sandboxed("beta", agent_script)]
     ev = Eval(
         setups=[_setup("solo")],
         dataset=Dataset(name="d", items=[Item(id="i1", prompt="x", expected="all done")]),
@@ -625,7 +625,9 @@ def test_run_matrix_interleaves_agents_and_compares(tmp_path) -> None:
         on_compare=lambda s, i, pairs: compares.append((s, i, [a for a, _ in pairs])),
     )
 
-    boards = run_matrix(ev, agents, out_dir=tmp_path / "runs", observer=observer, compare=True)
+    boards = run_matrix(
+        ev, agents, _ctx(tmp_path), out_dir=tmp_path / "runs", observer=observer, compare=True
+    )
 
     # task-major: both agents run on the one item, back-to-back
     assert start_agents == ["alpha", "beta"]
@@ -636,30 +638,20 @@ def test_run_matrix_interleaves_agents_and_compares(tmp_path) -> None:
     assert all(b.rows[0].accuracy == 1.0 for b in boards)
 
 
-def test_run_matrix_binds_commissions_to_their_agent(tmp_path) -> None:
+def test_run_matrix_binds_commissions_to_their_agent(tmp_path, sandbox_seam) -> None:
     """Seam: a commission bound to one agent (the `{agent: [ids]}` map form) runs
     only on that agent; an unbound one still runs on every agent. Each board
     carries only its agent's commissions, and no head-to-head fires for a
     commission that ran on a single agent."""
-    from avp_conformance.manifest import AgentManifest
-
-    from avp_cli.agents import ResolvedAgent
     from avp_cli.eval.engine import RunObserver, run_matrix
 
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)
 
-    def mk(name: str) -> ResolvedAgent:
-        return ResolvedAgent(
-            name=name,
-            manifest=AgentManifest(command=[sys.executable, str(agent_script)]),
-            manifest_cwd=tmp_path,
-        )
-
     def bound(id_: str, agent: str | None) -> Setup:
         return Setup(id=id_, commission=Commission(schema_version="0.1", run_id=id_), agent=agent)
 
-    agents = [mk("goose"), mk("claude-code")]
+    agents = [_sandboxed("goose", agent_script), _sandboxed("claude-code", agent_script)]
     ev = Eval(
         setups=[
             bound("for-goose", "goose"),
@@ -676,7 +668,9 @@ def test_run_matrix_binds_commissions_to_their_agent(tmp_path) -> None:
         on_start=lambda n, t, agent, s, i: started.append((agent, s)),
         on_compare=lambda s, i, pairs: compares.append(s),
     )
-    boards = run_matrix(ev, agents, out_dir=tmp_path / "runs", observer=observer, compare=True)
+    boards = run_matrix(
+        ev, agents, _ctx(tmp_path), out_dir=tmp_path / "runs", observer=observer, compare=True
+    )
 
     # bound commissions ran only on their agent; the unbound one ran on both
     assert ("goose", "for-goose") in started

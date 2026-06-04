@@ -32,9 +32,7 @@ def test_config_generated_once_with_minted_key(tmp_path, monkeypatch) -> None:
 def test_connection_reads_user_edited_config(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("AVP_HOME", str(tmp_path))
     cfg_path = osb._ensure_config()
-    cfg_path.write_text(
-        cfg_path.read_text().replace(f"port = {osb.DEFAULT_PORT}", "port = 9999")
-    )
+    cfg_path.write_text(cfg_path.read_text().replace(f"port = {osb.DEFAULT_PORT}", "port = 9999"))
     conn = osb._connection_from_config(cfg_path)
     assert conn.domain == "127.0.0.1:9999"
 
