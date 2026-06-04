@@ -130,6 +130,13 @@ def test_nonzero_exit_reports_stderr_tail(server) -> None:
 
 
 def test_default_deny_egress_blocks_unlisted_domains(server) -> None:
+    """Egress enforcement is host-dependent: OpenSandbox's sidecar disables
+    itself (with a warning, not an error) when it can't get its netfilter
+    hooks on the host kernel — observed on GitHub Actions runners, while
+    Docker Desktop's VM enforces fine. So a reachable denied domain is a SKIP
+    with evidence by default, and a hard failure where we know the host
+    enforces: `make test-docker` sets AVP_REQUIRE_EGRESS_ENFORCEMENT=1."""
+    import os
     from datetime import timedelta
 
     from opensandbox import SandboxSync
@@ -147,6 +154,15 @@ def test_default_deny_egress_blocks_unlisted_domains(server) -> None:
             opts=RunCommandOpts(timeout=timedelta(seconds=30)),
         )
         logs = "".join(log.text for log in denied.logs.stdout or [])
+        if "BLOCKED" not in logs and not os.environ.get("AVP_REQUIRE_EGRESS_ENFORCEMENT"):
+            try:
+                policy = box.get_egress_policy()
+            except Exception as exc:  # sidecar not even reachable
+                policy = f"(egress policy API unreachable: {exc})"
+            pytest.skip(
+                "egress sidecar is not enforcing on this host (upstream degrades "
+                f"silently without its netfilter hooks). got {logs!r}, policy: {policy}"
+            )
         assert "BLOCKED" in logs  # example.com is not on the allow-list
     finally:
         box.kill()

@@ -89,7 +89,7 @@ avp eval · capitals-extraction · 2 items · agent=goose
 
 `avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
-> **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist. The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
+> **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist (enforcement needs kernel netfilter support; `make test-docker` verifies it on your host). The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
 
 ### 5 · Add a second agent and compare (optional)
 

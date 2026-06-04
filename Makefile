@@ -76,9 +76,11 @@ test:
 # The real-sandbox seam tests: a managed OpenSandbox server over the local
 # Docker daemon, a stock-image sandbox, the run contract + trajectory bind-mount
 # round trip, and egress-deny enforcement. Free (no model), needs Docker.
+# Egress enforcement is REQUIRED here (the strict local gate); in CI the same
+# test skips when the runner's kernel can't support the sidecar's hooks.
 .PHONY: test-docker
 test-docker:
-	@cd avp-cli && uv run python -m pytest tests/test_docker_seam.py -m docker -v
+	@cd avp-cli && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker_seam.py -m docker -v
 
 
 # Manifest paths, relative to the repo root the harness runs from.
