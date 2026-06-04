@@ -274,7 +274,7 @@ def _exit_error(execution: Any, io_dir: Path) -> str | None:
 
 
 def _logs_tail(execution: Any, lines: int = 3) -> str:
-    chunks = [log.content for log in (execution.logs.stderr or execution.logs.stdout or [])]
+    chunks = [log.text for log in (execution.logs.stderr or execution.logs.stdout or [])]
     return "\n".join("".join(chunks).strip().splitlines()[-lines:])
 
 

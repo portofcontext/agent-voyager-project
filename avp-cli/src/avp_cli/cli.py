@@ -1398,9 +1398,9 @@ def _cmd_env_run(args: argparse.Namespace) -> int:
             opts=RunCommandOpts(working_directory=_WORKSPACE_MNT, timeout=timedelta(hours=1)),
         )
         for log in execution.logs.stdout or []:
-            console.out.print(log.content, end="", markup=False, highlight=False)
+            console.out.print(log.text, end="", markup=False, highlight=False)
         for log in execution.logs.stderr or []:
-            console.err.print(log.content, end="", markup=False, highlight=False)
+            console.err.print(log.text, end="", markup=False, highlight=False)
         return execution.exit_code or 0
     finally:
         with _contextlib.suppress(Exception):

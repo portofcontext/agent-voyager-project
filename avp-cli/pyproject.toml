@@ -46,3 +46,6 @@ packages = ["src/avp_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "docker: needs a running Docker daemon (the real-sandbox seam tests; `make test-docker`)",
+]

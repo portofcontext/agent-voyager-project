@@ -18,7 +18,7 @@ from typing import Any
 
 @dataclass
 class FakeLog:
-    content: str
+    text: str  # mirrors the SDK's OutputMessage.text
 
 
 @dataclass
