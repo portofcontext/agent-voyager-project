@@ -12,6 +12,12 @@
 # your local, uncommitted changes -- catching onboarding regressions before they
 # are pushed. Needs podman or docker.
 #
+# KNOWN GAP since sandbox-mandatory: AVP_SMOKE_PAID=1 runs `avp eval`, which now
+# needs a Docker daemon INSIDE this container (sandboxed runs are mandatory).
+# Until the smoke grows docker-in-docker (or mounts the host socket), PAID mode
+# fails at the eval step with the CLI's "Docker is not installed" diagnostic.
+# The free path (install -> describe) is unaffected.
+#
 #   scripts/onboarding-smoke.sh                 # goose, free (stops at describe)
 #   scripts/onboarding-smoke.sh claude-code     # claude-code (installs node + claude CLI)
 #   scripts/onboarding-smoke.sh all             # both agents

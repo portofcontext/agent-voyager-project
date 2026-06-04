@@ -36,14 +36,20 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 Set up the CLI and run your first scored agent comparison in about five minutes, on **macOS or Linux**. Each step installs only what it needs, so you reach a result before taking on the heavier (optional) agent.
 
-### 1 · Get the CLI
+### 1 · Get the CLI (and Docker)
 
-[uv](https://github.com/astral-sh/uv) runs everything (the CLI isn't published yet, so you invoke it as `uv run avp`):
+Two prerequisites. [uv](https://github.com/astral-sh/uv) runs everything (the CLI isn't published yet, so you invoke it as `uv run avp`), and a **Docker daemon** backs the sandbox every agent run executes in — [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) all work; just have one running.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
 git clone https://github.com/portofcontext/agent-voyager-project
 cd agent-voyager-project && uv sync
+```
+
+```bash
+# if you don't already have a Docker daemon (pick one):
+brew install --cask docker      # Docker Desktop, then launch it
+brew install colima docker && colima start
 ```
 
 ### 2 · Install an agent
@@ -64,6 +70,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 uv run avp init capitals --agent goose
 uv run avp eval run capitals.eval.json
 ```
+
+The first run sets up the sandbox stack (starts the managed server, builds the
+agent's image); later runs reuse all of it and start in a couple of seconds.
 
 This runs the agent on each task and prints a **scorecard** — every commission (one agent-config variant) scored and ranked by accuracy, pass-rate, cost per run, and turns:
 
