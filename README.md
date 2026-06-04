@@ -34,11 +34,11 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 ## Quickstart
 
-Set up the CLI and run your first scored agent comparison in about five minutes, on **macOS or Linux**. Each step installs only what it needs, so you reach a result before taking on the heavier (optional) agent.
+Install and run AVP with the CLI. Currently supports on **macOS and Linux**.
 
-### 1 · Install Docker
+### 1 · Install and run Docker
 
-Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works — skip ahead if one is already running.
+Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works. Skip if you already have Docker running.
 
 ```bash
 brew install --cask docker      # Docker Desktop, then launch it
@@ -101,8 +101,6 @@ avp agent install claude-code
 avp init capitals --agent goose,claude-code
 avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
 ```
-
-> **Verify the whole path in a throwaway container:** `make onboarding-smoke` (or `AGENT=all` for both agents) reproduces this on a clean machine, so you can confirm onboarding without touching your own setup. Add `PAID=1` (with `ANTHROPIC_API_KEY` set) to include the eval.
 
 ## Run an agent on a task, in an environment
 
