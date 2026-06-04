@@ -36,9 +36,18 @@ Built and maintained by the [Port of Context](https://github.com/portofcontext) 
 
 Set up the CLI and run your first scored agent comparison in about five minutes, on **macOS or Linux**. Each step installs only what it needs, so you reach a result before taking on the heavier (optional) agent.
 
-### 1 · Get the CLI (and Docker)
+### 1 · Install Docker
 
-Two prerequisites. [uv](https://github.com/astral-sh/uv) builds the CLI (it isn't published yet), and a **Docker daemon** backs the sandbox every agent run executes in — [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) all work; just have one running.
+Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works — skip ahead if one is already running.
+
+```bash
+brew install --cask docker      # Docker Desktop, then launch it
+# or: brew install colima docker && colima start
+```
+
+### 2 · Install the avp CLI
+
+[uv](https://github.com/astral-sh/uv) builds it (it isn't published yet):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
@@ -47,13 +56,7 @@ cd agent-voyager-project && uv sync
 source .venv/bin/activate                              # puts `avp` on PATH
 ```
 
-```bash
-# if you don't already have a Docker daemon (pick one):
-brew install --cask docker      # Docker Desktop, then launch it
-brew install colima docker && colima start
-```
-
-### 2 · Install agents
+### 3 · Install agents
 
 Agents are prebuilt GitHub releases, fetched over plain HTTPS (no build, no auth). `goose` needs nothing else:
 
@@ -62,7 +65,7 @@ avp agent install goose
 avp agent list                                  # goose → "ready"
 ```
 
-### 3 · Run an eval
+### 4 · Run an eval
 
 The capitals example runs on Claude, so set an `ANTHROPIC_API_KEY` (or sign in with `claude login`). That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key.
 
@@ -88,7 +91,7 @@ avp eval · capitals-extraction · 2 items · agent=goose
 
 > **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist. The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
 
-### 4 · Add a second agent and compare (optional)
+### 5 · Add a second agent and compare (optional)
 
 Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the one path that also needs [Node 18+](https://nodejs.org):
 
