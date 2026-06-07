@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-06",
+  "$snapshot_date": "2026-06-07",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -4755,12 +4755,12 @@
     "deepseek/deepseek-chat": {
       "input": 0.14,
       "output": 0.28,
-      "cache_read": 0.028
+      "cache_read": 0.0028
     },
     "deepseek/deepseek-reasoner": {
       "input": 0.14,
       "output": 0.28,
-      "cache_read": 0.028
+      "cache_read": 0.0028
     },
     "deepseek/deepseek-v4-flash": {
       "input": 0.14,
@@ -15464,10 +15464,6 @@
       "input": 0.9,
       "output": 3.3
     },
-    "openrouter/arcee-ai/spotlight": {
-      "input": 0.18,
-      "output": 0.18
-    },
     "openrouter/arcee-ai/trinity-large-thinking": {
       "input": 0.22,
       "output": 0.85,
@@ -15480,10 +15476,6 @@
     "openrouter/arcee-ai/virtuoso-large": {
       "input": 0.75,
       "output": 1.2
-    },
-    "openrouter/baidu/ernie-4.5-vl-28b-a3b": {
-      "input": 0.14,
-      "output": 0.56
     },
     "openrouter/baidu/ernie-4.5-vl-424b-a47b": {
       "input": 0.42,
@@ -15710,7 +15702,8 @@
     },
     "openrouter/google/gemma-4-31b-it": {
       "input": 0.12,
-      "output": 0.37
+      "output": 0.36,
+      "cache_read": 0.09
     },
     "openrouter/google/gemma-4-31b-it:free": {
       "input": 0.0,
@@ -15791,8 +15784,8 @@
       "output": 0.74
     },
     "openrouter/meta-llama/llama-3-8b-instruct": {
-      "input": 0.04,
-      "output": 0.04
+      "input": 0.14,
+      "output": 0.14
     },
     "openrouter/meta-llama/llama-3.1-70b-instruct": {
       "input": 0.4,
@@ -16107,10 +16100,6 @@
     "openrouter/openai/gpt-4": {
       "input": 30.0,
       "output": 60.0
-    },
-    "openrouter/openai/gpt-4-1106-preview": {
-      "input": 10.0,
-      "output": 30.0
     },
     "openrouter/openai/gpt-4-turbo": {
       "input": 10.0,
@@ -16608,8 +16597,8 @@
       "cache_write": 0.375
     },
     "openrouter/qwen/qwen3.6-27b": {
-      "input": 0.29,
-      "output": 3.2
+      "input": 0.289,
+      "output": 2.4
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
