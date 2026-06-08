@@ -198,7 +198,17 @@ printf '"parent_span_id":"0000000000000000","seen_key":"%s","host":"%s"}}\\n' \
 def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
     """The vault guarantee, for real: a vault Commission run through
     `run_agent` starts the host broker, the in-sandbox preflight reaches it, and
-    the agent sees only the sentinel — the resolved secret never crosses in."""
+    the agent sees only the sentinel — the resolved secret never crosses in.
+
+    The broker lives on the host and the sandbox reaches it at
+    `host.docker.internal`, which Docker Desktop / OrbStack inject but a plain
+    Docker bridge (GitHub Actions) does not (it needs `--add-host=host-gateway`,
+    set by the sandbox server, not us). So where the host can't route there the
+    run correctly fails closed, and this is a SKIP with evidence by default;
+    `make test-docker` sets AVP_REQUIRE_EGRESS_ENFORCEMENT=1 to make it a hard
+    assertion on hosts known to have full Docker networking."""
+    import os
+
     from avp.commission import Commission, Provider, SecretRef
     from avp_cli import paths
 
@@ -227,6 +237,14 @@ def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
         timeout_s=120.0,
     )
 
+    if err is not None and "broker unreachable" in err:
+        if not os.environ.get("AVP_REQUIRE_EGRESS_ENFORCEMENT"):
+            pytest.skip(
+                "sandbox can't reach the host broker on this host "
+                "(host.docker.internal absent without Docker Desktop / a host-gateway "
+                f"add-host); run correctly failed closed. got: {err}"
+            )
+        raise AssertionError(f"broker unreachable despite full-networking host: {err}")
     assert err is None, err  # broker was reachable from the sandbox (preflight passed)
     data = events[0].data if hasattr(events[0], "data") else events[0]["data"]
     seen_key = data.seen_key if hasattr(data, "seen_key") else data["seen_key"]
