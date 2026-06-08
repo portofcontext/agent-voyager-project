@@ -50,7 +50,11 @@ from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.sink import EventSink, stdio_sink
 from avp.trajectory import ErrorCode, StopReason
-from avp_claude_agent_sdk._commission import apply_commission, apply_prompt
+from avp_claude_agent_sdk._commission import (
+    UnsupportedProvider,
+    apply_commission,
+    apply_prompt,
+)
 from avp_claude_agent_sdk._emit import (
     emit_agent_described,
     emit_agent_stopped,
@@ -78,7 +82,16 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
         # a real object so the probe + descriptor translation (which read
         # `options.system_prompt` etc.) don't dereference None.
         options = options if options is not None else ClaudeAgentOptions()
-        run_options = apply_commission(commission, options)
+        # A non-anthropic provider is unsatisfiable for this SDK. Defer the
+        # failure to query() so it lands in the trajectory (error_occurred +
+        # agent_stopped) rather than crashing construction before any events.
+        self._provider_error: UnsupportedProvider | None = None
+        try:
+            run_options = apply_commission(commission, options)
+        except UnsupportedProvider as exc:
+            self._provider_error = exc
+            safe = commission.model_copy(update={"provider": None}) if commission else None
+            run_options = apply_commission(safe, options)
         super().__init__(options=run_options, transport=transport)
         self._original_options = options
         self._commission = commission
@@ -123,6 +136,18 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
             )
 
             self._avp_prelude_emitted = True
+
+            # Fail fast (spec): the Commission asked for a provider this SDK
+            # can't speak (Anthropic protocol only). Recorded in the trajectory.
+            if self._provider_error is not None:
+                await emit_error(
+                    state,
+                    self._provider_error,
+                    error_code=ErrorCode.unsupported_provider,
+                )
+                await emit_agent_stopped(state, StopReason.error)
+                self._aborted = True
+                return None
 
             # Fail fast (spec): a name in enabled_builtin_tools that isn't one of
             # the agent's tools is a commission_collision; stop before any model

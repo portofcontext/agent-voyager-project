@@ -85,7 +85,12 @@ def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
     from avp.commission import Commission
 
     agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
-    commission = Commission(schema_version="0.1", run_id="seam", prompt="hi")
+    commission = Commission(
+        schema_version="0.1",
+        run_id="seam",
+        model="anthropic/claude-haiku-4-5-20251001",
+        prompt="hi",
+    )
     out = paths.avp_home() / "runs" / "seam" / "trajectory.ndjson"
 
     def beat(e) -> int:
@@ -121,7 +126,12 @@ def test_nonzero_exit_reports_stderr_tail(server) -> None:
     events, err = run_agent(
         agent,
         ctx,
-        Commission(schema_version="0.1", run_id="fail", prompt="hi"),
+        Commission(
+            schema_version="0.1",
+            run_id="fail",
+            model="anthropic/claude-haiku-4-5-20251001",
+            prompt="hi",
+        ),
         out_path=paths.avp_home() / "runs" / "fail" / "t.ndjson",
         timeout_s=120.0,
     )

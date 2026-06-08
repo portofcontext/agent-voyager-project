@@ -16,6 +16,7 @@ export type Url = string;
 export type Headers = {
   [k: string]: string;
 } | null;
+export type Vault = string;
 export type Id1 = string;
 export type Type1 = "stdio";
 /**
@@ -28,6 +29,8 @@ export type Env = {
 } | null;
 export type Skills = Skill[] | null;
 export type Id2 = string;
+export type Id3 = string;
+export type BaseUrl = string | null;
 export type EnabledBuiltinTools = string[] | null;
 export type EnabledBuiltinSubagents = string[] | null;
 export type EnabledBuiltinSkills = string[] | null;
@@ -37,7 +40,7 @@ export type OutputSchema = {
 } | null;
 export type Prompt = string | null;
 export type SystemPrompt = string | null;
-export type Model = string | null;
+export type Model = string;
 export type ThreadId = string | null;
 export type Tags = string[] | null;
 export type Meta = {
@@ -53,6 +56,7 @@ export interface AVPV01Commission {
   supervisor?: SupervisorPreamble | null;
   mcp_servers?: McpServers;
   skills?: Skills;
+  provider?: Provider | null;
   enabled_builtin_tools?: EnabledBuiltinTools;
   enabled_builtin_subagents?: EnabledBuiltinSubagents;
   enabled_builtin_skills?: EnabledBuiltinSkills;
@@ -60,7 +64,7 @@ export interface AVPV01Commission {
   output_schema?: OutputSchema;
   prompt?: Prompt;
   system_prompt?: SystemPrompt;
-  model?: Model;
+  model: Model;
   thread_id?: ThreadId;
   tags?: Tags;
   meta?: Meta;
@@ -99,6 +103,21 @@ export interface McpServerHttp {
   type: Type;
   url: Url;
   headers?: Headers;
+  auth?: SecretRef | null;
+}
+/**
+ * A reference to a secret the supervisor resolves out of band.
+ *
+ * Carries a `vault` handle, never the secret value. The supervisor maps the
+ * handle to material (env var, secrets file, broker) at run time; the value
+ * never appears on the wire or in the trajectory. Used by `Provider.credential`
+ * and `McpServerHttp.auth`.
+ *
+ * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * via the `definition` "SecretRef".
+ */
+export interface SecretRef {
+  vault: Vault;
 }
 /**
  * Inline stdio MCP server entry in Commission.mcp_servers.
@@ -125,4 +144,28 @@ export interface Skill {
 }
 export interface Files {
   [k: string]: string;
+}
+/**
+ * Optional LLM routing override: which storefront serves the model.
+ *
+ * Absent → the agent uses its native default (whatever its own environment
+ * configures). Present → the supervisor directs the agent at a specific
+ * endpoint. `id` selects the protocol/auth family (e.g. "anthropic",
+ * "openai", "openrouter"); `base_url` overrides the endpoint; `credential`
+ * references the API key by vault handle (never the value).
+ *
+ * The model's origin (the `Commission.model` slug's first segment) and the
+ * storefront `id` are independent axes: `model: "openai/gpt-4o"` with
+ * `provider.id: "openrouter"` reads as "OpenAI's gpt-4o, bought through
+ * OpenRouter". An agent that cannot speak the requested provider's protocol
+ * MUST fail (error_occurred + agent_stopped reason=error), never silently
+ * run elsewhere.
+ *
+ * This interface was referenced by `AVPV01Commission`'s JSON-Schema
+ * via the `definition` "Provider".
+ */
+export interface Provider {
+  id: Id3;
+  base_url?: BaseUrl;
+  credential?: SecretRef | null;
 }

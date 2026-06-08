@@ -45,6 +45,7 @@ from avp_cli.eval.scoring import FinalOutput
 
 def _setup(id_: str, **fields) -> Setup:
     """A Setup wrapping a base wire Commission (run_id defaults to the id)."""
+    fields.setdefault("model", "anthropic/claude-haiku-4-5-20251001")
     return Setup(id=id_, commission=Commission(schema_version="0.1", run_id=id_, **fields))
 
 
@@ -55,7 +56,7 @@ def test_setup_to_commission_carries_the_variant_surface() -> None:
         prompt="Return JSON for: {input}",
         enabled_builtin_tools=["read_file"],
         output_schema=schema,
-        model="claude-haiku-4-5",
+        model="anthropic/claude-haiku-4-5",
     )
     item = Item(id="i1", prompt="Paris, France")
     c = setup.to_commission(item, run_id="terse-i1")
@@ -64,26 +65,26 @@ def test_setup_to_commission_carries_the_variant_surface() -> None:
     assert c.prompt == "Return JSON for: Paris, France"  # {input} filled with the case
     assert c.enabled_builtin_tools == ["read_file"]
     assert c.output_schema == schema
-    assert c.model == "claude-haiku-4-5"  # the commission's own model
+    assert c.model == "anthropic/claude-haiku-4-5"  # the commission's own model
     assert c.supervisor is not None and c.supervisor.name == "avp-cli"
     assert "commission:terse" in (c.tags or [])
 
 
 def test_model_override_wins_over_commission_model() -> None:
     # The run-time --model flag overrides every commission's own model.
-    setup = _setup("terse", model="claude-haiku-4-5")
+    setup = _setup("terse", model="anthropic/claude-haiku-4-5")
     c = setup.to_commission(
-        Item(id="i1", prompt="x"), run_id="r", model_override="claude-sonnet-4-6"
+        Item(id="i1", prompt="x"), run_id="r", model_override="anthropic/claude-sonnet-4-6"
     )
-    assert c.model == "claude-sonnet-4-6"
+    assert c.model == "anthropic/claude-sonnet-4-6"
 
 
 def test_setup_uses_item_prompt_when_no_template() -> None:
     c = _setup("baseline").to_commission(
-        Item(id="i1", prompt="raw task"), run_id="r", model_override="m"
+        Item(id="i1", prompt="raw task"), run_id="r", model_override="x/m"
     )
     assert c.prompt == "raw task"
-    assert c.model == "m"  # override applies when the commission has no model of its own
+    assert c.model == "x/m"  # override applies when the commission has no model of its own
 
 
 # ── Final-output extraction ───────────────────────────────────────────────────
@@ -293,7 +294,7 @@ def _result(
 
 
 def test_board_aggregation_math() -> None:
-    setup = _setup("s", model="m")
+    setup = _setup("s", model="x/m")
     results = [
         _result("s", "i1", 1.0, True, 0.002, 2),
         _result("s", "i2", 0.5, False, 0.004, 4),
@@ -338,7 +339,7 @@ def test_render_and_dump_round_trip() -> None:
 
     from avp_cli.eval.engine import Board
 
-    setup = _setup("winner", model="m")
+    setup = _setup("winner", model="x/m")
     board_rows = [_aggregate(setup, [_result("winner", "i1", 1.0, True, 0.002, 2)])]
     board = Board(dataset_name="d", agent_label="ref", out_dir="/tmp/x", rows=board_rows)
 
@@ -649,7 +650,13 @@ def test_run_matrix_binds_commissions_to_their_agent(tmp_path, sandbox_seam) -> 
     agent_script.write_text(_INLINE_AGENT)
 
     def bound(id_: str, agent: str | None) -> Setup:
-        return Setup(id=id_, commission=Commission(schema_version="0.1", run_id=id_), agent=agent)
+        return Setup(
+            id=id_,
+            commission=Commission(
+                schema_version="0.1", run_id=id_, model="anthropic/claude-haiku-4-5-20251001"
+            ),
+            agent=agent,
+        )
 
     agents = [_sandboxed("goose", agent_script), _sandboxed("claude-code", agent_script)]
     ev = Eval(

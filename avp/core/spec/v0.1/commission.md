@@ -44,10 +44,12 @@ A Commission is a single JSON document validating against [`commission.schema.js
 
   "prompt":        "Refactor the auth module to use JWT.",
   "system_prompt": "You are a senior Rust developer.",
-  "model":         "claude-sonnet-4-6",
+  "model":         "anthropic/claude-sonnet-4-6",
+
+  "provider": { "id": "anthropic", "credential": { "vault": "anthropic" } },
 
   "mcp_servers": [
-    { "id": "github", "type": "http", "url": "https://mcp.example.com/github", "headers": { "Authorization": "Bearer ghp_..." } }
+    { "id": "github", "type": "http", "url": "https://mcp.example.com/github", "auth": { "vault": "github" } }
   ],
   "skills": [
     { "id": "style-guide", "files": { "SKILL.md": "---\nname: Style Guide\n---\n…" } },
@@ -72,7 +74,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
 | `schema_version` | string | MUST equal `"0.1"`. |
 | `run_id` | string | MUST be unique per run within the supervisor's namespace. Carried on every event's `subject`. |
 | `prompt` | string | The model-facing instruction. |
-| `model` | string | Provider-qualified model id (e.g., `"claude-sonnet-4-6"`, `"gpt-5"`). Agents validate against their Descriptor's `supported_models`. |
+| `model` | string | Canonical [models.dev](https://models.dev) slug `"<origin>/<model>"` (e.g. `"anthropic/claude-sonnet-4-6"`, `"openai/gpt-5"`). MUST match `^[^/]+/.+$`. The origin segment is the model's home namespace and the pricing key; it is independent of the storefront that serves the tokens (see `provider`, §2.3). Agents split off the origin to get the SDK-native model id and validate against their Descriptor's `supported_models`. |
 
 ### 2.2 Optional fields
 
@@ -80,6 +82,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
 |---|---|---|
 | `supervisor` | `{ name: string, version?: string }` | Attribution for `run_requested`. When absent, the corresponding `avp.supervisor.*` fields on `run_requested` are omitted (absence is the canonical signal; the prior `"unknown"` placeholder is superseded). |
 | `system_prompt` | string | The agent's system context. Overrides `descriptor.system_prompt` when both are set. |
+| `provider` | `Provider \| null` | LLM routing override (which storefront serves `model`). Absent → the agent's native default. See §2.3. |
 | `mcp_servers` | `Array<McpServerHttp \| McpServerStdio>` | Inline MCP server connection material, discriminated on `type`. See §3. |
 | `skills` | `Array<Skill>` | Inline Agent Skills (SKILL.md content). See §3. |
 | `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.tools[].name`. See §4. |
@@ -90,6 +93,43 @@ A Commission is a single JSON document validating against [`commission.schema.js
 | `tags` | `string[]` | Free-form labels. |
 | `meta` | `object` | Free-form key/value bag. |
 | `output_schema` | `object \| null` | A JSON Schema the supervisor wants the agent's final output to validate against. Agents that don't support structured output ignore it. |
+
+### 2.3 Provider routing
+
+`provider` directs the agent at a specific LLM storefront. When absent, the
+agent uses its **native default** (whatever its own environment configures).
+
+```jsonc
+{
+  "id":         "openrouter",                         // protocol/auth family; MUST match ^[a-z0-9_-]+$
+  "base_url":   "https://openrouter.ai/api/v1",        // optional endpoint override
+  "credential": { "vault": "openrouter" }              // optional SecretRef (§2.4); never the value
+}
+```
+
+The model's **origin** (the `model` slug's first segment) and the storefront
+**`id`** are independent axes. `model: "openai/gpt-4o"` with
+`provider.id: "openrouter"` reads as "OpenAI's gpt-4o, bought through
+OpenRouter": the pricing key stays `openai/gpt-4o`, the tokens are bought from
+OpenRouter.
+
+`provider` is a **request, not a guarantee**. An agent that cannot speak the
+requested provider's protocol (e.g. an Anthropic-protocol-only agent asked for
+`id: "openrouter"`) MUST emit `error_occurred` and stop with `reason: "error"`,
+never silently run on a different endpoint.
+
+### 2.4 Secrets are references, never values
+
+Credentials never appear on the wire. Both `provider.credential` and
+`McpServerHttp.auth` carry a **`SecretRef`**: `{ "vault": "<handle>" }`, where
+the handle MUST match `^[a-z0-9_-]+$`. The supervisor resolves the handle to
+secret material out of band (env var, secrets file, credential broker) at run
+time; the value MUST NOT appear in the Commission or in any trajectory event.
+
+A conforming supervisor SHOULD resolve handles **outside the agent's reach** so
+the agent can *use* a credential it can never *read*. Inlining a credential in
+an HTTP header (`Authorization`, `*api-key*`, `*token*`, …) is rejected at
+validation; use `auth` instead.
 
 ---
 
@@ -108,7 +148,8 @@ Each entry in `mcp_servers` is a discriminated union on `type`:
   "id": "github",
   "type": "http",
   "url": "https://mcp.example.com/github",
-  "headers": { "Authorization": "Bearer ghp_..." }  // optional
+  "auth": { "vault": "github" },           // optional SecretRef (§2.4); injected as a bearer credential
+  "headers": { "X-Trace-Id": "abc" }       // optional; non-secret headers only
 }
 ```
 
@@ -125,7 +166,8 @@ Each entry in `mcp_servers` is a discriminated union on `type`:
 ```
 
 - **`id`**: a string the supervisor chooses. Stable across the run. MUST match `^[a-z0-9_-]+$`.
-- `headers` is optional. Pass auth and any other request headers directly (e.g. `"Authorization": "Bearer <token>"`).
+- `auth` is optional. A `SecretRef` (§2.4) the supervisor resolves and injects as the server's credential (a bearer `Authorization` header). Carry credentials here, not inline.
+- `headers` is optional and is for **non-secret** request headers only. Credential-bearing names (`Authorization`, `*api-key*`, `*token*`, …) are rejected at validation; use `auth`.
 
 ### 3.2 Skill entries
 
@@ -213,5 +255,7 @@ A supervisor (or any Commission producer) is conforming to the Commission Spec i
 2. `schema_version` equals `"0.1"`.
 3. `run_id` is unique within the supervisor's namespace.
 4. Every name in `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` / `enabled_builtin_mcp_servers` matches a corresponding entry in the target agent's Descriptor (by `name` for tools/subagents/skills, by `id` for mcp_servers). When the supervisor cannot pre-validate against the Descriptor, the agent catches mismatches at startup and emits `error_occurred(code: "commission_collision")`.
+5. `model` is a canonical `<origin>/<model>` slug (matches `^[^/]+/.+$`).
+6. No secret value appears inline anywhere in the Commission: credentials are carried only as `SecretRef` handles (`provider.credential`, `McpServerHttp.auth`), and `McpServerHttp.headers` contains no credential-bearing header. The resolved secret value MUST NOT appear in `run_requested.data["avp.commission"]` or any other trajectory event.
 
 An agent that consumes Commissions and composes with the Trajectory Spec MUST additionally enforce §3.3 (collisions) and §4 (allowlists) at startup.

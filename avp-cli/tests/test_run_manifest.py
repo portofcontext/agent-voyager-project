@@ -18,6 +18,7 @@ _DATASET = {"source": "inline", "items": [{"id": "i1", "prompt": "hi", "expected
 
 
 def _setup(cid: str, agent: str | None, **fields) -> Setup:
+    fields.setdefault("model", "anthropic/claude-haiku-4-5-20251001")
     return Setup(
         id=cid,
         commission=Commission(schema_version="0.1", run_id=cid, **fields),
@@ -39,8 +40,8 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
         )
     )
     setups = [
-        _setup("g", "goose", prompt="render {input}", enabled_builtin_tools=["shell"], model="m"),
-        _setup("c", "claude-code", prompt="fetch {input}", model="m2"),
+        _setup("g", "goose", prompt="render {input}", enabled_builtin_tools=["shell"], model="x/m"),
+        _setup("c", "claude-code", prompt="fetch {input}", model="x/m2"),
     ]
     run_manifest.write(
         out,
@@ -78,7 +79,12 @@ def test_snapshot_is_independent_of_later_library_edits(tmp_path) -> None:
     out = tmp_path / "run"
     library.save(
         "baseline",
-        Commission(schema_version="0.1", run_id="baseline", prompt="ORIGINAL"),
+        Commission(
+            schema_version="0.1",
+            run_id="baseline",
+            model="anthropic/claude-haiku-4-5-20251001",
+            prompt="ORIGINAL",
+        ),
         commissions_dir=lib,
     )
     setup = Setup(
@@ -96,7 +102,12 @@ def test_snapshot_is_independent_of_later_library_edits(tmp_path) -> None:
     # mutate the library the way this whole session did
     library.save(
         "baseline",
-        Commission(schema_version="0.1", run_id="baseline", prompt="REWRITTEN"),
+        Commission(
+            schema_version="0.1",
+            run_id="baseline",
+            model="anthropic/claude-haiku-4-5-20251001",
+            prompt="REWRITTEN",
+        ),
         commissions_dir=lib,
         overwrite=True,
     )

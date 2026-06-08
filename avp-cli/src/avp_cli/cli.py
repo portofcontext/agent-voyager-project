@@ -1160,6 +1160,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if prepared is None:
         return _SKIP
 
+    if not args.model or "/" not in args.model:
+        console.error_panel(
+            "model must be a provider/model slug",
+            f"got {args.model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
+            "or openai/gpt-4o (canonical models.dev namespace).",
+        )
+        return 1
+
     commission = Commission(
         schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
     )

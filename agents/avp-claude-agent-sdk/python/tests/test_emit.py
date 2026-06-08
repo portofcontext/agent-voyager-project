@@ -284,7 +284,11 @@ def test_client_normalizes_missing_options() -> None:
     from avp.commission import Commission
     from avp_claude_agent_sdk import AVPClaudeSDKClient
 
-    client = AVPClaudeSDKClient(commission=Commission(schema_version="0.1", run_id="x"))
+    client = AVPClaudeSDKClient(
+        commission=Commission(
+            schema_version="0.1", run_id="x", model="anthropic/claude-haiku-4-5-20251001"
+        )
+    )
     assert isinstance(client._original_options, ClaudeAgentOptions)
 
 

@@ -89,6 +89,7 @@ class ErrorCode(StrEnum):
     auth_error = "auth_error"
     agent_crash = "agent_crash"
     unsupported_model = "unsupported_model"
+    unsupported_provider = "unsupported_provider"
     commission_collision = "commission_collision"
     mcp_connect_failed = "mcp_connect_failed"
     unknown = "unknown"

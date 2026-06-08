@@ -11,6 +11,7 @@ from avp_cli import library
 
 
 def _c(**kw) -> Commission:
+    kw.setdefault("model", "anthropic/claude-haiku-4-5-20251001")
     return Commission(schema_version="0.1", run_id=kw.pop("run_id", "r"), **kw)
 
 
@@ -20,7 +21,7 @@ def test_save_load_round_trip(tmp_path) -> None:
     c = _c(
         run_id="terse",
         prompt="Return JSON: {input}",
-        model="claude-haiku-4-5",
+        model="anthropic/claude-haiku-4-5",
         enabled_builtin_tools=["read_file"],
         output_schema=schema,
     )
@@ -33,7 +34,7 @@ def test_save_load_round_trip(tmp_path) -> None:
 def test_saved_file_is_a_pure_wire_commission(tmp_path) -> None:
     # No tool-specific fields on disk — it must be portable to the cloud as-is.
     d = tmp_path / "commissions"
-    library.save("terse", _c(prompt="{input}", model="m"), commissions_dir=d)
+    library.save("terse", _c(prompt="{input}", model="x/m"), commissions_dir=d)
     raw = json.loads((d / "terse.json").read_text())
     assert "id" not in raw and "description" not in raw and "prompt_template" not in raw
     assert raw["schema_version"] == "0.1"

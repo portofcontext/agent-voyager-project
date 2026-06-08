@@ -4,7 +4,10 @@
 
 | Commission field              | ClaudeAgentOptions field        | Notes                                                                        |
 |-------------------------------|---------------------------------|------------------------------------------------------------------------------|
-| `model`                       | `model`                         | Direct.                                                                      |
+| `model`                       | `model`                         | Slug split: `"anthropic/claude-opus-4-8"` → SDK `model="claude-opus-4-8"`.   |
+| `provider`                    | *(env, set by supervisor)*      | Only `id: "anthropic"` is supported (the SDK speaks Anthropic protocol);     |
+|                               |                                 | `base_url`/`credential` reach the SDK via ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY|
+|                               |                                 | set by the supervisor. Any other `id` → `UnsupportedProvider` (fail-fast).   |
 | `system_prompt`               | `system_prompt`                 | Direct.                                                                      |
 | `prompt`                      | *(query call arg)*              | Direct.                                                                      |
 | `mcp_servers` (inline)        | `mcp_servers` dict              | `id` becomes the dict key. `McpServerHttp` → `McpHttpServerConfig`;           |
@@ -38,6 +41,7 @@ material; the agent dials and loads them directly.
 """
 
 import dataclasses
+import os
 from collections.abc import AsyncIterable
 from typing import Any
 
@@ -46,6 +50,35 @@ from claude_agent_sdk import ClaudeAgentOptions, McpServerConfig
 from avp.commission import Commission
 from avp.commission import McpServerHttp as AVPMcpServerHttp
 from avp.commission import McpServerStdio as AVPMcpServerStdio
+
+
+class UnsupportedProvider(Exception):
+    """The Commission requests a provider this agent cannot speak.
+
+    The Claude Agent SDK speaks the Anthropic protocol only, so any
+    `provider.id` other than `"anthropic"` is unsatisfiable. The run loop
+    catches this and emits `error_occurred` + `agent_stopped(reason=error)`
+    rather than silently running on the wrong endpoint.
+    """
+
+    def __init__(self, provider_id: str) -> None:
+        super().__init__(
+            f"provider {provider_id!r} is not supported by the Claude Agent SDK "
+            "(Anthropic protocol only); use provider.id 'anthropic' or an "
+            "Anthropic-compatible gateway via base_url"
+        )
+        self.provider_id = provider_id
+
+
+def _vault_env(handle: str) -> str | None:
+    """Resolve a SecretRef vault handle from the supervisor-injected env var.
+
+    The supervisor (CLI) resolves the value out of band and exposes it as
+    `AVP_VAULT_<HANDLE>`; the secret never appears in the Commission, so it
+    stays out of the trajectory snapshot. (Phase 2 replaces this with a broker
+    and the value leaves the sandbox entirely.)
+    """
+    return os.environ.get("AVP_VAULT_" + handle.upper().replace("-", "_"))
 
 
 def apply_commission(
@@ -73,11 +106,16 @@ def apply_commission(
     if commission is None:
         return options
 
+    # The SDK speaks Anthropic protocol only. A non-anthropic provider is
+    # unsatisfiable; fail fast rather than silently using the native endpoint.
+    if commission.provider is not None and commission.provider.id != "anthropic":
+        raise UnsupportedProvider(commission.provider.id)
+
     base = options if options is not None else ClaudeAgentOptions()
     updates: dict[str, Any] = {}
 
-    if commission.model is not None:
-        updates["model"] = commission.model
+    # model is a canonical "origin/model" slug; the SDK wants the bare model id.
+    updates["model"] = commission.model.split("/", 1)[1]
     if commission.system_prompt is not None:
         updates["system_prompt"] = commission.system_prompt
     # Per AVP spec: None = expose all (leave options.tools alone);
@@ -118,8 +156,13 @@ def _map_mcp_servers(commission: Commission) -> dict[str, McpServerConfig]:
     for server in commission.mcp_servers or []:
         if isinstance(server, AVPMcpServerHttp):
             cfg: dict[str, McpServerConfig] = {"type": "http", "url": server.url}
-            if server.headers:
-                cfg["headers"] = server.headers
+            headers = dict(server.headers or {})
+            if server.auth is not None:
+                value = _vault_env(server.auth.vault)
+                if value is not None:
+                    headers["Authorization"] = f"Bearer {value}"
+            if headers:
+                cfg["headers"] = headers
             result[server.id] = cfg
         elif isinstance(server, AVPMcpServerStdio):
             cmd, *rest = server.command

@@ -2890,6 +2890,7 @@ pub struct Citation {
 #[doc = "  \"description\": \"Supervisor's declaration of the supervisor-managed environment slice.\\n\\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\\nmaterial; no resolver round-trip is needed. The agent dials MCP servers\\nand injects skill content directly from these fields at startup.\\n\\nAnything the agent provides on its own (in-process tools, baked-in\\nskills) is invisible to AVP and the Commission entirely. The agent's own\\ncontribution surfaces in `agent_described.data[\\\"avp.descriptor\\\"]` so\\nconsumers can audit what the agent showed up with. The agent's runtime\\nlayer merges its internal contribution with the Commission-managed assets\\ninto one bag the loop dispatches against; collisions on `id` are a\\nstartup error.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
+#[doc = "    \"model\","]
 #[doc = "    \"run_id\","]
 #[doc = "    \"schema_version\""]
 #[doc = "  ],"]
@@ -2992,14 +2993,9 @@ pub struct Citation {
 #[doc = "    },"]
 #[doc = "    \"model\": {"]
 #[doc = "      \"title\": \"Model\","]
-#[doc = "      \"anyOf\": ["]
-#[doc = "        {"]
-#[doc = "          \"type\": \"string\""]
-#[doc = "        },"]
-#[doc = "        {"]
-#[doc = "          \"type\": \"null\""]
-#[doc = "        }"]
-#[doc = "      ]"]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1,"]
+#[doc = "      \"pattern\": \"^[^/]+/.+$\""]
 #[doc = "    },"]
 #[doc = "    \"output_schema\": {"]
 #[doc = "      \"title\": \"Output Schema\","]
@@ -3018,6 +3014,16 @@ pub struct Citation {
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"provider\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/Provider\""]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -3114,13 +3120,14 @@ pub struct Commission {
     pub mcp_servers: ::std::option::Option<::std::vec::Vec<CommissionMcpServersItem>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub meta: ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub model: ::std::option::Option<::std::string::String>,
+    pub model: Model,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub output_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub prompt: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub provider: ::std::option::Option<Provider>,
     pub run_id: RunId,
     pub schema_version: ::std::string::String,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -4143,6 +4150,16 @@ impl ::std::convert::TryFrom<::std::string::String> for McpServerDeclStatus {
 #[doc = "    \"url\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"auth\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/SecretRef\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"headers\": {"]
 #[doc = "      \"title\": \"Headers\","]
 #[doc = "      \"anyOf\": ["]
@@ -4181,6 +4198,8 @@ impl ::std::convert::TryFrom<::std::string::String> for McpServerDeclStatus {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct McpServerHttp {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub auth: ::std::option::Option<SecretRef>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub headers: ::std::option::Option<
         ::std::collections::HashMap<::std::string::String, ::std::string::String>,
@@ -4270,6 +4289,81 @@ pub struct McpServerStdio {
     pub id: Id,
     #[serde(rename = "type", skip_serializing, default)]
     pub type_: ::std::string::String,
+}
+#[doc = "`Model`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Model\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1,"]
+#[doc = "  \"pattern\": \"^[^/]+/.+$\""]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct Model(::std::string::String);
+impl ::std::ops::Deref for Model {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<Model> for ::std::string::String {
+    fn from(value: Model) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for Model {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        static PATTERN: ::std::sync::LazyLock<::regress::Regex> =
+            ::std::sync::LazyLock::new(|| ::regress::Regex::new("^[^/]+/.+$").unwrap());
+        if PATTERN.find(value).is_none() {
+            return Err("doesn't match pattern \"^[^/]+/.+$\"".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for Model {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for Model {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for Model {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for Model {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
 }
 #[doc = "`Name`"]
 #[doc = r""]
@@ -4418,6 +4512,60 @@ impl<'de> ::serde::Deserialize<'de> for ParentSpanId {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
     }
+}
+#[doc = "Optional LLM routing override: which storefront serves the model.\n\nAbsent → the agent uses its native default (whatever its own environment\nconfigures). Present → the supervisor directs the agent at a specific\nendpoint. `id` selects the protocol/auth family (e.g. \"anthropic\",\n\"openai\", \"openrouter\"); `base_url` overrides the endpoint; `credential`\nreferences the API key by vault handle (never the value).\n\nThe model's origin (the `Commission.model` slug's first segment) and the\nstorefront `id` are independent axes: `model: \"openai/gpt-4o\"` with\n`provider.id: \"openrouter\"` reads as \"OpenAI's gpt-4o, bought through\nOpenRouter\". An agent that cannot speak the requested provider's protocol\nMUST fail (error_occurred + agent_stopped reason=error), never silently\nrun elsewhere."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Provider\","]
+#[doc = "  \"description\": \"Optional LLM routing override: which storefront serves the model.\\n\\nAbsent → the agent uses its native default (whatever its own environment\\nconfigures). Present → the supervisor directs the agent at a specific\\nendpoint. `id` selects the protocol/auth family (e.g. \\\"anthropic\\\",\\n\\\"openai\\\", \\\"openrouter\\\"); `base_url` overrides the endpoint; `credential`\\nreferences the API key by vault handle (never the value).\\n\\nThe model's origin (the `Commission.model` slug's first segment) and the\\nstorefront `id` are independent axes: `model: \\\"openai/gpt-4o\\\"` with\\n`provider.id: \\\"openrouter\\\"` reads as \\\"OpenAI's gpt-4o, bought through\\nOpenRouter\\\". An agent that cannot speak the requested provider's protocol\\nMUST fail (error_occurred + agent_stopped reason=error), never silently\\nrun elsewhere.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"id\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"base_url\": {"]
+#[doc = "      \"title\": \"Base Url\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"credential\": {"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/$defs/SecretRef\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"id\": {"]
+#[doc = "      \"title\": \"Id\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1,"]
+#[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct Provider {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub base_url: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub credential: ::std::option::Option<SecretRef>,
+    pub id: Id,
 }
 #[doc = "Structured refusal distinct from generated text. OpenAI assistant\nmessage `refusal` field and Responses `output_refusal` item. Other\nproviders emit refusals as plain text plus a finish reason; this\nblock represents only providers that ship a typed refusal."]
 #[doc = r""]
@@ -4964,6 +5112,35 @@ impl<'de> ::serde::Deserialize<'de> for RunRequestedEventSubject {
                 <D::Error as ::serde::de::Error>::custom(e.to_string())
             })
     }
+}
+#[doc = "A reference to a secret the supervisor resolves out of band.\n\nCarries a `vault` handle, never the secret value. The supervisor maps the\nhandle to material (env var, secrets file, broker) at run time; the value\nnever appears on the wire or in the trajectory. Used by `Provider.credential`\nand `McpServerHttp.auth`."]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SecretRef\","]
+#[doc = "  \"description\": \"A reference to a secret the supervisor resolves out of band.\\n\\nCarries a `vault` handle, never the secret value. The supervisor maps the\\nhandle to material (env var, secrets file, broker) at run time; the value\\nnever appears on the wire or in the trajectory. Used by `Provider.credential`\\nand `McpServerHttp.auth`.\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"vault\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"vault\": {"]
+#[doc = "      \"title\": \"Vault\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"minLength\": 1,"]
+#[doc = "      \"pattern\": \"^[a-z0-9_-]+$\""]
+#[doc = "    }"]
+#[doc = "  },"]
+#[doc = "  \"additionalProperties\": false"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct SecretRef {
+    pub vault: Vault,
 }
 #[doc = "Result of a provider-executed built-in tool. Pairs with\n`ServerToolUseBlock`. Anthropic `web_search_tool_result`, OpenAI\nResponses `*_call_output`, Gemini `code_execution_result`.\n`content` is provider-shaped (search-result rows, code stdout,\ncomputer-use screenshots, ...)."]
 #[doc = r""]
@@ -7805,6 +7982,81 @@ pub struct Usage {
     pub output_tokens: u64,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub reasoning_output_tokens: ::std::option::Option<u64>,
+}
+#[doc = "`Vault`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"Vault\","]
+#[doc = "  \"type\": \"string\","]
+#[doc = "  \"minLength\": 1,"]
+#[doc = "  \"pattern\": \"^[a-z0-9_-]+$\""]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[serde(transparent)]
+pub struct Vault(::std::string::String);
+impl ::std::ops::Deref for Vault {
+    type Target = ::std::string::String;
+    fn deref(&self) -> &::std::string::String {
+        &self.0
+    }
+}
+impl ::std::convert::From<Vault> for ::std::string::String {
+    fn from(value: Vault) -> Self {
+        value.0
+    }
+}
+impl ::std::str::FromStr for Vault {
+    type Err = self::error::ConversionError;
+    fn from_str(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        if value.chars().count() < 1usize {
+            return Err("shorter than 1 characters".into());
+        }
+        static PATTERN: ::std::sync::LazyLock<::regress::Regex> =
+            ::std::sync::LazyLock::new(|| ::regress::Regex::new("^[a-z0-9_-]+$").unwrap());
+        if PATTERN.find(value).is_none() {
+            return Err("doesn't match pattern \"^[a-z0-9_-]+$\"".into());
+        }
+        Ok(Self(value.to_string()))
+    }
+}
+impl ::std::convert::TryFrom<&str> for Vault {
+    type Error = self::error::ConversionError;
+    fn try_from(value: &str) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for Vault {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for Vault {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for Vault {
+    fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+    where
+        D: ::serde::Deserializer<'de>,
+    {
+        ::std::string::String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: self::error::ConversionError| {
+                <D::Error as ::serde::de::Error>::custom(e.to_string())
+            })
+    }
 }
 #[doc = "Video content. Gemini `inline_data` / `file_data` video, Bedrock\n`video`."]
 #[doc = r""]

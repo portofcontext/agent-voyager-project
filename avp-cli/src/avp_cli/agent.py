@@ -43,7 +43,7 @@ from pydantic import BaseModel
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
-from avp_cli import osb, paths
+from avp_cli import osb, paths, vault
 
 # How often the streaming path re-reads the growing --out file (seconds).
 _TAIL_INTERVAL = 0.06
@@ -149,7 +149,7 @@ def run_agent(
             box = SandboxSync.create(
                 agent.image,
                 connection_config=ctx.connection.config(),
-                env=_sandbox_env(agent),
+                env=_sandbox_env(agent, commission),
                 volumes=[
                     Volume(
                         name="workspace",
@@ -158,7 +158,13 @@ def run_agent(
                     ),
                     Volume(name="io", host=Host(path=str(io_dir)), mount_path=_IO_MNT),
                 ],
-                network_policy=osb.network_policy(ctx.net),
+                # Egress is default-deny floored by runtime-base domains, plus the
+                # env's `net`, plus the hosts the Commission itself references
+                # (LLM provider + MCP servers). A run can never be commissioned to
+                # call a URL the sandbox then blocks.
+                network_policy=osb.network_policy(
+                    [*ctx.net, *osb.commission_egress_hosts(commission)]
+                ),
                 resource={**_DEFAULT_RESOURCES, **ctx.resources},
                 timeout=timedelta(seconds=timeout_s + _SANDBOX_TTL_MARGIN_S),
             )
@@ -194,15 +200,61 @@ def run_agent(
         shutil.rmtree(io_dir, ignore_errors=True)
 
 
-def _sandbox_env(agent: SandboxedAgent) -> dict[str, str]:
-    """The declared sandbox environment: forwarded provider credentials, the
-    manifest's env, and the AVP workspace convention (the agent roots itself
-    via AVP_WORKSPACE / AVP_ENV_ROOT, e.g. goose sets GOOSE_PATH_ROOT)."""
+def _sandbox_env(agent: SandboxedAgent, commission: Commission) -> dict[str, str]:
+    """The declared sandbox environment: forwarded provider credentials, any
+    vault-resolved secrets the Commission references, the manifest's env, and
+    the AVP workspace convention (the agent roots itself via AVP_WORKSPACE /
+    AVP_ENV_ROOT, e.g. goose sets GOOSE_PATH_ROOT).
+
+    Native host provider vars (ANTHROPIC_*, OPENROUTER_*, …) are forwarded as a
+    fallback for the no-`provider`-block case; the Commission's resolved
+    provider/MCP secrets layer on top and win.
+    """
     env = {k: v for k, v in os.environ.items() if k.startswith(_ENV_PASSTHROUGH_PREFIXES)}
+    env.update(_commission_secret_env(commission))
     env.update(agent.env)
     env["AVP_WORKSPACE"] = _WORKSPACE_MNT
     env["AVP_ENV_ROOT"] = "/avp"
     return env
+
+
+def _commission_secret_env(commission: Commission) -> dict[str, str]:
+    """Resolve the Commission's vault handles to sandbox env (Phase 1).
+
+    Two delivery conventions, each matching how its consumer natively reads
+    credentials:
+
+    - Provider: native env. `anthropic` → ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL;
+      any other id → <ID>_API_KEY / <ID>_HOST (what goose reads). The agent SDK
+      picks these up; no agent-side handle resolution needed.
+    - MCP `auth`: a deterministic `AVP_VAULT_<HANDLE>` var. The agent resolves
+      `auth.vault` → that var at dial time and sets the bearer header. The
+      handle stays in the Commission snapshot; only the value lives in env, so
+      the secret never enters the trajectory.
+
+    Phase 2 (the credential-injecting broker) removes the value from the
+    sandbox entirely; this function is the swap point.
+    """
+    out: dict[str, str] = {}
+    prov = commission.provider
+    if prov is not None:
+        if prov.id == "anthropic":
+            if prov.credential is not None:
+                out["ANTHROPIC_API_KEY"] = vault.resolve_ref(prov.credential)
+            if prov.base_url:
+                out["ANTHROPIC_BASE_URL"] = prov.base_url
+        else:
+            up = prov.id.upper().replace("-", "_")
+            if prov.credential is not None:
+                out[f"{up}_API_KEY"] = vault.resolve_ref(prov.credential)
+            base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
+            if base:
+                out[f"{up}_HOST"] = base
+    for server in commission.mcp_servers or []:
+        auth = getattr(server, "auth", None)
+        if auth is not None:
+            out["AVP_VAULT_" + auth.vault.upper().replace("-", "_")] = vault.resolve(auth.vault)
+    return out
 
 
 def _run_setup(box: SandboxSync, setup: list[str]) -> str | None:

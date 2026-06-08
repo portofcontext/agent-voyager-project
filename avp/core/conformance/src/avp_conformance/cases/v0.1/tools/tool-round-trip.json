@@ -9,7 +9,7 @@
   "commission": {
     "schema_version": "0.1",
     "run_id": "tool-round-trip",
-    "model": "claude-haiku-4-5-20251001",
+    "model": "anthropic/claude-haiku-4-5-20251001",
     "prompt": "Use your file-writing tool to create a file named avp_roundtrip.txt containing exactly the text OK. After the tool has run, reply with the single word DONE.",
     "supervisor": {
       "name": "avp-conformance",
