@@ -36,11 +36,12 @@ jobs:
           python-version: "3.11"
 
       - name: Build the agent + its in-repo dependency wheels
-        # avp (wire types) and avp-conformance (load_commission/load_built_in the
-        # conformance entrypoint imports) are unpublished, so ship them alongside
-        # the agent wheel; the installer installs all three by path.
+        # agent-voyager-project (the wire types, imported as `avp`) and
+        # avp-conformance (load_commission/load_built_in the conformance
+        # entrypoint imports) ship alongside the agent wheel; the installer
+        # installs all three by path so the bundled versions are exact.
         run: |
-          uv build --package avp --out-dir dist
+          uv build --package agent-voyager-project --out-dir dist
           uv build --package avp-conformance --out-dir dist
           uv build --package avp-claude-agent-sdk --out-dir dist
 

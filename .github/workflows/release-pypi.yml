@@ -1,0 +1,61 @@
+name: Publish to PyPI
+
+# Publishes the four AVP Python distributions to PyPI via Trusted Publishing
+# (OIDC, no stored token). Triggered by a `pypi-v<version>` tag, or run manually
+# from the Actions tab.
+#
+#   agent-voyager-project   the wire types (imported as `avp`; `avp` is taken on PyPI)
+#   avp-conformance         the conformance harness
+#   avp-claude-agent-sdk    the Claude Agent SDK observer agent
+#   avp-cli                 the `avp` CLI (console script `avp`)
+#
+# ONE-TIME SETUP (per project, before the first publish): on PyPI create each
+# project's Trusted Publisher as a "pending publisher" pointing at this repo +
+# this workflow file (`release-pypi.yml`) + environment `pypi`:
+#   https://pypi.org/manage/account/publishing/
+# After the first successful publish the pending publisher becomes permanent.
+
+on:
+  push:
+    tags: ["pypi-v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build all dists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Build sdists + wheels
+        # The wire types build as `agent-voyager-project` (import stays `avp`).
+        run: |
+          uv build --package agent-voyager-project --out-dir dist
+          uv build --package avp-conformance --out-dir dist
+          uv build --package avp-claude-agent-sdk --out-dir dist
+          uv build --package avp-cli --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI (Trusted Publishing)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

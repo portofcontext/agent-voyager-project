@@ -21,7 +21,7 @@ requires-python = ">=3.11"
 # Listing the members here is what makes `uv sync` install them.
 # Workspace membership alone makes them resolvable but not installed.
 dependencies = [
-    "avp",
+    "agent-voyager-project",
     "avp-conformance",
     "avp-claude-agent-sdk",
     "avp-cli",
@@ -56,7 +56,7 @@ members = [
 # there's an unrelated package on PyPI named `avp` (security tooling), and
 # without this override `pip install` would pull it down on a fresh machine.
 [tool.uv.sources]
-avp = { workspace = true }
+agent-voyager-project = { workspace = true }
 avp-conformance = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
 avp-cli = { workspace = true }

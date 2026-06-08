@@ -38,36 +38,38 @@ Install and run AVP with the CLI. Currently supports on **macOS and Linux**.
 
 ### 1 · Install and run Docker
 
-Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works. Skip if you already have Docker running.
+Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works.
+
+**Skip this you already have Docker running.**
 
 ```bash
-brew install --cask docker      # Docker Desktop, then launch it
-# or: brew install colima docker && colima start
+brew install --cask docker  # or: brew install colima docker && colima start
 ```
 
 ### 2 · Install the avp CLI
 
-[uv](https://github.com/astral-sh/uv) builds it (it isn't published yet):
-
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
-git clone https://github.com/portofcontext/agent-voyager-project
-cd agent-voyager-project && uv sync
-source .venv/bin/activate                              # puts `avp` on PATH
+curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv (if you don't have it)
+uv tool install avp-cli                            # installs the `avp` command
 ```
+
+That's it — `avp` is on your PATH. (Contributors who want the repo instead:
+`git clone https://github.com/portofcontext/agent-voyager-project && cd
+agent-voyager-project && uv sync && source .venv/bin/activate`.)
 
 ### 3 · Install agents
 
-Agents are prebuilt GitHub releases, fetched over plain HTTPS (no build, no auth). `goose` needs nothing else:
+Agents are prebuilt GitHub releases
 
 ```bash
 avp agent install goose
-avp agent list                                  # goose → "ready"
+avp agent install claude-code
+avp agent list
 ```
 
 ### 4 · Run an eval
 
-The capitals example runs on Claude, so set an `ANTHROPIC_API_KEY` (or sign in with `claude login`). That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key.
+The example eval runs on a Claude model, so set an `ANTHROPIC_API_KEY`. That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key. (The `claude-code` agent can instead run on a Claude subscription token from `claude setup-token`, exported as `CLAUDE_CODE_OAUTH_TOKEN`; goose calls the API directly and needs a platform key. See [`avp-cli/README.md`](avp-cli/README.md) for the full credential rules.)
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...

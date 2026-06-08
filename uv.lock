@@ -12,12 +12,34 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "avp",
+    "agent-voyager-project",
     "avp-claude-agent-sdk",
     "avp-cli",
     "avp-conformance",
     "avp-workspace",
 ]
+
+[[package]]
+name = "agent-voyager-project"
+version = "0.1.0"
+source = { editable = "avp/bindings/python" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.6,<3" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -212,33 +234,11 @@ wheels = [
 ]
 
 [[package]]
-name = "avp"
-version = "0.1.0"
-source = { editable = "avp/bindings/python" }
-dependencies = [
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.6,<3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "avp-claude-agent-sdk"
 version = "0.1.0"
 source = { editable = "agents/avp-claude-agent-sdk/python" }
 dependencies = [
-    { name = "avp" },
+    { name = "agent-voyager-project" },
     { name = "claude-agent-sdk" },
 ]
 
@@ -252,7 +252,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "avp", editable = "avp/bindings/python" },
+    { name = "agent-voyager-project", editable = "avp/bindings/python" },
     { name = "claude-agent-sdk", specifier = ">=0.1.81" },
 ]
 
@@ -269,7 +269,7 @@ name = "avp-cli"
 version = "0.1.0"
 source = { editable = "avp-cli" }
 dependencies = [
-    { name = "avp" },
+    { name = "agent-voyager-project" },
     { name = "avp-conformance" },
     { name = "httpx" },
     { name = "opensandbox" },
@@ -299,8 +299,8 @@ parsebench = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-voyager-project", editable = "avp/bindings/python" },
     { name = "anthropic", marker = "extra == 'llm-judge'", specifier = ">=0.40" },
-    { name = "avp", editable = "avp/bindings/python" },
     { name = "avp-claude-agent-sdk", marker = "extra == 'claude-agent'", editable = "agents/avp-claude-agent-sdk/python" },
     { name = "avp-conformance", editable = "avp/core/conformance" },
     { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3" },
@@ -321,7 +321,7 @@ name = "avp-conformance"
 version = "0.1.0"
 source = { editable = "avp/core/conformance" }
 dependencies = [
-    { name = "avp" },
+    { name = "agent-voyager-project" },
     { name = "typer" },
 ]
 
@@ -333,7 +333,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "avp", editable = "avp/bindings/python" },
+    { name = "agent-voyager-project", editable = "avp/bindings/python" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "typer", specifier = ">=0.12" },
@@ -345,7 +345,7 @@ name = "avp-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "avp" },
+    { name = "agent-voyager-project" },
     { name = "avp-claude-agent-sdk" },
     { name = "avp-cli" },
     { name = "avp-conformance" },
@@ -372,8 +372,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-voyager-project", editable = "avp/bindings/python" },
     { name = "anthropic", marker = "extra == 'llm-judge'", specifier = ">=0.40" },
-    { name = "avp", editable = "avp/bindings/python" },
     { name = "avp-claude-agent-sdk", editable = "agents/avp-claude-agent-sdk/python" },
     { name = "avp-cli", editable = "avp-cli" },
     { name = "avp-conformance", editable = "avp/core/conformance" },
