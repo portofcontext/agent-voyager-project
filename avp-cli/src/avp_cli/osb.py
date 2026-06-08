@@ -11,7 +11,8 @@ the `opensandbox` SDK with the returned connection.
 The policy posture: the container is the write boundary (the host filesystem
 simply isn't there), bind mounts are restricted to `~/.avp` via the server's
 `allowed_host_paths`, and the network is an explicit egress allowlist
-(default-deny + the model-provider domains below + the env's `net`).
+(default-deny + the runtime-base domains below + the env's `net` + the hosts
+the Commission references, derived via `commission_egress_hosts`).
 """
 
 from __future__ import annotations
@@ -28,28 +29,46 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from opensandbox.config import ConnectionConfigSync
 from opensandbox.models.sandboxes import NetworkPolicy, NetworkRule
 
 from avp_cli import paths
 
-# The egress allow-list every sandbox starts from. Seeded with the major
-# model-provider APIs (the agent calls whatever the commission's model resolves
-# to) plus GitHub; an env's `net` domains are added per run. Default action is
-# deny, so anything not listed is unreachable.
-DEFAULT_ALLOW_DOMAINS: tuple[str, ...] = (
-    "api.anthropic.com",
-    "*.anthropic.com",
-    "api.openai.com",
-    "*.openai.com",
-    "generativelanguage.googleapis.com",
-    "*.googleapis.com",
-    "api.mistral.ai",
-    "openrouter.ai",
+if TYPE_CHECKING:
+    from avp.commission import Commission
+
+# Provider id → (egress host, default base_url). One table, two jobs: it
+# supplies the default base_url when a Commission's `provider` block gives only
+# an `id`, and it supplies the egress host both for that case and for the
+# native-default case (no provider block, host derived from the model slug's
+# origin). Keys MUST match the provider `id` an agent passes to its SDK
+# (e.g. goose's provider name) so the egress host actually matches the call.
+PROVIDER_REGISTRY: dict[str, tuple[str, str | None]] = {
+    "anthropic": ("api.anthropic.com", "https://api.anthropic.com"),
+    "openai": ("api.openai.com", "https://api.openai.com/v1"),
+    "openrouter": ("openrouter.ai", "https://openrouter.ai/api/v1"),
+    "google": ("generativelanguage.googleapis.com", None),
+    "gemini": ("generativelanguage.googleapis.com", None),
+    "mistral": ("api.mistral.ai", "https://api.mistral.ai/v1"),
+}
+
+# Runtime-base reachability every sandbox gets, independent of the model
+# provider: package installs and agent fetches. Egress to LLM providers and MCP
+# servers is NOT here; it is derived per-run from the Commission (see
+# `commission_egress_hosts`). Default action is deny, so anything not listed
+# (here or derived) is unreachable.
+RUNTIME_BASE_DOMAINS: tuple[str, ...] = (
     "github.com",
     "*.githubusercontent.com",
+    "pypi.org",
+    "files.pythonhosted.org",
 )
+
+# Back-compat export: the floor an env's `net` extends. No longer carries
+# provider hosts (those are derived from the Commission).
+DEFAULT_ALLOW_DOMAINS: tuple[str, ...] = RUNTIME_BASE_DOMAINS
 
 # Not 8080: the OpenSandbox default collides with half the dev tools in the
 # world; this server exists only for avp and hides behind this module.
@@ -126,12 +145,43 @@ def ensure_server() -> Connection:
 
 
 def network_policy(extra_domains: list[str] | None = None) -> NetworkPolicy:
-    """Default-deny egress policy: provider domains + any env `net` additions."""
-    domains = list(dict.fromkeys([*DEFAULT_ALLOW_DOMAINS, *(extra_domains or [])]))
+    """Default-deny egress policy: runtime-base domains + any additions.
+
+    `extra_domains` carries the per-run additions: the env's `net` plus the
+    hosts derived from the Commission (`commission_egress_hosts`). Callers
+    union those before calling; this just floors them with the runtime base.
+    """
+    domains = list(dict.fromkeys([*RUNTIME_BASE_DOMAINS, *(extra_domains or [])]))
     return NetworkPolicy(
         default_action="deny",
         egress=[NetworkRule(action="allow", target=d) for d in domains],
     )
+
+
+def commission_egress_hosts(commission: Commission) -> list[str]:
+    """Hosts a Commission implies the sandbox must reach: the LLM provider and
+    every HTTP MCP server. Derived so a run can never be commissioned to call a
+    URL the sandbox then blocks. Default-deny still holds for everything else.
+    """
+    from urllib.parse import urlparse
+
+    hosts: list[str] = []
+    prov = getattr(commission, "provider", None)
+    if prov is not None:
+        if prov.base_url:
+            hosts.append(urlparse(prov.base_url).hostname or "")
+        elif prov.id in PROVIDER_REGISTRY:
+            hosts.append(PROVIDER_REGISTRY[prov.id][0])
+    else:
+        # Native default: the model slug's origin selects the provider host.
+        origin = (commission.model or "").split("/", 1)[0]
+        if origin in PROVIDER_REGISTRY:
+            hosts.append(PROVIDER_REGISTRY[origin][0])
+    for server in commission.mcp_servers or []:
+        url = getattr(server, "url", None)  # McpServerHttp only
+        if url:
+            hosts.append(urlparse(url).hostname or "")
+    return [h for h in hosts if h]
 
 
 def server_status() -> dict:
@@ -283,8 +333,11 @@ def _sandbox_count(conn: Connection) -> int | None:
 
 __all__ = [
     "DEFAULT_ALLOW_DOMAINS",
+    "PROVIDER_REGISTRY",
+    "RUNTIME_BASE_DOMAINS",
     "Connection",
     "SandboxUnavailable",
+    "commission_egress_hosts",
     "docker_available",
     "ensure_server",
     "network_policy",

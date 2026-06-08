@@ -48,7 +48,7 @@ def load(commission_id: str, *, commissions_dir: Path | None = None) -> Commissi
     if not p.is_file():
         raise CommissionError(
             f"no commission {commission_id!r} in {_dir(commissions_dir)} "
-            "(run `avp commission list`, or `avp init` to scaffold some)"
+            "(run `avp cm list`, or `avp init` to scaffold some)"
         )
     try:
         return Commission.model_validate(json.loads(p.read_text()))

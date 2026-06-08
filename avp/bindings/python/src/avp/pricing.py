@@ -84,6 +84,13 @@ def resolve_price(prices: PriceTable, model: str, provider: str | None = None) -
     `provider` to form the key (`anthropic/claude-sonnet-4-6`). The
     exact string is tried first so a custom table keyed by bare names
     still works.
+
+    Gateway caveat: the key is the model's origin slug, so when a Commission
+    routes a model through a different storefront (`model: "openai/gpt-4o"` with
+    `provider.id: "openrouter"`), this returns the model's *list* price, not the
+    gateway's actual price (gateways add margin). Treat the result as a
+    best-effort estimate and prefer provider-reported cost when available
+    (`avp.cost.source = "reported"`).
     """
     p = prices.get(model)
     if p is not None:

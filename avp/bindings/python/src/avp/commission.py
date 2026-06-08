@@ -21,6 +21,25 @@ from avp.envelope import _STRICT
 
 _ID_PATTERN = r"^[a-z0-9_-]+$"
 
+# `model` is a canonical models.dev slug: "<origin>/<model>" (e.g.
+# "anthropic/claude-opus-4-8", "openai/gpt-4o"). The origin segment is the
+# model's home namespace and the pricing key; it is independent of the
+# `Provider.id` storefront that actually serves the tokens.
+_MODEL_SLUG_PATTERN = r"^[^/]+/.+$"
+
+
+class SecretRef(BaseModel):
+    """A reference to a secret the supervisor resolves out of band.
+
+    Carries a `vault` handle, never the secret value. The supervisor maps the
+    handle to material (env var, secrets file, broker) at run time; the value
+    never appears on the wire or in the trajectory. Used by `Provider.credential`
+    and `McpServerHttp.auth`.
+    """
+
+    model_config = _STRICT
+    vault: str = Field(min_length=1, pattern=_ID_PATTERN)
+
 
 class McpServerHttp(BaseModel):
     """Inline HTTP MCP server entry in Commission.mcp_servers."""
@@ -29,7 +48,10 @@ class McpServerHttp(BaseModel):
     id: str = Field(min_length=1, pattern=_ID_PATTERN)
     type: Literal["http"]
     url: str = Field(min_length=1)
+    # Non-secret request headers. Credentials go in `auth` (a SecretRef the
+    # supervisor resolves out of band), not here.
     headers: dict[str, str] | None = None
+    auth: SecretRef | None = None
 
 
 class McpServerStdio(BaseModel):
@@ -44,6 +66,29 @@ class McpServerStdio(BaseModel):
 
 
 McpServer = Annotated[McpServerHttp | McpServerStdio, Field(discriminator="type")]
+
+
+class Provider(BaseModel):
+    """Optional LLM routing override: which storefront serves the model.
+
+    Absent → the agent uses its native default (whatever its own environment
+    configures). Present → the supervisor directs the agent at a specific
+    endpoint. `id` selects the protocol/auth family (e.g. "anthropic",
+    "openai", "openrouter"); `base_url` overrides the endpoint; `credential`
+    references the API key by vault handle (never the value).
+
+    The model's origin (the `Commission.model` slug's first segment) and the
+    storefront `id` are independent axes: `model: "openai/gpt-4o"` with
+    `provider.id: "openrouter"` reads as "OpenAI's gpt-4o, bought through
+    OpenRouter". An agent that cannot speak the requested provider's protocol
+    MUST fail (error_occurred + agent_stopped reason=error), never silently
+    run elsewhere.
+    """
+
+    model_config = _STRICT
+    id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    base_url: str | None = None
+    credential: SecretRef | None = None
 
 
 class Skill(BaseModel):
@@ -135,6 +180,9 @@ class Commission(BaseModel):
     mcp_servers: list[McpServer] | None = None
     skills: list[Skill] | None = None
 
+    # Optional LLM routing override. Absent → the agent's native default.
+    provider: Provider | None = None
+
     # Allow-lists over the agent's Descriptor-declared surface. Each list
     # gates the parallel `descriptor.*` field for this run.
     #
@@ -164,7 +212,11 @@ class Commission(BaseModel):
     # Agent plane (what the agent runs)
     prompt: str | None = None
     system_prompt: str | None = None
-    model: str | None = None
+    # Canonical models.dev slug "<origin>/<model>" (e.g. "anthropic/claude-opus-4-8").
+    # The pattern requires a non-empty origin and model id. Required: the origin
+    # segment is the pricing key and the native-default routing hint; agents
+    # split it off to get the SDK-native model id.
+    model: str = Field(min_length=1, pattern=_MODEL_SLUG_PATTERN)
 
     # Metadata
     thread_id: str | None = None
@@ -177,6 +229,8 @@ __all__ = [
     "McpServer",
     "McpServerHttp",
     "McpServerStdio",
+    "Provider",
+    "SecretRef",
     "Skill",
     "SupervisorPreamble",
 ]

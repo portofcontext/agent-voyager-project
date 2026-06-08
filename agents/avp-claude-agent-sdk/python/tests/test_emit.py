@@ -1,6 +1,6 @@
 """Unit tests: drive the prelude emitters + `handle_message` directly
 against a recording sink. Faster + simpler than spinning up the CLI;
-verifies prelude split (phase A in connect, phase B on init), filtering
+verifies prelude split (part in connect, part on init), filtering
 of non-connected MCP servers, mcp__-prefix filter on init tools,
 message_id-driven turn merging, per-call usage, content translation,
 empty-output gate, and agent_stopped reason mapping.
@@ -284,7 +284,11 @@ def test_client_normalizes_missing_options() -> None:
     from avp.commission import Commission
     from avp_claude_agent_sdk import AVPClaudeSDKClient
 
-    client = AVPClaudeSDKClient(commission=Commission(schema_version="0.1", run_id="x"))
+    client = AVPClaudeSDKClient(
+        commission=Commission(
+            schema_version="0.1", run_id="x", model="anthropic/claude-haiku-4-5-20251001"
+        )
+    )
     assert isinstance(client._original_options, ClaudeAgentOptions)
 
 

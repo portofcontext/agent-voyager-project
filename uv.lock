@@ -271,6 +271,7 @@ source = { editable = "avp-cli" }
 dependencies = [
     { name = "avp" },
     { name = "avp-conformance" },
+    { name = "httpx" },
     { name = "opensandbox" },
     { name = "opensandbox-server" },
     { name = "questionary" },
@@ -304,6 +305,7 @@ requires-dist = [
     { name = "avp-conformance", editable = "avp/core/conformance" },
     { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3" },
     { name = "datasets", marker = "extra == 'parsebench'", specifier = ">=3" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "opensandbox", specifier = "==0.1.9" },
     { name = "opensandbox-server", specifier = "==0.1.14" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },

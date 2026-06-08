@@ -90,6 +90,8 @@ avp eval · capitals-extraction · 2 items · agent=goose
 `avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
 
 > **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist (enforcement needs kernel netfilter support; `make test-docker` verifies it on your host). The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
+>
+> **Vault (secrets the agent can't read):** store a credential once with `avp env secret create <handle>` (kept in `~/.avp/secrets.toml`, mode 0600), then reference it in a Commission by handle: `{"vault": "<handle>"}` — never the value (see [commission spec §2.4](avp/core/spec/v0.1/commission.md)). For runs that use them, the CLI starts a host-side credential-injecting broker: the sandboxed agent is pointed at the broker with only sentinels, and the broker overwrites the auth with the real value on the host before forwarding to the provider / MCP server. The secret never enters the sandbox. If the broker can't be reached from the sandbox, the run fails closed rather than expose it.
 
 ### 5 · Add a second agent and compare (optional)
 

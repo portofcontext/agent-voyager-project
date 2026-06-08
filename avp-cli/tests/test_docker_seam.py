@@ -85,7 +85,12 @@ def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
     from avp.commission import Commission
 
     agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
-    commission = Commission(schema_version="0.1", run_id="seam", prompt="hi")
+    commission = Commission(
+        schema_version="0.1",
+        run_id="seam",
+        model="anthropic/claude-haiku-4-5-20251001",
+        prompt="hi",
+    )
     out = paths.avp_home() / "runs" / "seam" / "trajectory.ndjson"
 
     def beat(e) -> int:
@@ -121,7 +126,12 @@ def test_nonzero_exit_reports_stderr_tail(server) -> None:
     events, err = run_agent(
         agent,
         ctx,
-        Commission(schema_version="0.1", run_id="fail", prompt="hi"),
+        Commission(
+            schema_version="0.1",
+            run_id="fail",
+            model="anthropic/claude-haiku-4-5-20251001",
+            prompt="hi",
+        ),
         out_path=paths.avp_home() / "runs" / "fail" / "t.ndjson",
         timeout_s=120.0,
     )
@@ -166,6 +176,82 @@ def test_default_deny_egress_blocks_unlisted_domains(server) -> None:
         assert "BLOCKED" in logs  # example.com is not on the allow-list
     finally:
         box.kill()
+
+
+# A fake agent honoring the run contract that emits, in its trajectory, the
+# provider key it actually sees in its env — so the seam can prove the real
+# secret never reached the sandbox (only the broker sentinel did).
+_AGENT_ECHOENV_SH = """\
+#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--out" ]; then out=$2; fi
+  shift
+done
+printf '{"specversion":"1.0","id":"e1","source":"urn:seam","type":"x.test",' > "$out"
+printf '"subject":"seam","time":"2026-01-01T00:00:00Z","data":{' >> "$out"
+printf '"trace_id":"0af7651916cd43dd8448eb211c80319c","span_id":"b7ad6b7169203331",' >> "$out"
+printf '"parent_span_id":"0000000000000000","seen_key":"%s","host":"%s"}}\\n' \
+  "$OPENROUTER_API_KEY" "$OPENROUTER_HOST" >> "$out"
+"""
+
+
+def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
+    """The vault guarantee, for real: a vault Commission run through
+    `run_agent` starts the host broker, the in-sandbox preflight reaches it, and
+    the agent sees only the sentinel — the resolved secret never crosses in.
+
+    The broker lives on the host and the sandbox reaches it at
+    `host.docker.internal`, which Docker Desktop / OrbStack inject but a plain
+    Docker bridge (GitHub Actions) does not (it needs `--add-host=host-gateway`,
+    set by the sandbox server, not us). So where the host can't route there the
+    run correctly fails closed, and this is a SKIP with evidence by default;
+    `make test-docker` sets AVP_REQUIRE_EGRESS_ENFORCEMENT=1 to make it a hard
+    assertion on hosts known to have full Docker networking."""
+    import os
+
+    from avp.commission import Commission, Provider, SecretRef
+    from avp_cli import paths
+
+    monkeypatch.setenv("AVP_VAULT_OPENROUTER", "sk-or-REAL-SECRET-do-not-leak")
+    ws = paths.avp_home() / "runs" / "vault" / "workspace"
+    ctx = _ctx(server, ws)
+    (ws / "agent.sh").write_text(_AGENT_ECHOENV_SH)
+
+    agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
+    commission = Commission(
+        schema_version="0.1",
+        run_id="vault",
+        model="openai/gpt-4o",
+        prompt="hi",
+        provider=Provider(
+            id="openrouter",
+            base_url="https://openrouter.ai/api/v1",
+            credential=SecretRef(vault="openrouter"),
+        ),
+    )
+    events, err = run_agent(
+        agent,
+        ctx,
+        commission,
+        out_path=paths.avp_home() / "runs" / "vault" / "t.ndjson",
+        timeout_s=120.0,
+    )
+
+    if err is not None and "broker unreachable" in err:
+        if not os.environ.get("AVP_REQUIRE_EGRESS_ENFORCEMENT"):
+            pytest.skip(
+                "sandbox can't reach the host broker on this host "
+                "(host.docker.internal absent without Docker Desktop / a host-gateway "
+                f"add-host); run correctly failed closed. got: {err}"
+            )
+        raise AssertionError(f"broker unreachable despite full-networking host: {err}")
+    assert err is None, err  # broker was reachable from the sandbox (preflight passed)
+    data = events[0].data if hasattr(events[0], "data") else events[0]["data"]
+    seen_key = data.seen_key if hasattr(data, "seen_key") else data["seen_key"]
+    host = data.host if hasattr(data, "host") else data["host"]
+    assert seen_key == "avp-vault-managed"  # the agent saw only the sentinel
+    assert "REAL-SECRET" not in seen_key  # the real key never entered the sandbox
+    assert "host.docker.internal" in host  # routed at the broker, not openrouter.ai
 
 
 def test_ensure_image_builds_once_then_caches(server) -> None:

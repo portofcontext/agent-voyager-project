@@ -100,11 +100,31 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     commission::register_builtins();
 
     let cfg: GooseRunConfig = commission::from_commission(commission);
+    // `model_name` is the full canonical `origin/model` slug; it stays the slug
+    // for pricing and the descriptor/request_model. `native_model` is the bare
+    // SDK-facing id (slug with the origin stripped) handed to goose's provider.
     let model_name = cfg
         .model
         .clone()
         .ok_or_else(|| anyhow::anyhow!("Commission has no model"))?;
-    let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
+    let origin = model_name.split('/').next().unwrap_or("");
+    // Provider: the Commission's `provider.id` wins; then the `GOOSE_PROVIDER`
+    // env (transitional bridge); then the slug's origin segment; else anthropic.
+    let provider_name = cfg
+        .provider_id
+        .clone()
+        .or_else(|| std::env::var("GOOSE_PROVIDER").ok())
+        .or_else(|| (!origin.is_empty()).then(|| origin.to_string()))
+        .unwrap_or_else(|| "anthropic".to_string());
+    // Native model id is provider-aware. A native provider (id == the slug's
+    // origin, or no provider) wants the bare model (`gpt-4o`). A gateway that
+    // aggregates vendors (id != origin, e.g. openrouter) wants the full
+    // vendor-prefixed slug as its model id (`openai/gpt-4o`).
+    let native_model = if provider_name != origin {
+        model_name.clone()
+    } else {
+        model_name.split_once('/').map(|(_, m)| m).unwrap_or(&model_name).to_string()
+    };
 
     // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
     // provides one (so a provisioned environment's code/files actually reach the
@@ -132,7 +152,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     write_skills(commission, &working_dir)?;
 
     // Provider, extensions, system prompt, structured output.
-    let model_config = ModelConfig::new(&model_name)?;
+    let model_config = ModelConfig::new(&native_model)?;
     let provider =
         goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
     // Wrap the provider to capture per-inference usage (incl. cache split) off
@@ -347,16 +367,19 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let configured_model = goose::config::Config::global()
         .get_param::<String>("GOOSE_MODEL")
         .ok();
-    let model_name = configured_model
+    let native_model = configured_model
         .clone()
         .unwrap_or_else(|| "claude-haiku-4-5".to_string());
+    let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
+    // The Commission requires a canonical `origin/model` slug; qualify goose's
+    // bare configured model with the provider as its origin.
+    let slug = format!("{provider_name}/{native_model}");
     let commission: Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": "describe",
-        "model": model_name,
+        "model": slug,
     }))?;
     let cfg: GooseRunConfig = commission::from_commission(&commission);
-    let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
 
     let agent = Arc::new(Agent::new());
     let working_dir = path_root.join("workspace");
@@ -368,7 +391,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
         .await?;
     let session_id = session.id.clone();
 
-    let model_config = ModelConfig::new(&model_name)?;
+    let model_config = ModelConfig::new(&native_model)?;
     let provider =
         goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
     agent.update_provider(provider, &session_id).await?;

@@ -5,9 +5,11 @@
 //! `extend_system_prompt`, structured output via `add_final_output_tool`, and
 //! `prompt` as the first user message to `reply`.
 //!
-//! Provider is intentionally not derived here: a Commission carries `model` but
-//! not a provider, so the runner resolves the provider from the Goose
-//! environment (`GOOSE_PROVIDER`), the same way the CLI does.
+//! Provider: a Commission's optional `provider` block names the storefront
+//! (`provider.id`). When absent, the runner falls back to the model slug's
+//! origin (and, as a transitional bridge, the `GOOSE_PROVIDER` env). The
+//! provider's `base_url`/`credential` reach goose via env the supervisor sets
+//! (`<ID>_HOST` / `<ID>_API_KEY`), which goose's provider factory reads.
 //!
 //! The default built-in surface mirrors stock goose: every `default_enabled`
 //! platform extension (developer, analyze, todo, apps, ext_manager, summon for
@@ -15,8 +17,10 @@
 //! `summon` are therefore on by default (not gated behind Commission fields);
 //! the runner still materializes inline `skills` SKILL.md files under the working
 //! dir's `.agents/skills` so that extension discovers them. `enabled_builtin_tools`
-//! subtractively filters the whole surface. Not yet mapped: per-server `env` /
-//! `headers` (carried as empty until the secret-handling story is settled).
+//! subtractively filters the whole surface. Per-server HTTP `headers` are
+//! forwarded; an `auth` SecretRef is resolved from the supervisor-injected
+//! `AVP_VAULT_<HANDLE>` env var into a bearer header (the value never appears
+//! in the Commission, so it stays out of the trajectory).
 
 use std::collections::HashMap;
 use std::sync::Once;
@@ -41,7 +45,11 @@ pub fn register_builtins() {
 
 /// Goose-side run configuration derived from a Commission.
 pub struct GooseRunConfig {
+    /// The full canonical `origin/model` slug (the runner splits off the origin
+    /// for the SDK-native model id, and keeps the slug for pricing/descriptor).
     pub model: Option<String>,
+    /// The storefront `provider.id` from the Commission, if any.
+    pub provider_id: Option<String>,
     pub system_prompt: Option<String>,
     pub prompt: Option<String>,
     pub extensions: Vec<ExtensionConfig>,
@@ -80,7 +88,8 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     });
 
     GooseRunConfig {
-        model: commission.model.clone(),
+        model: Some(commission.model.to_string()),
+        provider_id: commission.provider.as_ref().map(|p| p.id.to_string()),
         system_prompt: commission.system_prompt.clone(),
         prompt: commission.prompt.clone(),
         extensions,
@@ -199,13 +208,23 @@ fn stdio_extension(s: &McpServerStdio) -> ExtensionConfig {
 }
 
 fn http_extension(h: &McpServerHttp) -> ExtensionConfig {
+    // Forward non-secret headers, then resolve an `auth` SecretRef from the
+    // supervisor-injected `AVP_VAULT_<HANDLE>` env into a bearer header. The
+    // handle (not the value) is what travels in the Commission.
+    let mut headers: HashMap<String, String> = h.headers.clone().unwrap_or_default();
+    if let Some(auth) = &h.auth {
+        let var = format!("AVP_VAULT_{}", auth.vault.to_uppercase().replace('-', "_"));
+        if let Ok(value) = std::env::var(&var) {
+            headers.insert("Authorization".to_string(), format!("Bearer {value}"));
+        }
+    }
     ExtensionConfig::StreamableHttp {
         name: h.id.to_string(),
         description: String::new(),
         uri: h.url.to_string(),
         envs: Envs::new(HashMap::new()),
         env_keys: Vec::new(),
-        headers: HashMap::new(),
+        headers,
         timeout: None,
         socket: None,
         bundled: None,
@@ -254,7 +273,7 @@ mod tests {
     #[test]
     fn maps_builtins_mcp_and_skills_to_extensions() {
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "mcp_servers": [
                 { "type": "stdio", "id": "avptest", "command": ["uv", "run"] },
                 { "type": "http", "id": "web", "url": "https://example.com/mcp" }
@@ -276,7 +295,7 @@ mod tests {
         // None -> goose's full default surface: every default-enabled platform
         // extension (incl. summon=subagents and skills) + every goose-mcp built-in.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m"
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m"
         })));
         let names = ext_names(&cfg);
         for platform in ["developer", "summon", "skills"] {
@@ -298,7 +317,7 @@ mod tests {
     fn enabled_builtin_tools_default_loads_developer_unfiltered() {
         // None -> all built-in tools (developer with an empty allow-list).
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m"
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m"
         })));
         assert_eq!(developer_available_tools(&cfg), Some(vec![]));
     }
@@ -307,7 +326,7 @@ mod tests {
     fn empty_enabled_builtin_tools_omits_all_builtins() {
         // [] -> no built-in tools: neither developer nor any goose-mcp built-in.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "enabled_builtin_tools": []
         })));
         let names = ext_names(&cfg);
@@ -323,7 +342,7 @@ mod tests {
         // matches the bare tool name. Other extensions get no match, so they are
         // pruned (EXPOSE_NONE) rather than fully exposed.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "enabled_builtin_tools": ["shell"]
         })));
         assert_eq!(developer_available_tools(&cfg), Some(vec!["shell".to_string()]));
@@ -339,7 +358,7 @@ mod tests {
         // goose-mcp built-in) is translated to that extension's BARE
         // `available_tools` entry, while the unprefixed `developer` is pruned.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "enabled_builtin_tools": ["computercontroller__pdf_tool", "computercontroller__web_scrape"]
         })));
         assert_eq!(
@@ -352,7 +371,7 @@ mod tests {
     #[test]
     fn stdio_command_splits_into_cmd_and_args() {
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "mcp_servers": [{ "type": "stdio", "id": "x",
                 "command": ["uv", "run", "server.py"], "args": ["--flag"] }]
         })));
@@ -380,7 +399,7 @@ mod tests {
     #[test]
     fn output_schema_becomes_response() {
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "output_schema": { "type": "object", "properties": { "answer": { "type": "string" } } }
         })));
         let response = cfg.response.expect("response set");
@@ -392,7 +411,7 @@ mod tests {
         // Goose enables summon (subagents) and skills by default, so an unfiltered
         // Commission gets both — they are NOT gated behind Commission fields.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m"
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m"
         })));
         let names = ext_names(&cfg);
         assert!(names.contains(&"summon".to_string()), "{names:?}");
@@ -404,7 +423,7 @@ mod tests {
         // [] hides the whole built-in surface, including the default platform
         // extensions (summon/skills), not just the goose-mcp built-ins.
         let cfg = from_commission(&commission(json!({
-            "schema_version": "0.1", "run_id": "r1", "model": "m",
+            "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "enabled_builtin_tools": []
         })));
         let names = ext_names(&cfg);

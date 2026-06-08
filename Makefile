@@ -57,6 +57,7 @@ help:
 	@echo "    make sync            uv sync the Python workspace (repo root)"
 	@echo "    make build-agents    build both agents' artifacts into dist/agents for local install"
 	@echo "    make onboarding-smoke  run the README Quickstart in a clean container (AGENT=goose|claude-code|all, PAID=1)"
+	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete; PAID=1 adds the vault-broker finale)"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -246,6 +247,17 @@ sync:
 .PHONY: onboarding-smoke
 onboarding-smoke:
 	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) bash scripts/onboarding-smoke.sh $(if $(AGENT),$(AGENT),goose)
+
+
+# Drive the `avp` CLI end to end: create -> list -> inspect -> delete across
+# commissions, environments, and vault secrets, against a throwaway AVP_HOME.
+# PAID=1 adds the grand finale (a CLI-built secret + env + commission run through
+# the credential broker in a real sandbox; needs Docker + OPENROUTER_API_KEY).
+#   make cli-smoke
+#   make cli-smoke PAID=1
+.PHONY: cli-smoke
+cli-smoke:
+	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) $(UV) run bash scripts/cli-smoke.sh
 
 
 # Build both agents' local artifacts into dist/agents, then print the

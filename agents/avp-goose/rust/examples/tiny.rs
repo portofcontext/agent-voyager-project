@@ -1,6 +1,6 @@
 //! The whole thing: hand Goose a Commission, stream a conformant AVP trajectory.
 //!
-//!   GOOSE_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-... \
+//!   ANTHROPIC_API_KEY=sk-... \
 //!     cargo run -p avp-goose --example tiny
 //!
 //! Every step of the run (model turns, tool calls, tokens, cost, stop reason)
@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     let commission: Commission = serde_json::from_value(serde_json::json!({
         "schema_version": "0.1",
         "run_id": "tiny-demo",
-        "model": "claude-sonnet-4-6",
+        "model": "anthropic/claude-sonnet-4-6",
         "prompt": "Use the shell to print today's date, then tell me what it is.",
         "enabled_builtin_tools": ["developer"],
     }))?;

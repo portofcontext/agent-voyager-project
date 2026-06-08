@@ -47,6 +47,7 @@ export type Url = string;
 export type Headers = {
   [k: string]: string;
 } | null;
+export type Vault = string;
 export type Id2 = string;
 export type Type2 = "stdio";
 /**
@@ -59,6 +60,8 @@ export type Env = {
 } | null;
 export type Skills = Skill[] | null;
 export type Id3 = string;
+export type Id4 = string;
+export type BaseUrl = string | null;
 export type EnabledBuiltinTools = string[] | null;
 export type EnabledBuiltinSubagents = string[] | null;
 export type EnabledBuiltinSkills = string[] | null;
@@ -68,14 +71,14 @@ export type OutputSchema = {
 } | null;
 export type Prompt = string | null;
 export type SystemPrompt = string | null;
-export type Model = string | null;
+export type Model = string;
 export type ThreadId = string | null;
 export type Tags = string[] | null;
 export type Meta = {
   [k: string]: unknown;
 } | null;
 export type Specversion1 = "1.0";
-export type Id4 = string;
+export type Id5 = string;
 export type Time1 = string;
 export type Subject1 = string | null;
 export type Datacontenttype1 = string | null;
@@ -97,7 +100,7 @@ export type SupportedModels = string[] | null;
 export type SystemPrompt1 = string | null;
 export type Prompt1 = string | null;
 export type McpServers1 = McpServerDecl[] | null;
-export type Id5 = string;
+export type Id6 = string;
 export type Name1 = string | null;
 export type Description = string | null;
 export type Status = ("connected" | "failed" | "needs-auth" | "pending" | "disabled") | null;
@@ -122,7 +125,7 @@ export type Version1 = string | null;
 export type AvpSource = string | null;
 export type Capabilities = string[] | null;
 export type Specversion2 = "1.0";
-export type Id6 = string;
+export type Id7 = string;
 export type Time2 = string;
 export type Subject2 = string | null;
 export type Datacontenttype2 = string | null;
@@ -149,7 +152,7 @@ export type AvpThreadId = string | null;
 export type AvpSessionId = string | null;
 export type AvpTags = string[] | null;
 export type Specversion3 = "1.0";
-export type Id7 = string;
+export type Id8 = string;
 export type Time3 = string;
 export type Subject3 = string | null;
 export type Datacontenttype3 = string | null;
@@ -172,7 +175,7 @@ export type AvpMeta3 = {
  */
 export type StopReason = "converged" | "error" | "interrupted" | "refused";
 export type Specversion4 = "1.0";
-export type Id8 = string;
+export type Id9 = string;
 export type Time4 = string;
 export type Subject4 = string | null;
 export type Datacontenttype4 = string | null;
@@ -222,7 +225,7 @@ export type Title = string | null;
 export type Context = string | null;
 export type Citations1 = Citation[] | null;
 export type Type17 = "tool_use";
-export type Id9 = string;
+export type Id10 = string;
 export type Name5 = string;
 export type Type18 = "tool_result";
 export type ToolUseId = string;
@@ -232,7 +235,7 @@ export type StructuredContent = {
 } | null;
 export type IsError = boolean | null;
 export type Type19 = "server_tool_use";
-export type Id10 = string;
+export type Id11 = string;
 export type Name6 = string;
 export type Type20 = "server_tool_result";
 export type ToolUseId1 = string;
@@ -267,7 +270,7 @@ export type AvpCostUsd = number;
 export type AvpCostSource = ("computed" | "reported" | "unknown") | null;
 export type AvpRefusalCategory = string | null;
 export type Specversion5 = "1.0";
-export type Id11 = string;
+export type Id12 = string;
 export type Time5 = string;
 export type Subject5 = string | null;
 export type Datacontenttype5 = string | null;
@@ -286,7 +289,7 @@ export type AvpToolCallId = string;
 export type AvpToolName = string;
 export type AvpToolDispatchTarget = ("mcp_server" | "local") | null;
 export type Specversion6 = "1.0";
-export type Id12 = string;
+export type Id13 = string;
 export type Time6 = string;
 export type Subject6 = string | null;
 export type Datacontenttype6 = string | null;
@@ -305,7 +308,7 @@ export type AvpToolCallId1 = string;
 export type AvpToolName1 = string;
 export type AvpDurationMs1 = number;
 export type Specversion7 = "1.0";
-export type Id13 = string;
+export type Id14 = string;
 export type Time7 = string;
 export type Subject7 = string | null;
 export type Datacontenttype7 = string | null;
@@ -325,7 +328,7 @@ export type AvpSubagentDescription = string | null;
 export type AvpSubagentInvocationId = string;
 export type AvpSubagentRunId = string | null;
 export type Specversion8 = "1.0";
-export type Id14 = string;
+export type Id15 = string;
 export type Time8 = string;
 export type Subject8 = string | null;
 export type Datacontenttype8 = string | null;
@@ -349,7 +352,7 @@ export type TokensInput = number;
 export type TokensOutput = number;
 export type Turns = number;
 export type Specversion9 = "1.0";
-export type Id15 = string;
+export type Id16 = string;
 export type Time9 = string;
 export type Subject9 = string | null;
 export type Datacontenttype9 = string | null;
@@ -369,6 +372,7 @@ export type ErrorCode =
   | "auth_error"
   | "agent_crash"
   | "unsupported_model"
+  | "unsupported_provider"
   | "commission_collision"
   | "mcp_connect_failed"
   | "unknown";
@@ -434,6 +438,7 @@ export interface Commission {
   supervisor?: SupervisorPreamble | null;
   mcp_servers?: McpServers;
   skills?: Skills;
+  provider?: Provider | null;
   enabled_builtin_tools?: EnabledBuiltinTools;
   enabled_builtin_subagents?: EnabledBuiltinSubagents;
   enabled_builtin_skills?: EnabledBuiltinSkills;
@@ -441,7 +446,7 @@ export interface Commission {
   output_schema?: OutputSchema;
   prompt?: Prompt;
   system_prompt?: SystemPrompt;
-  model?: Model;
+  model: Model;
   thread_id?: ThreadId;
   tags?: Tags;
   meta?: Meta;
@@ -474,6 +479,18 @@ export interface McpServerHttp {
   type: Type1;
   url: Url;
   headers?: Headers;
+  auth?: SecretRef | null;
+}
+/**
+ * A reference to a secret the supervisor resolves out of band.
+ *
+ * Carries a `vault` handle, never the secret value. The supervisor maps the
+ * handle to material (env var, secrets file, broker) at run time; the value
+ * never appears on the wire or in the trajectory. Used by `Provider.credential`
+ * and `McpServerHttp.auth`.
+ */
+export interface SecretRef {
+  vault: Vault;
 }
 /**
  * Inline stdio MCP server entry in Commission.mcp_servers.
@@ -496,6 +513,27 @@ export interface Files {
   [k: string]: string;
 }
 /**
+ * Optional LLM routing override: which storefront serves the model.
+ *
+ * Absent → the agent uses its native default (whatever its own environment
+ * configures). Present → the supervisor directs the agent at a specific
+ * endpoint. `id` selects the protocol/auth family (e.g. "anthropic",
+ * "openai", "openrouter"); `base_url` overrides the endpoint; `credential`
+ * references the API key by vault handle (never the value).
+ *
+ * The model's origin (the `Commission.model` slug's first segment) and the
+ * storefront `id` are independent axes: `model: "openai/gpt-4o"` with
+ * `provider.id: "openrouter"` reads as "OpenAI's gpt-4o, bought through
+ * OpenRouter". An agent that cannot speak the requested provider's protocol
+ * MUST fail (error_occurred + agent_stopped reason=error), never silently
+ * run elsewhere.
+ */
+export interface Provider {
+  id: Id4;
+  base_url?: BaseUrl;
+  credential?: SecretRef | null;
+}
+/**
  * Second event of the trajectory. The agent's "whoami":
  * self-published manifest of everything triggerable without supervisor
  * configuration. Carries the same JSON `<agent> describe` prints to
@@ -503,7 +541,7 @@ export interface Files {
  */
 export interface AgentDescribedEvent {
   specversion?: Specversion1;
-  id?: Id4;
+  id?: Id5;
   time?: Time1;
   subject?: Subject1;
   datacontenttype?: Datacontenttype1;
@@ -605,7 +643,7 @@ export interface AgentDescriptor {
  * `McpServerStatus.status` enum.
  */
 export interface McpServerDecl {
-  id: Id5;
+  id: Id6;
   name?: Name1;
   description?: Description;
   status?: Status;
@@ -673,7 +711,7 @@ export interface SkillDecl {
 }
 export interface AgentStartedEvent {
   specversion?: Specversion2;
-  id?: Id6;
+  id?: Id7;
   time?: Time2;
   subject?: Subject2;
   datacontenttype?: Datacontenttype2;
@@ -707,7 +745,7 @@ export interface AgentStartedData {
 }
 export interface AgentStoppedEvent {
   specversion?: Specversion3;
-  id?: Id7;
+  id?: Id8;
   time?: Time3;
   subject?: Subject3;
   datacontenttype?: Datacontenttype3;
@@ -736,7 +774,7 @@ export interface AgentStoppedData {
 }
 export interface AssistantMessageEvent {
   specversion?: Specversion4;
-  id?: Id8;
+  id?: Id9;
   time?: Time4;
   subject?: Subject4;
   datacontenttype?: Datacontenttype4;
@@ -910,7 +948,7 @@ export interface DocumentBlock {
  */
 export interface ToolUseBlock {
   type?: Type17;
-  id: Id9;
+  id: Id10;
   name: Name5;
   input: Input;
   [k: string]: unknown;
@@ -949,7 +987,7 @@ export interface ToolResultBlock {
  */
 export interface ServerToolUseBlock {
   type?: Type19;
-  id: Id10;
+  id: Id11;
   name: Name6;
   input: Input1;
   [k: string]: unknown;
@@ -1011,7 +1049,7 @@ export interface Usage {
 }
 export interface ToolInvokedEvent {
   specversion?: Specversion5;
-  id?: Id11;
+  id?: Id12;
   time?: Time5;
   subject?: Subject5;
   datacontenttype?: Datacontenttype5;
@@ -1038,7 +1076,7 @@ export interface AvpToolInput {
 }
 export interface ToolReturnedEvent {
   specversion?: Specversion6;
-  id?: Id12;
+  id?: Id13;
   time?: Time6;
   subject?: Subject6;
   datacontenttype?: Datacontenttype6;
@@ -1071,7 +1109,7 @@ export interface ToolReturnedData {
 }
 export interface SubagentInvokedEvent {
   specversion?: Specversion7;
-  id?: Id13;
+  id?: Id14;
   time?: Time7;
   subject?: Subject7;
   datacontenttype?: Datacontenttype7;
@@ -1112,7 +1150,7 @@ export interface AvpSubagentInput {
 }
 export interface SubagentReturnedEvent {
   specversion?: Specversion8;
-  id?: Id14;
+  id?: Id15;
   time?: Time8;
   subject?: Subject8;
   datacontenttype?: Datacontenttype8;
@@ -1173,7 +1211,7 @@ export interface SubagentUsage {
 }
 export interface ErrorOccurredEvent {
   specversion?: Specversion9;
-  id?: Id15;
+  id?: Id16;
   time?: Time9;
   subject?: Subject9;
   datacontenttype?: Datacontenttype9;

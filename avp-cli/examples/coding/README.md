@@ -13,7 +13,7 @@ Docker running, agents installed, ≈ $0.50 on Haiku (8 runs):
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 
-avp commission create coding-solver \
+avp cm create coding-solver \
   --model claude-haiku-4-5 \
   --prompt "$(printf 'Solve this task by writing and running code.\n\nTask: {input}\n\nWork in your workspace: write a small Python script, execute it, and verify the result. Then reply with ONLY the final numeric answer — no prose, no code, no formatting.')"
 
@@ -23,5 +23,5 @@ avp eval view
 
 ### How it was made
 
-- The commission: the `avp commission create` command above (lands in `~/.avp/commissions/coding-solver.json`).
+- The commission: the `avp cm create` command above (lands in `~/.avp/commissions/coding-solver.json`).
 - The eval: `coding.eval.json` in this directory, authored by hand — inline dataset, `exact-match` scorer, both agents, commission by id. An eval is a JSON file, not code.

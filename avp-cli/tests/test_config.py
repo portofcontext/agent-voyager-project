@@ -19,6 +19,7 @@ _DATASET = {"source": "inline", "items": [{"id": "i1", "prompt": "hi", "expected
 
 
 def _save(d, cid, **kw) -> None:
+    kw.setdefault("model", "anthropic/claude-haiku-4-5-20251001")
     library.save(cid, Commission(schema_version="0.1", run_id=cid, **kw), commissions_dir=d)
 
 
@@ -26,7 +27,7 @@ def _save(d, cid, **kw) -> None:
 def lib(tmp_path):
     """A throwaway library with one 'baseline' wire Commission."""
     d = tmp_path / "commissions"
-    _save(d, "baseline", prompt="{input}", model="m")
+    _save(d, "baseline", prompt="{input}", model="x/m")
     return d
 
 
@@ -102,7 +103,7 @@ def test_unknown_scorer_errors(lib) -> None:
 def test_commission_carries_output_schema(tmp_path) -> None:
     schema = {"type": "object", "properties": {"a": {"type": "string"}}}
     d = tmp_path / "commissions"
-    _save(d, "schema-one", prompt="{input}", model="m", output_schema=schema)
+    _save(d, "schema-one", prompt="{input}", model="x/m", output_schema=schema)
     ev = config.eval_from_dict(_cfg(commissions=["schema-one"]), commissions_dir=d)
     c = ev.setups[0].to_commission(ev.dataset.items[0], run_id="r")
     assert c.output_schema == schema
@@ -152,7 +153,7 @@ def test_scaffold_installs_wire_commissions_and_eval_reloads(tmp_path) -> None:
 
 def test_scaffold_skips_existing_commission(tmp_path) -> None:
     lib = tmp_path / "commissions"
-    _save(lib, "baseline", prompt="mine", model="m")
+    _save(lib, "baseline", prompt="mine", model="x/m")
     result = catalog.scaffold(catalog.get("custom"), tmp_path, commissions_dir=lib)
     assert "baseline" in result.skipped  # left my version untouched
     assert library.load("baseline", commissions_dir=lib).prompt == "mine"

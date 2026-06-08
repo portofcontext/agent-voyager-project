@@ -1292,6 +1292,17 @@
           "default": null,
           "title": "Skills"
         },
+        "provider": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provider"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "enabled_builtin_tools": {
           "anyOf": [
             {
@@ -1390,16 +1401,10 @@
           "title": "System Prompt"
         },
         "model": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Model"
+          "minLength": 1,
+          "pattern": "^[^/]+/.+$",
+          "title": "Model",
+          "type": "string"
         },
         "thread_id": {
           "anyOf": [
@@ -1444,7 +1449,8 @@
       },
       "required": [
         "schema_version",
-        "run_id"
+        "run_id",
+        "model"
       ],
       "title": "Commission",
       "type": "object"
@@ -1534,6 +1540,7 @@
         "auth_error",
         "agent_crash",
         "unsupported_model",
+        "unsupported_provider",
         "commission_collision",
         "mcp_connect_failed",
         "unknown"
@@ -1839,6 +1846,17 @@
           ],
           "default": null,
           "title": "Headers"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1909,6 +1927,46 @@
         "command"
       ],
       "title": "McpServerStdio",
+      "type": "object"
+    },
+    "Provider": {
+      "additionalProperties": false,
+      "description": "Optional LLM routing override: which storefront serves the model.\n\nAbsent → the agent uses its native default (whatever its own environment\nconfigures). Present → the supervisor directs the agent at a specific\nendpoint. `id` selects the protocol/auth family (e.g. \"anthropic\",\n\"openai\", \"openrouter\"); `base_url` overrides the endpoint; `credential`\nreferences the API key by vault handle (never the value).\n\nThe model's origin (the `Commission.model` slug's first segment) and the\nstorefront `id` are independent axes: `model: \"openai/gpt-4o\"` with\n`provider.id: \"openrouter\"` reads as \"OpenAI's gpt-4o, bought through\nOpenRouter\". An agent that cannot speak the requested provider's protocol\nMUST fail (error_occurred + agent_stopped reason=error), never silently\nrun elsewhere.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Provider",
       "type": "object"
     },
     "RefusalBlock": {
@@ -2104,6 +2162,23 @@
         "data"
       ],
       "title": "RunRequestedEvent",
+      "type": "object"
+    },
+    "SecretRef": {
+      "additionalProperties": false,
+      "description": "A reference to a secret the supervisor resolves out of band.\n\nCarries a `vault` handle, never the secret value. The supervisor maps the\nhandle to material (env var, secrets file, broker) at run time; the value\nnever appears on the wire or in the trajectory. Used by `Provider.credential`\nand `McpServerHttp.auth`.",
+      "properties": {
+        "vault": {
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Vault",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vault"
+      ],
+      "title": "SecretRef",
       "type": "object"
     },
     "ServerToolResultBlock": {

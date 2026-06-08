@@ -22,13 +22,13 @@
     "baseline": {
       "schema_version": "0.1",
       "run_id": "baseline",
-      "model": "claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-4-5",
       "prompt": "{input}"
     },
     "variant-a": {
       "schema_version": "0.1",
       "run_id": "variant-a",
-      "model": "claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-4-5",
       "prompt": "{input}"
     }
   }

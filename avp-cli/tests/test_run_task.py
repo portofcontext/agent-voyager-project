@@ -57,7 +57,18 @@ def test_run_commissions_agent_with_task_in_env(avp_home, monkeypatch) -> None:
     envfile = avp_home / "e.json"
     envfile.write_text('{"files": {"TASK.md": "context here"}}')
 
-    rc = cli.main(["run", "--agent", "goose", "--env", str(envfile), "do the task"])
+    rc = cli.main(
+        [
+            "run",
+            "--agent",
+            "goose",
+            "--model",
+            "anthropic/claude-haiku-4-5",
+            "--env",
+            str(envfile),
+            "do the task",
+        ]
+    )
     assert rc == 0
     assert captured["prompt"] == "do the task"  # task becomes the Commission prompt
     assert captured["agent"].image == "img:test"  # runs the prepared sandbox image
@@ -77,7 +88,9 @@ def test_run_without_env_uses_default_world(avp_home, monkeypatch) -> None:
         return [], None
 
     monkeypatch.setattr(agent_mod, "run_agent", fake_run_agent)
-    assert cli.main(["run", "--agent", "goose", "hello"]) == 0
+    assert (
+        cli.main(["run", "--agent", "goose", "--model", "anthropic/claude-haiku-4-5", "hello"]) == 0
+    )
     # no --env: still sandboxed, with an empty seeded workspace
     assert captured["ctx"].workspace.exists()
     assert list(captured["ctx"].workspace.iterdir()) == []

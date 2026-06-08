@@ -11,11 +11,11 @@
     avp env create NAME [flags]      create a declarative environment (--image/--pip/--file/--net ...)
     avp env run NAME -- CMD          run a command inside a declarative environment (sandboxed)
     avp sandbox status|stop          inspect or stop the managed sandbox server
-    avp commission create [ID]       build a commission into your library (wizard, or pass flags)
-    avp commission list              list your portable commission library
-    avp commission describe ID       render a library commission by id
-    avp commission check ID|FILE     check a library commission, or a Commission JSON file
-    avp commission delete ID         remove a commission from your library
+    avp cm create [ID]       build a commission into your library (wizard, or pass flags)
+    avp cm list              list your portable commission library
+    avp cm describe ID       render a library commission by id
+    avp cm check ID|FILE     check a library commission, or a Commission JSON file
+    avp cm delete ID         remove a commission from your library
 
 An eval is a JSON config file authored in place (no code); commissions are
 portable artifacts in ~/.avp/commissions referenced by id. The CLI is the engine.
@@ -421,7 +421,7 @@ def _cmd_commission(args: argparse.Namespace) -> int:
         if not library.delete(args.id):
             console.error_panel(
                 f"no commission {args.id!r}",
-                f"not in your library ({_tilde(paths.commissions_dir())}) — see `avp commission list`.",
+                f"not in your library ({_tilde(paths.commissions_dir())}) — see `avp cm list`.",
             )
             return 1
         console.note(f"deleted commission {args.id}")
@@ -441,7 +441,7 @@ def _cmd_commission(args: argparse.Namespace) -> int:
     except Exception as exc:
         console.error_panel(
             f"no commission {args.id!r}",
-            f"not a library id (see `avp commission list`) nor a readable Commission file: {exc}",
+            f"not a library id (see `avp cm list`) nor a readable Commission file: {exc}",
         )
         return 1
     console.print_json(commission_mod.full_dict(c))
@@ -458,6 +458,9 @@ _CONTENT_FLAG_ATTRS = (
     "model",
     "prompt",
     "system_prompt",
+    "provider_id",
+    "provider_base_url",
+    "credential",
     "enable_tools",
     "enable_subagents",
     "enable_skills",
@@ -505,7 +508,7 @@ def _cmd_commission_create(args: argparse.Namespace) -> int:
     if not cid:
         console.error_panel(
             "commission id required",
-            "pass one: `avp commission create <id> [flags]` (or run it on a TTY for the wizard).",
+            "pass one: `avp cm create <id> [flags]` (or run it on a TTY for the wizard).",
         )
         return 1
     if not _ID_RE.match(cid):
@@ -574,6 +577,9 @@ def _cmd_commission_create(args: argparse.Namespace) -> int:
             model=model,
             prompt=prompt,
             system_prompt=system_prompt,
+            provider_id=args.provider_id,
+            provider_base_url=args.provider_base_url,
+            credential=args.credential,
             tags=args.tags,
             descriptor=descriptor,
             **enabled,
@@ -586,7 +592,7 @@ def _cmd_commission_create(args: argparse.Namespace) -> int:
     console.out.print(
         f"[green]✓[/] created [bold {brand.SAIL}]{cid}[/] in {_tilde(paths.commissions_dir())}"
     )
-    console.note(f"avp commission describe {cid}  ·  see the full wire Commission")
+    console.note(f"avp cm describe {cid}  ·  see the full wire Commission")
     console.note(f'reference it in an eval\'s "commissions" list as "{cid}"')
     return 0
 
@@ -684,7 +690,7 @@ def _cmd_commission_validate(target: str) -> int:
     if not Path(target).is_file():
         console.error_panel(
             f"no commission {target!r}",
-            "not a library id (see `avp commission list`) nor a path to a Commission .json file.",
+            "not a library id (see `avp cm list`) nor a path to a Commission .json file.",
         )
         return 1
     ok, msg = commission_mod.validate_file(target)
@@ -711,7 +717,7 @@ def _cmd_commission_list() -> int:
         table.add_row(cid, c.model or "[dim](agent default)[/dim]", c.prompt or "[dim]—[/dim]")
     console.out.print(table)
     console.note(f"in {_tilde(paths.commissions_dir())}")
-    console.note("avp commission describe <id>  ·  see the full Commission")
+    console.note("avp cm describe <id>  ·  see the full Commission")
     return 0
 
 
@@ -1160,6 +1166,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if prepared is None:
         return _SKIP
 
+    if not args.model or "/" not in args.model:
+        console.error_panel(
+            "model must be a provider/model slug",
+            f"got {args.model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
+            "or openai/gpt-4o (canonical models.dev namespace).",
+        )
+        return 1
+
     commission = Commission(
         schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
     )
@@ -1203,7 +1217,52 @@ def _cmd_env(args: argparse.Namespace) -> int:
         return _cmd_env_show(args.env)
     if args.env_cmd == "delete":
         return _cmd_env_delete(args.name)
+    if args.env_cmd == "secret":
+        return _cmd_env_secret(args)
     return _cmd_env_run(args)
+
+
+def _cmd_env_secret(args: argparse.Namespace) -> int:
+    """Manage the vault: secrets a Commission references by handle. The value is
+    stored on the host (~/.avp/secrets.toml, 0600) and injected by the broker at
+    run time, so it never enters the sandbox or the wire."""
+    from avp_cli import vault
+
+    if args.secret_cmd == "list":
+        handles = vault.names()
+        if not handles:
+            console.note(f"no secrets stored ({_tilde(vault.secrets_path())})")
+            return 0
+        for handle in handles:
+            console.out.print(handle)
+        return 0
+    if args.secret_cmd == "delete":
+        if vault.remove(args.handle):
+            console.note(f"removed {args.handle!r}")
+            return 0
+        console.error_panel("no such secret", f"{args.handle!r} is not in the vault")
+        return 1
+    # create
+    if args.handle in vault.names() and not args.force:
+        console.error_panel(
+            f"secret {args.handle!r} already exists",
+            "pass --force to overwrite, or pick another handle.",
+        )
+        return 1
+    value = args.value
+    if value is None:
+        import getpass
+
+        value = getpass.getpass(f"value for {args.handle!r}: ")
+    try:
+        vault.store(args.handle, value)
+    except vault.VaultError as exc:
+        console.error_panel("could not store secret", str(exc))
+        return 1
+    console.note(
+        f'stored {args.handle!r} — reference it in a Commission as {{"vault": "{args.handle}"}}'
+    )
+    return 0
 
 
 def _cmd_env_create(args: argparse.Namespace) -> int:
@@ -1544,7 +1603,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-open", action="store_true", help="Print the URL(s), don't open a browser"
     )
 
-    com_p = groups.add_parser("commission", help="Build and inspect commissions in your library")
+    com_p = groups.add_parser("cm", help="Build and inspect commissions in your library")
     csub = com_p.add_subparsers(dest="commission_cmd", required=True)
     p_create = csub.add_parser(
         "create",
@@ -1567,11 +1626,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Anchor agent for the enabled-* pickers + validation ({', '.join(known_agents())}, "
         "or a manifest path).",
     )
-    p_create.add_argument("--model", default=None, help="Model (e.g. claude-haiku-4-5)")
+    p_create.add_argument(
+        "--model", default=None, help="Model slug, e.g. anthropic/claude-opus-4-8"
+    )
     p_create.add_argument(
         "--prompt", default=None, help="User prompt; use {input} where the dataset case goes"
     )
     p_create.add_argument("--system-prompt", dest="system_prompt", default=None)
+    p_create.add_argument(
+        "--provider-id",
+        dest="provider_id",
+        default=None,
+        metavar="ID",
+        help="Provider/storefront id (e.g. anthropic, openrouter); sets the provider block",
+    )
+    p_create.add_argument(
+        "--provider-base-url",
+        dest="provider_base_url",
+        default=None,
+        metavar="URL",
+        help="Provider endpoint override (requires --provider-id)",
+    )
+    p_create.add_argument(
+        "--credential",
+        dest="credential",
+        default=None,
+        metavar="HANDLE",
+        help="Vault handle for the provider key (a SecretRef; see `avp env secret create`)",
+    )
     p_create.add_argument(
         "--enable-tool",
         dest="enable_tools",
@@ -1720,6 +1802,26 @@ def _build_parser() -> argparse.ArgumentParser:
     p_edel = ensub.add_parser("delete", help="Delete an environment from your library")
     p_edel.add_argument("name", help="Environment name")
 
+    # Secrets a Commission references by handle ({"vault": "<handle>"}). Stored
+    # in ~/.avp/secrets.toml (0600); the credential broker injects the value at
+    # run time so it never enters the sandbox.
+    p_secret = ensub.add_parser(
+        "secret", help="Store credentials a Commission references by vault handle"
+    )
+    secsub = p_secret.add_subparsers(dest="secret_cmd", required=True)
+    p_secset = secsub.add_parser("create", help="Store a secret by handle")
+    p_secset.add_argument("handle", help='Vault handle (a Commission\'s {"vault": <handle>})')
+    p_secset.add_argument(
+        "value",
+        nargs="?",
+        default=None,
+        help="The secret value. Omit to be prompted (keeps it out of shell history).",
+    )
+    p_secset.add_argument("--force", action="store_true", help="Overwrite an existing secret")
+    secsub.add_parser("list", help="List stored handles (never the values)")
+    p_secrm = secsub.add_parser("delete", help="Delete a stored secret by handle")
+    p_secrm.add_argument("handle", help="Vault handle to delete")
+
     sandbox_p = groups.add_parser("sandbox", help="The managed sandbox server (OpenSandbox)")
     ssub = sandbox_p.add_subparsers(dest="sandbox_cmd", required=True)
     ssub.add_parser("status", help="Docker + server health, config path, live sandbox count")
@@ -1739,7 +1841,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_init(args)
     if args.group == "eval":
         return _cmd_eval(args)
-    if args.group == "commission":
+    if args.group == "cm":
         return _cmd_commission(args)
     if args.group == "agent":
         return _cmd_agent(args)

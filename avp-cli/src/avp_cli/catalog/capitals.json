@@ -33,7 +33,7 @@
     "capitals-baseline": {
       "schema_version": "0.1",
       "run_id": "capitals-baseline",
-      "model": "claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-4-5",
       "prompt": "Extract the structured facts from this sentence: {input}",
       "output_schema": {
         "type": "object",
@@ -49,7 +49,7 @@
     "capitals-few-shot": {
       "schema_version": "0.1",
       "run_id": "capitals-few-shot",
-      "model": "claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-4-5",
       "system_prompt": "You extract facts as JSON. Example:\nInput: \"Berlin is the capital of Germany, about 3.7 million people.\"\nOutput: {\"city\": \"Berlin\", \"country\": \"Germany\", \"population_millions\": 3.7}",
       "prompt": "Now do the same for: {input}",
       "output_schema": {
