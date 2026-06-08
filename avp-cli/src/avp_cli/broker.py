@@ -35,7 +35,10 @@ import httpx
 __all__ = ["Broker", "Route"]
 
 # The host alias an OpenSandbox bridge container uses to reach the host. avp
-# adds this to the egress allowlist for broker-mode runs.
+# adds this to the egress allowlist for broker-mode runs. Docker Desktop /
+# OrbStack inject it; on plain Linux Docker the broker preflight maps it to the
+# default-route gateway (the host) in the sandbox's /etc/hosts, so this single
+# address reaches the broker on every host.
 SANDBOX_HOST_ALIAS = "host.docker.internal"
 
 # Hop-by-hop / recomputed headers we never forward verbatim.

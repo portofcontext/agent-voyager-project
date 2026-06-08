@@ -158,6 +158,8 @@ def run_agent(
 
     try:
         (io_dir / "commission.json").write_text(_commission_for_sandbox(commission, brk))
+        if brk is not None:
+            (io_dir / "broker-preflight.sh").write_text(_BROKER_PREFLIGHT_SH)
         try:
             box = SandboxSync.create(
                 agent.image,
@@ -349,27 +351,49 @@ def _egress_extra(commission: Commission, brk: broker.Broker | None) -> list[str
     return [h for h in hosts if h]
 
 
+# Reach the host-side vault broker from inside the sandbox, cross-platform.
+# Docker Desktop / OrbStack inject `host.docker.internal`; plain Linux Docker
+# does not, so we map it to the default-route gateway (the host) in /etc/hosts.
+# That keeps a single broker address (host.docker.internal) working everywhere —
+# the agent's base_urls / MCP urls never have to change per host. Written to the
+# io dir and run by `_preflight_broker`; exit 0 iff the broker is reachable.
+_BROKER_PREFLIGHT_SH = r"""#!/bin/sh
+URL="http://host.docker.internal:$1/health"
+fetch() {
+  curl -fsS -m 3 "$URL" >/dev/null 2>&1 && return 0
+  wget -q -T 3 -O - "$URL" >/dev/null 2>&1 && return 0
+  python3 -c 'import urllib.request,sys; urllib.request.urlopen(sys.argv[1],timeout=3)' "$URL" >/dev/null 2>&1
+}
+fetch && exit 0
+gw="$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')"
+if [ -z "$gw" ]; then
+  gw="$(python3 -c 'import socket, struct
+for line in open("/proc/net/route").read().splitlines()[1:]:
+    f = line.split()
+    if len(f) > 3 and f[1] == "00000000" and int(f[3], 16) & 2:
+        print(socket.inet_ntoa(struct.pack("<L", int(f[2], 16)))); break' 2>/dev/null)"
+fi
+[ -n "$gw" ] && printf '%s host.docker.internal\n' "$gw" >> /etc/hosts 2>/dev/null
+fetch
+"""
+
+
 def _preflight_broker(box: SandboxSync, brk: broker.Broker) -> str | None:
-    """Confirm the sandbox can reach the vault broker before the agent runs.
+    """Confirm the sandbox can reach the vault broker before the agent runs (and
+    ensure host.docker.internal routes to the host on plain Linux Docker).
     Returns an error string (fail closed) when it can't; never falls back to
     placing the secret in the sandbox."""
-    url = f"{brk.base_url()}/health"
-    probe = (
-        f'curl -fsS -m 5 "{url}" >/dev/null 2>&1 '
-        f'|| wget -q -T 5 -O - "{url}" >/dev/null 2>&1 '
-        f'|| python3 -c "import urllib.request as u,sys; u.urlopen(sys.argv[1],timeout=5)" "{url}"'
-    )
     try:
         execution = box.commands.run(
-            f"sh -c {shlex.quote(probe)}",
-            opts=RunCommandOpts(timeout=timedelta(seconds=20)),
+            f"sh {_IO_MNT}/broker-preflight.sh {brk.port}",
+            opts=RunCommandOpts(timeout=timedelta(seconds=25)),
         )
     except Exception as exc:
         return f"vault broker preflight failed to run ({exc}); refusing to run"
     if execution.exit_code not in (0, None):
         return (
-            "vault broker unreachable from the sandbox "
-            f"({brk.base_url()}); refusing to run rather than expose the secret"
+            f"vault broker unreachable from the sandbox (host broker on port {brk.port}); "
+            "refusing to run rather than expose the secret"
         )
     return None
 
