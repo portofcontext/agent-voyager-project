@@ -239,7 +239,11 @@ Python member across those trees.
   **`avp run`** places an agent in an env and gives it a task. Internals:
   `avp_cli/{osb,images,environment,agent}.py`; the supervisor↔agent workspace
   convention is `AVP_WORKSPACE` / `AVP_ENV_ROOT` (mounted at `/avp/workspace` /
-  `/avp` in-sandbox). Real-sandbox seam tests: `make test-docker`.
+  `/avp` in-sandbox). Vault secrets (Commission `provider.credential` /
+  `mcp_servers[].auth` handles) resolve via `avp_cli/vault.py` and are injected
+  by a host-side broker (`avp_cli/broker.py`) so the value never enters the
+  sandbox; runs fail closed if the broker is unreachable. Real-sandbox seam
+  tests: `make test-docker`.
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make check` is the free
   pre-commit floor, with paid real-model targets (`test-real-llm`,

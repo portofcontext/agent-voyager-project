@@ -2,7 +2,7 @@
 
 A commission in the library *is* a wire `Commission` (see `avp_cli.library`), so
 inspecting one is just loading + rendering it. `full_dict` keeps every field
-(nulls included) so `avp commission describe` teaches the real, complete wire shape;
+(nulls included) so `avp cm describe` teaches the real, complete wire shape;
 `validate_file` checks a hand-written Commission JSON against the spec.
 
 `build_commission` is the inverse: it assembles a fresh wire Commission from a
@@ -52,6 +52,9 @@ def build_commission(
     enabled_builtin_skills: list[str] | None = None,
     enabled_builtin_mcp_servers: list[str] | None = None,
     tags: list[str] | None = None,
+    provider_id: str | None = None,
+    provider_base_url: str | None = None,
+    credential: str | None = None,
     descriptor: AgentDescriptor | None = None,
 ) -> Commission:
     """Assemble a wire `Commission` for the library.
@@ -81,6 +84,18 @@ def build_commission(
         "tags": tags,
     }
     fields.update({k: v for k, v in overrides.items() if v is not None})
+
+    # Provider routing: --provider-id selects the storefront; --credential names
+    # a vault handle (a SecretRef the supervisor resolves, never the value).
+    if provider_id is not None:
+        provider: dict[str, Any] = {"id": provider_id}
+        if provider_base_url is not None:
+            provider["base_url"] = provider_base_url
+        if credential is not None:
+            provider["credential"] = {"vault": credential}
+        fields["provider"] = provider
+    elif provider_base_url is not None or credential is not None:
+        raise BuildError("--provider-base-url / --credential require --provider-id")
 
     if descriptor is not None:
         _check_enabled_against(fields, descriptor)

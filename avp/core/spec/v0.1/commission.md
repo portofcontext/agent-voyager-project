@@ -131,6 +131,14 @@ the agent can *use* a credential it can never *read*. Inlining a credential in
 an HTTP header (`Authorization`, `*api-key*`, `*token*`, …) is rejected at
 validation; use `auth` instead.
 
+The avp CLI realizes "outside the agent's reach" with a host-side
+credential-injecting broker: it points the agent's provider `base_url` and MCP
+urls at the broker and hands the agent only sentinels; the broker (on the host,
+where the resolved value lives) overwrites the auth and forwards to the real
+upstream. The secret never enters the sandbox. How a supervisor achieves this
+is its own concern; the wire only requires that handles, not values, travel on
+the Commission.
+
 ---
 
 ## 3. Managed assets (inline)

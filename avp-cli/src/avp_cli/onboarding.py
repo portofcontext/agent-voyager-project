@@ -20,11 +20,11 @@ _START = [
 ]
 
 _COMMISSIONS = [
-    ("avp commission create [id]", "build a commission"),
-    ("avp commission list", "your commission library"),
-    ("avp commission describe <id>", "render the Commission an id yields"),
-    ("avp commission check <id>", "check a commission is valid"),
-    ("avp commission delete <id>", "remove a commission from your library"),
+    ("avp cm create [id]", "build a commission"),
+    ("avp cm list", "your commission library"),
+    ("avp cm describe <id>", "render the Commission an id yields"),
+    ("avp cm check <id>", "check a commission is valid"),
+    ("avp cm delete <id>", "remove a commission from your library"),
 ]
 
 _EVAL = [
@@ -38,6 +38,7 @@ _AGENTS = [
     ("avp agent list", "the agents you can run, and whether each is installed"),
     ("avp agent install <name>", "install a prebuilt agent (release, or --binary/--wheel local)"),
     ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagents"),
+    ("avp agent uninstall <name>", "remove an installed agent"),
 ]
 
 _ENV = [
@@ -45,6 +46,13 @@ _ENV = [
     ("avp env list", "your declarative environments (~/.avp/environments)"),
     ("avp env show <name>", "what an environment provisions + curates"),
     ("avp env run <name> -- <cmd>", "run a command inside an environment (provisioned + confined)"),
+    ("avp env delete <name>", "remove an environment from your library"),
+    (
+        "avp env secret create <handle>",
+        'store a credential a Commission references by {"vault": handle}',
+    ),
+    ("avp env secret list", "stored secret handles (values stay on the host, never the sandbox)"),
+    ("avp env secret delete <handle>", "remove a stored secret"),
 ]
 
 

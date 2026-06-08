@@ -41,7 +41,6 @@ material; the agent dials and loads them directly.
 """
 
 import dataclasses
-import os
 from collections.abc import AsyncIterable
 from typing import Any
 
@@ -68,17 +67,6 @@ class UnsupportedProvider(Exception):
             "Anthropic-compatible gateway via base_url"
         )
         self.provider_id = provider_id
-
-
-def _vault_env(handle: str) -> str | None:
-    """Resolve a SecretRef vault handle from the supervisor-injected env var.
-
-    The supervisor (CLI) resolves the value out of band and exposes it as
-    `AVP_VAULT_<HANDLE>`; the secret never appears in the Commission, so it
-    stays out of the trajectory snapshot. (Phase 2 replaces this with a broker
-    and the value leaves the sandbox entirely.)
-    """
-    return os.environ.get("AVP_VAULT_" + handle.upper().replace("-", "_"))
 
 
 def apply_commission(
@@ -155,14 +143,12 @@ def _map_mcp_servers(commission: Commission) -> dict[str, McpServerConfig]:
     result: dict[str, McpServerConfig] = {}
     for server in commission.mcp_servers or []:
         if isinstance(server, AVPMcpServerHttp):
+            # `auth` is a SecretRef the supervisor resolves out of band (the avp
+            # CLI injects it at its credential broker); the agent only forwards
+            # the connection material it is given and never resolves handles.
             cfg: dict[str, McpServerConfig] = {"type": "http", "url": server.url}
-            headers = dict(server.headers or {})
-            if server.auth is not None:
-                value = _vault_env(server.auth.vault)
-                if value is not None:
-                    headers["Authorization"] = f"Bearer {value}"
-            if headers:
-                cfg["headers"] = headers
+            if server.headers:
+                cfg["headers"] = dict(server.headers)
             result[server.id] = cfg
         elif isinstance(server, AVPMcpServerStdio):
             cmd, *rest = server.command

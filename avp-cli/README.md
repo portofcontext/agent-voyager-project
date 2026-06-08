@@ -68,7 +68,7 @@ Two kinds of artifact, two homes:
   **raw AVP wire `Commission`** and nothing else — no tool-specific fields — so the
   same artifact the CLI runs is what the cloud consumes. The id is the filename;
   the eval engine fills `{input}` and assigns `run_id`/`supervisor` per run.
-  `avp commission list` shows them all. Run outputs live under `~/.avp/runs/`
+  `avp cm list` shows them all. Run outputs live under `~/.avp/runs/`
   (delete one with `avp eval delete <id>`, or all with `avp eval delete --all`).
 
 ## The eval config (no code)
@@ -111,7 +111,7 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
   fields only (`prompt`, `system_prompt`, `model`, `enabled_builtin_tools`,
   `skills`, `mcp_servers`, `output_schema`, `tags`, …). The id is the filename, not
   a field. `{input}` in `prompt` is a plain string the eval fills per case;
-  `run_id`/`supervisor` are assigned per run. `avp commission describe <id>` prints the
+  `run_id`/`supervisor` are assigned per run. `avp cm describe <id>` prints the
   full Commission (nulls included) so you learn the real wire shape.
 - **`scorer`** — built into the CLI, chosen by name + params:
   - `exact-match` — answer text equals `expected` (normalized).
@@ -145,10 +145,10 @@ already have is left untouched):
 | `avp eval list` | list recent eval runs by voyage id (newest first) |
 | `avp eval view [ID]` | open an eval on agentvoyagerproject.com (default: most recent run) |
 | `avp eval delete ID [--all]` | delete one recorded run by id (or `--all` for every run, `~/.avp/runs`) |
-| `avp commission list` | list your portable commission library (`~/.avp/commissions`) |
-| `avp commission describe ID` | render the Commission a library commission yields |
-| `avp commission check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |
-| `avp commission delete ID` | remove a commission from your library |
+| `avp cm list` | list your portable commission library (`~/.avp/commissions`) |
+| `avp cm describe ID` | render the Commission a library commission yields |
+| `avp cm check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |
+| `avp cm delete ID` | remove a commission from your library |
 | `avp agent list` | the agents you can run against: whether each is installed and ready |
 | `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |

@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from avp_conformance.manifest import AgentManifest
 from opensandbox import SandboxSync
@@ -43,7 +44,7 @@ from pydantic import BaseModel
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
-from avp_cli import osb, paths, vault
+from avp_cli import broker, osb, paths, vault
 
 # How often the streaming path re-reads the growing --out file (seconds).
 _TAIL_INTERVAL = 0.06
@@ -140,16 +141,28 @@ def run_agent(
     io_dir = paths.avp_home() / "tmp" / uuid.uuid4().hex
     io_dir.mkdir(parents=True)
     traj_host = io_dir / "trajectory.ndjson"
-    (io_dir / "commission.json").write_text(
-        commission.model_dump_json(by_alias=True, exclude_none=True)
-    )
+
+    # Vault broker: when the Commission references any secret (provider
+    # credential or MCP auth), a host-side credential-injecting proxy serves
+    # those endpoints so the resolved value never enters the sandbox. The
+    # written commission + sandbox env then point at the broker with sentinels.
+    brk: broker.Broker | None = None
+    try:
+        brk = _start_broker(commission)
+    except vault.VaultError as exc:
+        shutil.rmtree(io_dir, ignore_errors=True)
+        return None, f"vault: {exc}"
+    except Exception as exc:
+        shutil.rmtree(io_dir, ignore_errors=True)
+        return None, f"vault broker startup failed: {exc}"
 
     try:
+        (io_dir / "commission.json").write_text(_commission_for_sandbox(commission, brk))
         try:
             box = SandboxSync.create(
                 agent.image,
                 connection_config=ctx.connection.config(),
-                env=_sandbox_env(agent, commission),
+                env=_sandbox_env(agent, commission, brk),
                 volumes=[
                     Volume(
                         name="workspace",
@@ -159,19 +172,22 @@ def run_agent(
                     Volume(name="io", host=Host(path=str(io_dir)), mount_path=_IO_MNT),
                 ],
                 # Egress is default-deny floored by runtime-base domains, plus the
-                # env's `net`, plus the hosts the Commission itself references
-                # (LLM provider + MCP servers). A run can never be commissioned to
-                # call a URL the sandbox then blocks.
-                network_policy=osb.network_policy(
-                    [*ctx.net, *osb.commission_egress_hosts(commission)]
-                ),
+                # env's `net`, plus the hosts the run reaches: under broker mode
+                # just the broker host (the broker reaches providers/MCP from the
+                # host); otherwise the provider + MCP hosts the Commission names.
+                # A run can never be commissioned to call a URL the sandbox blocks.
+                network_policy=osb.network_policy([*ctx.net, *_egress_extra(commission, brk)]),
                 resource={**_DEFAULT_RESOURCES, **ctx.resources},
                 timeout=timedelta(seconds=timeout_s + _SANDBOX_TTL_MARGIN_S),
             )
         except Exception as exc:
             return None, f"sandbox create failed: {exc}"
         try:
-            err = _run_setup(box, ctx.setup)
+            # Fail closed: if the vault broker isn't reachable from the sandbox,
+            # refuse the run rather than ever placing the secret inside it.
+            err = _preflight_broker(box, brk) if brk is not None else None
+            if err is None:
+                err = _run_setup(box, ctx.setup)
             if err is None:
                 argv = [
                     *agent.command,
@@ -197,64 +213,165 @@ def run_agent(
             shutil.move(traj_host, out)
         return read_trajectory(out), None
     finally:
+        if brk is not None:
+            brk.stop()
         shutil.rmtree(io_dir, ignore_errors=True)
 
 
-def _sandbox_env(agent: SandboxedAgent, commission: Commission) -> dict[str, str]:
-    """The declared sandbox environment: forwarded provider credentials, any
-    vault-resolved secrets the Commission references, the manifest's env, and
-    the AVP workspace convention (the agent roots itself via AVP_WORKSPACE /
-    AVP_ENV_ROOT, e.g. goose sets GOOSE_PATH_ROOT).
+# The sentinel key the agent receives in place of a vault-managed credential.
+# Non-empty so SDKs that require a key present are satisfied; the broker
+# overwrites it with the real value on the host before forwarding.
+_VAULT_SENTINEL = "avp-vault-managed"
 
-    Native host provider vars (ANTHROPIC_*, OPENROUTER_*, …) are forwarded as a
-    fallback for the no-`provider`-block case; the Commission's resolved
-    provider/MCP secrets layer on top and win.
+
+def _provider_credentialed(commission: Commission) -> bool:
+    p = commission.provider
+    return p is not None and p.credential is not None
+
+
+def _start_broker(commission: Commission) -> broker.Broker | None:
+    """Start a vault broker iff the Commission references any secret. Resolves
+    handles host-side (may raise VaultError); secrets live only in the broker."""
+    routes: list[tuple[str, broker.Route]] = []
+    prov = commission.provider
+    if _provider_credentialed(commission):
+        base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1] or ""
+        header, prefix = (
+            ("x-api-key", "") if prov.id == "anthropic" else ("authorization", "Bearer ")
+        )
+        routes.append(
+            (
+                f"llm/{prov.id}",
+                broker.Route(
+                    upstream=broker.origin_of(base),
+                    header=header,
+                    prefix=prefix,
+                    secret=vault.resolve_ref(prov.credential),
+                ),
+            )
+        )
+    for server in commission.mcp_servers or []:
+        auth = getattr(server, "auth", None)
+        if auth is not None:
+            routes.append(
+                (
+                    f"mcp/{server.id}",
+                    broker.Route(
+                        upstream=server.url,
+                        header="authorization",
+                        prefix="Bearer ",
+                        secret=vault.resolve(auth.vault),
+                    ),
+                )
+            )
+    if not routes:
+        return None
+    brk = broker.Broker()
+    for key, route in routes:
+        brk.add_route(key, route)
+    brk.start()
+    return brk
+
+
+def _sandbox_env(
+    agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
+) -> dict[str, str]:
+    """The declared sandbox environment: provider routing (broker urls +
+    sentinels for vault-credentialed providers, real base_url otherwise), the
+    manifest's env, and the AVP workspace convention (AVP_WORKSPACE /
+    AVP_ENV_ROOT). Host provider vars (ANTHROPIC_*, …) are forwarded for the
+    no-vault case where the user supplies their own ambient key.
     """
     env = {k: v for k, v in os.environ.items() if k.startswith(_ENV_PASSTHROUGH_PREFIXES)}
-    env.update(_commission_secret_env(commission))
+    prov = commission.provider
+    if prov is not None:
+        up = prov.id.upper().replace("-", "_")
+        if prov.credential is not None and brk is not None:
+            # Vault: route through the broker, hand the agent only a sentinel.
+            route = brk.route_url(f"llm/{prov.id}")
+            if prov.id == "anthropic":
+                env["ANTHROPIC_BASE_URL"] = route
+                env["ANTHROPIC_API_KEY"] = _VAULT_SENTINEL
+            else:
+                env[f"{up}_HOST"] = route
+                env[f"{up}_API_KEY"] = _VAULT_SENTINEL
+                env["GOOSE_PROVIDER"] = prov.id
+        else:
+            # Non-vault provider: real endpoint, ambient key (forwarded above).
+            base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
+            if prov.id == "anthropic":
+                if base:
+                    env["ANTHROPIC_BASE_URL"] = base
+            else:
+                if base:
+                    env[f"{up}_HOST"] = base
+                env["GOOSE_PROVIDER"] = prov.id
     env.update(agent.env)
     env["AVP_WORKSPACE"] = _WORKSPACE_MNT
     env["AVP_ENV_ROOT"] = "/avp"
     return env
 
 
-def _commission_secret_env(commission: Commission) -> dict[str, str]:
-    """Resolve the Commission's vault handles to sandbox env (Phase 1).
+def _commission_for_sandbox(commission: Commission, brk: broker.Broker | None) -> str:
+    """The commission.json the agent reads.
 
-    Two delivery conventions, each matching how its consumer natively reads
-    credentials:
+    Provider routing and MCP auth are supervisor concerns the CLI delivers via
+    env (`_sandbox_env`) and the broker, not fields the agent consumes — so they
+    are stripped from what the agent receives. This also keeps the written
+    commission compatible with released agents whose (older) wire types reject
+    unknown fields like `provider`/`auth`, and keeps the resolved value out of
+    the agent's run_requested snapshot. Under broker mode each authed MCP url is
+    rewritten to its broker route (the broker injects the credential)."""
+    data = commission.model_dump(by_alias=True, exclude_none=True, mode="json")
+    data.pop("provider", None)
+    for server in data.get("mcp_servers") or []:
+        if brk is not None and server.get("type") == "http" and server.get("auth") is not None:
+            server["url"] = brk.route_url(f"mcp/{server['id']}")
+        server.pop("auth", None)
+    return json.dumps(data)
 
-    - Provider: native env. `anthropic` → ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL;
-      any other id → <ID>_API_KEY / <ID>_HOST (what goose reads). The agent SDK
-      picks these up; no agent-side handle resolution needed.
-    - MCP `auth`: a deterministic `AVP_VAULT_<HANDLE>` var. The agent resolves
-      `auth.vault` → that var at dial time and sets the bearer header. The
-      handle stays in the Commission snapshot; only the value lives in env, so
-      the secret never enters the trajectory.
 
-    Phase 2 (the credential-injecting broker) removes the value from the
-    sandbox entirely; this function is the swap point.
-    """
-    out: dict[str, str] = {}
+def _egress_extra(commission: Commission, brk: broker.Broker | None) -> list[str]:
+    """Per-run egress additions. Without a broker: the provider + MCP hosts the
+    Commission names. With a broker: the broker host, plus the hosts of any
+    endpoints NOT routed through it (non-credentialed provider / unauthed MCP)."""
+    if brk is None:
+        return osb.commission_egress_hosts(commission)
+    hosts = [broker.SANDBOX_HOST_ALIAS]
     prov = commission.provider
-    if prov is not None:
-        if prov.id == "anthropic":
-            if prov.credential is not None:
-                out["ANTHROPIC_API_KEY"] = vault.resolve_ref(prov.credential)
-            if prov.base_url:
-                out["ANTHROPIC_BASE_URL"] = prov.base_url
-        else:
-            up = prov.id.upper().replace("-", "_")
-            if prov.credential is not None:
-                out[f"{up}_API_KEY"] = vault.resolve_ref(prov.credential)
-            base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
-            if base:
-                out[f"{up}_HOST"] = base
+    if prov is not None and prov.credential is None:
+        base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
+        if base:
+            hosts.append(urlparse(base).hostname or "")
     for server in commission.mcp_servers or []:
-        auth = getattr(server, "auth", None)
-        if auth is not None:
-            out["AVP_VAULT_" + auth.vault.upper().replace("-", "_")] = vault.resolve(auth.vault)
-    return out
+        if getattr(server, "url", None) and getattr(server, "auth", None) is None:
+            hosts.append(urlparse(server.url).hostname or "")
+    return [h for h in hosts if h]
+
+
+def _preflight_broker(box: SandboxSync, brk: broker.Broker) -> str | None:
+    """Confirm the sandbox can reach the vault broker before the agent runs.
+    Returns an error string (fail closed) when it can't; never falls back to
+    placing the secret in the sandbox."""
+    url = f"{brk.base_url()}/health"
+    probe = (
+        f'curl -fsS -m 5 "{url}" >/dev/null 2>&1 '
+        f'|| wget -q -T 5 -O - "{url}" >/dev/null 2>&1 '
+        f'|| python3 -c "import urllib.request as u,sys; u.urlopen(sys.argv[1],timeout=5)" "{url}"'
+    )
+    try:
+        execution = box.commands.run(
+            f"sh -c {shlex.quote(probe)}",
+            opts=RunCommandOpts(timeout=timedelta(seconds=20)),
+        )
+    except Exception as exc:
+        return f"vault broker preflight failed to run ({exc}); refusing to run"
+    if execution.exit_code not in (0, None):
+        return (
+            "vault broker unreachable from the sandbox "
+            f"({brk.base_url()}); refusing to run rather than expose the secret"
+        )
+    return None
 
 
 def _run_setup(box: SandboxSync, setup: list[str]) -> str | None:

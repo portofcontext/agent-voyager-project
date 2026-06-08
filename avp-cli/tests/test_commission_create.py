@@ -1,5 +1,5 @@
 """Building commissions into the library: `commission.build_commission` (unit)
-and the `avp commission create` flag path crossing the describe seam."""
+and the `avp cm create` flag path crossing the describe seam."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def test_descriptor_validation_checks_mcp_servers_by_id() -> None:
         )
 
 
-# ── avp commission create (CLI seam: create -> describe -> build) ─────────────
+# ── avp cm create (CLI seam: create -> describe -> build) ─────────────
 
 
 @pytest.fixture
@@ -85,7 +85,7 @@ def avp_home(tmp_path, monkeypatch):
 
 def test_create_via_flags_writes_a_wire_commission(avp_home, monkeypatch) -> None:
     # No --agent: no describe, no validation; pure flag build.
-    rc = cli.main(["commission", "create", "terse", "--model", "x/m", "--prompt", "{input}"])
+    rc = cli.main(["cm", "create", "terse", "--model", "x/m", "--prompt", "{input}"])
     assert rc == 0
     c = library.load("terse")
     assert c.run_id == "terse" and c.model == "x/m" and c.prompt == "{input}"
@@ -95,7 +95,7 @@ def test_create_validates_enabled_tools_against_the_agent(avp_home, monkeypatch)
     # Stub the describe seam so the test is deterministic without an agent binary.
     monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (_descriptor(), None))
     rc = cli.main(
-        ["commission", "create", "x", "--agent", "demo", "--enable-tool", "Nope", "--prompt", "p"]
+        ["cm", "create", "x", "--agent", "demo", "--enable-tool", "Nope", "--prompt", "p"]
     )
     assert rc == 1  # unknown tool rejected before it could become commission_collision
     assert not library.exists("x")
@@ -105,7 +105,7 @@ def test_create_with_valid_enabled_tool_succeeds(avp_home, monkeypatch) -> None:
     monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (_descriptor(), None))
     rc = cli.main(
         [
-            "commission",
+            "cm",
             "create",
             "x",
             "--agent",
@@ -123,18 +123,14 @@ def test_create_with_valid_enabled_tool_succeeds(avp_home, monkeypatch) -> None:
 
 
 def test_create_refuses_to_clobber_without_force(avp_home) -> None:
-    assert cli.main(["commission", "create", "dup", "--prompt", "a", "--model", "x/m"]) == 0
-    assert (
-        cli.main(["commission", "create", "dup", "--prompt", "b", "--model", "x/m"]) == 1
-    )  # exists
-    assert (
-        cli.main(["commission", "create", "dup", "--prompt", "b", "--force", "--model", "x/m"]) == 0
-    )
+    assert cli.main(["cm", "create", "dup", "--prompt", "a", "--model", "x/m"]) == 0
+    assert cli.main(["cm", "create", "dup", "--prompt", "b", "--model", "x/m"]) == 1  # exists
+    assert cli.main(["cm", "create", "dup", "--prompt", "b", "--force", "--model", "x/m"]) == 0
     assert library.load("dup").prompt == "b"
 
 
 def test_create_rejects_a_bad_id(avp_home) -> None:
-    assert cli.main(["commission", "create", "Bad Id", "--prompt", "p"]) == 1
+    assert cli.main(["cm", "create", "Bad Id", "--prompt", "p"]) == 1
 
 
 def test_create_clone_then_override(avp_home) -> None:
@@ -142,9 +138,48 @@ def test_create_clone_then_override(avp_home) -> None:
     library.save(
         "src", Commission(schema_version="0.1", run_id="src", model="x/m", output_schema=schema)
     )
-    rc = cli.main(["commission", "create", "dst", "--from", "src", "--model", "x/m"])
+    rc = cli.main(["cm", "create", "dst", "--from", "src", "--model", "x/m"])
     assert rc == 0
     dst = library.load("dst")
     assert dst.output_schema == schema and dst.model == "x/m" and dst.run_id == "dst"
     raw = json.loads((avp_home / "commissions" / "dst.json").read_text())
     assert "id" not in raw  # still a pure wire Commission on disk
+
+
+def test_build_commission_provider_with_credential_handle() -> None:
+    c = commission_mod.build_commission(
+        "x",
+        model="openai/gpt-4o",
+        provider_id="openrouter",
+        provider_base_url="https://openrouter.ai/api/v1",
+        credential="or-key",
+    )
+    assert c.provider.id == "openrouter"
+    assert c.provider.base_url == "https://openrouter.ai/api/v1"
+    assert c.provider.credential.vault == "or-key"  # a handle, never the value
+
+
+def test_build_commission_credential_requires_provider_id() -> None:
+    with pytest.raises(commission_mod.BuildError, match="require --provider-id"):
+        commission_mod.build_commission("x", model="openai/gpt-4o", credential="or-key")
+
+
+def test_create_via_flags_with_provider(avp_home) -> None:
+    rc = cli.main(
+        [
+            "cm",
+            "create",
+            "p",
+            "--model",
+            "openai/gpt-4o",
+            "--provider-id",
+            "openrouter",
+            "--credential",
+            "or-key",
+            "--prompt",
+            "{input}",
+        ]
+    )
+    assert rc == 0
+    c = library.load("p")
+    assert c.provider.id == "openrouter" and c.provider.credential.vault == "or-key"
