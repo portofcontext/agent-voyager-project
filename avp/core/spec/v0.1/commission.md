@@ -127,17 +127,10 @@ secret material out of band (env var, secrets file, credential broker) at run
 time; the value MUST NOT appear in the Commission or in any trajectory event.
 
 A conforming supervisor SHOULD resolve handles **outside the agent's reach** so
-the agent can *use* a credential it can never *read*. Inlining a credential in
-an HTTP header (`Authorization`, `*api-key*`, `*token*`, …) is rejected at
-validation; use `auth` instead.
-
-The avp CLI realizes "outside the agent's reach" with a host-side
-credential-injecting broker: it points the agent's provider `base_url` and MCP
-urls at the broker and hands the agent only sentinels; the broker (on the host,
-where the resolved value lives) overwrites the auth and forwards to the real
-upstream. The secret never enters the sandbox. How a supervisor achieves this
-is its own concern; the wire only requires that handles, not values, travel on
-the Commission.
+the agent can *use* a credential it can never *read*. How it does so is a
+supervisor concern; the wire only requires that handles, not values, travel on
+the Commission. Credentials MUST be carried as `auth` (a `SecretRef`), never
+inlined into `McpServerHttp.headers` (which is for non-secret headers only).
 
 ---
 
@@ -175,7 +168,7 @@ Each entry in `mcp_servers` is a discriminated union on `type`:
 
 - **`id`**: a string the supervisor chooses. Stable across the run. MUST match `^[a-z0-9_-]+$`.
 - `auth` is optional. A `SecretRef` (§2.4) the supervisor resolves and injects as the server's credential (a bearer `Authorization` header). Carry credentials here, not inline.
-- `headers` is optional and is for **non-secret** request headers only. Credential-bearing names (`Authorization`, `*api-key*`, `*token*`, …) are rejected at validation; use `auth`.
+- `headers` is optional and is for **non-secret** request headers only. Carry the server's credential in `auth`, not here.
 
 ### 3.2 Skill entries
 
@@ -264,6 +257,6 @@ A supervisor (or any Commission producer) is conforming to the Commission Spec i
 3. `run_id` is unique within the supervisor's namespace.
 4. Every name in `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` / `enabled_builtin_mcp_servers` matches a corresponding entry in the target agent's Descriptor (by `name` for tools/subagents/skills, by `id` for mcp_servers). When the supervisor cannot pre-validate against the Descriptor, the agent catches mismatches at startup and emits `error_occurred(code: "commission_collision")`.
 5. `model` is a canonical `<origin>/<model>` slug (matches `^[^/]+/.+$`).
-6. No secret value appears inline anywhere in the Commission: credentials are carried only as `SecretRef` handles (`provider.credential`, `McpServerHttp.auth`), and `McpServerHttp.headers` contains no credential-bearing header. The resolved secret value MUST NOT appear in `run_requested.data["avp.commission"]` or any other trajectory event.
+6. Credentials are carried only as `SecretRef` handles (`provider.credential`, `McpServerHttp.auth`); the resolved secret value MUST NOT appear in the Commission, in `run_requested.data["avp.commission"]`, or in any other trajectory event.
 
 An agent that consumes Commissions and composes with the Trajectory Spec MUST additionally enforce §3.3 (collisions) and §4 (allowlists) at startup.

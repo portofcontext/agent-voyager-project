@@ -27,11 +27,6 @@ _ID_PATTERN = r"^[a-z0-9_-]+$"
 # `Provider.id` storefront that actually serves the tokens.
 _MODEL_SLUG_PATTERN = r"^[^/]+/.+$"
 
-# Header names that carry credentials. Inlining these on the wire is rejected;
-# use `McpServerHttp.auth` (a SecretRef the supervisor resolves out of band).
-_SECRET_HEADER_NAMES = frozenset({"authorization", "proxy-authorization"})
-_SECRET_HEADER_SUBSTRINGS = ("api-key", "api_key", "apikey", "token", "secret", "x-key")
-
 
 class SecretRef(BaseModel):
     """A reference to a secret the supervisor resolves out of band.
@@ -53,20 +48,10 @@ class McpServerHttp(BaseModel):
     id: str = Field(min_length=1, pattern=_ID_PATTERN)
     type: Literal["http"]
     url: str = Field(min_length=1)
+    # Non-secret request headers. Credentials go in `auth` (a SecretRef the
+    # supervisor resolves out of band), not here.
     headers: dict[str, str] | None = None
     auth: SecretRef | None = None
-
-    @field_validator("headers")
-    @classmethod
-    def _no_inline_secret_headers(cls, v: dict[str, str] | None) -> dict[str, str] | None:
-        for name in v or {}:
-            low = name.lower()
-            if low in _SECRET_HEADER_NAMES or any(s in low for s in _SECRET_HEADER_SUBSTRINGS):
-                raise ValueError(
-                    f"header {name!r} looks like a credential; carry it as `auth` "
-                    "(a SecretRef vault handle), not an inline header"
-                )
-        return v
 
 
 class McpServerStdio(BaseModel):
@@ -228,20 +213,10 @@ class Commission(BaseModel):
     prompt: str | None = None
     system_prompt: str | None = None
     # Canonical models.dev slug "<origin>/<model>" (e.g. "anthropic/claude-opus-4-8").
-    # Required: the origin segment is the pricing key and the native-default
-    # routing hint. Agents split off the origin to get the SDK-native model id.
+    # The pattern requires a non-empty origin and model id. Required: the origin
+    # segment is the pricing key and the native-default routing hint; agents
+    # split it off to get the SDK-native model id.
     model: str = Field(min_length=1, pattern=_MODEL_SLUG_PATTERN)
-
-    @field_validator("model")
-    @classmethod
-    def _model_is_slug(cls, v: str) -> str:
-        origin, _, rest = v.partition("/")
-        if not origin or not rest:
-            raise ValueError(
-                "model must be a canonical 'origin/model' slug "
-                "(e.g. 'anthropic/claude-opus-4-8'), not a bare model id"
-            )
-        return v
 
     # Metadata
     thread_id: str | None = None

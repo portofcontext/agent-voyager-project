@@ -372,6 +372,7 @@ export type ErrorCode =
   | "auth_error"
   | "agent_crash"
   | "unsupported_model"
+  | "unsupported_provider"
   | "commission_collision"
   | "mcp_connect_failed"
   | "unknown";

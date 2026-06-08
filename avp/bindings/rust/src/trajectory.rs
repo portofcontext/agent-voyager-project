@@ -3396,6 +3396,7 @@ pub struct DocumentBlock {
 #[doc = "    \"auth_error\","]
 #[doc = "    \"agent_crash\","]
 #[doc = "    \"unsupported_model\","]
+#[doc = "    \"unsupported_provider\","]
 #[doc = "    \"commission_collision\","]
 #[doc = "    \"mcp_connect_failed\","]
 #[doc = "    \"unknown\""]
@@ -3426,6 +3427,8 @@ pub enum ErrorCode {
     AgentCrash,
     #[serde(rename = "unsupported_model")]
     UnsupportedModel,
+    #[serde(rename = "unsupported_provider")]
+    UnsupportedProvider,
     #[serde(rename = "commission_collision")]
     CommissionCollision,
     #[serde(rename = "mcp_connect_failed")]
@@ -3441,6 +3444,7 @@ impl ::std::fmt::Display for ErrorCode {
             Self::AuthError => f.write_str("auth_error"),
             Self::AgentCrash => f.write_str("agent_crash"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
+            Self::UnsupportedProvider => f.write_str("unsupported_provider"),
             Self::CommissionCollision => f.write_str("commission_collision"),
             Self::McpConnectFailed => f.write_str("mcp_connect_failed"),
             Self::Unknown => f.write_str("unknown"),
@@ -3456,6 +3460,7 @@ impl ::std::str::FromStr for ErrorCode {
             "auth_error" => Ok(Self::AuthError),
             "agent_crash" => Ok(Self::AgentCrash),
             "unsupported_model" => Ok(Self::UnsupportedModel),
+            "unsupported_provider" => Ok(Self::UnsupportedProvider),
             "commission_collision" => Ok(Self::CommissionCollision),
             "mcp_connect_failed" => Ok(Self::McpConnectFailed),
             "unknown" => Ok(Self::Unknown),
