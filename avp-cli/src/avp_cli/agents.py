@@ -68,7 +68,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="binary",
         tag_prefix="agent-goose",
         dev_manifest="agents/avp-goose/rust/avp-conformance.json",
-        container_version="0.0.2",
+        container_version="0.0.3",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -76,7 +76,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        container_version="0.0.2",
+        container_version="0.0.3",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission

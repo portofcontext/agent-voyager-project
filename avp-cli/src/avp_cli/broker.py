@@ -45,8 +45,12 @@ SANDBOX_HOST_ALIAS = "host.docker.internal"
 _DROP_REQUEST_HEADERS = frozenset(
     {"host", "content-length", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
 )
+# Hop-by-hop, plus `content-length` (we re-frame the body as chunked, so the
+# upstream length no longer applies). `content-encoding` is deliberately kept:
+# we forward the body raw (`iter_raw`, still gzip/br-encoded if the upstream
+# compressed it), so the client needs the header to decode it.
 _DROP_RESPONSE_HEADERS = frozenset(
-    {"connection", "keep-alive", "transfer-encoding", "te", "upgrade", "content-encoding"}
+    {"connection", "keep-alive", "transfer-encoding", "te", "upgrade", "content-length"}
 )
 
 

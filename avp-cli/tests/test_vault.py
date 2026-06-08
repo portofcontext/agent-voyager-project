@@ -140,6 +140,43 @@ def test_broker_anthropic_uses_x_api_key(fake_upstream) -> None:
         brk.stop()
 
 
+def test_broker_preserves_gzip_response() -> None:
+    """The broker forwards the body raw (iter_raw), so it must keep
+    `content-encoding` — else a client that requested gzip (e.g. the Anthropic
+    SDK) gets compressed bytes labeled plaintext and fails to parse."""
+    import gzip as _gzip
+
+    payload = b'{"ok":true,"msg":"PONG"}'
+
+    class U(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(n)
+            body = _gzip.compress(payload)
+            self.send_response(200)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), U)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    origin = f"http://127.0.0.1:{srv.server_address[1]}"
+    brk = broker.Broker()
+    brk.add_route("llm/x", broker.Route(upstream=origin, header="x-api-key", prefix="", secret="K"))
+    brk.start()
+    try:
+        # httpx auto-decodes gzip when content-encoding is present and intact.
+        r = httpx.Client().post(f"http://127.0.0.1:{brk.port}/llm/x/v1", json={"a": 1})
+        assert r.json()["msg"] == "PONG"
+    finally:
+        brk.stop()
+        srv.shutdown()
+
+
 def test_broker_refuses_unrouted_destination() -> None:
     brk = broker.Broker()
     brk.start()
