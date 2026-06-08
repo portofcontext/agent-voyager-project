@@ -16,7 +16,7 @@ requires-python = ">=3.11"
 # exactly and bumped together — the project warns of SDK/server version-skew
 # breakage on nullable fields.
 dependencies = [
-    "avp==0.1.0",
+    "agent-voyager-project==0.1.0",
     "avp-conformance==0.1.0",
     "rich>=13",
     "questionary>=2",

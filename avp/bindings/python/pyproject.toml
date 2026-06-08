@@ -3,7 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "avp"
+# Distribution name; the import package stays `avp` (mapped via hatch below).
+# `avp` is taken on PyPI by an unrelated project, so the protocol library
+# publishes under the project name. `import avp` is unchanged.
+name = "agent-voyager-project"
 version = "0.1.0"
 description = "Agent Voyager Protocol (AVP) — Python wire types (Pydantic source of truth), sinks, and resolver client for v0.1. The conformance harness ships separately as `avp-conformance`."
 readme = "README.md"

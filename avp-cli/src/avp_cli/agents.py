@@ -76,12 +76,15 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        container_version="0.0.3",
+        # 0.0.4: the wire wheel was renamed avp -> agent-voyager-project, so the
+        # bundled wheel filename changed; this release carries the new names.
+        container_version="0.0.4",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
-        # / load_built_in), which pulls avp + typer; ship all the in-repo wheels.
-        wheel_dists=("avp", "avp-conformance", "avp-claude-agent-sdk"),
+        # / load_built_in), which pulls the wire types + typer; ship all the
+        # in-repo wheels. `agent-voyager-project` is the renamed `avp` dist.
+        wheel_dists=("agent-voyager-project", "avp-conformance", "avp-claude-agent-sdk"),
     ),
 }
 

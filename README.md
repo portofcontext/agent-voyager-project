@@ -48,14 +48,14 @@ brew install --cask docker  # or: brew install colima docker && colima start
 
 ### 2 · Install the avp CLI
 
-[uv](https://github.com/astral-sh/uv) builds it (it isn't published yet):
-
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh        # install uv
-git clone https://github.com/portofcontext/agent-voyager-project
-cd agent-voyager-project && uv sync
-source .venv/bin/activate                              # puts `avp` on PATH
+curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv (if you don't have it)
+uv tool install avp-cli                            # installs the `avp` command
 ```
+
+That's it — `avp` is on your PATH. (Contributors who want the repo instead:
+`git clone https://github.com/portofcontext/agent-voyager-project && cd
+agent-voyager-project && uv sync && source .venv/bin/activate`.)
 
 ### 3 · Install agents
 
@@ -63,7 +63,7 @@ Agents are prebuilt GitHub releases
 
 ```bash
 avp agent install goose
-avg agent install claude-code
+avp agent install claude-code
 avp agent list
 ```
 
