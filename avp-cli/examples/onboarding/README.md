@@ -32,31 +32,29 @@ The artifacts each strategy ships live under [`strategies/`](strategies/), autho
 with the best-practice skills from [skills.sh](https://skills.sh) (the Anthropic
 `mcp-builder` and `skill-creator`, and an `llms.txt` generator).
 
-**The dataset is verifiable AVP tasks**, graded deterministically with the CLI's
-existing scorers (no LLM judge, so the CI gate is stable and free of grader
-noise). No bespoke scorer: this example does not grow the shared scorer registry.
+**The dataset is leak-free "can you operate AVP" questions**, graded
+deterministically with the CLI's existing `structural-match` scorer (each item
+expects `{"answer": "<value>"}`; no LLM judge, so the CI gate is stable). The
+questions are about the avp CLI / eval / supervisor layer — the acronym, the
+`structural-fidelity` scorer, the `llamaindex/ParseBench` dataset id, `avp eval
+run`, `avp cm check`, the `exact-match` scorer — which is exactly where a good
+onboarding artifact beats a wire-focused one.
 
-- **Conceptual facts** (what spec backs the event envelope? how many event types?
-  what is the `source` on every event?) → `exact-match`.
-- **Read a trajectory** (given NDJSON: total cost? stop reason? which tool ran?) →
-  `exact-match`.
-- **Author a Commission** for a scenario → `structural-match`: `item.expected` is
-  the set of fields the answer must get right (`model`, `schema_version`, the right
-  MCP-server `id`/`type`, an enabled built-in), scored as the fraction correct.
-- **Capstone: author the ParseBench setup** — the `model`, the PDF-vision MCP
-  server entry, the `structural-fidelity` scorer name, and the
-  `llamaindex/ParseBench` dataset source. This is the "blank brain → does something
-  real with AVP" target, scored field-by-field with `structural-match` /
-  `exact-match`. We grade the *authored* config, not an execution: running it needs
-  the HF dataset, a model, and the MCP server live in the agent's sandbox, which is
-  a separate paid smoke, not a per-release gate.
+**Why these and not wire trivia ("what's the `source` on every event?").** A
+first run taught us a methodology lesson worth recording: a tool-enabled agent can
+read its own `/avp/io/trajectory.ndjson` — its own emitted events carry
+`source: avp://agent`, the event-type names, and the commission snapshot — so any
+"recite a wire fact" question is **self-leakable** and a cold agent can pass it by
+`cat`-ing its own logs. The dataset therefore avoids facts that appear in an
+agent's own runtime artifacts, and the recall strategies run with **no built-in
+tools** (`enabled_builtin_tools: []`): the answer is in their context, so tools add
+nothing but the ability to flail or peek. skill/mcp/explore-cli keep tools because
+their delivery mechanism needs them.
 
-`structural-match` checks the answer carries the right fields; it does not run the
-full `Commission` validator. The rigorous version is a **follow-up**: have the
-agent write the artifact to a file in its workspace and grade by running the CLI's
-own `avp cm check` on it after the run. That reuses an existing validator and only
-needs the scoring path to see the post-run workspace (a generic capability), rather
-than a one-off scorer.
+A future, richer task ("author a ParseBench commission") is best graded by having
+the agent write the artifact to a file and validating it with the CLI's own `avp
+cm check` post-run — which sidesteps the leak (the grader validates; the agent
+isn't quizzed on its own snapshot).
 
 ## Run it
 

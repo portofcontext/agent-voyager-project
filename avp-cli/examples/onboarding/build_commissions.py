@@ -47,20 +47,29 @@ def base() -> dict:
 
 # strategy id -> the commission body (merged onto base()). Order matters only for
 # readability; the eval references them by id.
+# The pure-context-recall strategies run with NO built-in tools
+# (enabled_builtin_tools=[]): the answer is in their context, so they need no
+# tools, and disabling tools keeps the measurement clean (an agent cannot flail
+# or read its own /avp/io trajectory, whose events would otherwise leak wire
+# facts like the `source` value) and cheap (~1 turn). skill/mcp/explore-cli keep
+# tools because their delivery mechanism requires them.
+_NO_TOOLS = {"enabled_builtin_tools": []}
+
 STRATEGIES: dict[str, dict] = {
     # Control: no AVP material at all.
-    "onboard-cold": {},
-    # Skill: the real AVP SKILL.md as an inline skill.
+    "onboard-cold": {**_NO_TOOLS},
+    # Skill: the real AVP SKILL.md as an inline skill (needs the skill tool).
     "onboard-skill": {"skills": [{"id": "avp", "files": {"SKILL.md": SKILL_MD}}]},
     # Text strategies: the artifact injected as the system prompt.
-    "onboard-llms-txt": {"system_prompt": LLMS_FULL},
-    "onboard-readme-docs": {"system_prompt": README_DOCS},
-    "onboard-agents-md": {"system_prompt": AGENTS_MD},
+    "onboard-llms-txt": {"system_prompt": LLMS_FULL, **_NO_TOOLS},
+    "onboard-readme-docs": {"system_prompt": README_DOCS, **_NO_TOOLS},
+    "onboard-agents-md": {"system_prompt": AGENTS_MD, **_NO_TOOLS},
     # Needs in-sandbox tooling (excluded from the first run; see README):
-    "onboard-explore-cli": {
-        "system_prompt": EXPLORE,
-        "enabled_builtin_tools": ["shell", "bash", "write", "edit"],
-    },
+    # No enabled_builtin_tools restriction: the agent keeps its full native
+    # toolset (shell etc.) to run `uvx ... avp`. Listing names risks a
+    # commission_collision when a guessed name (e.g. "bash") isn't one the agent
+    # actually offers; absent = expose all, which is what exploration wants.
+    "onboard-explore-cli": {"system_prompt": EXPLORE},
     "onboard-mcp": {
         "system_prompt": MCP_SYSTEM,
         # The server is fetched + run by uvx from this repo's subdirectory (GitHub

@@ -5,38 +5,34 @@
     "source": "inline",
     "items": [
       {
-        "id": "event-source",
-        "prompt": "In AVP, every trajectory event carries the same `source` value identifying the producer. Respond with ONLY a JSON object of the form {\"answer\": \"<value>\"} and nothing else.",
-        "expected": { "answer": "avp://agent" }
-      },
-      {
-        "id": "closing-event",
-        "prompt": "Which AVP v0.1 trajectory event type closes a run (the final lifecycle event)? Respond with ONLY {\"answer\": \"<event_type>\"}.",
-        "expected": { "answer": "agent_stopped" }
-      },
-      {
-        "id": "usage-event",
-        "prompt": "Which AVP v0.1 trajectory event type carries the per-turn token usage and cost? Respond with ONLY {\"answer\": \"<event_type>\"}.",
-        "expected": { "answer": "assistant_message" }
+        "id": "avp-acronym",
+        "prompt": "What does the acronym \"AVP\" stand for? Respond with ONLY a JSON object {\"answer\": \"<full name>\"} and nothing else.",
+        "expected": { "answer": "Agent Voyager Project" }
       },
       {
         "id": "parsebench-scorer",
-        "prompt": "In the avp CLI, which scorer name grades ParseBench table-extraction fidelity? Respond with ONLY {\"answer\": \"<scorer-name>\"}.",
+        "prompt": "In the avp CLI, which scorer name grades ParseBench table-extraction fidelity? Respond with ONLY {\"answer\": \"<scorer-name>\"} and nothing else.",
         "expected": { "answer": "structural-fidelity" }
       },
       {
         "id": "parsebench-dataset",
-        "prompt": "What is the HuggingFace dataset id used by the avp ParseBench example? Respond with ONLY {\"answer\": \"<dataset-id>\"}.",
+        "prompt": "What HuggingFace dataset id does the avp ParseBench example use? Respond with ONLY {\"answer\": \"<owner/name>\"} and nothing else.",
         "expected": { "answer": "llamaindex/ParseBench" }
       },
       {
-        "id": "author-commission",
-        "prompt": "Write a valid AVP Commission as a single JSON object that runs the model anthropic/claude-haiku-4-5 and enables ONLY the built-in tool named shell. Output ONLY the JSON object, no prose.",
-        "expected": {
-          "schema_version": "0.1",
-          "model": "anthropic/claude-haiku-4-5",
-          "enabled_builtin_tools": ["shell"]
-        }
+        "id": "eval-run-cmd",
+        "prompt": "Which avp CLI command runs an eval config file and prints the ranked board? Respond with ONLY {\"answer\": \"<command>\"} — the command words only, no arguments, no backticks.",
+        "expected": { "answer": "avp eval run" }
+      },
+      {
+        "id": "cm-check-cmd",
+        "prompt": "Which avp CLI command validates a Commission JSON file? Respond with ONLY {\"answer\": \"<command>\"} — the command words only, no file argument, no backticks.",
+        "expected": { "answer": "avp cm check" }
+      },
+      {
+        "id": "exact-scorer",
+        "prompt": "In the avp CLI, which scorer checks that the answer text equals the expected value exactly? Respond with ONLY {\"answer\": \"<scorer-name>\"} and nothing else.",
+        "expected": { "answer": "exact-match" }
       }
     ]
   },
