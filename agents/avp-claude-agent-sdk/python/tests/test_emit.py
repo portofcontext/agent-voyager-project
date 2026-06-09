@@ -292,6 +292,30 @@ def test_client_normalizes_missing_options() -> None:
     assert isinstance(client._original_options, ClaudeAgentOptions)
 
 
+def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
+    """An inline Commission skill must reach the agent: its files written under
+    `<cwd>/.claude/skills/<id>/` (where the CLI discovers project skills) AND its
+    name passed in `options.skills`. Regression: the onboarding eval showed
+    claude-code answering cold because inline skills were dropped entirely."""
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody", "ref.md": "x"}}],
+    )
+    options = apply_commission(commission, ClaudeAgentOptions(cwd=str(tmp_path)))
+
+    skill_md = tmp_path / ".claude" / "skills" / "avp" / "SKILL.md"
+    assert skill_md.read_text() == "---\nname: avp\n---\nbody"
+    assert (tmp_path / ".claude" / "skills" / "avp" / "ref.md").read_text() == "x"
+    assert options.skills == ["avp"]  # frontmatter name, passed as the SDK filter
+
+
 def test_agent_described_carries_full_pre_commission_surface() -> None:
     """`agent_described` is built from the probe session: the agent's
     full capabilities BEFORE any Commission filter applies."""
