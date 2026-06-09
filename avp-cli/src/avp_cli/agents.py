@@ -27,10 +27,9 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from avp_conformance.manifest import AgentManifest
-
 from avp_cli import paths
 from avp_cli.agent import load_manifest
+from avp_cli.agent_manifest import AgentManifest
 from avp_cli.images import ContainerRecipe
 
 

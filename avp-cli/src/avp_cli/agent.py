@@ -35,7 +35,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from avp_conformance.manifest import AgentManifest
 from opensandbox import SandboxSync
 from opensandbox.models.execd import RunCommandOpts
 from opensandbox.models.sandboxes import Host, Volume
@@ -45,6 +44,7 @@ from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
 from avp_cli import broker, osb, paths, vault
+from avp_cli.agent_manifest import AgentManifest
 
 # How often the streaming path re-reads the growing --out file (seconds).
 _TAIL_INTERVAL = 0.06
