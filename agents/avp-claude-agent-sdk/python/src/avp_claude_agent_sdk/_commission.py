@@ -13,11 +13,11 @@
 | `mcp_servers` (inline)        | `mcp_servers` dict              | `id` becomes the dict key. `McpServerHttp` → `McpHttpServerConfig`;           |
 |                               |                                 | `McpServerStdio.command[0]` → SDK `command`, `command[1:] + args` → SDK      |
 |                               |                                 | `args`. No resolver round-trip; connection material is inline on the wire.   |
-| `skills` (inline)             | `skills` list                   | `skill.name` (SKILL.md frontmatter, fallback to `skill.id`) merged with      |
-|                               |                                 | `enabled_builtin_skills`. The SDK `skills` field is a name-based context      |
-|                               |                                 | filter and cannot ingest inline file content; skills with `files` content       |
-|                               |                                 | must also exist on disk where the SDK can discover them. TODO: write inline  |
-|                               |                                 | `Skill.files` to a temp dir and add via `setting_sources` / `add_dirs`.       |
+| `skills` (inline)             | `skills` list + files on disk   | The SDK `skills` field is a name-based context filter that cannot ingest      |
+|                               |                                 | inline content, so each `Skill.files` is materialized to                      |
+|                               |                                 | `<cwd>/.claude/skills/<id>/` (where the CLI discovers project skills once     |
+|                               |                                 | `skills` is set) and the `skill.name` (frontmatter, fallback `skill.id`) is   |
+|                               |                                 | passed in `skills`, merged with `enabled_builtin_skills`.                     |
 | `enabled_builtin_tools`       | `tools`                         | `None` → leave `options.tools` untouched (AVP spec: expose all); `[]` →      |
 |                               |                                 | `tools=[]` (expose none); `[...]` → `tools=[...]` (expose only the listed). |
 | `enabled_builtin_skills`      | `skills`                        | Merged with Commission-supplied skill names.                                 |
@@ -42,6 +42,7 @@ material; the agent dials and loads them directly.
 
 import dataclasses
 from collections.abc import AsyncIterable
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, McpServerConfig
@@ -85,11 +86,12 @@ def apply_commission(
     - `enabled_builtin_tools` → `tools`
     - `output_schema`         → `output_format` (wrapped as json_schema)
     - `mcp_servers` (inline)  → `mcp_servers`
+    - `skills` (inline)       → files materialized to `<cwd>/.claude/skills/<id>/`
+                                + `skills` (names), merged with `enabled_builtin_skills`
+    - `enabled_builtin_skills`→ `skills` (names)
 
     TODO:
-    - `skills` (inline) + `enabled_builtin_skills` filter
     - `enabled_builtin_mcp_servers`
-    - `enabled_builtin_skills`
     """
     if commission is None:
         return options
@@ -121,7 +123,39 @@ def apply_commission(
     if commission.mcp_servers:
         updates["mcp_servers"] = {**(base.mcp_servers or {}), **_map_mcp_servers(commission)}
 
+    # Inline skills: the SDK `skills` field is a name-based context filter that
+    # cannot ingest inline content, so the files must exist on disk where the CLI
+    # discovers them. Materialize each Skill's files under the run cwd's
+    # `.claude/skills/<id>/` (the SDK loads project skills from there once
+    # `skills` is set) and pass the names. enabled_builtin_skills merge in too.
+    if commission.skills:
+        _materialize_skills(commission, _run_cwd(base))
+    skill_names = _map_skills(commission)
+    if skill_names:
+        updates["skills"] = skill_names
+
     return dataclasses.replace(base, **updates) if updates else base
+
+
+def _run_cwd(options: ClaudeAgentOptions) -> Path:
+    """The directory the SDK subprocess will run in (and where it discovers
+    project skills): `options.cwd` if set, else the current process cwd."""
+    return Path(options.cwd).expanduser() if options.cwd else Path.cwd()
+
+
+def _materialize_skills(commission: Commission, base_dir: Path) -> None:
+    """Write each inline Skill's files under `<base_dir>/.claude/skills/<id>/`.
+
+    The SDK discovers project skills from the run cwd's `.claude/skills/` once
+    `ClaudeAgentOptions.skills` is set (it then defaults `setting_sources` to
+    include "project"). `Skill.files` always contains "SKILL.md" (validated on
+    the wire model); any companion files are written alongside it.
+    """
+    for skill in commission.skills or []:
+        dest = base_dir / ".claude" / "skills" / skill.id
+        dest.mkdir(parents=True, exist_ok=True)
+        for filename, content in skill.files.items():
+            (dest / filename).write_text(content)
 
 
 def apply_prompt(

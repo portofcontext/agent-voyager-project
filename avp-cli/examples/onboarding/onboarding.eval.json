@@ -1,0 +1,53 @@
+{
+  "name": "avp-onboarding",
+  "agents": ["goose", "claude-code"],
+  "dataset": {
+    "source": "inline",
+    "items": [
+      {
+        "id": "event-source",
+        "prompt": "In AVP, every trajectory event carries the same `source` value identifying the producer. Respond with ONLY a JSON object of the form {\"answer\": \"<value>\"} and nothing else.",
+        "expected": { "answer": "avp://agent" }
+      },
+      {
+        "id": "closing-event",
+        "prompt": "Which AVP v0.1 trajectory event type closes a run (the final lifecycle event)? Respond with ONLY {\"answer\": \"<event_type>\"}.",
+        "expected": { "answer": "agent_stopped" }
+      },
+      {
+        "id": "usage-event",
+        "prompt": "Which AVP v0.1 trajectory event type carries the per-turn token usage and cost? Respond with ONLY {\"answer\": \"<event_type>\"}.",
+        "expected": { "answer": "assistant_message" }
+      },
+      {
+        "id": "parsebench-scorer",
+        "prompt": "In the avp CLI, which scorer name grades ParseBench table-extraction fidelity? Respond with ONLY {\"answer\": \"<scorer-name>\"}.",
+        "expected": { "answer": "structural-fidelity" }
+      },
+      {
+        "id": "parsebench-dataset",
+        "prompt": "What is the HuggingFace dataset id used by the avp ParseBench example? Respond with ONLY {\"answer\": \"<dataset-id>\"}.",
+        "expected": { "answer": "llamaindex/ParseBench" }
+      },
+      {
+        "id": "author-commission",
+        "prompt": "Write a valid AVP Commission as a single JSON object that runs the model anthropic/claude-haiku-4-5 and enables ONLY the built-in tool named shell. Output ONLY the JSON object, no prose.",
+        "expected": {
+          "schema_version": "0.1",
+          "model": "anthropic/claude-haiku-4-5",
+          "enabled_builtin_tools": ["shell"]
+        }
+      }
+    ]
+  },
+  "scorer": { "name": "structural-match", "threshold": 1.0 },
+  "commissions": [
+    "onboard-cold",
+    "onboard-skill",
+    "onboard-llms-txt",
+    "onboard-readme-docs",
+    "onboard-agents-md",
+    "onboard-explore-cli",
+    "onboard-mcp"
+  ]
+}

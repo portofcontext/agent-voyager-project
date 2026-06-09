@@ -1,0 +1,38 @@
+# Agent Voyager Project (AVP)
+
+> AVP is an open standard for the agent-execution case: a supervisor sends an
+> agent a JSON **Commission** (what to do, which model, what resources), the agent
+> runs and streams back a **Trajectory** of CloudEvents the supervisor observes.
+> AVP specializes existing standards (CloudEvents, OpenTelemetry spans, JSON-RPC,
+> MCP, Agent Skills) rather than inventing wire formats.
+
+AVP is defined by four specs that compose independently: Commission (the run
+config the supervisor sends), Trajectory (the event stream the agent emits),
+Agent Descriptor (what the agent advertises about itself), and the optional
+Resolver API (JSON-RPC for dereferencing refs). The data-shape specs are the
+common path; the in-repo agents carry connection material inline on the
+Commission. There is no supervisor-to-agent push channel: once the Commission is
+sent, the supervisor only observes. The local CLI `avp` is a worked supervisor:
+it scaffolds Commissions and runs them over a dataset to rank a board.
+
+## Specs
+
+- [Commission](avp/core/spec/v0.1/commission.md): the run config sent at startup (model, prompt, system_prompt, inline mcp_servers/skills, enabled_builtin_* allowlists, output_schema).
+- [Trajectory](avp/core/spec/v0.1/trajectory.md): the agent's event stream (ten CloudEvents types: run_requested, agent_described, agent_started, agent_stopped, assistant_message, tool_invoked, tool_returned, subagent_invoked, subagent_returned, error_occurred).
+- [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md): the agent's per-build self-description (built-in tools/skills/mcp_servers/subagents, models, capabilities).
+- [Resolver API](avp/core/spec/v0.1/resolver.md): optional JSON-RPC for dereferencing opaque refs.
+
+## Foundations
+
+- [FOUNDATIONS.md](FOUNDATIONS.md): the upstream standards AVP specializes (CloudEvents 1.0 envelope, OTel span ids, OTel GenAI projection, JSON-RPC 2.0, MCP, Agent Skills) and the avp.* attribute namespace.
+
+## Using the CLI
+
+- [avp-cli/README.md](avp-cli/README.md): the `avp` CLI. `avp init` scaffolds an eval; `avp eval run <config>.eval.json` runs commissions over a dataset and prints a ranked board; `avp cm create` builds a Commission into your library; `avp agent install` installs an agent.
+- [Eval catalog](avp-cli/src/avp_cli/catalog/): worked eval configs (capitals, parsebench) showing the eval.json shape (name, agents, dataset, scorer, commissions).
+
+## Optional
+
+- [SKILL.md](SKILL.md): the full AVP skill for AI assistants (concepts, the three build patterns, where to read next).
+- [Conformance cases](avp/core/conformance/src/avp_conformance/cases/v0.1/): executable test cases pinning down wire behavior.
+- [llms-full.txt](strategies/llms-txt/llms-full.txt): this index with the key content inlined, for use when the linked docs are not fetchable.

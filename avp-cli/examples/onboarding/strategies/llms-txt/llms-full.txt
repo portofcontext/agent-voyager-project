@@ -1,0 +1,118 @@
+# Agent Voyager Project (AVP) — full reference
+
+> AVP is an open standard for the agent-execution case. A supervisor sends an
+> agent a JSON **Commission** (what to do, which model, what resources); the agent
+> runs and streams back a **Trajectory** of CloudEvents the supervisor observes.
+> There is no supervisor-to-agent push channel: once the Commission is sent, the
+> supervisor only observes.
+
+This file inlines the AVP knowledge needed to work with the wire format and the
+`avp` CLI, for use when the repo docs are not fetchable (e.g. inside a sandbox).
+
+## The four specs (compose independently)
+
+- **Commission**: the run config the supervisor sends at startup.
+- **Trajectory**: the ordered event stream the agent emits as it runs.
+- **Agent Descriptor**: what the agent advertises about itself, per build.
+- **Resolver API** (optional): JSON-RPC for dereferencing opaque refs. The
+  in-repo agents instead carry connection material inline on the Commission.
+
+## Built on existing standards
+
+AVP specializes, it does not reinvent. Every event is a **CloudEvents 1.0**
+envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `data`)
+carrying **OpenTelemetry** span identification (`trace_id`, `span_id`,
+`parent_span_id`) on its `data`. The payload uses AVP's own `avp.*` attribute
+namespace (`avp.usage`, `avp.cost_usd`, `avp.tool.name`, ...); OTel GenAI
+conventions are NOT on the wire (a documented `avp.*` → `gen_ai.*` projection
+ships for forwarding). RPC is **JSON-RPC 2.0**. Tool descriptors are **MCP**-shaped.
+Skills follow the **Agent Skills** SKILL.md format.
+
+## The Commission (run config)
+
+A `Commission` is a JSON object. Key fields:
+
+- `schema_version`: `"0.1"`.
+- `run_id`: a string id for the run.
+- `model`: REQUIRED, a canonical `origin/model` slug, e.g. `"anthropic/claude-haiku-4-5"`, `"openai/gpt-4o"`, `"openrouter/anthropic/claude-3.5-sonnet"`.
+- `prompt`: the task for the agent.
+- `system_prompt`: optional system prompt.
+- `mcp_servers`: optional list of inline MCP servers the agent dials directly:
+  - stdio: `{"type": "stdio", "id": "<id>", "command": ["uvx", "some-pkg"]}`
+  - http:  `{"type": "http", "id": "<id>", "url": "https://..."}`
+- `skills`: optional list of inline skills, each `{"id": "<id>", "files": {"SKILL.md": "<content>", ...}}` (the `files` map MUST contain a "SKILL.md" key).
+- `enabled_builtin_tools`: optional allowlist of the agent's built-in tool names.
+  Absent = all built-ins; `[]` = none; a subset = only those. Same subtractive
+  semantics for `enabled_builtin_mcp_servers` / `_subagents` / `_skills`.
+- `output_schema`: optional JSON Schema for structured output.
+
+Minimal valid Commission:
+
+```json
+{"schema_version": "0.1", "run_id": "demo", "model": "anthropic/claude-haiku-4-5", "prompt": "Say hi."}
+```
+
+## The Trajectory (event stream)
+
+Ten event types in v0.1, all past-tense facts, `source` always `avp://agent`:
+`run_requested`, `agent_described`, `agent_started`, `agent_stopped`,
+`assistant_message`, `tool_invoked`, `tool_returned`, `subagent_invoked`,
+`subagent_returned`, `error_occurred`. A run opens with `run_requested` →
+`agent_described` → `agent_started` and closes with `agent_stopped` carrying a
+stop reason. Each `assistant_message` (one model turn) carries `avp.content`,
+`avp.usage` (per-turn token deltas), and `avp.cost_usd`. The agent publishes no
+cumulative totals; the consumer reduces the per-turn deltas.
+
+## The `avp` CLI (the worked supervisor)
+
+- `avp init [benchmark]` — scaffold an eval config (`<name>.eval.json`) in place
+  and seed its commissions into your library (`~/.avp/commissions/`).
+- `avp eval run <config>.eval.json` — run the commissions over the dataset against
+  the agent(s) and print a ranked board (accuracy, pass-rate, $/run, turns/run).
+- `avp cm create [id]` — build a Commission into your library (wizard or flags).
+- `avp cm check <id|file>` — validate a library commission or a Commission JSON file.
+- `avp agent install <name>` — install a prebuilt agent (goose, claude-code).
+- `avp run --agent A --env E "<task>"` — drop an agent into an environment and
+  give it a task. Every run executes in a sandbox.
+
+## Eval config shape (`<name>.eval.json`)
+
+```json
+{
+  "name": "my-eval",
+  "agents": ["goose"],
+  "dataset": { "source": "inline", "items": [{"id": "a", "prompt": "...", "expected": {...}}] },
+  "scorer":  { "name": "structural-match", "threshold": 1.0 },
+  "commissions": ["baseline", "few-shot"]
+}
+```
+
+- `dataset.source`: `inline` (items array), `file` (a `.jsonl` `path` + `input`
+  template + `expected_field`), or `huggingface` (`id` + `split` + `input` +
+  `expected_field`; needs the `huggingface` extra).
+- `scorer.name`: `exact-match`, `structural-match` (fraction of `expected` dict
+  keys matched), `structural-fidelity` (rapidfuzz table-content match; needs the
+  `parsebench` extra), or `llm-judge` (needs the `llm-judge` extra + a key).
+- `commissions`: ids resolved from the library; each commission carries its own
+  `model` (no eval-level default).
+
+## Capstone: a ParseBench eval
+
+ParseBench (PDF table/structure extraction) is run by: a `huggingface` dataset
+(`id: "llamaindex/ParseBench"`, a `split` like `"table[:2]"`, an `input` URL
+template pointing at the PDF, `expected_field`), the `structural-fidelity` scorer,
+and a commission that gives the agent a **PDF-vision MCP server** (e.g. stdio
+`{"type": "stdio", "id": "pdf-vision", "command": ["uvx", "--from", "git+https://github.com/I-CAN-hack/pdf-mcp.git", "pdf-mcp"]}`)
+plus the `shell`/`write`/`edit` built-in tools and a prompt that says: download the
+PDF, render the page to an image, look at it, and reproduce the table as one HTML
+`<table>`. The scorer compares the agent's table content (markup stripped) to the
+expected markdown.
+
+## Rules to respect
+
+- No mid-run push to the agent. Runtime gating belongs in a managed MCP server the
+  agent calls, not a supervisor callback.
+- Every event has `source = avp://agent`; supervisor attribution rides inside
+  `run_requested.data` (`avp.supervisor.*` + the `avp.commission` snapshot).
+- Workspace provisioning, secret injection, and OS sandboxing are outside AVP's
+  scope; AVP defines the wire, not the deployment topology.
