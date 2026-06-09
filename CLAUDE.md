@@ -123,7 +123,8 @@ The seams in this repo:
 | **Conformance** | `avp/core/conformance/src/avp_conformance/cases/v0.1/*.json` | Wire-level rules (every MUST across the specs); driven via `avp-conformance` against an agent on a real model |
 | **Unit** | `<pkg>/tests/test_*.py` | Single-component behavior with seams mocked |
 | **Seam** | `tests/test_cli_smoke.py`, `tests/test_multi_turn.py`, translator-state tests | Cross-component bugs that unit tests can't see |
-| **Real-LLM** | `tests/test_real_llm.py` (gated `-m real_llm` + `ANTHROPIC_API_KEY`) | End-to-end correctness against actual model responses |
+| **Real-model** | `avp-conformance check` on a real model (`make conformance-check`, paid) | End-to-end correctness of an agent against actual model responses |
+
 ## Decision tree when adding a feature
 
 1. **Wire-level rule (a MUST in any spec)** → add a conformance case.
@@ -131,7 +132,8 @@ The seams in this repo:
 3. **Behavior depends on cross-component state** (history shape, cumulative
    usage, CLI lifecycle, subprocess CWD) → **seam test**. This is the layer
    that's easy to skip and where the bugs hide.
-4. **Provider-specific real-model behavior** → real-LLM smoke, gated.
+4. **Provider-specific real-model behavior** → the v0.1 conformance suite on a
+   real model (`make conformance-check`), gated.
 
 ## Deterministic checks
 
@@ -157,9 +159,9 @@ changed but the generated Rust / TypeScript bindings under `avp/bindings/rust/`
 and `avp/bindings/typescript/` weren't regenerated.
 
 The **paid** checks cost real money and need `ANTHROPIC_API_KEY` (~$0.10 to
-$0.20 on Haiku): `make test-real-llm` (real-LLM tests for both agents),
-`make conformance-check` (the v0.1 suite on a real model), and
-`make bindings-test` (`cargo test` + `npm test` against the generated types).
+$0.20 on Haiku): `make conformance-check` (the v0.1 suite run against both
+agents on a real model) and `make bindings-test` (`cargo test` + `npm test`
+against the generated types).
 
 Run the paid checks whenever you've changed something that could pass unit /
 seam tests but break real-model integration. Concretely, that's any of:
@@ -181,7 +183,7 @@ seam tests but break real-model integration. Concretely, that's any of:
 
 Skip the paid checks only for doc-only changes, internal refactors with no
 observable wire impact, or test-only changes. When in doubt, run them.
-The real-LLM tests have caught silent bugs that no mock could surface
+The real-model conformance run has caught silent bugs that no mock could surface
 (model-side flakiness, SDK-version drift, cost-calculation arithmetic
 that compiled fine but undercounted by 30%).
 
@@ -259,7 +261,7 @@ Python member across those trees.
   tests: `make test-docker`.
 - `avp/scripts/`: `generate-schemas.py`, `generate-bindings.sh`, `build-skill.sh`, `sync-prices.py`.
 - `Makefile`: `make help` lists all targets; `make check` is the free
-  pre-commit floor, with paid real-model targets (`test-real-llm`,
-  `conformance-check`) for wire / agent-loop changes (see above).
+  pre-commit floor, with the paid real-model target (`conformance-check`)
+  for wire / agent-loop changes (see above).
 - `FOUNDATIONS.md`: what AVP is built on (CloudEvents, OTel GenAI, OTel spans,
   JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes.

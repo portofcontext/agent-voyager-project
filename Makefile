@@ -34,7 +34,7 @@ help:
 	@echo "AVP: orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
-	@echo "    make test            pytest across every package, real-LLM + docker excluded"
+	@echo "    make test            pytest across every package, docker seam tests excluded"
 	@echo "    make test-docker     real-sandbox seam tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
 	@echo "    make lint            ruff check"
@@ -49,7 +49,6 @@ help:
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
-	@echo "    make test-real-llm      real-LLM smoke tests for both agents"
 	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
 	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
 	@echo ""
@@ -211,20 +210,6 @@ check: format-check lint test conformance bindings-check
 
 
 # ── Paid targets (real LLM) ───────────────────────────────────────────────────
-
-
-.PHONY: test-real-llm
-test-real-llm:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set; real-LLM tests require it"; exit 2; \
-	fi
-	@failed=""; \
-	for pkg in agents/avp-claude-agent-sdk/python; do \
-		echo ""; echo "==== $$pkg (real-LLM) ===="; \
-		(cd $$pkg && uv run python -m pytest -m real_llm -q; e=$$?; [ $$e -eq 0 ] || [ $$e -eq 5 ]) || failed="$$failed $$pkg"; \
-	done; \
-	if [ -n "$$failed" ]; then echo ""; echo "FAILED packages:$$failed"; exit 1; fi; \
-	echo ""; echo "All real-LLM tests passed."
 
 
 .PHONY: test-live

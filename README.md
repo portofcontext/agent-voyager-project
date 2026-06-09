@@ -49,13 +49,13 @@ brew install --cask docker  # or: brew install colima docker && colima start
 ### 2 · Install the avp CLI
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv (if you don't have it)
-uv tool install avp-cli                            # installs the `avp` command
+# install uv (if you don't have it)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# installs the `avp` command
+uv tool install avp-cli                            
 ```
 
-That's it — `avp` is on your PATH. (Contributors who want the repo instead:
-`git clone https://github.com/portofcontext/agent-voyager-project && cd
-agent-voyager-project && uv sync && source .venv/bin/activate`.)
+That's it — `avp` is installed.
 
 ### 3 · Install agents
 
@@ -97,13 +97,12 @@ avp eval · capitals-extraction · 2 items · agent=goose
 
 ### 5 · Add a second agent and compare (optional)
 
-Claude Code gives you a head-to-head. It drives the `claude` CLI, so this is the one path that also needs [Node 18+](https://nodejs.org):
+Claude Code gives you a head-to-head. [Claude Code installation](https://code.claude.com/docs/en/quickstart)
 
 ```bash
-npm install -g @anthropic-ai/claude-code               # the claude CLI
 avp agent install claude-code
 avp init capitals --agent goose,claude-code
-avp eval run capitals.eval.json                 # a scorecard per agent + a head-to-head table
+avp eval run capitals.eval.json
 ```
 
 ## Run an agent on a task, in an environment
@@ -137,7 +136,7 @@ cd agent-voyager-project
 make sync && make check
 ```
 
-`make help` lists every target. `make check` is the free floor (format, lint, tests, conformance, bindings drift). The paid targets (`make test-real-llm`, `make conformance-check`) run against real Anthropic models and cost about $0.10 to $0.20 per run. See [CLAUDE.md](CLAUDE.md) to contribute and [`proposals/`](proposals/) for the spec RFC process.
+`make help` lists every target. `make check` is the free floor (format, lint, tests, conformance, bindings drift). The paid target `make conformance-check` runs the v0.1 suite against real models. See [CLAUDE.md](CLAUDE.md) to contribute and [`proposals/`](proposals/) for the spec RFC process.
 
 ## What AVP defines
 
