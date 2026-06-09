@@ -75,10 +75,11 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        # 0.0.5: inline Commission skills are now delivered to the agent
-        # (materialized to .claude/skills + passed in options.skills). 0.0.4
-        # renamed the bundled wheel avp -> agent-voyager-project.
-        container_version="0.0.5",
+        # 0.0.6: inline Commission skills now actually load — setting_sources
+        # gets "project" so the materialized .claude/skills/<id> is discovered
+        # (0.0.5 wrote the files + set options.skills but the isolated
+        # setting_sources=[] meant project skills never loaded).
+        container_version="0.0.6",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission

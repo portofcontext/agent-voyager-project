@@ -130,6 +130,16 @@ def apply_commission(
     # `skills` is set) and pass the names. enabled_builtin_skills merge in too.
     if commission.skills:
         _materialize_skills(commission, _run_cwd(base))
+        # The materialized skill lives in the run cwd's `.claude/skills/`, a
+        # PROJECT skill. Project skills load only when `setting_sources` includes
+        # "project" — and a caller may pass `setting_sources=[]` for host
+        # isolation (the conformance run does, to avoid inheriting ~/.claude).
+        # Add "project" so the inline skill is discovered, without adding "user"
+        # (which would re-inherit the host settings the caller isolated from).
+        sources = list(base.setting_sources or [])
+        if "project" not in sources:
+            sources.append("project")
+        updates["setting_sources"] = sources
     skill_names = _map_skills(commission)
     if skill_names:
         updates["skills"] = skill_names

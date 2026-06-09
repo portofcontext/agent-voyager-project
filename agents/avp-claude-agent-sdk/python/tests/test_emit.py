@@ -314,6 +314,30 @@ def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
     assert skill_md.read_text() == "---\nname: avp\n---\nbody"
     assert (tmp_path / ".claude" / "skills" / "avp" / "ref.md").read_text() == "x"
     assert options.skills == ["avp"]  # frontmatter name, passed as the SDK filter
+    # The materialized skill is a PROJECT skill; it loads only if setting_sources
+    # includes "project". Must be added even when the caller isolated with [].
+    assert "project" in (options.setting_sources or [])
+
+
+def test_inline_skill_adds_project_to_isolated_setting_sources(tmp_path) -> None:
+    """A caller that isolates with setting_sources=[] (the conformance run does)
+    must still get "project" added so the materialized skill is discovered — but
+    not "user" (which would re-inherit the host ~/.claude it isolated from)."""
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody"}}],
+    )
+    options = apply_commission(
+        commission, ClaudeAgentOptions(cwd=str(tmp_path), setting_sources=[])
+    )
+    assert options.setting_sources == ["project"]
 
 
 def test_agent_described_carries_full_pre_commission_surface() -> None:
