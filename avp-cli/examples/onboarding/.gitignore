@@ -1,0 +1,9 @@
+# Commissions are generated from the strategy artifacts by build_commissions.py
+# (the artifacts under strategies/ are the source of truth). Don't commit the
+# generated copies: the skill commission would duplicate the 18KB SKILL.md and
+# drift. Run `python build_commissions.py` to (re)create them.
+strategies/*/*.commission.json
+
+# uv build artifacts from testing the MCP server locally.
+strategies/mcp/.venv/
+strategies/mcp/uv.lock

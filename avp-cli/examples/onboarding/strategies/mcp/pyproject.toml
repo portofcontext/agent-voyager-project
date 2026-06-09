@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avp-knowledge-mcp"
+version = "0.1.0"
+description = "An MCP server that teaches an agent the Agent Voyager Project (AVP): search and read the AVP docs and examples as tools."
+requires-python = ">=3.11"
+dependencies = ["mcp>=1.2"]
+
+[project.scripts]
+avp-knowledge-mcp = "avp_knowledge_mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avp_knowledge_mcp"]
