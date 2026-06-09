@@ -115,6 +115,29 @@ The pattern: build a `Commission` (`avp.commission.Commission`) with the supervi
 
 See `avp/core/spec/v0.1/examples/commission.json` for a wire-format equivalent and `avp-cli/` (the `avp` CLI) for a worked supervisor that composes Commissions from setups and ranks a board.
 
+## Using the `avp` CLI (the worked supervisor)
+
+When the task is to RUN or EVALUATE agents (not author wire bytes), use the `avp`
+CLI. It installs to `uv tool install avp-cli`; every `avp eval` / `avp run`
+executes the agent in a Docker-backed sandbox (the one prerequisite is Docker).
+
+- `avp init [benchmark]`: scaffold a `<name>.eval.json` and seed its commissions into `~/.avp/commissions/`.
+- `avp eval run <config>.eval.json`: run the commissions over the dataset and print a ranked board (accuracy, pass-rate, $/run, turns/run).
+- `avp cm create [id]` / `avp cm check <id|file>`: build a Commission into the library / validate a Commission (library id or JSON file).
+- `avp agent install <name>` / `avp agent list` / `avp agent describe <name>`: install and inspect agents (goose, claude-code).
+- `avp run --agent A --env E "<task>"`: drop an agent into a declarative environment and give it a task.
+
+An **eval is a JSON config**, not code: `{name, agents, dataset, scorer, commissions}`.
+- `dataset.source`: `inline` (items array), `file` (a `.jsonl` path + `input` template + `expected_field`), or `huggingface` (`id` + `split` + `input` + `expected_field`; needs the `huggingface` extra).
+- `scorer.name`: `exact-match`, `structural-match` (fraction of expected dict keys matched), `structural-fidelity` (rapidfuzz table-content match; needs the `parsebench` extra), or `llm-judge` (needs the `llm-judge` extra + a key).
+- `commissions`: ids resolved from the library; each commission carries its own `model` (no eval-level default).
+
+Worked example: **ParseBench** (PDF table extraction): a `huggingface` dataset
+(`id: "llamaindex/ParseBench"`, a `split` like `"table[:2]"`, an `input` URL
+template, an `expected_field`), the `structural-fidelity` scorer, and a commission
+that wires a PDF-vision MCP server (stdio `pdf-vision`) plus the `shell`/`write`/`edit`
+built-in tools. See `avp-cli/src/avp_cli/catalog/` for the catalog configs.
+
 ## Two classes of trajectory facts
 
 Whatever you build, the trajectory carries two distinct kinds of facts. Surface them separately to consumers; don't conflate.
