@@ -1,15 +1,21 @@
 name: Publish to PyPI
 
-# Publishes the four AVP Python distributions to PyPI via Trusted Publishing
+# Publishes the single AVP CLI distribution to PyPI via Trusted Publishing
 # (OIDC, no stored token). Triggered by a `pypi-v<version>` tag, or run manually
 # from the Actions tab.
 #
-#   agent-voyager-project   the wire types (imported as `avp`; `avp` is taken on PyPI)
-#   avp-conformance         the conformance harness
-#   avp-claude-agent-sdk    the Claude Agent SDK observer agent
-#   avp-cli                 the `avp` CLI (console script `avp`)
+#   avp-cli   the `avp` CLI (console script `avp`), and the ONLY package we
+#             publish. It vendors the `avp` wire types and the `avp_conformance`
+#             harness into its own wheel (see avp-cli/pyproject.toml's
+#             force-include), so `uv tool install avp-cli` is the whole install.
+#             The agents themselves are NOT on PyPI: they ship as GitHub releases
+#             and are installed into the sandbox by `avp agent install`.
 #
-# ONE-TIME SETUP (per project, before the first publish): on PyPI create each
+# Wheel-only: avp-cli's wheel reaches into sibling workspace dirs to vendor those
+# sources, which a package-rooted sdist can't carry, so we build `--wheel`
+# directly rather than the default sdist-then-wheel.
+#
+# ONE-TIME SETUP (before the first publish): on PyPI create the `avp-cli`
 # project's Trusted Publisher as a "pending publisher" pointing at this repo +
 # this workflow file (`release-pypi.yml`) + environment `pypi`:
 #   https://pypi.org/manage/account/publishing/
@@ -25,7 +31,7 @@ permissions:
 
 jobs:
   build:
-    name: Build all dists
+    name: Build avp-cli wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,13 +39,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
-      - name: Build sdists + wheels
-        # The wire types build as `agent-voyager-project` (import stays `avp`).
-        run: |
-          uv build --package agent-voyager-project --out-dir dist
-          uv build --package avp-conformance --out-dir dist
-          uv build --package avp-claude-agent-sdk --out-dir dist
-          uv build --package avp-cli --out-dir dist
+      - name: Build wheel
+        run: uv build --wheel --package avp-cli --out-dir dist
       - uses: actions/upload-artifact@v4
         with:
           name: dist

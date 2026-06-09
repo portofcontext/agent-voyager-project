@@ -269,19 +269,15 @@ name = "avp-cli"
 version = "0.1.0"
 source = { editable = "avp-cli" }
 dependencies = [
-    { name = "agent-voyager-project" },
-    { name = "avp-conformance" },
     { name = "httpx" },
     { name = "opensandbox" },
     { name = "opensandbox-server" },
+    { name = "pydantic" },
     { name = "questionary" },
     { name = "rich" },
 ]
 
 [package.optional-dependencies]
-claude-agent = [
-    { name = "avp-claude-agent-sdk" },
-]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -299,22 +295,20 @@ parsebench = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-voyager-project", editable = "avp/bindings/python" },
     { name = "anthropic", marker = "extra == 'llm-judge'", specifier = ">=0.40" },
-    { name = "avp-claude-agent-sdk", marker = "extra == 'claude-agent'", editable = "agents/avp-claude-agent-sdk/python" },
-    { name = "avp-conformance", editable = "avp/core/conformance" },
     { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3" },
     { name = "datasets", marker = "extra == 'parsebench'", specifier = ">=3" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "opensandbox", specifier = "==0.1.9" },
     { name = "opensandbox-server", specifier = "==0.1.14" },
+    { name = "pydantic", specifier = ">=2.6,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "questionary", specifier = ">=2" },
     { name = "rapidfuzz", marker = "extra == 'parsebench'", specifier = ">=3" },
     { name = "rich", specifier = ">=13" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
-provides-extras = ["claude-agent", "huggingface", "parsebench", "llm-judge", "dev"]
+provides-extras = ["huggingface", "parsebench", "llm-judge", "dev"]
 
 [[package]]
 name = "avp-conformance"
