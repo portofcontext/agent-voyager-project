@@ -1,7 +1,5 @@
 # Working in this repo
 
-> Read this before adding code. Claude Code (and the user) will load it
-> automatically; the rules below are how AVP stays correct over time.
 
 > [!IMPORTANT]
 > ## v0.1 is a work in progress. Breaking changes are allowed.
@@ -186,6 +184,21 @@ observable wire impact, or test-only changes. When in doubt, run them.
 The real-LLM tests have caught silent bugs that no mock could surface
 (model-side flakiness, SDK-version drift, cost-calculation arithmetic
 that compiled fine but undercounted by 30%).
+
+## Releasing
+
+Releases are git tags; CI builds and publishes. Cut them from a clean `main`
+with the Makefile, which derives each version from its source of truth so the
+tag can't drift:
+
+- `make release-cli`: tag `pypi-v<version>` from `avp-cli/pyproject.toml`,
+  published to PyPI via Trusted Publishing. `avp-cli` is the ONLY PyPI package; it
+  vendors the `avp` wire types into its wheel (so `import avp` ships inside it, not
+  as a separate dist).
+- `make release-goose` / `make release-claude-code`: tag `agent-<name>-v<version>`
+  from `container_version` in `avp_cli.agents`, published as a GitHub release the
+  CLI installs. Bumping an agent means editing its `container_version`, committing,
+  then running the target.
 
 ## Things you should not do
 

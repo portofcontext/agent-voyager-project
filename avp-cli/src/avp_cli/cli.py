@@ -284,7 +284,7 @@ def _finish_run(ev: Eval, boards: list, out: Path, run_id: str) -> None:
     console.out.print()
     console.out.print(
         f"  [bold {brand.SAIL}]{brand.SAILBOAT} {run_id}[/]   "
-        f"view it: [bold]uv run avp eval view {run_id}[/bold]"
+        f"view it: [bold]avp eval view {run_id}[/bold]"
     )
 
 
@@ -402,7 +402,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         body.append(
             f"\nthis benchmark needs: [bold]uv sync --extra {' --extra '.join(entry.needs)}[/bold]"
         )
-    body.append(f"\nnext:\n  uv run avp eval run {target.name}")
+    body.append(f"\nnext:\n  avp eval run {target.name}")
     console.panel(entry.title, "\n".join(body), style="green")
     return 0
 
@@ -964,7 +964,7 @@ def _cmd_eval_list(args: argparse.Namespace) -> int:
             str(len(r.get("commissions", []))),
         )
     console.out.print(table)
-    console.note("view one:  uv run avp eval view <id>   (no arg opens the most recent)")
+    console.note("view one:  avp eval view <id>   (no arg opens the most recent)")
     return 0
 
 

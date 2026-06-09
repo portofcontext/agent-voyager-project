@@ -53,10 +53,15 @@ help:
 	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
 	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
 	@echo ""
+	@echo "  Releases (cut from main; push a tag, CI builds + publishes):"
+	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>)"
+	@echo "    make release-goose       release the goose agent (tag agent-goose-v<pinned version>)"
+	@echo "    make release-claude-code release the claude-code agent (tag agent-claude-code-v<pinned version>)"
+	@echo "                             agent versions come from container_version in avp_cli.agents"
+	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
 	@echo "    make build-agents    build both agents' artifacts into dist/agents for local install"
-	@echo "    make onboarding-smoke  run the README Quickstart in a clean container (AGENT=goose|claude-code|all, PAID=1)"
 	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete; PAID=1 adds the vault-broker finale)"
 
 
@@ -229,24 +234,73 @@ test-live:
 	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
+# ── Releases ──────────────────────────────────────────────────────────────────
+#
+# Every release is a pushed git tag; CI does the build + publish (PyPI via
+# Trusted Publishing, agents via GitHub releases). These targets just cut the
+# right tag from a clean main, deriving the version from the single source of
+# truth so the tag can never drift from what the code expects:
+#   - avp-cli  -> version in avp-cli/pyproject.toml        (tag pypi-v<version>)
+#   - agents   -> container_version in avp_cli.agents      (tag agent-<name>-v<version>)
+# To bump an agent, edit its container_version, commit, then `make release-<name>`.
+
+
+# Guard shared by every release target: on main, clean tree, in sync with origin.
+.PHONY: _release-guard
+_release-guard:
+	@test "$$(git rev-parse --abbrev-ref HEAD)" = "main" \
+		|| { echo "error: releases are cut from main (you are on $$(git rev-parse --abbrev-ref HEAD))"; exit 1; }
+	@git diff --quiet && git diff --cached --quiet \
+		|| { echo "error: working tree is dirty; commit or stash before releasing"; exit 1; }
+	@git fetch -q origin main \
+		&& test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" \
+		|| { echo "error: local main is not in sync with origin/main; push or pull first"; exit 1; }
+
+
+# Tag + push a release. $(1) = tag, $(2) = annotation. Refuses to clobber an
+# existing tag (bump the version in its source of truth instead).
+define cut_release
+	@git rev-parse -q --verify "refs/tags/$(1)" >/dev/null \
+		&& { echo "error: tag $(1) already exists; bump the version first"; exit 1; } || true
+	@echo "→ cutting $(1)"
+	@git tag -a "$(1)" -m "$(2)" && git push origin "$(1)"
+	@echo "✓ pushed $(1); watch the build with: gh run watch \$$(gh run list -L1 --json databaseId -q '.[0].databaseId')"
+endef
+
+
+.PHONY: release-cli
+release-cli: _release-guard
+	@version=$$(grep -m1 '^version' avp-cli/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	echo "→ verifying the wheel builds (avp-cli $$version)..."; \
+	$(UV) build --wheel --package avp-cli --out-dir dist/release >/dev/null; \
+	$(MAKE) --no-print-directory _cut TAG="pypi-v$$version" MSG="avp-cli $$version"
+
+
+.PHONY: release-goose
+release-goose: _release-guard
+	@version=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['goose'].container_version)"); \
+	$(MAKE) --no-print-directory _cut TAG="agent-goose-v$$version" MSG="goose agent $$version"
+
+
+.PHONY: release-claude-code
+release-claude-code: _release-guard
+	@version=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['claude-code'].container_version)"); \
+	$(MAKE) --no-print-directory _cut TAG="agent-claude-code-v$$version" MSG="claude-code agent $$version"
+
+
+# Internal: cut the tag named by TAG. Kept separate so the release-* targets can
+# compute TAG in a recipe shell, then hand it to the cut_release template.
+.PHONY: _cut
+_cut:
+	$(call cut_release,$(TAG),$(MSG))
+
+
 # ── Other ─────────────────────────────────────────────────────────────────────
 
 
 .PHONY: sync
 sync:
 	@$(UV) sync
-
-
-# Clean-room onboarding test: run the README Quickstart for AGENT (default goose)
-# inside a fresh container, shipping the WORKING TREE in so it catches regressions
-# before they're pushed. Free by default (stops at `describe`); set PAID=1 (needs
-# ANTHROPIC_API_KEY) to also run a real eval.
-#   make onboarding-smoke
-#   make onboarding-smoke AGENT=claude-code
-#   make onboarding-smoke PAID=1
-.PHONY: onboarding-smoke
-onboarding-smoke:
-	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) bash scripts/onboarding-smoke.sh $(if $(AGENT),$(AGENT),goose)
 
 
 # Drive the `avp` CLI end to end: create -> list -> inspect -> delete across
