@@ -75,9 +75,10 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        # 0.0.4: the wire wheel was renamed avp -> agent-voyager-project, so the
-        # bundled wheel filename changed; this release carries the new names.
-        container_version="0.0.4",
+        # 0.0.5: inline Commission skills are now delivered to the agent
+        # (materialized to .claude/skills + passed in options.skills). 0.0.4
+        # renamed the bundled wheel avp -> agent-voyager-project.
+        container_version="0.0.5",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
