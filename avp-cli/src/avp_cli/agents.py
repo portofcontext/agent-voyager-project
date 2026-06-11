@@ -72,9 +72,10 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         descriptor_name="goose",
         tag_prefix="agent-goose",
         dev_manifest="agents/avp-goose/rust/avp-conformance.json",
-        # 0.0.4: tool decls pass through outputSchema from tools/list; skill /
-        # subagent decls carry description + avp.source (SKILL.md path).
-        container_version="0.0.4",
+        # 0.1.0: per-agent Commission allowlist maps + agent_versions pins;
+        # hermetic describe (pre-flight skills are build-intrinsic only,
+        # builtin:// sources; no host home discovery).
+        container_version="0.1.0",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -83,10 +84,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         descriptor_name="avp-claude-agent-sdk",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        # 0.0.7: decl fidelity: MCP-surfaced tool decls carry the model-facing
-        # description from get_mcp_status(); agent_started.meta carries the
-        # /context token breakdown (claude_agent_sdk.context_usage).
-        container_version="0.0.7",
+        # 0.1.0: per-agent Commission allowlist maps + agent_versions pins;
+        # hermetic describe probe (scrubbed HOME, build-intrinsic surface).
+        container_version="0.1.0",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
