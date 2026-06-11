@@ -718,14 +718,14 @@ pub struct SubagentDecl {
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
 }
-#[doc = "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity. Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field."]
+#[doc = "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description`, `inputSchema`, and\n`outputSchema`. The decl describes a single tool's model-facing\nidentity, and agents SHOULD carry `description` / `inputSchema` /\n`outputSchema` exactly as surfaced to the model when the runtime\nexposes them: the tool catalog is the dominant fixed input-token\ncost of every turn, and name-only decls make that cost\nunattributable. Name-only entries remain valid (honest-null when\nthe wrapped runtime doesn't expose the catalog text). Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"ToolDecl\","]
-#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools` and\\n`agent_started.data[\\\"avp.tools\\\"]`.\\n\\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\\ndecl describes a single tool's model-facing identity. Dispatch is\\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\\nthe tool runs locally in the agent's process. The per-invocation\\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\\npresence of this field.\","]
+#[doc = "  \"description\": \"Tool descriptor used by `AgentDescriptor.tools` and\\n`agent_started.data[\\\"avp.tools\\\"]`.\\n\\nMCP-shaped: `name` plus optional `description`, `inputSchema`, and\\n`outputSchema`. The decl describes a single tool's model-facing\\nidentity, and agents SHOULD carry `description` / `inputSchema` /\\n`outputSchema` exactly as surfaced to the model when the runtime\\nexposes them: the tool catalog is the dominant fixed input-token\\ncost of every turn, and name-only decls make that cost\\nunattributable. Name-only entries remain valid (honest-null when\\nthe wrapped runtime doesn't expose the catalog text). Dispatch is\\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\\nthe tool runs locally in the agent's process. The per-invocation\\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\\npresence of this field.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"name\""]
@@ -768,6 +768,18 @@ pub struct SubagentDecl {
 #[doc = "    \"name\": {"]
 #[doc = "      \"title\": \"Name\","]
 #[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"outputSchema\": {"]
+#[doc = "      \"title\": \"Outputschema\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": true"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -792,4 +804,11 @@ pub struct ToolDecl {
     pub input_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
+    #[serde(
+        rename = "outputSchema",
+        default,
+        skip_serializing_if = "::std::option::Option::is_none"
+    )]
+    pub output_schema:
+        ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
 }

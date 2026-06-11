@@ -23,6 +23,9 @@ export type Description1 = string | null;
 export type Inputschema = {
   [k: string]: unknown;
 } | null;
+export type Outputschema = {
+  [k: string]: unknown;
+} | null;
 export type AvpMcpServerId = string | null;
 export type Subagents = SubagentDecl[] | null;
 export type Name2 = string;
@@ -103,8 +106,14 @@ export interface McpServerDecl {
  * Tool descriptor used by `AgentDescriptor.tools` and
  * `agent_started.data["avp.tools"]`.
  *
- * MCP-shaped: `name` plus optional `description` and `inputSchema`. The
- * decl describes a single tool's model-facing identity. Dispatch is
+ * MCP-shaped: `name` plus optional `description`, `inputSchema`, and
+ * `outputSchema`. The decl describes a single tool's model-facing
+ * identity, and agents SHOULD carry `description` / `inputSchema` /
+ * `outputSchema` exactly as surfaced to the model when the runtime
+ * exposes them: the tool catalog is the dominant fixed input-token
+ * cost of every turn, and name-only decls make that cost
+ * unattributable. Name-only entries remain valid (honest-null when
+ * the wrapped runtime doesn't expose the catalog text). Dispatch is
  * discriminated by `avp.mcp_server_id`: when set, the tool is sourced
  * from the MCP server with that `id` in `mcp_servers[]`; when absent,
  * the tool runs locally in the agent's process. The per-invocation
@@ -118,6 +127,7 @@ export interface ToolDecl {
   name: Name1;
   description?: Description1;
   inputSchema?: Inputschema;
+  outputSchema?: Outputschema;
   "avp.mcp_server_id"?: AvpMcpServerId;
   [k: string]: unknown;
 }

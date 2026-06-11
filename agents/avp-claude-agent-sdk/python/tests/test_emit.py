@@ -33,6 +33,7 @@ from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.trajectory import Event
 from avp_claude_agent_sdk._emit import (
+    context_usage_meta,
     emit_agent_described,
     emit_agent_started,
     emit_run_requested,
@@ -141,7 +142,7 @@ def _status(
                 "name": connected_named,
                 "status": "connected",
                 "config": {"id": "mcpsrv_demo"},
-                "tools": [{"name": "search"}],
+                "tools": [{"name": "search", "description": "Search the demo index."}],
             }
         )
     if extra_pending:
@@ -389,6 +390,81 @@ def test_agent_started_mirrors_descriptor_when_no_commission() -> None:
     assert [s.id for s in started.data.mcp_servers] == [
         s.id for s in described.data.descriptor.mcp_servers
     ]
+
+
+def test_mcp_tool_decls_carry_catalog_description() -> None:
+    """Decl fidelity (spec SHOULD): MCP-surfaced entries take `description`
+    from the per-server catalog `get_mcp_status()` reports; built-ins stay
+    name-only (the SDK exposes no catalog text for them), and an MCP handle
+    absent from the server's catalog stays honest-null too."""
+    events = asyncio.run(
+        _drive_prelude(
+            init=_init(tools=["Bash", "mcp__demo__search", "mcp__demo__unlisted"]),
+        )
+    )
+    for ev_tools in (
+        next(ev for ev in events if ev.type == "avp.agent_started").data.tools,
+        next(ev for ev in events if ev.type == "avp.agent_described").data.descriptor.tools,
+    ):
+        by_name = {t.name: t for t in ev_tools}
+        assert by_name["mcp__demo__search"].description == "Search the demo index."
+        assert by_name["Bash"].description is None
+        assert by_name["mcp__demo__unlisted"].description is None
+        assert by_name["mcp__demo__unlisted"].mcp_server_id == "demo"
+
+
+def test_agent_started_meta_carries_context_usage() -> None:
+    """The `/context` breakdown rides on agent_started's `avp.meta` so the
+    run's fixed input-token cost (system prompt / tool catalog / skills /
+    memory) is attributable from the trajectory."""
+    usage = {
+        "totalTokens": 24381,
+        "maxTokens": 1_000_000,
+        "categories": [{"name": "System tools", "tokens": 12601, "color": "inactive"}],
+        "skills": {"totalSkills": 2, "tokens": 120},
+    }
+    events: list[Event] = []
+    state = _make_state(events)
+    asyncio.run(
+        emit_agent_started(
+            state,
+            prompt="ping",
+            options=ClaudeAgentOptions(),
+            init_data=_init().data,
+            status=_status(),
+            context_usage=usage,
+        )
+    )
+    assert events[0].data.meta["claude_agent_sdk.context_usage"] == usage
+
+
+def test_context_usage_meta_trims_and_survives_failure() -> None:
+    """`context_usage_meta` keeps only attribution-relevant keys (gridRows
+    and empty sections drop) and degrades to None when the control request
+    fails (older CLI builds): the prelude must not depend on it."""
+
+    class _Probe:
+        async def get_context_usage(self):
+            return {
+                "totalTokens": 100,
+                "maxTokens": 200_000,
+                "categories": [{"name": "System prompt", "tokens": 100}],
+                "systemTools": [],
+                "gridRows": [["visual"]],
+                "apiUsage": {"x": 1},
+            }
+
+    class _Broken:
+        async def get_context_usage(self):
+            raise RuntimeError("control request not supported")
+
+    meta = asyncio.run(context_usage_meta(_Probe()))
+    assert meta == {
+        "totalTokens": 100,
+        "maxTokens": 200_000,
+        "categories": [{"name": "System prompt", "tokens": 100}],
+    }
+    assert asyncio.run(context_usage_meta(_Broken())) is None
 
 
 def test_request_model_prefers_init_resolved_model() -> None:

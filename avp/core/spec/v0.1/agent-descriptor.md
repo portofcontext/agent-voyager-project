@@ -137,6 +137,7 @@ Each entry in `tools[]` is a tool the agent can dispatch — either **locally** 
   "name": "kb_search",
   "description": "Search the ACME knowledge base.",
   "inputSchema": { /* ... */ },
+  "outputSchema": { /* ... */ },                   // optional
   "avp.mcp_server_id": "acme_kb"
 }
 ```
@@ -146,7 +147,10 @@ Each entry in `tools[]` is a tool the agent can dispatch — either **locally** 
 | `name` | string | Model-facing tool name. Stable across versions. Unique within `tools[]`. |
 | `description` | string | Optional. Human/model description. |
 | `inputSchema` | object | Optional. JSON Schema for the tool's input, in MCP's `inputSchema` shape (camelCase). |
+| `outputSchema` | object | Optional. JSON Schema for the tool's structured output, in MCP's `outputSchema` shape (camelCase). |
 | `avp.mcp_server_id` | string | Optional. When set, the tool is dispatched via the MCP server with that `id` in `mcp_servers[]`. When absent, the tool is dispatched locally in the agent's process. |
+
+Each entry SHOULD carry `description`, `inputSchema`, and `outputSchema` **exactly as surfaced to the model** whenever the agent's runtime exposes them (for MCP-surfaced tools, the verbatim `tools/list` result). The tool catalog is the dominant fixed input-token cost of every turn; a names-only `tools[]` is valid (and is the honest shape when the wrapped runtime doesn't expose its catalog text) but leaves first-turn token usage unattributable to consumers.
 
 The per-invocation discriminator `avp.tool.dispatch_target` (`"local"` / `"mcp_server"`) lives on each `tool_invoked` event and mirrors the presence or absence of `avp.mcp_server_id` on the decl.
 

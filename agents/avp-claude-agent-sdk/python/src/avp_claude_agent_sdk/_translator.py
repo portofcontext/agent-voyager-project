@@ -179,18 +179,42 @@ def tools_from_init(init_data: dict[str, Any], status: McpStatusResponse) -> lis
     `avp.mcp_server_id` pointing at the un-sanitized `McpServerDecl.id`
     in `mcp_servers[]`. Lookups go through a sanitized-prefix → id map
     built from `status.mcpServers`.
+
+    Decl fidelity (spec SHOULD, Agent Descriptor §2.3): MCP-surfaced
+    entries take `description` from the per-server tool catalog that
+    `get_mcp_status()` reports (`McpToolInfo`). The SDK exposes neither
+    `inputSchema` / `outputSchema` for any tool nor catalog text for CLI
+    built-ins, so those stay None (honest-null); the measurable view of
+    built-in catalog weight rides on `agent_started`'s
+    `avp.meta["claude_agent_sdk.context_usage"]` instead.
     """
     names = init_data.get("tools") or []
-    prefix_to_id = {
-        _normalize_mcp_prefix(s["name"]): s["name"] for s in status.get("mcpServers", [])
+    servers = status.get("mcpServers", [])
+    prefix_to_id = {_normalize_mcp_prefix(s["name"]): s["name"] for s in servers}
+    # (sanitized server prefix, bare tool name) → the server's tools/list
+    # entry, when the CLI reports per-server catalogs.
+    catalog: dict[tuple[str, str], dict[str, Any]] = {
+        (_normalize_mcp_prefix(s["name"]), t["name"]): t
+        for s in servers
+        for t in (s.get("tools") or [])
     }
     decls: list[ToolDecl] = []
     for name in names:
         if name.startswith("mcp__"):
             parts = name.split("__", 2)
             prefix = parts[1] if len(parts) >= 3 else None
+            bare = parts[2] if len(parts) >= 3 else None
             server_id = prefix_to_id.get(prefix) if prefix else None
-            decls.append(ToolDecl.model_validate({"name": name, "avp.mcp_server_id": server_id}))
+            info = catalog.get((prefix, bare)) if prefix and bare else None
+            decls.append(
+                ToolDecl.model_validate(
+                    {
+                        "name": name,
+                        "description": (info or {}).get("description"),
+                        "avp.mcp_server_id": server_id,
+                    }
+                )
+            )
         else:
             decls.append(ToolDecl(name=name))
     return decls or None

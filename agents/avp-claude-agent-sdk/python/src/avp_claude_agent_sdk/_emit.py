@@ -139,6 +139,46 @@ def _apply_enabled_builtin_tools(
     return [t for t in (tools or []) if t.name in allowed]
 
 
+# Context-usage keys worth carrying on the wire: the ones that attribute the
+# run's fixed input-token cost (system prompt, tool catalog, skills, memory)
+# and the window they fit in. gridRows (visual rendering), apiUsage, and
+# slashCommands stay behind.
+_CONTEXT_USAGE_KEYS = (
+    "totalTokens",
+    "maxTokens",
+    "rawMaxTokens",
+    "percentage",
+    "model",
+    "categories",
+    "systemPromptSections",
+    "systemTools",
+    "deferredBuiltinTools",
+    "mcpTools",
+    "memoryFiles",
+    "skills",
+    "agents",
+    "isAutoCompactEnabled",
+    "autoCompactThreshold",
+)
+
+
+async def context_usage_meta(client: ClaudeSDKClient) -> dict[str, Any] | None:
+    """Token attribution for the run's starting context, from the SDK's
+    `get_context_usage()` (the `/context` breakdown): how many tokens the
+    system prompt, built-in tool catalog, per-server MCP tools, skill
+    frontmatter, and memory files each consume. This is the measurable
+    answer to "what does the model see on turn 1" for a CLI that doesn't
+    expose its catalog text; rides as opaque annotations under `avp.meta`
+    (spec §2). Returns None when the control request is unsupported or
+    fails (older CLI builds): the prelude must not depend on it."""
+    try:
+        usage: dict[str, Any] = dict(await client.get_context_usage())
+    except Exception:
+        return None
+    trimmed = {k: usage[k] for k in _CONTEXT_USAGE_KEYS if usage.get(k) not in (None, [], {})}
+    return trimmed or None
+
+
 async def emit_agent_started(
     state: RunState,
     *,
@@ -146,13 +186,18 @@ async def emit_agent_started(
     options: ClaudeAgentOptions,
     init_data: dict[str, Any] | None,
     status: McpStatusResponse,
+    context_usage: dict[str, Any] | None = None,
 ) -> None:
     """Merged-state snapshot for the run. Sets `state.agent_span_id` so
     subsequent turn / tool events parent under it."""
     agent_span_id = new_span_id()
     state.agent_span_id = agent_span_id
     sdk_session_id = init_data.get("session_id") if init_data else None
-    meta = {"claude_agent_sdk.session_id": sdk_session_id} if sdk_session_id else None
+    meta: dict[str, Any] = {}
+    if sdk_session_id:
+        meta["claude_agent_sdk.session_id"] = sdk_session_id
+    if context_usage:
+        meta["claude_agent_sdk.context_usage"] = context_usage
     await state.sink(
         AgentStartedEvent(
             subject=state.run_id,
@@ -160,7 +205,7 @@ async def emit_agent_started(
                 trace_id=state.trace_id,
                 span_id=agent_span_id,
                 parent_span_id=ZERO_SPAN_ID,
-                meta=meta,
+                meta=meta or None,
                 provider_name=_PROVIDER_NAME,
                 operation_name="invoke_agent",
                 request_model=(
@@ -244,12 +289,14 @@ async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: Sys
     if message.subtype != "init":
         return
     status = await client.get_mcp_status()
+    context_usage = await context_usage_meta(client)
     await emit_agent_started(
         state,
         prompt=state.prompt,
         options=client.options,
         init_data=message.data,
         status=status,
+        context_usage=context_usage,
     )
 
 

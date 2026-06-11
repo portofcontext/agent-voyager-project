@@ -35,8 +35,9 @@ const GOOSE_VERSION: &str = env!("GOOSE_VERSION");
 const FINAL_OUTPUT_TOOL: &str = "recipe__final_output";
 
 /// Reshape rmcp tools (from `list_tools`) to the AVP `ToolDecl` wire shape,
-/// keeping only `name`/`description`/`inputSchema` (plus `avp.mcp_server_id`
-/// when the tool is MCP-surfaced) and dropping Goose-internal tools.
+/// keeping only `name`/`description`/`inputSchema`/`outputSchema` (plus
+/// `avp.mcp_server_id` when the tool is MCP-surfaced) and dropping
+/// Goose-internal tools.
 ///
 /// `mcp_tool_to_server` maps a tool name to the id of the MCP server that
 /// surfaced it; tools absent from the map run locally and carry no server id.
@@ -52,6 +53,11 @@ fn tool_decls(raw: Vec<Value>, mcp_tool_to_server: &HashMap<String, String>) -> 
                 "description": v.get("description").cloned().unwrap_or(Value::Null),
                 "inputSchema": v.get("inputSchema").cloned().unwrap_or_else(|| json!({ "type": "object" })),
             });
+            if let Some(output_schema) = v.get("outputSchema") {
+                if !output_schema.is_null() {
+                    decl["outputSchema"] = output_schema.clone();
+                }
+            }
             if let Some(server_id) = mcp_tool_to_server.get(&name) {
                 decl["avp.mcp_server_id"] = json!(server_id);
             }
@@ -458,9 +464,19 @@ async fn build_descriptor(
     // Commission's inline skills materialized by `write_skills` — and the operator's
     // configured skill dirs). Filesystem-based by design; a sandbox will scope what's
     // visible later.
+    // `avp.source` is the skill's on-disk path (the directory holding SKILL.md;
+    // `builtin://skills/<name>` for bundled ones), per trajectory spec §6: with
+    // it populated, consumers attribute skill exploration by matching file-tool
+    // inputs against these paths.
     let skill_decls: Vec<Value> = goose::skills::discover_skills(Some(working_dir))
         .iter()
-        .map(|s| json!({ "name": s.name }))
+        .map(|s| {
+            let mut decl = json!({ "name": s.name, "avp.source": s.path });
+            if !s.description.is_empty() {
+                decl["description"] = json!(s.description);
+            }
+            decl
+        })
         .collect();
 
     // Subagents the model can `delegate` to via the `summon` extension: recipes /
@@ -470,7 +486,13 @@ async fn build_descriptor(
     let subagent_decls: Vec<Value> =
         goose::agents::platform_extensions::summon::discover_filesystem_sources(working_dir)
             .iter()
-            .map(|s| json!({ "name": s.name }))
+            .map(|s| {
+                let mut decl = json!({ "name": s.name });
+                if !s.description.is_empty() {
+                    decl["description"] = json!(s.description);
+                }
+                decl
+            })
             .collect();
 
     let mut descriptor = json!({
@@ -521,7 +543,8 @@ mod tests {
                     "inputSchema": { "type": "object" }, "annotations": { "x": 1 } }),
             json!({ "name": "recipe__final_output", "description": "internal",
                     "inputSchema": { "type": "object" } }),
-            json!({ "name": "analyze__list_functions" }),
+            json!({ "name": "analyze__list_functions",
+                    "outputSchema": { "type": "object", "properties": { "functions": { "type": "array" } } } }),
         ];
         // `analyze__list_functions` is surfaced by the `analyze` MCP server.
         let mcp: HashMap<String, String> =
@@ -529,12 +552,18 @@ mod tests {
         let decls = tool_decls(raw, &mcp);
         let names: Vec<&str> = decls.iter().map(|d| d["name"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["developer__shell", "analyze__list_functions"]);
-        // Local tool: only name/description/inputSchema, no mcp_server_id.
+        // Local tool: only name/description/inputSchema, no mcp_server_id
+        // and no outputSchema when the source tool doesn't declare one.
         assert_eq!(decls[0].as_object().unwrap().len(), 3);
         assert!(decls[0].get("avp.mcp_server_id").is_none());
+        assert!(decls[0].get("outputSchema").is_none());
         // Missing inputSchema defaults to an object schema.
         assert_eq!(decls[1]["inputSchema"], json!({ "type": "object" }));
-        // MCP-surfaced tool carries its server id.
+        // MCP-surfaced tool carries its server id and outputSchema verbatim.
         assert_eq!(decls[1]["avp.mcp_server_id"], "analyze");
+        assert_eq!(
+            decls[1]["outputSchema"],
+            json!({ "type": "object", "properties": { "functions": { "type": "array" } } })
+        );
     }
 }

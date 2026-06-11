@@ -2914,7 +2914,7 @@
     },
     "ToolDecl": {
       "additionalProperties": true,
-      "description": "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description` and `inputSchema`. The\ndecl describes a single tool's model-facing identity. Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field.",
+      "description": "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description`, `inputSchema`, and\n`outputSchema`. The decl describes a single tool's model-facing\nidentity, and agents SHOULD carry `description` / `inputSchema` /\n`outputSchema` exactly as surfaced to the model when the runtime\nexposes them: the tool catalog is the dominant fixed input-token\ncost of every turn, and name-only decls make that cost\nunattributable. Name-only entries remain valid (honest-null when\nthe wrapped runtime doesn't expose the catalog text). Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field.",
       "properties": {
         "name": {
           "title": "Name",
@@ -2944,6 +2944,19 @@
           ],
           "default": null,
           "title": "Inputschema"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outputschema"
         },
         "avp.mcp_server_id": {
           "anyOf": [

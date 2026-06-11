@@ -16,7 +16,8 @@ use avp_goose::translate::GooseContent;
 use serde_json::{json, Value};
 
 /// Canonical AVP trajectory-event schema (the source of truth for conformance).
-const TRAJECTORY_SCHEMA: &str = include_str!("../../../../spec/v0.1/trajectory.schema.json");
+const TRAJECTORY_SCHEMA: &str =
+    include_str!("../../../../../avp/core/spec/v0.1/trajectory.schema.json");
 
 // --- sink + trajectory ------------------------------------------------------
 

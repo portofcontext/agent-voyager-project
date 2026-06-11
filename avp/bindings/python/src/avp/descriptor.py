@@ -38,8 +38,14 @@ class ToolDecl(BaseModel):
     """Tool descriptor used by `AgentDescriptor.tools` and
     `agent_started.data["avp.tools"]`.
 
-    MCP-shaped: `name` plus optional `description` and `inputSchema`. The
-    decl describes a single tool's model-facing identity. Dispatch is
+    MCP-shaped: `name` plus optional `description`, `inputSchema`, and
+    `outputSchema`. The decl describes a single tool's model-facing
+    identity, and agents SHOULD carry `description` / `inputSchema` /
+    `outputSchema` exactly as surfaced to the model when the runtime
+    exposes them: the tool catalog is the dominant fixed input-token
+    cost of every turn, and name-only decls make that cost
+    unattributable. Name-only entries remain valid (honest-null when
+    the wrapped runtime doesn't expose the catalog text). Dispatch is
     discriminated by `avp.mcp_server_id`: when set, the tool is sourced
     from the MCP server with that `id` in `mcp_servers[]`; when absent,
     the tool runs locally in the agent's process. The per-invocation
@@ -50,6 +56,7 @@ class ToolDecl(BaseModel):
     name: str
     description: str | None = None
     inputSchema: dict[str, Any] | None = Field(default=None, alias="inputSchema")
+    outputSchema: dict[str, Any] | None = Field(default=None, alias="outputSchema")
     mcp_server_id: str | None = Field(default=None, alias="avp.mcp_server_id")
 
 
