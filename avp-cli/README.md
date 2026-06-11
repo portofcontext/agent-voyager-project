@@ -259,20 +259,6 @@ into the workspace fresh each run), `files` (inline or `@local`), `setup`
 `avp eval run --env <name>` runs a whole eval inside the same environment (one
 workspace shared across cells, one fresh sandbox per cell).
 
-## Visualize a run
-
-Every run writes a raw NDJSON trajectory under `--out` (a temp dir by default;
-the board prints the path). `avp show <trajectory>.ndjson` gives you two views,
-both offline:
-
-- **Terminal (default)** — a colored event voyage right in your shell: the
-  run's stats line plus each event as a brand-colored dot with its label (tool
-  name, stop reason, per-turn tokens). No browser.
-- **`--web`** — the full **constellation** from agentvoyagerproject.com (events
-  as stars on a voyage curve, revealed in sequence) as a self-contained HTML
-  file it opens in your browser (`--no-open` to just write it, `--out file.html`
-  to place it). No server, no network.
-
 ## Outputs
 
 Every `avp eval run` ends with a **voyage id** (e.g. `swift-harbor`) and writes
@@ -302,14 +288,14 @@ Layout:
 
 ```
 src/avp_cli/
-  cli.py            # the `avp` umbrella: init / eval / commission (rich output)
+  cli.py            # the `avp` umbrella: init / eval / cm / agent / run / env / sandbox
   paths.py          # the ~/.avp asset root (AVP_HOME): commissions/ + runs/ + agents/
   library.py        # the portable commission library (~/.avp/commissions/<id>.json)
   config.py         # load an eval JSON config -> internal engine (the config-not-code seam)
   commission.py     # inspect a Commission a library commission yields (show / validate)
   console.py        # rich Console + stdout(results)/stderr(progress) discipline
   brand.py          # the AVP ship logo + palette for the terminal
-  viz.py            # trajectory -> standalone HTML constellation (avp show)
+  viz.py            # trajectories -> agentvoyagerproject.com payload + view URL (avp eval view)
   osb.py            # the managed OpenSandbox control plane (config, spawn, egress policy)
   images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
   environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding

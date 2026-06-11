@@ -42,7 +42,7 @@ _AGENTS = [
 ]
 
 _ENV = [
-    ("avp env create <name>", "create an environment (--runtime/--pip/--file/--net ...)"),
+    ("avp env create <name>", "create an environment (--image/--pip/--file/--net ...)"),
     ("avp env list", "your declarative environments (~/.avp/environments)"),
     ("avp env show <name>", "what an environment provisions + curates"),
     ("avp env run <name> -- <cmd>", "run a command inside an environment (provisioned + confined)"),
@@ -53,6 +53,11 @@ _ENV = [
     ),
     ("avp env secret list", "stored secret handles (values stay on the host, never the sandbox)"),
     ("avp env secret delete <handle>", "remove a stored secret"),
+]
+
+_SANDBOX = [
+    ("avp sandbox status", "Docker + managed-server health, live sandbox count"),
+    ("avp sandbox stop", "stop the managed sandbox server"),
 ]
 
 
@@ -77,4 +82,5 @@ def welcome() -> Group:
         section("Environments", _ENV),
         section("Commissions", _COMMISSIONS),
         section("Evals", _EVAL),
+        section("Sandbox", _SANDBOX),
     )
