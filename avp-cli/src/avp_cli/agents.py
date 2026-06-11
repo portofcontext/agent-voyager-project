@@ -67,7 +67,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="binary",
         tag_prefix="agent-goose",
         dev_manifest="agents/avp-goose/rust/avp-conformance.json",
-        container_version="0.0.3",
+        # 0.0.4: tool decls pass through outputSchema from tools/list; skill /
+        # subagent decls carry description + avp.source (SKILL.md path).
+        container_version="0.0.4",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -75,11 +77,10 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         kind="python",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
-        # 0.0.6: inline Commission skills now actually load — setting_sources
-        # gets "project" so the materialized .claude/skills/<id> is discovered
-        # (0.0.5 wrote the files + set options.skills but the isolated
-        # setting_sources=[] meant project skills never loaded).
-        container_version="0.0.6",
+        # 0.0.7: decl fidelity: MCP-surfaced tool decls carry the model-facing
+        # description from get_mcp_status(); agent_started.meta carries the
+        # /context token breakdown (claude_agent_sdk.context_usage).
+        container_version="0.0.7",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
