@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-10",
+  "$snapshot_date": "2026-06-11",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -2851,6 +2851,12 @@
       "input": 0.1,
       "output": 0.0
     },
+    "azure/claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
+    },
     "azure/claude-haiku-4-5": {
       "input": 1.0,
       "output": 5.0,
@@ -4185,6 +4191,12 @@
       "cache_read": 0.56,
       "cache_write": 6.99
     },
+    "cortecs/claude-opus4-8": {
+      "input": 5.64,
+      "output": 28.198,
+      "cache_read": 0.563,
+      "cache_write": 7.049
+    },
     "cortecs/claude-sonnet-4": {
       "input": 3.307,
       "output": 16.536
@@ -5145,15 +5157,27 @@
       "cache_read": 1.5,
       "cache_write": 18.75
     },
+    "fastrouter/anthropic/claude-opus-4.8": {
+      "input": 5.0,
+      "output": 25.0
+    },
     "fastrouter/anthropic/claude-sonnet-4": {
       "input": 3.0,
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "fastrouter/anthropic/claude-sonnet-4.6": {
+      "input": 3.0,
+      "output": 15.0
+    },
     "fastrouter/deepseek-ai/deepseek-r1-distill-llama-70b": {
       "input": 0.03,
       "output": 0.14
+    },
+    "fastrouter/deepseek/deepseek-v4-pro": {
+      "input": 1.74,
+      "output": 3.48
     },
     "fastrouter/google/gemini-2.5-flash": {
       "input": 0.3,
@@ -5165,9 +5189,41 @@
       "output": 10.0,
       "cache_read": 0.31
     },
+    "fastrouter/google/gemini-3-pro-image-preview": {
+      "input": 2.0,
+      "output": 12.0
+    },
+    "fastrouter/google/gemini-3.1-flash-image-preview": {
+      "input": 0.5,
+      "output": 3.0
+    },
+    "fastrouter/google/gemini-3.1-pro-preview": {
+      "input": 2.0,
+      "output": 12.0
+    },
+    "fastrouter/google/gemini-3.5-flash": {
+      "input": 1.5,
+      "output": 9.0
+    },
+    "fastrouter/google/gemma-4-31b-it": {
+      "input": 0.13,
+      "output": 0.38
+    },
+    "fastrouter/minimax/minimax-m2.7": {
+      "input": 0.3,
+      "output": 1.2
+    },
+    "fastrouter/minimax/minimax-m2.7-highspeed": {
+      "input": 0.6,
+      "output": 2.4
+    },
     "fastrouter/moonshotai/kimi-k2": {
       "input": 0.55,
       "output": 2.2
+    },
+    "fastrouter/moonshotai/kimi-k2.6": {
+      "input": 0.75,
+      "output": 3.5
     },
     "fastrouter/openai/gpt-4.1": {
       "input": 2.0,
@@ -5189,6 +5245,26 @@
       "output": 0.4,
       "cache_read": 0.005
     },
+    "fastrouter/openai/gpt-5.3-codex": {
+      "input": 1.75,
+      "output": 14.0
+    },
+    "fastrouter/openai/gpt-5.4-mini": {
+      "input": 0.75,
+      "output": 4.5
+    },
+    "fastrouter/openai/gpt-5.4-nano": {
+      "input": 0.2,
+      "output": 1.25
+    },
+    "fastrouter/openai/gpt-5.5": {
+      "input": 5.0,
+      "output": 30.0
+    },
+    "fastrouter/openai/gpt-5.5-pro": {
+      "input": 30.0,
+      "output": 180.0
+    },
     "fastrouter/openai/gpt-oss-120b": {
       "input": 0.15,
       "output": 0.6
@@ -5197,9 +5273,21 @@
       "input": 0.05,
       "output": 0.2
     },
+    "fastrouter/openai/gpt-realtime-1.5": {
+      "input": 4.0,
+      "output": 16.0
+    },
     "fastrouter/qwen/qwen3-coder": {
       "input": 0.3,
       "output": 1.2
+    },
+    "fastrouter/sarvam/sarvam-105b": {
+      "input": 0.04,
+      "output": 0.16
+    },
+    "fastrouter/sarvam/sarvam-30b": {
+      "input": 0.02,
+      "output": 0.1
     },
     "fastrouter/x-ai/grok-4": {
       "input": 3.0,
@@ -5207,9 +5295,21 @@
       "cache_read": 0.75,
       "cache_write": 15.0
     },
+    "fastrouter/x-ai/grok-4.3": {
+      "input": 1.25,
+      "output": 2.5
+    },
+    "fastrouter/x-ai/grok-build-0.1": {
+      "input": 1.0,
+      "output": 2.0
+    },
     "fastrouter/z-ai/glm-5": {
       "input": 0.95,
       "output": 3.15
+    },
+    "fastrouter/z-ai/glm-5.1": {
+      "input": 1.05,
+      "output": 3.5
     },
     "firepass/accounts/fireworks/routers/kimi-k2p6-turbo": {
       "input": 0.0,
@@ -5280,6 +5380,12 @@
       "input": 2.0,
       "output": 8.0,
       "cache_read": 0.3
+    },
+    "freemodel/claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
     },
     "freemodel/claude-haiku-4-5-20251001": {
       "input": 1.0,
@@ -5831,6 +5937,12 @@
     "github-models/xai/grok-3-mini": {
       "input": 0.0,
       "output": 0.0
+    },
+    "gitlab/duo-chat-fable-5": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
     },
     "gitlab/duo-chat-gpt-5-1": {
       "input": 0.0,
@@ -9862,6 +9974,30 @@
     "llmgateway/sonar-reasoning-pro": {
       "input": 2.0,
       "output": 8.0
+    },
+    "llmtr/gemma-4": {
+      "input": 5.0,
+      "output": 10.0
+    },
+    "llmtr/magibu-11b-v8": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "llmtr/medgemma-4b": {
+      "input": 3.0,
+      "output": 5.0
+    },
+    "llmtr/qwen3-6-35b": {
+      "input": 5.0,
+      "output": 10.0
+    },
+    "llmtr/sincap": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "llmtr/trendyol-7b": {
+      "input": 0.0,
+      "output": 0.0
     },
     "lmstudio/openai/gpt-oss-20b": {
       "input": 0.0,
@@ -14912,12 +15048,17 @@
     "opencode/deepseek-v4-flash": {
       "input": 0.14,
       "output": 0.28,
-      "cache_read": 0.03
+      "cache_read": 0.028
     },
     "opencode/deepseek-v4-flash-free": {
       "input": 0.0,
       "output": 0.0,
       "cache_read": 0.0
+    },
+    "opencode/deepseek-v4-pro": {
+      "input": 1.74,
+      "output": 3.84,
+      "cache_read": 0.145
     },
     "opencode/gemini-3-flash": {
       "input": 0.5,
@@ -15875,10 +16016,6 @@
       "input": 0.68,
       "output": 3.41,
       "cache_read": 0.34
-    },
-    "openrouter/moonshotai/kimi-k2.6:free": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/morph/morph-v3-fast": {
       "input": 0.8,
@@ -19492,6 +19629,12 @@
       "output": 1.125,
       "cache_read": 0.075
     },
+    "venice/claude-fable-5": {
+      "input": 12.0,
+      "output": 60.0,
+      "cache_read": 1.2,
+      "cache_write": 15.0
+    },
     "venice/claude-opus-4-5": {
       "input": 6.0,
       "output": 30.0,
@@ -19650,7 +19793,7 @@
     "venice/minimax-m27": {
       "input": 0.375,
       "output": 1.5,
-      "cache_read": 0.075
+      "cache_read": 0.06875
     },
     "venice/minimax-m3": {
       "input": 0.3,
@@ -19788,6 +19931,11 @@
     "venice/qwen3-vl-235b-a22b": {
       "input": 0.25,
       "output": 1.5
+    },
+    "venice/tencent-hy3-preview": {
+      "input": 0.063,
+      "output": 0.21,
+      "cache_read": 0.021
     },
     "venice/venice-uncensored-1-2": {
       "input": 0.2,
@@ -20349,6 +20497,10 @@
     "vercel/mistral/pixtral-large": {
       "input": 2.0,
       "output": 6.0
+    },
+    "vercel/moonshotai/kimi-k2": {
+      "input": 0.57,
+      "output": 2.3
     },
     "vercel/moonshotai/kimi-k2-thinking": {
       "input": 0.6,
@@ -21608,13 +21760,13 @@
       "input": 0.1,
       "output": 0.3
     },
-    "zenmux/stepfun/step-3.5-flash-free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "zenmux/stepfun/step-3.7-flash": {
       "input": 0.2,
       "output": 1.15
+    },
+    "zenmux/stepfun/step-3.7-flash-free": {
+      "input": 0.0,
+      "output": 0.0
     },
     "zenmux/tencent/hy3-preview": {
       "input": 0.172,
