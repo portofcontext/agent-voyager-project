@@ -261,15 +261,23 @@ release-cli: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="pypi-v$$version" MSG="avp-cli $$version"
 
 
+# Agent releases derive the tag from the agent's OWN package version (the same
+# number its descriptor reports as agent_version and Commission.agent_versions
+# pins match), guarded against the CLI's container_version pin so the two can't
+# drift: bump the package version AND the pin together, commit, release.
 .PHONY: release-goose
 release-goose: _release-guard
-	@version=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['goose'].container_version)"); \
+	@version=$$(grep -m1 '^version' agents/avp-goose/rust/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['goose'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-goose Cargo.toml version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
 	$(MAKE) --no-print-directory _cut TAG="agent-goose-v$$version" MSG="goose agent $$version"
 
 
 .PHONY: release-claude-code
 release-claude-code: _release-guard
-	@version=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['claude-code'].container_version)"); \
+	@version=$$(grep -m1 '^version' agents/avp-claude-agent-sdk/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['claude-code'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-claude-agent-sdk pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
 	$(MAKE) --no-print-directory _cut TAG="agent-claude-code-v$$version" MSG="claude-code agent $$version"
 
 

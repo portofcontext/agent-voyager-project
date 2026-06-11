@@ -2895,13 +2895,30 @@ pub struct Citation {
 #[doc = "    \"schema_version\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"agent_versions\": {"]
+#[doc = "      \"title\": \"Agent Versions\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"enabled_builtin_mcp_servers\": {"]
 #[doc = "      \"title\": \"Enabled Builtin Mcp Servers\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -2913,9 +2930,12 @@ pub struct Citation {
 #[doc = "      \"title\": \"Enabled Builtin Skills\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -2927,9 +2947,12 @@ pub struct Citation {
 #[doc = "      \"title\": \"Enabled Builtin Subagents\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -2941,9 +2964,12 @@ pub struct Citation {
 #[doc = "      \"title\": \"Enabled Builtin Tools\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -3109,13 +3135,25 @@ pub struct Citation {
 #[serde(deny_unknown_fields)]
 pub struct Commission {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_mcp_servers: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub agent_versions: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::string::String>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_skills: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_mcp_servers: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_subagents: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_skills: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_tools: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_subagents: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub enabled_builtin_tools: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub mcp_servers: ::std::option::Option<::std::vec::Vec<CommissionMcpServersItem>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -3397,6 +3435,7 @@ pub struct DocumentBlock {
 #[doc = "    \"agent_crash\","]
 #[doc = "    \"unsupported_model\","]
 #[doc = "    \"unsupported_provider\","]
+#[doc = "    \"unsupported_agent_version\","]
 #[doc = "    \"commission_collision\","]
 #[doc = "    \"mcp_connect_failed\","]
 #[doc = "    \"unknown\""]
@@ -3429,6 +3468,8 @@ pub enum ErrorCode {
     UnsupportedModel,
     #[serde(rename = "unsupported_provider")]
     UnsupportedProvider,
+    #[serde(rename = "unsupported_agent_version")]
+    UnsupportedAgentVersion,
     #[serde(rename = "commission_collision")]
     CommissionCollision,
     #[serde(rename = "mcp_connect_failed")]
@@ -3445,6 +3486,7 @@ impl ::std::fmt::Display for ErrorCode {
             Self::AgentCrash => f.write_str("agent_crash"),
             Self::UnsupportedModel => f.write_str("unsupported_model"),
             Self::UnsupportedProvider => f.write_str("unsupported_provider"),
+            Self::UnsupportedAgentVersion => f.write_str("unsupported_agent_version"),
             Self::CommissionCollision => f.write_str("commission_collision"),
             Self::McpConnectFailed => f.write_str("mcp_connect_failed"),
             Self::Unknown => f.write_str("unknown"),
@@ -3461,6 +3503,7 @@ impl ::std::str::FromStr for ErrorCode {
             "agent_crash" => Ok(Self::AgentCrash),
             "unsupported_model" => Ok(Self::UnsupportedModel),
             "unsupported_provider" => Ok(Self::UnsupportedProvider),
+            "unsupported_agent_version" => Ok(Self::UnsupportedAgentVersion),
             "commission_collision" => Ok(Self::CommissionCollision),
             "mcp_connect_failed" => Ok(Self::McpConnectFailed),
             "unknown" => Ok(Self::Unknown),

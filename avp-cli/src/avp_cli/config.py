@@ -16,10 +16,15 @@ Schema (eval.json):
       "commissions": ["baseline", "terse", "few-shot"]   # ids in the library, run on every agent
     }
 
-`commissions` may instead be a per-agent map to bind each commission to one
-agent (the keys also supply `agents`, so the top-level key can be omitted):
+`commissions` may instead be a per-agent map binding each commission to one
+agent. Keys are the agents' self-declared `descriptor.agent_name` (what
+`avp agent describe` prints), the same identity that keys a Commission's
+`enabled_builtin_*` / `agent_versions` maps; `agents` entries stay locators
+(a registry name or a manifest path). When every key belongs to a known
+registry agent the top-level `agents` can be omitted (the keys imply it);
+a third-party agent's key needs its manifest path listed in `agents`:
 
-    "commissions": { "goose": ["baseline-goose"], "claude-code": ["baseline-claude"] }
+    "commissions": { "goose": ["baseline-goose"], "avp-claude-agent-sdk": ["baseline-claude"] }
 
 Dataset sources:
   inline:      { "source": "inline", "items": [ {"id","prompt","expected"} ] }
@@ -35,9 +40,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from avp_cli import library
+from avp_cli.eval import template
 from avp_cli.eval.dataset import Dataset, Item
 from avp_cli.eval.engine import Eval
+from avp_cli.eval.format import EvalConfig
 from avp_cli.eval.scoring import (
     ExactMatchScorer,
     FidelityScorer,
@@ -67,23 +76,62 @@ def load_eval(path: str | Path, *, commissions_dir: Path | None = None) -> Eval:
 def eval_from_dict(
     cfg: dict[str, Any], *, name_hint: str = "eval", commissions_dir: Path | None = None
 ) -> Eval:
-    for key in ("dataset", "scorer", "commissions"):
-        if key not in cfg:
-            raise EvalConfigError(f"eval config is missing required key {key!r}")
+    # The typed gate first (avp_cli.eval.format, the schema's source of truth):
+    # unknown keys, wrong shapes, and bad scorer/dataset names die here with a
+    # field path. The engine assembly below then reads the validated dict.
+    try:
+        EvalConfig.model_validate(cfg)
+    except ValidationError as exc:
+        raise EvalConfigError(f"not a valid eval config: {exc}") from exc
     name = cfg.get("name", name_hint)
     dataset = _build_dataset(cfg["dataset"], name=name)
     scorer = _build_scorer(cfg["scorer"])
     commissions = _resolve_commissions(cfg["commissions"], commissions_dir=commissions_dir)
-    # The map form `{agent: [ids]}` names its agents in the keys; an explicit
-    # top-level "agents" still wins (and `--agent` overrides both at run time).
+    # The map form `{agent_name: [ids]}` keys by descriptor.agent_name (an
+    # identity); "agents" entries are locators. When agents is omitted, map
+    # keys imply it for known registry agents (identity → registry alias);
+    # a key no registry agent owns needs an explicit locator in "agents".
     agents_spec = cfg.get("agents")
     if agents_spec is None and isinstance(cfg["commissions"], dict):
-        agents_spec = list(cfg["commissions"].keys())
+        agents_spec = [_locator_for(k) for k in cfg["commissions"]]
     return Eval(
         setups=commissions,
         dataset=dataset,
         scorer=scorer,
         agents=_build_agents(agents_spec),
+    )
+
+
+def _reject_alias_key(key: str) -> None:
+    """A commissions-map key that is a registry ALIAS (not the agent's
+    descriptor.agent_name) would bind to nothing at run time, silently. Catch
+    it at load with the exact fix. Aliases that equal the descriptor name
+    (goose) pass through; only divergent ones (claude-code) can mislead."""
+    from avp_cli.agents import AGENT_SOURCES
+
+    source = AGENT_SOURCES.get(key)
+    if source is not None and source.descriptor_name and source.descriptor_name != key:
+        raise EvalConfigError(
+            f"commissions key {key!r} is the CLI's install alias, not the agent's "
+            f"identity; key it by descriptor.agent_name: {source.descriptor_name!r}. "
+            f'("agents" entries stay locators, so {key!r} is still valid there.)'
+        )
+
+
+def _locator_for(agent_name: str) -> str:
+    """Map a commissions-map key (a `descriptor.agent_name`) to a resolvable
+    locator. Known registry agents resolve by their alias; anything else has
+    no implicit locator and needs an explicit "agents" entry (a manifest path)."""
+    from avp_cli.agents import AGENT_SOURCES
+
+    for alias, source in AGENT_SOURCES.items():
+        if agent_name in (alias, source.descriptor_name):
+            return alias
+    raise EvalConfigError(
+        f"commissions key {agent_name!r} is not a known agent's name; add an "
+        f'"agents" entry locating it (a registry name or a path to its '
+        f"avp-conformance.json). Keys are descriptor.agent_name (see "
+        f"`avp agent describe`)."
     )
 
 
@@ -128,6 +176,16 @@ def _build_scorer(spec: dict[str, Any]) -> Scorer:
         if "model" in spec:
             kwargs["grader_model"] = spec["model"]
         if "template" in spec:
+            # Strict context (EVAL-FORMAT.md §3): a custom grader template may
+            # only reference the judge's variable set. Catch typos at load,
+            # not on the first paid grading call.
+            judge_vars = {"question": "", "response": "", "correct_answer": ""}
+            unknown = [n for n in template.variables_in(spec["template"]) if n not in judge_vars]
+            if unknown:
+                raise EvalConfigError(
+                    f"llm-judge template references unknown name(s) {', '.join(unknown)}; "
+                    "available: correct_answer, question, response"
+                )
             kwargs["template"] = spec["template"]
         return LLMJudgeScorer(**kwargs)
     raise EvalConfigError(f"unknown scorer {name!r}; choose from {', '.join(_SCORERS)}")
@@ -162,14 +220,18 @@ def _item_from_row(row: dict[str, Any], *, idx: int) -> Item:
 
 
 def _mapped_item(row: dict[str, Any], spec: dict[str, Any], idx: int) -> Item:
-    """Map a raw dataset row to an Item via the config's field mapping."""
+    """Map a raw dataset row to an Item via the config's field mapping.
+
+    The `input` template renders by the eval format's single substitution
+    rule (EVAL-FORMAT.md §3), strict for this context: it's a field mapping,
+    so a token naming no row field is a typo and fails loudly."""
     input_tmpl = spec.get("input")
     if input_tmpl is None:
         raise EvalConfigError(f'dataset source {spec["source"]!r} needs an "input" template')
     try:
-        prompt = input_tmpl.format_map(row)
-    except KeyError as exc:
-        raise EvalConfigError(f"input template references unknown field {exc}") from exc
+        prompt = template.render(input_tmpl, row, strict=True)
+    except template.TemplateError as exc:
+        raise EvalConfigError(f'dataset "input" template: {exc}') from exc
     expected_field = spec.get("expected_field")
     expected = row.get(expected_field) if expected_field else None
     id_field = spec.get("id_field")
@@ -217,6 +279,16 @@ def _load_setup(cid: Any, *, agent: str | None, commissions_dir: Path | None) ->
         base = library.load(cid, commissions_dir=commissions_dir)
     except library.CommissionError as exc:
         raise EvalConfigError(str(exc)) from exc
+    # A prompt without the {input} slot would run BYTE-IDENTICAL for every
+    # dataset case (the case input silently dropped) and the board would score
+    # nonsense. Fail at load with the fix. A commission with no prompt at all
+    # is the explicit fixed-slot opt-out: the case input becomes the prompt.
+    if base.prompt and "input" not in template.variables_in(base.prompt):
+        raise EvalConfigError(
+            f"commission {cid!r} has a prompt without an {{input}} slot, so every "
+            "dataset case would run the identical prompt. Add {input} where the "
+            "case text goes, or remove the prompt to pass the case through verbatim."
+        )
     return Setup(id=cid, commission=base, agent=agent)
 
 
@@ -233,6 +305,7 @@ def _resolve_commissions(specs: Any, *, commissions_dir: Path | None) -> list[Se
             raise EvalConfigError('"commissions" map must not be empty')
         commissions: list[Setup] = []
         for agent_name, ids in specs.items():
+            _reject_alias_key(agent_name)
             if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
                 raise EvalConfigError(
                     f'"commissions"[{agent_name!r}] must be a non-empty list of commission ids'

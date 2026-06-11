@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from avp.commission import Commission, SupervisorPreamble
 from avp_cli.eval.dataset import Item
+from avp_cli.eval.template import render
 
 _SUPERVISOR = SupervisorPreamble(name="avp-cli", version="0.1.0")
 
@@ -43,11 +44,16 @@ class Setup:
         return self.commission.model
 
     def render_prompt(self, item: Item) -> str:
-        """The base prompt with `{input}` filled by the case (or the case verbatim)."""
+        """The base prompt with `{input}` filled by the case (or, when the
+        commission carries no prompt at all, the case verbatim).
+
+        A prompt WITHOUT `{input}` never reaches here: `avp_cli.config`
+        rejects it at load (the case input would be silently dropped and
+        every item would run the identical prompt)."""
         prompt = self.commission.prompt
-        if prompt and "{input}" in prompt:
-            return prompt.replace("{input}", item.prompt)
-        return prompt or item.prompt
+        if not prompt:
+            return item.prompt
+        return render(prompt, {"input": item.prompt})
 
     def to_commission(
         self, item: Item, run_id: str, *, model_override: str | None = None

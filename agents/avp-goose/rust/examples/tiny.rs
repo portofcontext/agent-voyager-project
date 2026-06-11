@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         "run_id": "tiny-demo",
         "model": "anthropic/claude-sonnet-4-6",
         "prompt": "Use the shell to print today's date, then tell me what it is.",
-        "enabled_builtin_tools": ["developer"],
+        "enabled_builtin_tools": { "goose": ["developer"] },
     }))?;
 
     // Run it on Goose. That's it.

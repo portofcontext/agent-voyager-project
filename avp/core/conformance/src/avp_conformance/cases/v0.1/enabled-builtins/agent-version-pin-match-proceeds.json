@@ -1,0 +1,44 @@
+{
+  "id": "agent-version-pin-match-proceeds",
+  "title": "An agent_versions pin matching the running build lets the run proceed",
+  "description": "The positive complement to agent-version-pin-mismatch-fails-fast: when agent_versions pins the running agent at exactly its descriptor.agent_version, the run proceeds and converges normally. The ${AGENT_NAME} and ${AGENT_VERSION} fixture tokens expand to the agent under test's describe identity, so the pin matches by construction on every conforming agent. Also pins a second, unrelated agent name to prove foreign keys are ignored.",
+  "spec_refs": [
+    "spec/v0.1/commission.md#40-agent-version-pins-agent_versions"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "agent-version-pin-match-proceeds",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "agent_versions": {
+      "${AGENT_NAME}": "${AGENT_VERSION}",
+      "some-other-agent-entirely": "9.9.9"
+    },
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "run converges",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no error_occurred",
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ]
+  }
+}

@@ -26,9 +26,12 @@ use crate::emit::{self, Emitter};
 use crate::provider_tap::{self, UsageTap};
 use crate::translate::{self, GooseContent};
 
-/// Reported as the descriptor's `agent_version`. Derived from Cargo.lock by
-/// `build.rs` so it tracks the resolved `goose` dependency.
-const GOOSE_VERSION: &str = env!("GOOSE_VERSION");
+/// The descriptor's `agent_version`: THIS connector build's version (the
+/// number `Commission.agent_versions` pins match and release tags derive
+/// from). The upstream Goose dependency's version is provenance, not
+/// identity; it rides on `agent_started.data["avp.meta"]` as
+/// `goose.upstream_version` (see `events::agent_started`).
+const AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Goose's internal structured-output tool; not a tool the agent offers, so it
 /// is filtered out of the descriptor.
@@ -216,11 +219,57 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     );
     emitter.prelude(commission, &descriptor)?;
 
-    // Fail fast (spec): every name in `enabled_builtin_tools` must be a tool the
-    // agent actually offers. An unknown name is a Commission/agent collision —
-    // emit `error_occurred(commission_collision)` + `agent_stopped(error)` before
-    // the loop, so no model turn runs.
-    if let Some(names) = &commission.enabled_builtin_tools {
+    // Fail fast (spec §4.0): the Commission pins this agent at a different
+    // build. Same-name surfaces can change behavior across builds; refuse
+    // loudly instead of running an unvalidated one.
+    if let Some(pin) =
+        commission.agent_versions.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    {
+        if pin != AGENT_VERSION {
+            emitter.error(
+                ErrorCode::UnsupportedAgentVersion,
+                &format!(
+                    "Commission pins {} at {pin:?}; this build is {AGENT_VERSION:?}",
+                    commission::AGENT_NAME
+                ),
+            )?;
+            emitter.stop(StopReason::Error, None)?;
+            return Ok(());
+        }
+    }
+
+    // Fail fast (spec §4): each present per-agent allowlist map MUST carry our
+    // key (a map without it filters a surface the Commission wasn't authored
+    // for on this agent), and every name under our key must be a tool the
+    // agent actually offers. Either breach is a Commission/agent collision —
+    // emit `error_occurred(commission_collision)` + `agent_stopped(error)`
+    // before the loop, so no model turn runs.
+    let missing_key: Vec<&str> = [
+        ("enabled_builtin_tools", commission.enabled_builtin_tools.as_ref()),
+        ("enabled_builtin_subagents", commission.enabled_builtin_subagents.as_ref()),
+        ("enabled_builtin_skills", commission.enabled_builtin_skills.as_ref()),
+        ("enabled_builtin_mcp_servers", commission.enabled_builtin_mcp_servers.as_ref()),
+    ]
+    .into_iter()
+    .filter_map(|(field, m)| {
+        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME)).then_some(field)
+    })
+    .collect();
+    if !missing_key.is_empty() {
+        emitter.error(
+            ErrorCode::CommissionCollision,
+            &format!(
+                "no {:?} entry in: {}",
+                commission::AGENT_NAME,
+                missing_key.join(", ")
+            ),
+        )?;
+        emitter.stop(StopReason::Error, None)?;
+        return Ok(());
+    }
+    if let Some(names) =
+        commission.enabled_builtin_tools.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    {
         let known: HashSet<&str> =
             descriptor.tools.iter().flatten().map(|t| t.name.as_str()).collect();
         let unknown: Vec<&str> =
@@ -348,7 +397,7 @@ pub async fn describe() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
             eprintln!("avp-goose: describe probe failed ({e}); emitting identity-only descriptor");
             serde_json::from_value(json!({
                 "agent_name": "goose",
-                "agent_version": GOOSE_VERSION,
+                "agent_version": AGENT_VERSION,
                 "spec_version": "0.1",
             }))
             .map_err(|e| anyhow::anyhow!("building fallback descriptor: {e}"))
@@ -361,6 +410,15 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let path_root = std::env::temp_dir().join(format!("avp-goose-describe-{}", std::process::id()));
     std::fs::create_dir_all(&path_root)?;
     std::env::set_var("GOOSE_PATH_ROOT", &path_root);
+    // GOOSE_PATH_ROOT only reroutes goose's own config/data/state. Skill,
+    // agent, and check discovery also sweep $HOME-anchored dirs
+    // (~/.claude/skills, ~/.agents/skills, ~/.config/agents/skills), which
+    // a sandboxed run will never see; point HOME at the throwaway root so
+    // the descriptor advertises only what the agent intrinsically ships
+    // (builtin:// skills), never the operator's local state.
+    let home = path_root.join("home");
+    std::fs::create_dir_all(&home)?;
+    std::env::set_var("HOME", &home);
 
     // Register goose's bundled built-ins so the full surface resolves in-process.
     commission::register_builtins();
@@ -377,6 +435,15 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
         .clone()
         .unwrap_or_else(|| "claude-haiku-4-5".to_string());
     let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
+    // Provider construction requires a key to exist, but the probe never
+    // calls the model, and the isolated HOME/GOOSE_PATH_ROOT hide any key
+    // in the operator's goose store (by design). Give the default provider
+    // a throwaway key rather than degrading to the identity-only fallback
+    // on keyless hosts. An explicitly chosen provider (GOOSE_PROVIDER set)
+    // is expected to bring its own env vars, which pass through.
+    if provider_name == "anthropic" && std::env::var("ANTHROPIC_API_KEY").is_err() {
+        std::env::set_var("ANTHROPIC_API_KEY", "avp-describe-throwaway");
+    }
     // The Commission requires a canonical `origin/model` slug; qualify goose's
     // bare configured model with the provider as its origin.
     let slug = format!("{provider_name}/{native_model}");
@@ -497,7 +564,7 @@ async fn build_descriptor(
 
     let mut descriptor = json!({
         "agent_name": "goose",
-        "agent_version": GOOSE_VERSION,
+        "agent_version": AGENT_VERSION,
         "spec_version": "0.1",
         "tools": tools,
         "mcp_servers": mcp_server_decls,

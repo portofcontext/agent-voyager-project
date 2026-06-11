@@ -63,7 +63,16 @@ from avp_claude_agent_sdk._emit import (
     handle_message,
 )
 from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
-from avp_claude_agent_sdk._translator import tools_from_init
+from avp_claude_agent_sdk._translator import _AGENT_NAME, tools_from_init
+
+# The four per-agent allowlist maps (Commission §4). Validated together in
+# query(): each present map MUST carry this agent's key.
+_ALLOWLIST_FIELDS = (
+    "enabled_builtin_tools",
+    "enabled_builtin_subagents",
+    "enabled_builtin_skills",
+    "enabled_builtin_mcp_servers",
+)
 
 
 class AVPClaudeSDKClient(ClaudeSDKClient):
@@ -120,7 +129,9 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
                 sink=self._sink,
                 prices=load_default_prices(),
                 enabled_builtin_tools=(
-                    self._commission.enabled_builtin_tools if self._commission else None
+                    (self._commission.enabled_builtin_tools or {}).get(_AGENT_NAME)
+                    if self._commission
+                    else None
                 ),
             )
             self._avp_token = set_run(state)
@@ -149,26 +160,65 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
                 self._aborted = True
                 return None
 
-            # Fail fast (spec): a name in enabled_builtin_tools that isn't one of
-            # the agent's tools is a commission_collision; stop before any model
-            # turn. Validated against the probe surface (pre-Commission tools).
-            allow = self._commission.enabled_builtin_tools if self._commission else None
-            if allow is not None:
-                probe_tools = tools_from_init(probe_init, probe_status) if probe_init else None
-                known = {t.name for t in (probe_tools or [])}
-                unknown = [n for n in allow if n not in known]
-                if unknown:
+            # Fail fast (spec §4.0): the Commission pins this agent at a
+            # different build. Same-name surfaces can change behavior across
+            # builds; refuse loudly instead of running an unvalidated one.
+            pin = (
+                (self._commission.agent_versions or {}).get(_AGENT_NAME)
+                if self._commission
+                else None
+            )
+            if pin is not None:
+                actual = _agent_version()
+                if pin != actual:
                     await emit_error(
                         state,
                         ValueError(
-                            "enabled_builtin_tools names not offered by the agent: "
-                            + ", ".join(unknown)
+                            f"Commission pins {_AGENT_NAME} at {pin!r}; this build is {actual!r}"
                         ),
+                        error_code=ErrorCode.unsupported_agent_version,
+                    )
+                    await emit_agent_stopped(state, StopReason.error)
+                    self._aborted = True
+                    return None
+
+            # Fail fast (spec §4): each present allowlist map MUST carry this
+            # agent's key (a map without it filters a surface the Commission
+            # wasn't authored for on this agent), and every tool name under our
+            # key must be one we offer. Validated against the probe surface
+            # (pre-Commission tools); stop before any model turn.
+            if self._commission is not None:
+                missing_key = [
+                    f
+                    for f in _ALLOWLIST_FIELDS
+                    if (m := getattr(self._commission, f)) is not None and _AGENT_NAME not in m
+                ]
+                if missing_key:
+                    await emit_error(
+                        state,
+                        ValueError(f"no {_AGENT_NAME!r} entry in: " + ", ".join(missing_key)),
                         error_code=ErrorCode.commission_collision,
                     )
                     await emit_agent_stopped(state, StopReason.error)
                     self._aborted = True
                     return None
+                allow = (self._commission.enabled_builtin_tools or {}).get(_AGENT_NAME)
+                if allow is not None:
+                    probe_tools = tools_from_init(probe_init, probe_status) if probe_init else None
+                    known = {t.name for t in (probe_tools or [])}
+                    unknown = [n for n in allow if n not in known]
+                    if unknown:
+                        await emit_error(
+                            state,
+                            ValueError(
+                                "enabled_builtin_tools names not offered by the agent: "
+                                + ", ".join(unknown)
+                            ),
+                            error_code=ErrorCode.commission_collision,
+                        )
+                        await emit_agent_stopped(state, StopReason.error)
+                        self._aborted = True
+                        return None
 
         return await super().query(final_prompt, session_id)
 
@@ -208,6 +258,14 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
             reset_run(self._avp_token)
             self._avp_token = None
         await super().disconnect()
+
+
+def _agent_version() -> str:
+    """This build's `descriptor.agent_version` (the package version), the value
+    `Commission.agent_versions` pins match against."""
+    from importlib.metadata import version
+
+    return version(_AGENT_NAME)
 
 
 async def _probe_describe(

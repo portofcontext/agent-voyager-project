@@ -140,7 +140,7 @@ fn build_commission(setup: &Setup, target: &Target, run_id: &str) -> Value {
         "prompt": setup.prompt,
     });
     if !setup.builtins.is_empty() {
-        c["enabled_builtin_tools"] = json!(setup.builtins);
+        c["enabled_builtin_tools"] = json!({ "goose": setup.builtins });
     }
     if let Some(schema) = &setup.output_schema {
         c["output_schema"] = schema.clone();

@@ -45,25 +45,68 @@ def test_eval_from_dict_resolves_commission_ids(lib) -> None:
 
 
 def test_commissions_map_binds_each_id_to_its_agent(tmp_path) -> None:
-    # The `{agent: [ids]}` form binds each commission to an agent and supplies
-    # `agents` from its keys (no separate "agents" key needed).
+    # The `{agent_name: [ids]}` form binds by descriptor.agent_name (the one
+    # public agent identity). Known agents' keys also imply `agents` locators
+    # (identity → registry alias), so no separate "agents" key is needed.
     d = tmp_path / "commissions"
     _save(d, "for-goose", prompt="{input}")
     _save(d, "for-claude", prompt="{input}")
-    cfg = _cfg(commissions={"goose": ["for-goose"], "claude-code": ["for-claude"]})
+    cfg = _cfg(commissions={"goose": ["for-goose"], "avp-claude-agent-sdk": ["for-claude"]})
     ev = config.eval_from_dict(cfg, commissions_dir=d)
     assert {(s.id, s.agent) for s in ev.setups} == {
         ("for-goose", "goose"),
-        ("for-claude", "claude-code"),
+        ("for-claude", "avp-claude-agent-sdk"),
     }
-    assert ev.agents == ["goose", "claude-code"]
+    assert ev.agents == ["goose", "claude-code"]  # locators: registry aliases
+
+
+def test_commissions_map_unknown_key_needs_explicit_agents(tmp_path) -> None:
+    # A third-party agent's descriptor.agent_name has no registry locator, so
+    # omitting "agents" is an error pointing at the fix...
+    d = tmp_path / "commissions"
+    _save(d, "mine", prompt="{input}")
+    cfg = _cfg(commissions={"my-agent": ["mine"]})
+    with pytest.raises(config.EvalConfigError, match='"agents" entry locating it'):
+        config.eval_from_dict(cfg, commissions_dir=d)
+    # ...and an explicit locator (their manifest path) makes the same map fine:
+    # binding still keys on the identity, the locator just finds the agent.
+    cfg["agents"] = ["./my-agent/avp-conformance.json"]
+    ev = config.eval_from_dict(cfg, commissions_dir=d)
+    assert ev.agents == ["./my-agent/avp-conformance.json"]
+    assert {(s.id, s.agent) for s in ev.setups} == {("mine", "my-agent")}
 
 
 def test_commissions_map_rejects_non_list_value(tmp_path) -> None:
+    # The typed gate (EvalConfig) catches the shape with a field path.
     d = tmp_path / "commissions"
     _save(d, "baseline", prompt="{input}")
-    with pytest.raises(config.EvalConfigError, match="non-empty list"):
+    with pytest.raises(config.EvalConfigError, match="not a valid eval config"):
         config.eval_from_dict(_cfg(commissions={"goose": "baseline"}), commissions_dir=d)
+
+
+def test_prompt_without_input_slot_is_rejected_at_load(tmp_path) -> None:
+    # EVAL-FORMAT.md §3: a prompt with no {input} would run byte-identical for
+    # every case (the old behavior silently dropped the case input).
+    d = tmp_path / "commissions"
+    _save(d, "fixed", prompt="always the same task")
+    with pytest.raises(config.EvalConfigError, match=r"without an \{input\} slot"):
+        config.eval_from_dict(_cfg(commissions=["fixed"]), commissions_dir=d)
+    # No prompt at all is the explicit opt-out: the case text IS the prompt.
+    _save(d, "passthrough")
+    ev = config.eval_from_dict(_cfg(commissions=["passthrough"]), commissions_dir=d)
+    assert ev.setups[0].render_prompt(ev.dataset.items[0]) == "hi"
+
+
+def test_unknown_top_level_key_is_rejected(lib) -> None:
+    # The typed gate: unknown keys are typos, not extensions.
+    with pytest.raises(config.EvalConfigError, match="commisions"):
+        config.eval_from_dict(_cfg(commisions=["baseline"], commissions=None), commissions_dir=lib)
+
+
+def test_eval_version_accepted_and_pinned(lib) -> None:
+    assert config.eval_from_dict(_cfg(eval_version="0.1"), commissions_dir=lib)
+    with pytest.raises(config.EvalConfigError, match="eval_version"):
+        config.eval_from_dict(_cfg(eval_version="9.9"), commissions_dir=lib)
 
 
 def test_missing_required_key_errors() -> None:
@@ -79,7 +122,7 @@ def test_unknown_commission_id_errors(tmp_path) -> None:
 
 def test_inline_commission_is_rejected(lib) -> None:
     bad = _cfg(commissions=[{"schema_version": "0.1", "run_id": "x"}])
-    with pytest.raises(config.EvalConfigError, match="referenced by id"):
+    with pytest.raises(config.EvalConfigError, match="not a valid eval config"):
         config.eval_from_dict(bad, commissions_dir=lib)
 
 
@@ -96,7 +139,7 @@ def test_scorer_registry(lib, spec: dict, cls: type) -> None:
 
 
 def test_unknown_scorer_errors(lib) -> None:
-    with pytest.raises(config.EvalConfigError, match="unknown scorer"):
+    with pytest.raises(config.EvalConfigError, match="exact-match"):
         config.eval_from_dict(_cfg(scorer={"name": "nope"}), commissions_dir=lib)
 
 

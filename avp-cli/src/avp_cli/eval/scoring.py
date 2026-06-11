@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from avp_cli.eval import template
 from avp_cli.observability import Summary
 
 # <style>…</style> / <script>…</script> bodies, markdown code fences, and any tag.
@@ -170,15 +171,17 @@ class FidelityScorer:
 
 # The BrowseComp response-format wrapper. Put this around the question in a
 # commission's `prompt` (with the question slot as `{input}`) so the agent
-# emits an "Exact Answer:" line the grader can extract. Verbatim from
-# openai/simple-evals `browsecomp_eval.py` QUERY_TEMPLATE (the `{Question}` slot
-# becomes `{input}` for the AVP commission's substitution).
+# emits an "Exact Answer:" line the grader can extract. Adapted from
+# openai/simple-evals `browsecomp_eval.py` QUERY_TEMPLATE: their `{Question}`
+# slot becomes `{input}`, and their `{{...}}` format-escapes become plain
+# braces — the eval format's substitution (EVAL-FORMAT.md §3) touches only
+# defined-variable tokens, so multi-word brace text is already literal.
 BROWSECOMP_QUERY_TEMPLATE = """{input}
 
 Your response should be in the following format:
-Explanation: {{your explanation for your final answer}}
-Exact Answer: {{your succinct, final answer}}
-Confidence: {{your confidence score between 0% and 100% for your answer}}""".strip()
+Explanation: {your explanation for your final answer}
+Exact Answer: {your succinct, final answer}
+Confidence: {your confidence score between 0% and 100% for your answer}""".strip()
 
 # The grader prompt. `{question}` / `{response}` / `{correct_answer}` are filled
 # per run. Verbatim from openai/simple-evals `browsecomp_eval.py` GRADER_TEMPLATE.
@@ -242,10 +245,16 @@ class LLMJudgeScorer:
         return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
 
     def score(self, item: Any, output: FinalOutput, summary: Summary) -> Score:
-        prompt = self.template.format(
-            question=item.prompt,
-            response=output.text or "",
-            correct_answer="" if item.expected is None else str(item.expected),
+        # Strict render (the template maps a fixed variable set): a custom
+        # `template` from the eval config that typos a slot fails loudly here.
+        prompt = template.render(
+            self.template,
+            {
+                "question": item.prompt,
+                "response": output.text or "",
+                "correct_answer": "" if item.expected is None else str(item.expected),
+            },
+            strict=True,
         )
         verdict = self._grade(prompt)
         m = _CORRECT_RE.search(verdict)

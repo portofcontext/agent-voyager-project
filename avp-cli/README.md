@@ -74,7 +74,10 @@ Two kinds of artifact, two homes:
 ## The eval config (no code)
 
 An eval is one JSON file that references commissions by id. `avp init` scaffolds
-it; you edit it; the CLI runs it.
+it; you edit it; the CLI runs it. The format is pinned by
+[`eval.schema.json`](./eval.schema.json) plus the normative rules in
+[`EVAL-FORMAT.md`](./EVAL-FORMAT.md) (templating, identity vs locator keys,
+run stamping) — the contract a cloud runner reproduces.
 
 ```json
 {
@@ -98,7 +101,7 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
 {
   "schema_version": "0.1",
   "run_id": "terse",
-  "model": "claude-haiku-4-5",
+  "model": "anthropic/claude-haiku-4-5",
   "prompt": "Return ONLY JSON {city,country,population_millions}: {input}",
   "output_schema": { "type": "object", "properties": { "city": { "type": "string" } } }
 }
@@ -145,6 +148,7 @@ already have is left untouched):
 | `avp eval list` | list recent eval runs by voyage id (newest first) |
 | `avp eval view [ID]` | open an eval on agentvoyagerproject.com (default: most recent run) |
 | `avp eval delete ID [--all]` | delete one recorded run by id (or `--all` for every run, `~/.avp/runs`) |
+| `avp cm create ID --agent A` | generate a complete commission (full tool/skill surface + version pin); edit the JSON |
 | `avp cm list` | list your portable commission library (`~/.avp/commissions`) |
 | `avp cm describe ID` | render the Commission a library commission yields |
 | `avp cm check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |

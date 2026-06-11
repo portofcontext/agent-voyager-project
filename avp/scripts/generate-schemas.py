@@ -31,8 +31,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+REPO = ROOT.parent
 sys.path.insert(0, str(ROOT / "bindings" / "python" / "src"))
 sys.path.insert(0, str(ROOT / "core" / "conformance" / "src"))
+sys.path.insert(0, str(REPO / "avp-cli" / "src"))
 
 from avp_conformance.case import AgentBuiltins  # noqa: E402
 from pydantic import TypeAdapter  # noqa: E402
@@ -40,6 +42,7 @@ from pydantic import TypeAdapter  # noqa: E402
 from avp.commission import Commission  # noqa: E402
 from avp.descriptor import AgentDescriptor  # noqa: E402
 from avp.trajectory import Event  # noqa: E402
+from avp_cli.eval.format import EvalConfig  # noqa: E402
 
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_BASE = "https://avp.dev/schema/v0.1"
@@ -56,7 +59,7 @@ def render(adapter: TypeAdapter, *, schema_id: str, title: str, description: str
 
 def write_json(path: Path, doc: dict[str, Any]) -> None:
     path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"  wrote {path.relative_to(ROOT)}")
+    print(f"  wrote {path.relative_to(REPO)}")
 
 
 def main() -> int:
@@ -111,6 +114,23 @@ def main() -> int:
         ),
     )
     write_json(out_dir / "agent-descriptor.schema.json", descriptor_schema)
+
+    # The eval format is the CLI's portable artifact, NOT an AVP wire spec, so
+    # its schema lives with avp-cli rather than under core/spec. Same pattern:
+    # the Pydantic models (avp_cli.eval.format) are the source of truth.
+    eval_schema = render(
+        TypeAdapter(EvalConfig),
+        schema_id="https://avp.dev/schema/eval/0.1/eval.schema.json",
+        title="AVP eval config 0.1",
+        description=(
+            "One eval: a dataset, a scorer, and the library commissions to "
+            "compare, optionally bound per agent (map keys are each agent's "
+            "descriptor.agent_name). Authored as <name>.eval.json. The "
+            "templating, commission-reference, and run-stamping rules an "
+            "implementation must reproduce are in avp-cli/EVAL-FORMAT.md."
+        ),
+    )
+    write_json(REPO / "avp-cli" / "eval.schema.json", eval_schema)
 
     # Clean up files we no longer produce.
     for old in ("event.schema.json", "supervisor-message.schema.json"):

@@ -91,13 +91,45 @@ def _repo_root(start: Path) -> Path:
     return start
 
 
-def _expand_fixture_tokens(commission_json: str, cwd: Path) -> str:
+def _expand_fixture_tokens(
+    commission_json: str, cwd: Path, identity: tuple[str, str] | None = None
+) -> str:
     """Expand in-repo fixture placeholders in a serialized Commission so a case
     can reference repo fixtures portably (their absolute path differs per
     checkout). `${AVP_TEST_MCP}` → the bundled stdio test MCP server at
-    `testing/mcp/avp_test_mcp.py`."""
+    `testing/mcp/avp_test_mcp.py`. `${AGENT_NAME}` / `${AGENT_VERSION}` → the
+    agent-under-test's descriptor identity, so cases can key the per-agent
+    `enabled_builtin_*` / `agent_versions` maps portably across agents."""
     test_mcp = _repo_root(cwd) / "testing" / "mcp" / "avp_test_mcp.py"
-    return commission_json.replace("${AVP_TEST_MCP}", str(test_mcp))
+    out = commission_json.replace("${AVP_TEST_MCP}", str(test_mcp))
+    if identity is not None:
+        name, version = identity
+        out = out.replace("${AGENT_NAME}", name).replace("${AGENT_VERSION}", version)
+    return out
+
+
+def _describe_identity(
+    manifest: AgentManifest, command: list[str], cwd: Path, prefix: list[str], timeout: float
+) -> tuple[str, str]:
+    """The agent-under-test's `(agent_name, agent_version)` from its pre-flight
+    `describe` surface. Cases key per-agent Commission maps with these via the
+    `${AGENT_NAME}` / `${AGENT_VERSION}` fixture tokens; `describe` is a
+    first-class agent contract, so failure here aborts the check loudly."""
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        out_path = Path(f.name)
+    try:
+        cmd = [*prefix, *command, "describe", "--out", str(out_path)]
+        env = {**os.environ, **manifest.env}
+        result = subprocess.run(
+            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+        )
+        if result.returncode != 0:
+            tail = result.stderr[-300:].strip() if result.stderr else "(no stderr)"
+            raise RuntimeError(f"describe exit={result.returncode}: {tail}")
+        descriptor = AgentDescriptor.model_validate(json.loads(out_path.read_text()))
+        return descriptor.agent_name, descriptor.agent_version
+    finally:
+        out_path.unlink(missing_ok=True)
 
 
 def _resolve_command(command: list[str]) -> list[str]:
@@ -312,6 +344,7 @@ def _run_case(
     prefix: list[str],
     timeout: float,
     dump_dir: Path | None = None,
+    identity: tuple[str, str] | None = None,
 ) -> tuple[list[dict] | None, str | None]:
     """Spawn the agent's `run` for one case; return (events, error).
 
@@ -325,7 +358,7 @@ def _run_case(
         tmpd = Path(tmp)
         commission_path = tmpd / "commission.json"
         commission_json = _expand_fixture_tokens(
-            tc.commission.model_dump_json(by_alias=True, exclude_none=True), cwd
+            tc.commission.model_dump_json(by_alias=True, exclude_none=True), cwd, identity
         )
         commission_path.write_text(commission_json)
         out_path = tmpd / "out.jsonl"
@@ -424,11 +457,21 @@ def check(
     n_fail = 0
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup, allow_domain)
-        typer.echo(f"running {total} case(s) against {manifest.command[0]!r}\n")
+        try:
+            identity = _describe_identity(manifest, command, cwd, prefix, timeout)
+        except Exception as exc:
+            typer.echo(f"error: could not learn the agent's identity via describe: {exc}", err=True)
+            raise typer.Exit(code=2) from None
+        typer.echo(
+            f"running {total} case(s) against {manifest.command[0]!r} "
+            f"({identity[0]} v{identity[1]})\n"
+        )
         for cat_name in sorted(grouped):
             typer.echo(f"  {cat_name}:")
             for tc in grouped[cat_name]:
-                events, error = _run_case(tc, manifest, command, cwd, prefix, timeout, dump_dir)
+                events, error = _run_case(
+                    tc, manifest, command, cwd, prefix, timeout, dump_dir, identity
+                )
                 if error is not None:
                     typer.echo(f"    FAIL  {tc.id}  {error}", err=True)
                     n_fail += 1

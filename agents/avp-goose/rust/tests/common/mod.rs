@@ -196,7 +196,8 @@ pub fn test_mcp_server() -> Value {
 // --- avp fixtures (built from the wire form to avoid field plumbing) ---------
 
 pub fn commission(extra: Value) -> avp::Commission {
-    let mut base = json!({ "schema_version": "0.1", "run_id": "r1", "model": "claude-opus-4-7" });
+    let mut base =
+        json!({ "schema_version": "0.1", "run_id": "r1", "model": "anthropic/claude-opus-4-7" });
     merge(&mut base, extra);
     serde_json::from_value(base).expect("valid Commission")
 }

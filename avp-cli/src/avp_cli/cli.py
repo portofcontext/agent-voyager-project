@@ -11,7 +11,7 @@
     avp env create NAME [flags]      create a declarative environment (--image/--pip/--file/--net ...)
     avp env run NAME -- CMD          run a command inside a declarative environment (sandboxed)
     avp sandbox status|stop          inspect or stop the managed sandbox server
-    avp cm create [ID]       build a commission into your library (wizard, or pass flags)
+    avp cm create ID --agent A   generate a complete commission (full surface; edit the JSON)
     avp cm list              list your portable commission library
     avp cm describe ID       render a library commission by id
     avp cm check ID|FILE     check a library commission, or a Commission JSON file
@@ -194,9 +194,34 @@ def _run_and_report(
     return 0
 
 
+def _agent_identity(agent) -> tuple[str | None, str | None]:
+    """The agent's self-declared `descriptor.agent_name`: registry metadata
+    for known agents (free), one host-side `describe` for manifest-path
+    agents. This is the ONE public identity that keys Commission
+    `enabled_builtin_*` / `agent_versions` maps, eval per-agent bindings,
+    and board labels; the resolution spec (alias or path) is just a locator."""
+    if agent.agent_name:
+        return agent.agent_name, None
+    from avp_cli.agent import describe_agent
+
+    descriptor, err = describe_agent(agent.manifest, agent.manifest_cwd)
+    if descriptor is None:
+        return None, err
+    return descriptor.agent_name, None
+
+
 def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
-    """Resolve one agent to its sandbox form: recipe + derived image (built or
-    reused). Returns None (with a warning) when the agent can't run."""
+    """Resolve one agent to its sandbox form: identity (descriptor agent_name)
+    + recipe + derived image (built or reused). Returns None (with a warning)
+    when the agent can't run."""
+    agent_name, err = _agent_identity(agent)
+    if agent_name is None:
+        console.warn(
+            f"skipping agent '{agent.name}': couldn't learn its identity via "
+            f"describe ({err}). Per-agent Commission maps and eval bindings key "
+            "on descriptor.agent_name, so a describable agent is required."
+        )
+        return None
     try:
         recipe = container_recipe(agent)
     except NoContainerRecipe as exc:
@@ -214,7 +239,7 @@ def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
     if built == tag and not quiet:
         console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
-        name=agent.name,
+        name=agent_name,
         image=built,
         command=recipe.command,
         env={**dict(recipe.env), **agent.manifest.env},
@@ -450,24 +475,6 @@ def _cmd_commission(args: argparse.Namespace) -> int:
 
 _ID_RE = re.compile(r"^[a-z0-9_-]+$")
 
-# Flags that, if any are set, mean "the caller specified this commission via
-# flags" — so we skip the interactive wizard even on a TTY. `--agent` is NOT
-# here: it just pre-selects the anchor for the wizard's pickers.
-_CONTENT_FLAG_ATTRS = (
-    "from_id",
-    "model",
-    "prompt",
-    "system_prompt",
-    "provider_id",
-    "provider_base_url",
-    "credential",
-    "enable_tools",
-    "enable_subagents",
-    "enable_skills",
-    "enable_mcp",
-    "tags",
-)
-
 
 def _describe_for_create(spec: str) -> tuple[object | None, str | None]:
     """Resolve an agent spec and fetch its Descriptor; (descriptor, error)."""
@@ -484,33 +491,16 @@ def _describe_for_create(spec: str) -> tuple[object | None, str | None]:
 
 
 def _cmd_commission_create(args: argparse.Namespace) -> int:
-    """Build a wire Commission into the library, via wizard or flags.
+    """Generate a complete wire Commission into the library; edit the JSON after.
 
-    Flags fully specify a commission for non-interactive / coding-agent use; with
-    none of them on a TTY, an interactive wizard fills the fields. Either way the
-    bulky fields (`output_schema`, inline `mcp_servers` / `skills`) come from a
-    cloned base (`--from <id>`), not inline authoring; edit the JSON for the rest.
+    No wizard: `--agent` enumerates the agent's full builtin surface into the
+    per-agent `enabled_builtin_*` maps, pins `agent_versions`, fills a sample
+    `{input}` prompt and a runnable model, and writes the file. Restricting the
+    surface is deleting lines from the JSON (a job for a coding agent), not
+    answering pickers. `--from <id>` clones an existing commission instead
+    (carrying its bulky fields: `output_schema`, inline `mcp_servers`/`skills`).
     """
-    flag_mode = any(getattr(args, a) is not None for a in _CONTENT_FLAG_ATTRS)
-    interactive = sys.stdin.isatty() and console.err.is_terminal and not flag_mode
-
     cid = args.id
-    if not cid and interactive:
-        cid = questionary.text(
-            "Commission id (becomes <id>.json in your library):",
-            qmark=brand.SAILBOAT,
-            style=_PICKER_STYLE,
-            validate=lambda s: bool(_ID_RE.match(s.strip())) or "use a-z, 0-9, '-', '_'",
-        ).ask()
-        if cid is None:
-            raise SystemExit(0)
-        cid = cid.strip()
-    if not cid:
-        console.error_panel(
-            "commission id required",
-            "pass one: `avp cm create <id> [flags]` (or run it on a TTY for the wizard).",
-        )
-        return 1
     if not _ID_RE.match(cid):
         console.error_panel(
             "invalid commission id",
@@ -532,146 +522,42 @@ def _cmd_commission_create(args: argparse.Namespace) -> int:
             console.error_panel(f"can't clone {args.from_id!r}", str(exc))
             return 1
 
-    # Anchor agent: pre-selected by --agent, else picked in the wizard. Describing
-    # it unlocks the enabled_* pickers and validates enabled_* names.
+    # Generation enumerates the agent's real surface, so it needs a describable
+    # agent; a partial file full of guesses would defeat the point.
     descriptor = None
-    agent_spec = args.agent
-    if agent_spec is None and interactive:
-        agent_spec = _pick_anchor_agent()
-    if agent_spec:
-        descriptor, err = _describe_for_create(agent_spec)
+    if args.agent:
+        descriptor, err = _describe_for_create(args.agent)
         if descriptor is None:
-            console.warn(
-                f"couldn't describe '{agent_spec}': {err}. "
-                "Continuing without its tool/skill pickers + validation."
+            console.error_panel(
+                f"couldn't describe '{args.agent}'",
+                f"{err}. Generation enumerates the agent's tools/skills/subagents "
+                "from its descriptor, so the agent must be installed and describable "
+                "(`avp agent list`).",
             )
-
-    model = args.model
-    prompt = args.prompt
-    system_prompt = args.system_prompt
-    enabled = {
-        "enabled_builtin_tools": args.enable_tools,
-        "enabled_builtin_subagents": args.enable_subagents,
-        "enabled_builtin_skills": args.enable_skills,
-        "enabled_builtin_mcp_servers": args.enable_mcp,
-    }
-    if interactive:
-        model = _ask_text(
-            "Model (blank for the agent's default):",
-            (base.model if base else None) or (descriptor.default_model if descriptor else None),
-        )
-        prompt = _ask_text(
-            "User prompt (use {input} where the dataset case goes; blank to skip):",
-            base.prompt if base else None,
-        )
-        system_prompt = _ask_text(
-            "System prompt (blank to skip):", base.system_prompt if base else None
-        )
-        if descriptor is not None:
-            enabled = _ask_enabled(descriptor, base)
+            return 1
 
     try:
         c = commission_mod.build_commission(
             cid,
             base=base,
-            model=model,
-            prompt=prompt,
-            system_prompt=system_prompt,
+            model=args.model,
             provider_id=args.provider_id,
             provider_base_url=args.provider_base_url,
             credential=args.credential,
-            tags=args.tags,
             descriptor=descriptor,
-            **enabled,
         )
     except commission_mod.BuildError as exc:
         console.error_panel("can't build that commission", str(exc))
         return 1
 
-    library.save(cid, c, overwrite=args.force)
+    path = library.save(cid, c, overwrite=args.force)
     console.out.print(
         f"[green]✓[/] created [bold {brand.SAIL}]{cid}[/] in {_tilde(paths.commissions_dir())}"
     )
+    console.note(f"edit it: {_tilde(path)} (delete allowlist lines to restrict the surface)")
     console.note(f"avp cm describe {cid}  ·  see the full wire Commission")
     console.note(f'reference it in an eval\'s "commissions" list as "{cid}"')
     return 0
-
-
-def _pick_anchor_agent() -> str | None:
-    """Wizard step: pick the agent to build against (or skip for a plain commission)."""
-    choices = [
-        questionary.Choice(title="None - do not use agent built-in capabilities", value=""),
-        *(questionary.Choice(title=n, value=n) for n in known_agents()),
-    ]
-    pick = questionary.select(
-        "Build against which agent? (unlocks its tool / skill / subagent pickers)",
-        choices=choices,
-        qmark=brand.SAILBOAT,
-        pointer="»",
-        instruction=" ",
-        style=_PICKER_STYLE,
-    ).ask()
-    if pick is None:  # Esc / Ctrl-C
-        raise SystemExit(0)
-    return pick or None
-
-
-def _ask_text(message: str, default: str | None) -> str | None:
-    """Wizard text input prefilled with `default`; returns the trimmed value or None."""
-    ans = questionary.text(
-        message, default=default or "", qmark=brand.SAILBOAT, style=_PICKER_STYLE
-    ).ask()
-    if ans is None:
-        raise SystemExit(0)
-    return ans.strip() or None
-
-
-def _ask_enabled(descriptor, base) -> dict[str, list[str] | None]:
-    """Per builtin category, optionally restrict to a subset of what the agent has.
-
-    Skipping the restriction leaves the field `None` (every entry exposed, the
-    default); restricting then selecting nothing yields `[]` (expose none).
-    """
-    cats = [
-        ("enabled_builtin_tools", "tools", [t.name for t in descriptor.tools or []]),
-        ("enabled_builtin_subagents", "subagents", [s.name for s in descriptor.subagents or []]),
-        ("enabled_builtin_skills", "skills", [s.name for s in descriptor.skills or []]),
-        (
-            "enabled_builtin_mcp_servers",
-            "MCP servers",
-            [m.id for m in descriptor.mcp_servers or []],
-        ),
-    ]
-    out: dict[str, list[str] | None] = {}
-    for field, label, names in cats:
-        if not names:
-            out[field] = None
-            continue
-        base_val = getattr(base, field) if base else None
-        restrict = questionary.confirm(
-            f"Restrict which {label} the agent may use? (default: expose all {len(names)})",
-            default=base_val is not None,
-            qmark=brand.SAILBOAT,
-            style=_PICKER_STYLE,
-        ).ask()
-        if restrict is None:
-            raise SystemExit(0)
-        if not restrict:
-            out[field] = None
-            continue
-        preselected = set(base_val or [])
-        sel = questionary.checkbox(
-            f"Select {label} to expose (none selected = expose none):",
-            choices=[questionary.Choice(title=n, value=n, checked=n in preselected) for n in names],
-            qmark=brand.SAILBOAT,
-            pointer="»",
-            instruction="(space to toggle, enter to confirm)",
-            style=_PICKER_STYLE,
-        ).ask()
-        if sel is None:
-            raise SystemExit(0)
-        out[field] = sel
-    return out
 
 
 def _cmd_commission_validate(target: str) -> int:
@@ -1607,32 +1493,30 @@ def _build_parser() -> argparse.ArgumentParser:
     csub = com_p.add_subparsers(dest="commission_cmd", required=True)
     p_create = csub.add_parser(
         "create",
-        help="Build a commission into your library (interactive wizard, or fully via flags)",
+        help="Generate a complete commission into your library (then edit the JSON)",
+    )
+    p_create.add_argument("id", help="Commission id (becomes <id>.json in your library)")
+    p_create.add_argument(
+        "--agent",
+        default=None,
+        help=f"Generate against this agent ({', '.join(known_agents())}, or a manifest path): "
+        "enumerates its full tool/skill/subagent/MCP surface into the per-agent "
+        "enabled_builtin_* maps and pins agent_versions. Edit the file to restrict.",
     )
     p_create.add_argument(
-        "id", nargs="?", default=None, help="Commission id (becomes <id>.json; prompts if a TTY)"
+        "--model",
+        default=None,
+        help="Model slug, e.g. anthropic/claude-opus-4-8 (default: the agent's, "
+        "else a cheap runnable sample)",
     )
     p_create.add_argument(
         "--from",
         dest="from_id",
         default=None,
         metavar="ID",
-        help="Clone an existing library commission as the base (carries its output_schema, "
-        "mcp_servers, skills); other flags override on top.",
+        help="Clone an existing library commission as the base instead of generating "
+        "(carries its output_schema, mcp_servers, skills).",
     )
-    p_create.add_argument(
-        "--agent",
-        default=None,
-        help=f"Anchor agent for the enabled-* pickers + validation ({', '.join(known_agents())}, "
-        "or a manifest path).",
-    )
-    p_create.add_argument(
-        "--model", default=None, help="Model slug, e.g. anthropic/claude-opus-4-8"
-    )
-    p_create.add_argument(
-        "--prompt", default=None, help="User prompt; use {input} where the dataset case goes"
-    )
-    p_create.add_argument("--system-prompt", dest="system_prompt", default=None)
     p_create.add_argument(
         "--provider-id",
         dest="provider_id",
@@ -1654,26 +1538,6 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="HANDLE",
         help="Vault handle for the provider key (a SecretRef; see `avp env secret create`)",
     )
-    p_create.add_argument(
-        "--enable-tool",
-        dest="enable_tools",
-        action="append",
-        metavar="NAME",
-        help="Expose only this builtin tool (repeatable); validated against --agent. "
-        "Omit to expose all the agent's tools.",
-    )
-    p_create.add_argument(
-        "--enable-subagent", dest="enable_subagents", action="append", metavar="NAME"
-    )
-    p_create.add_argument("--enable-skill", dest="enable_skills", action="append", metavar="NAME")
-    p_create.add_argument(
-        "--enable-mcp",
-        dest="enable_mcp",
-        action="append",
-        metavar="ID",
-        help="Expose only this builtin MCP server (repeatable).",
-    )
-    p_create.add_argument("--tag", dest="tags", action="append", metavar="TAG")
     p_create.add_argument(
         "--force", action="store_true", help="Overwrite an existing commission with this id"
     )

@@ -1,5 +1,6 @@
 {
   "eval": {
+    "eval_version": "0.1",
     "name": "parsebench-table",
     "dataset": {
       "source": "huggingface",
@@ -14,8 +15,12 @@
       "threshold": 0.8
     },
     "commissions": {
-      "goose": ["parsebench-goose"],
-      "claude-code": ["parsebench-claude"]
+      "goose": [
+        "parsebench-goose"
+      ],
+      "avp-claude-agent-sdk": [
+        "parsebench-claude"
+      ]
     }
   },
   "commissions": {
@@ -24,12 +29,23 @@
       "run_id": "parsebench-goose",
       "model": "anthropic/claude-opus-4-8",
       "prompt": "Reproduce the table from a PDF page as a single HTML <table>.\n1. Download it: curl -sL '{input}' -o page.pdf\n2. Render the page to an image with the pdf-vision get_page_image tool and LOOK at it. The image is the ground truth for the 2D layout: how many columns there are, which cells are merged or span rows, section-header rows, and which values visually share one cell (e.g. multiple holders inside a single cell). Use get_page_text only to copy exact text; trust the image for structure.\n3. Rebuild as ONE HTML <table> that matches what you see: one <tr> per visual row, <th> for header cells, <td> for data, colspan/rowspan for merged cells. Keep column order and exact cell text. Do NOT split a value into extra columns or merge rows that are visually separate.\n4. Verify against the image: the header column count and each row's cell count must match the page. Fix and redo if not. Do not submit a table you can see is wrong.\n5. Output only the final HTML <table>.",
-      "enabled_builtin_tools": ["shell", "write", "edit"],
+      "enabled_builtin_tools": {
+        "goose": [
+          "shell",
+          "write",
+          "edit"
+        ]
+      },
       "mcp_servers": [
         {
           "type": "stdio",
           "id": "pdf-vision",
-          "command": ["uvx", "--from", "git+https://github.com/I-CAN-hack/pdf-mcp.git", "pdf-mcp"]
+          "command": [
+            "uvx",
+            "--from",
+            "git+https://github.com/I-CAN-hack/pdf-mcp.git",
+            "pdf-mcp"
+          ]
         }
       ]
     },
@@ -38,7 +54,14 @@
       "run_id": "parsebench-claude",
       "model": "anthropic/claude-opus-4-8",
       "prompt": "Download the PDF page at {input}, read it, rebuild it as a single HTML <table>, then re-read the original and verify your table matches before returning. Output only the HTML.",
-      "enabled_builtin_tools": ["Bash", "Read", "Write", "WebFetch"]
+      "enabled_builtin_tools": {
+        "avp-claude-agent-sdk": [
+          "Bash",
+          "Read",
+          "Write",
+          "WebFetch"
+        ]
+      }
     }
   }
 }

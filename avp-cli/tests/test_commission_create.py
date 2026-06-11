@@ -1,5 +1,5 @@
-"""Building commissions into the library: `commission.build_commission` (unit)
-and the `avp cm create` flag path crossing the describe seam."""
+"""Generating commissions into the library: `commission.build_commission` (unit)
+and the `avp cm create` generator path crossing the describe seam."""
 
 from __future__ import annotations
 
@@ -30,10 +30,11 @@ def _descriptor() -> AgentDescriptor:
 
 
 def test_build_sets_library_conventions() -> None:
-    c = commission_mod.build_commission("my-id", prompt="{input}", model="x/m")
+    c = commission_mod.build_commission("my-id", model="x/m")
     assert c.schema_version == "0.1"
     assert c.run_id == "my-id"  # run_id is the id, by convention
-    assert c.prompt == "{input}" and c.model == "x/m"
+    assert c.model == "x/m"
+    assert "{input}" in c.prompt  # the generated sample prompt is eval-ready
 
 
 def test_clone_carries_bulky_fields_but_resets_run_id() -> None:
@@ -41,40 +42,71 @@ def test_clone_carries_bulky_fields_but_resets_run_id() -> None:
     base = Commission(
         schema_version="0.1", run_id="old", model="x/m", prompt="p", output_schema=schema
     )
-    c = commission_mod.build_commission("new", base=base, prompt="overridden")
+    c = commission_mod.build_commission("new", base=base)
     assert c.run_id == "new"  # forced to the new id, not the base's
     assert c.output_schema == schema  # bulky field carried from the clone
-    assert c.prompt == "overridden"  # override wins
-    assert c.model == "x/m"  # un-overridden base value retained
+    assert c.prompt == "p"  # base values retained
+    assert c.model == "x/m"
 
 
-def test_empty_list_is_a_real_value_expose_none() -> None:
-    c = commission_mod.build_commission("x", model="x/m", enabled_builtin_tools=[])
-    assert c.enabled_builtin_tools == []  # [] (expose none), not None (expose all)
+def test_generation_enumerates_the_full_surface_per_agent() -> None:
+    c = commission_mod.build_commission("x", descriptor=_descriptor())
+    assert c.enabled_builtin_tools == {"demo": ["Read", "Grep"]}
+    assert c.enabled_builtin_subagents == {"demo": ["explorer"]}
+    assert c.enabled_builtin_skills == {"demo": ["pdf"]}
+    assert c.enabled_builtin_mcp_servers == {"demo": ["brain"]}
+    assert c.agent_versions == {"demo": "1.0.0"}  # pinned at the described build
+    # default_model "claude-haiku-4-5" is not a canonical slug -> sample model
+    assert c.model == commission_mod.SAMPLE_MODEL
 
 
-def test_descriptor_validation_accepts_a_known_subset() -> None:
-    c = commission_mod.build_commission(
-        "x", model="x/m", enabled_builtin_tools=["Read"], descriptor=_descriptor()
+def test_generation_omits_categories_the_agent_lacks() -> None:
+    bare = AgentDescriptor(
+        agent_name="tiny",
+        agent_version="0.1.0",
+        spec_version="0.1",
+        tools=[ToolDecl(name="Read")],
     )
-    assert c.enabled_builtin_tools == ["Read"]
+    c = commission_mod.build_commission("x", descriptor=bare)
+    assert c.enabled_builtin_tools == {"tiny": ["Read"]}
+    # No subagents/skills/MCP advertised: fields stay None (expose-all default),
+    # never {agent: []} (which would mean expose NONE).
+    assert c.enabled_builtin_subagents is None
+    assert c.enabled_builtin_skills is None
+    assert c.enabled_builtin_mcp_servers is None
 
 
-def test_descriptor_validation_rejects_an_unknown_tool() -> None:
+def test_slug_default_model_is_used_when_canonical() -> None:
+    d = _descriptor().model_copy(update={"default_model": "anthropic/claude-opus-4-8"})
+    c = commission_mod.build_commission("x", descriptor=d)
+    assert c.model == "anthropic/claude-opus-4-8"
+
+
+def test_descriptor_validation_rejects_an_unknown_tool_in_my_key() -> None:
+    base = Commission(
+        schema_version="0.1",
+        run_id="b",
+        model="x/m",
+        prompt="p",
+        enabled_builtin_tools={"demo": ["Bash"]},
+    )
     with pytest.raises(commission_mod.BuildError, match="no tool 'Bash'"):
-        commission_mod.build_commission(
-            "x", enabled_builtin_tools=["Bash"], descriptor=_descriptor()
-        )
+        commission_mod.build_commission("x", base=base, descriptor=_descriptor())
 
 
-def test_descriptor_validation_checks_mcp_servers_by_id() -> None:
-    with pytest.raises(commission_mod.BuildError, match="no MCP server 'ghost'"):
-        commission_mod.build_commission(
-            "x", enabled_builtin_mcp_servers=["ghost"], descriptor=_descriptor()
-        )
+def test_descriptor_validation_ignores_other_agents_keys() -> None:
+    base = Commission(
+        schema_version="0.1",
+        run_id="b",
+        model="x/m",
+        prompt="p",
+        enabled_builtin_tools={"demo": ["Read"], "someone-else": ["whatever"]},
+    )
+    c = commission_mod.build_commission("x", base=base, descriptor=_descriptor())
+    assert c.enabled_builtin_tools["someone-else"] == ["whatever"]  # not ours to judge
 
 
-# ── avp cm create (CLI seam: create -> describe -> build) ─────────────
+# ── avp cm create (CLI seam: create -> describe -> generate) ─────────────
 
 
 @pytest.fixture
@@ -83,54 +115,40 @@ def avp_home(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_create_via_flags_writes_a_wire_commission(avp_home, monkeypatch) -> None:
-    # No --agent: no describe, no validation; pure flag build.
-    rc = cli.main(["cm", "create", "terse", "--model", "x/m", "--prompt", "{input}"])
+def test_create_without_agent_writes_a_minimal_runnable_commission(avp_home) -> None:
+    rc = cli.main(["cm", "create", "terse", "--model", "x/m"])
     assert rc == 0
     c = library.load("terse")
-    assert c.run_id == "terse" and c.model == "x/m" and c.prompt == "{input}"
+    assert c.run_id == "terse" and c.model == "x/m"
+    assert "{input}" in c.prompt  # never a blank-field crash: sample prompt fills in
 
 
-def test_create_validates_enabled_tools_against_the_agent(avp_home, monkeypatch) -> None:
+def test_create_with_agent_generates_the_full_surface(avp_home, monkeypatch) -> None:
     # Stub the describe seam so the test is deterministic without an agent binary.
     monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (_descriptor(), None))
-    rc = cli.main(
-        ["cm", "create", "x", "--agent", "demo", "--enable-tool", "Nope", "--prompt", "p"]
-    )
-    assert rc == 1  # unknown tool rejected before it could become commission_collision
+    rc = cli.main(["cm", "create", "x", "--agent", "demo"])
+    assert rc == 0
+    c = library.load("x")
+    assert c.enabled_builtin_tools == {"demo": ["Read", "Grep"]}
+    assert c.agent_versions == {"demo": "1.0.0"}
+
+
+def test_create_fails_loudly_when_describe_fails(avp_home, monkeypatch) -> None:
+    monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (None, "boom"))
+    rc = cli.main(["cm", "create", "x", "--agent", "demo"])
+    assert rc == 1  # generation needs the real surface; no partial guess-file
     assert not library.exists("x")
 
 
-def test_create_with_valid_enabled_tool_succeeds(avp_home, monkeypatch) -> None:
-    monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (_descriptor(), None))
-    rc = cli.main(
-        [
-            "cm",
-            "create",
-            "x",
-            "--agent",
-            "demo",
-            "--enable-tool",
-            "Read",
-            "--prompt",
-            "p",
-            "--model",
-            "x/m",
-        ]
-    )
-    assert rc == 0
-    assert library.load("x").enabled_builtin_tools == ["Read"]
-
-
 def test_create_refuses_to_clobber_without_force(avp_home) -> None:
-    assert cli.main(["cm", "create", "dup", "--prompt", "a", "--model", "x/m"]) == 0
-    assert cli.main(["cm", "create", "dup", "--prompt", "b", "--model", "x/m"]) == 1  # exists
-    assert cli.main(["cm", "create", "dup", "--prompt", "b", "--force", "--model", "x/m"]) == 0
-    assert library.load("dup").prompt == "b"
+    assert cli.main(["cm", "create", "dup", "--model", "x/m"]) == 0
+    assert cli.main(["cm", "create", "dup", "--model", "y/m"]) == 1  # exists
+    assert cli.main(["cm", "create", "dup", "--model", "y/m", "--force"]) == 0
+    assert library.load("dup").model == "y/m"
 
 
 def test_create_rejects_a_bad_id(avp_home) -> None:
-    assert cli.main(["cm", "create", "Bad Id", "--prompt", "p"]) == 1
+    assert cli.main(["cm", "create", "Bad Id"]) == 1
 
 
 def test_create_clone_then_override(avp_home) -> None:
@@ -138,7 +156,7 @@ def test_create_clone_then_override(avp_home) -> None:
     library.save(
         "src", Commission(schema_version="0.1", run_id="src", model="x/m", output_schema=schema)
     )
-    rc = cli.main(["cm", "create", "dst", "--from", "src", "--model", "x/m"])
+    rc = cli.main(["cm", "create", "dst", "--from", "src"])
     assert rc == 0
     dst = library.load("dst")
     assert dst.output_schema == schema and dst.model == "x/m" and dst.run_id == "dst"
@@ -164,7 +182,7 @@ def test_build_commission_credential_requires_provider_id() -> None:
         commission_mod.build_commission("x", model="openai/gpt-4o", credential="or-key")
 
 
-def test_create_via_flags_with_provider(avp_home) -> None:
+def test_create_with_provider(avp_home) -> None:
     rc = cli.main(
         [
             "cm",
@@ -176,8 +194,6 @@ def test_create_via_flags_with_provider(avp_home) -> None:
             "openrouter",
             "--credential",
             "or-key",
-            "--prompt",
-            "{input}",
         ]
     )
     assert rc == 0

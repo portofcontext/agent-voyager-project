@@ -261,11 +261,15 @@ pub fn agent_started(
     // filtering beyond what's already baked into the loaded extensions (e.g.
     // `enabled_builtin_tools` -> the developer extension's `available_tools`), so
     // agent_started mirrors the descriptor's tools / subagents / MCP / skills.
+    // `agent_version` is this connector build; the wrapped Goose dependency's
+    // own version is provenance and rides as an opaque meta annotation.
+    let mut meta = serde_json::Map::new();
+    meta.insert("goose.upstream_version".into(), env!("GOOSE_VERSION").into());
     let data = AgentStartedData {
         trace_id: trace_id.parse().expect("valid trace id"),
         span_id: span_id.parse().expect("valid span id"),
         parent_span_id: parent_span_id.parse().expect("valid parent span id"),
-        avp_meta: None,
+        avp_meta: Some(meta),
         avp_operation_name: Some(AgentStartedDataAvpOperationName::InvokeAgent),
         avp_provider_name: provider.map(str::to_string),
         avp_request_model: model.map(str::to_string),

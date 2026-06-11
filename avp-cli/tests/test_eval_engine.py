@@ -54,7 +54,7 @@ def test_setup_to_commission_carries_the_variant_surface() -> None:
     setup = _setup(
         "terse",
         prompt="Return JSON for: {input}",
-        enabled_builtin_tools=["read_file"],
+        enabled_builtin_tools={"demo": ["read_file"]},
         output_schema=schema,
         model="anthropic/claude-haiku-4-5",
     )
@@ -63,7 +63,7 @@ def test_setup_to_commission_carries_the_variant_surface() -> None:
 
     assert c.run_id == "terse-i1"
     assert c.prompt == "Return JSON for: Paris, France"  # {input} filled with the case
-    assert c.enabled_builtin_tools == ["read_file"]
+    assert c.enabled_builtin_tools == {"demo": ["read_file"]}
     assert c.output_schema == schema
     assert c.model == "anthropic/claude-haiku-4-5"  # the commission's own model
     assert c.supervisor is not None and c.supervisor.name == "avp-cli"
