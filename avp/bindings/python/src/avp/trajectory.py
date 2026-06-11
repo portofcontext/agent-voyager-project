@@ -90,6 +90,7 @@ class ErrorCode(StrEnum):
     agent_crash = "agent_crash"
     unsupported_model = "unsupported_model"
     unsupported_provider = "unsupported_provider"
+    unsupported_agent_version = "unsupported_agent_version"
     commission_collision = "commission_collision"
     mcp_connect_failed = "mcp_connect_failed"
     unknown = "unknown"

@@ -35,12 +35,18 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
                 "name": "x",
                 "dataset": _DATASET,
                 "scorer": {"name": "exact-match"},
-                "commissions": {"goose": ["g"], "claude-code": ["c"]},
+                "commissions": {"goose": ["g"], "avp-claude-agent-sdk": ["c"]},
             }
         )
     )
     setups = [
-        _setup("g", "goose", prompt="render {input}", enabled_builtin_tools=["shell"], model="x/m"),
+        _setup(
+            "g",
+            "goose",
+            prompt="render {input}",
+            enabled_builtin_tools={"goose": ["shell"]},
+            model="x/m",
+        ),
         _setup("c", "claude-code", prompt="fetch {input}", model="x/m2"),
     ]
     run_manifest.write(
@@ -63,11 +69,11 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
         "threshold_override": 0.8,
     }
     # verbatim eval config is embedded
-    assert m["eval_config"]["commissions"] == {"goose": ["g"], "claude-code": ["c"]}
+    assert m["eval_config"]["commissions"] == {"goose": ["g"], "avp-claude-agent-sdk": ["c"]}
     # full commission bodies + agent binding, not just ids
     assert m["commissions"]["g"]["agent"] == "goose"
     assert m["commissions"]["g"]["commission"]["prompt"] == "render {input}"
-    assert m["commissions"]["g"]["commission"]["enabled_builtin_tools"] == ["shell"]
+    assert m["commissions"]["g"]["commission"]["enabled_builtin_tools"] == {"goose": ["shell"]}
     assert m["commissions"]["c"]["agent"] == "claude-code"
     assert m["cli_version"]  # recorded, non-empty
 

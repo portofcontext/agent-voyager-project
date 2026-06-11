@@ -5,13 +5,16 @@ inspecting one is just loading + rendering it. `full_dict` keeps every field
 (nulls included) so `avp cm describe` teaches the real, complete wire shape;
 `validate_file` checks a hand-written Commission JSON against the spec.
 
-`build_commission` is the inverse: it assembles a fresh wire Commission from a
-few values (optionally cloning an existing one as the base), enforcing the two
-library conventions (`schema_version` is `"0.1"`, `run_id` is the id) and, when
-an agent's Descriptor is supplied, that every `enabled_builtin_*` name actually
-exists on that agent — the same check the agent would otherwise fail at startup
-with `commission_collision`. Catching it here turns a run-time abort into a
-build-time error.
+`build_commission` is the inverse: it generates a complete wire Commission
+(optionally cloning an existing one as the base), enforcing the two library
+conventions (`schema_version` is `"0.1"`, `run_id` is the id). Generation is
+descriptor-driven and total: given an agent's Descriptor it enumerates the
+agent's FULL builtin surface into the per-agent `enabled_builtin_*` maps and
+pins `agent_versions`, so the file on disk is explicit and ready to edit
+(delete lines to restrict) rather than assembled through a wizard. It also
+validates the agent's own allowlist entries against the Descriptor — the same
+check the agent would otherwise fail at startup with `commission_collision`.
+Catching it here turns a run-time abort into a build-time error.
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ class BuildError(Exception):
     `enabled_builtin_*` name the anchor agent doesn't advertise)."""
 
 
-# (build_commission kwarg, descriptor attribute, the decl's identity field, label)
+# (Commission field, descriptor attribute, the decl's identity field, label)
 _ENABLED_CHECKS = [
     ("enabled_builtin_tools", "tools", "name", "tool"),
     ("enabled_builtin_subagents", "subagents", "name", "subagent"),
@@ -39,51 +42,77 @@ _ENABLED_CHECKS = [
     ("enabled_builtin_mcp_servers", "mcp_servers", "id", "MCP server"),
 ]
 
+# The generated sample prompt: instructive, eval-ready ({input} is the slot the
+# eval engine fills per dataset case), and obviously meant to be rewritten.
+SAMPLE_PROMPT = (
+    "You are being evaluated. Complete the task below, then output ONLY the "
+    "final answer (no preamble).\n\n{input}"
+)
+
+# Known-good cheap slug for generated files when the agent declares no usable
+# default; the file is meant to be edited, and a wrong-but-valid sample beats
+# a crash on a blank field.
+SAMPLE_MODEL = "anthropic/claude-haiku-4-5-20251001"
+
+
+def generated_surface(descriptor: AgentDescriptor) -> dict[str, Any]:
+    """The descriptor's FULL builtin surface as explicit per-agent allowlist
+    maps, plus the version pin: the generated-commission starting point. Every
+    advertised name is enumerated under the agent's own `agent_name` key so
+    restricting is deleting lines; categories the agent doesn't advertise are
+    omitted (an empty list would mean "expose none", not "default")."""
+    name = descriptor.agent_name
+    out: dict[str, Any] = {"agent_versions": {name: descriptor.agent_version}}
+    for field, attr, id_field, _ in _ENABLED_CHECKS:
+        names = [getattr(d, id_field) for d in (getattr(descriptor, attr) or [])]
+        if names:
+            out[field] = {name: names}
+    return out
+
 
 def build_commission(
     commission_id: str,
     *,
     base: Commission | None = None,
     model: str | None = None,
-    prompt: str | None = None,
-    system_prompt: str | None = None,
-    enabled_builtin_tools: list[str] | None = None,
-    enabled_builtin_subagents: list[str] | None = None,
-    enabled_builtin_skills: list[str] | None = None,
-    enabled_builtin_mcp_servers: list[str] | None = None,
     tags: list[str] | None = None,
     provider_id: str | None = None,
     provider_base_url: str | None = None,
     credential: str | None = None,
     descriptor: AgentDescriptor | None = None,
 ) -> Commission:
-    """Assemble a wire `Commission` for the library.
+    """Generate a complete wire `Commission` for the library.
 
-    `base` (a cloned commission) supplies the starting values — including the
-    bulky fields the CLI doesn't author inline (`output_schema`, `mcp_servers`,
-    `skills`); pass it via `--from <id>`. Each remaining argument *overrides* the
-    base when not `None`; an empty list is a real value (e.g. `[]` exposes none).
-    `schema_version` is forced to `"0.1"` and `run_id` to `commission_id`, the
-    two library conventions, regardless of the base.
+    `base` (a cloned commission, via `--from <id>`) supplies the starting
+    values, including the bulky fields the CLI doesn't author inline
+    (`output_schema`, `mcp_servers`, `skills`). Without a base, `descriptor`
+    drives generation: the agent's full builtin surface lands in the
+    per-agent `enabled_builtin_*` maps and `agent_versions` pins the build
+    (see `generated_surface`). `schema_version` is forced to `"0.1"` and
+    `run_id` to `commission_id`, the two library conventions, regardless.
+    `model` falls back to the base's, then the descriptor's `default_model`
+    (when it's already a canonical slug), then `SAMPLE_MODEL`; a missing
+    prompt gets `SAMPLE_PROMPT`. The result always validates: the generated
+    file is a complete, runnable starting point to edit, never a crash.
 
-    When `descriptor` is given, every `enabled_builtin_*` name is checked against
-    that agent's advertised surface; an unknown name raises `BuildError` rather
-    than letting the run abort with `commission_collision`.
+    When `descriptor` is given, its own allowlist entries are checked against
+    its advertised surface; an unknown name raises `BuildError` rather than
+    letting the run abort with `commission_collision`.
     """
     fields: dict[str, Any] = base.model_dump() if base is not None else {}
+    if base is None and descriptor is not None:
+        fields.update(generated_surface(descriptor))
     fields["schema_version"] = "0.1"
     fields["run_id"] = commission_id
-    overrides = {
-        "model": model,
-        "prompt": prompt,
-        "system_prompt": system_prompt,
-        "enabled_builtin_tools": enabled_builtin_tools,
-        "enabled_builtin_subagents": enabled_builtin_subagents,
-        "enabled_builtin_skills": enabled_builtin_skills,
-        "enabled_builtin_mcp_servers": enabled_builtin_mcp_servers,
-        "tags": tags,
-    }
-    fields.update({k: v for k, v in overrides.items() if v is not None})
+    if model is not None:
+        fields["model"] = model
+    if not fields.get("model"):
+        default = descriptor.default_model if descriptor else None
+        fields["model"] = default if default and "/" in default else SAMPLE_MODEL
+    if not fields.get("prompt"):
+        fields["prompt"] = SAMPLE_PROMPT
+    if tags is not None:
+        fields["tags"] = tags
 
     # Provider routing: --provider-id selects the storefront; --credential names
     # a vault handle (a SecretRef the supervisor resolves, never the value).
@@ -106,10 +135,16 @@ def build_commission(
 
 
 def _check_enabled_against(fields: dict[str, Any], descriptor: AgentDescriptor) -> None:
-    """Raise `BuildError` if any `enabled_builtin_*` names aren't on the agent."""
-    for kwarg, attr, id_field, label in _ENABLED_CHECKS:
-        requested = fields.get(kwarg)
-        if not requested:  # None (expose all) or [] (expose none): nothing to check
+    """Raise `BuildError` if the descriptor's own allowlist entries name things
+    the agent doesn't advertise. Each `enabled_builtin_*` field is a per-agent
+    map; only the entries under THIS descriptor's `agent_name` are checkable
+    here (other agents' keys validate against their own descriptors)."""
+    for field, attr, id_field, label in _ENABLED_CHECKS:
+        allow_map = fields.get(field)
+        if not allow_map:
+            continue
+        requested = allow_map.get(descriptor.agent_name)
+        if not requested:
             continue
         advertised = [getattr(d, id_field) for d in (getattr(descriptor, attr) or [])]
         unknown = [n for n in requested if n not in advertised]

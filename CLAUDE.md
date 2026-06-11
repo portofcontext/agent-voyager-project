@@ -198,9 +198,10 @@ tag can't drift:
   vendors the `avp` wire types into its wheel (so `import avp` ships inside it, not
   as a separate dist).
 - `make release-goose` / `make release-claude-code`: tag `agent-<name>-v<version>`
-  from `container_version` in `avp_cli.agents`, published as a GitHub release the
-  CLI installs. Bumping an agent means editing its `container_version`, committing,
-  then running the target.
+  from the agent's own package version (Cargo.toml / pyproject; the same number its
+  descriptor reports as `agent_version`), guarded to match `container_version` in
+  `avp_cli.agents`. Bumping an agent means bumping both together, committing, then
+  running the target. Published as a GitHub release the CLI installs.
 
 ## Things you should not do
 

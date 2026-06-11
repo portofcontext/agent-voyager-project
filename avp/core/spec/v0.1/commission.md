@@ -55,7 +55,7 @@ A Commission is a single JSON document validating against [`commission.schema.js
     { "id": "style-guide", "files": { "SKILL.md": "---\nname: Style Guide\n---\n…" } },
     { "id": "code-runner", "files": { "SKILL.md": "---\nname: Code Runner\n---\n…", "scripts/run.sh": "#!/bin/sh\n…" } }
   ],
-  "enabled_builtin_tools":       ["Read", "Grep", "Glob"],
+  "enabled_builtin_tools":       { "my-agent": ["Read", "Grep", "Glob"] },
   "enabled_builtin_subagents":   null,
   "enabled_builtin_skills":      null,
   "enabled_builtin_mcp_servers": null,
@@ -85,10 +85,11 @@ A Commission is a single JSON document validating against [`commission.schema.js
 | `provider` | `Provider \| null` | LLM routing override (which storefront serves `model`). Absent → the agent's native default. See §2.3. |
 | `mcp_servers` | `Array<McpServerHttp \| McpServerStdio>` | Inline MCP server connection material, discriminated on `type`. See §3. |
 | `skills` | `Array<Skill>` | Inline Agent Skills (SKILL.md content). See §3. |
-| `enabled_builtin_tools` | `string[] \| null` | Allowlist over `descriptor.tools[].name`. See §4. |
-| `enabled_builtin_subagents` | `string[] \| null` | Allowlist over `descriptor.subagents[].name`. See §4. |
-| `enabled_builtin_skills` | `string[] \| null` | Allowlist over `descriptor.skills[].name`. See §4. |
-| `enabled_builtin_mcp_servers` | `string[] \| null` | Allowlist over `descriptor.mcp_servers[].id`. Disabling a server prevents the agent from dialing it, so the tools that server would have surfaced are also unavailable for the run. See §4. |
+| `enabled_builtin_tools` | `object<agent_name, string[]> \| null` | Per-agent allowlists over `descriptor.tools[].name`, keyed by `descriptor.agent_name`. See §4. |
+| `enabled_builtin_subagents` | `object<agent_name, string[]> \| null` | Per-agent allowlists over `descriptor.subagents[].name`. See §4. |
+| `enabled_builtin_skills` | `object<agent_name, string[]> \| null` | Per-agent allowlists over `descriptor.skills[].name`. See §4. |
+| `enabled_builtin_mcp_servers` | `object<agent_name, string[]> \| null` | Per-agent allowlists over `descriptor.mcp_servers[].id`. Disabling a server prevents the agent from dialing it, so the tools that server would have surfaced are also unavailable for the run. See §4. |
+| `agent_versions` | `object<agent_name, string> \| null` | Exact `descriptor.agent_version` pins per agent; mismatch fails fast with `unsupported_agent_version`. See §4.0. |
 | `thread_id` | string | Free-form correlation id (multi-turn conversation, parent context, etc.). |
 | `tags` | `string[]` | Free-form labels. |
 | `meta` | `object` | Free-form key/value bag. |
@@ -201,20 +202,33 @@ Tool-name collisions across distinct MCP servers (e.g. agent-internal `github_v1
 
 ## 4. Built-in surface allowlists
 
-`Commission` carries four optional allowlists that gate which entries from the agent's [Descriptor](./agent-descriptor.md) surface to the model for the run:
+`Commission` carries four optional allowlist maps that gate which entries from the agent's [Descriptor](./agent-descriptor.md) surface to the model for the run. Each field is an object keyed by `descriptor.agent_name`, so one Commission carries an explicit list per agent it may run on; built-in names live in each agent's own namespace, and a flat list would inevitably name tools that don't exist on whichever other agent runs it.
 
-| Field | Gates | Source of truth |
+| Field | Each list gates | Source of truth |
 |---|---|---|
 | `enabled_builtin_tools` | `descriptor.tools[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
 | `enabled_builtin_subagents` | `descriptor.subagents[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
 | `enabled_builtin_skills` | `descriptor.skills[].name` | The agent's [Agent Descriptor](./agent-descriptor.md) |
 | `enabled_builtin_mcp_servers` | `descriptor.mcp_servers[].id` | The agent's [Agent Descriptor](./agent-descriptor.md) |
 
-Semantics, identical across all four:
+Semantics, identical across all four. The running agent looks up exactly its own `agent_name`; entries under other agents' keys are ignored:
 
-- **Absent (null)** → every descriptor entry of that kind is exposed (default; backwards-compatible).
-- **`[]`** → none are exposed.
-- **`[n1, n2, …]`** → only the listed names are exposed; the rest are hidden from the model and runtime-blocked if invoked.
+- **Absent (null)** → every descriptor entry of that kind is exposed (default).
+- **Map present, no key for the running agent** → `commission_collision` fail-fast (§4.1): the Commission filters this surface but was not authored for this agent. Running it anyway, unfiltered or guessed, would silently change the experiment.
+- **`"<my agent_name>": []`** → none are exposed.
+- **`"<my agent_name>": [n1, n2, …]`** → only the listed names are exposed; the rest are hidden from the model and runtime-blocked if invoked.
+
+Names are exact; there is no pattern or wildcard matching. The allowlist is part of the run's definition, and the surface it produces is fully determined by the Commission plus the Descriptor.
+
+### 4.0 Agent version pins (`agent_versions`)
+
+`agent_versions` is an optional map keyed by `descriptor.agent_name` whose values are exact `descriptor.agent_version` strings: the agent builds this Commission was authored and validated against. The allowlist fail-fast catches renamed or removed names; a version pin additionally catches same-name surface drift (a tool that still exists but behaves differently in a newer build), pre-flight instead of via post-hoc trajectory comparison.
+
+- **Absent (null), or map present with no key for the running agent** → no pin declared; the run proceeds. Note the asymmetry with the allowlists: an allowlist without the agent's key means "filtered, but not authored for this agent" (refuse); a pin map without its key just means nobody pinned this agent.
+- **Key present and equal to the agent's `agent_version`** → the run proceeds.
+- **Key present and different** → the agent MUST emit `error_occurred` with `data["avp.error.code"]: "unsupported_agent_version"` and stop with `reason: "error"` before any model turn.
+
+Values are exact strings; there are no version ranges. A stale pin is a one-field fix, and a loud refusal beats every agent evaluating a range expression identically.
 
 **Subtractive-only over the descriptor.** These fields gate the *agent's own* declarations (the Descriptor). Supervisor-managed assets carried in `Commission.{mcp_servers,skills}` are always active by virtue of being present in the Commission, and are never affected by these allowlists. Tools surfaced post-handshake by a Commission-managed MCP server are similarly controlled by whether the supervisor declared the server.
 
@@ -222,7 +236,7 @@ Semantics, identical across all four:
 
 ### 4.1 Validation at startup (MUST)
 
-The agent MUST validate every name in each allowlist against the corresponding Descriptor list. Names that don't match emit `error_occurred` with `data["avp.error.code"]: "commission_collision"` and the agent stops with `reason: "error"` before any model turn. Fail-loud-on-drift: a Commission referencing a built-in the agent no longer ships is a contract violation; supervisors find out at startup, not via silent surface degradation.
+For each allowlist map that is present, the agent MUST find its own `agent_name` among the keys, and MUST validate every name under that key against the corresponding Descriptor list. A missing key, or a name that doesn't match, emits `error_occurred` with `data["avp.error.code"]: "commission_collision"` and the agent stops with `reason: "error"` before any model turn. Fail-loud-on-drift: a Commission referencing a built-in the agent no longer ships, or filtered for agents this one isn't among, is a contract violation; supervisors find out at startup, not via silent surface degradation.
 
 ### 4.2 Two-layer enforcement (MUST)
 
@@ -231,9 +245,10 @@ The agent MUST validate every name in each allowlist against the corresponding D
 
 ### 4.3 Common patterns
 
-- Read-only audit run → `enabled_builtin_tools: ["Read", "Glob", "Grep"]`
-- No network egress → omit `WebFetch`, `WebSearch` from the tools list
-- Pure delegation (force the model into managed assets) → `enabled_builtin_tools: []`
+- Read-only audit run → `enabled_builtin_tools: {"my-agent": ["Read", "Glob", "Grep"]}`
+- No network egress → omit `WebFetch`, `WebSearch` from the agent's list
+- Pure delegation (force the model into managed assets) → `enabled_builtin_tools: {"my-agent": []}`
+- One commission, two agents → `enabled_builtin_tools: {"avp-claude-agent-sdk": ["Bash", "Read"], "goose": ["developer__shell"]}`
 
 ---
 
@@ -255,8 +270,9 @@ A supervisor (or any Commission producer) is conforming to the Commission Spec i
 1. Every Commission it emits validates against [`commission.schema.json`](./commission.schema.json).
 2. `schema_version` equals `"0.1"`.
 3. `run_id` is unique within the supervisor's namespace.
-4. Every name in `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` / `enabled_builtin_mcp_servers` matches a corresponding entry in the target agent's Descriptor (by `name` for tools/subagents/skills, by `id` for mcp_servers). When the supervisor cannot pre-validate against the Descriptor, the agent catches mismatches at startup and emits `error_occurred(code: "commission_collision")`.
-5. `model` is a canonical `<origin>/<model>` slug (matches `^[^/]+/.+$`).
-6. Credentials are carried only as `SecretRef` handles (`provider.credential`, `McpServerHttp.auth`); the resolved secret value MUST NOT appear in the Commission, in `run_requested.data["avp.commission"]`, or in any other trajectory event.
+4. In each of `enabled_builtin_tools` / `enabled_builtin_subagents` / `enabled_builtin_skills` / `enabled_builtin_mcp_servers` that is present, the target agent's `agent_name` appears as a key, and every name under it matches a corresponding entry in that agent's Descriptor (by `name` for tools/subagents/skills, by `id` for mcp_servers). When the supervisor cannot pre-validate against the Descriptor, the agent catches mismatches (missing key or unknown name) at startup and emits `error_occurred(code: "commission_collision")`.
+5. When `agent_versions` carries a key for the target agent, its value equals that agent's `descriptor.agent_version`; the agent catches mismatches at startup with `error_occurred(code: "unsupported_agent_version")` (§4.0).
+6. `model` is a canonical `<origin>/<model>` slug (matches `^[^/]+/.+$`).
+7. Credentials are carried only as `SecretRef` handles (`provider.credential`, `McpServerHttp.auth`); the resolved secret value MUST NOT appear in the Commission, in `run_requested.data["avp.commission"]`, or in any other trajectory event.
 
 An agent that consumes Commissions and composes with the Trajectory Spec MUST additionally enforce §3.3 (collisions) and §4 (allowlists) at startup.

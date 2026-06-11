@@ -1,5 +1,6 @@
 {
   "eval": {
+    "eval_version": "0.1",
     "name": "capitals-extraction",
     "dataset": {
       "source": "inline",
@@ -38,11 +39,21 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "city": { "type": "string" },
-          "country": { "type": "string" },
-          "population_millions": { "type": "number" }
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "population_millions": {
+            "type": "number"
+          }
         },
-        "required": ["city", "country", "population_millions"],
+        "required": [
+          "city",
+          "country",
+          "population_millions"
+        ],
         "additionalProperties": false
       }
     },
@@ -55,11 +66,21 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "city": { "type": "string" },
-          "country": { "type": "string" },
-          "population_millions": { "type": "number" }
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "population_millions": {
+            "type": "number"
+          }
         },
-        "required": ["city", "country", "population_millions"],
+        "required": [
+          "city",
+          "country",
+          "population_millions"
+        ],
         "additionalProperties": false
       }
     }

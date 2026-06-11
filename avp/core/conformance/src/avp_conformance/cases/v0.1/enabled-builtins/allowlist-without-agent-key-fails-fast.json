@@ -1,21 +1,17 @@
 {
-  "id": "unknown-tool-name-fails-fast",
-  "title": "enabled_builtin_tools naming a tool the agent doesn't offer fails fast",
-  "description": "enabled_builtin_tools[agent_name] is an allow-list over the agent's own tool surface. A name under the running agent's key that isn't one of its tools is a Commission/agent collision: the agent MUST emit error_occurred with code commission_collision and stop with reason error BEFORE running any model turn (no assistant_message). Uses a clearly-bogus tool name so it collides on every agent regardless of its native tool names.",
+  "id": "allowlist-without-agent-key-fails-fast",
+  "title": "An enabled_builtin_tools map with no key for the running agent fails fast",
+  "description": "enabled_builtin_tools is keyed by descriptor.agent_name. A present map without the running agent's key means the Commission filters the tool surface but was not authored for this agent; running it anyway (unfiltered or guessed) would silently change the experiment. The agent MUST emit error_occurred with code commission_collision and stop with reason error BEFORE any model turn (no assistant_message). Uses a key no real agent owns so the case behaves identically on every agent.",
   "spec_refs": [
-    "spec/v0.1/commission.md",
+    "spec/v0.1/commission.md#4-built-in-surface-allowlists",
     "spec/v0.1/trajectory.md#7-event-reference"
   ],
   "commission": {
     "schema_version": "0.1",
-    "run_id": "unknown-tool-name-fails-fast",
+    "run_id": "allowlist-without-agent-key-fails-fast",
     "model": "anthropic/claude-haiku-4-5-20251001",
     "prompt": "Reply with exactly the word DONE and nothing else.",
-    "enabled_builtin_tools": {
-      "${AGENT_NAME}": [
-        "definitely-not-a-real-tool"
-      ]
-    },
+    "enabled_builtin_tools": { "some-other-agent-entirely": [] },
     "supervisor": {
       "name": "avp-conformance",
       "version": "0.1"

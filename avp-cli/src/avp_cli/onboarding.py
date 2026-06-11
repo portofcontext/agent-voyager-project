@@ -20,7 +20,7 @@ _START = [
 ]
 
 _COMMISSIONS = [
-    ("avp cm create [id]", "build a commission"),
+    ("avp cm create <id> --agent <a>", "generate a complete commission to edit"),
     ("avp cm list", "your commission library"),
     ("avp cm describe <id>", "render the Commission an id yields"),
     ("avp cm check <id>", "check a commission is valid"),

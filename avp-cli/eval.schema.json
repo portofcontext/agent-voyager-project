@@ -1,0 +1,324 @@
+{
+  "$defs": {
+    "FileDataset": {
+      "additionalProperties": false,
+      "description": "Rows from a local `.json` / `.jsonl` file. Either the rows already have\nthe `{id, prompt, expected}` shape (omit `input`), or `input` is a template\nover row fields (EVAL-FORMAT.md §3; strict: unknown field names error) with\n`expected_field` / `id_field` naming the mapped columns.",
+      "properties": {
+        "source": {
+          "const": "file",
+          "title": "Source",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input"
+        },
+        "expected_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Field"
+        },
+        "id_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Field"
+        }
+      },
+      "required": [
+        "source",
+        "path"
+      ],
+      "title": "FileDataset",
+      "type": "object"
+    },
+    "HuggingFaceDataset": {
+      "additionalProperties": false,
+      "description": "Rows from a Hugging Face dataset (needs the `huggingface` extra).",
+      "properties": {
+        "source": {
+          "const": "huggingface",
+          "title": "Source",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "split": {
+          "title": "Split",
+          "type": "string"
+        },
+        "input": {
+          "title": "Input",
+          "type": "string"
+        },
+        "expected_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Field"
+        },
+        "id_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id Field"
+        }
+      },
+      "required": [
+        "source",
+        "id",
+        "split",
+        "input"
+      ],
+      "title": "HuggingFaceDataset",
+      "type": "object"
+    },
+    "InlineDataset": {
+      "additionalProperties": false,
+      "description": "Cases carried in the config: the zero-dependency source.",
+      "properties": {
+        "source": {
+          "const": "inline",
+          "title": "Source",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/InlineItem"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "items"
+      ],
+      "title": "InlineDataset",
+      "type": "object"
+    },
+    "InlineItem": {
+      "additionalProperties": false,
+      "description": "One dataset case, carried in the config itself.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "expected": {
+          "default": null,
+          "title": "Expected"
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "title": "InlineItem",
+      "type": "object"
+    },
+    "ScorerSpec": {
+      "additionalProperties": false,
+      "description": "A built-in scorer chosen by name. `threshold` applies to\nstructural-match / structural-fidelity; `model` / `template` to llm-judge\n(the template renders strict over question / response / correct_answer).",
+      "properties": {
+        "name": {
+          "enum": [
+            "exact-match",
+            "structural-match",
+            "structural-fidelity",
+            "llm-judge"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ScorerSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One eval: a dataset, a scorer, and the library commissions to compare, optionally bound per agent (map keys are each agent's descriptor.agent_name). Authored as <name>.eval.json. The templating, commission-reference, and run-stamping rules an implementation must reproduce are in avp-cli/EVAL-FORMAT.md.",
+  "properties": {
+    "eval_version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Eval Version",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "agents": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agents"
+    },
+    "dataset": {
+      "discriminator": {
+        "mapping": {
+          "file": "#/$defs/FileDataset",
+          "huggingface": "#/$defs/HuggingFaceDataset",
+          "inline": "#/$defs/InlineDataset"
+        },
+        "propertyName": "source"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/InlineDataset"
+        },
+        {
+          "$ref": "#/$defs/FileDataset"
+        },
+        {
+          "$ref": "#/$defs/HuggingFaceDataset"
+        }
+      ],
+      "title": "Dataset"
+    },
+    "scorer": {
+      "$ref": "#/$defs/ScorerSpec"
+    },
+    "commissions": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        }
+      ],
+      "minLength": 1,
+      "title": "Commissions"
+    }
+  },
+  "required": [
+    "dataset",
+    "scorer",
+    "commissions"
+  ],
+  "title": "AVP eval config 0.1",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avp.dev/schema/eval/0.1/eval.schema.json"
+}

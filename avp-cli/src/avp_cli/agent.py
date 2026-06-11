@@ -506,11 +506,23 @@ def describe_agent(
     This is the spec's pre-flight view: the agent boots, lists its surface, and
     exits without a model turn, so it's free, and it runs on the host (no
     sandbox; nothing untrusted executes).
+
+    The probe gets a fresh, empty home instead of the operator's: agent
+    frameworks sweep $HOME-anchored dirs for ambient state (~/.claude/skills,
+    ~/.agents/skills), and runs execute in a sandbox where none of that
+    exists, so the descriptor must list only what the agent intrinsically
+    ships. Everything else in the environment (PATH, provider keys) passes
+    through; `manifest.env` wins over the scrub.
     """
     import tempfile
 
-    env = {**os.environ, **manifest.env}
     with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp) / "home"
+        home.mkdir()
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        for var in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
+            env.pop(var, None)
+        env.update(manifest.env)
         out = Path(tmp) / "descriptor.json"
         cmd = [*manifest.command, "describe", "--out", str(out)]
         err = _run_blocking(cmd, manifest_cwd, env, timeout_s)

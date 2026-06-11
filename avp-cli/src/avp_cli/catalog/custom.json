@@ -1,5 +1,6 @@
 {
   "eval": {
+    "eval_version": "0.1",
     "name": "my-eval",
     "dataset": {
       "source": "inline",

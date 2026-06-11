@@ -48,6 +48,10 @@ class AgentSource:
     kind: str  # "binary" | "python"
     tag_prefix: str
     dev_manifest: str
+    # The agent's self-declared `descriptor.agent_name` (what its `describe`
+    # reports). Carried as registry metadata so known agents resolve their
+    # public identity without spawning a describe.
+    descriptor_name: str = ""
     # The release version whose Linux artifacts the container recipe installs.
     # Pinned so the derived image is content-addressed; bump with releases.
     container_version: str = ""
@@ -65,6 +69,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
     "goose": AgentSource(
         name="goose",
         kind="binary",
+        descriptor_name="goose",
         tag_prefix="agent-goose",
         dev_manifest="agents/avp-goose/rust/avp-conformance.json",
         # 0.0.4: tool decls pass through outputSchema from tools/list; skill /
@@ -75,6 +80,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
     "claude-code": AgentSource(
         name="claude-code",
         kind="python",
+        descriptor_name="avp-claude-agent-sdk",
         tag_prefix="agent-claude-code",
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
         # 0.0.7: decl fidelity: MCP-surfaced tool decls carry the model-facing
@@ -172,9 +178,17 @@ def _repo_root() -> Path:
 
 @dataclass(frozen=True)
 class ResolvedAgent:
+    """An agent located and loadable. `name` is the resolution handle (registry
+    alias, or the manifest's directory for a path spec); `agent_name` is the
+    agent's self-declared `descriptor.agent_name`, the ONE public identity that
+    keys Commission `enabled_builtin_*` / `agent_versions` maps, eval per-agent
+    bindings, and board labels. Known agents carry it as registry metadata;
+    for a manifest-path agent it's None until a `describe` resolves it."""
+
     name: str
     manifest: AgentManifest
     manifest_cwd: Path
+    agent_name: str | None = None
 
 
 def known_agents() -> list[str]:
@@ -210,14 +224,19 @@ def resolve_agent(spec: str) -> ResolvedAgent:
 
 def _resolve_known(name: str) -> ResolvedAgent:
     """Installed agent first, then the in-repo dev fallback."""
+    descriptor_name = AGENT_SOURCES[name].descriptor_name or None
     installed = installed_manifest_path(name)
     if installed.is_file():
         manifest, cwd = load_manifest(installed)
-        return ResolvedAgent(name=name, manifest=manifest, manifest_cwd=cwd)
+        return ResolvedAgent(
+            name=name, manifest=manifest, manifest_cwd=cwd, agent_name=descriptor_name
+        )
     dev = _repo_root() / AGENT_SOURCES[name].dev_manifest
     if dev.is_file():
         manifest, cwd = load_manifest(dev)
-        return ResolvedAgent(name=name, manifest=manifest, manifest_cwd=cwd)
+        return ResolvedAgent(
+            name=name, manifest=manifest, manifest_cwd=cwd, agent_name=descriptor_name
+        )
     raise SystemExit(
         f"agent '{name}' is not installed and no in-repo copy was found.\n"
         f"  install it:             avp agent install {name}\n"

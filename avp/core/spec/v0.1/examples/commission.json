@@ -25,7 +25,8 @@
     }
   ],
 
-  "enabled_builtin_tools": ["read_file", "write_file", "bash"],
+  "enabled_builtin_tools": { "example-agent": ["read_file", "write_file", "bash"] },
+  "agent_versions": { "example-agent": "1.2.0" },
 
   "output_schema": null,
 

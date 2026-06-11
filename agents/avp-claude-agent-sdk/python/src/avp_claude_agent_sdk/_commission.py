@@ -50,6 +50,7 @@ from claude_agent_sdk import ClaudeAgentOptions, McpServerConfig
 from avp.commission import Commission
 from avp.commission import McpServerHttp as AVPMcpServerHttp
 from avp.commission import McpServerStdio as AVPMcpServerStdio
+from avp_claude_agent_sdk._translator import _AGENT_NAME
 
 
 class UnsupportedProvider(Exception):
@@ -108,10 +109,15 @@ def apply_commission(
     updates["model"] = commission.model.split("/", 1)[1]
     if commission.system_prompt is not None:
         updates["system_prompt"] = commission.system_prompt
-    # Per AVP spec: None = expose all (leave options.tools alone);
-    # [] = expose none; [...] = expose only the listed names.
-    if commission.enabled_builtin_tools is not None:
-        updates["tools"] = list(commission.enabled_builtin_tools)
+    # Per AVP spec §4: the allowlist maps are keyed by descriptor.agent_name;
+    # we read only our own key. No map / no key here = leave options.tools
+    # alone ([] = expose none; [...] = expose only the listed names). A
+    # present map MISSING our key is a commission_collision, but that
+    # fail-fast lands in the client's query() so it reaches the trajectory;
+    # options construction stays total (the run aborts before any model call).
+    allow_tools = (commission.enabled_builtin_tools or {}).get(_AGENT_NAME)
+    if allow_tools is not None:
+        updates["tools"] = list(allow_tools)
     if commission.output_schema is not None:
         updates["output_format"] = {
             "type": "json_schema",
@@ -219,7 +225,7 @@ def _map_skills(commission: Commission) -> list[str]:
         name = skill.name or skill.id
         if name not in names:
             names.append(name)
-    for name in commission.enabled_builtin_skills or []:
+    for name in (commission.enabled_builtin_skills or {}).get(_AGENT_NAME) or []:
         if name not in names:
             names.append(name)
     return names

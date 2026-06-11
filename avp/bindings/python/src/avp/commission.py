@@ -183,29 +183,55 @@ class Commission(BaseModel):
     # Optional LLM routing override. Absent → the agent's native default.
     provider: Provider | None = None
 
-    # Allow-lists over the agent's Descriptor-declared surface. Each list
-    # gates the parallel `descriptor.*` field for this run.
+    # Allow-lists over the agent's Descriptor-declared surface, keyed by
+    # `descriptor.agent_name` so one Commission can carry an explicit list
+    # per agent it may run on (names live in each agent's own namespace).
+    # The running agent looks up exactly its own `agent_name`:
     #
-    #   - None (absent) → every descriptor entry of that kind is exposed
-    #                     (default).
-    #   - []            → none are exposed.
-    #   - [n1, n2, …]   → only the listed names/ids are exposed; the agent
-    #                     hides the rest from the model and runtime-blocks
-    #                     any hallucinated invocation with a `tool_returned`
-    #                     (isError=True) (or, for subagents, a
-    #                     `subagent_returned` with `reason=error`).
+    #   - None (absent)          → every descriptor entry of that kind is
+    #                              exposed (default).
+    #   - map without my key     → commission_collision fail-fast: the
+    #                              Commission filters this surface but was
+    #                              not authored for this agent.
+    #   - my key → []            → none are exposed.
+    #   - my key → [n1, n2, …]   → only the listed names/ids are exposed;
+    #                              the agent hides the rest from the model
+    #                              and runtime-blocks any hallucinated
+    #                              invocation with a `tool_returned`
+    #                              (isError=True) (or, for subagents, a
+    #                              `subagent_returned` with `reason=error`).
     #
-    # Names MUST appear in the corresponding descriptor field at startup or
-    # the agent emits `error_occurred(code: "commission_collision")` and
-    # stops with `reason=error`. Subtractive-only: these have no effect on
+    # Entries under other agents' keys are ignored by the running agent.
+    # Names under the agent's own key MUST appear in the corresponding
+    # descriptor field at startup or the agent emits
+    # `error_occurred(code: "commission_collision")` and stops with
+    # `reason=error`. Subtractive-only: these have no effect on
     # supervisor-managed assets (those are gated by being-in-the-Commission).
     # `enabled_builtin_mcp_servers` filters `descriptor.mcp_servers[].id`;
     # disabling a server prevents the agent from dialing it, so its tools
     # are unavailable for the run.
-    enabled_builtin_tools: list[str] | None = None
-    enabled_builtin_subagents: list[str] | None = None
-    enabled_builtin_skills: list[str] | None = None
-    enabled_builtin_mcp_servers: list[str] | None = None
+    enabled_builtin_tools: dict[str, list[str]] | None = None
+    enabled_builtin_subagents: dict[str, list[str]] | None = None
+    enabled_builtin_skills: dict[str, list[str]] | None = None
+    enabled_builtin_mcp_servers: dict[str, list[str]] | None = None
+
+    # Optional exact version pins, keyed by `descriptor.agent_name` and
+    # matched against `descriptor.agent_version`. A pin records the agent
+    # build the Commission was authored and validated against; same-name
+    # tool surfaces can change behavior across builds, and a pin moves
+    # that check pre-flight instead of post-hoc trajectory archaeology.
+    # The running agent looks up its own `agent_name`:
+    #
+    #   - None (absent) / no key for me → no pin declared; run proceeds.
+    #     (Deliberately the opposite default from the allowlists above:
+    #     an allowlist without my key means "filtered but not authored
+    #     for me"; a pin map without my key just means "nobody pinned me".)
+    #   - my key present, value != my agent_version → the agent emits
+    #     `error_occurred(code: "unsupported_agent_version")` and stops
+    #     with `reason=error` before any model turn.
+    #
+    # Exact string match; no version ranges.
+    agent_versions: dict[str, str] | None = None
 
     output_schema: dict[str, Any] | None = None
 

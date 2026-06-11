@@ -45,13 +45,30 @@ pub mod error {
 #[doc = "    \"schema_version\""]
 #[doc = "  ],"]
 #[doc = "  \"properties\": {"]
+#[doc = "    \"agent_versions\": {"]
+#[doc = "      \"title\": \"Agent Versions\","]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"string\""]
+#[doc = "          }"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
 #[doc = "    \"enabled_builtin_mcp_servers\": {"]
 #[doc = "      \"title\": \"Enabled Builtin Mcp Servers\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -63,9 +80,12 @@ pub mod error {
 #[doc = "      \"title\": \"Enabled Builtin Skills\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -77,9 +97,12 @@ pub mod error {
 #[doc = "      \"title\": \"Enabled Builtin Subagents\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -91,9 +114,12 @@ pub mod error {
 #[doc = "      \"title\": \"Enabled Builtin Tools\","]
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
-#[doc = "          \"type\": \"array\","]
-#[doc = "          \"items\": {"]
-#[doc = "            \"type\": \"string\""]
+#[doc = "          \"type\": \"object\","]
+#[doc = "          \"additionalProperties\": {"]
+#[doc = "            \"type\": \"array\","]
+#[doc = "            \"items\": {"]
+#[doc = "              \"type\": \"string\""]
+#[doc = "            }"]
 #[doc = "          }"]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -259,13 +285,25 @@ pub mod error {
 #[serde(deny_unknown_fields)]
 pub struct AvpV01Commission {
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_mcp_servers: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub agent_versions: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::string::String>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_skills: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_mcp_servers: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_subagents: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_skills: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-    pub enabled_builtin_tools: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+    pub enabled_builtin_subagents: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub enabled_builtin_tools: ::std::option::Option<
+        ::std::collections::HashMap<::std::string::String, ::std::vec::Vec<::std::string::String>>,
+    >,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub mcp_servers: ::std::option::Option<::std::vec::Vec<AvpV01CommissionMcpServersItem>>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]

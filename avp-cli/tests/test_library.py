@@ -22,7 +22,7 @@ def test_save_load_round_trip(tmp_path) -> None:
         run_id="terse",
         prompt="Return JSON: {input}",
         model="anthropic/claude-haiku-4-5",
-        enabled_builtin_tools=["read_file"],
+        enabled_builtin_tools={"demo": ["read_file"]},
         output_schema=schema,
     )
     path = library.save("terse", c, commissions_dir=d)

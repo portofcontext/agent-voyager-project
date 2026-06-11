@@ -25,6 +25,10 @@
 use std::collections::HashMap;
 use std::sync::Once;
 
+/// This agent's `descriptor.agent_name`: the key it reads in the Commission's
+/// per-agent `enabled_builtin_*` allowlist maps and `agent_versions` pins.
+pub const AGENT_NAME: &str = "goose";
+
 use avp::commission::{AvpV01CommissionMcpServersItem, McpServerHttp, McpServerStdio};
 use avp::Commission;
 use goose::agents::extension::{Envs, ExtensionConfig};
@@ -69,7 +73,11 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     // `builtin_extensions` translates each to that extension's bare
     // `available_tools` (see `available_for`). `summon` (subagents) and `skills`
     // are part of this default surface — not gated behind Commission fields.
-    match commission.enabled_builtin_tools.as_deref() {
+    // Per-agent map (spec §4): read only our own key. A present map MISSING
+    // our key is a commission_collision; the runner fail-fasts on it before
+    // the loop, so resolution here stays total (treat it as unfiltered).
+    let allow = commission.enabled_builtin_tools.as_ref().and_then(|m| m.get(AGENT_NAME));
+    match allow.map(Vec::as_slice) {
         None => extensions.extend(builtin_extensions(Vec::new())),
         Some([]) => {}
         Some(names) => extensions.extend(builtin_extensions(names.to_vec())),
@@ -327,7 +335,7 @@ mod tests {
         // [] -> no built-in tools: neither developer nor any goose-mcp built-in.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "x/m",
-            "enabled_builtin_tools": []
+            "enabled_builtin_tools": { "goose": [] }
         })));
         let names = ext_names(&cfg);
         assert!(!names.contains(&"developer".to_string()), "{names:?}");
@@ -343,7 +351,7 @@ mod tests {
         // pruned (EXPOSE_NONE) rather than fully exposed.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "x/m",
-            "enabled_builtin_tools": ["shell"]
+            "enabled_builtin_tools": { "goose": ["shell"] }
         })));
         assert_eq!(developer_available_tools(&cfg), Some(vec!["shell".to_string()]));
         assert_eq!(
@@ -359,7 +367,7 @@ mod tests {
         // `available_tools` entry, while the unprefixed `developer` is pruned.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "x/m",
-            "enabled_builtin_tools": ["computercontroller__pdf_tool", "computercontroller__web_scrape"]
+            "enabled_builtin_tools": { "goose": ["computercontroller__pdf_tool", "computercontroller__web_scrape"] }
         })));
         assert_eq!(
             builtin_available_tools(&cfg, "computercontroller"),
@@ -424,7 +432,7 @@ mod tests {
         // extensions (summon/skills), not just the goose-mcp built-ins.
         let cfg = from_commission(&commission(json!({
             "schema_version": "0.1", "run_id": "r1", "model": "x/m",
-            "enabled_builtin_tools": []
+            "enabled_builtin_tools": { "goose": [] }
         })));
         let names = ext_names(&cfg);
         assert!(!names.contains(&"summon".to_string()), "{names:?}");

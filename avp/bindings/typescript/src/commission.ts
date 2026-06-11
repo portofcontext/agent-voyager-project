@@ -31,10 +31,21 @@ export type Skills = Skill[] | null;
 export type Id2 = string;
 export type Id3 = string;
 export type BaseUrl = string | null;
-export type EnabledBuiltinTools = string[] | null;
-export type EnabledBuiltinSubagents = string[] | null;
-export type EnabledBuiltinSkills = string[] | null;
-export type EnabledBuiltinMcpServers = string[] | null;
+export type EnabledBuiltinTools = {
+  [k: string]: string[];
+} | null;
+export type EnabledBuiltinSubagents = {
+  [k: string]: string[];
+} | null;
+export type EnabledBuiltinSkills = {
+  [k: string]: string[];
+} | null;
+export type EnabledBuiltinMcpServers = {
+  [k: string]: string[];
+} | null;
+export type AgentVersions = {
+  [k: string]: string;
+} | null;
 export type OutputSchema = {
   [k: string]: unknown;
 } | null;
@@ -61,6 +72,7 @@ export interface AVPV01Commission {
   enabled_builtin_subagents?: EnabledBuiltinSubagents;
   enabled_builtin_skills?: EnabledBuiltinSkills;
   enabled_builtin_mcp_servers?: EnabledBuiltinMcpServers;
+  agent_versions?: AgentVersions;
   output_schema?: OutputSchema;
   prompt?: Prompt;
   system_prompt?: SystemPrompt;

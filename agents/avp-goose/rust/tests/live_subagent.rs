@@ -47,7 +47,7 @@ async fn model_delegates_to_a_subagent_recipe() {
         "run_id": run_id,
         "model": model,
         "prompt": "Use the delegate tool to run the echoer subagent, then tell me exactly what it returned.",
-        "enabled_builtin_subagents": ["echoer"],
+        "enabled_builtin_subagents": { "goose": ["echoer"] },
     }))
     .unwrap();
 

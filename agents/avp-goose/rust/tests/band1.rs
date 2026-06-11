@@ -24,7 +24,7 @@ fn prelude_emits_run_requested_then_agent_described() {
     t.assert_order(&["avp.run_requested", "avp.agent_described"]);
     let rr = t.find("avp.run_requested");
     assert_eq!(rr["data"]["avp.commission"]["run_id"], "r1");
-    assert_eq!(rr["data"]["avp.commission"]["model"], "claude-opus-4-7");
+    assert_eq!(rr["data"]["avp.commission"]["model"], "anthropic/claude-opus-4-7");
     assert_eq!(
         t.find("avp.agent_described")["data"]["avp.descriptor"]["agent_name"],
         "goose"

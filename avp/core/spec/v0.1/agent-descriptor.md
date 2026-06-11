@@ -22,7 +22,7 @@ An Agent Descriptor can be:
 - Carried on the wire as part of [Trajectory](./trajectory.md)'s `agent_described` event so the trajectory is a complete record of the agent that ran (composes with Trajectory).
 - Combined at startup with a [Commission](./commission.md): the supervisor's contribution (additional MCP servers, skills, subagents — by ref) is merged with the descriptor's by id/name; collisions fail-fast (see §2.7).
 
-The pre-flight and run-time views SHOULD be consistent: `<agent> describe` SHOULD emit the same payload `agent_described.data["avp.descriptor"]` carries for the same agent build. The relaxation from a strict MUST: pre-flight `describe` MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), since populating them requires dialing the agent's MCP servers and running `tools/list` — work the agent only needs to do at run-time. Every other Descriptor field MUST be identical between the two views.
+The pre-flight and run-time views SHOULD be consistent: `<agent> describe` SHOULD emit the same payload `agent_described.data["avp.descriptor"]` carries for the same agent build. Two relaxations from a strict MUST. First, pre-flight `describe` MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), since populating them requires dialing the agent's MCP servers and running `tools/list` — work the agent only needs to do at run-time. Second, the run-time view MAY extend `skills[]` and `subagents[]` with Commission-provided and environment-discovered sources; the pre-flight view MUST list only sources intrinsic to the agent build (compiled-in, or shipped with the agent's install). In particular, pre-flight `describe` MUST NOT list sources discovered on the invoking host's filesystem (operator home directories, working-dir conventions): runs execute in the agent's own environment, so a host-discovered source advertises a capability the run cannot load. Every other Descriptor field MUST be identical between the two views.
 
 ### 1.1 Non-goals
 
@@ -223,13 +223,13 @@ When a [Commission](./commission.md) is in play at run time, descriptor entries 
 **List-shaped fields (`mcp_servers`, `skills`, `subagents`):** the effective set for the run is
 
 ```
-(descriptor.<field> filtered by Commission.enabled_builtin_<field>) ∪ Commission.<field>
+(descriptor.<field> filtered by Commission.enabled_builtin_<field>[agent_name]) ∪ Commission.<field>
 ```
 
 - `Commission.enabled_builtin_*` is **subtractive-only over the descriptor**. It never enables a Commission-supplied asset; those are always active by virtue of being present in the Commission.
 - Descriptor entries are agent-internal. Commission entries carry inline connection material and are always active by virtue of being present.
 - An id/name collision between a descriptor entry and a Commission entry MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn. Specifically: `descriptor.mcp_servers[].id` vs `Commission.mcp_servers[].id`; `descriptor.skills[].name` vs `Commission.skills[].id`.
-- A name in `Commission.enabled_builtin_*` that doesn't appear in the corresponding `descriptor.*` field is the same `commission_collision`.
+- Each `Commission.enabled_builtin_*` map is keyed by `descriptor.agent_name`; the running agent reads only its own key (Commission §4). A present map without the agent's key, or a name under its key that doesn't appear in the corresponding `descriptor.*` field, is the same `commission_collision`.
 
 **Tools:** the effective `agent_started.data["avp.tools"]` for the run is `descriptor.tools` (filtered for entries without `avp.mcp_server_id` against `Commission.enabled_builtin_tools`), unioned with the live `tools/list` output from each MCP server whose dial reached `status: "connected"` — descriptor-internal servers post-`enabled_builtin_mcp_servers` filter, plus all `Commission.mcp_servers`. Disabling a server via `Commission.enabled_builtin_mcp_servers` prevents the dial, so its tools never become available for the run; a Commission-declared server that fails to dial still appears in `mcp_servers[]` with its terminal `status`, but contributes no tools.
 
@@ -256,7 +256,7 @@ Implementations MAY publish additional vendor-namespaced flags (e.g., `vendor.ac
 
 | Composes with | How |
 |---|---|
-| [Trajectory](./trajectory.md) | The Descriptor payload is the body of `agent_described.data["avp.descriptor"]`. The pre-flight `describe` surface and the run-time `agent_described` event SHOULD be consistent for the same agent build; pre-flight describe MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), which require a startup dial. |
+| [Trajectory](./trajectory.md) | The Descriptor payload is the body of `agent_described.data["avp.descriptor"]`. The pre-flight `describe` surface and the run-time `agent_described` event SHOULD be consistent for the same agent build; pre-flight describe MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), which require a startup dial, and run-time `skills[]` / `subagents[]` MAY extend the pre-flight (build-intrinsic) list with Commission-provided and environment-discovered sources. |
 | [Commission](./commission.md) | Commission's `enabled_builtin_*` allow-lists reference Descriptor-declared `name`/`id`s (subtractive-only over the descriptor). Prompt-shaped fields override per §2.7; list-shaped fields merge as `(descriptor filtered by enabled_builtin_*) ∪ Commission` with id-collision = `commission_collision` fail-fast. |
 
 A consumer that adopts only the Agent Descriptor Spec can run an agent's `describe` command and ingest the result for catalog/discovery purposes without ever sending a Commission or reading a trajectory.
@@ -269,8 +269,8 @@ An agent (or any Descriptor publisher) is conforming to the Agent Descriptor Spe
 
 1. Every Descriptor it emits validates against [`agent-descriptor.schema.json`](./agent-descriptor.schema.json).
 2. `avp_spec_version` equals `"0.1"`.
-3. The Descriptor's **static portion** (every field except MCP-surfaced `tools[]` entries and `mcp_servers[].status`) MUST be identical across runs of the same build. No environment reads, no filesystem walks, no random ids in the static portion. MCP-surfaced `tools[]` entries (those with `avp.mcp_server_id`) and per-server `status` are populated from each MCP server's startup `tools/list` and may legitimately vary if the server's catalog changes.
+3. The Descriptor's **static portion** (every field except MCP-surfaced `tools[]` entries, `mcp_servers[].status`, and run-time additions to `skills[]` / `subagents[]`) MUST be identical across runs of the same build. No environment reads, no filesystem walks, no random ids in the static portion. MCP-surfaced `tools[]` entries (those with `avp.mcp_server_id`) and per-server `status` are populated from each MCP server's startup `tools/list` and may legitimately vary if the server's catalog changes. At run-time, `skills[]` and `subagents[]` MAY gain Commission-provided and environment-discovered entries; pre-flight `describe` MUST list only build-intrinsic sources, never sources discovered on the invoking host's filesystem.
 4. Within each list-valued field, identifiers are unique: `tools[].name`, `subagents[].name`, `skills[].name`, `mcp_servers[].id`.
 5. Every `tools[]` entry with `avp.mcp_server_id` set MUST match an `id` in `mcp_servers[]`. Conversely, an MCP server whose `status` is anything other than `"connected"` MUST NOT have any `tools[]` entries carrying its `id`.
-6. If composed with [Trajectory](./trajectory.md): `agent_described.data["avp.descriptor"]` SHOULD be consistent with what `<agent> describe` prints for the same build. Pre-flight describe MAY omit MCP-surfaced tool entries; every other field MUST be identical.
+6. If composed with [Trajectory](./trajectory.md): `agent_described.data["avp.descriptor"]` SHOULD be consistent with what `<agent> describe` prints for the same build. Pre-flight describe MAY omit MCP-surfaced tool entries, and run-time `skills[]` / `subagents[]` MAY carry Commission-provided and environment-discovered entries beyond the pre-flight (build-intrinsic) list; every other field MUST be identical.
 7. If composed with [Commission](./commission.md): descriptor entries and Commission entries merge per §2.7 — prompt-shaped fields are overridden by Commission; list-shaped fields are unioned (descriptor side filtered by `enabled_builtin_*` first). An id/name collision across descriptor and Commission MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn.

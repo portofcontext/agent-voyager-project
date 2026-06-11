@@ -1,11 +1,12 @@
 """Seam test: `avp-conformance check` ↔ agent subprocess.
 
 Crosses the harness↔agent seam without a real model. A stub agent script
-honors the agent CLI contract (`ping`, `run --commission --out`) by writing
-a canned NDJSON trajectory; the harness writes the Commission to a temp file,
-spawns the stub, reads the trajectory back, and matches it. This pins the
-parts a matcher unit test can't see: argument plumbing, file round-trip,
-exit-code semantics, and PASS/FAIL reporting.
+honors the agent CLI contract (`ping`, `describe`, `run --commission --out`)
+by writing a canned NDJSON trajectory; the harness writes the Commission to a
+temp file, spawns the stub, reads the trajectory back, and matches it. This
+pins the parts a matcher unit test can't see: argument plumbing (including
+the describe-derived `${AGENT_NAME}` identity), file round-trip, exit-code
+semantics, and PASS/FAIL reporting.
 """
 
 from __future__ import annotations
@@ -19,8 +20,10 @@ from typer.testing import CliRunner
 
 runner = CliRunner()
 
-# A stub agent: `ping` writes pong; `run` writes a fixed converged trajectory,
-# ignoring the Commission contents (this test exercises plumbing, not a model).
+# A stub agent: `ping` writes pong; `describe` writes a minimal AgentDescriptor
+# (check uses it to learn the agent identity for `${AGENT_NAME}` expansion);
+# `run` writes a fixed converged trajectory, ignoring the Commission contents
+# (this test exercises plumbing, not a model).
 STUB_AGENT = """\
 import argparse, json, sys
 
@@ -40,9 +43,12 @@ TRAJECTORY = [
      "data": {**_s("5" * 16, _AGENT), "avp.reason": "converged"}},
 ]
 
+DESCRIPTOR = {"agent_name": "stub-agent", "agent_version": "0.0.1", "spec_version": "0.1"}
+
 p = argparse.ArgumentParser()
 sub = p.add_subparsers(dest="cmd", required=True)
 pp = sub.add_parser("ping"); pp.add_argument("--out", required=True)
+pd = sub.add_parser("describe"); pd.add_argument("--out", required=True)
 pr = sub.add_parser("run")
 pr.add_argument("--commission", required=True)
 pr.add_argument("--built-in", dest="built_in", required=False)
@@ -51,6 +57,8 @@ a = p.parse_args()
 with open(a.out, "w") as f:
     if a.cmd == "ping":
         f.write(json.dumps({"type": "pong"}) + "\\n")
+    elif a.cmd == "describe":
+        f.write(json.dumps(DESCRIPTOR) + "\\n")
     else:
         for ev in TRAJECTORY:
             f.write(json.dumps(ev) + "\\n")

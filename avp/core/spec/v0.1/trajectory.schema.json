@@ -1306,10 +1306,13 @@
         "enabled_builtin_tools": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
-              "type": "array"
+              "type": "object"
             },
             {
               "type": "null"
@@ -1321,10 +1324,13 @@
         "enabled_builtin_subagents": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
-              "type": "array"
+              "type": "object"
             },
             {
               "type": "null"
@@ -1336,10 +1342,13 @@
         "enabled_builtin_skills": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
-              "type": "array"
+              "type": "object"
             },
             {
               "type": "null"
@@ -1351,10 +1360,13 @@
         "enabled_builtin_mcp_servers": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
-              "type": "array"
+              "type": "object"
             },
             {
               "type": "null"
@@ -1362,6 +1374,21 @@
           ],
           "default": null,
           "title": "Enabled Builtin Mcp Servers"
+        },
+        "agent_versions": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Versions"
         },
         "output_schema": {
           "anyOf": [
@@ -1541,6 +1568,7 @@
         "agent_crash",
         "unsupported_model",
         "unsupported_provider",
+        "unsupported_agent_version",
         "commission_collision",
         "mcp_connect_failed",
         "unknown"

@@ -1,0 +1,52 @@
+{
+  "id": "agent-version-pin-mismatch-fails-fast",
+  "title": "An agent_versions pin that doesn't match the running build fails fast",
+  "description": "agent_versions maps descriptor.agent_name to an exact descriptor.agent_version the Commission was authored against. A pin for the running agent that doesn't equal its actual version is a contract violation (same-name surfaces can change behavior across builds): the agent MUST emit error_occurred with code unsupported_agent_version and stop with reason error BEFORE any model turn (no assistant_message). The ${AGENT_NAME} fixture token keys the pin at the agent under test; the pinned value is a version no real build reports.",
+  "spec_refs": [
+    "spec/v0.1/commission.md#40-agent-version-pins-agent_versions",
+    "spec/v0.1/trajectory.md#7-event-reference"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "agent-version-pin-mismatch-fails-fast",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Reply with exactly the word DONE and nothing else.",
+    "agent_versions": { "${AGENT_NAME}": "0.0.0-not-a-real-build" },
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "error_occurred(unsupported_agent_version)",
+        "match": {
+          "type": "avp.error_occurred",
+          "source": "avp://agent",
+          "data": {
+            "avp.error.code": "unsupported_agent_version"
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(error)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "error"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "no model turn runs",
+        "match": {
+          "type": "avp.assistant_message"
+        }
+      }
+    ]
+  }
+}
