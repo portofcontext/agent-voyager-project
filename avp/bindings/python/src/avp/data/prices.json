@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-13",
+  "$snapshot_date": "2026-06-14",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -3047,12 +3047,12 @@
       "output": 1.68
     },
     "azure/deepseek-v4-flash": {
-      "input": 1.74,
-      "output": 3.48
-    },
-    "azure/deepseek-v4-pro": {
       "input": 0.19,
       "output": 0.51
+    },
+    "azure/deepseek-v4-pro": {
+      "input": 1.74,
+      "output": 3.48
     },
     "azure/gpt-3.5-turbo-0125": {
       "input": 0.5,
@@ -15836,8 +15836,8 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.098,
-      "output": 0.196,
+      "input": 0.09,
+      "output": 0.18,
       "cache_read": 0.02
     },
     "openrouter/deepseek/deepseek-v4-pro": {
@@ -16259,9 +16259,9 @@
       "cache_read": 0.34
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
-      "input": 0.95,
-      "output": 4.0,
-      "cache_read": 0.19
+      "input": 0.75,
+      "output": 3.5,
+      "cache_read": 0.16
     },
     "openrouter/morph/morph-v3-fast": {
       "input": 0.8,
@@ -20116,6 +20116,11 @@
       "output": 1.2,
       "cache_read": 0.06
     },
+    "venice/minimax-m3-preview": {
+      "input": 0.3,
+      "output": 1.2,
+      "cache_read": 0.06
+    },
     "venice/mistral-small-2603": {
       "input": 0.1875,
       "output": 0.75
@@ -21626,6 +21631,12 @@
       "cache_read": 0.0,
       "cache_write": 0.0
     },
+    "zai-coding-plan/glm-5.2": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
     "zai-coding-plan/glm-5v-turbo": {
       "input": 0.0,
       "output": 0.0,
@@ -22285,6 +22296,12 @@
       "cache_write": 0.0
     },
     "zhipuai-coding-plan/glm-5.1": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "zhipuai-coding-plan/glm-5.2": {
       "input": 0.0,
       "output": 0.0,
       "cache_read": 0.0,
