@@ -81,15 +81,15 @@ def test_provision_reuses_cached_gguf(monkeypatch, tmp_path) -> None:
     local_models.provision("local/bartowski/M-GGUF:Q4_K_M")  # no download
 
 
-def test_volume_binds_cache_at_sandbox_models_dir(monkeypatch, tmp_path) -> None:
+def test_mount_binds_cache_at_sandbox_models_dir(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(local_models.paths, "avp_home", lambda: tmp_path)
     monkeypatch.setattr(local_models, "_resolve_gguf_filename", lambda repo, quant: "M-Q4_K_M.gguf")
     monkeypatch.setattr(local_models, "_download", lambda url, dest, notify: dest.write_bytes(b"x"))
 
-    vol = local_models.volume(_commission("local/bartowski/M-GGUF:Q4_K_M", provider=True))
-    assert vol is not None
-    assert vol.mount_path == local_models.SANDBOX_MODELS_DIR
-    assert vol.host.path == str((tmp_path / "models").resolve())
+    m = local_models.mount(_commission("local/bartowski/M-GGUF:Q4_K_M", provider=True))
+    assert m is not None
+    assert m.target == local_models.SANDBOX_MODELS_DIR
+    assert m.host == str((tmp_path / "models").resolve())
 
-    # A hosted-provider commission needs no models volume.
-    assert local_models.volume(_commission("anthropic/claude-haiku-4-5", provider=False)) is None
+    # A hosted-provider commission needs no models mount.
+    assert local_models.mount(_commission("anthropic/claude-haiku-4-5", provider=False)) is None

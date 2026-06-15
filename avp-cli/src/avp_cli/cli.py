@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import webbrowser
@@ -47,6 +48,7 @@ from avp_cli import (
     osb,
     paths,
     run_manifest,
+    runtime,
     state,
     viz,
 )
@@ -116,7 +118,7 @@ def _run_and_report(
     runnable = []
     for spec in agent_specs:
         agent = resolve_agent(spec)
-        prepared = _prepare_agent(agent, env_obj, quiet=quiet)
+        prepared = _prepare_agent(agent, env_obj, quiet=quiet, runtime_name=sandbox_ctx.runtime)
         if prepared is not None:
             runnable.append(prepared)
     if not runnable:
@@ -211,7 +213,9 @@ def _agent_identity(agent) -> tuple[str | None, str | None]:
     return descriptor.agent_name, None
 
 
-def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
+def _prepare_agent(
+    agent, env_obj, *, quiet: bool, runtime_name: str = "opensandbox"
+) -> SandboxedAgent | None:
     """Resolve one agent to its sandbox form: identity (descriptor agent_name)
     + recipe + derived image (built or reused). Returns None (with a warning)
     when the agent can't run."""
@@ -228,17 +232,25 @@ def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
     except NoContainerRecipe as exc:
         console.warn(f"skipping agent '{agent.name}': {exc}")
         return None
-    tag = images.image_tag(env_obj, recipe)
-    on_line = None
-    if not quiet:
-        on_line = lambda line: console.err.print(line, style="dim", markup=False, highlight=False)  # noqa: E731
-    try:
-        built = images.ensure_image(env_obj, recipe, on_line=on_line)
-    except images.ImageBuildError as exc:
-        console.warn(f"skipping agent '{agent.name}': {exc}")
-        return None
-    if built == tag and not quiet:
-        console.note(f"sandbox image for {agent.name}: {built}")
+    # The libkrun backend runs a prebuilt GPU image (goose's `vulkan` build on a
+    # Venus runtime) from the podman machine's own storage; the env-derived Docker
+    # image build doesn't apply. AVP_LIBKRUN_IMAGE names it. (A first-class GPU
+    # agent-image recipe + release is the follow-up; this unblocks the path now.)
+    libkrun_image = os.environ.get("AVP_LIBKRUN_IMAGE")
+    if runtime_name == "libkrun" and libkrun_image:
+        built = libkrun_image
+    else:
+        tag = images.image_tag(env_obj, recipe)
+        on_line = None
+        if not quiet:
+            on_line = lambda line: console.err.print(line, style="dim", markup=False, highlight=False)  # noqa: E731
+        try:
+            built = images.ensure_image(env_obj, recipe, on_line=on_line)
+        except images.ImageBuildError as exc:
+            console.warn(f"skipping agent '{agent.name}': {exc}")
+            return None
+        if built == tag and not quiet:
+            console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
         name=agent_name,
         image=built,
@@ -247,8 +259,8 @@ def _prepare_agent(agent, env_obj, *, quiet: bool) -> SandboxedAgent | None:
     )
 
 
-def _prepare_sandbox(env_spec: str | None, workspace_root: Path):
-    """Parse the env (or the default), bring up the sandbox server, and seed the
+def _prepare_sandbox(env_spec: str | None, workspace_root: Path, *, runtime_name: str = "opensandbox"):
+    """Parse the env (or the default), bring up the sandbox backend, and seed the
     run workspace. Returns (env_obj, SandboxContext); raises EnvError /
     SandboxUnavailable / OSError / JSONDecodeError."""
     from avp_cli import environment as env_mod
@@ -260,7 +272,12 @@ def _prepare_sandbox(env_spec: str | None, workspace_root: Path):
     else:
         env_obj = env_mod.Environment.parse({})
         base_dir = Path.cwd()
-    conn = osb.ensure_server()
+    # The libkrun backend runs on a podman machine, not the Docker-based
+    # OpenSandbox server, so skip standing it up; the connection is unused there.
+    if runtime_name == "libkrun":
+        conn = osb.Connection(domain="127.0.0.1:0", api_key="unused-by-libkrun")
+    else:
+        conn = osb.ensure_server()
     workspace = env_mod.seed_workspace(env_obj, workspace_root / "workspace", base_dir=base_dir)
     return env_obj, SandboxContext(
         connection=conn,
@@ -268,6 +285,7 @@ def _prepare_sandbox(env_spec: str | None, workspace_root: Path):
         setup=env_obj.setup,
         net=env_obj.net,
         resources=env_obj.resources,
+        runtime=runtime_name,
     )
 
 
@@ -966,7 +984,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     # Bring up the sandbox stack once (not per cell): Docker preflight, the
     # managed server, and the seeded run workspace every cell mounts.
     try:
-        env_obj, sandbox_ctx = _prepare_sandbox(args.env, _workspace_root(out, run_id))
+        env_obj, sandbox_ctx = _prepare_sandbox(
+            args.env, _workspace_root(out, run_id),
+            runtime_name=runtime.resolve_runtime_name(args.runtime),
+        )
     except osb.SandboxUnavailable as exc:
         console.error_panel("sandbox unavailable", str(exc))
         return _SKIP
@@ -1042,14 +1063,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
     rundir.mkdir(parents=True, exist_ok=True)
 
     try:
-        env_obj, sandbox_ctx = _prepare_sandbox(args.env, rundir)
+        env_obj, sandbox_ctx = _prepare_sandbox(
+            args.env, rundir, runtime_name=runtime.resolve_runtime_name(args.runtime)
+        )
     except osb.SandboxUnavailable as exc:
         console.error_panel("sandbox unavailable", str(exc))
         return _SKIP
     except Exception as exc:
         console.error_panel(f"environment '{args.env}'", str(exc))
         return 1
-    prepared = _prepare_agent(agent, env_obj, quiet=False)
+    prepared = _prepare_agent(agent, env_obj, quiet=False, runtime_name=sandbox_ctx.runtime)
     if prepared is None:
         return _SKIP
 
@@ -1385,6 +1408,16 @@ def _cmd_sandbox(args: argparse.Namespace) -> int:
 # ── parser ─────────────────────────────────────────────────────────────────────
 
 
+_RUNTIME_HELP = (
+    "Sandbox backend. 'opensandbox' (default): the Docker-based managed server with "
+    "DNS-filtered egress isolation. 'libkrun': a podman microVM (no Docker, lighter) "
+    "that exposes the host GPU to the sandbox via virtio-gpu, so a local model "
+    "(provider 'local') runs GPU-accelerated in-process. Use libkrun when you want fast, "
+    "private, $0 local inference and have a krunkit machine; opensandbox otherwise. "
+    "Falls back to $AVP_RUNTIME."
+)
+
+
 def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
     if needs_path:
         p.add_argument("path", help="Path to an eval config (.eval.json)")
@@ -1403,6 +1436,7 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
         default=None,
         help="Override the model every commission runs (e.g. claude-sonnet-4-6)",
     )
+    p.add_argument("--runtime", choices=runtime.RUNTIMES, default=None, help=_RUNTIME_HELP)
     p.add_argument(
         "--name",
         default=None,
@@ -1619,6 +1653,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--env", default=None, help="Environment to run inside (a name or a path to an env JSON)"
     )
     run_p.add_argument("--model", default=None, help="Model override (else the agent's default)")
+    run_p.add_argument("--runtime", choices=runtime.RUNTIMES, default=None, help=_RUNTIME_HELP)
     run_p.add_argument(
         "--timeout", type=float, default=600.0, help="Max seconds for the run (default: 600)"
     )

@@ -1,0 +1,13 @@
+order_id,customer,product,quantity,unit_price,region,status
+1001,Acme Corp,Widget,10,25,East,shipped
+1002,Globex,Gadget,5,40,West,pending
+1003,Initech,Widget,8,25,East,shipped
+1004,Umbrella,Sprocket,12,15,South,shipped
+1005,Hooli,Gadget,3,40,West,cancelled
+1006,Stark Industries,Widget,20,25,North,shipped
+1007,Wayne Enterprises,Sprocket,7,15,North,pending
+1008,Globex,Widget,6,25,East,shipped
+1009,Acme Corp,Sprocket,9,15,East,shipped
+1010,Initech,Widget,4,25,East,pending
+1011,Hooli,Gadget,2,40,West,shipped
+1012,Umbrella,Widget,15,25,South,cancelled

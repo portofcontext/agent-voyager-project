@@ -24,10 +24,9 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from opensandbox.models.sandboxes import Host, Volume
-
 from avp.commission import Commission
 from avp_cli import paths
+from avp_cli.runtime import Mount
 
 # Where the agent reads its staged model manifest + files in-sandbox: an
 # env-root-relative path (AVP_ENV_ROOT is mounted at /avp, models under data/).
@@ -142,12 +141,15 @@ def _download(url: str, dest: Path, notify: Callable[[str], None] | None) -> Non
         lock.unlink(missing_ok=True)
 
 
-def provision(commission_model: str, *, notify: Callable[[str], None] | None = None) -> Path:
+def provision(
+    commission_model: str, *, notify: Callable[[str], None] | None = None, gpu: bool = False
+) -> Path:
     """Cache the model on the host and write the manifest that lists it.
 
     Idempotent: a cached GGUF is reused. Returns the host models dir to mount at
     `SANDBOX_MODELS_DIR`. The manifest names the file by its IN-SANDBOX path (the
-    host file is mounted there), so it resolves inside the container.
+    host file is mounted there), so it resolves inside the container. `gpu`
+    requests full GPU offload in the manifest (for a GPU-capable runtime).
     """
     repo_id, quant = _spec(commission_model)
     cache = models_cache_dir()
@@ -156,16 +158,22 @@ def provision(commission_model: str, *, notify: Callable[[str], None] | None = N
     dest = cache / filename
     if not dest.exists():
         _download(_HF_RESOLVE.format(repo=repo_id, filename=filename), dest, notify)
-    _write_registry(cache, commission_model, repo_id, quant, filename, dest.stat().st_size)
+    _write_registry(cache, commission_model, repo_id, quant, filename, dest.stat().st_size, gpu)
     return cache
 
 
 def _write_registry(
-    cache: Path, model_id_origin: str, repo_id: str, quant: str, filename: str, size: int
+    cache: Path, model_id_origin: str, repo_id: str, quant: str, filename: str, size: int, gpu: bool
 ) -> None:
     """Write the manifest (`registry.json`) the agent's local provider reads: one
     entry naming the staged file by its in-sandbox path and how it was fetched."""
     native = model_id_origin.split("/", 1)[1] if "/" in model_id_origin else model_id_origin
+    settings = {"context_size": _DEFAULT_CONTEXT_SIZE, "native_tool_calling": False}
+    # On a GPU-capable runtime (the libkrun backend exposes the host GPU via
+    # virtio-gpu), offload all layers; the agent's local provider reads this as
+    # n_gpu_layers. On the CPU runtime a GPU-less build ignores it.
+    if gpu:
+        settings["n_gpu_layers"] = 999
     entry = {
         "id": native,  # the agent's native model id (slug with the `local/` origin stripped)
         "repo_id": repo_id,
@@ -173,23 +181,22 @@ def _write_registry(
         "quantization": quant,
         "local_path": f"{SANDBOX_MODELS_DIR}/{filename}",
         "source_url": _HF_RESOLVE.format(repo=repo_id, filename=filename),
-        "settings": {"context_size": _DEFAULT_CONTEXT_SIZE, "native_tool_calling": False},
+        "settings": settings,
         "size_bytes": size,
     }
     (cache / "registry.json").write_text(json.dumps({"models": [entry]}, indent=2))
 
 
-def volume(commission: Commission, *, notify: Callable[[str], None] | None = None) -> Volume | None:
-    """The models volume to mount for a local-inference commission, else None.
+def mount(
+    commission: Commission, *, notify: Callable[[str], None] | None = None, gpu: bool = False
+) -> Mount | None:
+    """The models mount for a local-inference commission, else None.
 
-    Provisions the model host-side (download if needed) and returns a Volume
-    binding the host cache at `SANDBOX_MODELS_DIR` so the agent finds it.
+    Provisions the model host-side (download if needed) and returns a Mount
+    binding the host cache at `SANDBOX_MODELS_DIR` so the agent finds it. `gpu`
+    requests GPU offload in the staged manifest.
     """
     if not is_local(commission):
         return None
-    host_dir = provision(commission.model, notify=notify)
-    return Volume(
-        name="models",
-        host=Host(path=str(host_dir.resolve())),
-        mount_path=SANDBOX_MODELS_DIR,
-    )
+    host_dir = provision(commission.model, notify=notify, gpu=gpu)
+    return Mount(host=str(host_dir.resolve()), target=SANDBOX_MODELS_DIR)

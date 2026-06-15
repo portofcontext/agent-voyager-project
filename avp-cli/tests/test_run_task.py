@@ -35,7 +35,7 @@ def _stub_stack(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli,
         "_prepare_agent",
-        lambda agent, env_obj, quiet: SandboxedAgent(
+        lambda agent, env_obj, quiet, runtime_name="opensandbox": SandboxedAgent(
             name=agent.name, image="img:test", command=("agent-bin",)
         ),
     )

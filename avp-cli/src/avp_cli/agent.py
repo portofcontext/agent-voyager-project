@@ -30,20 +30,16 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from opensandbox import SandboxSync
-from opensandbox.models.execd import RunCommandOpts
-from opensandbox.models.sandboxes import Host, Volume
 from pydantic import BaseModel
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
-from avp_cli import broker, local_models, osb, paths, vault
+from avp_cli import broker, local_models, osb, paths, runtime, vault
 from avp_cli.agent_manifest import AgentManifest
 
 # How often the streaming path re-reads the growing --out file (seconds).
@@ -99,6 +95,7 @@ class SandboxContext:
     setup: list[str] = field(default_factory=list)
     net: list[str] = field(default_factory=list)
     resources: dict[str, str] = field(default_factory=dict)
+    runtime: str = "opensandbox"  # the sandbox backend (see avp_cli.runtime)
 
 
 def load_manifest(path: str | Path) -> tuple[AgentManifest, Path]:
@@ -164,31 +161,29 @@ def run_agent(
         # before the run (the agent runs it in-process but does not fetch it).
         # Provision host-side and mount it; cache hit is fast, first run downloads.
         try:
-            models_vol = local_models.volume(commission)
+            models_mount = local_models.mount(commission, gpu=ctx.runtime == "libkrun")
         except local_models.LocalModelError as exc:
             return None, f"local model: {exc}"
+        mounts = [
+            runtime.Mount(host=str(ctx.workspace.resolve()), target=_WORKSPACE_MNT),
+            runtime.Mount(host=str(io_dir), target=_IO_MNT),
+            *([models_mount] if models_mount is not None else []),
+        ]
         try:
-            box = SandboxSync.create(
-                agent.image,
-                connection_config=ctx.connection.config(),
+            # The runtime seam (avp_cli.runtime): the managed OpenSandbox server by
+            # default, or a libkrun podman machine (AVP_RUNTIME=libkrun) for GPU.
+            # Egress is default-deny floored by runtime-base domains, plus the env's
+            # `net`, plus the hosts the run reaches: under broker mode just the
+            # broker host (the broker reaches providers/MCP from the host);
+            # otherwise the provider + MCP hosts the Commission names. A run can
+            # never be commissioned to call a URL the sandbox blocks.
+            box = runtime.get_runtime(ctx.runtime, ctx.connection.config()).create(
+                image=agent.image,
                 env=_sandbox_env(agent, commission, brk),
-                volumes=[
-                    Volume(
-                        name="workspace",
-                        host=Host(path=str(ctx.workspace.resolve())),
-                        mount_path=_WORKSPACE_MNT,
-                    ),
-                    Volume(name="io", host=Host(path=str(io_dir)), mount_path=_IO_MNT),
-                    *([models_vol] if models_vol is not None else []),
-                ],
-                # Egress is default-deny floored by runtime-base domains, plus the
-                # env's `net`, plus the hosts the run reaches: under broker mode
-                # just the broker host (the broker reaches providers/MCP from the
-                # host); otherwise the provider + MCP hosts the Commission names.
-                # A run can never be commissioned to call a URL the sandbox blocks.
-                network_policy=osb.network_policy([*ctx.net, *_egress_extra(commission, brk)]),
-                resource={**_DEFAULT_RESOURCES, **ctx.resources},
-                timeout=timedelta(seconds=timeout_s + _SANDBOX_TTL_MARGIN_S),
+                mounts=mounts,
+                egress=[*ctx.net, *_egress_extra(commission, brk)],
+                resources={**_DEFAULT_RESOURCES, **ctx.resources},
+                timeout_s=timeout_s + _SANDBOX_TTL_MARGIN_S,
             )
         except Exception as exc:
             return None, f"sandbox create failed: {exc}"
@@ -386,19 +381,16 @@ fetch
 """
 
 
-def _preflight_broker(box: SandboxSync, brk: broker.Broker) -> str | None:
+def _preflight_broker(box: runtime.Box, brk: broker.Broker) -> str | None:
     """Confirm the sandbox can reach the vault broker before the agent runs (and
     ensure host.docker.internal routes to the host on plain Linux Docker).
     Returns an error string (fail closed) when it can't; never falls back to
     placing the secret in the sandbox."""
     try:
-        execution = box.commands.run(
-            f"sh {_IO_MNT}/broker-preflight.sh {brk.port}",
-            opts=RunCommandOpts(timeout=timedelta(seconds=25)),
-        )
+        result = box.run(f"sh {_IO_MNT}/broker-preflight.sh {brk.port}", timeout_s=25)
     except Exception as exc:
         return f"vault broker preflight failed to run ({exc}); refusing to run"
-    if execution.exit_code not in (0, None):
+    if result.exit_code not in (0, None):
         return (
             f"vault broker unreachable from the sandbox (host broker on port {brk.port}); "
             "refusing to run rather than expose the secret"
@@ -406,40 +398,29 @@ def _preflight_broker(box: SandboxSync, brk: broker.Broker) -> str | None:
     return None
 
 
-def _run_setup(box: SandboxSync, setup: list[str]) -> str | None:
+def _run_setup(box: runtime.Box, setup: list[str]) -> str | None:
     """Run the env's setup commands in the workspace; first failure reports."""
     for command in setup:
         try:
-            execution = box.commands.run(
-                command,
-                opts=RunCommandOpts(
-                    working_directory=_WORKSPACE_MNT, timeout=timedelta(minutes=10)
-                ),
-            )
+            result = box.run(command, cwd=_WORKSPACE_MNT, timeout_s=600)
         except Exception as exc:
             return f"setup failed ({command!r}): {exc}"
-        if execution.exit_code not in (0, None):
-            tail = _logs_tail(execution)
-            return f"setup exit {execution.exit_code} ({command!r}): {tail}"
+        if result.exit_code not in (0, None):
+            return f"setup exit {result.exit_code} ({command!r}): {result.logs_tail}"
     return None
 
 
-def _exec(box: SandboxSync, command: str, timeout_s: float, io_dir: Path) -> str | None:
+def _exec(box: runtime.Box, command: str, timeout_s: float, io_dir: Path) -> str | None:
     """Run the agent command and wait; return an error string or None."""
     try:
-        execution = box.commands.run(
-            command,
-            opts=RunCommandOpts(
-                working_directory=_WORKSPACE_MNT, timeout=timedelta(seconds=timeout_s)
-            ),
-        )
+        result = box.run(command, cwd=_WORKSPACE_MNT, timeout_s=timeout_s)
     except Exception as exc:
         return _timeout_or(f"agent run failed: {exc}", exc, timeout_s)
-    return _exit_error(execution, io_dir)
+    return _exit_error(result, io_dir)
 
 
 def _exec_streaming(
-    box: SandboxSync,
+    box: runtime.Box,
     command: str,
     timeout_s: float,
     io_dir: Path,
@@ -467,19 +448,14 @@ def _exec_streaming(
         return future.result()
 
 
-def _exit_error(execution: Any, io_dir: Path) -> str | None:
-    if execution.exit_code in (0, None):
+def _exit_error(result: runtime.ExecResult, io_dir: Path) -> str | None:
+    if result.exit_code in (0, None):
         return None
     stderr = io_dir / "stderr.log"
     tail = ""
     if stderr.exists():
         tail = "\n".join(stderr.read_text().strip().splitlines()[-3:])
-    return f"exit {execution.exit_code}: {tail or _logs_tail(execution) or '(no stderr)'}"
-
-
-def _logs_tail(execution: Any, lines: int = 3) -> str:
-    chunks = [log.text for log in (execution.logs.stderr or execution.logs.stdout or [])]
-    return "\n".join("".join(chunks).strip().splitlines()[-lines:])
+    return f"exit {result.exit_code}: {tail or result.logs_tail or '(no stderr)'}"
 
 
 def _timeout_or(message: str, exc: Exception, timeout_s: float) -> str:

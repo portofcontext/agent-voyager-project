@@ -1,6 +1,6 @@
 [package]
 name = "avp-goose"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "AVP connector for Block's Goose coding agent (in-process trajectory emitter)."
 license = "MIT"
@@ -49,6 +49,13 @@ clap = { version = "4", features = ["derive"], optional = true }
 # clap. Off by default so a plain `cargo build` doesn't drag clap into the
 # dep graph.
 conformance = ["dep:clap"]
+# GPU-accelerated local inference: forwards to goose's `vulkan` feature
+# (adds `llama-cpp-2/vulkan` on top of the `local-inference` we already enable).
+# The Vulkan backend works against any Vulkan device the host exposes, including
+# a virtio-gpu Venus device in a libkrun/krunkit microVM (Apple GPU via
+# MoltenVK). The build needs a glsl compiler (glslc) for the shaders; the
+# runtime needs libvulkan + an ICD (e.g. mesa's venus driver).
+vulkan = ["goose/vulkan"]
 
 [[bin]]
 name = "avp-goose-conformance"

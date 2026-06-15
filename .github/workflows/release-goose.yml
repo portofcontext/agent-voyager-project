@@ -29,7 +29,8 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # Two llama.cpp compiles on Linux (CPU + Vulkan), so allow extra headroom.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +45,9 @@ jobs:
       - name: System build deps (Linux)
         if: runner.os == 'Linux'
         working-directory: .
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake pkg-config libssl-dev
+        # glslc + libvulkan-dev are for the Vulkan build (compiles llama.cpp's
+        # SPIR-V shaders); harmless for the CPU build.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake pkg-config libssl-dev glslc libvulkan-dev
 
       - name: System build deps (macOS)
         if: runner.os == 'macOS'
@@ -62,10 +65,25 @@ jobs:
           tar -czf "$asset" -C target/release avp-goose-conformance
           shasum -a 256 "$asset" > "$asset.sha256"
 
+      # Linux-only GPU variant: the same binary with goose's `vulkan` feature, for
+      # the libkrun runtime (virtio-gpu Venus). Built after the CPU package since
+      # it overwrites target/release/avp-goose-conformance. The sandbox is Linux,
+      # so no macOS Vulkan variant.
+      - name: Build the Vulkan conformance binary (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release --features conformance,vulkan --bin avp-goose-conformance
+
+      - name: Package the Vulkan binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          asset="avp-goose-conformance-vulkan-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C target/release avp-goose-conformance
+          shasum -a 256 "$asset" > "$asset.sha256"
+
       - uses: actions/upload-artifact@v4
         with:
           name: goose-${{ matrix.target }}
-          path: agents/avp-goose/rust/avp-goose-conformance-${{ matrix.target }}.tar.gz*
+          path: agents/avp-goose/rust/avp-goose-conformance*-${{ matrix.target }}.tar.gz*
           if-no-files-found: error
 
   release:

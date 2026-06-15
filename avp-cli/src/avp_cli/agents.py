@@ -78,7 +78,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # 0.1.1: goose `local-inference` + `telemetry` features compiled in, so
         # the `local` provider (in-process llama.cpp + GGUF from Hugging Face) is
         # available alongside the hosted providers.
-        container_version="0.1.1",
+        # 0.1.2: also publishes a Linux `-vulkan-` binary variant (goose's `vulkan`
+        # feature) for the libkrun GPU runtime; the CPU binary is unchanged.
+        container_version="0.1.2",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
