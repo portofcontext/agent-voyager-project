@@ -1,6 +1,6 @@
 [package]
 name = "avp-goose"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "AVP connector for Block's Goose coding agent (in-process trajectory emitter)."
 license = "MIT"
@@ -11,9 +11,21 @@ avp = { path = "../../../avp/bindings/rust" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Heavy git dependency: pinned to the rev whose API this connector targets.
-# Default features (local-inference, aws-providers, code-mode, otel, keyring)
-# are dropped; only TLS is needed to drive an Agent with a hosted provider.
-goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false, features = ["rustls-tls", "system-keyring"] }
+# We drop goose's defaults and pick the set AVP needs: TLS + keyring to drive
+# hosted providers, `local-inference` for the `local` provider (in-process
+# llama.cpp + GGUF straight from Hugging Face, no ollama), and `telemetry` for
+# goose's internal observability hooks. Deliberately omitted: `code-mode` (AVP
+# enables code execution from the meta-harness level, not per-agent),
+# `aws-providers` (Bedrock/SageMaker), and `otel` (its
+# opentelemetry-appender-tracing pin wants a `experimental_span_attributes`
+# feature that the resolvable 0.31.x releases dropped, so it won't build at this
+# goose rev; revisit when the rev bumps).
+goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false, features = [
+    "rustls-tls",
+    "system-keyring",
+    "local-inference",
+    "telemetry",
+] }
 # Goose's bundled built-in extensions (developer is a platform extension and
 # always available; computercontroller/memory/tutorial/autovisualiser live here).
 # We register their in-process servers into goose's BUILTIN_REGISTRY so the agent

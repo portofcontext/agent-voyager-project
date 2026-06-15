@@ -43,7 +43,7 @@ from pydantic import BaseModel
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
-from avp_cli import broker, osb, paths, vault
+from avp_cli import broker, local_models, osb, paths, vault
 from avp_cli.agent_manifest import AgentManifest
 
 # How often the streaming path re-reads the growing --out file (seconds).
@@ -160,6 +160,13 @@ def run_agent(
         (io_dir / "commission.json").write_text(_commission_for_sandbox(commission, brk))
         if brk is not None:
             (io_dir / "broker-preflight.sh").write_text(_BROKER_PREFLIGHT_SH)
+        # Local-inference commissions need their model staged into the env root
+        # before the run (the agent runs it in-process but does not fetch it).
+        # Provision host-side and mount it; cache hit is fast, first run downloads.
+        try:
+            models_vol = local_models.volume(commission)
+        except local_models.LocalModelError as exc:
+            return None, f"local model: {exc}"
         try:
             box = SandboxSync.create(
                 agent.image,
@@ -172,6 +179,7 @@ def run_agent(
                         mount_path=_WORKSPACE_MNT,
                     ),
                     Volume(name="io", host=Host(path=str(io_dir)), mount_path=_IO_MNT),
+                    *([models_vol] if models_vol is not None else []),
                 ],
                 # Egress is default-deny floored by runtime-base domains, plus the
                 # env's `net`, plus the hosts the run reaches: under broker mode

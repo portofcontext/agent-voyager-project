@@ -75,7 +75,10 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # 0.1.0: per-agent Commission allowlist maps + agent_versions pins;
         # hermetic describe (pre-flight skills are build-intrinsic only,
         # builtin:// sources; no host home discovery).
-        container_version="0.1.0",
+        # 0.1.1: goose `local-inference` + `telemetry` features compiled in, so
+        # the `local` provider (in-process llama.cpp + GGUF from Hugging Face) is
+        # available alongside the hosted providers.
+        container_version="0.1.1",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -111,8 +114,12 @@ def _builtin_recipe(source: AgentSource) -> ContainerRecipe:
         asset = f"{source.binary_name}-$(uname -m)-unknown-linux-gnu.tar.gz"
         return ContainerRecipe(
             install=(
+                # libgomp1: goose's `local-inference` build links llama.cpp with
+                # OpenMP (libgomp.so.1), which the slim base image lacks; without
+                # it the binary fails to start (loading shared libraries) on every
+                # run, not just `local`-provider ones.
                 "apt-get update && apt-get install -y --no-install-recommends "
-                "curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+                "curl ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*",
                 f"curl -fsSL {_RELEASE_DL}/{tag}/{asset} | tar -xz -C /usr/local/bin "
                 f"&& chmod +x /usr/local/bin/{source.binary_name}",
             ),

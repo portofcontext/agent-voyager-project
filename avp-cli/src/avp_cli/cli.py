@@ -43,6 +43,7 @@ from avp_cli import (
     images,
     library,
     live,
+    local_models,
     osb,
     paths,
     run_manifest,
@@ -1063,6 +1064,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     commission = Commission(
         schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
     )
+    if local_models.is_local(commission):
+        try:
+            local_models.provision(commission.model, notify=console.note)
+        except local_models.LocalModelError as exc:
+            console.error_panel("local model", str(exc))
+            return 1
     traj = rundir / "trajectory.ndjson"
     where = f" in {args.env}" if args.env else ""
     console.note(f"{agent.name} working on the task{where} …")
