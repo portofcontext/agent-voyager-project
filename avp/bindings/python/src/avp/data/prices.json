@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-14",
+  "$snapshot_date": "2026-06-15",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -9679,6 +9679,11 @@
       "output": 0.5,
       "cache_read": 0.05
     },
+    "llmgateway/grok-build-0-1": {
+      "input": 1.0,
+      "output": 2.0,
+      "cache_read": 0.2
+    },
     "llmgateway/hermes-2-pro-llama-3-8b": {
       "input": 0.14,
       "output": 0.14
@@ -9707,6 +9712,11 @@
       "input": 0.95,
       "output": 4.0,
       "cache_read": 0.16
+    },
+    "llmgateway/kimi-k2.7-code": {
+      "input": 0.95,
+      "output": 4.0,
+      "cache_read": 0.19
     },
     "llmgateway/llama-3-70b-instruct": {
       "input": 0.51,
@@ -9845,6 +9855,11 @@
     "llmgateway/mistral-small-2506": {
       "input": 0.1,
       "output": 0.3
+    },
+    "llmgateway/nemotron-3-ultra-550b": {
+      "input": 0.5,
+      "output": 2.5,
+      "cache_read": 0.15
     },
     "llmgateway/o1": {
       "input": 15.0,
@@ -18799,10 +18814,6 @@
       "input": 0.2,
       "output": 0.6
     },
-    "siliconflow-cn/PaddlePaddle/PaddleOCR-VL": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "siliconflow-cn/PaddlePaddle/PaddleOCR-VL-1.5": {
       "input": 0.0,
       "output": 0.0
@@ -19029,10 +19040,6 @@
       "input": 0.086,
       "output": 0.086
     },
-    "siliconflow-cn/ascend-tribe/pangu-pro-moe": {
-      "input": 0.2,
-      "output": 0.6
-    },
     "siliconflow-cn/baidu/ERNIE-4.5-300B-A47B": {
       "input": 0.28,
       "output": 1.1
@@ -19078,14 +19085,6 @@
       "input": 0.14,
       "output": 0.57
     },
-    "siliconflow-cn/inclusionAI/Ling-mini-2.0": {
-      "input": 0.07,
-      "output": 0.28
-    },
-    "siliconflow-cn/inclusionAI/Ring-flash-2.0": {
-      "input": 0.14,
-      "output": 0.57
-    },
     "siliconflow-cn/moonshotai/Kimi-K2-Instruct-0905": {
       "input": 0.4,
       "output": 2.0
@@ -19125,10 +19124,6 @@
     "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct": {
       "input": 0.21,
       "output": 0.57
-    },
-    "siliconflow/MiniMaxAI/MiniMax-M2.1": {
-      "input": 0.3,
-      "output": 1.2
     },
     "siliconflow/MiniMaxAI/MiniMax-M2.5": {
       "input": 0.3,
@@ -19332,21 +19327,17 @@
       "input": 0.15,
       "output": 0.15
     },
+    "siliconflow/google/gemma-4-26B-A4B-it": {
+      "input": 0.12,
+      "output": 0.4
+    },
+    "siliconflow/google/gemma-4-31B-it": {
+      "input": 0.13,
+      "output": 0.4
+    },
     "siliconflow/inclusionAI/Ling-flash-2.0": {
       "input": 0.14,
       "output": 0.57
-    },
-    "siliconflow/inclusionAI/Ling-mini-2.0": {
-      "input": 0.07,
-      "output": 0.28
-    },
-    "siliconflow/inclusionAI/Ring-flash-2.0": {
-      "input": 0.14,
-      "output": 0.57
-    },
-    "siliconflow/meta-llama/Meta-Llama-3.1-8B-Instruct": {
-      "input": 0.06,
-      "output": 0.06
     },
     "siliconflow/moonshotai/Kimi-K2-Instruct": {
       "input": 0.58,
@@ -19368,10 +19359,6 @@
       "input": 0.95,
       "output": 4.0,
       "cache_read": 0.16
-    },
-    "siliconflow/nex-agi/DeepSeek-V3.1-Nex-N1": {
-      "input": 0.5,
-      "output": 2.0
     },
     "siliconflow/openai/gpt-oss-120b": {
       "input": 0.05,
@@ -19540,6 +19527,11 @@
     "synthetic/hf:MiniMaxAI/MiniMax-M2.5": {
       "input": 0.6,
       "output": 3.0,
+      "cache_read": 0.6
+    },
+    "synthetic/hf:MiniMaxAI/MiniMax-M3": {
+      "input": 0.6,
+      "output": 1.2,
       "cache_read": 0.6
     },
     "synthetic/hf:Qwen/Qwen2.5-Coder-32B-Instruct": {
@@ -19824,6 +19816,11 @@
       "input": 1.2,
       "output": 4.5,
       "cache_read": 0.2
+    },
+    "togetherai/moonshotai/Kimi-K2.7-Code": {
+      "input": 0.95,
+      "output": 4.0,
+      "cache_read": 0.19
     },
     "togetherai/nvidia/nemotron-3-ultra-550b-a55b": {
       "input": 0.6,
