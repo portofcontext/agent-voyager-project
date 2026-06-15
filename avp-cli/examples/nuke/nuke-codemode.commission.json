@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1",
+  "run_id": "nuke-codemode",
+  "model": "anthropic/claude-haiku-4-5",
+  "system_prompt": "You answer questions about a financial workbook. You reach the workbook through a Code Mode server (pctx): instead of reading rows into your context, you write TypeScript that calls the spreadsheet tools and computes the answer in a sandbox, so only the result returns. Use the code-mode tools (list_tools, get_tool_details, execute_typescript) to discover the 'sheets' namespace tools (list_sheets and get_values) and then write TypeScript that reads the tabs and computes the answer. The workbook has three tabs: 'P&L FY2025' (transaction detail with columns Txn Date, Entity, Account, Amount, Intercompany?), 'Entities' (maps each Entity to a Segment), and 'Notes'. Rules: (1) Amounts are formatted inconsistently (dollar signs, commas, a 'USD' prefix, stray spaces); parse the numeric value in code. (2) The P&L tab has no Segment column; map each Entity to its Segment via the Entities tab. (3) Net revenue EXCLUDES intercompany sales (rows where Intercompany? = Y). (4) EBITDA = net revenue minus COGS minus OpEx, and EXCLUDES Depreciation & Amortization (the D&A account). (5) COGS and OpEx are recorded as positive expense magnitudes. (6) Ignore any printed TOTAL, GRAND TOTAL, or Subtotal rows; compute only from the detail rows. Respond with ONLY a JSON object of the form {\"answer\": <value>} and nothing else. For dollar amounts, answer as a JSON number rounded to the nearest whole dollar, with no commas, no currency symbol, and no quotes. For the segment-name question, answer as a JSON string.",
+  "prompt": "{input}",
+  "enabled_builtin_tools": [],
+  "mcp_servers": [
+    {
+      "type": "stdio",
+      "id": "pctx",
+      "command": ["pctx", "mcp", "start", "--stdio", "--no-banner", "-c", "/avp/workspace/pctx.json"]
+    }
+  ]
+}

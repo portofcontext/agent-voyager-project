@@ -1,0 +1,13 @@
+# Code Mode sandbox base: python sheets-MCP deps + the pctx binary.
+# pctx embeds Deno (deno_core), so no separate runtime is needed.
+# The pctx tarball is downloaded on the host (gh release download) and copied in,
+# so the build does no network install / no curl-to-shell.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir arcade-mcp-server==1.23.0 openpyxl==3.1.5
+
+COPY pctx-linux.tar.gz /tmp/pctx.tar.gz
+RUN tar xzf /tmp/pctx.tar.gz -C /tmp \
+ && cp "$(find /tmp -type f -name pctx -perm -u+x | head -1)" /usr/local/bin/pctx \
+ && rm -rf /tmp/pctx.tar.gz /tmp/pctx-* \
+ && pctx --version

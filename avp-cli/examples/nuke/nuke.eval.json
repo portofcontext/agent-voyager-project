@@ -1,0 +1,31 @@
+{
+  "name": "context-nuke",
+  "agents": ["goose"],
+  "dataset": {
+    "source": "inline",
+    "items": [
+      {
+        "id": "maritime-net-revenue",
+        "prompt": "Compute total FY2025 NET revenue for the Maritime segment: all Revenue for Maritime entities, excluding intercompany sales. Map entities to segments using the Entities tab.",
+        "expected": { "answer": 31135117 }
+      },
+      {
+        "id": "aviation-ebitda",
+        "prompt": "Compute FY2025 EBITDA for the Aviation segment: net revenue (excluding intercompany) minus COGS minus OpEx. EBITDA EXCLUDES Depreciation & Amortization (D&A).",
+        "expected": { "answer": 10534584 }
+      },
+      {
+        "id": "top-ebitda-segment",
+        "prompt": "Which segment had the highest FY2025 EBITDA (net revenue excluding intercompany, minus COGS and OpEx, excluding D&A)? Answer with the segment name only.",
+        "expected": { "answer": "Aviation" }
+      },
+      {
+        "id": "q4-opex-all",
+        "prompt": "Compute total Q4 2025 (October, November, December) OpEx across ALL segments. Exclude D&A.",
+        "expected": { "answer": 4774083 }
+      }
+    ]
+  },
+  "scorer": { "name": "structural-match", "threshold": 1.0 },
+  "commissions": ["nuke-baseline", "nuke-codemode"]
+}

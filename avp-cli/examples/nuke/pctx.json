@@ -1,0 +1,14 @@
+{
+  "name": "nuke_codemode",
+  "version": "0.1.0",
+  "description": "Code Mode over the nuke sheets MCP: pctx wraps the sheets server as an upstream and exposes execute_typescript.",
+  "servers": [
+    {
+      "name": "sheets",
+      "command": "python",
+      "args": ["/avp/workspace/sheets_mcp.py"],
+      "env": { "NUKE_XLSX": "/avp/workspace/nuke.xlsx" }
+    }
+  ],
+  "logger": { "level": "error" }
+}
