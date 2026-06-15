@@ -241,9 +241,11 @@ def _prepare_agent(
         built = libkrun_image
     else:
         tag = images.image_tag(env_obj, recipe)
-        on_line = None
-        if not quiet:
-            on_line = lambda line: console.err.print(line, style="dim", markup=False, highlight=False)  # noqa: E731
+
+        def _emit(line: str) -> None:
+            console.err.print(line, style="dim", markup=False, highlight=False)
+
+        on_line = None if quiet else _emit
         try:
             built = images.ensure_image(env_obj, recipe, on_line=on_line)
         except images.ImageBuildError as exc:
@@ -259,7 +261,9 @@ def _prepare_agent(
     )
 
 
-def _prepare_sandbox(env_spec: str | None, workspace_root: Path, *, runtime_name: str = "opensandbox"):
+def _prepare_sandbox(
+    env_spec: str | None, workspace_root: Path, *, runtime_name: str = "opensandbox"
+):
     """Parse the env (or the default), bring up the sandbox backend, and seed the
     run workspace. Returns (env_obj, SandboxContext); raises EnvError /
     SandboxUnavailable / OSError / JSONDecodeError."""
@@ -985,7 +989,8 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     # managed server, and the seeded run workspace every cell mounts.
     try:
         env_obj, sandbox_ctx = _prepare_sandbox(
-            args.env, _workspace_root(out, run_id),
+            args.env,
+            _workspace_root(out, run_id),
             runtime_name=runtime.resolve_runtime_name(args.runtime),
         )
     except osb.SandboxUnavailable as exc:
