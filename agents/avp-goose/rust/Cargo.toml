@@ -11,19 +11,23 @@ avp = { path = "../../../avp/bindings/rust" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Heavy git dependency: pinned to the rev whose API this connector targets.
-# We drop goose's defaults and pick the set AVP needs: TLS + keyring to drive
-# hosted providers, `local-inference` for the `local` provider (in-process
-# llama.cpp + GGUF straight from Hugging Face, no ollama), and `telemetry` for
-# goose's internal observability hooks. Deliberately omitted: `code-mode` (AVP
-# enables code execution from the meta-harness level, not per-agent),
-# `aws-providers` (Bedrock/SageMaker), and `otel` (its
+# We drop goose's defaults and always pull the set every consumer needs: TLS +
+# keyring to drive hosted providers, and `telemetry` for goose's internal
+# observability hooks. `local-inference` (in-process llama.cpp + GGUF straight
+# from Hugging Face, for goose's `local` provider) is split out into our own
+# default-on `local-inference` feature below, NOT pinned here: it compiles
+# llama.cpp from C++ and so forces a full C++ toolchain on every consumer.
+# Consumers that only drive hosted providers or a host model server (goose's
+# `openai` provider over host.docker.internal) build with
+# `default-features = false` to skip that compile entirely. Deliberately
+# omitted: `code-mode` (AVP enables code execution from the meta-harness level,
+# not per-agent), `aws-providers` (Bedrock/SageMaker), and `otel` (its
 # opentelemetry-appender-tracing pin wants a `experimental_span_attributes`
 # feature that the resolvable 0.31.x releases dropped, so it won't build at this
 # goose rev; revisit when the rev bumps).
 goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false, features = [
     "rustls-tls",
     "system-keyring",
-    "local-inference",
     "telemetry",
 ] }
 # Goose's bundled built-in extensions (developer is a platform extension and
@@ -45,17 +49,27 @@ jsonschema = "0.46"
 clap = { version = "4", features = ["derive"], optional = true }
 
 [features]
+# On by default so a plain `cargo build` (and our release binaries) keep the
+# `local` provider. The C++ llama.cpp compile lives entirely behind this flag,
+# so a consumer that only drives hosted providers or a host model server builds
+# with `default-features = false` and never needs a C++ toolchain.
+default = ["local-inference"]
+# In-process local inference (goose's `local` provider): in-process llama.cpp +
+# GGUF straight from Hugging Face, no ollama. Forwards to goose's own
+# `local-inference`, which compiles llama.cpp from C++.
+local-inference = ["goose/local-inference"]
 # Compiles the avp-goose-conformance binary (declared below) and pulls in
 # clap. Off by default so a plain `cargo build` doesn't drag clap into the
 # dep graph.
 conformance = ["dep:clap"]
-# GPU-accelerated local inference: forwards to goose's `vulkan` feature
-# (adds `llama-cpp-2/vulkan` on top of the `local-inference` we already enable).
-# The Vulkan backend works against any Vulkan device the host exposes, including
-# a virtio-gpu Venus device in a libkrun/krunkit microVM (Apple GPU via
-# MoltenVK). The build needs a glsl compiler (glslc) for the shaders; the
-# runtime needs libvulkan + an ICD (e.g. mesa's venus driver).
-vulkan = ["goose/vulkan"]
+# GPU-accelerated local inference: forwards to goose's `vulkan` feature (adds
+# `llama-cpp-2/vulkan`) and implies `local-inference`, since the GPU backend is
+# only meaningful with in-process inference compiled in. The Vulkan backend
+# works against any Vulkan device the host exposes, including a virtio-gpu Venus
+# device in a libkrun/krunkit microVM (Apple GPU via MoltenVK). The build needs
+# a glsl compiler (glslc) for the shaders; the runtime needs libvulkan + an ICD
+# (e.g. mesa's venus driver).
+vulkan = ["local-inference", "goose/vulkan"]
 
 [[bin]]
 name = "avp-goose-conformance"
