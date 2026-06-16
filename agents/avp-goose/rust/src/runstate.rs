@@ -107,6 +107,21 @@ impl<S: Sink> RunState<S> {
         (turn.step, turn.span_id.clone())
     }
 
+    /// Like `open_turn`, but stamps a *newly opened* turn's start at
+    /// `started_at` (the inference begin the runner observed) instead of "now".
+    /// Goose hands the connector coalesced deltas and the turn is materialized
+    /// only at flush, so without this the turn's `duration_ms` would measure
+    /// flush time (~0) rather than the inference. Reusing an open turn leaves
+    /// its existing start untouched.
+    pub fn open_turn_at(&mut self, started_at: Instant) -> (u64, String) {
+        let fresh = self.turn.is_none();
+        let turn = self.turn_mut();
+        if fresh {
+            turn.started_at = started_at;
+        }
+        (turn.step, turn.span_id.clone())
+    }
+
     /// Emit an event straight through the sink, bypassing the turn buffer. For
     /// lifecycle events and for tool returns that arrive after their turn has
     /// already drained.

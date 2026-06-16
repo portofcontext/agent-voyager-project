@@ -80,7 +80,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # available alongside the hosted providers.
         # 0.1.2: also publishes a Linux `-vulkan-` binary variant (goose's `vulkan`
         # feature) for the libkrun GPU runtime; the CPU binary is unchanged.
-        container_version="0.1.2",
+        # 0.1.3: assistant_message.duration_ms reports real inference wall-time
+        # (was ~0 because the coalesced turn opened and drained at flush).
+        container_version="0.1.3",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(

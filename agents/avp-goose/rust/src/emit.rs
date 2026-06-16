@@ -151,8 +151,9 @@ impl<S: Sink> Emitter<S> {
         content: &[GooseContent],
         usage: Usage,
         model: Option<String>,
+        turn_start: Instant,
     ) -> std::io::Result<()> {
-        let (step, turn_span) = self.state.open_turn();
+        let (step, turn_span) = self.state.open_turn_at(turn_start);
         for item in content {
             if let Some(block) = translate::to_content_block(item) {
                 self.state.push_content(block);
@@ -383,6 +384,7 @@ mod tests {
             ),
             usage(),
             Some("claude-opus-4-7".to_string()),
+            std::time::Instant::now(),
         )
         .unwrap();
         em.on_tool_results(&content(
@@ -433,6 +435,24 @@ mod tests {
     }
 
     #[test]
+    fn assistant_turn_duration_reflects_inference_start_not_flush() {
+        // Goose hands the connector a coalesced turn at flush, so the turn was
+        // historically opened and drained in one instant (duration ~0). The
+        // runner now passes the inference start; the emitted duration must
+        // reflect it, not the flush instant.
+        let sink = CapturingSink::default();
+        let mut em = emitter(sink.clone());
+        em.start(None).unwrap();
+        let start = std::time::Instant::now() - std::time::Duration::from_millis(40);
+        em.on_assistant(&content(r#"[{"type":"text","text":"42"}]"#), usage(), None, start)
+            .unwrap();
+        let evs = sink.events.lock().unwrap();
+        let msg = evs.iter().find(|e| e["type"] == "avp.assistant_message").unwrap();
+        let dur = msg["data"]["avp.duration_ms"].as_u64().unwrap();
+        assert!(dur >= 40, "duration_ms {dur} should reflect the inference start, not ~0");
+    }
+
+    #[test]
     fn mcp_tool_is_classified_mcp_server() {
         let sink = CapturingSink::default();
         let mut em = emitter(sink.clone());
@@ -444,6 +464,7 @@ mod tests {
             ),
             usage(),
             None,
+            std::time::Instant::now(),
         )
         .unwrap();
         let evs = sink.events.lock().unwrap();
@@ -466,6 +487,7 @@ mod tests {
             ),
             usage(),
             None,
+            std::time::Instant::now(),
         )
         .unwrap();
         em.on_tool_results(&content(

@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
@@ -311,6 +312,12 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     let mut consumed: usize = 0;
     let mut ended_ok = true;
     let mut pending: Vec<GooseContent> = Vec::new();
+    // Wall-clock start of the inference whose deltas we are coalescing. Set when
+    // `reply()` is dispatched (turn 1) and reset after each tool-result batch
+    // (the next inference begins once Goose has the tool output). Carried into
+    // the turn so `assistant_message.duration_ms` reflects the model's time, not
+    // the ~0 between materializing and draining the coalesced turn at flush.
+    let mut turn_start = Instant::now();
 
     while let Some(item) = stream.next().await {
         match item {
@@ -331,8 +338,12 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                             &model_name,
                             &mut consumed,
                             &mut pending,
+                            turn_start,
                         )?;
                         emitter.on_tool_results(&content)?;
+                        // The next inference begins now that Goose has the tool
+                        // output; time it from here.
+                        turn_start = Instant::now();
                     }
                 }
             }
@@ -344,6 +355,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                     &model_name,
                     &mut consumed,
                     &mut pending,
+                    turn_start,
                 )?;
                 let message = e.to_string();
                 emitter.error(emit::classify_error(&message), &message)?;
@@ -359,6 +371,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         &model_name,
         &mut consumed,
         &mut pending,
+        turn_start,
     )?;
     emitter.stop(emit::classify_stop(ended_ok, false, false), None)?;
     Ok(())
@@ -372,13 +385,14 @@ fn flush_turn<S: Sink>(
     model: &str,
     consumed: &mut usize,
     pending: &mut Vec<GooseContent>,
+    turn_start: Instant,
 ) -> anyhow::Result<()> {
     if pending.is_empty() {
         return Ok(());
     }
     let content = std::mem::take(pending);
     let usage = tap_usage(usage_tap, consumed);
-    emitter.on_assistant(&content, usage, Some(model.to_string()))?;
+    emitter.on_assistant(&content, usage, Some(model.to_string()), turn_start)?;
     Ok(())
 }
 
