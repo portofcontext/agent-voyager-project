@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1",
+  "run_id": "gsm8k-local",
+  "model": "openai/qwen2.5-7b",
+  "provider": { "id": "openai", "base_url": "http://host.docker.internal:8080" },
+  "prompt": "{input}",
+  "system_prompt": "Solve the grade-school math word problem. Reason step by step, then report the final integer answer via the structured output.",
+  "enabled_builtin_tools": { "goose": [] },
+  "output_schema": {
+    "type": "object",
+    "properties": { "answer": { "type": "integer" } },
+    "required": ["answer"]
+  }
+}

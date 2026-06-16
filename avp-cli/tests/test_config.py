@@ -44,6 +44,48 @@ def test_eval_from_dict_resolves_commission_ids(lib) -> None:
     assert isinstance(ev.scorer, ExactMatchScorer)
 
 
+def test_expected_pattern_and_key_reduce_gold_to_structural_dict(lib, tmp_path) -> None:
+    # GSM8K-style: the gold lives after "####" in a longer field. expected_pattern
+    # extracts it (coerced to int, commas stripped) and expected_key wraps it as
+    # the {key: value} dict structural-match scores against.
+    rows = tmp_path / "rows.jsonl"
+    rows.write_text(
+        '{"q": "two plus sixteen?", "answer": "work it out\\n#### 18"}\n'
+        '{"q": "thousands?", "answer": "carefully\\n#### 1,024"}\n'
+    )
+    cfg = _cfg(
+        dataset={
+            "source": "file",
+            "path": str(rows),
+            "input": "{q}",
+            "expected_field": "answer",
+            "expected_pattern": r"####\s*([-0-9,]+)",
+            "expected_key": "answer",
+        },
+        scorer={"name": "structural-match"},
+    )
+    ev = config.eval_from_dict(cfg, commissions_dir=lib)
+    assert isinstance(ev.scorer, StructuralMatchScorer)
+    assert [it.expected for it in ev.dataset.items] == [{"answer": 18}, {"answer": 1024}]
+
+
+def test_expected_pattern_with_no_match_is_rejected(lib, tmp_path) -> None:
+    rows = tmp_path / "rows.jsonl"
+    rows.write_text('{"q": "x", "answer": "no gold marker here"}\n')
+    cfg = _cfg(
+        dataset={
+            "source": "file",
+            "path": str(rows),
+            "input": "{q}",
+            "expected_field": "answer",
+            "expected_pattern": r"####\s*([0-9]+)",
+        },
+        scorer={"name": "exact-match"},
+    )
+    with pytest.raises(config.EvalConfigError):
+        config.eval_from_dict(cfg, commissions_dir=lib)
+
+
 def test_commissions_map_binds_each_id_to_its_agent(tmp_path) -> None:
     # The `{agent_name: [ids]}` form binds by descriptor.agent_name (the one
     # public agent identity). Known agents' keys also imply `agents` locators

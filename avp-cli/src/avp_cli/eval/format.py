@@ -53,6 +53,12 @@ class FileDataset(BaseModel):
     input: str | None = None
     expected_field: str | None = None
     id_field: str | None = None
+    # Reduce a raw `expected_field` value to the gold answer. `expected_pattern`
+    # is a regex searched against it (capture group 1, else the whole match;
+    # numeric results coerce to int/float). `expected_key` wraps the result as
+    # `{expected_key: value}`, the dict shape structural-match scores against.
+    expected_pattern: str | None = None
+    expected_key: str | None = None
 
 
 class HuggingFaceDataset(BaseModel):
@@ -63,8 +69,13 @@ class HuggingFaceDataset(BaseModel):
     id: str
     split: str
     input: str
+    config: str | None = None  # dataset config/subset (e.g. gsm8k's "main")
     expected_field: str | None = None
     id_field: str | None = None
+    # See FileDataset: reduce the raw `expected_field` value to the gold answer
+    # (regex capture) and optionally wrap it as a dict for structural-match.
+    expected_pattern: str | None = None
+    expected_key: str | None = None
 
 
 class ScorerSpec(BaseModel):

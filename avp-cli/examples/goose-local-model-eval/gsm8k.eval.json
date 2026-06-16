@@ -1,0 +1,16 @@
+{
+  "name": "gsm8k-local",
+  "agents": ["goose"],
+  "dataset": {
+    "source": "huggingface",
+    "id": "openai/gsm8k",
+    "config": "main",
+    "split": "test[:10]",
+    "input": "{question}",
+    "expected_field": "answer",
+    "expected_pattern": "####\\s*([-0-9,]+)",
+    "expected_key": "answer"
+  },
+  "scorer": { "name": "structural-match" },
+  "commissions": ["gsm8k-local"]
+}

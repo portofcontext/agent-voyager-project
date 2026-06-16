@@ -1,54 +1,85 @@
-# Local models with the goose agent (no ollama)
+# Eval goose on a local model over a Hugging Face dataset
 
-The goose agent can run an LLM **in-process** with no hosted provider, no API
-key, and no external server. It uses goose's `local` provider: a built-in
-llama.cpp backend running a quantized GGUF model pulled from Hugging Face.
+This evals the **goose** agent on [GSM8K](https://huggingface.co/datasets/openai/gsm8k)
+(grade-school math) while goose runs against a **local model server on your own
+machine**: no hosted provider, no API keys, fully deterministic scoring, `$0.00`
+per run. goose runs sandboxed and talks to an OpenAI-compatible server (llama.cpp,
+Ollama, LM Studio, ...) on your host, so the model uses your real GPU and stays
+loaded warm across the whole eval.
 
-A commission opts in by naming the `local` provider and a `local/<hf-repo>:<quant>`
-model slug. [`goose-local.commission.json`](./goose-local.commission.json):
+In our run, `Qwen2.5-7B-Instruct` (Q4) scored **9/10** with step-by-step
+reasoning, at `$0.00`.
+
+The eval is one file. The dataset is pulled straight from the Hub by id, no
+download script or CSV. The agent returns a structured `{"answer": N}` (a
+Commission `output_schema`), and `structural-match` compares it to the gold
+integer, so scoring is exact and needs no judge:
 
 ```json
 {
-  "model": "local/bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M",
-  "provider": { "id": "local" }
+  "name": "gsm8k-local",
+  "agents": ["goose"],
+  "dataset": {
+    "source": "huggingface",
+    "id": "openai/gsm8k", "config": "main", "split": "test[:10]",
+    "input": "{question}", "expected_field": "answer",
+    "expected_pattern": "####\\s*([-0-9,]+)", "expected_key": "answer"
+  },
+  "scorer": { "name": "structural-match" },
+  "commissions": ["gsm8k-local"]
 }
 ```
 
-## How it runs
-
-The `local` provider does **not** download the model at inference time: it
-expects the GGUF already present in goose's model registry. avp provisions that
-for you. When a commission routes to `local`, the CLI
-([`avp_cli/local_models.py`](../../src/avp_cli/local_models.py)):
-
-1. resolves the GGUF filename for the requested quant from the Hugging Face API,
-2. downloads it once into a host cache (`~/.avp/models/`, reused across runs),
-3. writes a `registry.json` next to it pointing at the model's in-sandbox path,
-4. mounts that cache at `/avp/data/models` — where the agent's `GOOSE_PATH_ROOT`
-   looks — so the in-sandbox provider finds it.
-
-The download happens host-side, so the run is deterministic and needs no
-in-sandbox network egress. Inference runs on the sandbox's CPU.
+GSM8K's `answer` field is the full worked solution ending in `#### 18`;
+`expected_pattern` extracts the gold integer and `expected_key` wraps it as
+`{"answer": 18}`, the shape `structural-match` scores the agent's structured
+output against. The model may still reason step by step; only its final
+structured answer is scored.
 
 ## Run it
 
+Prerequisites: Docker running and the goose agent (`avp agent install goose`).
+No model API key, no judge key: the model is local and scoring is deterministic.
+
+**1. Serve a model on your host.** With llama.cpp (`brew install llama.cpp`):
+
 ```bash
-# prerequisite: Docker running, and the goose agent built with local-inference
-# (agent-goose v0.1.1+).
-avp agent install goose
-
-# A) one-off task
-avp run "What is 7 multiplied by 6? Respond with only the number." \
-  --agent goose --model local/bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M
-
-# B) the eval board
-cp goose-local.commission.json ~/.avp/commissions/goose-local.json
-avp eval run local-model.eval.json
+llama-server -m Qwen2.5-7B-Instruct-Q4_K_M.gguf --port 8080 -ngl 999 -c 16384 -fa on
 ```
 
-The first run downloads ~0.8 GB (the 1B Q4_K_M GGUF) and prints a one-line
-notice; later runs reuse the host cache. Cost shows `$0.00` (local inference has
-no price). A 1B model is small, so the board may not be all-green; the point of
-this example is that the local path runs end-to-end, not the model's accuracy.
-Swap in a larger featured model (e.g. `…/Llama-3.2-3B-Instruct-GGUF:Q4_K_M`) for
-better answers at the cost of a bigger download and slower CPU inference.
+Any OpenAI-compatible server works (`ollama serve`, LM Studio, vLLM); point the
+commission's `provider.base_url` at it.
+
+**2. Run the eval.** The commission
+([`gsm8k-local.commission.json`](./gsm8k-local.commission.json)) routes goose at
+the host server via `host.docker.internal`, declares the `{"answer": integer}`
+`output_schema`, and turns goose's tools off (math needs none, which keeps the
+prompt small and fast):
+
+```bash
+export OPENAI_API_KEY=sk-local        # any non-empty value; the local server ignores it
+
+cp gsm8k-local.commission.json ~/.avp/commissions/gsm8k-local.json
+avp eval run gsm8k.eval.json --env env.json
+```
+
+`avp eval view` opens the scored board.
+
+## Run a different / bigger brain
+
+Serve a different GGUF in step 1 (the swap is the model file), then update the
+model name in `gsm8k-local.commission.json`:
+
+```diff
+-  "model": "openai/qwen2.5-7b",
++  "model": "openai/llama-3.1-70b",
+```
+
+The local server picks the model; the `model` string is just a label here. A
+bigger model needs more VRAM but the eval config is unchanged.
+
+## Swap the dataset
+
+Any Hub dataset works: change `id`, `config`, `split`, and the `{input}` /
+`expected_field` mappings. The `test[:10]` slice keeps the demo cheap; drop it
+to run the full split.

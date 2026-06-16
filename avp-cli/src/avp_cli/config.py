@@ -37,6 +37,7 @@ Dataset sources:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -232,11 +233,46 @@ def _mapped_item(row: dict[str, Any], spec: dict[str, Any], idx: int) -> Item:
         prompt = template.render(input_tmpl, row, strict=True)
     except template.TemplateError as exc:
         raise EvalConfigError(f'dataset "input" template: {exc}') from exc
-    expected_field = spec.get("expected_field")
-    expected = row.get(expected_field) if expected_field else None
     id_field = spec.get("id_field")
     iid = str(row[id_field]) if id_field and id_field in row else str(idx)
+    expected_field = spec.get("expected_field")
+    expected = row.get(expected_field) if expected_field else None
+    expected = _reduce_expected(expected, spec, iid)
     return Item(id=iid, prompt=prompt, expected=expected)
+
+
+def _reduce_expected(expected: Any, spec: dict[str, Any], iid: str) -> Any:
+    """Apply the optional `expected_pattern` (regex extraction) and
+    `expected_key` (dict wrap) reductions to a raw expected value. Lets a
+    benchmark whose gold lives inside a longer field (e.g. GSM8K's `#### 18`)
+    feed exact-match / structural-match without a preprocessing step."""
+    pattern = spec.get("expected_pattern")
+    if pattern is not None and expected is not None:
+        m = re.search(pattern, str(expected))
+        if m is None:
+            raise EvalConfigError(
+                f"expected_pattern {pattern!r} did not match the "
+                f"{spec.get('expected_field')!r} value for row {iid!r}"
+            )
+        expected = _coerce_scalar(m.group(1) if m.groups() else m.group(0))
+    key = spec.get("expected_key")
+    if key is not None:
+        expected = {key: expected}
+    return expected
+
+
+def _coerce_scalar(text: str) -> Any:
+    """Best-effort numeric coercion so structural-match's number tolerance
+    applies: '1,024' -> 1024, '3.5' -> 3.5, 'cat' -> 'cat'."""
+    stripped = text.strip().replace(",", "")
+    try:
+        return int(stripped)
+    except ValueError:
+        pass
+    try:
+        return float(stripped)
+    except ValueError:
+        return text.strip()
 
 
 def _load_file(spec: dict[str, Any]) -> list[Item]:
@@ -261,7 +297,9 @@ def _load_huggingface(spec: dict[str, Any]) -> list[Item]:
         raise EvalConfigError(
             "dataset source 'huggingface' needs the huggingface extra: uv sync --extra huggingface"
         ) from exc
-    ds = datasets.load_dataset(spec["id"], split=spec["split"])
+    # `config` is the dataset's subset/config name (HF's second positional arg);
+    # multi-config datasets like gsm8k ("main") require it. None loads the default.
+    ds = datasets.load_dataset(spec["id"], spec.get("config"), split=spec["split"])
     return [_mapped_item(dict(row), spec, i) for i, row in enumerate(ds)]
 
 
