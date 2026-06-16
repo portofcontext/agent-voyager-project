@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import webbrowser
@@ -227,32 +226,34 @@ def _prepare_agent(
             "on descriptor.agent_name, so a describable agent is required."
         )
         return None
+    # The libkrun backend gets the GPU recipe variant (goose's `vulkan` build +
+    # Venus ICD) and is built with podman into the libkrun machine's own image
+    # store; the default backend uses the CPU recipe built with docker.
+    gpu = runtime_name == "libkrun"
     try:
-        recipe = container_recipe(agent)
+        recipe = container_recipe(agent, gpu=gpu)
     except NoContainerRecipe as exc:
         console.warn(f"skipping agent '{agent.name}': {exc}")
         return None
-    # The libkrun backend runs a prebuilt GPU image (goose's `vulkan` build on a
-    # Venus runtime) from the podman machine's own storage; the env-derived Docker
-    # image build doesn't apply. AVP_LIBKRUN_IMAGE names it. (A first-class GPU
-    # agent-image recipe + release is the follow-up; this unblocks the path now.)
-    libkrun_image = os.environ.get("AVP_LIBKRUN_IMAGE")
-    if runtime_name == "libkrun" and libkrun_image:
-        built = libkrun_image
-    else:
-        tag = images.image_tag(env_obj, recipe)
+    tag = images.image_tag(env_obj, recipe)
 
-        def _emit(line: str) -> None:
-            console.err.print(line, style="dim", markup=False, highlight=False)
+    def _emit(line: str) -> None:
+        console.err.print(line, style="dim", markup=False, highlight=False)
 
-        on_line = None if quiet else _emit
-        try:
-            built = images.ensure_image(env_obj, recipe, on_line=on_line)
-        except images.ImageBuildError as exc:
-            console.warn(f"skipping agent '{agent.name}': {exc}")
-            return None
-        if built == tag and not quiet:
-            console.note(f"sandbox image for {agent.name}: {built}")
+    on_line = None if quiet else _emit
+    try:
+        built = images.ensure_image(
+            env_obj,
+            recipe,
+            on_line=on_line,
+            builder="podman" if gpu else "docker",
+            builder_env={"CONTAINERS_MACHINE_PROVIDER": "libkrun"} if gpu else None,
+        )
+    except images.ImageBuildError as exc:
+        console.warn(f"skipping agent '{agent.name}': {exc}")
+        return None
+    if built == tag and not quiet:
+        console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
         name=agent_name,
         image=built,

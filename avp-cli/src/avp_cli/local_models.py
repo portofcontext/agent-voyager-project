@@ -168,7 +168,14 @@ def _write_registry(
     """Write the manifest (`registry.json`) the agent's local provider reads: one
     entry naming the staged file by its in-sandbox path and how it was fetched."""
     native = model_id_origin.split("/", 1)[1] if "/" in model_id_origin else model_id_origin
-    settings = {"context_size": _DEFAULT_CONTEXT_SIZE, "native_tool_calling": False}
+    # enable_thinking=false: for evals we want the answer (and prompt tool calls),
+    # not a long reasoning trace. Hybrid-reasoning models (e.g. Qwen3) otherwise
+    # emit <think>...</think> first, which is slow and can blow per-cell timeouts.
+    settings = {
+        "context_size": _DEFAULT_CONTEXT_SIZE,
+        "native_tool_calling": False,
+        "enable_thinking": False,
+    }
     # On a GPU-capable runtime (the libkrun backend exposes the host GPU via
     # virtio-gpu), offload all layers; the agent's local provider reads this as
     # n_gpu_layers. On the CPU runtime a GPU-less build ignores it.

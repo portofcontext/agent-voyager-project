@@ -449,6 +449,43 @@ def sandbox_seam(tmp_path, monkeypatch):
     return install(monkeypatch)
 
 
+# An agent that writes one trajectory event, then exits nonzero (mimics a
+# timed-out / crashed agentic run that produced partial output).
+_PARTIAL_THEN_FAIL_AGENT = """\
+import argparse, json
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("cmd")
+p.add_argument("--commission", required=True)
+p.add_argument("--out", required=True)
+a = p.parse_args()
+Path(a.out).write_text(
+    json.dumps({"specversion": "1.0", "type": "avp.assistant_message", "data": {}}) + "\\n"
+)
+raise SystemExit(3)
+"""
+
+
+def test_failed_run_preserves_its_partial_trajectory(tmp_path, sandbox_seam) -> None:
+    """A run that errors/times out must still leave its (partial) trajectory at
+    `out` — that's exactly when you need to see what the agent did."""
+    from avp.commission import Commission
+    from avp_cli.agent import run_agent
+
+    script = tmp_path / "partial_fail.py"
+    script.write_text(_PARTIAL_THEN_FAIL_AGENT)
+    commission = Commission.model_validate(
+        {"schema_version": "0.1", "run_id": "r", "prompt": "x", "model": "m/x"}
+    )
+    out = tmp_path / "traj.ndjson"
+    events, err = run_agent(_sandboxed("partial", script), _ctx(tmp_path), commission, out_path=out)
+
+    assert events is None and err is not None  # the run is reported as failed
+    assert out.exists()  # but the partial trajectory survives for inspection
+    assert "avp.assistant_message" in out.read_text()
+
+
 def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path, sandbox_seam) -> None:
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)

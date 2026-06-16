@@ -104,24 +104,31 @@ AGENT_SOURCES: dict[str, AgentSource] = {
 _RELEASE_DL = "https://github.com/portofcontext/agent-voyager-project/releases/download"
 
 
-def _builtin_recipe(source: AgentSource) -> ContainerRecipe:
+def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecipe:
     """The container recipe for an in-tree agent, pinned to `container_version`.
 
     Install steps run at image-build time (full network); `$(uname -m)` picks
     the asset for the image's arch (aarch64 on Apple Silicon, x86_64 on amd64),
     matching the release's `-unknown-linux-gnu` artifact names.
+
+    `gpu` selects the Linux `-vulkan-` binary variant and installs the Vulkan
+    loader + Mesa's Venus ICD, so the agent's local model offloads to a GPU the
+    runtime exposes (the libkrun backend's virtio-gpu Venus device). Only the
+    binary kind ships a Vulkan variant.
     """
     tag = f"{source.tag_prefix}-v{source.container_version}"
     if source.kind == "binary":
-        asset = f"{source.binary_name}-$(uname -m)-unknown-linux-gnu.tar.gz"
+        variant = "vulkan-" if gpu else ""
+        asset = f"{source.binary_name}-{variant}$(uname -m)-unknown-linux-gnu.tar.gz"
+        # libgomp1: goose's `local-inference` build links llama.cpp with OpenMP
+        # (libgomp.so.1), which the slim base lacks; without it the binary fails
+        # to start. The GPU variant also needs libvulkan1 + the Venus ICD
+        # (mesa-vulkan-drivers) to reach a virtio-gpu device at runtime.
+        gpu_pkgs = " libvulkan1 mesa-vulkan-drivers" if gpu else ""
         return ContainerRecipe(
             install=(
-                # libgomp1: goose's `local-inference` build links llama.cpp with
-                # OpenMP (libgomp.so.1), which the slim base image lacks; without
-                # it the binary fails to start (loading shared libraries) on every
-                # run, not just `local`-provider ones.
                 "apt-get update && apt-get install -y --no-install-recommends "
-                "curl ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*",
+                f"curl ca-certificates libgomp1{gpu_pkgs} && rm -rf /var/lib/apt/lists/*",
                 f"curl -fsSL {_RELEASE_DL}/{tag}/{asset} | tar -xz -C /usr/local/bin "
                 f"&& chmod +x /usr/local/bin/{source.binary_name}",
             ),
@@ -154,12 +161,14 @@ class NoContainerRecipe(Exception):
     """The agent can't run: no `container` block and no built-in recipe."""
 
 
-def container_recipe(agent: ResolvedAgent) -> ContainerRecipe:
+def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRecipe:
     """How `agent` gets into and runs inside a sandbox image.
 
     A manifest's `container` block wins (third-party agents describe
     themselves); known agents fall back to the built-in pinned recipe. An
-    agent with neither cannot run (runs are always sandboxed)."""
+    agent with neither cannot run (runs are always sandboxed). `gpu` requests
+    the built-in GPU recipe variant (a manifest `container` block is used as-is
+    either way; third-party GPU images are the agent's own concern)."""
     spec = agent.manifest.container
     if spec is not None:
         return ContainerRecipe(
@@ -169,7 +178,7 @@ def container_recipe(agent: ResolvedAgent) -> ContainerRecipe:
         )
     source = AGENT_SOURCES.get(agent.name)
     if source is not None and source.container_version:
-        return _builtin_recipe(source)
+        return _builtin_recipe(source, gpu=gpu)
     raise NoContainerRecipe(
         f"agent '{agent.name}' has no container recipe: runs execute in a Linux "
         "sandbox, so its manifest needs a `container` block "

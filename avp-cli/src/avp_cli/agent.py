@@ -210,12 +210,16 @@ def run_agent(
         finally:
             with contextlib.suppress(Exception):  # reaped by TTL if the kill call fails
                 box.kill()
+        # Preserve the trajectory even on error/timeout: move it out of the io
+        # dir before the finally removes that dir, so a failed run stays
+        # inspectable (and resumable). A timed-out agentic run is exactly when
+        # you most want to see what it did.
+        if traj_host.exists() and traj_host != out:
+            shutil.move(traj_host, out)
         if err is not None:
             return None, err
-        if not traj_host.exists():
+        if not out.exists():
             return None, "agent exited 0 but wrote no trajectory"
-        if traj_host != out:
-            shutil.move(traj_host, out)
         return read_trajectory(out), None
     finally:
         if brk is not None:

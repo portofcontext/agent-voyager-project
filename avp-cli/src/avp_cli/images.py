@@ -16,6 +16,7 @@ third-party manifests carry a `container` block.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -80,26 +81,35 @@ def ensure_image(
     recipe: ContainerRecipe,
     *,
     on_line: Callable[[str], None] | None = None,
+    builder: str = "docker",
+    builder_env: dict[str, str] | None = None,
 ) -> str:
     """Build (or reuse) the derived image; returns its tag.
 
     `on_line` receives build output lines for progress display; first builds
     pull the base image and install the agent, so silence would read as a hang.
+    `builder` is the OCI tool (`docker`, or `podman` for the libkrun runtime,
+    whose image lives in the podman machine's storage); `builder_env` overlays
+    env for it (e.g. `CONTAINERS_MACHINE_PROVIDER=libkrun`). Both build the
+    Dockerfile from stdin with an empty context, so no context dir is needed.
     """
-    docker = shutil.which("docker")
-    if docker is None:
-        raise ImageBuildError("docker is not on PATH")
+    exe = shutil.which(builder)
+    if exe is None:
+        raise ImageBuildError(f"{builder} is not on PATH")
+    run_env = {**os.environ, **(builder_env or {})}
     tag = image_tag(env, recipe)
-    if subprocess.run([docker, "image", "inspect", tag], capture_output=True).returncode == 0:
+    inspect = subprocess.run([exe, "image", "inspect", tag], capture_output=True, env=run_env)
+    if inspect.returncode == 0:
         return tag
 
     df = dockerfile(env, recipe)
     proc = subprocess.Popen(
-        [docker, "build", "-t", tag, "-"],
+        [exe, "build", "-t", tag, "-"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        env=run_env,
     )
     assert proc.stdin is not None and proc.stdout is not None
     proc.stdin.write(df)
@@ -112,7 +122,7 @@ def ensure_image(
             on_line(line)
     if proc.wait() != 0:
         raise ImageBuildError(
-            "docker build failed for the environment image:\n"
+            f"{builder} build failed for the environment image:\n"
             + "\n".join(tail)
             + f"\n\n(Dockerfile)\n{df}"
         )
