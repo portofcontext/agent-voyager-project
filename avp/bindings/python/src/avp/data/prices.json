@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-17",
+  "$snapshot_date": "2026-06-18",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -15214,6 +15214,11 @@
       "output": 4.4,
       "cache_read": 0.26
     },
+    "opencode-go/glm-5.2": {
+      "input": 1.4,
+      "output": 4.4,
+      "cache_read": 0.26
+    },
     "opencode-go/kimi-k2.5": {
       "input": 0.6,
       "output": 3.0,
@@ -15895,8 +15900,8 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.098,
-      "output": 0.196,
+      "input": 0.09,
+      "output": 0.18,
       "cache_read": 0.02
     },
     "openrouter/deepseek/deepseek-v4-pro": {
@@ -16318,9 +16323,9 @@
       "cache_read": 0.34
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
-      "input": 0.75,
+      "input": 0.74,
       "output": 3.5,
-      "cache_read": 0.16
+      "cache_read": 0.15
     },
     "openrouter/morph/morph-v3-fast": {
       "input": 0.8,
@@ -16380,8 +16385,8 @@
     },
     "openrouter/nvidia/nemotron-3-ultra-550b-a55b": {
       "input": 0.5,
-      "output": 2.5,
-      "cache_read": 0.15
+      "output": 2.2,
+      "cache_read": 0.1
     },
     "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {
       "input": 0.0,
@@ -17078,9 +17083,9 @@
       "cache_read": 0.11
     },
     "openrouter/z-ai/glm-4.5-air": {
-      "input": 0.125,
+      "input": 0.13,
       "output": 0.85,
-      "cache_read": 0.06
+      "cache_read": 0.025
     },
     "openrouter/z-ai/glm-4.5v": {
       "input": 0.6,
