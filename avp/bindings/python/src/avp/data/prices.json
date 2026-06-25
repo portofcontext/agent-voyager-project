@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-24",
+  "$snapshot_date": "2026-06-25",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -7191,6 +7191,10 @@
       "input": 0.17,
       "output": 0.25
     },
+    "huggingface/Qwen/Qwen3.6-27B": {
+      "input": 0.47,
+      "output": 3.19
+    },
     "huggingface/Qwen/Qwen3.6-35B-A3B": {
       "input": 0.15,
       "output": 0.95
@@ -7198,6 +7202,10 @@
     "huggingface/XiaomiMiMo/MiMo-V2-Flash": {
       "input": 0.1,
       "output": 0.3
+    },
+    "huggingface/XiaomiMiMo/MiMo-V2.5-Pro": {
+      "input": 1.0,
+      "output": 3.0
     },
     "huggingface/deepseek-ai/DeepSeek-R1": {
       "input": 0.7,
@@ -7262,6 +7270,10 @@
     "huggingface/stepfun-ai/Step-3.5-Flash": {
       "input": 0.1,
       "output": 0.3
+    },
+    "huggingface/stepfun-ai/Step-3.7-Flash": {
+      "input": 0.2,
+      "output": 1.15
     },
     "huggingface/zai-org/GLM-4.5": {
       "input": 0.6,
@@ -9403,21 +9415,11 @@
       "input": 0.0,
       "output": 0.0
     },
-    "llmgateway/claude-3-5-haiku": {
-      "input": 0.8,
-      "output": 4.0,
-      "cache_read": 0.08
-    },
-    "llmgateway/claude-3-5-sonnet-20241022": {
+    "llmgateway/claude-3-7-sonnet": {
       "input": 3.0,
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
-    },
-    "llmgateway/claude-3-7-sonnet": {
-      "input": 3.0,
-      "output": 15.0,
-      "cache_read": 0.3
     },
     "llmgateway/claude-3-7-sonnet-20250219": {
       "input": 3.0,
@@ -9428,7 +9430,8 @@
     "llmgateway/claude-3-opus": {
       "input": 15.0,
       "output": 75.0,
-      "cache_read": 1.5
+      "cache_read": 1.5,
+      "cache_write": 18.75
     },
     "llmgateway/claude-haiku-4-5": {
       "input": 1.0,
@@ -9443,12 +9446,6 @@
       "cache_write": 1.25
     },
     "llmgateway/claude-opus-4-1-20250805": {
-      "input": 15.0,
-      "output": 75.0,
-      "cache_read": 1.5,
-      "cache_write": 18.75
-    },
-    "llmgateway/claude-opus-4-20250514": {
       "input": 15.0,
       "output": 75.0,
       "cache_read": 1.5,
@@ -9478,12 +9475,6 @@
       "cache_read": 0.5,
       "cache_write": 6.25
     },
-    "llmgateway/claude-sonnet-4-20250514": {
-      "input": 3.0,
-      "output": 15.0,
-      "cache_read": 0.3,
-      "cache_write": 3.75
-    },
     "llmgateway/claude-sonnet-4-5": {
       "input": 3.0,
       "output": 15.0,
@@ -9510,19 +9501,15 @@
       "input": 0.0,
       "output": 0.0
     },
-    "llmgateway/deepseek-r1-0528": {
-      "input": 0.55,
-      "output": 2.19
-    },
     "llmgateway/deepseek-v3.1": {
       "input": 0.56,
       "output": 1.68,
-      "cache_read": 0.07
+      "cache_read": 0.112
     },
     "llmgateway/deepseek-v3.2": {
       "input": 0.28,
       "output": 0.42,
-      "cache_read": 0.056
+      "cache_read": 0.028
     },
     "llmgateway/deepseek-v4-flash": {
       "input": 0.14,
@@ -9542,14 +9529,10 @@
       "input": 0.1,
       "output": 0.3
     },
-    "llmgateway/gemini-2.0-flash": {
-      "input": 0.1,
-      "output": 0.4,
-      "cache_read": 0.025
-    },
-    "llmgateway/gemini-2.0-flash-lite": {
-      "input": 0.075,
-      "output": 0.3
+    "llmgateway/fugu-ultra": {
+      "input": 5.0,
+      "output": 30.0,
+      "cache_read": 0.5
     },
     "llmgateway/gemini-2.5-flash": {
       "input": 0.3,
@@ -9557,6 +9540,11 @@
       "cache_read": 0.03
     },
     "llmgateway/gemini-2.5-flash-lite": {
+      "input": 0.1,
+      "output": 0.4,
+      "cache_read": 0.01
+    },
+    "llmgateway/gemini-2.5-flash-lite-preview-09-2025": {
       "input": 0.1,
       "output": 0.4,
       "cache_read": 0.01
@@ -9574,12 +9562,8 @@
     "llmgateway/gemini-3.1-flash-lite": {
       "input": 0.25,
       "output": 1.5,
-      "cache_read": 0.025
-    },
-    "llmgateway/gemini-3.1-flash-lite-preview": {
-      "input": 0.25,
-      "output": 1.5,
-      "cache_read": 0.025
+      "cache_read": 0.025,
+      "cache_write": 0.08333
     },
     "llmgateway/gemini-3.1-pro-preview": {
       "input": 2.0,
@@ -9589,24 +9573,13 @@
     "llmgateway/gemini-3.5-flash": {
       "input": 1.5,
       "output": 9.0,
-      "cache_read": 0.15
+      "cache_read": 0.15,
+      "cache_write": 0.08333
     },
     "llmgateway/gemini-pro-latest": {
       "input": 2.0,
       "output": 12.0,
       "cache_read": 0.2
-    },
-    "llmgateway/gemma-2-27b-it-together": {
-      "input": 0.08,
-      "output": 0.08
-    },
-    "llmgateway/gemma-3-1b-it": {
-      "input": 0.08,
-      "output": 0.3
-    },
-    "llmgateway/gemma-3-27b": {
-      "input": 0.27,
-      "output": 0.27
     },
     "llmgateway/gemma-4-26b-a4b-it": {
       "input": 0.07,
@@ -9650,7 +9623,8 @@
     },
     "llmgateway/glm-4.5v": {
       "input": 0.6,
-      "output": 1.8
+      "output": 1.8,
+      "cache_read": 0.11
     },
     "llmgateway/glm-4.6": {
       "input": 0.6,
@@ -9660,7 +9634,8 @@
     },
     "llmgateway/glm-4.6v": {
       "input": 0.3,
-      "output": 0.9
+      "output": 0.9,
+      "cache_read": 0.05
     },
     "llmgateway/glm-4.6v-flash": {
       "input": 0.0,
@@ -9678,10 +9653,14 @@
       "cache_write": 0.0
     },
     "llmgateway/glm-4.7-flash": {
-      "input": 0.0,
-      "output": 0.0,
-      "cache_read": 0.0,
+      "input": 0.06,
+      "output": 0.4,
+      "cache_read": 0.01,
       "cache_write": 0.0
+    },
+    "llmgateway/glm-4.7-flash-free": {
+      "input": 0.0,
+      "output": 0.0
     },
     "llmgateway/glm-4.7-flashx": {
       "input": 0.07,
@@ -9696,9 +9675,9 @@
       "cache_write": 0.0
     },
     "llmgateway/glm-5.1": {
-      "input": 6.0,
-      "output": 24.0,
-      "cache_read": 1.3,
+      "input": 1.4,
+      "output": 4.4,
+      "cache_read": 0.26,
       "cache_write": 0.0
     },
     "llmgateway/glm-5.2": {
@@ -9850,16 +9829,22 @@
       "output": 180.0
     },
     "llmgateway/gpt-oss-120b": {
-      "input": 0.05,
-      "output": 0.25
+      "input": 0.15,
+      "output": 0.75
     },
     "llmgateway/gpt-oss-20b": {
-      "input": 0.04,
-      "output": 0.15
+      "input": 0.1,
+      "output": 0.5
     },
-    "llmgateway/grok-4-0709": {
+    "llmgateway/grok-4": {
       "input": 3.0,
-      "output": 15.0
+      "output": 15.0,
+      "cache_read": 0.75
+    },
+    "llmgateway/grok-4-1-fast-non-reasoning": {
+      "input": 0.2,
+      "output": 0.5,
+      "cache_read": 0.05
     },
     "llmgateway/grok-4-1-fast-reasoning": {
       "input": 0.2,
@@ -9867,48 +9852,39 @@
       "cache_read": 0.05
     },
     "llmgateway/grok-4-20-beta-0309-non-reasoning": {
-      "input": 1.25,
-      "output": 2.5,
+      "input": 2.0,
+      "output": 6.0,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-20-beta-0309-reasoning": {
-      "input": 1.25,
-      "output": 2.5,
+      "input": 2.0,
+      "output": 6.0,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-20-non-reasoning": {
-      "input": 1.25,
-      "output": 2.5,
+      "input": 2.0,
+      "output": 6.0,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-20-reasoning": {
-      "input": 1.25,
-      "output": 2.5,
+      "input": 2.0,
+      "output": 6.0,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-3": {
       "input": 1.25,
       "output": 2.5,
-      "cache_read": 0.2
-    },
-    "llmgateway/grok-4-fast-reasoning": {
-      "input": 0.2,
-      "output": 0.5,
-      "cache_read": 0.05
+      "cache_read": 0.3125
     },
     "llmgateway/grok-build-0-1": {
       "input": 1.0,
       "output": 2.0,
       "cache_read": 0.2
     },
-    "llmgateway/hermes-2-pro-llama-3-8b": {
-      "input": 0.14,
-      "output": 0.14
-    },
     "llmgateway/kimi-k2": {
-      "input": 0.6,
-      "output": 2.5,
-      "cache_read": 0.12
+      "input": 1.0,
+      "output": 3.0,
+      "cache_read": 0.5
     },
     "llmgateway/kimi-k2-thinking": {
       "input": 0.6,
@@ -9952,10 +9928,6 @@
       "input": 0.72,
       "output": 0.72
     },
-    "llmgateway/llama-3.1-8b-instruct": {
-      "input": 0.22,
-      "output": 0.22
-    },
     "llmgateway/llama-3.1-nemotron-ultra-253b": {
       "input": 0.6,
       "output": 1.8
@@ -9969,25 +9941,16 @@
       "output": 0.05
     },
     "llmgateway/llama-3.3-70b-instruct": {
-      "input": 0.0,
-      "output": 0.0
+      "input": 0.13,
+      "output": 0.4
     },
     "llmgateway/llama-4-maverick-17b-instruct": {
       "input": 0.24,
       "output": 0.97
     },
-    "llmgateway/llama-4-scout": {
-      "input": 0.18,
-      "output": 0.59
-    },
     "llmgateway/llama-4-scout-17b-instruct": {
       "input": 0.17,
       "output": 0.66
-    },
-    "llmgateway/mimo-v2-flash": {
-      "input": 0.1,
-      "output": 0.3,
-      "cache_read": 0.01
     },
     "llmgateway/mimo-v2-omni": {
       "input": 0.4,
@@ -10000,22 +9963,23 @@
       "cache_read": 0.2
     },
     "llmgateway/mimo-v2.5": {
-      "input": 0.4,
-      "output": 2.0,
-      "cache_read": 0.08
+      "input": 0.14,
+      "output": 0.28,
+      "cache_read": 0.0028
     },
     "llmgateway/mimo-v2.5-pro": {
-      "input": 1.0,
-      "output": 3.0,
-      "cache_read": 0.2
+      "input": 0.435,
+      "output": 0.87,
+      "cache_read": 0.0036
     },
     "llmgateway/minimax-m2": {
-      "input": 0.3,
-      "output": 1.2
+      "input": 0.2,
+      "output": 1.0,
+      "cache_read": 0.03
     },
     "llmgateway/minimax-m2.1": {
-      "input": 0.3,
-      "output": 1.2
+      "input": 0.27,
+      "output": 1.1
     },
     "llmgateway/minimax-m2.1-lightning": {
       "input": 0.12,
@@ -10030,7 +9994,7 @@
     "llmgateway/minimax-m2.5-highspeed": {
       "input": 0.6,
       "output": 2.4,
-      "cache_read": 0.06,
+      "cache_read": 0.03,
       "cache_write": 0.375
     },
     "llmgateway/minimax-m2.7": {
@@ -10071,8 +10035,8 @@
       "output": 1.5
     },
     "llmgateway/mistral-large-latest": {
-      "input": 0.5,
-      "output": 1.5
+      "input": 4.0,
+      "output": 12.0
     },
     "llmgateway/mistral-small-2506": {
       "input": 0.1,
@@ -10104,8 +10068,8 @@
       "cache_read": 0.275
     },
     "llmgateway/pixtral-large-latest": {
-      "input": 2.0,
-      "output": 6.0
+      "input": 4.0,
+      "output": 12.0
     },
     "llmgateway/qwen-coder-plus": {
       "input": 0.502,
@@ -10113,27 +10077,33 @@
     },
     "llmgateway/qwen-flash": {
       "input": 0.05,
-      "output": 0.4
+      "output": 0.4,
+      "cache_read": 0.01,
+      "cache_write": 0.0625
     },
     "llmgateway/qwen-max": {
       "input": 1.6,
       "output": 6.4
     },
     "llmgateway/qwen-max-latest": {
-      "input": 0.345,
-      "output": 1.377
+      "input": 1.6,
+      "output": 6.4
     },
     "llmgateway/qwen-omni-turbo": {
-      "input": 0.07,
-      "output": 0.27
+      "input": 0.2,
+      "output": 0.8
     },
     "llmgateway/qwen-plus": {
       "input": 0.4,
-      "output": 1.2
+      "output": 1.2,
+      "cache_read": 0.08,
+      "cache_write": 0.5
     },
     "llmgateway/qwen-plus-latest": {
-      "input": 0.115,
-      "output": 0.287
+      "input": 0.4,
+      "output": 1.2,
+      "cache_read": 0.08,
+      "cache_write": 0.5
     },
     "llmgateway/qwen-turbo": {
       "input": 0.05,
@@ -10145,84 +10115,76 @@
     },
     "llmgateway/qwen-vl-plus": {
       "input": 0.21,
-      "output": 0.63
+      "output": 0.64
     },
     "llmgateway/qwen2-5-vl-32b-instruct": {
       "input": 1.4,
       "output": 4.2
     },
     "llmgateway/qwen2-5-vl-72b-instruct": {
-      "input": 2.8,
-      "output": 8.4
-    },
-    "llmgateway/qwen25-coder-7b": {
-      "input": 0.05,
-      "output": 0.05
+      "input": 0.13,
+      "output": 0.4
     },
     "llmgateway/qwen3-235b-a22b-fp8": {
       "input": 0.2,
       "output": 0.8
     },
     "llmgateway/qwen3-235b-a22b-instruct-2507": {
-      "input": 0.09,
-      "output": 0.58
+      "input": 0.2,
+      "output": 0.6
     },
     "llmgateway/qwen3-235b-a22b-thinking-2507": {
       "input": 0.2,
       "output": 0.6
     },
-    "llmgateway/qwen3-30b-a3b-fp8": {
-      "input": 0.1,
-      "output": 0.1
-    },
     "llmgateway/qwen3-30b-a3b-instruct-2507": {
       "input": 0.1,
       "output": 0.3
     },
-    "llmgateway/qwen3-30b-a3b-thinking-2507": {
-      "input": 0.1,
-      "output": 0.1
-    },
     "llmgateway/qwen3-32b": {
-      "input": 0.7,
-      "output": 2.8
-    },
-    "llmgateway/qwen3-32b-fp8": {
       "input": 0.1,
-      "output": 0.1
+      "output": 0.3
     },
     "llmgateway/qwen3-4b-fp8": {
       "input": 0.03,
       "output": 0.03
     },
     "llmgateway/qwen3-coder-30b-a3b-instruct": {
-      "input": 0.45,
-      "output": 2.25
+      "input": 0.1,
+      "output": 0.3
     },
     "llmgateway/qwen3-coder-480b-a35b-instruct": {
-      "input": 1.5,
-      "output": 7.5
+      "input": 0.4,
+      "output": 1.8
     },
     "llmgateway/qwen3-coder-flash": {
       "input": 0.3,
-      "output": 1.5
+      "output": 1.5,
+      "cache_read": 0.06,
+      "cache_write": 0.375
     },
     "llmgateway/qwen3-coder-next": {
       "input": 0.108,
-      "output": 0.675
+      "output": 0.675,
+      "cache_read": 0.06
     },
     "llmgateway/qwen3-coder-plus": {
-      "input": 1.0,
-      "output": 5.0
+      "input": 6.0,
+      "output": 60.0,
+      "cache_read": 1.2,
+      "cache_write": 7.5
     },
     "llmgateway/qwen3-max": {
-      "input": 1.2,
-      "output": 6.0
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.6,
+      "cache_write": 3.75
     },
     "llmgateway/qwen3-max-2026-01-23": {
-      "input": 0.359,
-      "output": 1.434,
-      "cache_read": 0.072
+      "input": 1.2,
+      "output": 6.0,
+      "cache_read": 0.24,
+      "cache_write": 1.5
     },
     "llmgateway/qwen3-next-80b-a3b-instruct": {
       "input": 0.5,
@@ -10233,8 +10195,8 @@
       "output": 6.0
     },
     "llmgateway/qwen3-vl-235b-a22b-instruct": {
-      "input": 0.3,
-      "output": 1.5
+      "input": 0.5,
+      "output": 2.0
     },
     "llmgateway/qwen3-vl-235b-a22b-thinking": {
       "input": 0.5,
@@ -10253,13 +10215,15 @@
       "output": 0.5
     },
     "llmgateway/qwen3-vl-flash": {
-      "input": 0.022,
-      "output": 0.215,
-      "cache_read": 0.0044
+      "input": 0.05,
+      "output": 0.4,
+      "cache_read": 0.01
     },
     "llmgateway/qwen3-vl-plus": {
       "input": 0.2,
-      "output": 1.6
+      "output": 1.6,
+      "cache_read": 0.04,
+      "cache_write": 0.25
     },
     "llmgateway/qwen3.5-9b": {
       "input": 0.1,
