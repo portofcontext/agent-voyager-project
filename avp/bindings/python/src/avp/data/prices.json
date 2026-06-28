@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-27",
+  "$snapshot_date": "2026-06-28",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -7162,6 +7162,10 @@
     "huggingface/moonshotai/Kimi-K2.7-Code": {
       "input": 0.95,
       "output": 4.0
+    },
+    "huggingface/openai/gpt-oss-120b": {
+      "input": 0.25,
+      "output": 0.69
     },
     "huggingface/stepfun-ai/Step-3.5-Flash": {
       "input": 0.1,
@@ -14859,6 +14863,10 @@
       "input": 0.0,
       "output": 0.0
     },
+    "nvidia/minimaxai/minimax-m3": {
+      "input": 0.0,
+      "output": 0.0
+    },
     "nvidia/mistralai/magistral-small-2506": {
       "input": 0.0,
       "output": 0.0
@@ -17042,8 +17050,8 @@
       "cache_write": 0.375
     },
     "openrouter/qwen/qwen3.6-27b": {
-      "input": 0.2885,
-      "output": 2.65
+      "input": 0.2596,
+      "output": 2.385
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
@@ -18988,17 +18996,9 @@
       "input": 0.21,
       "output": 0.57
     },
-    "siliconflow-cn/Kwaipilot/KAT-Dev": {
-      "input": 0.2,
-      "output": 0.6
-    },
     "siliconflow-cn/PaddlePaddle/PaddleOCR-VL-1.5": {
       "input": 0.0,
       "output": 0.0
-    },
-    "siliconflow-cn/Pro/MiniMaxAI/MiniMax-M2.1": {
-      "input": 0.3,
-      "output": 1.2
     },
     "siliconflow-cn/Pro/MiniMaxAI/MiniMax-M2.5": {
       "input": 0.3,
@@ -19020,14 +19020,6 @@
       "input": 0.27,
       "output": 0.42
     },
-    "siliconflow-cn/Pro/moonshotai/Kimi-K2-Instruct-0905": {
-      "input": 0.4,
-      "output": 2.0
-    },
-    "siliconflow-cn/Pro/moonshotai/Kimi-K2-Thinking": {
-      "input": 0.55,
-      "output": 2.5
-    },
     "siliconflow-cn/Pro/moonshotai/Kimi-K2.5": {
       "input": 0.45,
       "output": 2.25
@@ -19036,10 +19028,6 @@
       "input": 0.95,
       "output": 4.0,
       "cache_read": 0.16
-    },
-    "siliconflow-cn/Pro/zai-org/GLM-4.7": {
-      "input": 0.6,
-      "output": 2.2
     },
     "siliconflow-cn/Pro/zai-org/GLM-5": {
       "input": 1.0,
@@ -19050,23 +19038,7 @@
       "output": 4.4,
       "cache_write": 0.0
     },
-    "siliconflow-cn/Qwen/QwQ-32B": {
-      "input": 0.15,
-      "output": 0.58
-    },
-    "siliconflow-cn/Qwen/Qwen2.5-14B-Instruct": {
-      "input": 0.1,
-      "output": 0.1
-    },
-    "siliconflow-cn/Qwen/Qwen2.5-32B-Instruct": {
-      "input": 0.18,
-      "output": 0.18
-    },
     "siliconflow-cn/Qwen/Qwen2.5-72B-Instruct": {
-      "input": 0.59,
-      "output": 0.59
-    },
-    "siliconflow-cn/Qwen/Qwen2.5-72B-Instruct-128K": {
       "input": 0.59,
       "output": 0.59
     },
@@ -19074,35 +19046,15 @@
       "input": 0.05,
       "output": 0.05
     },
-    "siliconflow-cn/Qwen/Qwen2.5-Coder-32B-Instruct": {
-      "input": 0.18,
-      "output": 0.18
-    },
-    "siliconflow-cn/Qwen/Qwen2.5-VL-32B-Instruct": {
-      "input": 0.27,
-      "output": 0.27
-    },
-    "siliconflow-cn/Qwen/Qwen2.5-VL-72B-Instruct": {
-      "input": 0.59,
-      "output": 0.59
-    },
     "siliconflow-cn/Qwen/Qwen3-14B": {
       "input": 0.07,
       "output": 0.28
-    },
-    "siliconflow-cn/Qwen/Qwen3-235B-A22B-Instruct-2507": {
-      "input": 0.09,
-      "output": 0.6
     },
     "siliconflow-cn/Qwen/Qwen3-235B-A22B-Thinking-2507": {
       "input": 0.13,
       "output": 0.6
     },
     "siliconflow-cn/Qwen/Qwen3-30B-A3B-Instruct-2507": {
-      "input": 0.09,
-      "output": 0.3
-    },
-    "siliconflow-cn/Qwen/Qwen3-30B-A3B-Thinking-2507": {
       "input": 0.09,
       "output": 0.3
     },
@@ -19121,26 +19073,6 @@
     "siliconflow-cn/Qwen/Qwen3-Coder-480B-A35B-Instruct": {
       "input": 0.25,
       "output": 1.0
-    },
-    "siliconflow-cn/Qwen/Qwen3-Next-80B-A3B-Instruct": {
-      "input": 0.14,
-      "output": 1.4
-    },
-    "siliconflow-cn/Qwen/Qwen3-Next-80B-A3B-Thinking": {
-      "input": 0.14,
-      "output": 0.57
-    },
-    "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Captioner": {
-      "input": 0.1,
-      "output": 0.4
-    },
-    "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Instruct": {
-      "input": 0.1,
-      "output": 0.4
-    },
-    "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Thinking": {
-      "input": 0.1,
-      "output": 0.4
     },
     "siliconflow-cn/Qwen/Qwen3-VL-235B-A22B-Instruct": {
       "input": 0.3,
@@ -19169,10 +19101,6 @@
     "siliconflow-cn/Qwen/Qwen3-VL-8B-Instruct": {
       "input": 0.18,
       "output": 0.68
-    },
-    "siliconflow-cn/Qwen/Qwen3-VL-8B-Thinking": {
-      "input": 0.18,
-      "output": 2.0
     },
     "siliconflow-cn/Qwen/Qwen3.5-122B-A10B": {
       "input": 0.29,
@@ -19214,14 +19142,6 @@
       "input": 0.5,
       "output": 2.18
     },
-    "siliconflow-cn/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B": {
-      "input": 0.1,
-      "output": 0.1
-    },
-    "siliconflow-cn/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B": {
-      "input": 0.18,
-      "output": 0.18
-    },
     "siliconflow-cn/deepseek-ai/DeepSeek-V3": {
       "input": 0.25,
       "output": 1.0
@@ -19244,21 +19164,9 @@
       "output": 3.48,
       "cache_read": 0.145
     },
-    "siliconflow-cn/deepseek-ai/deepseek-vl2": {
-      "input": 0.15,
-      "output": 0.15
-    },
     "siliconflow-cn/inclusionAI/Ling-flash-2.0": {
       "input": 0.14,
       "output": 0.57
-    },
-    "siliconflow-cn/moonshotai/Kimi-K2-Instruct-0905": {
-      "input": 0.4,
-      "output": 2.0
-    },
-    "siliconflow-cn/moonshotai/Kimi-K2-Thinking": {
-      "input": 0.55,
-      "output": 2.5
     },
     "siliconflow-cn/stepfun-ai/Step-3.5-Flash": {
       "input": 0.1,
@@ -19271,18 +19179,6 @@
     "siliconflow-cn/zai-org/GLM-4.5-Air": {
       "input": 0.14,
       "output": 0.86
-    },
-    "siliconflow-cn/zai-org/GLM-4.5V": {
-      "input": 0.14,
-      "output": 0.86
-    },
-    "siliconflow-cn/zai-org/GLM-4.6": {
-      "input": 0.5,
-      "output": 1.9
-    },
-    "siliconflow-cn/zai-org/GLM-4.6V": {
-      "input": 0.3,
-      "output": 0.9
     },
     "siliconflow-cn/zai-org/GLM-5.2": {
       "input": 1.4,
@@ -19297,23 +19193,7 @@
       "input": 0.3,
       "output": 1.2
     },
-    "siliconflow/Qwen/QwQ-32B": {
-      "input": 0.15,
-      "output": 0.58
-    },
-    "siliconflow/Qwen/Qwen2.5-14B-Instruct": {
-      "input": 0.1,
-      "output": 0.1
-    },
-    "siliconflow/Qwen/Qwen2.5-32B-Instruct": {
-      "input": 0.18,
-      "output": 0.18
-    },
     "siliconflow/Qwen/Qwen2.5-72B-Instruct": {
-      "input": 0.59,
-      "output": 0.59
-    },
-    "siliconflow/Qwen/Qwen2.5-72B-Instruct-128K": {
       "input": 0.59,
       "output": 0.59
     },
@@ -19321,43 +19201,15 @@
       "input": 0.05,
       "output": 0.05
     },
-    "siliconflow/Qwen/Qwen2.5-Coder-32B-Instruct": {
-      "input": 0.18,
-      "output": 0.18
-    },
-    "siliconflow/Qwen/Qwen2.5-VL-32B-Instruct": {
-      "input": 0.27,
-      "output": 0.27
-    },
-    "siliconflow/Qwen/Qwen2.5-VL-72B-Instruct": {
-      "input": 0.59,
-      "output": 0.59
-    },
-    "siliconflow/Qwen/Qwen2.5-VL-7B-Instruct": {
-      "input": 0.05,
-      "output": 0.05
-    },
     "siliconflow/Qwen/Qwen3-14B": {
       "input": 0.07,
       "output": 0.28
-    },
-    "siliconflow/Qwen/Qwen3-235B-A22B": {
-      "input": 0.35,
-      "output": 1.42
-    },
-    "siliconflow/Qwen/Qwen3-235B-A22B-Instruct-2507": {
-      "input": 0.09,
-      "output": 0.6
     },
     "siliconflow/Qwen/Qwen3-235B-A22B-Thinking-2507": {
       "input": 0.13,
       "output": 0.6
     },
     "siliconflow/Qwen/Qwen3-30B-A3B-Instruct-2507": {
-      "input": 0.09,
-      "output": 0.3
-    },
-    "siliconflow/Qwen/Qwen3-30B-A3B-Thinking-2507": {
       "input": 0.09,
       "output": 0.3
     },
@@ -19376,26 +19228,6 @@
     "siliconflow/Qwen/Qwen3-Coder-480B-A35B-Instruct": {
       "input": 0.25,
       "output": 1.0
-    },
-    "siliconflow/Qwen/Qwen3-Next-80B-A3B-Instruct": {
-      "input": 0.14,
-      "output": 1.4
-    },
-    "siliconflow/Qwen/Qwen3-Next-80B-A3B-Thinking": {
-      "input": 0.14,
-      "output": 0.57
-    },
-    "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Captioner": {
-      "input": 0.1,
-      "output": 0.4
-    },
-    "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Instruct": {
-      "input": 0.1,
-      "output": 0.4
-    },
-    "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Thinking": {
-      "input": 0.1,
-      "output": 0.4
     },
     "siliconflow/Qwen/Qwen3-VL-235B-A22B-Instruct": {
       "input": 0.3,
@@ -19425,9 +19257,33 @@
       "input": 0.18,
       "output": 0.68
     },
-    "siliconflow/Qwen/Qwen3-VL-8B-Thinking": {
-      "input": 0.18,
+    "siliconflow/Qwen/Qwen3.5-122B-A10B": {
+      "input": 0.26,
+      "output": 2.08
+    },
+    "siliconflow/Qwen/Qwen3.5-27B": {
+      "input": 0.25,
       "output": 2.0
+    },
+    "siliconflow/Qwen/Qwen3.5-35B-A3B": {
+      "input": 0.24,
+      "output": 1.8
+    },
+    "siliconflow/Qwen/Qwen3.5-397B-A17B": {
+      "input": 0.39,
+      "output": 2.34
+    },
+    "siliconflow/Qwen/Qwen3.5-9B": {
+      "input": 0.1,
+      "output": 0.15
+    },
+    "siliconflow/Qwen/Qwen3.6-27B": {
+      "input": 0.3,
+      "output": 3.2
+    },
+    "siliconflow/Qwen/Qwen3.6-35B-A3B": {
+      "input": 0.2,
+      "output": 1.6
     },
     "siliconflow/baidu/ERNIE-4.5-300B-A47B": {
       "input": 0.28,
@@ -19436,14 +19292,6 @@
     "siliconflow/deepseek-ai/DeepSeek-R1": {
       "input": 0.5,
       "output": 2.18
-    },
-    "siliconflow/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B": {
-      "input": 0.1,
-      "output": 0.1
-    },
-    "siliconflow/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B": {
-      "input": 0.18,
-      "output": 0.18
     },
     "siliconflow/deepseek-ai/DeepSeek-V3": {
       "input": 0.25,
@@ -19465,19 +19313,15 @@
       "input": 0.27,
       "output": 0.41
     },
-    "siliconflow/deepseek-ai/deepseek-v4-flash": {
+    "siliconflow/deepseek-ai/DeepSeek-V4-Flash": {
       "input": 0.14,
       "output": 0.28,
       "cache_read": 0.028
     },
-    "siliconflow/deepseek-ai/deepseek-v4-pro": {
+    "siliconflow/deepseek-ai/DeepSeek-V4-Pro": {
       "input": 1.74,
       "output": 3.48,
       "cache_read": 0.145
-    },
-    "siliconflow/deepseek-ai/deepseek-vl2": {
-      "input": 0.15,
-      "output": 0.15
     },
     "siliconflow/google/gemma-4-26B-A4B-it": {
       "input": 0.12,
@@ -19490,18 +19334,6 @@
     "siliconflow/inclusionAI/Ling-flash-2.0": {
       "input": 0.14,
       "output": 0.57
-    },
-    "siliconflow/moonshotai/Kimi-K2-Instruct": {
-      "input": 0.58,
-      "output": 2.29
-    },
-    "siliconflow/moonshotai/Kimi-K2-Instruct-0905": {
-      "input": 0.4,
-      "output": 2.0
-    },
-    "siliconflow/moonshotai/Kimi-K2-Thinking": {
-      "input": 0.55,
-      "output": 2.5
     },
     "siliconflow/moonshotai/Kimi-K2.5": {
       "input": 0.45,
@@ -19533,29 +19365,9 @@
       "output": 0.26,
       "cache_read": 0.029
     },
-    "siliconflow/zai-org/GLM-4.5": {
-      "input": 0.4,
-      "output": 2.0
-    },
     "siliconflow/zai-org/GLM-4.5-Air": {
       "input": 0.14,
       "output": 0.86
-    },
-    "siliconflow/zai-org/GLM-4.5V": {
-      "input": 0.14,
-      "output": 0.86
-    },
-    "siliconflow/zai-org/GLM-4.6": {
-      "input": 0.5,
-      "output": 1.9
-    },
-    "siliconflow/zai-org/GLM-4.6V": {
-      "input": 0.3,
-      "output": 0.9
-    },
-    "siliconflow/zai-org/GLM-4.7": {
-      "input": 0.6,
-      "output": 2.2
     },
     "siliconflow/zai-org/GLM-5": {
       "input": 0.95,
