@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-06-30",
+  "$snapshot_date": "2026-07-01",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -1899,6 +1899,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "amazon-bedrock/anthropic.claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "amazon-bedrock/au.anthropic.claude-haiku-4-5-20251001-v1:0": {
       "input": 1.0,
       "output": 5.0,
@@ -1928,6 +1934,12 @@
       "output": 16.5,
       "cache_read": 0.33,
       "cache_write": 4.125
+    },
+    "amazon-bedrock/au.anthropic.claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "amazon-bedrock/deepseek.r1-v1:0": {
       "input": 1.35,
@@ -1989,6 +2001,12 @@
       "cache_read": 0.33,
       "cache_write": 4.125
     },
+    "amazon-bedrock/eu.anthropic.claude-sonnet-5": {
+      "input": 2.2,
+      "output": 11.0,
+      "cache_read": 0.22,
+      "cache_write": 2.75
+    },
     "amazon-bedrock/global.anthropic.claude-fable-5": {
       "input": 10.0,
       "output": 50.0,
@@ -2037,6 +2055,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "amazon-bedrock/global.anthropic.claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "amazon-bedrock/google.gemma-3-12b-it": {
       "input": 0.05,
       "output": 0.1
@@ -2072,6 +2096,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "amazon-bedrock/jp.anthropic.claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "amazon-bedrock/meta.llama3-1-70b-instruct-v1:0": {
       "input": 0.72,
@@ -2281,6 +2311,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "amazon-bedrock/us.anthropic.claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "amazon-bedrock/us.deepseek.r1-v1:0": {
       "input": 1.35,
       "output": 5.4
@@ -2473,6 +2509,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "anthropic/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "atomic-chat/Meta-Llama-3_1-8B-Instruct-GGUF": {
       "input": 0.0,
@@ -3040,6 +3082,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "azure/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "azure/codestral-2501": {
       "input": 0.3,
@@ -3835,6 +3883,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "cloudflare-ai-gateway/anthropic/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "cloudflare-ai-gateway/openai/gpt-3.5-turbo": {
       "input": 0.5,
@@ -4799,6 +4853,11 @@
     },
     "deepinfra/moonshotai/Kimi-K2.6": {
       "input": 0.75,
+      "output": 3.5,
+      "cache_read": 0.15
+    },
+    "deepinfra/moonshotai/Kimi-K2.7-Code": {
+      "input": 0.74,
       "output": 3.5,
       "cache_read": 0.15
     },
@@ -6272,6 +6331,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "google-vertex-anthropic/claude-sonnet-5@default": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "google-vertex/claude-3-5-haiku@20241022": {
       "input": 0.8,
       "output": 4.0,
@@ -6337,6 +6402,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "google-vertex/claude-sonnet-5@default": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "google-vertex/deepseek-ai/deepseek-v3.1-maas": {
       "input": 0.6,
@@ -9426,6 +9497,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "llmgateway/claude-sonnet-5": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75
+    },
     "llmgateway/codestral-2508": {
       "input": 0.3,
       "output": 0.9
@@ -9781,13 +9858,13 @@
       "cache_read": 0.2
     },
     "llmgateway/grok-4-20-non-reasoning": {
-      "input": 2.0,
-      "output": 6.0,
+      "input": 1.25,
+      "output": 2.5,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-20-reasoning": {
-      "input": 2.0,
-      "output": 6.0,
+      "input": 1.25,
+      "output": 2.5,
       "cache_read": 0.2
     },
     "llmgateway/grok-4-3": {
@@ -10102,7 +10179,7 @@
     },
     "llmgateway/qwen3-next-80b-a3b-instruct": {
       "input": 0.15,
-      "output": 1.5
+      "output": 1.2
     },
     "llmgateway/qwen3-next-80b-a3b-thinking": {
       "input": 0.15,
@@ -15432,9 +15509,9 @@
       "cache_read": 0.06
     },
     "opencode-go/minimax-m3": {
-      "input": 0.1,
-      "output": 0.4,
-      "cache_read": 0.02
+      "input": 0.3,
+      "output": 1.2,
+      "cache_read": 0.06
     },
     "opencode-go/qwen3.5-plus": {
       "input": 0.2,
@@ -15531,6 +15608,12 @@
       "output": 15.0,
       "cache_read": 0.3,
       "cache_write": 3.75
+    },
+    "opencode/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "opencode/deepseek-v4-flash": {
       "input": 0.14,
@@ -15728,6 +15811,11 @@
       "output": 4.0,
       "cache_read": 0.16
     },
+    "opencode/kimi-k2.7-code": {
+      "input": 0.95,
+      "output": 4.0,
+      "cache_read": 0.19
+    },
     "opencode/ling-2.6-flash-free": {
       "input": 0.0,
       "output": 0.0
@@ -15773,6 +15861,11 @@
       "cache_read": 0.0
     },
     "opencode/minimax-m2.7": {
+      "input": 0.3,
+      "output": 1.2,
+      "cache_read": 0.06
+    },
+    "opencode/minimax-m3": {
       "input": 0.3,
       "output": 1.2,
       "cache_read": 0.06
@@ -15953,6 +16046,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "openrouter/anthropic/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "openrouter/arcee-ai/coder-large": {
       "input": 0.5,
       "output": 0.8
@@ -16065,8 +16164,8 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.09,
-      "output": 0.18,
+      "input": 0.098,
+      "output": 0.196,
       "cache_read": 0.02
     },
     "openrouter/deepseek/deepseek-v4-pro": {
@@ -16147,6 +16246,10 @@
       "output": 1.5,
       "cache_read": 0.025,
       "cache_write": 0.083333
+    },
+    "openrouter/google/gemini-3.1-flash-lite-image": {
+      "input": 0.25,
+      "output": 1.5
     },
     "openrouter/google/gemini-3.1-flash-lite-preview": {
       "input": 0.25,
@@ -16330,11 +16433,6 @@
     "openrouter/microsoft/phi-4": {
       "input": 0.07,
       "output": 0.14
-    },
-    "openrouter/microsoft/phi-4-mini-instruct": {
-      "input": 0.08,
-      "output": 0.35,
-      "cache_read": 0.08
     },
     "openrouter/microsoft/wizardlm-2-8x22b": {
       "input": 0.62,
@@ -16862,10 +16960,6 @@
       "input": 0.0,
       "output": 0.0
     },
-    "openrouter/openrouter/owl-alpha": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/perceptron/perceptron-mk1": {
       "input": 0.15,
       "output": 1.5
@@ -16953,9 +17047,8 @@
       "output": 0.1
     },
     "openrouter/qwen/qwen3-235b-a22b-thinking-2507": {
-      "input": 0.1,
-      "output": 0.1,
-      "cache_read": 0.1
+      "input": 0.1495,
+      "output": 1.495
     },
     "openrouter/qwen/qwen3-30b-a3b": {
       "input": 0.12,
@@ -17094,8 +17187,8 @@
       "cache_write": 0.375
     },
     "openrouter/qwen/qwen3.6-27b": {
-      "input": 0.2596,
-      "output": 2.385
+      "input": 0.285,
+      "output": 2.4
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
@@ -17297,7 +17390,7 @@
       "output": 4.3
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.94,
+      "input": 0.93,
       "output": 3.0,
       "cache_read": 0.18
     },
@@ -17325,10 +17418,10 @@
       "cache_write": 6.25
     },
     "openrouter/~anthropic/claude-sonnet-latest": {
-      "input": 3.0,
-      "output": 15.0,
-      "cache_read": 0.3,
-      "cache_write": 3.75
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "openrouter/~google/gemini-flash-latest": {
       "input": 1.5,
@@ -18825,6 +18918,16 @@
       "input": 0.096,
       "output": 0.288,
       "cache_read": 0.019
+    },
+    "sakana/fugu-ultra": {
+      "input": 5.0,
+      "output": 30.0,
+      "cache_read": 0.5
+    },
+    "sakana/fugu-ultra-20260615": {
+      "input": 5.0,
+      "output": 30.0,
+      "cache_read": 0.5
     },
     "sap-ai-core/anthropic--claude-3-haiku": {
       "input": 0.25,
@@ -20459,6 +20562,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "vercel/anthropic/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "vercel/arcee-ai/trinity-large-preview": {
       "input": 0.25,
       "output": 1.0
@@ -20568,6 +20677,11 @@
       "cache_read": 0.05
     },
     "vercel/google/gemini-3.1-flash-lite": {
+      "input": 0.25,
+      "output": 1.5,
+      "cache_read": 0.03
+    },
+    "vercel/google/gemini-3.1-flash-lite-image": {
       "input": 0.25,
       "output": 1.5,
       "cache_read": 0.03
