@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-01",
+  "$snapshot_date": "2026-07-02",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -1851,6 +1851,12 @@
       "output": 3.2,
       "cache_read": 0.2
     },
+    "amazon-bedrock/anthropic.claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
+    },
     "amazon-bedrock/anthropic.claude-haiku-4-5-20251001-v1:0": {
       "input": 1.0,
       "output": 5.0,
@@ -3628,6 +3634,10 @@
     "berget/zai-org/GLM-5.2": {
       "input": 1.54,
       "output": 4.84
+    },
+    "cerebras/gemma-4-31b": {
+      "input": 0.99,
+      "output": 1.49
     },
     "cerebras/gpt-oss-120b": {
       "input": 0.35,
@@ -5842,6 +5852,12 @@
       "cache_read": 0.3,
       "cache_write": 3.75
     },
+    "github-copilot/claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
+    },
     "github-copilot/gemini-2.5-pro": {
       "input": 1.25,
       "output": 10.0,
@@ -6225,6 +6241,11 @@
       "output": 22.5,
       "cache_read": 0.45
     },
+    "gmicloud/anthropic/claude-opus-4.8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5
+    },
     "gmicloud/anthropic/claude-sonnet-4.6": {
       "input": 3.0,
       "output": 15.0,
@@ -6249,6 +6270,11 @@
       "input": 1.9,
       "output": 8.0,
       "cache_read": 0.38
+    },
+    "gmicloud/openai/gpt-5.5": {
+      "input": 5.0,
+      "output": 30.0,
+      "cache_read": 0.5
     },
     "gmicloud/zai-org/GLM-5-FP8": {
       "input": 0.6,
@@ -9432,6 +9458,12 @@
       "output": 75.0,
       "cache_read": 1.5,
       "cache_write": 18.75
+    },
+    "llmgateway/claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
     },
     "llmgateway/claude-haiku-4-5": {
       "input": 1.0,
@@ -15974,6 +16006,12 @@
       "cache_read": 0.03,
       "cache_write": 0.3
     },
+    "openrouter/anthropic/claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
+    },
     "openrouter/anthropic/claude-haiku-4.5": {
       "input": 1.0,
       "output": 5.0,
@@ -16127,8 +16165,8 @@
       "output": 0.8001
     },
     "openrouter/deepseek/deepseek-chat-v3-0324": {
-      "input": 0.2,
-      "output": 0.77,
+      "input": 0.24,
+      "output": 0.9,
       "cache_read": 0.135
     },
     "openrouter/deepseek/deepseek-chat-v3.1": {
@@ -16164,9 +16202,9 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.098,
-      "output": 0.196,
-      "cache_read": 0.02
+      "input": 0.09,
+      "output": 0.18,
+      "cache_read": 0.018
     },
     "openrouter/deepseek/deepseek-v4-pro": {
       "input": 0.435,
@@ -16448,8 +16486,7 @@
     },
     "openrouter/minimax/minimax-m2": {
       "input": 0.255,
-      "output": 1.0,
-      "cache_read": 0.03
+      "output": 1.02
     },
     "openrouter/minimax/minimax-m2-her": {
       "input": 0.3,
@@ -16457,8 +16494,8 @@
       "cache_read": 0.03
     },
     "openrouter/minimax/minimax-m2.1": {
-      "input": 0.29,
-      "output": 0.95,
+      "input": 0.3,
+      "output": 1.2,
       "cache_read": 0.03
     },
     "openrouter/minimax/minimax-m2.5": {
@@ -16575,7 +16612,7 @@
     "openrouter/moonshotai/kimi-k2-thinking": {
       "input": 0.6,
       "output": 2.5,
-      "cache_read": 0.6
+      "cache_read": 0.15
     },
     "openrouter/moonshotai/kimi-k2.5": {
       "input": 0.375,
@@ -17059,18 +17096,16 @@
       "output": 0.19305
     },
     "openrouter/qwen/qwen3-30b-a3b-thinking-2507": {
-      "input": 0.08,
-      "output": 0.4,
-      "cache_read": 0.08
+      "input": 0.13,
+      "output": 1.56
     },
     "openrouter/qwen/qwen3-32b": {
       "input": 0.08,
       "output": 0.28
     },
     "openrouter/qwen/qwen3-8b": {
-      "input": 0.05,
-      "output": 0.4,
-      "cache_read": 0.05
+      "input": 0.117,
+      "output": 0.455
     },
     "openrouter/qwen/qwen3-coder": {
       "input": 0.22,
@@ -19645,17 +19680,12 @@
       "output": 1.2,
       "cache_read": 0.6
     },
-    "synthetic/hf:Qwen/Qwen3.5-397B-A17B": {
-      "input": 0.6,
-      "output": 3.6,
-      "cache_read": 0.6
-    },
     "synthetic/hf:Qwen/Qwen3.6-27B": {
       "input": 0.45,
       "output": 3.6,
       "cache_read": 0.45
     },
-    "synthetic/hf:moonshotai/Kimi-K2.6": {
+    "synthetic/hf:moonshotai/Kimi-K2.7-Code": {
       "input": 0.95,
       "output": 4.0,
       "cache_read": 0.95
@@ -19670,20 +19700,10 @@
       "output": 0.1,
       "cache_read": 0.1
     },
-    "synthetic/hf:zai-org/GLM-4.7": {
-      "input": 0.45,
-      "output": 2.19,
-      "cache_read": 0.45
-    },
     "synthetic/hf:zai-org/GLM-4.7-Flash": {
       "input": 0.1,
       "output": 0.5,
       "cache_read": 0.1
-    },
-    "synthetic/hf:zai-org/GLM-5.1": {
-      "input": 1.0,
-      "output": 3.0,
-      "cache_read": 1.0
     },
     "synthetic/hf:zai-org/GLM-5.2": {
       "input": 1.4,
@@ -19998,11 +20018,6 @@
       "output": 2.0,
       "cache_read": 0.25
     },
-    "venice/arcee-trinity-large-thinking": {
-      "input": 0.3125,
-      "output": 1.125,
-      "cache_read": 0.075
-    },
     "venice/claude-fable-5": {
       "input": 12.0,
       "output": 60.0,
@@ -20056,6 +20071,12 @@
       "output": 18.0,
       "cache_read": 0.36,
       "cache_write": 4.5
+    },
+    "venice/claude-sonnet-5": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75
     },
     "venice/deepseek-v3.2": {
       "input": 0.33,
@@ -20501,6 +20522,12 @@
       "output": 4.0,
       "cache_read": 0.08,
       "cache_write": 1.0
+    },
+    "vercel/anthropic/claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write": 12.5
     },
     "vercel/anthropic/claude-haiku-4.5": {
       "input": 1.0,
@@ -22496,9 +22523,9 @@
       "cache_write": 0.0
     },
     "zhipuai/glm-5.1": {
-      "input": 6.0,
-      "output": 24.0,
-      "cache_read": 1.3,
+      "input": 1.4,
+      "output": 4.4,
+      "cache_read": 0.26,
       "cache_write": 0.0
     },
     "zhipuai/glm-5.2": {
