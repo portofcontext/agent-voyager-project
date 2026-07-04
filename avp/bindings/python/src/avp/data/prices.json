@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-03",
+  "$snapshot_date": "2026-07-04",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -15371,7 +15371,7 @@
       "input": 0.0,
       "output": 0.0
     },
-    "nvidia/z-ai/glm-5.1": {
+    "nvidia/z-ai/glm-5.2": {
       "input": 0.0,
       "output": 0.0
     },
@@ -16806,8 +16806,8 @@
       "output": 0.0
     },
     "openrouter/nvidia/nemotron-3-super-120b-a12b": {
-      "input": 0.085,
-      "output": 0.4
+      "input": 0.08,
+      "output": 0.45
     },
     "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
       "input": 0.0,
@@ -17360,7 +17360,8 @@
     },
     "openrouter/qwen/qwen3.6-27b": {
       "input": 0.285,
-      "output": 2.4
+      "output": 2.4,
+      "cache_read": 0.15
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
@@ -17563,9 +17564,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.93,
-      "output": 3.0,
-      "cache_read": 0.18
+      "input": 0.91,
+      "output": 2.86,
+      "cache_read": 0.169
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -20284,8 +20285,9 @@
       "output": 0.2
     },
     "venice/google-gemma-4-26b-a4b-it": {
-      "input": 0.1625,
-      "output": 0.5
+      "input": 0.13,
+      "output": 0.4,
+      "cache_read": 0.05
     },
     "venice/google-gemma-4-31b-it": {
       "input": 0.12,
@@ -20327,9 +20329,9 @@
       "cache_read": 0.16
     },
     "venice/kimi-k2-7-code": {
-      "input": 0.9,
-      "output": 4.3,
-      "cache_read": 0.2
+      "input": 0.75,
+      "output": 3.5,
+      "cache_read": 0.16
     },
     "venice/llama-3.2-3b": {
       "input": 0.15,
@@ -20345,9 +20347,9 @@
       "cache_read": 0.03125
     },
     "venice/minimax-m25": {
-      "input": 0.34,
-      "output": 1.19,
-      "cache_read": 0.04
+      "input": 0.27,
+      "output": 0.95,
+      "cache_read": 0.03
     },
     "venice/minimax-m27": {
       "input": 0.375,
@@ -20381,8 +20383,9 @@
       "output": 0.8
     },
     "venice/olafangensan-glm-4.7-flash-heretic": {
-      "input": 0.14,
-      "output": 0.8
+      "input": 0.07,
+      "output": 0.4,
+      "cache_read": 0.035
     },
     "venice/openai-gpt-4o-2024-11-20": {
       "input": 3.125,
@@ -20488,8 +20491,9 @@
       "output": 1.9
     },
     "venice/qwen3-vl-235b-a22b": {
-      "input": 0.25,
-      "output": 1.5
+      "input": 0.21,
+      "output": 1.9,
+      "cache_read": 0.1
     },
     "venice/venice-uncensored-1-2": {
       "input": 0.2,
@@ -20500,9 +20504,9 @@
       "output": 2.0
     },
     "venice/xiaomi-mimo-v2-5": {
-      "input": 0.175,
-      "output": 0.35,
-      "cache_read": 0.0625
+      "input": 0.14,
+      "output": 0.28,
+      "cache_read": 0.05
     },
     "venice/z-ai-glm-5-turbo": {
       "input": 1.2,
@@ -20534,9 +20538,9 @@
       "cache_read": 0.2
     },
     "venice/zai-org-glm-5-1": {
-      "input": 1.75,
-      "output": 5.5,
-      "cache_read": 0.325
+      "input": 1.54,
+      "output": 4.84,
+      "cache_read": 0.286
     },
     "venice/zai-org-glm-5-2": {
       "input": 1.4,
