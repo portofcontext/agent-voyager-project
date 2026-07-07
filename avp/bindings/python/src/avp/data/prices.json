@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-06",
+  "$snapshot_date": "2026-07-07",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -7328,6 +7328,10 @@
     "huggingface/openai/gpt-oss-120b": {
       "input": 0.25,
       "output": 0.69
+    },
+    "huggingface/openai/gpt-oss-20b": {
+      "input": 0.1,
+      "output": 0.5
     },
     "huggingface/stepfun-ai/Step-3.5-Flash": {
       "input": 0.1,
@@ -15959,6 +15963,11 @@
       "cache_read": 0.0,
       "cache_write": 0.0
     },
+    "opencode/hy3-free": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0
+    },
     "opencode/hy3-preview-free": {
       "input": 0.0,
       "output": 0.0,
@@ -16587,8 +16596,8 @@
       "output": 0.201
     },
     "openrouter/meta-llama/llama-3.2-3b-instruct": {
-      "input": 0.0509,
-      "output": 0.335
+      "input": 0.05,
+      "output": 0.33
     },
     "openrouter/meta-llama/llama-3.2-3b-instruct:free": {
       "input": 0.0,
@@ -16762,7 +16771,8 @@
     },
     "openrouter/moonshotai/kimi-k2.5": {
       "input": 0.375,
-      "output": 2.025
+      "output": 2.025,
+      "cache_read": 0.203
     },
     "openrouter/moonshotai/kimi-k2.6": {
       "input": 0.66,
@@ -16781,6 +16791,11 @@
     "openrouter/morph/morph-v3-large": {
       "input": 0.9,
       "output": 1.9
+    },
+    "openrouter/nex-agi/nex-n2-mini": {
+      "input": 0.025,
+      "output": 0.1,
+      "cache_read": 0.0025
     },
     "openrouter/nex-agi/nex-n2-pro": {
       "input": 0.25,
@@ -17357,7 +17372,8 @@
     },
     "openrouter/qwen/qwen3.5-397b-a17b": {
       "input": 0.385,
-      "output": 2.45
+      "output": 2.45,
+      "cache_read": 0.111
     },
     "openrouter/qwen/qwen3.5-9b": {
       "input": 0.1,
@@ -17466,10 +17482,19 @@
       "input": 0.14,
       "output": 0.57
     },
+    "openrouter/tencent/hy3": {
+      "input": 0.14,
+      "output": 0.58,
+      "cache_read": 0.035
+    },
     "openrouter/tencent/hy3-preview": {
       "input": 0.063,
       "output": 0.21,
       "cache_read": 0.021
+    },
+    "openrouter/tencent/hy3:free": {
+      "input": 0.0,
+      "output": 0.0
     },
     "openrouter/thedrummer/cydonia-24b-v4.1": {
       "input": 0.3,
@@ -17524,7 +17549,8 @@
     },
     "openrouter/xiaomi/mimo-v2.5": {
       "input": 0.105,
-      "output": 0.28
+      "output": 0.28,
+      "cache_read": 0.028
     },
     "openrouter/xiaomi/mimo-v2.5-pro": {
       "input": 0.435,
@@ -17582,9 +17608,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.686,
-      "output": 2.156,
-      "cache_read": 0.1274
+      "input": 0.9086,
+      "output": 2.8556,
+      "cache_read": 0.16874
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -19807,9 +19833,15 @@
       "output": 1.15,
       "cache_read": 0.04
     },
+    "subconscious/subconscious/glm-5.2": {
+      "input": 1.4,
+      "output": 4.4,
+      "cache_read": 0.26
+    },
     "subconscious/subconscious/tim-qwen3.6-27b": {
-      "input": 0.0,
-      "output": 0.0
+      "input": 0.3,
+      "output": 3.0,
+      "cache_read": 0.15
     },
     "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507": {
       "input": 0.2,
