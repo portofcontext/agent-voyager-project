@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-11",
+  "$snapshot_date": "2026-07-12",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -2548,8 +2548,8 @@
       "cache_write": 0.0
     },
     "ambient/moonshotai/kimi-k2.7-code": {
-      "input": 0.75,
-      "output": 3.5,
+      "input": 0.84,
+      "output": 3.99,
       "cache_read": 0.16,
       "cache_write": 0.0
     },
@@ -2557,6 +2557,12 @@
       "input": 1.4,
       "output": 4.4,
       "cache_read": 0.0,
+      "cache_write": 0.0
+    },
+    "ambient/zai-org/GLM-5.2-FP8": {
+      "input": 1.2,
+      "output": 4.2,
+      "cache_read": 0.26,
       "cache_write": 0.0
     },
     "anthropic/claude-fable-5": {
@@ -8075,6 +8081,30 @@
       "input": 0.01,
       "output": 0.0
     },
+    "inferx/google/gemma-4-31b-it-fp8": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "inferx/qwen/qwen3-coder-next-fp8": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "inferx/qwen/qwen3-coder-next-fp8-1m": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "inferx/qwen/qwen3.5-122b-a10b-nvfp4": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "inferx/qwen/qwen3.6-27b-fp8": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "inferx/qwen/qwen3.6-35b-a3b-fp8": {
+      "input": 0.0,
+      "output": 0.0
+    },
     "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar": {
       "input": 0.22,
       "output": 0.95,
@@ -10686,16 +10716,6 @@
     "llmgateway/llama-4-scout-17b-instruct": {
       "input": 0.18,
       "output": 0.59
-    },
-    "llmgateway/mimo-v2-omni": {
-      "input": 0.4,
-      "output": 2.0,
-      "cache_read": 0.08
-    },
-    "llmgateway/mimo-v2-pro": {
-      "input": 1.0,
-      "output": 3.0,
-      "cache_read": 0.2
     },
     "llmgateway/mimo-v2.5": {
       "input": 0.14,
@@ -17038,9 +17058,9 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.084,
-      "output": 0.168,
-      "cache_read": 0.0168
+      "input": 0.077,
+      "output": 0.154,
+      "cache_read": 0.0154
     },
     "openrouter/deepseek/deepseek-v4-pro": {
       "input": 0.435,
@@ -17246,10 +17266,6 @@
       "input": 0.75,
       "output": 1.0
     },
-    "openrouter/meta-llama/llama-3-8b-instruct": {
-      "input": 0.14,
-      "output": 0.14
-    },
     "openrouter/meta-llama/llama-3.1-70b-instruct": {
       "input": 0.4,
       "output": 0.4
@@ -17453,8 +17469,8 @@
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
       "input": 0.72,
-      "output": 3.49,
-      "cache_read": 0.159
+      "output": 3.5,
+      "cache_read": 0.15
     },
     "openrouter/morph/morph-v3-fast": {
       "input": 0.8,
@@ -18308,9 +18324,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.42,
-      "output": 1.32,
-      "cache_read": 0.078
+      "input": 0.35,
+      "output": 1.1,
+      "cache_read": 0.065
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -22997,8 +23013,14 @@
       "cache_write": 0.0
     },
     "wafer.ai/Kimi-K2.6": {
-      "input": 0.68,
-      "output": 3.15,
+      "input": 1.14,
+      "output": 4.8,
+      "cache_read": 0.19,
+      "cache_write": 0.0
+    },
+    "wafer.ai/MiniMax-M3": {
+      "input": 0.33,
+      "output": 1.32,
       "cache_read": 0.07,
       "cache_write": 0.0
     },
@@ -23008,27 +23030,9 @@
       "cache_read": 0.04,
       "cache_write": 0.0
     },
-    "wafer.ai/Qwen3.6-35B-A3B": {
-      "input": 0.15,
-      "output": 1.0,
-      "cache_read": 0.02,
-      "cache_write": 0.0
-    },
-    "wafer.ai/deepseek-v4-flash": {
-      "input": 0.14,
-      "output": 0.28,
-      "cache_read": 0.01,
-      "cache_write": 0.0
-    },
-    "wafer.ai/deepseek-v4-pro": {
-      "input": 1.74,
-      "output": 3.48,
-      "cache_read": 0.02,
-      "cache_write": 0.0
-    },
-    "wafer.ai/qwen3.7-max": {
-      "input": 5.0,
-      "output": 15.0,
+    "wafer.ai/glm5.2-fast": {
+      "input": 3.0,
+      "output": 10.25,
       "cache_read": 0.5,
       "cache_write": 0.0
     },
