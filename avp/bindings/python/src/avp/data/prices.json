@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-18",
+  "$snapshot_date": "2026-07-19",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -2654,9 +2654,9 @@
       "cache_write": 0.0
     },
     "ambient/deepseek/deepseek-v4-flash": {
-      "input": 0.25,
-      "output": 0.4,
-      "cache_read": 0.1,
+      "input": 0.5,
+      "output": 0.8,
+      "cache_read": 0.2,
       "cache_write": 0.0
     },
     "ambient/moonshotai/kimi-k2.6": {
@@ -2666,9 +2666,9 @@
       "cache_write": 0.0
     },
     "ambient/moonshotai/kimi-k2.7-code": {
-      "input": 1.0,
-      "output": 4.4,
-      "cache_read": 0.2,
+      "input": 0.85,
+      "output": 3.8,
+      "cache_read": 0.17,
       "cache_write": 0.0
     },
     "ambient/stepfun/step-3.7-flash": {
@@ -5096,6 +5096,12 @@
       "output": 4.16,
       "cache_read": 0.18,
       "cache_write": 1.0
+    },
+    "crossmodel/moonshot/kimi-k3": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.0
     },
     "crossmodel/openai/gpt-4o-mini": {
       "input": 0.15,
@@ -15177,6 +15183,10 @@
       "cache_read": 0.03,
       "cache_write": 0.375
     },
+    "nebius/MiniMaxAI/MiniMax-M3": {
+      "input": 0.3,
+      "output": 1.2
+    },
     "nebius/NousResearch/Hermes-4-405B": {
       "input": 1.0,
       "output": 3.0,
@@ -15291,6 +15301,10 @@
       "output": 2.5,
       "cache_read": 0.05,
       "cache_write": 0.625
+    },
+    "nebius/moonshotai/Kimi-K2.7-Code": {
+      "input": 0.95,
+      "output": 4.0
     },
     "nebius/nvidia/Llama-3_1-Nemotron-Ultra-253B-v1": {
       "input": 0.6,
@@ -17556,8 +17570,8 @@
       "output": 0.12
     },
     "openrouter/google/gemma-4-26b-a4b-it": {
-      "input": 0.1,
-      "output": 0.3
+      "input": 0.07,
+      "output": 0.34
     },
     "openrouter/google/gemma-4-26b-a4b-it:free": {
       "input": 0.0,
@@ -17703,8 +17717,9 @@
       "output": 2.2
     },
     "openrouter/minimax/minimax-m2": {
-      "input": 0.255,
-      "output": 1.02
+      "input": 0.3,
+      "output": 1.2,
+      "cache_read": 0.03
     },
     "openrouter/minimax/minimax-m2-her": {
       "input": 0.3,
@@ -17841,14 +17856,14 @@
       "cache_read": 0.095
     },
     "openrouter/moonshotai/kimi-k2.6": {
-      "input": 0.95,
-      "output": 4.0,
-      "cache_read": 0.16
+      "input": 0.684,
+      "output": 3.42,
+      "cache_read": 0.144
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
-      "input": 1.0,
-      "output": 4.4,
-      "cache_read": 0.2
+      "input": 0.85,
+      "output": 3.8,
+      "cache_read": 0.17
     },
     "openrouter/moonshotai/kimi-k3": {
       "input": 3.0,
@@ -18335,8 +18350,8 @@
       "cache_read": 0.4
     },
     "openrouter/qwen/qwen3-14b": {
-      "input": 0.12,
-      "output": 0.24
+      "input": 0.2275,
+      "output": 0.91
     },
     "openrouter/qwen/qwen3-235b-a22b": {
       "input": 0.455,
@@ -18634,7 +18649,7 @@
     "openrouter/x-ai/grok-4.5": {
       "input": 2.0,
       "output": 6.0,
-      "cache_read": 0.5
+      "cache_read": 0.3
     },
     "openrouter/x-ai/grok-build-0.1": {
       "input": 1.0,
@@ -18701,9 +18716,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.4144,
-      "output": 1.3024,
-      "cache_read": 0.07696
+      "input": 0.2576,
+      "output": 0.8096,
+      "cache_read": 0.04784
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -18765,7 +18780,7 @@
     "openrouter/~x-ai/grok-latest": {
       "input": 2.0,
       "output": 6.0,
-      "cache_read": 0.5
+      "cache_read": 0.3
     },
     "orcarouter/anthropic/claude-haiku-4.5": {
       "input": 1.0,
@@ -22024,7 +22039,7 @@
     "venice/grok-4-5": {
       "input": 2.27,
       "output": 6.8,
-      "cache_read": 0.57
+      "cache_read": 0.34
     },
     "venice/grok-build-0-1": {
       "input": 1.0,
@@ -22716,22 +22731,6 @@
     "vercel/meta/llama-3.1-8b": {
       "input": 0.22,
       "output": 0.22
-    },
-    "vercel/meta/llama-3.2-11b": {
-      "input": 0.16,
-      "output": 0.16
-    },
-    "vercel/meta/llama-3.2-1b": {
-      "input": 0.1,
-      "output": 0.1
-    },
-    "vercel/meta/llama-3.2-3b": {
-      "input": 0.15,
-      "output": 0.15
-    },
-    "vercel/meta/llama-3.2-90b": {
-      "input": 0.72,
-      "output": 0.72
     },
     "vercel/meta/llama-3.3-70b": {
       "input": 0.0,
@@ -23652,7 +23651,7 @@
     "xai/grok-4.5": {
       "input": 2.0,
       "output": 6.0,
-      "cache_read": 0.5
+      "cache_read": 0.3
     },
     "xai/grok-build-0.1": {
       "input": 1.0,
