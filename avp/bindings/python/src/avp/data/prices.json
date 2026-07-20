@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-19",
+  "$snapshot_date": "2026-07-20",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -10500,13 +10500,13 @@
       "output": 4.5,
       "cache_read": 0.075
     },
-    "kimi-for-coding/k2p7": {
+    "kimi-for-coding/k3": {
       "input": 0.0,
       "output": 0.0,
       "cache_read": 0.0,
       "cache_write": 0.0
     },
-    "kimi-for-coding/k3": {
+    "kimi-for-coding/kimi-for-coding": {
       "input": 0.0,
       "output": 0.0,
       "cache_read": 0.0,
@@ -17374,10 +17374,6 @@
       "input": 0.2,
       "output": 0.9
     },
-    "openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/cohere/command-a": {
       "input": 2.5,
       "output": 10.0
@@ -17671,17 +17667,9 @@
       "input": 0.0509,
       "output": 0.335
     },
-    "openrouter/meta-llama/llama-3.2-3b-instruct:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/meta-llama/llama-3.3-70b-instruct": {
       "input": 0.13,
       "output": 0.4
-    },
-    "openrouter/meta-llama/llama-3.3-70b-instruct:free": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/meta-llama/llama-4-maverick": {
       "input": 0.2,
@@ -17892,10 +17880,6 @@
       "input": 1.0,
       "output": 1.0
     },
-    "openrouter/nousresearch/hermes-3-llama-3.1-405b:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/nousresearch/hermes-3-llama-3.1-70b": {
       "input": 0.7,
       "output": 0.7
@@ -17921,9 +17905,8 @@
       "output": 0.0
     },
     "openrouter/nvidia/nemotron-3-super-120b-a12b": {
-      "input": 0.21,
-      "output": 0.455,
-      "cache_read": 0.06
+      "input": 0.085,
+      "output": 0.4
     },
     "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
       "input": 0.0,
@@ -18350,8 +18333,8 @@
       "cache_read": 0.4
     },
     "openrouter/qwen/qwen3-14b": {
-      "input": 0.2275,
-      "output": 0.91
+      "input": 0.12,
+      "output": 0.24
     },
     "openrouter/qwen/qwen3-235b-a22b": {
       "input": 0.455,
@@ -18362,8 +18345,8 @@
       "output": 0.55
     },
     "openrouter/qwen/qwen3-235b-a22b-thinking-2507": {
-      "input": 0.1495,
-      "output": 1.495
+      "input": 0.3,
+      "output": 3.0
     },
     "openrouter/qwen/qwen3-30b-a3b": {
       "input": 0.13,
@@ -18411,10 +18394,6 @@
       "cache_read": 0.13,
       "cache_write": 0.8125
     },
-    "openrouter/qwen/qwen3-coder:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "openrouter/qwen/qwen3-max": {
       "input": 0.78,
       "output": 3.9,
@@ -18429,10 +18408,6 @@
       "input": 0.1,
       "output": 1.1,
       "cache_read": 0.07
-    },
-    "openrouter/qwen/qwen3-next-80b-a3b-instruct:free": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/qwen/qwen3-next-80b-a3b-thinking": {
       "input": 0.0975,
@@ -18702,8 +18677,8 @@
     },
     "openrouter/z-ai/glm-5": {
       "input": 0.95,
-      "output": 3.15,
-      "cache_read": 0.19
+      "output": 2.55,
+      "cache_read": 0.2
     },
     "openrouter/z-ai/glm-5-turbo": {
       "input": 1.2,
@@ -18716,9 +18691,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.2576,
-      "output": 0.8096,
-      "cache_read": 0.04784
+      "input": 0.9786,
+      "output": 3.0756,
+      "cache_read": 0.18174
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
