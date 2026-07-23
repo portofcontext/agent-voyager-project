@@ -1114,9 +1114,10 @@ def test_task_stopped_status_emits_returned_with_interrupted_reason() -> None:
 
 def test_task_usage_rolls_up_onto_subagent_usage() -> None:
     """TaskUsage (`total_tokens`, `tool_uses`, `duration_ms`) rides on
-    `subagent_returned.subagent_usage` as extras alongside the AVP
-    canonical fields (which stay 0 since the SDK doesn't split
-    input/output). This is the in-process-fallback rollup per spec §6."""
+    `subagent_returned.subagent_usage` as extras. The AVP canonical fields
+    stay absent rather than 0, because the SDK reports neither cost nor an
+    input/output split and a 0 would read as a measured zero. This is the
+    in-process-fallback rollup per spec §6."""
     events = asyncio.run(
         _drive(
             [
@@ -1134,14 +1135,113 @@ def test_task_usage_rolls_up_onto_subagent_usage() -> None:
     returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
     usage = returned.data.subagent_usage
     assert usage is not None
-    assert usage.cost_usd == 0.0
-    assert usage.tokens_input == 0
-    assert usage.tokens_output == 0
-    assert usage.turns == 0
+    assert usage.cost_usd is None
+    assert usage.tokens_input is None
+    assert usage.tokens_output is None
+    assert usage.turns is None
     dumped = usage.model_dump(by_alias=True, exclude_none=True)
     assert dumped["total_tokens"] == 1500
     assert dumped["tool_uses"] == 5
     assert dumped["duration_ms"] == 7000
+    # Absence is the signal: a consumer summing spend must not see a zero
+    # it would mistake for a measurement.
+    assert "cost_usd" not in dumped
+    assert "tokens_input" not in dumped
+    assert "tokens_output" not in dumped
+    assert "turns" not in dumped
+
+
+def test_notification_after_turn_rollover_still_closes_the_frame() -> None:
+    """The `Agent` tool dispatches asynchronously: its `tool_result` is a
+    launch receipt that returns immediately, so the child's notification
+    routinely lands turns later. Pairing state is run-scoped for exactly
+    this reason; when it was turn-scoped the entry died at rollover and
+    `subagent_returned` was never emitted."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                # Launch receipt, then the parent moves on to further turns.
+                _user_tool_result(tool_use_id="toolu_task_1", content="launched"),
+                _assistant(message_id="msg_second", input_tokens=1, output_tokens=1),
+                _assistant(message_id="msg_third", input_tokens=1, output_tokens=1),
+                # Child finally reports, two turns after it was dispatched.
+                _task_notification(summary="found it"),
+                _result(),
+            ]
+        )
+    )
+    invoked = [ev for ev in events if ev.type == "avp.subagent_invoked"]
+    returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert len(invoked) == 1
+    assert len(returned) == 1
+    # Same frame: the close carries the span captured at dispatch, not the
+    # span of whatever turn happened to be open when it landed.
+    assert returned[0].data.span_id == invoked[0].data.span_id
+    assert returned[0].data.parent_span_id == invoked[0].data.parent_span_id
+    assert returned[0].data.subagent_reason == "converged"
+    assert returned[0].data.subagent_result_text == "found it"
+
+    stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
+    assert stopped.data.reason == "converged"
+
+
+def test_subagent_still_running_at_run_end_is_abandoned_not_converged() -> None:
+    """A background dispatch whose notification never arrives.
+
+    The SDK reports `ResultMessage(subtype="success")` even though the
+    parent produced no answer -- its last message is literally "I'll wait
+    for the agent to complete". Left alone that scores as a pass, so the
+    frame is closed as `abandoned` and the run's stop reason follows it.
+    """
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                _user_tool_result(
+                    tool_use_id="toolu_task_1",
+                    content="Async agent launched successfully. agentId: abc123",
+                ),
+                _assistant(message_id="msg_second", input_tokens=1, output_tokens=1),
+                # No _task_notification: the child is still running.
+                _result(result="I'll wait for the agent to complete the search."),
+            ]
+        )
+    )
+    invoked = [ev for ev in events if ev.type == "avp.subagent_invoked"]
+    returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert len(invoked) == 1
+    # Spec 5.6: every subagent_invoked gets a subagent_returned.
+    assert len(returned) == 1
+    assert returned[0].data.span_id == invoked[0].data.span_id
+    assert returned[0].data.subagent_reason == "abandoned"
+    assert "still running" in (returned[0].data.subagent_result_text or "")
+
+    stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
+    assert stopped.data.reason == "abandoned"
+
+
+def test_an_errored_run_keeps_its_reason_when_a_subagent_dangles() -> None:
+    """Only `converged` is downgraded. A run that already failed reports
+    the failure -- `abandoned` must not mask a real error."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=2, output_tokens=2),
+                _task_started(),
+                _user_tool_result(tool_use_id="toolu_task_1", content="launched"),
+                _result(result="boom", is_error=True),
+            ]
+        )
+    )
+    returned = [ev for ev in events if ev.type == "avp.subagent_returned"]
+    assert len(returned) == 1
+    assert returned[0].data.subagent_reason == "abandoned"
+
+    stopped = next(ev for ev in events if ev.type == "avp.agent_stopped")
+    assert stopped.data.reason == "error"
 
 
 def test_task_progress_messages_are_dropped() -> None:

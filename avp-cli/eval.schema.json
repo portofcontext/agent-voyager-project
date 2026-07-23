@@ -48,6 +48,30 @@
           ],
           "default": null,
           "title": "Id Field"
+        },
+        "expected_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Pattern"
+        },
+        "expected_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Key"
         }
       },
       "required": [
@@ -78,6 +102,18 @@
           "title": "Input",
           "type": "string"
         },
+        "config": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
         "expected_field": {
           "anyOf": [
             {
@@ -101,6 +137,30 @@
           ],
           "default": null,
           "title": "Id Field"
+        },
+        "expected_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Pattern"
+        },
+        "expected_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Key"
         }
       },
       "required": [

@@ -168,6 +168,9 @@ def _check_structure(events: list[dict]) -> list[str]:
       span some event in the run actually emitted (the tree has no dangling
       parents). This is what pairs `tool_returned` under its `tool_invoked`,
       turns under the agent span, etc.
+    - every `subagent_invoked` frame is closed by a `subagent_returned` with
+      the same `span_id`, and a run that abandoned a subagent does not then
+      claim it converged (trajectory.md §5.6, criteria 7).
 
     Run on every checked trajectory, so it guards all cases at once.
     """
@@ -215,6 +218,53 @@ def _check_structure(events: list[dict]) -> list[str]:
             and pid not in span_ids
         ):
             reasons.append(f"structure: {t} parent_span_id {pid!r} resolves to no emitted span")
+
+    reasons.extend(_check_subagent_frames(events))
+    return reasons
+
+
+def _check_subagent_frames(events: list[dict]) -> list[str]:
+    """Every subagent frame opened must be closed, and an abandoned frame
+    must not coexist with a `converged` run.
+
+    An unclosed frame is how an asynchronously-dispatched subagent silently
+    disappears: the launch receipt returns in milliseconds, the parent stops
+    before the child reports, and without this the trajectory looks complete
+    while the delegated work simply vanished.
+    """
+    reasons: list[str] = []
+    opened: dict[str, str] = {}
+    closed: set[str] = set()
+    abandoned = False
+
+    for e in events:
+        t = e.get("type")
+        d = e.get("data", {}) if isinstance(e.get("data"), dict) else {}
+        sid = d.get("span_id")
+        if not isinstance(sid, str):
+            continue
+        if t == "avp.subagent_invoked":
+            opened[sid] = d.get("avp.subagent.name") or "?"
+        elif t == "avp.subagent_returned":
+            closed.add(sid)
+            if d.get("avp.subagent.reason") == "abandoned":
+                abandoned = True
+
+    for sid, name in opened.items():
+        if sid not in closed:
+            reasons.append(
+                f"structure: subagent_invoked {name!r} (span {sid}) has no matching "
+                "subagent_returned; the frame was left open at run end"
+            )
+
+    if abandoned:
+        stopped = [e for e in events if e.get("type") == "avp.agent_stopped"]
+        for e in stopped:
+            actual = (e.get("data") or {}).get("avp.reason")
+            if actual == "converged":
+                reasons.append(
+                    "structure: run abandoned a subagent but reports agent_stopped(converged)"
+                )
 
     return reasons
 

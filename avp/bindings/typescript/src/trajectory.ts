@@ -182,12 +182,20 @@ export type AvpMeta3 = {
 } | null;
 /**
  * Why a run terminated. v0.1 keeps the enum tight: model said done,
- * model declined, agent crashed, or operator interrupted. Cap-driven
- * stop reasons (turn / token / cost / duration limits) are not part of
- * v0.1; agents that need bounded execution wire it externally
- * (subprocess timeouts, supervisor SIGKILL).
+ * model declined, agent crashed, operator interrupted, or delegated work
+ * was left in flight. Cap-driven stop reasons (turn / token / cost /
+ * duration limits) are not part of v0.1; agents that need bounded
+ * execution wire it externally (subprocess timeouts, supervisor SIGKILL).
+ *
+ * `abandoned` is distinct from `converged` on purpose. A parent that
+ * dispatches a background subagent and stops before the child reports
+ * has produced no answer, however confident its final text sounds
+ * ("I'll wait for the agent to complete"). Scoring that as `converged`
+ * silently counts an unfinished run as a success, so it gets its own
+ * value rather than being folded into `converged` or `interrupted`
+ * (which means an operator or supervisor cut the run short).
  */
-export type StopReason = "converged" | "error" | "interrupted" | "refused";
+export type StopReason = "converged" | "error" | "interrupted" | "refused" | "abandoned";
 export type Specversion4 = "1.0";
 export type Id9 = string;
 export type Time4 = string;
@@ -361,10 +369,10 @@ export type AvpSubagentName1 = string;
 export type AvpSubagentInvocationId1 = string;
 export type AvpDurationMs2 = number;
 export type AvpSubagentResultText = string;
-export type CostUsd = number;
-export type TokensInput = number;
-export type TokensOutput = number;
-export type Turns = number;
+export type CostUsd = number | null;
+export type TokensInput = number | null;
+export type TokensOutput = number | null;
+export type Turns = number | null;
 export type Specversion9 = "1.0";
 export type Id16 = string;
 export type Time9 = string;
@@ -1224,12 +1232,20 @@ export interface SubagentReturnedData {
  * parent agent's SDK does not expose the child's per-turn events (e.g.
  * Claude Agent SDK's Task tool). `extra="allow"` so SDK-specific fields
  * (total_tokens, tool_uses, duration_ms) round-trip verbatim.
+ *
+ * Every field is optional because SDKs report different subsets: Claude
+ * Agent SDK's `TaskUsage` carries a token total with no input/output split
+ * and no cost. Per spec §2.1, absence (not a 0 sentinel) is the signal
+ * that the parent could not measure a field, so a consumer summing
+ * `cost_usd` across a run can tell "the child spent nothing" from "nobody
+ * told us." Emitters MUST omit what they cannot measure rather than
+ * zero-filling it.
  */
 export interface SubagentUsage {
-  cost_usd: CostUsd;
-  tokens_input: TokensInput;
-  tokens_output: TokensOutput;
-  turns: Turns;
+  cost_usd?: CostUsd;
+  tokens_input?: TokensInput;
+  tokens_output?: TokensOutput;
+  turns?: Turns;
   [k: string]: unknown;
 }
 export interface ErrorOccurredEvent {

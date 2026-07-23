@@ -97,9 +97,6 @@ class Turn:
     # Live tool dispatches keyed by `tool_use_id`. Populated by the
     # PreToolUse hook, popped by the PostToolUse hook to pair returns.
     tool_spans: dict[str, ToolSpan] = dataclasses.field(default_factory=dict)
-    # Live Task (subagent) dispatches keyed by `tool_use_id`. Populated
-    # by `_on_task_started`, popped by `_on_task_notification`.
-    tasks: dict[str, TaskInfo] = dataclasses.field(default_factory=dict)
     # Anthropic service tier from `usage.service_tier`; affects pricing.
     meta_service_tier: str | None = None
     # Cache-creation tokens split by TTL bucket; Anthropic prices these differently.
@@ -150,6 +147,17 @@ class RunState:
     agent_span_id: str | None = None
     # Currently open turn buffer; `None` between turns.
     turn: Turn | None = None
+    # Live Task (subagent) dispatches keyed by `tool_use_id`. Populated by
+    # `_on_task_started`, popped by `_on_task_notification`.
+    #
+    # Run-scoped, not turn-scoped. The `Agent` tool dispatches asynchronously:
+    # its `tool_result` is a launch receipt that returns in milliseconds, and
+    # the child's `TaskNotificationMessage` can arrive many turns later or not
+    # at all. Keyed on the turn, the pairing entry died at turn rollover and
+    # the frame was never closed. `TaskInfo` captures its own span / parent /
+    # step at dispatch, so nothing here depends on the dispatching turn still
+    # being open.
+    tasks: dict[str, TaskInfo] = dataclasses.field(default_factory=dict)
     # Highest step actually emitted; the next turn opens at `last_step + 1`.
     # Tracked on the run (not derived from the just-drained turn) so a gated
     # empty turn doesn't consume a step number.

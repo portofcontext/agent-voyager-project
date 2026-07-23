@@ -44,6 +44,7 @@ from avp.trajectory import (
     ErrorCode,
     ErrorOccurredData,
     ErrorOccurredEvent,
+    Event,
     RunRequestedData,
     RunRequestedEvent,
     StopReason,
@@ -235,11 +236,20 @@ async def emit_agent_stopped(
     ResultMessage handling, disconnect fallbacks, and exception paths
     can all call this safely without double-emitting. Drains any open
     turn first so the last `assistant_message` lands before the close
-    regardless of which path triggered the stop."""
+    regardless of which path triggered the stop.
+
+    Any subagent frame still open at this point is closed as `abandoned`,
+    and a `converged` stop is downgraded to match. A parent that dispatched
+    a background subagent and stopped before the child reported has not
+    converged on anything, however finished its last message sounds; the
+    SDK's `ResultMessage` says `success` in exactly that case, so the
+    correction has to happen here rather than upstream."""
     if state.stopped:
         return
     if state.agent_span_id is not None:
         await state.drain()
+    if await _close_dangling_subagents(state) and reason is StopReason.converged:
+        reason = StopReason.abandoned
     state.stopped = True
     await state.sink(
         AgentStoppedEvent(
@@ -512,17 +522,18 @@ def _task_usage_to_subagent_usage(usage: TaskUsage | None) -> SubagentUsage | No
     """Project a `TaskUsage` onto AVP `SubagentUsage`.
 
     `TaskUsage` carries `{total_tokens, tool_uses, duration_ms}` with no
-    input/output split or cost. AVP required fields stay at 0 (honest
-    sentinel -- we don't know); the raw triple rides along as extras
-    (`SubagentUsage` permits open keys).
+    input/output split or cost, so `cost_usd` / `tokens_input` /
+    `tokens_output` / `turns` cannot be filled from it.
+
+    We omit them rather than zero-filling. A 0 is indistinguishable from a
+    measured zero, so a consumer summing `cost_usd` across a run would
+    silently under-report every delegated inference and never know it. Per
+    spec §2.1 absence is the signal for "not reported"; the raw triple rides
+    along as extras (`SubagentUsage` permits open keys).
     """
     if not usage:
         return None
     return SubagentUsage(
-        cost_usd=0.0,
-        tokens_input=0,
-        tokens_output=0,
-        turns=0,
         total_tokens=int(usage.get("total_tokens") or 0),
         tool_uses=int(usage.get("tool_uses") or 0),
         duration_ms=int(usage.get("duration_ms") or 0),
@@ -554,7 +565,7 @@ async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None
         return
     span_id = new_span_id()
     task_type = message.task_type or "Task"
-    state.turn.tasks[message.tool_use_id] = TaskInfo(
+    state.tasks[message.tool_use_id] = TaskInfo(
         span_id=span_id,
         parent_span_id=state.turn.span_id,
         step=state.turn.step,
@@ -578,20 +589,26 @@ async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None
 
 
 async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
-    """Buffer the matching `subagent_returned` onto the open turn's
-    emissions. Status maps to `avp.subagent.reason`: completed→converged,
-    stopped→interrupted, failed→error (with `result.text` carrying the
-    failure summary). No-op if the dispatch wasn't recorded (e.g. the
-    parent turn drained early)."""
-    if state.turn is None or not message.tool_use_id:
+    """Emit the matching `subagent_returned`. Status maps to
+    `avp.subagent.reason`: completed→converged, stopped→interrupted,
+    failed→error (with `result.text` carrying the failure summary).
+    No-op if the dispatch wasn't recorded.
+
+    The notification can arrive long after the dispatching turn drained
+    (async `Agent` dispatch), so this buffers onto whatever turn is open
+    now and emits directly when none is. Either way the event carries the
+    span / parent / step captured at dispatch, so its place in the trace
+    is fixed regardless of when it lands on the wire."""
+    if not message.tool_use_id:
         return
-    info = state.turn.tasks.pop(message.tool_use_id, None)
+    info = state.tasks.pop(message.tool_use_id, None)
     if info is None:
         return
     duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
     summary = message.summary or ""
     reason = _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged)
-    state.turn.emissions.append(
+    await _emit_or_buffer(
+        state,
         SubagentReturnedEvent(
             subject=state.run_id,
             data=SubagentReturnedData(
@@ -609,8 +626,55 @@ async def _on_task_notification(state: RunState, message: TaskNotificationMessag
                 subagent_reason=reason,
                 subagent_usage=_task_usage_to_subagent_usage(message.usage),
             ),
-        )
+        ),
     )
+
+
+async def _emit_or_buffer(state: RunState, event: Event) -> None:
+    """Buffer onto the open turn's emissions, or emit straight to the sink
+    when no turn is open. Buffering preserves arrival order relative to the
+    turn's other events; the direct path is for events that outlive every
+    turn (an async subagent closing after the last inference)."""
+    if state.turn is not None:
+        state.turn.emissions.append(event)
+    else:
+        await state.sink(event)
+
+
+async def _close_dangling_subagents(state: RunState) -> bool:
+    """Close every subagent frame still open at run end, and report whether
+    there were any.
+
+    Spec §5.6 requires a `subagent_returned` for every `subagent_invoked`.
+    A background `Agent` dispatch whose notification never arrives would
+    otherwise leave the frame dangling, so we synthesize the close with
+    `reason = abandoned` rather than dropping it: the supervisor learns the
+    child was still in flight, which is the whole signal it needs."""
+    if not state.tasks:
+        return False
+    for tool_use_id, info in list(state.tasks.items()):
+        duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
+        await state.sink(
+            SubagentReturnedEvent(
+                subject=state.run_id,
+                data=SubagentReturnedData(
+                    trace_id=state.trace_id,
+                    span_id=info.span_id,
+                    parent_span_id=info.parent_span_id,
+                    step=info.step,
+                    subagent_name=info.task_type,
+                    subagent_invocation_id=tool_use_id,
+                    duration_ms=duration_ms,
+                    subagent_result_text=(
+                        "Run ended while this subagent was still running; "
+                        "it never reported a result."
+                    ),
+                    subagent_reason=StopReason.abandoned,
+                ),
+            )
+        )
+    state.tasks.clear()
+    return True
 
 
 async def _on_result(state: RunState, message: ResultMessage) -> None:

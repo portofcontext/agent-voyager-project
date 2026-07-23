@@ -5536,20 +5536,21 @@ impl<'de> ::serde::Deserialize<'de> for SpanId {
             })
     }
 }
-#[doc = "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, or operator interrupted. Cap-driven\nstop reasons (turn / token / cost / duration limits) are not part of\nv0.1; agents that need bounded execution wire it externally\n(subprocess timeouts, supervisor SIGKILL)."]
+#[doc = "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, operator interrupted, or delegated work\nwas left in flight. Cap-driven stop reasons (turn / token / cost /\nduration limits) are not part of v0.1; agents that need bounded\nexecution wire it externally (subprocess timeouts, supervisor SIGKILL).\n\n`abandoned` is distinct from `converged` on purpose. A parent that\ndispatches a background subagent and stops before the child reports\nhas produced no answer, however confident its final text sounds\n(\"I'll wait for the agent to complete\"). Scoring that as `converged`\nsilently counts an unfinished run as a success, so it gets its own\nvalue rather than being folded into `converged` or `interrupted`\n(which means an operator or supervisor cut the run short)."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"StopReason\","]
-#[doc = "  \"description\": \"Why a run terminated. v0.1 keeps the enum tight: model said done,\\nmodel declined, agent crashed, or operator interrupted. Cap-driven\\nstop reasons (turn / token / cost / duration limits) are not part of\\nv0.1; agents that need bounded execution wire it externally\\n(subprocess timeouts, supervisor SIGKILL).\","]
+#[doc = "  \"description\": \"Why a run terminated. v0.1 keeps the enum tight: model said done,\\nmodel declined, agent crashed, operator interrupted, or delegated work\\nwas left in flight. Cap-driven stop reasons (turn / token / cost /\\nduration limits) are not part of v0.1; agents that need bounded\\nexecution wire it externally (subprocess timeouts, supervisor SIGKILL).\\n\\n`abandoned` is distinct from `converged` on purpose. A parent that\\ndispatches a background subagent and stops before the child reports\\nhas produced no answer, however confident its final text sounds\\n(\\\"I'll wait for the agent to complete\\\"). Scoring that as `converged`\\nsilently counts an unfinished run as a success, so it gets its own\\nvalue rather than being folded into `converged` or `interrupted`\\n(which means an operator or supervisor cut the run short).\","]
 #[doc = "  \"type\": \"string\","]
 #[doc = "  \"enum\": ["]
 #[doc = "    \"converged\","]
 #[doc = "    \"error\","]
 #[doc = "    \"interrupted\","]
-#[doc = "    \"refused\""]
+#[doc = "    \"refused\","]
+#[doc = "    \"abandoned\""]
 #[doc = "  ]"]
 #[doc = "}"]
 #[doc = r" ```"]
@@ -5575,6 +5576,8 @@ pub enum StopReason {
     Interrupted,
     #[serde(rename = "refused")]
     Refused,
+    #[serde(rename = "abandoned")]
+    Abandoned,
 }
 impl ::std::fmt::Display for StopReason {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
@@ -5583,6 +5586,7 @@ impl ::std::fmt::Display for StopReason {
             Self::Error => f.write_str("error"),
             Self::Interrupted => f.write_str("interrupted"),
             Self::Refused => f.write_str("refused"),
+            Self::Abandoned => f.write_str("abandoned"),
         }
     }
 }
@@ -5594,6 +5598,7 @@ impl ::std::str::FromStr for StopReason {
             "error" => Ok(Self::Error),
             "interrupted" => Ok(Self::Interrupted),
             "refused" => Ok(Self::Refused),
+            "abandoned" => Ok(Self::Abandoned),
             _ => Err("invalid value".into()),
         }
     }
@@ -6550,41 +6555,63 @@ impl<'de> ::serde::Deserialize<'de> for SubagentReturnedEventSubject {
             })
     }
 }
-#[doc = "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events (e.g.\nClaude Agent SDK's Task tool). `extra=\"allow\"` so SDK-specific fields\n(total_tokens, tool_uses, duration_ms) round-trip verbatim."]
+#[doc = "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events (e.g.\nClaude Agent SDK's Task tool). `extra=\"allow\"` so SDK-specific fields\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.\n\nEvery field is optional because SDKs report different subsets: Claude\nAgent SDK's `TaskUsage` carries a token total with no input/output split\nand no cost. Per spec §2.1, absence (not a 0 sentinel) is the signal\nthat the parent could not measure a field, so a consumer summing\n`cost_usd` across a run can tell \"the child spent nothing\" from \"nobody\ntold us.\" Emitters MUST omit what they cannot measure rather than\nzero-filling it."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"SubagentUsage\","]
-#[doc = "  \"description\": \"Narrow totals carrier for the in-process subagent rollup.\\n\\nUsed ONLY on `subagent_returned.data[\\\"avp.subagent.usage\\\"]` when the\\nparent agent's SDK does not expose the child's per-turn events (e.g.\\nClaude Agent SDK's Task tool). `extra=\\\"allow\\\"` so SDK-specific fields\\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.\","]
+#[doc = "  \"description\": \"Narrow totals carrier for the in-process subagent rollup.\\n\\nUsed ONLY on `subagent_returned.data[\\\"avp.subagent.usage\\\"]` when the\\nparent agent's SDK does not expose the child's per-turn events (e.g.\\nClaude Agent SDK's Task tool). `extra=\\\"allow\\\"` so SDK-specific fields\\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.\\n\\nEvery field is optional because SDKs report different subsets: Claude\\nAgent SDK's `TaskUsage` carries a token total with no input/output split\\nand no cost. Per spec §2.1, absence (not a 0 sentinel) is the signal\\nthat the parent could not measure a field, so a consumer summing\\n`cost_usd` across a run can tell \\\"the child spent nothing\\\" from \\\"nobody\\ntold us.\\\" Emitters MUST omit what they cannot measure rather than\\nzero-filling it.\","]
 #[doc = "  \"type\": \"object\","]
-#[doc = "  \"required\": ["]
-#[doc = "    \"cost_usd\","]
-#[doc = "    \"tokens_input\","]
-#[doc = "    \"tokens_output\","]
-#[doc = "    \"turns\""]
-#[doc = "  ],"]
 #[doc = "  \"properties\": {"]
 #[doc = "    \"cost_usd\": {"]
 #[doc = "      \"title\": \"Cost Usd\","]
-#[doc = "      \"type\": \"number\","]
-#[doc = "      \"minimum\": 0.0"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"number\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"tokens_input\": {"]
 #[doc = "      \"title\": \"Tokens Input\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"tokens_output\": {"]
 #[doc = "      \"title\": \"Tokens Output\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    },"]
 #[doc = "    \"turns\": {"]
 #[doc = "      \"title\": \"Turns\","]
-#[doc = "      \"type\": \"integer\","]
-#[doc = "      \"minimum\": 0.0"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"integer\","]
+#[doc = "          \"minimum\": 0.0"]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
 #[doc = "  \"additionalProperties\": true"]
@@ -6593,10 +6620,24 @@ impl<'de> ::serde::Deserialize<'de> for SubagentReturnedEventSubject {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct SubagentUsage {
-    pub cost_usd: f64,
-    pub tokens_input: u64,
-    pub tokens_output: u64,
-    pub turns: u64,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub cost_usd: ::std::option::Option<f64>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub tokens_input: ::std::option::Option<u64>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub tokens_output: ::std::option::Option<u64>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub turns: ::std::option::Option<u64>,
+}
+impl ::std::default::Default for SubagentUsage {
+    fn default() -> Self {
+        Self {
+            cost_usd: Default::default(),
+            tokens_input: Default::default(),
+            tokens_output: Default::default(),
+            turns: Default::default(),
+        }
+    }
 }
 #[doc = "Identifies the supervisor that is requesting the run.\n\nCarried inside `Commission.supervisor` and projected onto the\n`run_requested` event's `data` (`avp.supervisor.name` +\n`avp.supervisor.version`) so a trajectory consumer can attribute the\nrun to the originating supervisor without an out-of-band lookup. The\nevent's `source` is `avp://agent` (the agent is the sole producer on\nthe wire); supervisor attribution lives inside `data`.\n\n`name` SHOULD be a stable identifier for the supervisor implementation\nor instance (e.g. `\"avp-cli\"`, `\"acme.scheduler\"`).\n`version` is optional but recommended; it travels with the trajectory\nand lets auditors correlate a run with the exact supervisor build\nthat requested it."]
 #[doc = r""]
