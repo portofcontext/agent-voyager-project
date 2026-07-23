@@ -206,6 +206,79 @@ def test_structure_flags_prelude_not_at_root():
     assert any("must be root" in r for r in reasons)
 
 
+def test_structure_flags_unclosed_subagent_frame():
+    """The async-dispatch failure: the frame opens, the launch receipt
+    closes the tool span, and the child never reports."""
+    _TURN = "4" * 16
+    bad = [
+        {"type": "avp.agent_started", "source": "avp://agent", "data": _span(_AGENT, _ZERO)},
+        {"type": "avp.assistant_message", "source": "avp://agent", "data": _span(_TURN, _AGENT)},
+        {
+            "type": "avp.subagent_invoked",
+            "source": "avp://agent",
+            "data": {**_span("7" * 16, _TURN), "avp.subagent.name": "local_agent"},
+        },
+        {
+            "type": "avp.agent_stopped",
+            "source": "avp://agent",
+            "data": {**_span("5" * 16, _AGENT), "avp.reason": "converged"},
+        },
+    ]
+    reasons = _check_structure(bad)
+    assert any("no matching subagent_returned" in r for r in reasons)
+
+
+def test_structure_accepts_a_closed_subagent_frame():
+    _TURN = "4" * 16
+    ok = [
+        {"type": "avp.agent_started", "source": "avp://agent", "data": _span(_AGENT, _ZERO)},
+        {"type": "avp.assistant_message", "source": "avp://agent", "data": _span(_TURN, _AGENT)},
+        {
+            "type": "avp.subagent_invoked",
+            "source": "avp://agent",
+            "data": {**_span("7" * 16, _TURN), "avp.subagent.name": "local_agent"},
+        },
+        {
+            "type": "avp.subagent_returned",
+            "source": "avp://agent",
+            "data": {**_span("7" * 16, _TURN), "avp.subagent.reason": "converged"},
+        },
+        {
+            "type": "avp.agent_stopped",
+            "source": "avp://agent",
+            "data": {**_span("5" * 16, _AGENT), "avp.reason": "converged"},
+        },
+    ]
+    assert _check_structure(ok) == []
+
+
+def test_structure_flags_abandoned_subagent_on_a_converged_run():
+    """Closing the frame is not enough: a run that abandoned its delegated
+    work must not also report success."""
+    _TURN = "4" * 16
+    bad = [
+        {"type": "avp.agent_started", "source": "avp://agent", "data": _span(_AGENT, _ZERO)},
+        {"type": "avp.assistant_message", "source": "avp://agent", "data": _span(_TURN, _AGENT)},
+        {
+            "type": "avp.subagent_invoked",
+            "source": "avp://agent",
+            "data": {**_span("7" * 16, _TURN), "avp.subagent.name": "local_agent"},
+        },
+        {
+            "type": "avp.subagent_returned",
+            "source": "avp://agent",
+            "data": {**_span("7" * 16, _TURN), "avp.subagent.reason": "abandoned"},
+        },
+        {
+            "type": "avp.agent_stopped",
+            "source": "avp://agent",
+            "data": {**_span("5" * 16, _AGENT), "avp.reason": "converged"},
+        },
+    ]
+    reasons = _check_structure(bad)
+    assert any("abandoned a subagent but reports" in r for r in reasons)
+
+
 def test_structure_flags_dangling_parent():
     # assistant_message parents under a span no event emitted.
     bad = [

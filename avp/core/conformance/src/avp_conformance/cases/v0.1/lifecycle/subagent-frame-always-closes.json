@@ -1,0 +1,56 @@
+{
+  "id": "subagent-frame-always-closes",
+  "title": "A delegated subagent's frame is closed before the run ends",
+  "description": "Given a prompt that makes the agent delegate, every avp.subagent_invoked must be paired with an avp.subagent_returned carrying the same span_id, emitted before agent_stopped. This is the async-dispatch trap: runtimes whose subagent tool returns a launch receipt immediately (the child reports later, out of band) will close the tool span while the child is still running, and a parent that stops first leaves the frame dangling. The universal structure check enforces the pairing and the converged/abandoned consistency; this case exists to actually drive a delegation so that check has something to bite on. Model-agnostic: no assertion on what the subagent found, only that its frame opened and closed.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#56-subagents",
+    "spec/v0.1/trajectory.md#8-conformance-criteria"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "subagent-frame-always-closes",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Delegate to a subagent: ask it to reply with exactly the word PONG. Wait for the subagent to report back, then tell me the single word it replied with and nothing else.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "a subagent frame opens",
+        "match": {
+          "type": "avp.subagent_invoked",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "the subagent frame closes",
+        "match": {
+          "type": "avp.subagent_returned",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "run closes after the subagent frame",
+        "match": {
+          "type": "avp.agent_stopped",
+          "source": "avp://agent"
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "label": "the run must not claim convergence while a subagent was abandoned",
+        "match": {
+          "type": "avp.subagent_returned",
+          "data": {
+            "avp.subagent.reason": "abandoned"
+          }
+        }
+      }
+    ]
+  }
+}

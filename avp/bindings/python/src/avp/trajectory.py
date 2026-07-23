@@ -72,15 +72,25 @@ T_SUBAGENT_RETURNED = "avp.subagent_returned"
 
 class StopReason(StrEnum):
     """Why a run terminated. v0.1 keeps the enum tight: model said done,
-    model declined, agent crashed, or operator interrupted. Cap-driven
-    stop reasons (turn / token / cost / duration limits) are not part of
-    v0.1; agents that need bounded execution wire it externally
-    (subprocess timeouts, supervisor SIGKILL)."""
+    model declined, agent crashed, operator interrupted, or delegated work
+    was left in flight. Cap-driven stop reasons (turn / token / cost /
+    duration limits) are not part of v0.1; agents that need bounded
+    execution wire it externally (subprocess timeouts, supervisor SIGKILL).
+
+    `abandoned` is distinct from `converged` on purpose. A parent that
+    dispatches a background subagent and stops before the child reports
+    has produced no answer, however confident its final text sounds
+    ("I'll wait for the agent to complete"). Scoring that as `converged`
+    silently counts an unfinished run as a success, so it gets its own
+    value rather than being folded into `converged` or `interrupted`
+    (which means an operator or supervisor cut the run short).
+    """
 
     converged = "converged"
     error = "error"
     interrupted = "interrupted"
     refused = "refused"
+    abandoned = "abandoned"
 
 
 class ErrorCode(StrEnum):
@@ -127,13 +137,21 @@ class SubagentUsage(BaseModel):
     parent agent's SDK does not expose the child's per-turn events (e.g.
     Claude Agent SDK's Task tool). `extra="allow"` so SDK-specific fields
     (total_tokens, tool_uses, duration_ms) round-trip verbatim.
+
+    Every field is optional because SDKs report different subsets: Claude
+    Agent SDK's `TaskUsage` carries a token total with no input/output split
+    and no cost. Per spec §2.1, absence (not a 0 sentinel) is the signal
+    that the parent could not measure a field, so a consumer summing
+    `cost_usd` across a run can tell "the child spent nothing" from "nobody
+    told us." Emitters MUST omit what they cannot measure rather than
+    zero-filling it.
     """
 
     model_config = _OPEN
-    cost_usd: float = Field(ge=0)
-    tokens_input: int = Field(ge=0)
-    tokens_output: int = Field(ge=0)
-    turns: int = Field(ge=0)
+    cost_usd: float | None = Field(default=None, ge=0)
+    tokens_input: int | None = Field(default=None, ge=0)
+    tokens_output: int | None = Field(default=None, ge=0)
+    turns: int | None = Field(default=None, ge=0)
 
 
 # ── Data payloads (per-event-type) ────────────────────────────────────────────

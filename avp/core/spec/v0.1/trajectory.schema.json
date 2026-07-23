@@ -2360,12 +2360,13 @@
       "type": "object"
     },
     "StopReason": {
-      "description": "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, or operator interrupted. Cap-driven\nstop reasons (turn / token / cost / duration limits) are not part of\nv0.1; agents that need bounded execution wire it externally\n(subprocess timeouts, supervisor SIGKILL).",
+      "description": "Why a run terminated. v0.1 keeps the enum tight: model said done,\nmodel declined, agent crashed, operator interrupted, or delegated work\nwas left in flight. Cap-driven stop reasons (turn / token / cost /\nduration limits) are not part of v0.1; agents that need bounded\nexecution wire it externally (subprocess timeouts, supervisor SIGKILL).\n\n`abandoned` is distinct from `converged` on purpose. A parent that\ndispatches a background subagent and stops before the child reports\nhas produced no answer, however confident its final text sounds\n(\"I'll wait for the agent to complete\"). Scoring that as `converged`\nsilently counts an unfinished run as a success, so it gets its own\nvalue rather than being folded into `converged` or `interrupted`\n(which means an operator or supervisor cut the run short).",
       "enum": [
         "converged",
         "error",
         "interrupted",
-        "refused"
+        "refused",
+        "abandoned"
       ],
       "title": "StopReason",
       "type": "string"
@@ -2799,35 +2800,61 @@
     },
     "SubagentUsage": {
       "additionalProperties": true,
-      "description": "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events (e.g.\nClaude Agent SDK's Task tool). `extra=\"allow\"` so SDK-specific fields\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.",
+      "description": "Narrow totals carrier for the in-process subagent rollup.\n\nUsed ONLY on `subagent_returned.data[\"avp.subagent.usage\"]` when the\nparent agent's SDK does not expose the child's per-turn events (e.g.\nClaude Agent SDK's Task tool). `extra=\"allow\"` so SDK-specific fields\n(total_tokens, tool_uses, duration_ms) round-trip verbatim.\n\nEvery field is optional because SDKs report different subsets: Claude\nAgent SDK's `TaskUsage` carries a token total with no input/output split\nand no cost. Per spec §2.1, absence (not a 0 sentinel) is the signal\nthat the parent could not measure a field, so a consumer summing\n`cost_usd` across a run can tell \"the child spent nothing\" from \"nobody\ntold us.\" Emitters MUST omit what they cannot measure rather than\nzero-filling it.",
       "properties": {
         "cost_usd": {
-          "minimum": 0,
-          "title": "Cost Usd",
-          "type": "number"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
         },
         "tokens_input": {
-          "minimum": 0,
-          "title": "Tokens Input",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Input"
         },
         "tokens_output": {
-          "minimum": 0,
-          "title": "Tokens Output",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens Output"
         },
         "turns": {
-          "minimum": 0,
-          "title": "Turns",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turns"
         }
       },
-      "required": [
-        "cost_usd",
-        "tokens_input",
-        "tokens_output",
-        "turns"
-      ],
       "title": "SubagentUsage",
       "type": "object"
     },

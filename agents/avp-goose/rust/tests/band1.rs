@@ -162,6 +162,7 @@ fn stop_emits_each_reason_on_the_wire() {
         (StopReason::Error, "error"),
         (StopReason::Interrupted, "interrupted"),
         (StopReason::Refused, "refused"),
+        (StopReason::Abandoned, "abandoned"),
     ] {
         let sink = CapturingSink::default();
         let mut em = emitter(sink.clone(), &[]);
