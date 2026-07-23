@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 # wheels. The dist name only matters for those local/workspace builds; `avp` is
 # taken on PyPI by an unrelated project, so it carries the project name instead.
 name = "agent-voyager-project"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agent Voyager Project (AVP) Python wire types (Pydantic source of truth), sinks, and resolver client for v0.1. Vendored into the avp-cli distribution; not published standalone."
 readme = "README.md"
 license = { text = "MIT" }

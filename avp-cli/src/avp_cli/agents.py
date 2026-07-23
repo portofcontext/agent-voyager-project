@@ -93,7 +93,11 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dev_manifest="agents/avp-claude-agent-sdk/python/avp-conformance.json",
         # 0.1.0: per-agent Commission allowlist maps + agent_versions pins;
         # hermetic describe probe (scrubbed HOME, build-intrinsic surface).
-        container_version="0.1.0",
+        # 0.1.1: subagent pairing state is run-scoped, so an async `Agent`
+        # dispatch whose notification lands turns later still closes its frame;
+        # a child still in flight at run end closes as `abandoned` and the run
+        # stops as `abandoned` rather than reporting `converged`.
+        container_version="0.1.1",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
@@ -140,7 +144,9 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
     # on PyPI); third-party deps resolve from PyPI at build time. Node ships the
     # `claude` CLI the agent shells out to. Assumes a python base image (the
     # default env image is one); a wrong base fails loudly in the build log.
-    version = "0.1.0"  # wheel version on the release
+    # Shared wheel version on the release: the three in-repo wheels
+    # (wire types, conformance harness, agent) are versioned in lockstep.
+    version = "0.1.1"
     wheels = " ".join(
         f"{_RELEASE_DL}/{tag}/{d.replace('-', '_')}-{version}-py3-none-any.whl"
         for d in source.wheel_dists

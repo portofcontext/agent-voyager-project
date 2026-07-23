@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avp-cli"
-version = "0.1.3"
+version = "0.1.4"
 description = "The local AVP CLI (`avp`). Build, run, and iterate on Commissions: scaffold a Commission, compare setups (Commission variants) over a dataset against a real agent, and rank a board by accuracy / pass-rate / cost / turns."
 readme = "README.md"
 license = { text = "MIT" }
