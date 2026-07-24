@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-23",
+  "$snapshot_date": "2026-07-24",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -3997,6 +3997,11 @@
       "output": 1.2,
       "cache_read": 0.075
     },
+    "chutes/Nemotron-3-Nano-Omni-30B-TEE": {
+      "input": 0.0245,
+      "output": 0.0978,
+      "cache_read": 0.01225
+    },
     "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507-TEE": {
       "input": 0.2989,
       "output": 1.1957,
@@ -5276,6 +5281,12 @@
       "output": 1.25,
       "cache_read": 0.032,
       "cache_write": 0.4
+    },
+    "crossmodel/tencent/hy3": {
+      "input": 0.16,
+      "output": 0.64,
+      "cache_read": 0.04,
+      "cache_write": 0.16
     },
     "crossmodel/tencent/hy3-preview": {
       "input": 0.19,
@@ -7635,6 +7646,16 @@
       "output": 3.2,
       "cache_read": 0.1
     },
+    "google/deep-research-max-preview-04-2026": {
+      "input": 2.0,
+      "output": 12.0,
+      "cache_read": 0.2
+    },
+    "google/deep-research-preview-04-2026": {
+      "input": 2.0,
+      "output": 12.0,
+      "cache_read": 0.2
+    },
     "google/gemini-2.0-flash": {
       "input": 0.1,
       "output": 0.4,
@@ -7643,6 +7664,10 @@
     "google/gemini-2.0-flash-lite": {
       "input": 0.075,
       "output": 0.3
+    },
+    "google/gemini-2.5-computer-use-preview-10-2025": {
+      "input": 1.25,
+      "output": 10.0
     },
     "google/gemini-2.5-flash": {
       "input": 0.3,
@@ -7677,6 +7702,10 @@
       "output": 3.0,
       "cache_read": 0.05
     },
+    "google/gemini-3-pro-image": {
+      "input": 2.0,
+      "output": 120.0
+    },
     "google/gemini-3-pro-image-preview": {
       "input": 2.0,
       "output": 120.0
@@ -7685,6 +7714,10 @@
       "input": 2.0,
       "output": 12.0,
       "cache_read": 0.2
+    },
+    "google/gemini-3.1-flash-image": {
+      "input": 0.5,
+      "output": 60.0
     },
     "google/gemini-3.1-flash-image-preview": {
       "input": 0.5,
@@ -7695,10 +7728,22 @@
       "output": 1.5,
       "cache_read": 0.025
     },
+    "google/gemini-3.1-flash-lite-image": {
+      "input": 0.25,
+      "output": 30.0
+    },
     "google/gemini-3.1-flash-lite-preview": {
       "input": 0.25,
       "output": 1.5,
       "cache_read": 0.025
+    },
+    "google/gemini-3.1-flash-live-preview": {
+      "input": 0.75,
+      "output": 4.5
+    },
+    "google/gemini-3.1-flash-tts-preview": {
+      "input": 1.0,
+      "output": 20.0
     },
     "google/gemini-3.1-pro-preview": {
       "input": 2.0,
@@ -7720,6 +7765,10 @@
       "output": 2.5,
       "cache_read": 0.03
     },
+    "google/gemini-3.5-live-translate-preview": {
+      "input": 3.5,
+      "output": 21.0
+    },
     "google/gemini-3.6-flash": {
       "input": 1.5,
       "output": 7.5,
@@ -7727,6 +7776,10 @@
     },
     "google/gemini-embedding-001": {
       "input": 0.15,
+      "output": 0.0
+    },
+    "google/gemini-embedding-2": {
+      "input": 0.2,
       "output": 0.0
     },
     "google/gemini-flash-latest": {
@@ -7742,6 +7795,18 @@
     "google/gemini-omni-flash-preview": {
       "input": 1.5,
       "output": 17.5
+    },
+    "google/gemini-robotics-er-1.6-preview": {
+      "input": 1.0,
+      "output": 5.0
+    },
+    "google/lyria-3-clip-preview": {
+      "input": 0.0,
+      "output": 0.0
+    },
+    "google/lyria-3-pro-preview": {
+      "input": 0.0,
+      "output": 0.0
     },
     "groq/llama-3.1-8b-instant": {
       "input": 0.05,
@@ -10843,6 +10908,10 @@
       "input": 0.3,
       "output": 0.9
     },
+    "llmgateway/cosmos3-super-reasoner": {
+      "input": 0.1,
+      "output": 0.3
+    },
     "llmgateway/custom": {
       "input": 0.0,
       "output": 0.0
@@ -10924,6 +10993,10 @@
       "input": 2.0,
       "output": 12.0,
       "cache_read": 0.2
+    },
+    "llmgateway/gemma-3-27b": {
+      "input": 0.1,
+      "output": 0.3
     },
     "llmgateway/gemma-4-26b-a4b-it": {
       "input": 0.07,
@@ -11234,6 +11307,14 @@
       "output": 2.0,
       "cache_read": 0.2
     },
+    "llmgateway/hermes-4-405b": {
+      "input": 1.0,
+      "output": 3.0
+    },
+    "llmgateway/hermes-4-70b": {
+      "input": 0.13,
+      "output": 0.4
+    },
     "llmgateway/kimi-k2": {
       "input": 0.57,
       "output": 2.3,
@@ -11250,9 +11331,9 @@
       "cache_read": 0.225
     },
     "llmgateway/kimi-k2.6": {
-      "input": 0.4,
-      "output": 2.2,
-      "cache_read": 0.08
+      "input": 0.22,
+      "output": 1.137,
+      "cache_read": 0.048
     },
     "llmgateway/kimi-k2.7-code": {
       "input": 0.95,
@@ -11311,6 +11392,10 @@
       "output": 0.87,
       "cache_read": 0.0036
     },
+    "llmgateway/minicpm-v-4.5": {
+      "input": 0.658,
+      "output": 1.11
+    },
     "llmgateway/minimax-m2": {
       "input": 0.2,
       "output": 1.0,
@@ -11337,9 +11422,9 @@
       "cache_write": 0.375
     },
     "llmgateway/minimax-m2.7": {
-      "input": 0.3,
-      "output": 1.2,
-      "cache_read": 0.06,
+      "input": 0.08,
+      "output": 0.32,
+      "cache_read": 0.017,
       "cache_write": 0.375
     },
     "llmgateway/minimax-m2.7-highspeed": {
@@ -11385,6 +11470,18 @@
       "input": 1.25,
       "output": 4.25,
       "cache_read": 0.15
+    },
+    "llmgateway/nemotron-3-nano-30b": {
+      "input": 0.06,
+      "output": 0.24
+    },
+    "llmgateway/nemotron-3-nano-omni": {
+      "input": 0.06,
+      "output": 0.24
+    },
+    "llmgateway/nemotron-3-super-120b": {
+      "input": 0.3,
+      "output": 0.9
     },
     "llmgateway/nemotron-3-ultra-550b": {
       "input": 0.5,
@@ -11450,8 +11547,8 @@
       "output": 4.2
     },
     "llmgateway/qwen2-5-vl-72b-instruct": {
-      "input": 0.13,
-      "output": 0.4
+      "input": 0.25,
+      "output": 0.75
     },
     "llmgateway/qwen3-235b-a22b-fp8": {
       "input": 0.2,
@@ -11462,8 +11559,8 @@
       "output": 0.58
     },
     "llmgateway/qwen3-235b-a22b-thinking-2507": {
-      "input": 0.2,
-      "output": 0.6
+      "input": 0.3,
+      "output": 3.0
     },
     "llmgateway/qwen3-30b-a3b-instruct-2507": {
       "input": 0.1,
@@ -17392,6 +17489,11 @@
       "input": 0.0,
       "output": 0.0
     },
+    "opencode/ling-3.0-flash-free": {
+      "input": 0.0,
+      "output": 0.0,
+      "cache_read": 0.0
+    },
     "opencode/mimo-v2-flash-free": {
       "input": 0.0,
       "output": 0.0,
@@ -17862,8 +17964,9 @@
       "output": 0.15
     },
     "openrouter/google/gemma-3-27b-it": {
-      "input": 0.1,
-      "output": 0.3
+      "input": 0.08,
+      "output": 0.45,
+      "cache_read": 0.04
     },
     "openrouter/google/gemma-3-4b-it": {
       "input": 0.05,
@@ -17874,8 +17977,9 @@
       "output": 0.12
     },
     "openrouter/google/gemma-4-26b-a4b-it": {
-      "input": 0.07,
-      "output": 0.34
+      "input": 0.12,
+      "output": 0.35,
+      "cache_read": 0.05
     },
     "openrouter/google/gemma-4-26b-a4b-it:free": {
       "input": 0.0,
@@ -17925,6 +18029,10 @@
       "input": 0.01,
       "output": 0.03,
       "cache_read": 0.002
+    },
+    "openrouter/inclusionai/ling-3.0-flash:free": {
+      "input": 0.0,
+      "output": 0.0
     },
     "openrouter/inclusionai/ring-2.6-1t": {
       "input": 0.075,
@@ -17977,8 +18085,8 @@
       "output": 0.201
     },
     "openrouter/meta-llama/llama-3.2-3b-instruct": {
-      "input": 0.0509,
-      "output": 0.335
+      "input": 0.05,
+      "output": 0.33
     },
     "openrouter/meta-llama/llama-3.3-70b-instruct": {
       "input": 0.13,
@@ -18018,9 +18126,8 @@
       "output": 2.2
     },
     "openrouter/minimax/minimax-m2": {
-      "input": 0.3,
-      "output": 1.2,
-      "cache_read": 0.03
+      "input": 0.255,
+      "output": 1.02
     },
     "openrouter/minimax/minimax-m2-her": {
       "input": 0.3,
@@ -18226,9 +18333,9 @@
       "output": 0.0
     },
     "openrouter/nvidia/nemotron-3-ultra-550b-a55b": {
-      "input": 0.6,
-      "output": 3.6,
-      "cache_read": 0.2
+      "input": 0.5,
+      "output": 2.2,
+      "cache_read": 0.1
     },
     "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {
       "input": 0.0,
@@ -18655,8 +18762,8 @@
       "cache_read": 0.4
     },
     "openrouter/qwen/qwen3-14b": {
-      "input": 0.12,
-      "output": 0.24
+      "input": 0.2275,
+      "output": 0.91
     },
     "openrouter/qwen/qwen3-235b-a22b": {
       "input": 0.455,
@@ -18727,9 +18834,8 @@
       "output": 3.9
     },
     "openrouter/qwen/qwen3-next-80b-a3b-instruct": {
-      "input": 0.1,
-      "output": 1.1,
-      "cache_read": 0.07
+      "input": 0.15,
+      "output": 1.2
     },
     "openrouter/qwen/qwen3-next-80b-a3b-thinking": {
       "input": 0.0975,
@@ -18745,8 +18851,8 @@
       "output": 2.6
     },
     "openrouter/qwen/qwen3-vl-30b-a3b-instruct": {
-      "input": 0.13,
-      "output": 0.52
+      "input": 0.15,
+      "output": 0.6
     },
     "openrouter/qwen/qwen3-vl-30b-a3b-thinking": {
       "input": 0.13,
@@ -18769,8 +18875,8 @@
       "output": 2.08
     },
     "openrouter/qwen/qwen3.5-27b": {
-      "input": 0.26,
-      "output": 2.6
+      "input": 0.195,
+      "output": 1.56
     },
     "openrouter/qwen/qwen3.5-35b-a3b": {
       "input": 0.14,
@@ -18798,8 +18904,9 @@
       "cache_write": 0.375
     },
     "openrouter/qwen/qwen3.6-27b": {
-      "input": 0.45,
-      "output": 2.7
+      "input": 0.6,
+      "output": 3.6,
+      "cache_read": 0.12
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
@@ -18990,8 +19097,9 @@
       "cache_read": 0.08
     },
     "openrouter/z-ai/glm-4.7-flash": {
-      "input": 0.0605,
-      "output": 0.4
+      "input": 0.06,
+      "output": 0.4,
+      "cache_read": 0.01
     },
     "openrouter/z-ai/glm-5": {
       "input": 0.95,
@@ -19009,9 +19117,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.791,
-      "output": 2.486,
-      "cache_read": 0.1469
+      "input": 0.8036,
+      "output": 2.5256,
+      "cache_read": 0.14924
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -21843,7 +21951,12 @@
       "cache_read": 0.0,
       "cache_write": 0.0
     },
-    "thinkingmachines/inkling": {
+    "thinkingmachines/thinkingmachines/Inkling": {
+      "input": 1.87,
+      "output": 4.68,
+      "cache_read": 0.374
+    },
+    "thinkingmachines/thinkingmachines/Inkling:peft:262144": {
       "input": 3.74,
       "output": 9.36,
       "cache_read": 0.748
@@ -23017,6 +23130,10 @@
     "vercel/inception/mercury-coder-small": {
       "input": 0.25,
       "output": 1.0
+    },
+    "vercel/inclusionai/ling-3.0-flash-free": {
+      "input": 0.0,
+      "output": 0.0
     },
     "vercel/interfaze/interfaze-beta": {
       "input": 1.5,
