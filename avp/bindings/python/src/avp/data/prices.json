@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-25",
+  "$snapshot_date": "2026-07-26",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -2802,8 +2802,8 @@
       "cache_write": 0.0
     },
     "ambient/moonshotai/kimi-k2.7-code": {
-      "input": 0.82,
-      "output": 3.75,
+      "input": 0.75,
+      "output": 3.5,
       "cache_read": 0.15,
       "cache_write": 0.0
     },
@@ -3079,14 +3079,6 @@
       "input": 2.5,
       "output": 10.0
     },
-    "azure-cognitive-services/cohere-command-r-08-2024": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure-cognitive-services/cohere-command-r-plus-08-2024": {
-      "input": 2.5,
-      "output": 10.0
-    },
     "azure-cognitive-services/cohere-embed-v-4-0": {
       "input": 0.12,
       "output": 0.0
@@ -3103,18 +3095,6 @@
       "input": 1.35,
       "output": 5.4
     },
-    "azure-cognitive-services/deepseek-r1-0528": {
-      "input": 1.35,
-      "output": 5.4
-    },
-    "azure-cognitive-services/deepseek-v3-0324": {
-      "input": 1.14,
-      "output": 4.56
-    },
-    "azure-cognitive-services/deepseek-v3.1": {
-      "input": 0.56,
-      "output": 1.68
-    },
     "azure-cognitive-services/deepseek-v3.2": {
       "input": 0.58,
       "output": 1.68
@@ -3127,14 +3107,6 @@
       "input": 0.5,
       "output": 1.5
     },
-    "azure-cognitive-services/gpt-3.5-turbo-0301": {
-      "input": 1.5,
-      "output": 2.0
-    },
-    "azure-cognitive-services/gpt-3.5-turbo-0613": {
-      "input": 3.0,
-      "output": 4.0
-    },
     "azure-cognitive-services/gpt-3.5-turbo-1106": {
       "input": 1.0,
       "output": 2.0
@@ -3142,14 +3114,6 @@
     "azure-cognitive-services/gpt-3.5-turbo-instruct": {
       "input": 1.5,
       "output": 2.0
-    },
-    "azure-cognitive-services/gpt-4": {
-      "input": 60.0,
-      "output": 120.0
-    },
-    "azure-cognitive-services/gpt-4-32k": {
-      "input": 60.0,
-      "output": 120.0
     },
     "azure-cognitive-services/gpt-4-turbo": {
       "input": 10.0,
@@ -3189,11 +3153,6 @@
       "output": 10.0,
       "cache_read": 0.13
     },
-    "azure-cognitive-services/gpt-5-chat": {
-      "input": 1.25,
-      "output": 10.0,
-      "cache_read": 0.13
-    },
     "azure-cognitive-services/gpt-5-codex": {
       "input": 1.25,
       "output": 10.0,
@@ -3218,11 +3177,6 @@
       "output": 10.0,
       "cache_read": 0.125
     },
-    "azure-cognitive-services/gpt-5.1-chat": {
-      "input": 1.25,
-      "output": 10.0,
-      "cache_read": 0.125
-    },
     "azure-cognitive-services/gpt-5.1-codex": {
       "input": 1.25,
       "output": 10.0,
@@ -3237,11 +3191,6 @@
       "input": 1.75,
       "output": 14.0,
       "cache_read": 0.125
-    },
-    "azure-cognitive-services/gpt-5.2-chat": {
-      "input": 1.75,
-      "output": 14.0,
-      "cache_read": 0.175
     },
     "azure-cognitive-services/gpt-5.2-codex": {
       "input": 1.75,
@@ -3297,16 +3246,6 @@
       "output": 30.0,
       "cache_read": 0.5
     },
-    "azure-cognitive-services/grok-4-fast-reasoning": {
-      "input": 0.2,
-      "output": 0.5,
-      "cache_read": 0.05
-    },
-    "azure-cognitive-services/kimi-k2-thinking": {
-      "input": 0.6,
-      "output": 2.5,
-      "cache_read": 0.15
-    },
     "azure-cognitive-services/kimi-k2.5": {
       "input": 0.6,
       "output": 3.0
@@ -3314,14 +3253,6 @@
     "azure-cognitive-services/kimi-k2.6": {
       "input": 0.95,
       "output": 4.0
-    },
-    "azure-cognitive-services/llama-3.2-11b-vision-instruct": {
-      "input": 0.37,
-      "output": 0.37
-    },
-    "azure-cognitive-services/llama-3.2-90b-vision-instruct": {
-      "input": 2.04,
-      "output": 2.04
     },
     "azure-cognitive-services/llama-3.3-70b-instruct": {
       "input": 0.71,
@@ -3335,41 +3266,13 @@
       "input": 0.2,
       "output": 0.78
     },
-    "azure-cognitive-services/meta-llama-3-70b-instruct": {
-      "input": 2.68,
-      "output": 3.54
-    },
-    "azure-cognitive-services/meta-llama-3-8b-instruct": {
-      "input": 0.3,
-      "output": 0.61
-    },
-    "azure-cognitive-services/meta-llama-3.1-405b-instruct": {
-      "input": 5.33,
-      "output": 16.0
-    },
-    "azure-cognitive-services/meta-llama-3.1-70b-instruct": {
-      "input": 2.68,
-      "output": 3.54
-    },
-    "azure-cognitive-services/meta-llama-3.1-8b-instruct": {
-      "input": 0.3,
-      "output": 0.61
-    },
     "azure-cognitive-services/ministral-3b": {
       "input": 0.04,
       "output": 0.04
     },
-    "azure-cognitive-services/mistral-large-2411": {
-      "input": 2.0,
-      "output": 6.0
-    },
     "azure-cognitive-services/mistral-medium-2505": {
       "input": 0.4,
       "output": 2.0
-    },
-    "azure-cognitive-services/mistral-nemo": {
-      "input": 0.15,
-      "output": 0.15
     },
     "azure-cognitive-services/mistral-small-2503": {
       "input": 0.1,
@@ -3383,11 +3286,6 @@
       "input": 15.0,
       "output": 60.0,
       "cache_read": 7.5
-    },
-    "azure-cognitive-services/o1-mini": {
-      "input": 1.1,
-      "output": 4.4,
-      "cache_read": 0.55
     },
     "azure-cognitive-services/o3": {
       "input": 2.0,
@@ -3403,38 +3301,6 @@
       "input": 1.1,
       "output": 4.4,
       "cache_read": 0.275
-    },
-    "azure-cognitive-services/phi-3-medium-128k-instruct": {
-      "input": 0.17,
-      "output": 0.68
-    },
-    "azure-cognitive-services/phi-3-medium-4k-instruct": {
-      "input": 0.17,
-      "output": 0.68
-    },
-    "azure-cognitive-services/phi-3-mini-128k-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure-cognitive-services/phi-3-mini-4k-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure-cognitive-services/phi-3-small-128k-instruct": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure-cognitive-services/phi-3-small-8k-instruct": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure-cognitive-services/phi-3.5-mini-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure-cognitive-services/phi-3.5-moe-instruct": {
-      "input": 0.16,
-      "output": 0.64
     },
     "azure-cognitive-services/phi-4": {
       "input": 0.125,
@@ -3545,14 +3411,6 @@
       "input": 2.5,
       "output": 10.0
     },
-    "azure/cohere-command-r-08-2024": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure/cohere-command-r-plus-08-2024": {
-      "input": 2.5,
-      "output": 10.0
-    },
     "azure/cohere-embed-v-4-0": {
       "input": 0.12,
       "output": 0.0
@@ -3568,18 +3426,6 @@
     "azure/deepseek-r1": {
       "input": 1.35,
       "output": 5.4
-    },
-    "azure/deepseek-r1-0528": {
-      "input": 1.35,
-      "output": 5.4
-    },
-    "azure/deepseek-v3-0324": {
-      "input": 1.14,
-      "output": 4.56
-    },
-    "azure/deepseek-v3.1": {
-      "input": 0.56,
-      "output": 1.68
     },
     "azure/deepseek-v3.2": {
       "input": 0.58,
@@ -3601,14 +3447,6 @@
       "input": 0.5,
       "output": 1.5
     },
-    "azure/gpt-3.5-turbo-0301": {
-      "input": 1.5,
-      "output": 2.0
-    },
-    "azure/gpt-3.5-turbo-0613": {
-      "input": 3.0,
-      "output": 4.0
-    },
     "azure/gpt-3.5-turbo-1106": {
       "input": 1.0,
       "output": 2.0
@@ -3616,14 +3454,6 @@
     "azure/gpt-3.5-turbo-instruct": {
       "input": 1.5,
       "output": 2.0
-    },
-    "azure/gpt-4": {
-      "input": 60.0,
-      "output": 120.0
-    },
-    "azure/gpt-4-32k": {
-      "input": 60.0,
-      "output": 120.0
     },
     "azure/gpt-4-turbo": {
       "input": 10.0,
@@ -3663,11 +3493,6 @@
       "output": 10.0,
       "cache_read": 0.13
     },
-    "azure/gpt-5-chat": {
-      "input": 1.25,
-      "output": 10.0,
-      "cache_read": 0.13
-    },
     "azure/gpt-5-codex": {
       "input": 1.25,
       "output": 10.0,
@@ -3692,11 +3517,6 @@
       "output": 10.0,
       "cache_read": 0.125
     },
-    "azure/gpt-5.1-chat": {
-      "input": 1.25,
-      "output": 10.0,
-      "cache_read": 0.125
-    },
     "azure/gpt-5.1-codex": {
       "input": 1.25,
       "output": 10.0,
@@ -3717,17 +3537,7 @@
       "output": 14.0,
       "cache_read": 0.125
     },
-    "azure/gpt-5.2-chat": {
-      "input": 1.75,
-      "output": 14.0,
-      "cache_read": 0.175
-    },
     "azure/gpt-5.2-codex": {
-      "input": 1.75,
-      "output": 14.0,
-      "cache_read": 0.175
-    },
-    "azure/gpt-5.3-chat": {
       "input": 1.75,
       "output": 14.0,
       "cache_read": 0.175
@@ -3814,16 +3624,6 @@
       "input": 2.0,
       "output": 6.0
     },
-    "azure/grok-4-fast-reasoning": {
-      "input": 0.2,
-      "output": 0.5,
-      "cache_read": 0.05
-    },
-    "azure/kimi-k2-thinking": {
-      "input": 0.6,
-      "output": 2.5,
-      "cache_read": 0.15
-    },
     "azure/kimi-k2.5": {
       "input": 0.6,
       "output": 3.0
@@ -3831,14 +3631,6 @@
     "azure/kimi-k2.6": {
       "input": 0.95,
       "output": 4.0
-    },
-    "azure/llama-3.2-11b-vision-instruct": {
-      "input": 0.37,
-      "output": 0.37
-    },
-    "azure/llama-3.2-90b-vision-instruct": {
-      "input": 2.04,
-      "output": 2.04
     },
     "azure/llama-3.3-70b-instruct": {
       "input": 0.71,
@@ -3852,41 +3644,13 @@
       "input": 0.2,
       "output": 0.78
     },
-    "azure/meta-llama-3-70b-instruct": {
-      "input": 2.68,
-      "output": 3.54
-    },
-    "azure/meta-llama-3-8b-instruct": {
-      "input": 0.3,
-      "output": 0.61
-    },
-    "azure/meta-llama-3.1-405b-instruct": {
-      "input": 5.33,
-      "output": 16.0
-    },
-    "azure/meta-llama-3.1-70b-instruct": {
-      "input": 2.68,
-      "output": 3.54
-    },
-    "azure/meta-llama-3.1-8b-instruct": {
-      "input": 0.3,
-      "output": 0.61
-    },
     "azure/ministral-3b": {
       "input": 0.04,
       "output": 0.04
     },
-    "azure/mistral-large-2411": {
-      "input": 2.0,
-      "output": 6.0
-    },
     "azure/mistral-medium-2505": {
       "input": 0.4,
       "output": 2.0
-    },
-    "azure/mistral-nemo": {
-      "input": 0.15,
-      "output": 0.15
     },
     "azure/mistral-small-2503": {
       "input": 0.1,
@@ -3900,11 +3664,6 @@
       "input": 15.0,
       "output": 60.0,
       "cache_read": 7.5
-    },
-    "azure/o1-mini": {
-      "input": 1.1,
-      "output": 4.4,
-      "cache_read": 0.55
     },
     "azure/o3": {
       "input": 2.0,
@@ -3920,38 +3679,6 @@
       "input": 1.1,
       "output": 4.4,
       "cache_read": 0.275
-    },
-    "azure/phi-3-medium-128k-instruct": {
-      "input": 0.17,
-      "output": 0.68
-    },
-    "azure/phi-3-medium-4k-instruct": {
-      "input": 0.17,
-      "output": 0.68
-    },
-    "azure/phi-3-mini-128k-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure/phi-3-mini-4k-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure/phi-3-small-128k-instruct": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure/phi-3-small-8k-instruct": {
-      "input": 0.15,
-      "output": 0.6
-    },
-    "azure/phi-3.5-mini-instruct": {
-      "input": 0.13,
-      "output": 0.52
-    },
-    "azure/phi-3.5-moe-instruct": {
-      "input": 0.16,
-      "output": 0.64
     },
     "azure/phi-4": {
       "input": 0.125,
@@ -5228,6 +4955,12 @@
       "cache_write": 6.25
     },
     "crossmodel/anthropic/claude-opus-4-8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25
+    },
+    "crossmodel/anthropic/claude-opus-5": {
       "input": 5.0,
       "output": 25.0,
       "cache_read": 0.5,
@@ -17853,8 +17586,8 @@
       "cache_write": 2.5
     },
     "openrouter/arcee-ai/trinity-large-thinking": {
-      "input": 0.25,
-      "output": 0.8,
+      "input": 0.22,
+      "output": 0.85,
       "cache_read": 0.06
     },
     "openrouter/arcee-ai/virtuoso-large": {
@@ -17956,9 +17689,9 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.0938,
-      "output": 0.1876,
-      "cache_read": 0.01876
+      "input": 0.14,
+      "output": 0.28,
+      "cache_read": 0.028
     },
     "openrouter/deepseek/deepseek-v4-pro": {
       "input": 0.435,
@@ -18381,9 +18114,9 @@
       "cache_read": 0.095
     },
     "openrouter/moonshotai/kimi-k2.6": {
-      "input": 0.684,
-      "output": 3.42,
-      "cache_read": 0.144
+      "input": 0.646,
+      "output": 2.72,
+      "cache_read": 0.1088
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
       "input": 0.78,
@@ -18731,8 +18464,7 @@
     },
     "openrouter/openai/gpt-oss-20b": {
       "input": 0.03,
-      "output": 0.13,
-      "cache_read": 0.03
+      "output": 0.14
     },
     "openrouter/openai/gpt-oss-20b:free": {
       "input": 0.0,
@@ -18899,8 +18631,8 @@
       "output": 0.52
     },
     "openrouter/qwen/qwen3-30b-a3b-instruct-2507": {
-      "input": 0.1,
-      "output": 0.3
+      "input": 0.04815,
+      "output": 0.19305
     },
     "openrouter/qwen/qwen3-30b-a3b-thinking-2507": {
       "input": 0.13,
@@ -19022,8 +18754,9 @@
       "cache_write": 0.375
     },
     "openrouter/qwen/qwen3.6-27b": {
-      "input": 0.289,
-      "output": 2.4
+      "input": 0.3,
+      "output": 2.0,
+      "cache_read": 0.15
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
       "input": 0.14,
@@ -19234,9 +18967,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.7966,
-      "output": 2.5036,
-      "cache_read": 0.14794
+      "input": 0.7182,
+      "output": 2.2572,
+      "cache_read": 0.13338
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
@@ -23055,12 +22788,6 @@
       "cache_read": 0.5,
       "cache_write": 6.25
     },
-    "vercel/anthropic/claude-opus-4.7-fast": {
-      "input": 30.0,
-      "output": 150.0,
-      "cache_read": 3.0,
-      "cache_write": 37.5
-    },
     "vercel/anthropic/claude-opus-4.8": {
       "input": 5.0,
       "output": 25.0,
@@ -23220,11 +22947,6 @@
       "cache_read": 0.03
     },
     "vercel/google/gemini-3.1-flash-lite-image": {
-      "input": 0.25,
-      "output": 1.5,
-      "cache_read": 0.03
-    },
-    "vercel/google/gemini-3.1-flash-lite-preview": {
       "input": 0.25,
       "output": 1.5,
       "cache_read": 0.03
@@ -23540,11 +23262,6 @@
       "output": 10.0,
       "cache_read": 0.125
     },
-    "vercel/openai/gpt-5-chat": {
-      "input": 1.25,
-      "output": 10.0,
-      "cache_read": 0.125
-    },
     "vercel/openai/gpt-5-codex": {
       "input": 1.25,
       "output": 10.0,
@@ -23590,11 +23307,6 @@
       "cache_read": 0.125
     },
     "vercel/openai/gpt-5.2": {
-      "input": 1.75,
-      "output": 14.0,
-      "cache_read": 0.175
-    },
-    "vercel/openai/gpt-5.2-chat": {
       "input": 1.75,
       "output": 14.0,
       "cache_read": 0.175
@@ -24083,9 +23795,9 @@
       "cache_read": 0.3
     },
     "wandb/MiniMaxAI/MiniMax-M3": {
-      "input": 0.29,
-      "output": 1.2,
-      "cache_read": 0.06
+      "input": 0.23,
+      "output": 0.96,
+      "cache_read": 0.05
     },
     "wandb/OpenPipe/Qwen3-14B-Instruct": {
       "input": 0.05,
@@ -24148,9 +23860,9 @@
       "cache_read": 0.14
     },
     "wandb/google/gemma-4-31B-it": {
-      "input": 0.12,
-      "output": 0.35,
-      "cache_read": 0.09
+      "input": 0.1,
+      "output": 0.34,
+      "cache_read": 0.1
     },
     "wandb/ibm-granite/granite-4.1-8b": {
       "input": 0.05,
@@ -24183,14 +23895,14 @@
       "cache_read": 0.1
     },
     "wandb/moonshotai/Kimi-K2.6": {
-      "input": 0.95,
-      "output": 4.0,
-      "cache_read": 0.16
+      "input": 0.65,
+      "output": 3.41,
+      "cache_read": 0.15
     },
     "wandb/moonshotai/Kimi-K2.7-Code": {
-      "input": 0.94,
-      "output": 4.0,
-      "cache_read": 0.19
+      "input": 0.71,
+      "output": 3.5,
+      "cache_read": 0.15
     },
     "wandb/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8": {
       "input": 0.2,
@@ -24203,9 +23915,9 @@
       "cache_read": 0.15
     },
     "wandb/openai/gpt-oss-120b": {
-      "input": 0.04,
-      "output": 0.14,
-      "cache_read": 0.04
+      "input": 0.03,
+      "output": 0.17,
+      "cache_read": 0.03
     },
     "wandb/openai/gpt-oss-20b": {
       "input": 0.03,
@@ -24218,9 +23930,9 @@
       "cache_read": 0.26
     },
     "wandb/zai-org/GLM-5.2": {
-      "input": 1.39,
-      "output": 4.4,
-      "cache_read": 0.26
+      "input": 0.76,
+      "output": 2.42,
+      "cache_read": 0.14
     },
     "xai/grok-4.20-0309-non-reasoning": {
       "input": 1.25,
