@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-07-26",
+  "$snapshot_date": "2026-07-27",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -2784,9 +2784,9 @@
       "output": 3.2
     },
     "ambient/ambient/large": {
-      "input": 1.05,
-      "output": 4.4,
-      "cache_read": 0.2,
+      "input": 0.76,
+      "output": 2.42,
+      "cache_read": 0.14,
       "cache_write": 0.0
     },
     "ambient/deepseek/deepseek-v4-flash": {
@@ -2802,7 +2802,7 @@
       "cache_write": 0.0
     },
     "ambient/moonshotai/kimi-k2.7-code": {
-      "input": 0.75,
+      "input": 0.73,
       "output": 3.5,
       "cache_read": 0.15,
       "cache_write": 0.0
@@ -2820,9 +2820,9 @@
       "cache_write": 0.0
     },
     "ambient/z-ai/glm-5.2": {
-      "input": 1.05,
-      "output": 4.4,
-      "cache_read": 0.2,
+      "input": 0.76,
+      "output": 2.42,
+      "cache_read": 0.14,
       "cache_write": 0.0
     },
     "ambient/zai-org/GLM-5.1-FP8": {
@@ -4126,6 +4126,12 @@
       "cache_write": 6.25
     },
     "cloudflare-ai-gateway/anthropic/claude-opus-4-8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25
+    },
+    "cloudflare-ai-gateway/anthropic/claude-opus-5": {
       "input": 5.0,
       "output": 25.0,
       "cache_read": 0.5,
@@ -6384,11 +6390,6 @@
       "output": 3.48,
       "cache_read": 0.145
     },
-    "fireworks-ai/accounts/fireworks/models/glm-5p1": {
-      "input": 1.4,
-      "output": 4.4,
-      "cache_read": 0.26
-    },
     "fireworks-ai/accounts/fireworks/models/glm-5p2": {
       "input": 1.4,
       "output": 4.4,
@@ -6428,11 +6429,6 @@
       "input": 0.4,
       "output": 1.6,
       "cache_read": 0.08
-    },
-    "fireworks-ai/accounts/fireworks/routers/glm-5p1-fast": {
-      "input": 2.8,
-      "output": 8.8,
-      "cache_read": 0.52
     },
     "fireworks-ai/accounts/fireworks/routers/glm-5p2-fast": {
       "input": 2.1,
@@ -17889,14 +17885,6 @@
       "output": 0.625,
       "cache_read": 0.015
     },
-    "openrouter/inflection/inflection-3-pi": {
-      "input": 2.5,
-      "output": 10.0
-    },
-    "openrouter/inflection/inflection-3-productivity": {
-      "input": 2.5,
-      "output": 10.0
-    },
     "openrouter/kwaipilot/kat-coder-air-v2.5": {
       "input": 0.15,
       "output": 0.6,
@@ -18119,7 +18107,7 @@
       "cache_read": 0.1088
     },
     "openrouter/moonshotai/kimi-k2.7-code": {
-      "input": 0.78,
+      "input": 0.73,
       "output": 3.5,
       "cache_read": 0.15
     },
@@ -18275,10 +18263,6 @@
       "output": 0.6,
       "cache_read": 0.075
     },
-    "openrouter/openai/gpt-4o-mini-search-preview": {
-      "input": 0.15,
-      "output": 0.6
-    },
     "openrouter/openai/gpt-4o-search-preview": {
       "input": 2.5,
       "output": 10.0
@@ -18335,7 +18319,7 @@
     "openrouter/openai/gpt-5.1-codex": {
       "input": 1.25,
       "output": 10.0,
-      "cache_read": 0.125
+      "cache_read": 0.13
     },
     "openrouter/openai/gpt-5.1-codex-max": {
       "input": 1.25,
@@ -18345,7 +18329,7 @@
     "openrouter/openai/gpt-5.1-codex-mini": {
       "input": 0.25,
       "output": 2.0,
-      "cache_read": 0.025
+      "cache_read": 0.03
     },
     "openrouter/openai/gpt-5.2": {
       "input": 1.75,
@@ -18627,8 +18611,8 @@
       "output": 3.0
     },
     "openrouter/qwen/qwen3-30b-a3b": {
-      "input": 0.13,
-      "output": 0.52
+      "input": 0.12,
+      "output": 0.5
     },
     "openrouter/qwen/qwen3-30b-a3b-instruct-2507": {
       "input": 0.04815,
@@ -18967,9 +18951,9 @@
       "cache_read": 0.1794
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.7182,
-      "output": 2.2572,
-      "cache_read": 0.13338
+      "input": 0.6692,
+      "output": 2.1032,
+      "cache_read": 0.12428
     },
     "openrouter/z-ai/glm-5v-turbo": {
       "input": 1.2,
