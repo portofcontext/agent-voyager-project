@@ -27,10 +27,6 @@ The JSON Schemas under `avp/core/spec/v0.1/` are generated FROM these models
 bindings are generated from the same schemas, so the three languages cannot
 drift.
 
-`src/avp/archive/` holds the retired pre-restructure implementation (old agent
-loop, driver protocols, tracer, resolver). Do NOT import from it; it exists for
-review only.
-
 ## Quickstart
 
 The repo is a uv workspace; bootstrap once from the repo root:
@@ -62,5 +58,4 @@ src/avp/
   pricing.py        # bundled price table + compute_cost
   sink.py           # EventSink type + stdio_sink / jsonl_sink
   data/prices.json  # bundled price table (synced from models.dev)
-  archive/          # retired pre-restructure impl, do NOT import
 ```

@@ -23,8 +23,8 @@
  *
  * v0.1 has no supervisor → agent push channel. The supervisor pipes
  * `Commission` in once and reads the NDJSON trajectory out. Managed assets
- * carry inline connection material on the Commission, so there is no
- * resolver round-trip; the agent dials and loads them directly.
+ * carry inline connection material on the Commission; the agent dials and
+ * loads them directly.
  *
  * ## Regenerating
  *

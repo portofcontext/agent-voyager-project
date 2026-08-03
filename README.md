@@ -14,10 +14,7 @@ AVP is an open standard for AI agents and the systems that run them. A superviso
    I.   SUPERVISOR  ═════ Commission ══════▶  AGENT
         what to do · which model · what's available
 
-  II.   AGENT  ◀═══ avp.resolve(ref) ═══▶  SUPERVISOR
-        MCP connections · skill content · subagent commissions
-
- III.   AGENT  ═════ Trajectory ══════▶  SUPERVISOR
+  II.   SUPERVISOR  ◀═════ Trajectory ══════  AGENT
         every model + tool call · usage · outcome
 
 ≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
@@ -26,7 +23,7 @@ AVP is an open standard for AI agents and the systems that run them. A superviso
 
 The supervisor sends a small JSON **Commission** (what to do, which model, what resources are available); the agent runs the work and streams back a **Trajectory** of events that records every model and tool call, what the run cost, and how it ended.
 
-AVP picks a shared vocabulary instead of inventing new wire formats: [CloudEvents](https://cloudevents.io/) for the event envelope, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [JSON-RPC](https://www.jsonrpc.org/specification) for resource lookup, [MCP](https://modelcontextprotocol.io/) for tools, and [Agent Skills](https://agentskills.io/specification) for skill files. What AVP adds on top is small. See [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping.
+AVP picks a shared vocabulary instead of inventing new wire formats: [CloudEvents](https://cloudevents.io/) for the event envelope, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [MCP](https://modelcontextprotocol.io/) for the tool-server connections a Commission carries, and [Agent Skills](https://agentskills.io/specification) for the skill content it carries. What AVP adds on top is small. See [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping.
 
 Built and maintained by the [Port of Context](https://github.com/portofcontext) team.
 
@@ -140,16 +137,15 @@ make sync && make check
 
 ## What AVP defines
 
-Four specs, each adoptable on its own:
+Three specs, each adoptable on its own:
 
 | Sub-spec | What it covers |
 |---|---|
 | [Trajectory](avp/core/spec/v0.1/trajectory.md) | The stream of events an agent emits as it runs. |
 | [Commission](avp/core/spec/v0.1/commission.md) | The run configuration the supervisor sends at startup. |
 | [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md) | What an agent advertises about itself before a run. |
-| [Resolver API](avp/core/spec/v0.1/resolver.md) | The JSON-RPC service the agent calls to look up referenced resources. |
 
-The first three are data-shape specs; the Resolver API is the only two-party wire protocol. The umbrella [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md) indexes all four and the shared concerns.
+All three are data-shape specs and compose independently. The umbrella [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md) indexes them and the shared concerns.
 
 ## More
 

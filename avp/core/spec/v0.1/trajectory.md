@@ -193,7 +193,7 @@ Subagents are usually dispatched as tool calls from the model's perspective: the
 
 ## 6. Skills
 
-`Commission.skills[]` declares [Agent Skills](https://agentskills.io/specification) the agent loads into the model's context for the run. Each entry carries inline file content (see [Commission §3.2](./commission.md)); no resolver round-trip is needed. The agent injects `SKILL.md` content into the model's context at startup per agentskills.io semantics.
+`Commission.skills[]` declares [Agent Skills](https://agentskills.io/specification) the agent loads into the model's context for the run. Each entry carries inline file content (see [Commission §3.2](./commission.md)). The agent injects `SKILL.md` content into the model's context at startup per agentskills.io semantics.
 
 The registration view is `agent_started.data["avp.skills"]`. No discrete per-skill load event exists on the wire: how and when a SKILL.md body enters the model's context window is an implementation detail of the agent.
 

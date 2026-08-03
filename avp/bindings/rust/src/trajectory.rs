@@ -2880,14 +2880,14 @@ pub struct Citation {
     #[serde(rename = "type")]
     pub type_: ::std::string::String,
 }
-#[doc = "Supervisor's declaration of the supervisor-managed environment slice.\n\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\nmaterial; no resolver round-trip is needed. The agent dials MCP servers\nand injects skill content directly from these fields at startup.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills) is invisible to AVP and the Commission entirely. The agent's own\ncontribution surfaces in `agent_described.data[\"avp.descriptor\"]` so\nconsumers can audit what the agent showed up with. The agent's runtime\nlayer merges its internal contribution with the Commission-managed assets\ninto one bag the loop dispatches against; collisions on `id` are a\nstartup error."]
+#[doc = "Supervisor's declaration of the supervisor-managed environment slice.\n\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\nmaterial. The agent dials MCP servers and injects skill content directly\nfrom these fields at startup.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills) is invisible to AVP and the Commission entirely. The agent's own\ncontribution surfaces in `agent_described.data[\"avp.descriptor\"]` so\nconsumers can audit what the agent showed up with. The agent's runtime\nlayer merges its internal contribution with the Commission-managed assets\ninto one bag the loop dispatches against; collisions on `id` are a\nstartup error."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
 #[doc = r" ```json"]
 #[doc = "{"]
 #[doc = "  \"title\": \"Commission\","]
-#[doc = "  \"description\": \"Supervisor's declaration of the supervisor-managed environment slice.\\n\\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\\nmaterial; no resolver round-trip is needed. The agent dials MCP servers\\nand injects skill content directly from these fields at startup.\\n\\nAnything the agent provides on its own (in-process tools, baked-in\\nskills) is invisible to AVP and the Commission entirely. The agent's own\\ncontribution surfaces in `agent_described.data[\\\"avp.descriptor\\\"]` so\\nconsumers can audit what the agent showed up with. The agent's runtime\\nlayer merges its internal contribution with the Commission-managed assets\\ninto one bag the loop dispatches against; collisions on `id` are a\\nstartup error.\","]
+#[doc = "  \"description\": \"Supervisor's declaration of the supervisor-managed environment slice.\\n\\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\\nmaterial. The agent dials MCP servers and injects skill content directly\\nfrom these fields at startup.\\n\\nAnything the agent provides on its own (in-process tools, baked-in\\nskills) is invisible to AVP and the Commission entirely. The agent's own\\ncontribution surfaces in `agent_described.data[\\\"avp.descriptor\\\"]` so\\nconsumers can audit what the agent showed up with. The agent's runtime\\nlayer merges its internal contribution with the Commission-managed assets\\ninto one bag the loop dispatches against; collisions on `id` are a\\nstartup error.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"model\","]

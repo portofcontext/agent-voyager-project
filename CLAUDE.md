@@ -28,13 +28,12 @@ agent-execution case:
 - **AVP Trajectory** (`avp/core/spec/v0.1/trajectory.md`): event stream
 - **AVP Commission** (`avp/core/spec/v0.1/commission.md`): run-config object
 - **AVP Agent Descriptor** (`avp/core/spec/v0.1/agent-descriptor.md`): agent self-description
-- **AVP Resolver API** (`avp/core/spec/v0.1/resolver.md`): JSON-RPC for ref dereferencing
 
-The three data-shape specs (Trajectory/Commission/Agent Descriptor) compose
-independently; the Resolver API is the only thing that's actually a
-protocol (wire-level request/response). Each spec carries its own RFC
-2119 keywords and conformance criteria for its layer; an
-implementation may adopt one or all.
+All three are data-shape specs and compose independently. v0.1 has no
+two-party wire protocol: the supervisor sends a Commission, the agent runs,
+the trajectory comes back, and there is no mid-run supervisor → agent
+channel. Each spec carries its own RFC 2119 keywords and conformance
+criteria for its layer; an implementation may adopt one or all.
 
 ## Agents and supervisors
 
@@ -76,14 +75,11 @@ change MUST stay compatible with the upstream spec it's anchored to:
   owns its attribute namespace (`avp.usage.input_tokens`, `avp.tool.name`,
   ...) and ships a documented AVP → `gen_ai.*` projection in
   `FOUNDATIONS.md` for consumers forwarding into OTel-native backends.
-- **JSON-RPC 2.0** for the AVP Resolver API. Agent calls `avp.resolve`
-  and `avp.spawn_subagent` against a supervisor-stood-up service to dereference
-  opaque refs in `Commission.{mcp_servers,skills,subagents}[].ref`
-- **MCP 2025-11-25** for the connection material the resolver returns for
-  each `mcp_server` ref (transport / url / auth / command etc.); the agent's
-  MCP client consumes it
-- **Agent Skills** (agentskills.io) for SKILL.md content (returned by the
-  resolver for each `skill` ref)
+- **MCP 2025-11-25** for the connection material each `Commission.mcp_servers[]`
+  entry carries inline (transport / url / auth / command etc.); the agent's
+  MCP client consumes it directly from the Commission at startup
+- **Agent Skills** (agentskills.io) for SKILL.md content, carried inline on
+  each `Commission.skills[]` entry
 
 AVP-specific concepts (no-mid-run-reach-in, trajectory contract) live
 under the `avp.*` attribute namespace. See `FOUNDATIONS.md`
@@ -207,7 +203,7 @@ tag can't drift:
 
 - Do NOT add prose docs that duplicate the specs under `avp/core/spec/v0.1/`. Two
   sources of truth drift. Either update the relevant spec
-  (`trajectory.md` / `commission.md` / `agent-descriptor.md` / `resolver.md`) or
+  (`trajectory.md` / `commission.md` / `agent-descriptor.md`) or
   update `README.md`'s explanation; not both with the same content.
 - Do NOT update test counts in any markdown doc. They will go stale within
   a week. The conformance harness CLI prints the live count.
@@ -235,9 +231,9 @@ the **local CLI** `avp` lives at `avp-cli/`. The uv (Python) workspace is rooted
 at the repo root (`pyproject.toml` + `ruff.toml` + `uv.lock`) and spans every
 Python member across those trees.
 
-- `avp/core/spec/v0.1/`: the four normative specs (Trajectory, Commission, Agent Descriptor, Resolver API), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
+- `avp/core/spec/v0.1/`: the three normative specs (Trajectory, Commission, Agent Descriptor), their JSON Schemas (auto-generated), and an umbrella `README.md` that indexes them.
 - `avp/core/conformance/`: the `avp-conformance` package (import root `avp_conformance`) — the harness CLI, the matcher, and the packaged language-agnostic cases (`src/avp_conformance/cases/v0.1/`). Depends on the `avp` types package; it is NOT part of it.
-- `avp/bindings/python/`: the `avp` package — wire types (Pydantic source of truth), the sink type + stdio/jsonl sinks, and the resolver client. No harness, no cases.
+- `avp/bindings/python/`: the `avp` package — wire types (Pydantic source of truth) plus the sink type + stdio/jsonl sinks. No harness, no cases.
 - `avp/bindings/rust/`, `avp/bindings/typescript/`: the generated Rust + TypeScript bindings of the wire types.
 - `agents/avp-claude-agent-sdk/python/`: observer-pattern agent over Claude Agent SDK.
   `AVPClaudeSDKClient` is its drop-in `ClaudeSDKClient` subclass (emits the
@@ -265,4 +261,4 @@ Python member across those trees.
   pre-commit floor, with the paid real-model target (`conformance-check`)
   for wire / agent-loop changes (see above).
 - `FOUNDATIONS.md`: what AVP is built on (CloudEvents, OTel GenAI, OTel spans,
-  JSON-RPC 2.0, MCP, Agent Skills, JSON Schema) and what it specializes.
+  MCP, Agent Skills, JSON Schema) and what it specializes.

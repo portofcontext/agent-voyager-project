@@ -6,16 +6,15 @@ description: |
 
 # AVP: Agent Voyager Project
 
-AVP is an open standard for the agent-execution case, defined by four specs that compose independently:
+AVP is an open standard for the agent-execution case, defined by three specs that compose independently:
 
 - **Commission** ([`avp/core/spec/v0.1/commission.md`](avp/core/spec/v0.1/commission.md)): what the supervisor sends the agent at startup (model, prompt, inline managed assets, built-in allowlists).
 - **Agent Descriptor** ([`avp/core/spec/v0.1/agent-descriptor.md`](avp/core/spec/v0.1/agent-descriptor.md)): what the agent advertises about itself before a run begins.
 - **Trajectory** ([`avp/core/spec/v0.1/trajectory.md`](avp/core/spec/v0.1/trajectory.md)): the stream of source-tagged events the agent emits as it runs.
-- **Resolver API** ([`avp/core/spec/v0.1/resolver.md`](avp/core/spec/v0.1/resolver.md)): an optional JSON-RPC service for dereferencing opaque refs. The three data-shape specs above are the common path and do not depend on it; the in-repo agents carry inline connection material on the Commission instead of dialing a resolver.
 
 The shape of one run: supervisor sends a Commission; the agent reads it, connects any inline managed assets, runs, and emits the trajectory. **No supervisor to agent push channel.** Once the Commission is sent, the supervisor only observes.
 
-**AVP is built on existing standards.** Every event is a [CloudEvents 1.0](https://cloudevents.io/) envelope carrying OTel span identification (`trace_id`, `span_id`, `parent_span_id`). The `data` payload uses AVP's own `avp.*` attribute namespace (`avp.usage`, `avp.tool.name`, ...); the [OpenTelemetry GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) conventions are NOT on the wire, but a documented `avp.*` to `gen_ai.*` projection ships for consumers forwarding into OTel-native backends. RPC payloads are [JSON-RPC 2.0](https://www.jsonrpc.org/specification). Tool descriptors are [MCP](https://modelcontextprotocol.io/)-shaped. See `FOUNDATIONS.md` for the full mapping.
+**AVP is built on existing standards.** Every event is a [CloudEvents 1.0](https://cloudevents.io/) envelope carrying OTel span identification (`trace_id`, `span_id`, `parent_span_id`). The `data` payload uses AVP's own `avp.*` attribute namespace (`avp.usage`, `avp.tool.name`, ...); the [OpenTelemetry GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/) conventions are NOT on the wire, but a documented `avp.*` to `gen_ai.*` projection ships for consumers forwarding into OTel-native backends. Tool descriptors are [MCP](https://modelcontextprotocol.io/)-shaped. Skill content follows [Agent Skills](https://agentskills.io/specification). See `FOUNDATIONS.md` for the full mapping.
 
 ## Terms
 
@@ -162,12 +161,11 @@ Common temptations to push back on:
 
 ## When in doubt, read these (in this order)
 
-1. [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md): umbrella entry point indexing the four specs plus shared concerns (foundations, transports, deployment scope, versioning).
+1. [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md): umbrella entry point indexing the three specs plus shared concerns (foundations, transports, deployment scope, versioning).
 2. The relevant spec for your question:
    - **Event stream / loop / cost rules / event catalog** -> `avp/core/spec/v0.1/trajectory.md`
    - **Run-config / allowlists / inline assets** -> `avp/core/spec/v0.1/commission.md`
    - **Agent self-description / capabilities** -> `avp/core/spec/v0.1/agent-descriptor.md`
-   - **JSON-RPC methods, bootstrap, error handling** -> `avp/core/spec/v0.1/resolver.md`
 3. `avp/core/spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape, generated from the Pydantic models.
 4. `avp/core/conformance/src/avp_conformance/cases/v0.1/`: executable test cases that pin down behavior, plus `COVERAGE.md` (what the suite covers and the deliberate gaps). Read the cases as worked examples of "what's the right answer when...".
 5. `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py`: the Pydantic models that are the source of truth for the schemas, one file per spec. Do NOT inline-redefine the wire types; import them.

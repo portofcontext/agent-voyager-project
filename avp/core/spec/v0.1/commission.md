@@ -137,7 +137,7 @@ inlined into `McpServerHttp.headers` (which is for non-secret headers only).
 
 ## 3. Managed assets (inline)
 
-`mcp_servers` and `skills` carry **inline connection material** in v0.1. No resolver round-trip is needed; the agent dials MCP servers and loads skill content directly from the Commission at startup.
+`mcp_servers` and `skills` carry **inline connection material**. The agent dials MCP servers and loads skill content directly from the Commission at startup.
 
 ### 3.1 MCP server entries
 
