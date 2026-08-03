@@ -55,7 +55,8 @@ agent (today: `avp-claude-agent-sdk` and `avp-goose`).
 Prelude, descriptor, Commission-side tool filtering, the tool round-trip, cost
 accounting, and span structure are all covered. The remaining gaps are the
 provider-nondeterministic events, the invalid-Commission entrypoint behavior,
-and the entire resolver layer.
+and the inline assets a Commission carries (skills, and the subagent frames an
+agent opens on its own trajectory).
 
 ## Gaps
 
@@ -91,21 +92,21 @@ and the entire resolver layer.
   silently falls back and converges. Making this a case requires agents to
   enumerate `supported_models` and fail fast with
   `error_occurred(unsupported_model)`: a real feature, not a quick green.
+- **Subagent frames.** `subagent_invoked` -> `subagent_returned` pairing on the
+  shared frame `span_id`, with the sub-loop's events chaining off it. v0.1
+  subagents are in-process frames on the parent's trajectory, so nothing is
+  missing infrastructurally; the blocker is that delegation is the model's
+  decision and no case can force it. (`avp.subagent.run_id` is reserved for a
+  future revision and is absent here, so it is not part of what a case would
+  assert.)
 
-### Blocked on infrastructure (no in-repo resolver)
+### Feasible, just not written
 
-The entire Resolver API (`resolver.md`) has zero conformance coverage. It is the
-least-baked part of v0.1 and there is no in-repo resolver service to dial.
-
-- **Resolver fail-fast + resolved-ref path.** A Commission with managed
-  `mcp_servers`/`skills`/`subagents` but no resolver wired ->
-  `error_occurred(resolver_not_configured)`, plus the happy path.
-- **Managed subagents.** `subagent_invoked` -> `subagent_returned` pairing,
-  shared frame `span_id`, `avp.subagent.run_id`. (No conformance case exercises
-  the pair on a real agent yet.)
-- **Managed skills.** Resolution + `agent_started` listing the skill. Inline
-  skills (Commission carries file content, no resolver) are feasible sooner:
-  goose materializes them, the claude SDK path is unverified.
+- **Inline skills.** A `Commission.skills[]` entry carries its content inline,
+  so the case needs no infrastructure: assert the agent materializes it and
+  that `agent_started` lists it. goose materializes inline skills today; the
+  claude SDK path is unverified, which is exactly what makes this worth a
+  cross-agent case.
 
 ## Not expressible cross-agent
 

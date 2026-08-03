@@ -22,7 +22,7 @@ Slim, single-runner conformance for AVP v0.1.
 - **No embedded reference agent.** Per `python/avp/CLAUDE.md`. The CLI shells out to the SDK under test for every `run` invocation.
 - **Agent CLI contract: `run` + `ping` subcommands.** Commission delivered via `--commission <json|path>`; trajectory written to `--out <path.jsonl>`; `ping --out <path>` writes `{"type": "pong"}` as a liveness check. The conformance CLI appends these subcommands + flags to the manifest's `command` prefix.
 - **Cases are cross-SDK; built-ins are injected as fixtures.** A test case's optional `built_in` field tells the SDK what to pretend its built-ins are for the run (system prompt, tools, skills, mcp_servers, subagents). The SDK then applies Commission overrides per spec. This is how merge / override behavior gets tested deterministically across any SDK without coupling case files to a specific implementation.
-- **No stubbing of model / tool / resolver outcomes.** Cases run against the SDK's real model; expectations are structural (event ordering, source field, presence of fields), not numeric. Numeric bounds on `final_state` remain available for SDKs that opt into determinism.
+- **No stubbing of model / tool outcomes.** Cases run against the SDK's real model; expectations are structural (event ordering, source field, presence of fields), not numeric. Numeric bounds on `final_state` remain available for SDKs that opt into determinism.
 - **Written from scratch.** `avp/archive/conformance/` is a read-only reference; do not import from it or port code verbatim. Skim it for prior decisions, then write fresh against the slim plan below.
 
 ## Out of scope (for this refactor)

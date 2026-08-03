@@ -12,7 +12,7 @@
 | `prompt`                      | *(query call arg)*              | Direct.                                                                      |
 | `mcp_servers` (inline)        | `mcp_servers` dict              | `id` becomes the dict key. `McpServerHttp` → `McpHttpServerConfig`;           |
 |                               |                                 | `McpServerStdio.command[0]` → SDK `command`, `command[1:] + args` → SDK      |
-|                               |                                 | `args`. No resolver round-trip; connection material is inline on the wire.   |
+|                               |                                 | `args`. Connection material comes inline off the Commission.                 |
 | `skills` (inline)             | `skills` list + files on disk   | The SDK `skills` field is a name-based context filter that cannot ingest      |
 |                               |                                 | inline content, so each `Skill.files` is materialized to                      |
 |                               |                                 | `<cwd>/.claude/skills/<id>/` (where the CLI discovers project skills once     |

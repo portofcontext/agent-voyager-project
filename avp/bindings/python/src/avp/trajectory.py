@@ -157,8 +157,8 @@ class SubagentUsage(BaseModel):
 # ── Data payloads (per-event-type) ────────────────────────────────────────────
 #
 # Every AVP event's `data` field carries an OTel span triple plus the
-# event-type-specific attributes. Field names with dots (the OTel/MCP/JSON-RPC
-# wire form) are declared via Pydantic aliases; Python attribute names use
+# event-type-specific attributes. Field names with dots (the OTel/MCP wire
+# form) are declared via Pydantic aliases; Python attribute names use
 # underscores. `model_dump(by_alias=True)` produces the wire form on emit.
 
 

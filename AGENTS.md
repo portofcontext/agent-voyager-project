@@ -4,8 +4,8 @@ Orientation for any coding agent working with AVP. AVP (the **Agent Voyager
 Project**) is an open standard for the agent-execution case: a **supervisor**
 sends an **agent** a JSON **Commission**, the agent runs and streams back a
 **Trajectory** of events, and the supervisor only observes (no mid-run push).
-AVP specializes existing standards (CloudEvents, OpenTelemetry, JSON-RPC, MCP,
-Agent Skills) rather than inventing wire formats.
+AVP specializes existing standards (CloudEvents, OpenTelemetry, MCP, Agent
+Skills) rather than inventing wire formats.
 
 Deeper references: [`SKILL.md`](SKILL.md) is the full AVP skill (concepts + the
 three build patterns); [`README.md`](README.md) is install + quickstart;
