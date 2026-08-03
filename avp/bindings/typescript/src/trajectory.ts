@@ -6,7 +6,7 @@
  */
 
 /**
- * Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See avp/core/spec/v0.1/trajectory.md.
+ * Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Inside `data`, all attributes are namespaced `avp.*` except the OpenTelemetry span triple (`trace_id`, `span_id`, `parent_span_id`); OpenTelemetry GenAI semantic conventions (`gen_ai.*`) are a projection target, not carried on the wire (see FOUNDATIONS.md). See avp/core/spec/v0.1/trajectory.md.
  */
 export type AVPV01TrajectoryEvent =
   | RunRequestedEvent

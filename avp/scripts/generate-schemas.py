@@ -89,12 +89,12 @@ def main() -> int:
         description=(
             "Agent → supervisor event. Each event is a CloudEvent 1.0 "
             "envelope carrying a typed `data` payload. The `type` field is "
-            "the discriminator (reverse-DNS, `avp.*` namespace). Attribute "
-            "names inside `data` follow OpenTelemetry GenAI semantic "
-            "conventions and OTel span identification "
-            "(`trace_id`, `span_id`, `parent_span_id`); AVP-specific "
-            "attributes are namespaced `avp.*`. See "
-            "avp/core/spec/v0.1/trajectory.md."
+            "the discriminator (reverse-DNS, `avp.*` namespace). Inside "
+            "`data`, all attributes are namespaced `avp.*` except the "
+            "OpenTelemetry span triple (`trace_id`, `span_id`, "
+            "`parent_span_id`); OpenTelemetry GenAI semantic conventions "
+            "(`gen_ai.*`) are a projection target, not carried on the wire "
+            "(see FOUNDATIONS.md). See avp/core/spec/v0.1/trajectory.md."
         ),
     )
     write_json(out_dir / "trajectory.schema.json", trajectory_schema)
@@ -145,11 +145,15 @@ def main() -> int:
         "title": "Agent Voyager Project (AVP) v0.1",
         "description": (
             "Umbrella bundle for the AVP v0.1 wire format. Built on "
-            "CloudEvents 1.0 (envelopes), OpenTelemetry GenAI semantic "
-            "conventions and span identification (data attribute names), "
+            "CloudEvents 1.0 (envelopes), OpenTelemetry span "
+            "identification (`trace_id` / `span_id` / `parent_span_id` on "
+            "every event's `data`), "
             "MCP (tool descriptors and supervisor-side tool dispatch), "
             "Agent Skills (SKILL.md), "
-            "and JSON Schema 2020-12 (this document). AVP-specific "
+            "and JSON Schema 2020-12 (this document). Data attribute names "
+            "are AVP's own `avp.*` namespace; OpenTelemetry GenAI semantic "
+            "conventions are a documented projection target only, not "
+            "carried on the wire. AVP-specific "
             "concepts (the no-mid-run-reach-in topology, the "
             "trajectory-as-source-of-truth contract) live under the "
             "`avp.*` attribute namespace. See FOUNDATIONS.md and the "

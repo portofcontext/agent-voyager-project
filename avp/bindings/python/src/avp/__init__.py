@@ -1,7 +1,8 @@
 """avp — Python reference implementation for the Agent Voyager Project (v0.1 model).
 
-The wire format is built on CloudEvents 1.0, OpenTelemetry GenAI semantic
-conventions, OTel spans, MCP, Agent Skills, and JSON Schema.
+The wire format is built on CloudEvents 1.0, OTel span identification, MCP,
+Agent Skills, and JSON Schema. OpenTelemetry GenAI semantic conventions are a
+projection target (`avp.gen_ai`), not on the wire.
 See FOUNDATIONS.md for the full mapping.
 
 Public API lives in the spec-scoped submodules; this package's top level
