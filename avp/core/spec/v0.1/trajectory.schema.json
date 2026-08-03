@@ -3654,5 +3654,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avp.dev/schema/v0.1/trajectory.schema.json",
   "title": "AVP v0.1 Trajectory (Event)",
-  "description": "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md."
+  "description": "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See avp/core/spec/v0.1/trajectory.md."
 }

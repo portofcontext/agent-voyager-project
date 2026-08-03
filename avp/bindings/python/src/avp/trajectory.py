@@ -3,7 +3,7 @@
 Defines the agent-emitted event stream: CloudEvents envelopes, typed
 `data` payloads (one per event type), the `Event` discriminated union,
 and the `parse_event` / `event_to_wire` helpers. This module mirrors
-the [Trajectory spec](../../../../spec/v0.1/trajectory.md).
+the [Trajectory spec](../../../../core/spec/v0.1/trajectory.md).
 
 Consumers wanting only the event stream can:
 
@@ -25,7 +25,7 @@ The wire format is built on:
 
 All AVP-defined `data` attributes (token / cost / model / tool /
 subagent / refusal / step / content) live under the single `avp.*` namespace.
-See `spec/v0.1/trajectory.md` for the normative attribute reference.
+See `avp/core/spec/v0.1/trajectory.md` for the normative attribute reference.
 """
 
 from __future__ import annotations
@@ -482,7 +482,7 @@ def parse_event(payload: dict[str, Any]) -> Event | UnknownEvent:
 
     Known types validate via the `Event` discriminated-union TypeAdapter.
     Unknown types validate as `UnknownEvent`: envelope + span triple are
-    enforced; the rest of `data` is opaque. Per spec/v0.1/README.md §4,
+    enforced; the rest of `data` is opaque. Per avp/core/spec/v0.1/README.md §4,
     consumers MUST pass through unknown types without error.
     """
     _adapter = TypeAdapter(Event)

@@ -42,7 +42,7 @@ export type AvpSource = string | null;
 export type Capabilities = string[] | null;
 
 /**
- * The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md.
+ * The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See avp/core/spec/v0.1/agent-descriptor.md.
  */
 export interface AVPV01AgentDescriptor {
   agent_name: AgentName;

@@ -2,7 +2,7 @@
 
 Defines the Commission shape (supervisor → agent setup message) and the
 managed-asset entries the supervisor declares inline. This module mirrors
-the [Commission spec](../../../../spec/v0.1/commission.md).
+the [Commission spec](../../../../core/spec/v0.1/commission.md).
 
 Consumers wanting only the run-config object can:
 

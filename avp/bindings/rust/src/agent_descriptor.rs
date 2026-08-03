@@ -167,7 +167,7 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
             })
     }
 }
-#[doc = "The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md."]
+#[doc = "The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See avp/core/spec/v0.1/agent-descriptor.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
@@ -175,7 +175,7 @@ impl<'de> ::serde::Deserialize<'de> for AgentVersion {
 #[doc = "{"]
 #[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/agent-descriptor.schema.json\","]
 #[doc = "  \"title\": \"AVP v0.1 Agent Descriptor\","]
-#[doc = "  \"description\": \"The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See spec/v0.1/agent-descriptor.md.\","]
+#[doc = "  \"description\": \"The agent's self-description. Enumerates built-in tools, subagents, and skills triggerable without supervisor configuration, plus the agent's identity, capabilities, and supported models. Pre-flight (`<agent> describe` stdout) and run-time (`agent_described.data['avp.descriptor']`) views MUST match for the same agent build. See avp/core/spec/v0.1/agent-descriptor.md.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"agent_name\","]

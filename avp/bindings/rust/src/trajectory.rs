@@ -2599,7 +2599,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpToolCallId {
             })
     }
 }
-#[doc = "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md."]
+#[doc = "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See avp/core/spec/v0.1/trajectory.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
@@ -2607,7 +2607,7 @@ impl<'de> ::serde::Deserialize<'de> for AvpToolCallId {
 #[doc = "{"]
 #[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/trajectory.schema.json\","]
 #[doc = "  \"title\": \"AVP v0.1 Trajectory (Event)\","]
-#[doc = "  \"description\": \"Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md.\","]
+#[doc = "  \"description\": \"Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See avp/core/spec/v0.1/trajectory.md.\","]
 #[doc = "  \"oneOf\": ["]
 #[doc = "    {"]
 #[doc = "      \"$ref\": \"#/$defs/RunRequestedEvent\""]
