@@ -9,10 +9,10 @@ A test case is six fields:
 - `expectations` — assertions over the emitted trajectory.
 
 Tests verify that the SDK correctly merges/overrides its built-ins with the
-Commission per the AVP spec. Stubbing of model responses / tool outputs /
-resolver outcomes is NOT part of v0.1 conformance: cases run against the
-SDK's real model, and expectations are structural (event ordering, source
-field, presence of required fields), not numeric (token counts, costs).
+Commission per the AVP spec. Stubbing of model responses / tool outputs is
+NOT part of v0.1 conformance: cases run against the SDK's real model, and
+expectations are structural (event ordering, source field, presence of
+required fields), not numeric (token counts, costs).
 """
 
 from __future__ import annotations

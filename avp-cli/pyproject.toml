@@ -41,7 +41,7 @@ dev = ["pytest>=7", "ruff>=0.6"]
 avp = "avp_cli.cli:main"
 
 [project.urls]
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/avp/core/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp_cli"]

@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # taken on PyPI by an unrelated project, so it carries the project name instead.
 name = "agent-voyager-project"
 version = "0.1.1"
-description = "Agent Voyager Project (AVP) Python wire types (Pydantic source of truth), sinks, and resolver client for v0.1. Vendored into the avp-cli distribution; not published standalone."
+description = "Agent Voyager Project (AVP) Python wire types (Pydantic source of truth) and event sinks for v0.1. Vendored into the avp-cli distribution; not published standalone."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -21,7 +21,7 @@ dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.urls]
 Homepage = "https://github.com/portofcontext/agent-voyager-project"
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/avp/core/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp"]

@@ -29,7 +29,7 @@ pub mod error {
         }
     }
 }
-#[doc = "Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md."]
+#[doc = "Supervisor → agent setup message. Declares prompt, model, and the supervisor-managed assets the agent starts with: mcp_servers carrying their connection material inline and skills carrying their content inline. Sent once at startup. See avp/core/spec/v0.1/commission.md."]
 #[doc = r""]
 #[doc = r" <details><summary>JSON schema</summary>"]
 #[doc = r""]
@@ -37,7 +37,7 @@ pub mod error {
 #[doc = "{"]
 #[doc = "  \"$id\": \"https://avp.dev/schema/v0.1/commission.schema.json\","]
 #[doc = "  \"title\": \"AVP v0.1 Commission\","]
-#[doc = "  \"description\": \"Supervisor → agent setup message. Declares prompt, model, and supervisor-managed assets (mcp_servers, skills, subagents) as opaque {id, ref} pairs the agent dereferences via the AVP Resolver API at startup. Sent once at startup. See spec/v0.1/commission.md.\","]
+#[doc = "  \"description\": \"Supervisor → agent setup message. Declares prompt, model, and the supervisor-managed assets the agent starts with: mcp_servers carrying their connection material inline and skills carrying their content inline. Sent once at startup. See avp/core/spec/v0.1/commission.md.\","]
 #[doc = "  \"type\": \"object\","]
 #[doc = "  \"required\": ["]
 #[doc = "    \"model\","]

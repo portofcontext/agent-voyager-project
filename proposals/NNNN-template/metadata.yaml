@@ -17,12 +17,11 @@ created: "YYYY-MM-DD"
 # ISO 8601 date. Update on each status transition.
 last-updated: "YYYY-MM-DD"
 
-# Which specs this proposal touches. Any of: trajectory, commission, agent-descriptor, resolver
+# Which specs this proposal touches. Any of: trajectory, commission, agent-descriptor
 specs:
   - trajectory
 # - commission
 # - agent-descriptor
-# - resolver
 
 # Target umbrella release for landing this proposal (when accepted).
 # Leave blank while provisional.

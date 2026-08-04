@@ -10,8 +10,6 @@ In scope:
   type for "consume one trajectory event"; `stdio_sink` is the trivial
   NDJSON-to-stdout built-in. No base class, no agent abstraction: integrator
   packages own their own agent shape and just take an `EventSink`.
-- **Resolver client + worked sample** — one client class for talking to a
-  resolver service according to the resolver.md spec. The server itself is not in this repo for now.
 
 The **conformance harness** is NOT here anymore: it ships as the separate
 `avp-conformance` package at `avp/core/conformance/` (it depends on these
@@ -24,7 +22,6 @@ Out of scope here (belongs in the agent package that needs it, not in `avp`):
 - Transport stubs (serve_stdio, serve_ws) — deployment concern
 - MCP / skill / subagent dispatch helpers
 - Opinionated tracers with scope ergonomics
-- Multi-class resolver server/client abstractions
 
 Duplication across two integrator packages is cheaper than a shared helper
 that keeps regrowing.

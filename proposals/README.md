@@ -1,6 +1,6 @@
 # AVP-RFCs
 
-AVP-RFCs are how the Agent Voyager Project evolves. An **AVP-RFC** (Agent Voyager RFC) is a written design document that proposes, communicates, and coordinates a new effort: a new event type, a new resolver method, a structural change to a spec, a process change.
+AVP-RFCs are how the Agent Voyager Project evolves. An **AVP-RFC** (Agent Voyager RFC) is a written design document that proposes, communicates, and coordinates a new effort: a new event type, a new Commission field, a structural change to a spec, a process change.
 
 > Acronym note: **AVP** is the project (Agent Voyager Project). **AVP-RFC** is a proposal against it. Keep them separate.
 
@@ -10,7 +10,7 @@ The format is borrowed from [Kubernetes Enhancement Proposals (KEPs)](https://gi
 
 File an AVP-RFC for:
 
-- **Wire-format changes**: new event types, new Commission fields, new Agent Descriptor fields, new Resolver API methods, breaking changes to existing shapes.
+- **Wire-format changes**: new event types, new Commission fields, new Agent Descriptor fields, breaking changes to existing shapes.
 - **Stability transitions**: moving a spec from `alpha` to `beta` to `stable`, or marking one `deprecated`.
 - **Process changes**: changes to the AVP-RFC process itself, governance, the conformance suite contract.
 - **Architectural decisions**: adding/removing a spec, splitting one in two, renaming.
@@ -18,7 +18,7 @@ File an AVP-RFC for:
 You do **not** need an AVP-RFC for:
 
 - Bug fixes, performance work, or refactors that don't change the wire.
-- Reference-implementation changes that don't touch any spec doc under `spec/v0.1/`.
+- Reference-implementation changes that don't touch any spec doc under `avp/core/spec/v0.1/`.
 - Documentation cleanups.
 
 When in doubt, file one. AVP-RFCs are cheap; downstream churn from un-discussed wire changes is expensive.
@@ -69,6 +69,6 @@ proposals/
 
 ## Relationship to spec versioning
 
-The four specs ([Trajectory](../avp/core/spec/v0.1/trajectory.md) / [Commission](../avp/core/spec/v0.1/commission.md) / [Agent Descriptor](../avp/core/spec/v0.1/agent-descriptor.md) / [Resolver API](../avp/core/spec/v0.1/resolver.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
+The three specs ([Trajectory](../avp/core/spec/v0.1/trajectory.md) / [Commission](../avp/core/spec/v0.1/commission.md) / [Agent Descriptor](../avp/core/spec/v0.1/agent-descriptor.md)) share the umbrella `v0.1` version. AVP-RFCs are the granular record of *how* each spec evolved between releases; the version bump bundles a set of `implemented` AVP-RFCs.
 
 When an AVP-RFC lands a wire-affecting change, its `metadata.yaml` records which spec(s) it touches and the target umbrella version. Future tooling can render an "AVP-RFCs implemented since v0.1" view by querying that metadata.

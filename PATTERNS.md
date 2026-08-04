@@ -41,7 +41,7 @@ You own the `messages.create` / `chat.completions.create` loop. AVP slots in aro
 
 **What you emit.** Open with the prelude (`run_requested` → `agent_described` → `agent_started`), then per turn one `assistant_message` (carrying `avp.content`, `avp.usage`, `avp.cost_usd`), with `tool_invoked` / `tool_returned` around each dispatch; close with `agent_stopped` and a stop reason. You publish per-turn deltas, not cumulative snapshots: the consumer reduces cost / token totals from the `assistant_message` deltas.
 
-**Honoring the Commission.** Translate the Commission's fields into your API params before the run starts: `enabled_builtin_tools` filters the tool list you hand the model, inline `mcp_servers[]` are dialed by your MCP client, and inline `skills[]` content is materialized into the system prompt. Managed assets carry their connection material on the Commission, so there is no resolver round-trip in this path.
+**Honoring the Commission.** Translate the Commission's fields into your API params before the run starts: `enabled_builtin_tools` filters the tool list you hand the model, inline `mcp_servers[]` are dialed by your MCP client, and inline `skills[]` content is materialized into the system prompt. Managed assets carry their connection material on the Commission, so everything you need is in hand before the first model turn.
 
 ## Conformance
 

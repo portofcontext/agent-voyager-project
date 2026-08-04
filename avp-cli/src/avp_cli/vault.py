@@ -2,7 +2,7 @@
 
 A Commission carries credentials only as handles (`{"vault": "<name>"}`); the
 real values live with the supervisor, never on the wire or in the trajectory.
-This module is the supervisor's resolver.
+This module is the supervisor side of that lookup.
 
 Backends, first hit wins:
   1. host env var  `AVP_VAULT_<UPPER_SNAKE(handle)>`  (e.g. handle "openrouter"

@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.urls]
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/spec/v0.1"
+Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/avp/core/spec/v0.1"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/avp_claude_agent_sdk"]

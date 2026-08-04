@@ -36,7 +36,7 @@ The following registry attributes are NOT in the projection:
     single event. Build via `avp.history.to_messages(events_so_far)`
     and attach manually when entering an `assistant_message` span.
 
-**Out of scope for AVP (see [trajectory.md §1.1](../../../spec/v0.1/trajectory.md) non-goals):**
+**Out of scope for AVP (see [trajectory.md §1.1](../../../../core/spec/v0.1/trajectory.md) non-goals):**
 
   - Retrieval: `gen_ai.retrieval.{query.text, documents}` — RAG-specific.
   - Evaluation: `gen_ai.evaluation.{name, score.value, score.label,

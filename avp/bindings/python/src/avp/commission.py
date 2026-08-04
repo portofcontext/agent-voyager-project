@@ -2,7 +2,7 @@
 
 Defines the Commission shape (supervisor → agent setup message) and the
 managed-asset entries the supervisor declares inline. This module mirrors
-the [Commission spec](../../../../spec/v0.1/commission.md).
+the [Commission spec](../../../../core/spec/v0.1/commission.md).
 
 Consumers wanting only the run-config object can:
 
@@ -152,8 +152,8 @@ class Commission(BaseModel):
     """Supervisor's declaration of the supervisor-managed environment slice.
 
     Managed asset entries (`mcp_servers`, `skills`) carry inline connection
-    material; no resolver round-trip is needed. The agent dials MCP servers
-    and injects skill content directly from these fields at startup.
+    material. The agent dials MCP servers and injects skill content directly
+    from these fields at startup.
 
     Anything the agent provides on its own (in-process tools, baked-in
     skills) is invisible to AVP and the Commission entirely. The agent's own

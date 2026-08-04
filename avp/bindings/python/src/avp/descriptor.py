@@ -3,7 +3,7 @@
 Defines `AgentDescriptor` (the agent's self-description shape) and the
 declaration types it carries: `ToolDecl`, `SubagentDecl`, `SkillDecl`,
 `McpServerDecl`. This module mirrors the
-[Agent Descriptor spec](../../../../spec/v0.1/agent-descriptor.md).
+[Agent Descriptor spec](../../../../core/spec/v0.1/agent-descriptor.md).
 
 Implementors building an `agent_described` event construct
 `AgentDescriptor` with typed decl lists:
@@ -22,7 +22,7 @@ the same shape (`agent_started.data["avp.tools"]`,
 `agent_started.data["avp.mcp_servers"]`).
 
 This module is self-contained: importing from it does not drag in
-Trajectory / Commission / Resolver API types.
+Trajectory / Commission types.
 """
 
 from __future__ import annotations

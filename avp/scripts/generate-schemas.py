@@ -74,10 +74,10 @@ def main() -> int:
         title="AVP v0.1 Commission",
         description=(
             "Supervisor → agent setup message. Declares prompt, model, and "
-            "supervisor-managed assets (mcp_servers, skills, subagents) as "
-            "opaque {id, ref} pairs the agent dereferences via the AVP "
-            "Resolver API at startup. Sent once at startup. See "
-            "spec/v0.1/commission.md."
+            "the supervisor-managed assets the agent starts with: "
+            "mcp_servers carrying their connection material inline and "
+            "skills carrying their content inline. Sent once at startup. "
+            "See avp/core/spec/v0.1/commission.md."
         ),
     )
     write_json(out_dir / "commission.schema.json", commission_schema)
@@ -89,12 +89,12 @@ def main() -> int:
         description=(
             "Agent → supervisor event. Each event is a CloudEvent 1.0 "
             "envelope carrying a typed `data` payload. The `type` field is "
-            "the discriminator (reverse-DNS, `avp.*` namespace). Attribute "
-            "names inside `data` follow OpenTelemetry GenAI semantic "
-            "conventions and OTel span identification "
-            "(`trace_id`, `span_id`, `parent_span_id`); AVP-specific "
-            "attributes are namespaced `avp.*`. See "
-            "spec/v0.1/trajectory.md."
+            "the discriminator (reverse-DNS, `avp.*` namespace). Inside "
+            "`data`, all attributes are namespaced `avp.*` except the "
+            "OpenTelemetry span triple (`trace_id`, `span_id`, "
+            "`parent_span_id`); OpenTelemetry GenAI semantic conventions "
+            "(`gen_ai.*`) are a projection target, not carried on the wire "
+            "(see FOUNDATIONS.md). See avp/core/spec/v0.1/trajectory.md."
         ),
     )
     write_json(out_dir / "trajectory.schema.json", trajectory_schema)
@@ -110,7 +110,7 @@ def main() -> int:
             "supported models. Pre-flight (`<agent> describe` stdout) and "
             "run-time (`agent_described.data['avp.descriptor']`) views MUST "
             "match for the same agent build. See "
-            "spec/v0.1/agent-descriptor.md."
+            "avp/core/spec/v0.1/agent-descriptor.md."
         ),
     )
     write_json(out_dir / "agent-descriptor.schema.json", descriptor_schema)
@@ -145,13 +145,17 @@ def main() -> int:
         "title": "Agent Voyager Project (AVP) v0.1",
         "description": (
             "Umbrella bundle for the AVP v0.1 wire format. Built on "
-            "CloudEvents 1.0 (envelopes), OpenTelemetry GenAI semantic "
-            "conventions and span identification (data attribute names), "
-            "JSON-RPC 2.0 (Resolver API), MCP (tool descriptors and "
-            "supervisor-side tool dispatch), Agent Skills (SKILL.md), "
-            "and JSON Schema 2020-12 (this document). AVP-specific "
-            "concepts — the no-mid-run-reach-in topology, the "
-            "trajectory-as-source-of-truth contract — live under the "
+            "CloudEvents 1.0 (envelopes), OpenTelemetry span "
+            "identification (`trace_id` / `span_id` / `parent_span_id` on "
+            "every event's `data`), "
+            "MCP (tool descriptors and supervisor-side tool dispatch), "
+            "Agent Skills (SKILL.md), "
+            "and JSON Schema 2020-12 (this document). Data attribute names "
+            "are AVP's own `avp.*` namespace; OpenTelemetry GenAI semantic "
+            "conventions are a documented projection target only, not "
+            "carried on the wire. AVP-specific "
+            "concepts (the no-mid-run-reach-in topology, the "
+            "trajectory-as-source-of-truth contract) live under the "
             "`avp.*` attribute namespace. See FOUNDATIONS.md and the "
             "per-spec entry-point schemas: commission.schema.json, "
             "trajectory.schema.json, agent-descriptor.schema.json."

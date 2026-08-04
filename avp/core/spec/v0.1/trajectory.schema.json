@@ -1225,7 +1225,7 @@
     },
     "Commission": {
       "additionalProperties": false,
-      "description": "Supervisor's declaration of the supervisor-managed environment slice.\n\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\nmaterial; no resolver round-trip is needed. The agent dials MCP servers\nand injects skill content directly from these fields at startup.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills) is invisible to AVP and the Commission entirely. The agent's own\ncontribution surfaces in `agent_described.data[\"avp.descriptor\"]` so\nconsumers can audit what the agent showed up with. The agent's runtime\nlayer merges its internal contribution with the Commission-managed assets\ninto one bag the loop dispatches against; collisions on `id` are a\nstartup error.",
+      "description": "Supervisor's declaration of the supervisor-managed environment slice.\n\nManaged asset entries (`mcp_servers`, `skills`) carry inline connection\nmaterial. The agent dials MCP servers and injects skill content directly\nfrom these fields at startup.\n\nAnything the agent provides on its own (in-process tools, baked-in\nskills) is invisible to AVP and the Commission entirely. The agent's own\ncontribution surfaces in `agent_described.data[\"avp.descriptor\"]` so\nconsumers can audit what the agent showed up with. The agent's runtime\nlayer merges its internal contribution with the Commission-managed assets\ninto one bag the loop dispatches against; collisions on `id` are a\nstartup error.",
       "properties": {
         "schema_version": {
           "const": "0.1",
@@ -3654,5 +3654,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avp.dev/schema/v0.1/trajectory.schema.json",
   "title": "AVP v0.1 Trajectory (Event)",
-  "description": "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Attribute names inside `data` follow OpenTelemetry GenAI semantic conventions and OTel span identification (`trace_id`, `span_id`, `parent_span_id`); AVP-specific attributes are namespaced `avp.*`. See spec/v0.1/trajectory.md."
+  "description": "Agent → supervisor event. Each event is a CloudEvent 1.0 envelope carrying a typed `data` payload. The `type` field is the discriminator (reverse-DNS, `avp.*` namespace). Inside `data`, all attributes are namespaced `avp.*` except the OpenTelemetry span triple (`trace_id`, `span_id`, `parent_span_id`); OpenTelemetry GenAI semantic conventions (`gen_ai.*`) are a projection target, not carried on the wire (see FOUNDATIONS.md). See avp/core/spec/v0.1/trajectory.md."
 }
