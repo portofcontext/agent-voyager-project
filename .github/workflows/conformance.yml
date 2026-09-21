@@ -17,8 +17,8 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -36,14 +36,14 @@ jobs:
     needs: lint
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The repo is a uv workspace rooted at the repo root; `uv sync` installs
       # every Python member editable and resolves the cross-package deps (`avp`,
       # `avp-conformance`, ...) to the in-tree sources rather than PyPI. (There's
       # an unrelated `avp` package on PyPI; the workspace sources override it.)
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.11"
           enable-cache: true
@@ -78,17 +78,17 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.11"
           enable-cache: true
 
       # The avp-claude-agent-sdk real_llm tests drive the Claude Agent SDK, which
       # shells out to the `claude` CLI; install it so it's on PATH.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
       - name: Install the claude CLI
