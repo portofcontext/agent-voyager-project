@@ -229,7 +229,7 @@ def _commission(**kw) -> Commission:
 
 @pytest.mark.parametrize("provider", [None, "anthropic", "openrouter", "local"])
 def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, provider) -> None:
-    monkeypatch.delenv("GOOSE_PROVIDER", raising=False)
+    monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
     for name in (
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -239,7 +239,8 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
         monkeypatch.setenv(name, name)
     monkeypatch.setenv("OPENAI_UNRELATED_SECRET", "must-not-pass")
     c = _commission(provider=Provider(id=provider) if provider else None)
-    env = agent._sandbox_env(_Agent, c, None)
+    a = agent.SandboxedAgent("fake", "x", (), env={"GOOSE_PROVIDER": "mistral"})
+    env = agent._sandbox_env(a, c, None)
     expected = {
         None: {"OPENAI_API_KEY"},
         "anthropic": {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"},
@@ -248,6 +249,7 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
     }[provider]
     assert {k for k in env if k.endswith(("API_KEY", "OAUTH_TOKEN"))} == expected
     assert "OPENAI_UNRELATED_SECRET" not in env
+    assert env["GOOSE_PROVIDER"] == (provider or "openai")
 
 
 def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:

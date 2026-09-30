@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from avp.commission import Commission
+from avp.commission import Commission, Provider
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
 from avp_cli import broker, local_models, osb, paths, runtime, vault
@@ -260,64 +260,40 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
     return brk
 
 
+# Alternate credential names supported by the bundled agents.
+_CREDENTIAL_ALIASES = {
+    "anthropic": ("CLAUDE_CODE_OAUTH_TOKEN",),
+    "google": ("GEMINI_API_KEY",),
+    "gemini": ("GOOGLE_API_KEY",),
+}
+
+
 def _sandbox_env(
     agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
 ) -> dict[str, str]:
-    """The declared sandbox environment: provider routing (broker urls +
-    per-run tokens for vault-credentialed providers, real base_url otherwise), the
-    manifest's env, and the AVP workspace convention (AVP_WORKSPACE /
-    AVP_ENV_ROOT). Only the selected provider's ambient key and endpoint are
-    forwarded, and only when that provider does not use a vault credential.
-    """
-    prov = commission.provider
-    provider_id = (
-        prov.id
-        if prov
-        else agent.env.get(
-            "GOOSE_PROVIDER", os.environ.get("GOOSE_PROVIDER", commission.model.split("/", 1)[0])
-        )
-    )
-    up = provider_id.upper().replace("-", "_")
-    names = {f"{up}_API_KEY", f"{up}_HOST", f"{up}_BASE_URL"}
-    if provider_id == "anthropic":
-        names.add("CLAUDE_CODE_OAUTH_TOKEN")
-    if provider_id in {"google", "gemini"}:
-        names.update({"GOOGLE_API_KEY", "GEMINI_API_KEY"})
-    env = (
-        {}
-        if _provider_credentialed(commission)
-        else {k: os.environ[k] for k in names if k in os.environ}
-    )
-    if "GOOSE_PROVIDER" in os.environ:
-        env["GOOSE_PROVIDER"] = os.environ["GOOSE_PROVIDER"]
-    env.update(agent.env)
-    if prov is not None:
-        env["GOOSE_PROVIDER"] = prov.id
-        if prov.credential is not None:
-            if brk is None:
-                raise ValueError("vault credential requires a running broker")
-            # Remove alternate credentials/endpoints, including manifest values.
-            for name in names:
-                env.pop(name, None)
-            route = brk.route_url(f"llm/{prov.id}")
-            if prov.id == "anthropic":
-                env["ANTHROPIC_BASE_URL"] = route
-                env["ANTHROPIC_HOST"] = route
-                env["ANTHROPIC_API_KEY"] = brk.token
-            else:
-                env[f"{up}_HOST"] = route
-                env[f"{up}_API_KEY"] = brk.token
-        else:
-            # Non-vault provider: real endpoint, ambient key (forwarded above).
-            base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
-            if prov.id == "anthropic":
-                if base:
-                    env["ANTHROPIC_BASE_URL"] = base
-            else:
-                if base:
-                    env[f"{up}_HOST"] = base
-    env["AVP_WORKSPACE"] = _WORKSPACE_MNT
-    env["AVP_ENV_ROOT"] = "/avp"
+    """Build the agent environment using the Commission's provider selection."""
+    provider = commission.provider or Provider(id=commission.model.split("/", 1)[0])
+    prefix = provider.id.upper().replace("-", "_")
+    api_key = f"{prefix}_API_KEY"
+    endpoints = (f"{prefix}_HOST", f"{prefix}_BASE_URL")
+    provider_vars = (api_key, *endpoints, *_CREDENTIAL_ALIASES.get(provider.id, ()))
+
+    if provider.credential is not None:
+        if brk is None:
+            raise ValueError("vault credential requires a running broker")
+        env = {k: v for k, v in agent.env.items() if k not in provider_vars}
+        env[api_key] = brk.token
+        env.update(dict.fromkeys(endpoints, brk.route_url(f"llm/{provider.id}")))
+    else:
+        env = {k: os.environ[k] for k in provider_vars if k in os.environ}
+        env.update(agent.env)
+        if commission.provider is not None:
+            base = provider.base_url or osb.PROVIDER_REGISTRY.get(provider.id, (None, None))[1]
+            if base:
+                env.update(dict.fromkeys(endpoints, base))
+
+    # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
+    env.update(GOOSE_PROVIDER=provider.id, AVP_WORKSPACE=_WORKSPACE_MNT, AVP_ENV_ROOT="/avp")
     return env
 
 
