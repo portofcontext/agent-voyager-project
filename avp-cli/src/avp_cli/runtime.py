@@ -171,8 +171,7 @@ class LibkrunRuntime:
     Egress: local-inference runs need no network (the model is mounted), so the
     container is created with `--network none` by default — stronger than the
     OpenSandbox default and enough for the GPU local-model path. Commissions that
-    need egress (hosted providers, MCP) are the remaining parity gap with
-    OpenSandbox's DNS-filtering sidecar; see the design notes.
+    need egress (hosted providers, MCP) are rejected until filtering is supported.
     """
 
     counter: int = field(default=0)
@@ -187,15 +186,17 @@ class LibkrunRuntime:
         resources: dict[str, str],
         timeout_s: float,
     ) -> LibkrunBox:
+        if egress:
+            raise ValueError(
+                "libkrun does not support filtered egress; use opensandbox for networked runs"
+            )
         penv = _podman_env()
         self.counter += 1
         name = f"avp-{os.getpid()}-{self.counter}"
         argv = ["podman", "run", "-d", "--name", name]
         if LIBKRUN_GPU_DEVICE and LIBKRUN_GPU_DEVICE != "none":
             argv += ["--device", LIBKRUN_GPU_DEVICE]
-        # Local inference needs no egress; deny by default. (Egress parity for
-        # networked commissions is a follow-up.)
-        argv += ["--network", "none" if not egress else "bridge"]
+        argv += ["--network", "none"]
         if resources.get("cpu"):
             argv += ["--cpus", str(resources["cpu"])]
         if resources.get("memory"):

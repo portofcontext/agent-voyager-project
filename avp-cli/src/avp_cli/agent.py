@@ -50,22 +50,6 @@ _TAIL_INTERVAL = 0.06
 _WORKSPACE_MNT = "/avp/workspace"
 _IO_MNT = "/avp/io"
 
-# Host env vars forwarded into the sandbox: model-provider credentials and
-# agent routing knobs. CLAUDE_ covers CLAUDE_CODE_OAUTH_TOKEN (the
-# `claude setup-token` subscription credential the claude CLI accepts in
-# place of an API key). The rest of the host environment stays on the host;
-# the sandbox env is otherwise fully declared.
-_ENV_PASSTHROUGH_PREFIXES = (
-    "ANTHROPIC_",
-    "CLAUDE_",
-    "OPENAI_",
-    "GOOGLE_",
-    "GEMINI_",
-    "MISTRAL_",
-    "OPENROUTER_",
-    "GOOSE_",
-)
-
 # Sandbox lifetime margin beyond the run timeout: covers image boot, setup
 # commands, and trajectory readback before the server reaps the sandbox.
 _SANDBOX_TTL_MARGIN_S = 180.0
@@ -142,7 +126,7 @@ def run_agent(
     # Vault broker: when the Commission references any secret (provider
     # credential or MCP auth), a host-side credential-injecting proxy serves
     # those endpoints so the resolved value never enters the sandbox. The
-    # written commission + sandbox env then point at the broker with sentinels.
+    # written commission + sandbox env authenticate with a per-run token.
     brk: broker.Broker | None = None
     try:
         brk = _start_broker(commission)
@@ -227,12 +211,6 @@ def run_agent(
         shutil.rmtree(io_dir, ignore_errors=True)
 
 
-# The sentinel key the agent receives in place of a vault-managed credential.
-# Non-empty so SDKs that require a key present are satisfied; the broker
-# overwrites it with the real value on the host before forwarding.
-_VAULT_SENTINEL = "avp-vault-managed"
-
-
 def _provider_credentialed(commission: Commission) -> bool:
     p = commission.provider
     return p is not None and p.credential is not None
@@ -286,25 +264,49 @@ def _sandbox_env(
     agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
 ) -> dict[str, str]:
     """The declared sandbox environment: provider routing (broker urls +
-    sentinels for vault-credentialed providers, real base_url otherwise), the
+    per-run tokens for vault-credentialed providers, real base_url otherwise), the
     manifest's env, and the AVP workspace convention (AVP_WORKSPACE /
-    AVP_ENV_ROOT). Host provider vars (ANTHROPIC_*, …) are forwarded for the
-    no-vault case where the user supplies their own ambient key.
+    AVP_ENV_ROOT). Only the selected provider's ambient key and endpoint are
+    forwarded, and only when that provider does not use a vault credential.
     """
-    env = {k: v for k, v in os.environ.items() if k.startswith(_ENV_PASSTHROUGH_PREFIXES)}
     prov = commission.provider
+    provider_id = (
+        prov.id
+        if prov
+        else agent.env.get(
+            "GOOSE_PROVIDER", os.environ.get("GOOSE_PROVIDER", commission.model.split("/", 1)[0])
+        )
+    )
+    up = provider_id.upper().replace("-", "_")
+    names = {f"{up}_API_KEY", f"{up}_HOST", f"{up}_BASE_URL"}
+    if provider_id == "anthropic":
+        names.add("CLAUDE_CODE_OAUTH_TOKEN")
+    if provider_id in {"google", "gemini"}:
+        names.update({"GOOGLE_API_KEY", "GEMINI_API_KEY"})
+    env = (
+        {}
+        if _provider_credentialed(commission)
+        else {k: os.environ[k] for k in names if k in os.environ}
+    )
+    if "GOOSE_PROVIDER" in os.environ:
+        env["GOOSE_PROVIDER"] = os.environ["GOOSE_PROVIDER"]
+    env.update(agent.env)
     if prov is not None:
-        up = prov.id.upper().replace("-", "_")
-        if prov.credential is not None and brk is not None:
-            # Vault: route through the broker, hand the agent only a sentinel.
+        env["GOOSE_PROVIDER"] = prov.id
+        if prov.credential is not None:
+            if brk is None:
+                raise ValueError("vault credential requires a running broker")
+            # Remove alternate credentials/endpoints, including manifest values.
+            for name in names:
+                env.pop(name, None)
             route = brk.route_url(f"llm/{prov.id}")
             if prov.id == "anthropic":
                 env["ANTHROPIC_BASE_URL"] = route
-                env["ANTHROPIC_API_KEY"] = _VAULT_SENTINEL
+                env["ANTHROPIC_HOST"] = route
+                env["ANTHROPIC_API_KEY"] = brk.token
             else:
                 env[f"{up}_HOST"] = route
-                env[f"{up}_API_KEY"] = _VAULT_SENTINEL
-                env["GOOSE_PROVIDER"] = prov.id
+                env[f"{up}_API_KEY"] = brk.token
         else:
             # Non-vault provider: real endpoint, ambient key (forwarded above).
             base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
@@ -314,8 +316,6 @@ def _sandbox_env(
             else:
                 if base:
                     env[f"{up}_HOST"] = base
-                env["GOOSE_PROVIDER"] = prov.id
-    env.update(agent.env)
     env["AVP_WORKSPACE"] = _WORKSPACE_MNT
     env["AVP_ENV_ROOT"] = "/avp"
     return env
@@ -336,6 +336,12 @@ def _commission_for_sandbox(commission: Commission, brk: broker.Broker | None) -
     for server in data.get("mcp_servers") or []:
         if brk is not None and server.get("type") == "http" and server.get("auth") is not None:
             server["url"] = brk.route_url(f"mcp/{server['id']}")
+            server["headers"] = {
+                k: v
+                for k, v in (server.get("headers") or {}).items()
+                if k.lower() not in {"authorization", "x-api-key"}
+            }
+            server["headers"]["Authorization"] = f"Bearer {brk.token}"
         server.pop("auth", None)
     return json.dumps(data)
 

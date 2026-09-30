@@ -180,7 +180,7 @@ def test_default_deny_egress_blocks_unlisted_domains(server) -> None:
 
 # A fake agent honoring the run contract that emits, in its trajectory, the
 # provider key it actually sees in its env — so the seam can prove the real
-# secret never reached the sandbox (only the broker sentinel did).
+# secret never reached the sandbox (only the per-run broker token did).
 _AGENT_ECHOENV_SH = """\
 #!/bin/sh
 while [ $# -gt 0 ]; do
@@ -198,7 +198,7 @@ printf '"parent_span_id":"0000000000000000","seen_key":"%s","host":"%s"}}\\n' \
 def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
     """The vault guarantee, for real: a vault Commission run through
     `run_agent` starts the host broker, the in-sandbox preflight reaches it, and
-    the agent sees only the sentinel — the resolved secret never crosses in.
+    the agent sees only the per-run token; the resolved secret never crosses in.
 
     The broker lives on the host and the sandbox reaches it at
     `host.docker.internal`, which Docker Desktop / OrbStack inject but a plain
@@ -249,7 +249,7 @@ def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
     data = events[0].data if hasattr(events[0], "data") else events[0]["data"]
     seen_key = data.seen_key if hasattr(data, "seen_key") else data["seen_key"]
     host = data.host if hasattr(data, "host") else data["host"]
-    assert seen_key == "avp-vault-managed"  # the agent saw only the sentinel
+    assert len(seen_key) >= 32  # the agent sees a random per-run broker token
     assert "REAL-SECRET" not in seen_key  # the real key never entered the sandbox
     assert "host.docker.internal" in host  # routed at the broker, not openrouter.ai
 
