@@ -45,15 +45,21 @@ OrbStack, or colima running and you're set; the first run pulls/builds images
 and is slower, every later run reuses them. `avp sandbox status` shows the
 stack's health.
 
-**Credentials.** Agents resolve their own credentials, exactly as they would
-standalone; the CLI forwards your model-provider environment into the sandbox
-(`ANTHROPIC_*`, `CLAUDE_*`, `OPENAI_*`, `GOOGLE_*`/`GEMINI_*`, `MISTRAL_*`,
-`OPENROUTER_*`, and `GOOSE_*` routing vars). Set up whatever your chosen agent
-expects: for an Anthropic-backed run, `export ANTHROPIC_API_KEY=...` (a platform
-API key — goose calls the API directly and needs one). The claude-code agent can
-instead run on a Claude subscription: `claude setup-token` and export the result
-as `CLAUDE_CODE_OAUTH_TOKEN`. The CLI reads no keys and assumes no provider;
-nothing else from your host environment reaches the agent.
+**Credentials.** Without a vault credential, the CLI forwards only the selected
+provider's API key and endpoint variables (`<PROVIDER>_API_KEY`, `_HOST`, and
+`_BASE_URL`). The Commission's provider (or its model origin when omitted)
+selects credentials and Goose routing; host or manifest `GOOSE_PROVIDER` values
+do not override that selection. Anthropic runs also accept
+`CLAUDE_CODE_OAUTH_TOKEN` for claude-code subscriptions; Google/Gemini runs accept
+either provider's API-key variable. Other settings must be explicit in the agent
+manifest. With a vault credential, the model-provider secret stays in the host
+broker and the agent receives only a random per-run authentication token. MCP
+vault routes use the same token through their request headers. The broker rejects
+missing or invalid tokens. It remains reachable through the host's Docker bridge.
+
+The optional `libkrun` runtime supports offline runs only. Networked runs fail
+closed until filtered egress is supported; use the default `opensandbox` runtime
+when a Commission or environment requires network access.
 
 ## Where things live
 

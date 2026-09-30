@@ -7,7 +7,7 @@ broker keeps the resolved value out of the sandbox entirely.
 How it fits together. OpenSandbox filters egress by DNS only, so a sandboxed
 agent can reach a host process at `host.docker.internal` once that name is in
 the egress allowlist (verified empirically). avp points the agent's provider
-base_url and MCP urls at this broker and hands the agent only sentinels; the
+base_url and MCP urls at this broker and gives the agent a per-run token; the
 broker, running on the host where the real secret lives, overwrites the auth
 header with the real value and forwards over TLS to the real upstream. The
 secret never crosses into the sandbox; only the broker (host) and the upstream
@@ -25,6 +25,7 @@ destination-specific).
 
 from __future__ import annotations
 
+import secrets
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -79,6 +80,7 @@ class Broker:
     """
 
     def __init__(self) -> None:
+        self.token = secrets.token_urlsafe(32)
         self._routes: dict[str, Route] = {}
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -106,7 +108,8 @@ class Broker:
         return f"{self.base_url()}/{key.strip('/')}"
 
     def start(self) -> None:
-        # Bind on all interfaces so the bridge can reach us; port 0 = ephemeral.
+        # Docker bridges need host reachability; every routed request requires
+        # the per-run token. Port 0 allocates an ephemeral listener.
         handler = _make_handler(self)
         self._server = ThreadingHTTPServer(("0.0.0.0", 0), handler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -151,10 +154,14 @@ class Broker:
         out: dict[str, str] = {}
         for name, value in headers.items():
             low = name.lower()
-            if low in _DROP_REQUEST_HEADERS or low == route.header.lower():
+            if low in _DROP_REQUEST_HEADERS or low in {
+                "authorization",
+                "x-api-key",
+                route.header.lower(),
+            }:
                 continue
             out[name] = value
-        # Overwrite (never append) the auth header with the real secret.
+        # Replace broker authentication with the upstream secret.
         out[route.header] = f"{route.prefix}{route.secret}"
         # Pin Host to the upstream so the upstream's TLS/vhost routing is correct.
         out["Host"] = urlsplit(self._target_url(route, "", "")).netloc
@@ -186,6 +193,11 @@ def _make_handler(broker: Broker) -> type[BaseHTTPRequestHandler]:
                 self.send_error(404, "no broker route")
                 return
             route, remainder = matched
+            supplied = self.headers.get_all(route.header, [])
+            expected = f"{route.prefix}{broker.token}".encode()
+            if len(supplied) != 1 or not secrets.compare_digest(supplied[0].encode(), expected):
+                self.send_error(403, "invalid broker token")
+                return
             target = broker._target_url(route, remainder, split.query)
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else None

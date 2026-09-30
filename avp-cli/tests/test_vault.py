@@ -2,7 +2,7 @@
 
 Covers: handle → value resolution (env, file, miss); the broker's
 credential-injection + routing against a fake upstream; and the run wiring
-(broker routes built from a Commission, sentinel-only sandbox env, broker urls
+(broker routes built from a Commission, per-run-token sandbox env, broker urls
 in the written commission, broker-mode egress) that together realize the vault
 guarantee — the agent uses a credential it can never read.
 """
@@ -99,7 +99,7 @@ def fake_upstream():
     srv.shutdown()
 
 
-def test_broker_overwrites_sentinel_with_real_secret(fake_upstream) -> None:
+def test_broker_overwrites_run_token_with_real_secret(fake_upstream) -> None:
     origin, seen = fake_upstream
     brk = broker.Broker()
     brk.add_route(
@@ -109,14 +109,15 @@ def test_broker_overwrites_sentinel_with_real_secret(fake_upstream) -> None:
     brk.start()
     try:
         c = httpx.Client()
-        # The agent sends a sentinel; the broker must replace it with the real key.
+        # The agent sends its run token; only the upstream receives the real key.
         r = c.post(
             f"http://127.0.0.1:{brk.port}/llm/openrouter/api/v1/chat",
-            headers={"authorization": "Bearer avp-vault-managed"},
+            headers={"authorization": f"Bearer {brk.token}", "x-api-key": brk.token},
             json={"x": 1},
         )
         assert r.status_code == 200
         assert seen["authorization"] == "Bearer REAL"  # real key reached upstream
+        assert seen["x-api-key"] is None  # alternate headers cannot leak the run token
         assert seen["path"] == "/api/v1/chat"  # path remainder preserved
     finally:
         brk.stop()
@@ -132,7 +133,7 @@ def test_broker_anthropic_uses_x_api_key(fake_upstream) -> None:
     try:
         httpx.Client().post(
             f"http://127.0.0.1:{brk.port}/llm/anthropic/v1/messages",
-            headers={"x-api-key": "avp-vault-managed"},
+            headers={"x-api-key": brk.token},
             json={"x": 1},
         )
         assert seen["x-api-key"] == "ANT"
@@ -170,7 +171,11 @@ def test_broker_preserves_gzip_response() -> None:
     brk.start()
     try:
         # httpx auto-decodes gzip when content-encoding is present and intact.
-        r = httpx.Client().post(f"http://127.0.0.1:{brk.port}/llm/x/v1", json={"a": 1})
+        r = httpx.Client().post(
+            f"http://127.0.0.1:{brk.port}/llm/x/v1",
+            headers={"x-api-key": brk.token},
+            json={"a": 1},
+        )
         assert r.json()["msg"] == "PONG"
     finally:
         brk.stop()
@@ -188,6 +193,25 @@ def test_broker_refuses_unrouted_destination() -> None:
         brk.stop()
 
 
+@pytest.mark.parametrize("header,prefix", [("authorization", "Bearer "), ("x-api-key", "")])
+def test_broker_rejects_missing_wrong_and_other_run_tokens(fake_upstream, header, prefix) -> None:
+    origin, seen = fake_upstream
+    with broker.Broker() as brk, broker.Broker() as other:
+        brk.add_route("llm/x", broker.Route(origin, header, prefix, "REAL"))
+        url = f"http://127.0.0.1:{brk.port}/llm/x/v1"
+        attempts = [
+            [],
+            [(header, prefix + "avp-vault-managed")],
+            [(header, prefix + other.token)],
+            [(header, prefix + brk.token), (header, prefix + brk.token)],
+        ]
+        with httpx.Client() as client:
+            for method in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+                for headers in attempts:
+                    assert client.request(method, url, headers=headers).status_code == 403
+        assert seen == {}  # unauthorized requests never reach the upstream
+
+
 # ── run wiring ───────────────────────────────────────────────────────────────
 
 
@@ -201,6 +225,56 @@ def _commission(**kw) -> Commission:
     base = {"schema_version": "0.1", "run_id": "r", "model": "openai/gpt-4o"}
     base.update(kw)
     return Commission(**base)
+
+
+@pytest.mark.parametrize("provider", [None, "anthropic", "openrouter", "local"])
+def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, provider) -> None:
+    monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
+    for name in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "OPENROUTER_API_KEY",
+    ):
+        monkeypatch.setenv(name, name)
+    monkeypatch.setenv("OPENAI_UNRELATED_SECRET", "must-not-pass")
+    c = _commission(provider=Provider(id=provider) if provider else None)
+    a = agent.SandboxedAgent("fake", "x", (), env={"GOOSE_PROVIDER": "mistral"})
+    env = agent._sandbox_env(a, c, None)
+    expected = {
+        None: {"OPENAI_API_KEY"},
+        "anthropic": {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"},
+        "openrouter": {"OPENROUTER_API_KEY"},
+        "local": set(),
+    }[provider]
+    assert {k for k in env if k.endswith(("API_KEY", "OAUTH_TOKEN"))} == expected
+    assert "OPENAI_UNRELATED_SECRET" not in env
+    assert env["GOOSE_PROVIDER"] == (provider or "openai")
+
+
+def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:
+    monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
+    a = agent.SandboxedAgent(
+        "fake",
+        "x",
+        (),
+        env={
+            "ANTHROPIC_API_KEY": "manifest-secret",
+            "CLAUDE_CODE_OAUTH_TOKEN": "oauth-secret",
+            "ANTHROPIC_HOST": "https://wrong.invalid",
+            "IS_SANDBOX": "1",
+        },
+    )
+    c = _commission(provider=Provider(id="anthropic", credential=SecretRef(vault="ant")))
+    with pytest.raises(ValueError, match="requires a running broker"):
+        agent._sandbox_env(a, c, None)
+    with broker.Broker() as brk:
+        env = agent._sandbox_env(a, c, brk)
+        assert env["ANTHROPIC_API_KEY"] == brk.token
+        assert env["ANTHROPIC_HOST"] == env["ANTHROPIC_BASE_URL"] == brk.route_url("llm/anthropic")
+        assert env["GOOSE_PROVIDER"] == "anthropic"
+        assert env["IS_SANDBOX"] == "1"
+        assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
 
 
 def test_start_broker_builds_routes_and_resolves_handles(monkeypatch) -> None:
@@ -231,8 +305,10 @@ def test_start_broker_none_without_secrets() -> None:
     assert agent._start_broker(c) is None
 
 
-def test_sandbox_env_broker_mode_is_sentinel_only(monkeypatch) -> None:
+def test_sandbox_env_broker_mode_has_no_ambient_credentials(monkeypatch) -> None:
     monkeypatch.setenv("AVP_VAULT_OPENROUTER", "sk-or-REAL")
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GOOSE_SECRET"):
+        monkeypatch.setenv(name, "ambient-secret")
     c = _commission(
         provider=Provider(
             id="openrouter",
@@ -243,21 +319,31 @@ def test_sandbox_env_broker_mode_is_sentinel_only(monkeypatch) -> None:
     brk = agent._start_broker(c)
     try:
         env = agent._sandbox_env(_Agent, c, brk)
-        assert env["OPENROUTER_API_KEY"] == agent._VAULT_SENTINEL
+        assert env["OPENROUTER_API_KEY"] == brk.token
         assert env["OPENROUTER_HOST"] == brk.route_url("llm/openrouter")
         assert env["GOOSE_PROVIDER"] == "openrouter"
         assert not any("sk-or-REAL" in v for v in env.values())  # real key never in sandbox env
+        assert "ambient-secret" not in env.values()
     finally:
         brk.stop()
 
 
-def test_written_commission_has_broker_urls_no_secret(monkeypatch) -> None:
+def test_written_commission_authenticates_mcp_without_upstream_secret(
+    monkeypatch, fake_upstream
+) -> None:
+    origin, seen = fake_upstream
     monkeypatch.setenv("AVP_VAULT_OPENROUTER", "sk-or-REAL")
     monkeypatch.setenv("AVP_VAULT_MOT", "tok-REAL")
     c = _commission(
         provider=Provider(id="openrouter", credential=SecretRef(vault="openrouter")),
         mcp_servers=[
-            McpServerHttp(id="net", type="http", url="https://x/mcp", auth=SecretRef(vault="mot"))
+            McpServerHttp(
+                id="net",
+                type="http",
+                url=f"{origin}/mcp",
+                auth=SecretRef(vault="mot"),
+                headers={"authorization": "stale", "X-Request-ID": "preserved"},
+            )
         ],
     )
     brk = agent._start_broker(c)
@@ -271,6 +357,13 @@ def test_written_commission_has_broker_urls_no_secret(monkeypatch) -> None:
         # agents reject unknown fields — so neither appears in what the agent reads.
         assert "provider" not in data
         assert "sk-or-REAL" not in written and "tok-REAL" not in written
+        assert server["headers"] == {
+            "Authorization": f"Bearer {brk.token}",
+            "X-Request-ID": "preserved",
+        }
+        url = server["url"].replace(broker.SANDBOX_HOST_ALIAS, "127.0.0.1")
+        assert httpx.post(url, headers=server["headers"], json={}).status_code == 200
+        assert seen["authorization"] == "Bearer tok-REAL"
     finally:
         brk.stop()
 

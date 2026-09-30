@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from avp.commission import Commission
+from avp.commission import Commission, Provider
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import parse_event
 from avp_cli import broker, local_models, osb, paths, runtime, vault
@@ -49,22 +49,6 @@ _TAIL_INTERVAL = 0.06
 # rw mount for this run's io (commission in, trajectory + stderr out).
 _WORKSPACE_MNT = "/avp/workspace"
 _IO_MNT = "/avp/io"
-
-# Host env vars forwarded into the sandbox: model-provider credentials and
-# agent routing knobs. CLAUDE_ covers CLAUDE_CODE_OAUTH_TOKEN (the
-# `claude setup-token` subscription credential the claude CLI accepts in
-# place of an API key). The rest of the host environment stays on the host;
-# the sandbox env is otherwise fully declared.
-_ENV_PASSTHROUGH_PREFIXES = (
-    "ANTHROPIC_",
-    "CLAUDE_",
-    "OPENAI_",
-    "GOOGLE_",
-    "GEMINI_",
-    "MISTRAL_",
-    "OPENROUTER_",
-    "GOOSE_",
-)
 
 # Sandbox lifetime margin beyond the run timeout: covers image boot, setup
 # commands, and trajectory readback before the server reaps the sandbox.
@@ -142,7 +126,7 @@ def run_agent(
     # Vault broker: when the Commission references any secret (provider
     # credential or MCP auth), a host-side credential-injecting proxy serves
     # those endpoints so the resolved value never enters the sandbox. The
-    # written commission + sandbox env then point at the broker with sentinels.
+    # written commission + sandbox env authenticate with a per-run token.
     brk: broker.Broker | None = None
     try:
         brk = _start_broker(commission)
@@ -227,12 +211,6 @@ def run_agent(
         shutil.rmtree(io_dir, ignore_errors=True)
 
 
-# The sentinel key the agent receives in place of a vault-managed credential.
-# Non-empty so SDKs that require a key present are satisfied; the broker
-# overwrites it with the real value on the host before forwarding.
-_VAULT_SENTINEL = "avp-vault-managed"
-
-
 def _provider_credentialed(commission: Commission) -> bool:
     p = commission.provider
     return p is not None and p.credential is not None
@@ -282,42 +260,40 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
     return brk
 
 
+# Alternate credential names supported by the bundled agents.
+_CREDENTIAL_ALIASES = {
+    "anthropic": ("CLAUDE_CODE_OAUTH_TOKEN",),
+    "google": ("GEMINI_API_KEY",),
+    "gemini": ("GOOGLE_API_KEY",),
+}
+
+
 def _sandbox_env(
     agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
 ) -> dict[str, str]:
-    """The declared sandbox environment: provider routing (broker urls +
-    sentinels for vault-credentialed providers, real base_url otherwise), the
-    manifest's env, and the AVP workspace convention (AVP_WORKSPACE /
-    AVP_ENV_ROOT). Host provider vars (ANTHROPIC_*, …) are forwarded for the
-    no-vault case where the user supplies their own ambient key.
-    """
-    env = {k: v for k, v in os.environ.items() if k.startswith(_ENV_PASSTHROUGH_PREFIXES)}
-    prov = commission.provider
-    if prov is not None:
-        up = prov.id.upper().replace("-", "_")
-        if prov.credential is not None and brk is not None:
-            # Vault: route through the broker, hand the agent only a sentinel.
-            route = brk.route_url(f"llm/{prov.id}")
-            if prov.id == "anthropic":
-                env["ANTHROPIC_BASE_URL"] = route
-                env["ANTHROPIC_API_KEY"] = _VAULT_SENTINEL
-            else:
-                env[f"{up}_HOST"] = route
-                env[f"{up}_API_KEY"] = _VAULT_SENTINEL
-                env["GOOSE_PROVIDER"] = prov.id
-        else:
-            # Non-vault provider: real endpoint, ambient key (forwarded above).
-            base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1]
-            if prov.id == "anthropic":
-                if base:
-                    env["ANTHROPIC_BASE_URL"] = base
-            else:
-                if base:
-                    env[f"{up}_HOST"] = base
-                env["GOOSE_PROVIDER"] = prov.id
-    env.update(agent.env)
-    env["AVP_WORKSPACE"] = _WORKSPACE_MNT
-    env["AVP_ENV_ROOT"] = "/avp"
+    """Build the agent environment using the Commission's provider selection."""
+    provider = commission.provider or Provider(id=commission.model.split("/", 1)[0])
+    prefix = provider.id.upper().replace("-", "_")
+    api_key = f"{prefix}_API_KEY"
+    endpoints = (f"{prefix}_HOST", f"{prefix}_BASE_URL")
+    provider_vars = (api_key, *endpoints, *_CREDENTIAL_ALIASES.get(provider.id, ()))
+
+    if provider.credential is not None:
+        if brk is None:
+            raise ValueError("vault credential requires a running broker")
+        env = {k: v for k, v in agent.env.items() if k not in provider_vars}
+        env[api_key] = brk.token
+        env.update(dict.fromkeys(endpoints, brk.route_url(f"llm/{provider.id}")))
+    else:
+        env = {k: os.environ[k] for k in provider_vars if k in os.environ}
+        env.update(agent.env)
+        if commission.provider is not None:
+            base = provider.base_url or osb.PROVIDER_REGISTRY.get(provider.id, (None, None))[1]
+            if base:
+                env.update(dict.fromkeys(endpoints, base))
+
+    # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
+    env.update(GOOSE_PROVIDER=provider.id, AVP_WORKSPACE=_WORKSPACE_MNT, AVP_ENV_ROOT="/avp")
     return env
 
 
@@ -336,6 +312,12 @@ def _commission_for_sandbox(commission: Commission, brk: broker.Broker | None) -
     for server in data.get("mcp_servers") or []:
         if brk is not None and server.get("type") == "http" and server.get("auth") is not None:
             server["url"] = brk.route_url(f"mcp/{server['id']}")
+            server["headers"] = {
+                k: v
+                for k, v in (server.get("headers") or {}).items()
+                if k.lower() not in {"authorization", "x-api-key"}
+            }
+            server["headers"]["Authorization"] = f"Bearer {brk.token}"
         server.pop("auth", None)
     return json.dumps(data)
 
