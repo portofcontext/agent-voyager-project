@@ -1,8 +1,10 @@
 """Pydantic model for the AVP conformance agent manifest.
 
-The manifest tells `avp-conformance run` how to invoke the SDK under test as
-a subprocess. See `AGENT-PROCESS.md` for the wire-level contract the
-subprocess itself must honor (stdin payload, stdout NDJSON, exit codes).
+The manifest tells `avp-conformance` (`ping` / `describe` / `check`) and the
+`avp` CLI how to invoke the agent as a subprocess. The subprocess honors the
+agent command contract implemented by the bindings' stock entrypoint
+(`avp.agent_cli` / `avp::agent_cli`): `ping --out`, `describe [--out]`, and
+`run --commission <json|path> [--built-in <json|path>] --out <ndjson>`.
 """
 
 from __future__ import annotations

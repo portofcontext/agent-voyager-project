@@ -20,6 +20,12 @@
 //! }
 //! ```
 //!
+//! `run` returns `Ok` once the trajectory is closed with `agent_stopped`,
+//! including runs that end in an expected failure (a fail-fast Commission
+//! check, a provider auth or rate-limit error, a refusal); return `Err` only
+//! for a crash, after recording `error_occurred` and `agent_stopped`. It exits
+//! non-zero with the error on stderr.
+//!
 //! Async harnesses block on their runtime inside the closures. `--built-in` is
 //! the conformance fixture of the agent's pretend defaults: its `system_prompt`
 //! and `prompt` seed the Commission when it leaves them unset (the Commission

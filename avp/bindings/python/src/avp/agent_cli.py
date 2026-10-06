@@ -20,6 +20,13 @@ An adapter supplies two functions and gets the whole contract::
 
     raise SystemExit(main(run=run, describe=describe))
 
+Exit codes. ``run`` returns 0 once the trajectory is closed with
+``agent_stopped``, including runs that end in an expected failure: a fail-fast
+Commission check, a provider auth or rate-limit error, a refusal. Let an
+exception escape ``run`` only for a crash (record ``error_occurred`` and
+``agent_stopped`` first); it exits non-zero with the traceback on stderr, which
+the harness surfaces.
+
 ``--built-in`` is the conformance fixture of the agent's pretend defaults. Its
 ``system_prompt`` and ``prompt`` seed the Commission when it leaves them unset
 (the Commission wins). Tool / MCP / subagent built-ins are not simulated.
