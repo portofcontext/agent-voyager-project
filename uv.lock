@@ -13,6 +13,7 @@ resolution-markers = [
 [manifest]
 members = [
     "agent-voyager-project",
+    "avp-agent-template",
     "avp-claude-agent-sdk",
     "avp-cli",
     "avp-conformance",
@@ -248,6 +249,25 @@ sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c0314
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
 ]
+
+[[package]]
+name = "avp-agent-template"
+version = "0.0.1"
+source = { editable = "agents/_template/python" }
+dependencies = [
+    { name = "agent-voyager-project" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "agent-voyager-project", editable = "avp/bindings/python" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-claude-agent-sdk"

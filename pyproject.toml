@@ -49,6 +49,7 @@ members = [
     "avp/core/conformance",
     "avp-cli",
     "agents/avp-claude-agent-sdk/python",
+    "agents/_template/python",
 ]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
