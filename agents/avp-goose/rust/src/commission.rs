@@ -43,7 +43,9 @@ use goose::recipe::Response;
 pub fn register_builtins() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        goose::builtin_extension::register_builtin_extensions(goose_mcp::BUILTIN_EXTENSIONS.clone());
+        goose::builtin_extension::register_builtin_extensions(
+            goose_mcp::BUILTIN_EXTENSIONS.clone(),
+        );
     });
 }
 
@@ -76,7 +78,10 @@ pub fn from_commission(commission: &Commission) -> GooseRunConfig {
     // Per-agent map (spec §4): read only our own key. A present map MISSING
     // our key is a commission_collision; the runner fail-fasts on it before
     // the loop, so resolution here stays total (treat it as unfiltered).
-    let allow = commission.enabled_builtin_tools.as_ref().and_then(|m| m.get(AGENT_NAME));
+    let allow = commission
+        .enabled_builtin_tools
+        .as_ref()
+        .and_then(|m| m.get(AGENT_NAME));
     match allow.map(Vec::as_slice) {
         None => extensions.extend(builtin_extensions(Vec::new())),
         Some([]) => {}
@@ -130,13 +135,24 @@ fn available_for(enabled: &[String], prefix: Option<&str>) -> Vec<String> {
         return Vec::new(); // None: expose everything
     }
     let bare: Vec<String> = match prefix {
-        None => enabled.iter().filter(|n| !n.contains("__")).cloned().collect(),
+        None => enabled
+            .iter()
+            .filter(|n| !n.contains("__"))
+            .cloned()
+            .collect(),
         Some(p) => {
             let pfx = format!("{p}__");
-            enabled.iter().filter_map(|n| n.strip_prefix(&pfx).map(str::to_string)).collect()
+            enabled
+                .iter()
+                .filter_map(|n| n.strip_prefix(&pfx).map(str::to_string))
+                .collect()
         }
     };
-    if bare.is_empty() { vec![EXPOSE_NONE.to_string()] } else { bare }
+    if bare.is_empty() {
+        vec![EXPOSE_NONE.to_string()]
+    } else {
+        bare
+    }
 }
 
 /// Goose's full default built-in surface: every `default_enabled` platform
@@ -210,6 +226,7 @@ fn stdio_extension(s: &McpServerStdio) -> ExtensionConfig {
         envs: Envs::new(HashMap::new()),
         env_keys: Vec::new(),
         timeout: None,
+        cwd: None,
         bundled: None,
         available_tools: Vec::new(),
     }
@@ -233,6 +250,9 @@ fn http_extension(h: &McpServerHttp) -> ExtensionConfig {
         envs: Envs::new(HashMap::new()),
         env_keys: Vec::new(),
         headers,
+        client_id: None,
+        client_secret_key: None,
+        scopes: Vec::new(),
         timeout: None,
         socket: None,
         bundled: None,
@@ -291,11 +311,23 @@ mod tests {
         let names = ext_names(&cfg);
         // The full built-in surface loads by default (no enabled_builtin_tools
         // override): developer + the bundled goose-mcp built-ins.
-        assert!(names.contains(&"developer".to_string()), "builtin: {names:?}");
-        assert!(names.contains(&"memory".to_string()), "goose-mcp builtin: {names:?}");
-        assert!(names.contains(&"avptest".to_string()), "stdio mcp: {names:?}");
+        assert!(
+            names.contains(&"developer".to_string()),
+            "builtin: {names:?}"
+        );
+        assert!(
+            names.contains(&"memory".to_string()),
+            "goose-mcp builtin: {names:?}"
+        );
+        assert!(
+            names.contains(&"avptest".to_string()),
+            "stdio mcp: {names:?}"
+        );
         assert!(names.contains(&"web".to_string()), "http mcp: {names:?}");
-        assert!(names.contains(&"skills".to_string()), "skills platform: {names:?}");
+        assert!(
+            names.contains(&"skills".to_string()),
+            "skills platform: {names:?}"
+        );
     }
 
     #[test]
@@ -307,16 +339,25 @@ mod tests {
         })));
         let names = ext_names(&cfg);
         for platform in ["developer", "summon", "skills"] {
-            assert!(names.contains(&platform.to_string()), "missing {platform}: {names:?}");
+            assert!(
+                names.contains(&platform.to_string()),
+                "missing {platform}: {names:?}"
+            );
         }
         for builtin in goose_mcp::BUILTIN_EXTENSIONS.keys() {
-            assert!(names.contains(&builtin.to_string()), "missing {builtin}: {names:?}");
+            assert!(
+                names.contains(&builtin.to_string()),
+                "missing {builtin}: {names:?}"
+            );
         }
         // Every default-enabled platform extension goose ships is loaded.
         use goose::agents::platform_extensions::PLATFORM_EXTENSIONS;
         for (name, def) in PLATFORM_EXTENSIONS.iter() {
             if def.default_enabled && !def.hidden {
-                assert!(names.contains(&name.to_string()), "missing default platform {name}: {names:?}");
+                assert!(
+                    names.contains(&name.to_string()),
+                    "missing default platform {name}: {names:?}"
+                );
             }
         }
     }
@@ -340,7 +381,10 @@ mod tests {
         let names = ext_names(&cfg);
         assert!(!names.contains(&"developer".to_string()), "{names:?}");
         for builtin in goose_mcp::BUILTIN_EXTENSIONS.keys() {
-            assert!(!names.contains(&builtin.to_string()), "leaked {builtin}: {names:?}");
+            assert!(
+                !names.contains(&builtin.to_string()),
+                "leaked {builtin}: {names:?}"
+            );
         }
     }
 
@@ -353,7 +397,10 @@ mod tests {
             "schema_version": "0.1", "run_id": "r1", "model": "x/m",
             "enabled_builtin_tools": { "goose": ["shell"] }
         })));
-        assert_eq!(developer_available_tools(&cfg), Some(vec!["shell".to_string()]));
+        assert_eq!(
+            developer_available_tools(&cfg),
+            Some(vec!["shell".to_string()])
+        );
         assert_eq!(
             builtin_available_tools(&cfg, "computercontroller"),
             Some(vec![EXPOSE_NONE.to_string()])
@@ -373,7 +420,10 @@ mod tests {
             builtin_available_tools(&cfg, "computercontroller"),
             Some(vec!["pdf_tool".to_string(), "web_scrape".to_string()])
         );
-        assert_eq!(developer_available_tools(&cfg), Some(vec![EXPOSE_NONE.to_string()]));
+        assert_eq!(
+            developer_available_tools(&cfg),
+            Some(vec![EXPOSE_NONE.to_string()])
+        );
     }
 
     #[test]
