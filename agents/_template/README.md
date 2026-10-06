@@ -1,59 +1,98 @@
 # Agent template
 
-Starting point for a new AVP agent (an adapter over a harness that owns its
-own loop). Python in `python/`, Rust in `rust/`. Each runs end to end out of
-the box against a scripted stand-in harness, so its tests pass before you
-change anything.
+Starting point for a new AVP agent: an adapter over a harness (an agent SDK)
+that owns its own loop. Python in `python/`, Rust in `rust/`. Each runs end to
+end out of the box against a scripted stand-in harness, so a fresh copy passes
+its tests and `ping` / `describe` before you change a line.
 
-An adapter is four small parts. Only the first two are yours to write; the
-binding does the rest.
+An adapter is two small files of yours on top of the binding:
 
 | File | You write | The binding does |
 |---|---|---|
-| `commission` | Commission → harness config; `fail_fast` checks | |
+| `commission` | Commission → harness config | `preflight`: the spec's pre-turn Commission checks |
 | `translate` | native content / usage → AVP blocks / `Usage`; stop reasons | |
 | `agent` | wire harness events to Recorder calls; `describe()` | `Recorder`: ordering, spans, steps, tool pairing, cost |
 | `conformance` / `main` | nothing | `agent_cli`: `ping` / `describe` / `run` |
 
-## Steps
+## 1. Scaffold
 
-1. Copy `python/` or `rust/` to `agents/<name>/<lang>/`; rename the package,
-   `AGENT_NAME`, and the module in `avp-conformance.json`. Python: in the root
-   `pyproject.toml`, add the directory to the workspace `members` and the
-   package to `[project].dependencies` and `[tool.uv.sources]` (membership
-   alone doesn't install it, and a root `uv sync` would remove it); add the
-   directory to `TEST_PKGS` and your manifest to the `conformance` targets in
-   the `Makefile`; and add the import package to `known-first-party` in
-   `ruff.toml`.
-2. Replace `harness` with the real SDK and map its events in `agent`. The rules
-   that matter:
-   - Report each inference with `assistant(...)`, tool calls as `tool_use`
-     blocks in its content. Streamed chunks of one inference share a
-     `turn_key`; a complete message per inference passes none, and should
-     pass `duration_ms` (the Recorder can only time chunks it sees).
-   - `model` is the response model on the wire and the price-table key;
-     pass one the table knows (see `avp/bindings/python/src/avp/data/prices.json`).
-   - Report each result with `tool_result(call_id, ...)`.
-   - Usage that arrives after the content: keep the turn open with a
-     `turn_key` and call `usage(...)` before the next inference.
-   - Subagents: `subagent_start` / `subagent_result`, keyed by the tool call id
-     that spawned them.
-   - End every path with `stop(reason)`; on an exception, `error(...)` first.
-   - Keep the SDK import inside `run` / `describe` so `ping` stays cheap.
-   - Tools that touch files resolve against `AVP_WORKSPACE`. Without it, use a
-     fresh temp directory, never the process CWD: an unsandboxed run (e.g.
-     `avp-conformance check` without `--sandbox`) starts in your source tree.
-   - Expected failures (fail-fast, auth, rate limit, refusal) end with `stop`
-     and return normally; re-raise only crashes (see `agent_cli`).
-3. Fill in `commission`: model, `provider` (fail fast with
-   `unsupported_provider` when the harness can't reach it), system prompt,
-   prompt, `output_schema`, the `enabled_builtin_*` allow-lists under
-   `AGENT_NAME`, inline `mcp_servers` and `skills`.
-4. Keep the seam test, pointed at a recorded or stubbed SDK stream.
-5. Run the free checks (`avp-conformance ping` / `describe --agent
-   <manifest>`), then the suite on a real model (`avp-conformance check
-   --agent <manifest> --suite v0.1`).
+```bash
+make new-agent NAME=avp-<sdk>          # Python
+make new-agent-rust NAME=avp-<sdk>     # Rust
+```
 
-The checklist with commands: `avp/core/conformance/src/avp_conformance/CHECKLIST.md`.
+This copies the template to `agents/<NAME>/<lang>/`, renames the package, the
+agent name (`AGENT_NAME`, the key Commissions use in per-agent allow-lists),
+and the manifest command, and registers the agent in the uv workspace,
+`make test`, `make conformance`, and ruff's first-party list. Run the
+`next:` commands it prints.
+
+## 2. Replace the stand-in harness
+
+Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
+
+- **Inferences.** Report each with `assistant(...)`, tool calls as `tool_use`
+  blocks in its content (the Recorder derives `tool_invoked` from them).
+  Streamed chunks of one inference share a `turn_key`; a complete message per
+  inference passes none, and should pass `duration_ms` (the Recorder only times
+  chunks it sees).
+- **Models and cost.** `model` is the response model (`avp.response.model` on
+  the wire, and the price-table key). Pass `request_model` too: a dated
+  snapshot id the table lacks is then priced as the requested model.
+- **Tool results.** `tool_result(call_id, ...)`, keyed by the call id in the
+  `tool_use` block.
+- **Late usage.** Usage that arrives after the content: keep the turn open with
+  a `turn_key` and call `usage(...)` before the next inference.
+- **Subagents.** `subagent_start` / `subagent_result`, keyed by the id of the
+  tool call that spawned the child. If the child's own model calls aren't
+  visible, roll its spend up onto `subagent_result(usage=...)`.
+- **Ending.** `stop(reason)` on every path. Expected failures (preflight,
+  auth, rate limit, refusal) end with `stop` and return normally; a crash
+  records `error(...)` and `stop(error)`, then re-raises (non-zero exit).
+- **Files.** Tools that touch files resolve against `AVP_WORKSPACE`. Without
+  it use a fresh temp directory, never the process CWD: an unsandboxed run
+  starts in your source tree.
+- **Imports.** Keep the SDK import inside `run` / `describe` so `ping` stays
+  cheap.
+
+## 3. Honor the Commission
+
+In `commission`, map every field the harness can honor: `model`, `provider`
+(refuse with `unsupported_provider` when the harness can't reach it),
+`system_prompt`, `prompt`, `output_schema`, inline `mcp_servers` and `skills`,
+and the `enabled_builtin_*` allow-lists under `AGENT_NAME`. Pass the names the
+agent offers per surface to `preflight` (the template does this for tools);
+add harness-specific refusals next to it.
+
+## 4. Test and certify
+
+- Keep the seam test, pointed at a recorded or stubbed SDK stream.
+- Free: `make test` and `make conformance` (your agent's `ping` / `describe`).
+- On a real model: `avp-conformance check --agent <manifest> --suite v0.1`.
+  The cases pin a Claude model; run them on your provider's with
+  `--model <origin>/<model>` (e.g. `openai/gpt-4o-mini`). A case that needs a
+  surface your descriptor doesn't declare (e.g. subagents) reports SKIP.
+  `--case <path>` runs one case; `--dump-dir <dir>` keeps the trajectories.
+
+## 5. Ship
+
+**Out of tree** (a third-party agent): nothing in this repo changes. Point the
+`avp` CLI at the manifest (an eval's agent can be a manifest path), and give
+the manifest a `container` block (`install` steps, in-sandbox `command`) so it
+can run in the CLI's sandbox.
+
+**In tree** (published from this repo, installable with `avp agent install`):
+
+1. Register it in `AGENT_SOURCES` (`avp-cli/src/avp_cli/agents.py`): `kind`
+   (`"python"` wheels or a `"binary"`), `tag_prefix`, `dev_manifest`,
+   `descriptor_name`, `container_version`, and `module` / `dist` /
+   `wheel_dists` (Python) or `binary_name` (binary).
+2. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
+   (Python) or `release-goose.yml` (binary) and change the tag prefix.
+3. Add a `release-<name>` target to the `Makefile`, copying
+   `release-claude-code` / `release-goose`.
+4. Release: bump the package version and `container_version` together, commit,
+   and run `make release-<name>` from a clean `main`.
+
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
-subagents) and `agents/avp-goose/rust/` (late usage, subagents via a tool).
+subagents) and `agents/avp-goose/rust/` (late usage, subagents via a tool). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

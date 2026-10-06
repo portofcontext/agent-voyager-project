@@ -61,7 +61,7 @@ Tool calls go in `assistant`'s content as `tool_use` blocks; the Recorder derive
 
 ## Conformance
 
-Conformance is certified by driving a conforming agent's `run` entrypoint against a real model and matching the emitted trajectory: the cross-agent suite lives at `avp/core/conformance/src/avp_conformance/cases/v0.1/` and is driven by the `avp-conformance` CLI (`check --agent <manifest> --suite v0.1`). There is no shared reference-agent base class; each agent inlines its own loop and reports to the binding's `Recorder`, which owns the ordering and span rules (pinned by the recorder vectors next to the cases). The harness validates the trajectory both case-by-case and against universal span-tree invariants. `COVERAGE.md` in that directory maps what the suite covers and the deliberate gaps.
+Conformance is certified by driving a conforming agent's `run` entrypoint against a real model and matching the emitted trajectory: the cross-agent suite lives at `avp/core/conformance/src/avp_conformance/cases/v0.1/` and is driven by the `avp-conformance` CLI (`check --agent <manifest> --suite v0.1`). There is no shared reference-agent base class; each agent inlines its own loop and reports to the binding's `Recorder`, which owns the ordering and span rules (pinned by the recorder vectors next to the cases). The harness validates the trajectory both case-by-case and against universal span-tree invariants. Cases pin a Claude model; `--model <origin>/<model>` runs the suite on any provider's, and a case whose `requires` names a surface the agent's descriptor doesn't declare (e.g. subagents) reports SKIP. `COVERAGE.md` in that directory maps what the suite covers and the deliberate gaps.
 
 ## How this maps to packaging
 
