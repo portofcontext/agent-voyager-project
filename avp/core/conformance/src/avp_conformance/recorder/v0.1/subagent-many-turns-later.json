@@ -137,9 +137,9 @@
       "text": "research done",
       "reason": "converged",
       "usage": {
-        "total_tokens": 900,
-        "tool_uses": 3,
-        "duration_ms": 3990
+        "tokens_input": 700,
+        "tokens_output": 200,
+        "turns": 4
       }
     },
     {
@@ -418,9 +418,9 @@
         "avp.subagent.result.text": "research done",
         "avp.subagent.reason": "converged",
         "avp.subagent.usage": {
-          "total_tokens": 900,
-          "tool_uses": 3,
-          "duration_ms": 3990
+          "tokens_input": 700,
+          "tokens_output": 200,
+          "turns": 4
         }
       }
     },
