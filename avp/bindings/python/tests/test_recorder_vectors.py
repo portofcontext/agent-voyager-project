@@ -106,6 +106,13 @@ async def _apply(rec: Recorder, op: str, a: dict[str, Any]) -> None:
             cost_usd=a.get("cost_usd"),
             duration_ms=a.get("duration_ms"),
         )
+    elif op == "usage":
+        await rec.usage(
+            Usage.model_validate(a["usage"]),
+            turn_key=a.get("turn_key"),
+            cost_usd=a.get("cost_usd"),
+            duration_ms=a.get("duration_ms"),
+        )
     elif op == "close_turn":
         await rec.close_turn()
     elif op == "tool_result":

@@ -1,14 +1,18 @@
 //! Run the shared recorder vectors against the Rust `Recorder`. Contract:
 //! `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::Arc;
 
 use avp::recorder::{AssistantOpts, Clock, Ids, Recorder, RecorderOptions, StartInfo};
 use avp::sink::Sink;
-use avp::trajectory::{AgentDescriptor, AvpContentItem, ErrorCode, StopReason, SubagentUsage, Usage};
+use avp::trajectory::{
+    AgentDescriptor, AvpContentItem, ErrorCode, StopReason, SubagentUsage, Usage,
+};
 use avp::{Commission, Event, ModelPrice, PriceTable};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use serde::de::DeserializeOwned;
@@ -21,22 +25,23 @@ fn vectors_dir() -> PathBuf {
         .join("../../core/conformance/src/avp_conformance/recorder/v0.1")
 }
 
-struct VectorClock(Rc<Cell<i64>>);
+struct VectorClock(Arc<AtomicI64>);
 
 impl Clock for VectorClock {
     fn now_iso(&self) -> String {
         let epoch: DateTime<Utc> = "2026-01-01T00:00:00Z".parse().unwrap();
-        (epoch + Duration::milliseconds(self.0.get())).to_rfc3339_opts(SecondsFormat::Millis, true)
+        (epoch + Duration::milliseconds(self.0.load(Ordering::SeqCst)))
+            .to_rfc3339_opts(SecondsFormat::Millis, true)
     }
     fn monotonic(&self) -> f64 {
-        self.0.get() as f64 / 1000.0
+        self.0.load(Ordering::SeqCst) as f64 / 1000.0
     }
 }
 
 #[derive(Default)]
 struct VectorIds {
-    spans: Cell<u64>,
-    events: Cell<u64>,
+    spans: AtomicU64,
+    events: AtomicU64,
 }
 
 impl Ids for VectorIds {
@@ -44,12 +49,10 @@ impl Ids for VectorIds {
         TRACE_ID.to_string()
     }
     fn span_id(&self) -> String {
-        self.spans.set(self.spans.get() + 1);
-        format!("{:016x}", self.spans.get())
+        format!("{:016x}", self.spans.fetch_add(1, Ordering::SeqCst) + 1)
     }
     fn event_id(&self) -> String {
-        self.events.set(self.events.get() + 1);
-        format!("evt-{}", self.events.get())
+        format!("evt-{}", self.events.fetch_add(1, Ordering::SeqCst) + 1)
     }
 }
 
@@ -58,13 +61,17 @@ struct Capture(Rc<RefCell<Vec<Value>>>);
 
 impl Sink for Capture {
     fn emit(&self, event: &Event) -> std::io::Result<()> {
-        self.0.borrow_mut().push(serde_json::to_value(event).unwrap());
+        self.0
+            .borrow_mut()
+            .push(serde_json::to_value(event).unwrap());
         Ok(())
     }
 }
 
 fn opt<T: DeserializeOwned>(a: &Value, key: &str) -> Option<T> {
-    a.get(key).filter(|v| !v.is_null()).map(|v| serde_json::from_value(v.clone()).unwrap())
+    a.get(key)
+        .filter(|v| !v.is_null())
+        .map(|v| serde_json::from_value(v.clone()).unwrap())
 }
 
 fn req<T: DeserializeOwned>(a: &Value, key: &str) -> T {
@@ -111,26 +118,43 @@ fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) {
             )
             .unwrap();
         }
+        "usage" => {
+            let usage: Usage = req(a, "usage");
+            let key: Option<String> = opt(a, "turn_key");
+            rec.usage(
+                usage,
+                key.as_deref(),
+                opt(a, "cost_usd"),
+                opt(a, "duration_ms"),
+            );
+        }
         "close_turn" => rec.close_turn().unwrap(),
         "tool_result" => {
             let call_id: String = req(a, "call_id");
             let is_error: Option<bool> = opt(a, "is_error");
             let structured: Option<Map<String, Value>> = opt(a, "structured_content");
-            rec.tool_result(&call_id, a["content"].clone(), is_error.unwrap_or(false), structured)
-                .unwrap();
+            rec.tool_result(
+                &call_id,
+                a["content"].clone(),
+                is_error.unwrap_or(false),
+                structured,
+            )
+            .unwrap();
         }
         "subagent_start" => {
             let id: String = req(a, "invocation_id");
             let name: String = req(a, "name");
             let description: Option<String> = opt(a, "description");
-            rec.subagent_start(&id, &name, opt(a, "input"), description.as_deref()).unwrap();
+            rec.subagent_start(&id, &name, opt(a, "input"), description.as_deref())
+                .unwrap();
         }
         "subagent_result" => {
             let id: String = req(a, "invocation_id");
             let text: String = req(a, "text");
             let reason: StopReason = opt(a, "reason").unwrap_or(StopReason::Converged);
             let usage: Option<SubagentUsage> = opt(a, "usage");
-            rec.subagent_result(&id, &text, reason, usage, opt(a, "structured")).unwrap();
+            rec.subagent_result(&id, &text, reason, usage, opt(a, "structured"))
+                .unwrap();
         }
         "error" => {
             let code: ErrorCode = req(a, "code");
@@ -210,7 +234,7 @@ fn same(got: &Value, want: &Value, path: &str) -> Result<(), String> {
 
 fn run(vector: &Value) -> Vec<Value> {
     let cfg = &vector["recorder"];
-    let t = Rc::new(Cell::new(0i64));
+    let t = Arc::new(AtomicI64::new(0));
     let capture = Capture::default();
     let prices: PriceTable = cfg
         .get("prices")
@@ -228,7 +252,7 @@ fn run(vector: &Value) -> Vec<Value> {
         },
     );
     for call in vector["calls"].as_array().unwrap() {
-        t.set(call["t"].as_i64().unwrap());
+        t.store(call["t"].as_i64().unwrap(), Ordering::SeqCst);
         apply(&mut rec, call["op"].as_str().unwrap(), call);
     }
     let events = capture.0.borrow().clone();
@@ -243,7 +267,11 @@ fn recorder_vectors() {
         .filter(|p| p.extension().is_some_and(|x| x == "json"))
         .collect();
     paths.sort();
-    assert!(paths.len() >= 10, "expected the shared vectors, found {}", paths.len());
+    assert!(
+        paths.len() >= 10,
+        "expected the shared vectors, found {}",
+        paths.len()
+    );
     let mut failures = Vec::new();
     for path in &paths {
         let vector: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -252,7 +280,11 @@ fn recorder_vectors() {
         let want = vector["expected"].as_array().unwrap();
         let types = |v: &[Value]| v.iter().map(|e| e["type"].to_string()).collect::<Vec<_>>();
         if types(&got) != types(want) {
-            failures.push(format!("{name}: types {:?} != {:?}", types(&got), types(want)));
+            failures.push(format!(
+                "{name}: types {:?} != {:?}",
+                types(&got),
+                types(want)
+            ));
             continue;
         }
         for (i, (g, w)) in got.iter().zip(want).enumerate() {
@@ -262,5 +294,10 @@ fn recorder_vectors() {
             }
         }
     }
-    assert!(failures.is_empty(), "{} vector(s) failed:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} vector(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
