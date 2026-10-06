@@ -125,7 +125,9 @@ mod tests {
         let lines: Vec<&str> = body.lines().collect();
         // Truncated on create (no "stale"), one NDJSON line per emit.
         assert_eq!(lines.len(), 2);
-        assert!(lines.iter().all(|l| l.contains(r#""type":"avp.agent_stopped""#)));
+        assert!(lines
+            .iter()
+            .all(|l| l.contains(r#""type":"avp.agent_stopped""#)));
         std::fs::remove_file(&path).ok();
     }
 }
