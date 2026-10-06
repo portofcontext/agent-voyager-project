@@ -50,8 +50,8 @@ use crate::ids::{new_event_id, new_span_id, new_trace_id, SOURCE_AGENT, ZERO_SPA
 use crate::pricing::{compute_cost, CostSource, PriceTable};
 use crate::sink::Sink;
 use crate::trajectory::{
-    AgentDescriptor, AvpContentItem, ErrorCode, McpServerDecl, SkillDecl, StopReason,
-    SubagentDecl, SubagentUsage, ToolDecl, Usage,
+    AgentDescriptor, AvpContentItem, ErrorCode, McpServerDecl, SkillDecl, StopReason, SubagentDecl,
+    SubagentUsage, ToolDecl, Usage,
 };
 use crate::{Commission, Event};
 
@@ -79,7 +79,9 @@ pub struct SystemClock {
 
 impl Default for SystemClock {
     fn default() -> Self {
-        Self { origin: Instant::now() }
+        Self {
+            origin: Instant::now(),
+        }
     }
 }
 
@@ -123,9 +125,9 @@ pub struct RecorderOptions {
     pub prices: PriceTable,
     /// Classifies a tool name as `"mcp_server"` / `"local"`. Defaults to the
     /// catalog passed to `start` (a decl with `avp.mcp_server_id` is MCP).
-    pub dispatch_target: Option<Box<dyn Fn(&str) -> DispatchTarget>>,
-    pub clock: Option<Box<dyn Clock>>,
-    pub ids: Option<Box<dyn Ids>>,
+    pub dispatch_target: Option<Box<dyn Fn(&str) -> DispatchTarget + Send>>,
+    pub clock: Option<Box<dyn Clock + Send>>,
+    pub ids: Option<Box<dyn Ids + Send>>,
 }
 
 /// `agent_started` inputs. `tools` is also the dispatch-target catalog.
@@ -198,22 +200,23 @@ struct Turn {
 impl Turn {
     fn has_output(&self) -> bool {
         !self.emissions.is_empty()
-            || self.content.iter().any(|b| {
-                !(b["type"] == "text" && b["text"].as_str().map_or(true, str::is_empty))
-            })
+            || self
+                .content
+                .iter()
+                .any(|b| !(b["type"] == "text" && b["text"].as_str().map_or(true, str::is_empty)))
     }
 }
 
 /// Builds one run's trajectory from what the adapter reports.
 pub struct Recorder<S: Sink> {
     sink: S,
-    clock: Box<dyn Clock>,
-    ids: Box<dyn Ids>,
+    clock: Box<dyn Clock + Send>,
+    ids: Box<dyn Ids + Send>,
     run_id: String,
     trace_id: String,
     provider: Option<String>,
     prices: PriceTable,
-    dispatch_override: Option<Box<dyn Fn(&str) -> DispatchTarget>>,
+    dispatch_override: Option<Box<dyn Fn(&str) -> DispatchTarget + Send>>,
     catalog: HashMap<String, bool>,
     agent_span_id: Option<String>,
     turn: Option<Turn>,
@@ -237,7 +240,9 @@ fn strip_nulls(mut v: Value) -> Value {
 
 impl<S: Sink> Recorder<S> {
     pub fn new(sink: S, opts: RecorderOptions) -> Self {
-        let clock = opts.clock.unwrap_or_else(|| Box::new(SystemClock::default()));
+        let clock = opts
+            .clock
+            .unwrap_or_else(|| Box::new(SystemClock::default()));
         let ids = opts.ids.unwrap_or_else(|| Box::new(RandomIds));
         let run_id = opts.run_id.unwrap_or_else(|| ids.event_id());
         let trace_id = ids.trace_id();
@@ -323,7 +328,9 @@ impl<S: Sink> Recorder<S> {
     }
 
     fn agent_parent(&self) -> String {
-        self.agent_span_id.clone().unwrap_or_else(|| ZERO_SPAN_ID.to_string())
+        self.agent_span_id
+            .clone()
+            .unwrap_or_else(|| ZERO_SPAN_ID.to_string())
     }
 
     // ── lifecycle ────────────────────────────────────────────────────────
@@ -415,7 +422,13 @@ impl<S: Sink> Recorder<S> {
         if !self.frames.is_empty() {
             let ids: Vec<String> = self.frames.iter().map(|(id, _)| id.clone()).collect();
             for id in ids {
-                self.close_frame(&id, ABANDONED_SUBAGENT_TEXT, StopReason::Abandoned, None, None)?;
+                self.close_frame(
+                    &id,
+                    ABANDONED_SUBAGENT_TEXT,
+                    StopReason::Abandoned,
+                    None,
+                    None,
+                )?;
             }
             if reason == StopReason::Converged {
                 reason = StopReason::Abandoned;
@@ -508,7 +521,10 @@ impl<S: Sink> Recorder<S> {
                     self.invoke(id, name, block["input"].clone());
                 }
                 Some("server_tool_result") => {
-                    let id = block["tool_use_id"].as_str().unwrap_or_default().to_string();
+                    let id = block["tool_use_id"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
                     let result = json!({
                         "type": "tool_result",
                         "tool_use_id": id,
@@ -524,6 +540,32 @@ impl<S: Sink> Recorder<S> {
             self.close_turn()?;
         }
         Ok(())
+    }
+
+    /// Report usage for the open turn after its content, for harnesses that
+    /// deliver token counts once the inference (or its tool round) is over.
+    /// Keep the turn open with a `turn_key` until then. Applies to the open
+    /// turn when `turn_key` is `None` or matches it; otherwise dropped.
+    pub fn usage(
+        &mut self,
+        usage: Usage,
+        turn_key: Option<&str>,
+        cost_usd: Option<f64>,
+        duration_ms: Option<u64>,
+    ) {
+        let Some(turn) = self.turn.as_mut() else {
+            return;
+        };
+        if turn_key.is_some_and(|k| turn.key.as_deref() != Some(k)) {
+            return;
+        }
+        turn.usage = Some(usage);
+        if cost_usd.is_some() {
+            turn.cost_usd = cost_usd;
+        }
+        if duration_ms.is_some() {
+            turn.duration_ms = duration_ms;
+        }
     }
 
     fn invoke(&mut self, call_id: String, name: String, input: Value) {
@@ -550,7 +592,14 @@ impl<S: Sink> Recorder<S> {
         self.open_calls.insert(call_id.clone());
         self.calls.insert(
             call_id,
-            Call { span_id: span, turn_span_id: turn_span, step, name, input, started_at },
+            Call {
+                span_id: span,
+                turn_span_id: turn_span,
+                step,
+                name,
+                input,
+                started_at,
+            },
         );
     }
 
@@ -598,9 +647,9 @@ impl<S: Sink> Recorder<S> {
                 &self.prices,
             )
         };
-        let duration_ms = turn.duration_ms.unwrap_or_else(|| {
-            ((turn.last_chunk_at - turn.opened_at) * 1000.0).max(0.0) as u64
-        });
+        let duration_ms = turn
+            .duration_ms
+            .unwrap_or_else(|| ((turn.last_chunk_at - turn.opened_at) * 1000.0).max(0.0) as u64);
         let agent_span = self.agent_parent();
         let meta = (!turn.meta.is_empty()).then(|| Value::Object(turn.meta.clone()));
         let message = self.event(
@@ -692,11 +741,23 @@ impl<S: Sink> Recorder<S> {
         description: Option<&str>,
     ) -> io::Result<()> {
         let (parent, step, frame_input) = if let Some(call) = self.calls.get(invocation_id) {
-            (call.turn_span_id.clone(), call.step, input.unwrap_or_else(|| call.input.clone()))
+            (
+                call.turn_span_id.clone(),
+                call.step,
+                input.unwrap_or_else(|| call.input.clone()),
+            )
         } else if let Some(turn) = &self.turn {
-            (turn.span_id.clone(), turn.step, input.unwrap_or_else(|| json!({})))
+            (
+                turn.span_id.clone(),
+                turn.step,
+                input.unwrap_or_else(|| json!({})),
+            )
         } else {
-            (self.agent_parent(), self.last_step, input.unwrap_or_else(|| json!({})))
+            (
+                self.agent_parent(),
+                self.last_step,
+                input.unwrap_or_else(|| json!({})),
+            )
         };
         let span = self.ids.span_id();
         let started_at = self.clock.monotonic();
@@ -750,7 +811,11 @@ impl<S: Sink> Recorder<S> {
         usage: Option<SubagentUsage>,
         structured: Option<Value>,
     ) -> io::Result<()> {
-        let idx = self.frames.iter().position(|(id, _)| id == invocation_id).expect("open frame");
+        let idx = self
+            .frames
+            .iter()
+            .position(|(id, _)| id == invocation_id)
+            .expect("open frame");
         let (_, frame) = self.frames.remove(idx);
         let event = self.now_event(
             "subagent_returned",
@@ -795,7 +860,10 @@ fn result_content(content: &Value) -> Value {
 fn python_json(v: &Value) -> String {
     match v {
         Value::Array(items) => {
-            format!("[{}]", items.iter().map(python_json).collect::<Vec<_>>().join(", "))
+            format!(
+                "[{}]",
+                items.iter().map(python_json).collect::<Vec<_>>().join(", ")
+            )
         }
         Value::Object(m) => format!(
             "{{{}}}",
