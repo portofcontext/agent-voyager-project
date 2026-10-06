@@ -25,6 +25,7 @@ TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
+	agents/_template/python \
 	avp-cli
 
 

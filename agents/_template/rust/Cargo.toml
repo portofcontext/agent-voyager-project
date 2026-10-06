@@ -1,0 +1,16 @@
+[package]
+# Rename on copy (and the binary in avp-conformance.json).
+name = "avp-agent-template"
+version = "0.0.1"
+edition = "2021"
+description = "Template for a new AVP agent: copy, rename, and replace the stand-in harness."
+license = "MIT"
+publish = false
+
+[dependencies]
+avp = { path = "../../../avp/bindings/rust" }
+serde_json = "1"
+
+[[bin]]
+name = "avp-agent-template"
+path = "src/main.rs"

@@ -31,17 +31,33 @@ async with AVPClaudeSDKClient(commission=commission, sink=sink) as client:
         ...  # your existing message handling; AVP events are already on the wire
 ```
 
-**Worked example.** `agents/avp-claude-agent-sdk/python/` — the whole package is this pattern. An OpenAI Agents SDK equivalent would follow the same shape: subscribe to the SDK's run lifecycle, translate each signal.
+**Worked example.** `agents/avp-claude-agent-sdk/python/` — the whole package is this pattern: SDK messages in, `Recorder` calls out. An OpenAI Agents SDK equivalent would follow the same shape: subscribe to the SDK's run lifecycle, translate each signal.
 
 ## Instrument your own loop
 
-You own the `messages.create` / `chat.completions.create` loop. AVP slots in around it: you emit the wire events yourself to an `EventSink`. The `avp` binding ships the event types, the `EventSink` protocol, and stdio / jsonl sinks; it imposes no base class or driver protocol, so your loop stays yours and you add emission at the points that map to AVP events.
+You own the `messages.create` / `chat.completions.create` loop. AVP slots in around it: at the points that map to AVP events, you report to the binding's `Recorder`, which writes the wire events to an `EventSink`. The Recorder is a plain object you call; it imposes no base class or driver protocol, so your loop stays yours.
 
 **When to pick.** You own the agentic loop with a direct API integration and want AVP without restructuring it.
 
-**What you emit.** Open with the prelude (`run_requested` → `agent_described` → `agent_started`), then per turn one `assistant_message` (carrying `avp.content`, `avp.usage`, `avp.cost_usd`), with `tool_invoked` / `tool_returned` around each dispatch; close with `agent_stopped` and a stop reason. You publish per-turn deltas, not cumulative snapshots: the consumer reduces cost / token totals from the `assistant_message` deltas.
+**What you report.**
+
+```python
+rec = Recorder(sink, run_id=commission.run_id, provider="openai", prices=load_default_prices())
+await rec.prelude(commission, descriptor)            # run_requested, agent_described
+await rec.start(request_model=model, prompt=prompt, tools=tool_decls)   # agent_started
+while not done:
+    response = client.chat.completions.create(...)
+    await rec.assistant(content_blocks, usage, model=model)   # assistant_message + tool_invoked
+    for call in tool_calls:
+        await rec.tool_result(call.id, run_tool(call))         # tool_returned
+await rec.stop(StopReason.converged, output)          # agent_stopped
+```
+
+Tool calls go in `assistant`'s content as `tool_use` blocks; the Recorder derives `tool_invoked` from them, pairs each `tool_result` by id, numbers the steps, mints the span tree, buffers events behind their turn's `assistant_message`, and computes per-turn cost. You publish per-turn deltas, not cumulative snapshots. A streamed inference reports its chunks under one `turn_key`; usage that arrives after the content goes through `usage()`. The rules are pinned by the recorder vectors (`avp/core/conformance/src/avp_conformance/recorder/v0.1/`). The raw event types and sinks stay public if you'd rather emit by hand.
 
 **Honoring the Commission.** Translate the Commission's fields into your API params before the run starts: `enabled_builtin_tools` filters the tool list you hand the model, inline `mcp_servers[]` are dialed by your MCP client, and inline `skills[]` content is materialized into the system prompt. Managed assets carry their connection material on the Commission, so everything you need is in hand before the first model turn.
+
+**Starting point.** `agents/_template/<lang>/` is this shape with a stand-in harness: replace the harness, keep the rest.
 
 ## Conformance
 
