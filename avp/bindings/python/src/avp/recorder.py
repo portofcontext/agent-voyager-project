@@ -379,6 +379,10 @@ class Recorder:
     ) -> None:
         """Report model output for one inference (or one chunk of it).
 
+        ``model`` is the response model: it goes on the wire as
+        ``avp.response.model`` and is the price-table key. When the table
+        doesn't know it, cost is computed for ``request_model`` instead.
+
         Within a turn: content appends, ``usage`` / ``finish_reasons`` /
         ``cost_usd`` / ``duration_ms`` are last-write-wins, ``model`` is
         first-write-wins, and ``meta`` keys merge with later chunks winning.
@@ -490,15 +494,22 @@ class Recorder:
         elif usage.input_tokens == 0 and usage.output_tokens == 0:
             cost_usd, cost_source = 0.0, COST_SOURCE_UNKNOWN
         else:
-            cost_usd, cost_source = compute_cost(
-                turn.response_model or "",
-                provider=self.provider,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read=usage.cache_read_input_tokens or 0,
-                cache_write=usage.cache_creation_input_tokens or 0,
-                prices=self._prices,
-            )
+            # Providers often answer with a dated snapshot id the table lacks
+            # (`gpt-4o-mini-2024-07-18`); price it as the requested model then.
+            for model in dict.fromkeys(m for m in (turn.response_model, turn.request_model) if m):
+                cost_usd, cost_source = compute_cost(
+                    model,
+                    provider=self.provider,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cache_read=usage.cache_read_input_tokens or 0,
+                    cache_write=usage.cache_creation_input_tokens or 0,
+                    prices=self._prices,
+                )
+                if cost_source != COST_SOURCE_UNKNOWN:
+                    break
+            else:
+                cost_usd, cost_source = 0.0, COST_SOURCE_UNKNOWN
         duration_ms = (
             turn.duration_ms
             if turn.duration_ms is not None
