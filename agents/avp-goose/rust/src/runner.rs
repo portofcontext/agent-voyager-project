@@ -12,19 +12,18 @@ use std::time::Instant;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
-use avp::trajectory::{ErrorCode, StopReason, Usage};
+use avp::trajectory::{ErrorCode, StopReason};
 use avp::Commission;
 use futures::StreamExt;
 use goose::agents::{Agent, AgentEvent, SessionConfig};
 use goose::config::GooseMode;
 use goose::conversation::message::Message;
-use goose::model::ModelConfig;
+use goose::model_config::model_config_from_user_config;
 use goose::session::session_manager::SessionType;
 use serde_json::{json, Value};
 
 use crate::commission::{self, GooseRunConfig};
 use crate::emit::{self, Emitter};
-use crate::provider_tap::{self, UsageTap};
 use crate::translate::{self, GooseContent};
 
 /// The descriptor's `agent_version`: THIS connector build's version (the
@@ -133,7 +132,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     let native_model = if provider_name != origin {
         model_name.clone()
     } else {
-        model_name.split_once('/').map(|(_, m)| m).unwrap_or(&model_name).to_string()
+        model_name
+            .split_once('/')
+            .map(|(_, m)| m)
+            .unwrap_or(&model_name)
+            .to_string()
     };
 
     // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
@@ -162,13 +165,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     write_skills(commission, &working_dir)?;
 
     // Provider, extensions, system prompt, structured output.
-    let model_config = ModelConfig::new(&native_model)?;
-    let provider =
-        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
-    // Wrap the provider to capture per-inference usage (incl. cache split) off
-    // its stream — the signal that never reaches the AgentEvent level.
-    let (provider, usage_tap) = provider_tap::tap(provider);
-    agent.update_provider(provider, &session_id).await?;
+    let model_config = model_config_from_user_config(&provider_name, &native_model)?;
+    let provider = goose::providers::create(&provider_name, cfg.extensions.clone()).await?;
+    agent
+        .update_provider(provider, model_config, &session_id)
+        .await?;
     // `add_extensions_bulk` reports per-extension outcomes in its return value
     // rather than failing the call, so a built-in that won't load (missing
     // factory, init error) is otherwise silent. Surface failures on stderr.
@@ -190,7 +191,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             .await;
     }
     if let Some(response) = cfg.response {
-        agent.add_final_output_tool(response).await;
+        agent.add_final_output_tool(response).await?;
     }
 
     // The set of MCP-extension ids (for tool dispatch-target classification and
@@ -208,8 +209,14 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // Static descriptor from the agent's live tool registry (no probe needed).
     // Skills are discovered from disk (built-ins + the working dir's `.agents/skills`,
     // where `write_skills` materialized the Commission's inline skills).
-    let descriptor =
-        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &working_dir).await?;
+    let descriptor = build_descriptor(
+        &agent,
+        &session_id,
+        Some(&model_name),
+        &mcp_servers,
+        &working_dir,
+    )
+    .await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -223,8 +230,10 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // Fail fast (spec §4.0): the Commission pins this agent at a different
     // build. Same-name surfaces can change behavior across builds; refuse
     // loudly instead of running an unvalidated one.
-    if let Some(pin) =
-        commission.agent_versions.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    if let Some(pin) = commission
+        .agent_versions
+        .as_ref()
+        .and_then(|m| m.get(commission::AGENT_NAME))
     {
         if pin != AGENT_VERSION {
             emitter.error(
@@ -246,14 +255,27 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // emit `error_occurred(commission_collision)` + `agent_stopped(error)`
     // before the loop, so no model turn runs.
     let missing_key: Vec<&str> = [
-        ("enabled_builtin_tools", commission.enabled_builtin_tools.as_ref()),
-        ("enabled_builtin_subagents", commission.enabled_builtin_subagents.as_ref()),
-        ("enabled_builtin_skills", commission.enabled_builtin_skills.as_ref()),
-        ("enabled_builtin_mcp_servers", commission.enabled_builtin_mcp_servers.as_ref()),
+        (
+            "enabled_builtin_tools",
+            commission.enabled_builtin_tools.as_ref(),
+        ),
+        (
+            "enabled_builtin_subagents",
+            commission.enabled_builtin_subagents.as_ref(),
+        ),
+        (
+            "enabled_builtin_skills",
+            commission.enabled_builtin_skills.as_ref(),
+        ),
+        (
+            "enabled_builtin_mcp_servers",
+            commission.enabled_builtin_mcp_servers.as_ref(),
+        ),
     ]
     .into_iter()
     .filter_map(|(field, m)| {
-        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME)).then_some(field)
+        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME))
+            .then_some(field)
     })
     .collect();
     if !missing_key.is_empty() {
@@ -268,13 +290,22 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         emitter.stop(StopReason::Error, None)?;
         return Ok(());
     }
-    if let Some(names) =
-        commission.enabled_builtin_tools.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    if let Some(names) = commission
+        .enabled_builtin_tools
+        .as_ref()
+        .and_then(|m| m.get(commission::AGENT_NAME))
     {
-        let known: HashSet<&str> =
-            descriptor.tools.iter().flatten().map(|t| t.name.as_str()).collect();
-        let unknown: Vec<&str> =
-            names.iter().map(String::as_str).filter(|n| !known.contains(n)).collect();
+        let known: HashSet<&str> = descriptor
+            .tools
+            .iter()
+            .flatten()
+            .map(|t| t.name.as_str())
+            .collect();
+        let unknown: Vec<&str> = names
+            .iter()
+            .map(String::as_str)
+            .filter(|n| !known.contains(n))
+            .collect();
         if !unknown.is_empty() {
             emitter.error(
                 ErrorCode::CommissionCollision,
@@ -298,20 +329,30 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         max_turns: None,
         retry_config: None,
     };
-    let mut stream = agent.reply(user_message, session_config, None).await?;
+    // Goose's default loop; its experimental state-machine loop stays off.
+    let mut stream = agent
+        .reply(user_message, session_config, false, None)
+        .await?;
 
     // Coalesce streamed deltas into turns. Goose yields an assistant inference
     // as incremental message deltas (partial `Text` chunks), and a new
     // inference only begins after tool execution, which arrives as a
     // non-assistant (tool-result) message. So consecutive assistant messages
     // are one inference: accumulate their content, then close the turn when a
-    // non-assistant message arrives or the stream ends. By the close trigger
-    // the inference is complete, so the provider tap has captured all of its
-    // usage; we drain it then. This also preserves ordering (a turn's
-    // `tool_invoked` lands before its `tool_returned`).
-    let mut consumed: usize = 0;
+    // non-assistant message arrives or the stream ends.
+    //
+    // Goose attributes an inference's usage to its assistant message with a
+    // `MessageUsage` event that lands after the turn's tool results, before the
+    // next inference. So a turn is reported under its message id and kept open:
+    // tool results buffer onto it, `MessageUsage` fills in its usage and the
+    // inference's own elapsed time, and the next inference (or the stop) closes
+    // it. Ordering holds: a turn's `tool_invoked` lands before its
+    // `tool_returned`.
     let mut ended_ok = true;
     let mut pending: Vec<GooseContent> = Vec::new();
+    // Goose message ids coalesced into `pending`, then into the open turn.
+    let mut pending_ids: Vec<String> = Vec::new();
+    let mut open_ids: Vec<String> = Vec::new();
     // Wall-clock start of the inference whose deltas we are coalescing. Set when
     // `reply()` is dispatched (turn 1) and reset after each tool-result batch
     // (the next inference begins once Goose has the tool output). Carried into
@@ -330,14 +371,21 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                         .unwrap_or_else(|| Value::Array(Vec::new())),
                 )?;
                 match value.get("role").and_then(Value::as_str) {
-                    Some("assistant") => translate::append_coalescing(&mut pending, content),
+                    Some("assistant") => {
+                        if let Some(id) = value.get("id").and_then(Value::as_str) {
+                            if !pending_ids.iter().any(|p| p == id) {
+                                pending_ids.push(id.to_string());
+                            }
+                        }
+                        translate::append_coalescing(&mut pending, content)
+                    }
                     _ => {
                         flush_turn(
                             &mut emitter,
-                            &usage_tap,
                             &model_name,
-                            &mut consumed,
                             &mut pending,
+                            &mut pending_ids,
+                            &mut open_ids,
                             turn_start,
                         )?;
                         emitter.on_tool_results(&content)?;
@@ -347,14 +395,34 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                     }
                 }
             }
-            Ok(AgentEvent::McpNotification(_)) | Ok(AgentEvent::HistoryReplaced(_)) => {}
+            Ok(AgentEvent::MessageUsage { message_id, usage }) => {
+                // An inference with no tool round reaches `MessageUsage` before
+                // any close trigger; report its turn first so usage lands on it.
+                let id = message_id.unwrap_or_default();
+                if pending_ids.contains(&id) {
+                    flush_turn(
+                        &mut emitter,
+                        &model_name,
+                        &mut pending,
+                        &mut pending_ids,
+                        &mut open_ids,
+                        turn_start,
+                    )?;
+                }
+                if open_ids.contains(&id) {
+                    emitter.on_usage(translate::message_usage(&usage), usage.elapsed_ms);
+                }
+            }
+            Ok(AgentEvent::Usage(_))
+            | Ok(AgentEvent::McpNotification(_))
+            | Ok(AgentEvent::HistoryReplaced(_)) => {}
             Err(e) => {
                 flush_turn(
                     &mut emitter,
-                    &usage_tap,
                     &model_name,
-                    &mut consumed,
                     &mut pending,
+                    &mut pending_ids,
+                    &mut open_ids,
                     turn_start,
                 )?;
                 let message = e.to_string();
@@ -364,35 +432,43 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             }
         }
     }
-    // Final turn: the stream has ended, so all usage has been tapped.
+    // Final turn: the stream has ended; `stop` closes the open turn.
     flush_turn(
         &mut emitter,
-        &usage_tap,
         &model_name,
-        &mut consumed,
         &mut pending,
+        &mut pending_ids,
+        &mut open_ids,
         turn_start,
     )?;
     emitter.stop(emit::classify_stop(ended_ok, false, false), None)?;
     Ok(())
 }
 
-/// Close the open assistant turn, if any: emit one `assistant_message` from the
-/// coalesced deltas with the usage tapped since the last turn. Clears `pending`.
+/// Report the coalesced assistant deltas as one turn, keyed by its last Goose
+/// message id and left open for that message's `MessageUsage`. The turn's
+/// duration is a fallback from `turn_start`, replaced by Goose's own
+/// `elapsed_ms` when the usage arrives. Clears `pending`.
 fn flush_turn<S: Sink>(
     emitter: &mut Emitter<S>,
-    usage_tap: &UsageTap,
     model: &str,
-    consumed: &mut usize,
     pending: &mut Vec<GooseContent>,
+    pending_ids: &mut Vec<String>,
+    open_ids: &mut Vec<String>,
     turn_start: Instant,
 ) -> anyhow::Result<()> {
     if pending.is_empty() {
         return Ok(());
     }
     let content = std::mem::take(pending);
-    let usage = tap_usage(usage_tap, consumed);
-    emitter.on_assistant(&content, usage, Some(model.to_string()), turn_start)?;
+    *open_ids = std::mem::take(pending_ids);
+    // A message without an id still needs a key unique to this turn.
+    let key = open_ids
+        .last()
+        .cloned()
+        .unwrap_or_else(|| format!("turn@{turn_start:?}"));
+    let duration_ms = turn_start.elapsed().as_millis() as u64;
+    emitter.on_inference(&content, Some(model.to_string()), key, Some(duration_ms))?;
     Ok(())
 }
 
@@ -474,15 +550,24 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let session = agent
         .config
         .session_manager
-        .create_session(working_dir.clone(), "describe".to_string(), SessionType::User, GooseMode::Auto)
+        .create_session(
+            working_dir.clone(),
+            "describe".to_string(),
+            SessionType::User,
+            GooseMode::Auto,
+        )
         .await?;
     let session_id = session.id.clone();
 
-    let model_config = ModelConfig::new(&native_model)?;
-    let provider =
-        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
-    agent.update_provider(provider, &session_id).await?;
-    for result in agent.add_extensions_bulk(cfg.extensions.clone(), &session_id).await? {
+    let model_config = model_config_from_user_config(&provider_name, &native_model)?;
+    let provider = goose::providers::create(&provider_name, cfg.extensions.clone()).await?;
+    agent
+        .update_provider(provider, model_config, &session_id)
+        .await?;
+    for result in agent
+        .add_extensions_bulk(cfg.extensions.clone(), &session_id)
+        .await?
+    {
         if !result.success {
             eprintln!(
                 "avp-goose: extension '{}' failed to load: {}",
@@ -494,8 +579,14 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 
     // The pre-flight view carries no Commission MCP servers or skills, and only
     // advertises a default_model if goose actually has one configured.
-    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &working_dir)
-        .await
+    build_descriptor(
+        &agent,
+        &session_id,
+        configured_model.as_deref(),
+        &HashSet::new(),
+        &working_dir,
+    )
+    .await
 }
 
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
@@ -509,17 +600,13 @@ async fn build_descriptor(
     mcp_servers: &HashSet<String>,
     working_dir: &std::path::Path,
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
-    let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
-        tools.iter().map(|t| t.name.to_string()).collect()
-    };
-
     // Map each MCP-surfaced tool to its server id by querying the registry
     // per-extension (tool names from `list_tools(None)` are not reliably
     // prefixed, so a per-server query is the dependable correlation).
     let mut mcp_tool_to_server: HashMap<String, String> = HashMap::new();
     for id in mcp_servers {
-        for name in tool_names(agent.list_tools(session_id, Some(id.clone())).await) {
-            mcp_tool_to_server.insert(name, id.clone());
+        for tool in agent.list_tools(session_id, Some(id.clone())).await {
+            mcp_tool_to_server.insert(tool.name.to_string(), id.clone());
         }
     }
 
@@ -590,27 +677,6 @@ async fn build_descriptor(
         descriptor["default_model"] = json!(model);
     }
     serde_json::from_value(descriptor).map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
-}
-
-/// AVP usage from the provider tap: sum the per-inference `ProviderUsage`s
-/// captured since the last flush. AVP convention folds cache reads/writes into
-/// `input_tokens`; the split is also carried in its own fields.
-fn tap_usage(tap: &UsageTap, consumed: &mut usize) -> Usage {
-    let (mut input, mut output, mut cache_read, mut cache_write) = (0i64, 0i64, 0i64, 0i64);
-    for pu in tap.drain_new(consumed) {
-        input += pu.usage.input_tokens.unwrap_or(0) as i64;
-        output += pu.usage.output_tokens.unwrap_or(0) as i64;
-        cache_read += pu.usage.cache_read_input_tokens.unwrap_or(0) as i64;
-        cache_write += pu.usage.cache_write_input_tokens.unwrap_or(0) as i64;
-    }
-    let nonzero = |v: i64| (v > 0).then_some(v as u64);
-    Usage {
-        input_tokens: (input + cache_read + cache_write).max(0) as u64,
-        output_tokens: output.max(0) as u64,
-        cache_read_input_tokens: nonzero(cache_read),
-        cache_creation_input_tokens: nonzero(cache_write),
-        reasoning_output_tokens: None,
-    }
 }
 
 #[cfg(test)]

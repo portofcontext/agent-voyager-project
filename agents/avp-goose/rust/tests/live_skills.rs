@@ -39,7 +39,9 @@ async fn model_discovers_and_uses_an_inline_skill() {
     .unwrap();
 
     let sink = CapturingSink::default();
-    avp_goose::runner::run(&commission, sink.clone()).await.expect("connector run");
+    avp_goose::runner::run(&commission, sink.clone())
+        .await
+        .expect("connector run");
 
     let t = sink.trajectory();
     t.assert_schema_valid();
@@ -56,9 +58,14 @@ async fn model_discovers_and_uses_an_inline_skill() {
     // our skill, and it returned without error.
     let invoked = t.find_all("avp.tool_invoked");
     assert!(
-        invoked.iter().any(|e| e["data"]["avp.tool.name"] == "load_skill"),
+        invoked
+            .iter()
+            .any(|e| e["data"]["avp.tool.name"] == "load_skill"),
         "no load_skill tool_invoked; tools were {:?}",
-        invoked.iter().map(|e| &e["data"]["avp.tool.name"]).collect::<Vec<_>>()
+        invoked
+            .iter()
+            .map(|e| &e["data"]["avp.tool.name"])
+            .collect::<Vec<_>>()
     );
     assert!(
         t.find_all("avp.tool_returned")
@@ -74,5 +81,8 @@ async fn model_discovers_and_uses_an_inline_skill() {
         "model did not follow the skill (expected AVP-GREETING::Bob)"
     );
 
-    assert_eq!(t.find("avp.agent_stopped")["data"]["avp.reason"], "converged");
+    assert_eq!(
+        t.find("avp.agent_stopped")["data"]["avp.reason"],
+        "converged"
+    );
 }

@@ -34,12 +34,12 @@ Why not the SDK's `PreToolUse` / `PostToolUse` hooks? They'd work, but tool-rela
 
 ```
 _client.py     AVPClaudeSDKClient (probe-then-run connect, error/cancel handling)
-_emit.py       Per-message handlers, prelude/terminal emitters, SDK→AVP helpers
-_runstate.py   RunState, Turn (per-inference buffer), ToolSpan, TaskInfo
+_emit.py       Per-message handlers: SDK messages in, avp.recorder.Recorder calls out
+_runstate.py   RunState (the Recorder, the Commission allow-list, the current turn key)
 _translator.py SDK init-data → AgentDescriptor fields
 ```
 
-The hot path is the **deferred-emission pattern** on `Turn`. The Claude CLI fans one API response into multiple `AssistantMessage` chunks sharing a `message_id`. To keep wire ordering causal (assistant_message precedes the tool / subagent events it triggered), each turn buffers AVP events in `Turn.emissions` until a new `message_id` arrives. `RunState.drain()` then flushes one `assistant_message` followed by every buffered event in arrival order. Original timestamps are preserved.
+The trajectory's ordering and span rules live in the binding's `avp.recorder.Recorder`. The Claude CLI fans one API response into multiple `AssistantMessage` chunks sharing a `message_id`; the adapter passes that id as the Recorder's `turn_key`, so the chunks merge into one turn and the `assistant_message` lands before the tool / subagent events it triggered.
 
 See [CLAUDE.md](CLAUDE.md) for design notes.
 

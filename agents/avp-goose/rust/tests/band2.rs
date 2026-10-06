@@ -51,6 +51,7 @@ fn summon_tool_call_emits_both_tool_and_subagent_events() {
         )],
         usage_zero(),
         None,
+        None,
     )
     .unwrap();
     em.on_tool_results(&[tool_response("s1", "subagent finished")])
@@ -85,8 +86,14 @@ fn summon_failure_emits_subagent_returned_with_error_reason() {
     let mut em = emitter(sink.clone(), &[]);
     em.start(None).unwrap();
     em.on_assistant(
-        &[tool_request("s1", "delegate", json!({ "source": "broken" }), Some("summon"))],
+        &[tool_request(
+            "s1",
+            "delegate",
+            json!({ "source": "broken" }),
+            Some("summon"),
+        )],
         usage_zero(),
+        None,
         None,
     )
     .unwrap();
@@ -94,7 +101,10 @@ fn summon_failure_emits_subagent_returned_with_error_reason() {
         .unwrap();
 
     let t = sink.trajectory();
-    assert!(t.find_all("avp.subagent_failed").is_empty(), "subagent_failed is gone");
+    assert!(
+        t.find_all("avp.subagent_failed").is_empty(),
+        "subagent_failed is gone"
+    );
     let returned = t.find_all("avp.subagent_returned");
     assert_eq!(returned.len(), 1);
     assert_eq!(returned[0]["data"]["avp.subagent.reason"], "error");

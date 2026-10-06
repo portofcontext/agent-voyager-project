@@ -29,7 +29,10 @@ use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 #[derive(Parser)]
-#[command(name = "avp-goose-conformance", about = "Conformance entrypoint for avp-goose.")]
+#[command(
+    name = "avp-goose-conformance",
+    about = "Conformance entrypoint for avp-goose."
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

@@ -52,14 +52,21 @@ async fn model_delegates_to_a_subagent_recipe() {
     .unwrap();
 
     let sink = CapturingSink::default();
-    avp_goose::runner::run(&commission, sink.clone()).await.expect("connector run");
+    avp_goose::runner::run(&commission, sink.clone())
+        .await
+        .expect("connector run");
 
     let t = sink.trajectory();
     t.assert_schema_valid();
 
     // The delegate surfaces on both axes.
     let invoked = t.find_all("avp.subagent_invoked");
-    assert_eq!(invoked.len(), 1, "expected one subagent_invoked; types: {:?}", t.types());
+    assert_eq!(
+        invoked.len(),
+        1,
+        "expected one subagent_invoked; types: {:?}",
+        t.types()
+    );
     // Named for the delegated recipe (`source`), not the `delegate` tool.
     assert_eq!(invoked[0]["data"]["avp.subagent.name"], "echoer");
     assert!(
@@ -76,7 +83,13 @@ async fn model_delegates_to_a_subagent_recipe() {
 
     // The subagent ran its recipe and the token round-tripped.
     let blob = serde_json::to_string(&t.0).unwrap();
-    assert!(blob.contains("SUBAGENT-OK"), "subagent token not found in trajectory");
+    assert!(
+        blob.contains("SUBAGENT-OK"),
+        "subagent token not found in trajectory"
+    );
 
-    assert_eq!(t.find("avp.agent_stopped")["data"]["avp.reason"], "converged");
+    assert_eq!(
+        t.find("avp.agent_stopped")["data"]["avp.reason"],
+        "converged"
+    );
 }

@@ -10,7 +10,7 @@ repository = "https://github.com/portofcontext/agent-voyager-project"
 avp = { path = "../../../avp/bindings/rust" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Heavy git dependency: pinned to the rev whose API this connector targets.
+# Heavy git dependency: pinned to the release tag whose API this connector targets.
 # We drop goose's defaults and always pull the set every consumer needs: TLS +
 # keyring to drive hosted providers, and `telemetry` for goose's internal
 # observability hooks. `local-inference` (in-process llama.cpp + GGUF straight
@@ -25,7 +25,7 @@ serde_json = "1"
 # opentelemetry-appender-tracing pin wants a `experimental_span_attributes`
 # feature that the resolvable 0.31.x releases dropped, so it won't build at this
 # goose rev; revisit when the rev bumps).
-goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false, features = [
+goose = { git = "https://github.com/aaif-goose/goose", tag = "v1.53.0", default-features = false, features = [
     "rustls-tls",
     "system-keyring",
     "telemetry",
@@ -34,14 +34,15 @@ goose = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a
 # always available; computercontroller/memory/tutorial/autovisualiser live here).
 # We register their in-process servers into goose's BUILTIN_REGISTRY so the agent
 # can load them without spawning an external `goose` binary — the embedding
-# otherwise leaves that registry empty.
-goose-mcp = { git = "https://github.com/block/goose", rev = "728d72a79f9eda1cf6d573a7885ef660b04a5622", default-features = false }
+# otherwise leaves that registry empty. goose-mcp gates each built-in behind a
+# feature; `bundled-mcp` is the full set stock goose ships.
+goose-mcp = { git = "https://github.com/aaif-goose/goose", tag = "v1.53.0", default-features = false, features = [
+    "bundled-mcp",
+] }
 futures = "0.3"
 anyhow = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 async-trait = "0.1"
-# Same registry version Goose resolves, so `rmcp::model::Tool` is the same type.
-rmcp = "1.7"
 # Used by the eval harness to schema-validate live trajectories.
 jsonschema = "0.46"
 # Optional: only pulled in for the `conformance` feature, which gates the

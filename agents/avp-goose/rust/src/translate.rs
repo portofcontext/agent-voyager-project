@@ -14,35 +14,43 @@
 
 use std::collections::HashSet;
 
-use avp::trajectory::{
-    AvpContentItem, TextBlock, ThinkingBlock, ToolInvokedDataAvpToolDispatchTarget, Usage,
-};
+use avp::recorder::DispatchTarget;
+use avp::trajectory::{AvpContentItem, TextBlock, ThinkingBlock, Usage};
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 /// Map a Goose provider-usage object (token counts from a turn / token state)
 /// to AVP `Usage`.
 ///
-/// AVP convention: `input_tokens` is the *total* prompt size, cache reads and
-/// writes INCLUDED (see `avp::pricing::compute_cost`, which subtracts them back
-/// out for the fresh-token rate). Anthropic/Goose report fresh input separately
-/// from cache tokens, so we fold the cache counts into the AVP input total and
-/// also carry them in their own fields. Accepts either Goose's
-/// `cache_write_input_tokens` or the `cache_creation_input_tokens` spelling.
+/// AVP `Usage` from a Goose usage object. Both count `input_tokens` as the
+/// whole prompt, cache reads and writes INCLUDED, with the cache split carried
+/// in its own fields (see `avp::pricing::compute_cost`, which subtracts them
+/// back out for the fresh-token rate). Accepts Goose's
+/// `cache_write_input_tokens` or the `cache_creation_input_tokens` spelling;
+/// a zero cache count is reported as absent.
 pub fn usage(goose: &Value) -> Usage {
     let field = |k: &str| goose.get(k).and_then(Value::as_u64);
-    let cache_read = field("cache_read_input_tokens");
-    let cache_write =
-        field("cache_write_input_tokens").or_else(|| field("cache_creation_input_tokens"));
+    let nonzero = |v: Option<u64>| v.filter(|n| *n > 0);
     Usage {
-        input_tokens: field("input_tokens").unwrap_or(0)
-            + cache_read.unwrap_or(0)
-            + cache_write.unwrap_or(0),
+        input_tokens: field("input_tokens").unwrap_or(0),
         output_tokens: field("output_tokens").unwrap_or(0),
-        cache_read_input_tokens: cache_read,
-        cache_creation_input_tokens: cache_write,
+        cache_read_input_tokens: nonzero(field("cache_read_input_tokens")),
+        cache_creation_input_tokens: nonzero(
+            field("cache_write_input_tokens").or_else(|| field("cache_creation_input_tokens")),
+        ),
         reasoning_output_tokens: None,
     }
+}
+
+/// AVP `Usage` from Goose's `MessageUsage` (the usage Goose attaches to an
+/// assistant message), via [`usage`].
+pub fn message_usage(u: &goose::conversation::message::MessageUsage) -> Usage {
+    usage(&json!({
+        "input_tokens": u.input_tokens.unwrap_or(0).max(0),
+        "output_tokens": u.output_tokens.unwrap_or(0).max(0),
+        "cache_read_input_tokens": u.cache_read_tokens.unwrap_or(0).max(0),
+        "cache_write_input_tokens": u.cache_write_tokens.unwrap_or(0).max(0),
+    }))
 }
 
 /// One item of a Goose `Message.content` array.
@@ -249,14 +257,47 @@ pub fn append_coalescing(buf: &mut Vec<GooseContent>, incoming: Vec<GooseContent
 /// whose extension is an MCP server (stdio / streamable-http / sse) is
 /// `mcp_server`; everything else (builtin, platform, frontend, unknown) is
 /// `local`. The caller supplies the set of MCP extension names.
-pub fn dispatch_target(
-    extension: Option<&str>,
-    mcp_servers: &HashSet<String>,
-) -> ToolInvokedDataAvpToolDispatchTarget {
+pub fn dispatch_target(extension: Option<&str>, mcp_servers: &HashSet<String>) -> DispatchTarget {
     match extension {
-        Some(ext) if mcp_servers.contains(ext) => ToolInvokedDataAvpToolDispatchTarget::McpServer,
-        _ => ToolInvokedDataAvpToolDispatchTarget::Local,
+        Some(ext) if mcp_servers.contains(ext) => "mcp_server",
+        _ => "local",
     }
+}
+
+/// The AVP `tool_result` block for a Goose tool output: the text the model
+/// reads as `content`, and an rmcp `CallToolResult` object kept whole as
+/// `structured_content`.
+pub fn tool_result_block(call_id: &str, output: &Value, is_error: bool) -> Value {
+    let mut block = json!({
+        "type": "tool_result",
+        "tool_use_id": call_id,
+        "content": result_text(output),
+        "is_error": is_error,
+    });
+    if let Some(obj) = output.as_object() {
+        block["structured_content"] = Value::Object(obj.clone());
+    }
+    block
+}
+
+/// The text of a Goose tool output: a string as-is, an rmcp `CallToolResult`'s
+/// text content items concatenated, anything else JSON-encoded.
+pub fn result_text(output: &Value) -> String {
+    if let Some(s) = output.as_str() {
+        return s.to_string();
+    }
+    if let Some(items) = output.get("content").and_then(Value::as_array) {
+        let mut out = String::new();
+        for item in items {
+            if item.get("type").and_then(Value::as_str) == Some("text") {
+                if let Some(t) = item.get("text").and_then(Value::as_str) {
+                    out.push_str(t);
+                }
+            }
+        }
+        return out;
+    }
+    output.to_string()
 }
 
 #[cfg(test)]
@@ -374,18 +415,9 @@ mod tests {
     #[test]
     fn dispatch_target_keys_on_mcp_extension_set() {
         let mcp: HashSet<String> = ["avptest".to_string()].into_iter().collect();
-        assert_eq!(
-            dispatch_target(Some("avptest"), &mcp),
-            ToolInvokedDataAvpToolDispatchTarget::McpServer
-        );
-        assert_eq!(
-            dispatch_target(Some("developer"), &mcp),
-            ToolInvokedDataAvpToolDispatchTarget::Local
-        );
-        assert_eq!(
-            dispatch_target(None, &mcp),
-            ToolInvokedDataAvpToolDispatchTarget::Local
-        );
+        assert_eq!(dispatch_target(Some("avptest"), &mcp), "mcp_server");
+        assert_eq!(dispatch_target(Some("developer"), &mcp), "local");
+        assert_eq!(dispatch_target(None, &mcp), "local");
     }
 
     #[test]

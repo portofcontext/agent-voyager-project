@@ -24,7 +24,10 @@ fn prelude_emits_run_requested_then_agent_described() {
     t.assert_order(&["avp.run_requested", "avp.agent_described"]);
     let rr = t.find("avp.run_requested");
     assert_eq!(rr["data"]["avp.commission"]["run_id"], "r1");
-    assert_eq!(rr["data"]["avp.commission"]["model"], "anthropic/claude-opus-4-7");
+    assert_eq!(
+        rr["data"]["avp.commission"]["model"],
+        "anthropic/claude-opus-4-7"
+    );
     assert_eq!(
         t.find("avp.agent_described")["data"]["avp.descriptor"]["agent_name"],
         "goose"
@@ -43,6 +46,7 @@ fn full_lifecycle_is_ordered_and_conformant() {
         &[text("hi")],
         usage_zero(),
         Some("claude-opus-4-7".to_string()),
+        None,
     )
     .unwrap();
     em.stop(StopReason::Converged, None).unwrap();
@@ -79,11 +83,11 @@ fn descriptor_carries_tools() {
 // --- usage / cost -----------------------------------------------------------
 
 #[test]
-fn usage_folds_cache_tokens_into_input() {
-    // AVP convention: `input_tokens` is the total prompt size with cache reads
-    // and writes included.
+fn usage_keeps_cache_inclusive_input_total() {
+    // Goose (since v1.53) and AVP agree: `input_tokens` is the whole prompt,
+    // cache reads and writes included, so it passes through unchanged.
     let u = translate::usage(&json!({
-        "input_tokens": 700, "output_tokens": 500,
+        "input_tokens": 1000, "output_tokens": 500,
         "cache_read_input_tokens": 200, "cache_creation_input_tokens": 100
     }));
     assert_eq!(u.input_tokens, 1000);
@@ -95,7 +99,7 @@ fn usage_folds_cache_tokens_into_input() {
 #[test]
 fn usage_accepts_cache_write_spelling() {
     let u = translate::usage(&json!({
-        "input_tokens": 10, "output_tokens": 5, "cache_write_input_tokens": 3
+        "input_tokens": 13, "output_tokens": 5, "cache_write_input_tokens": 3
     }));
     assert_eq!(u.input_tokens, 13);
     assert_eq!(u.cache_creation_input_tokens, Some(3));
@@ -107,10 +111,10 @@ fn usage_drives_computed_cost_on_assistant_message() {
     let mut em = emitter(sink.clone(), &[]);
     em.start(Some("claude-opus-4-7")).unwrap();
     let u = translate::usage(&json!({
-        "input_tokens": 700, "output_tokens": 500,
+        "input_tokens": 1000, "output_tokens": 500,
         "cache_read_input_tokens": 200, "cache_creation_input_tokens": 100
     }));
-    em.on_assistant(&[text("hi")], u, Some("claude-opus-4-7".to_string()))
+    em.on_assistant(&[text("hi")], u, Some("claude-opus-4-7".to_string()), None)
         .unwrap();
     em.stop(StopReason::Converged, None).unwrap();
 
@@ -133,6 +137,7 @@ fn unknown_model_reports_unknown_cost() {
         &[text("hi")],
         usage_zero(),
         Some("mystery/model".to_string()),
+        None,
     )
     .unwrap();
     em.stop(StopReason::Converged, None).unwrap();
@@ -185,6 +190,7 @@ fn zero_usage_reports_unknown_even_for_known_model() {
         &[text("hi")],
         usage_zero(),
         Some("claude-opus-4-7".to_string()),
+        None,
     )
     .unwrap();
     em.stop(StopReason::Converged, None).unwrap();

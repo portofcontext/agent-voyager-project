@@ -35,6 +35,7 @@ fn representative_trajectory_is_schema_valid_and_ordered() {
         ],
         usage_zero(),
         Some("claude-opus-4-7".to_string()),
+        None,
     )
     .unwrap();
     em.on_tool_results(&[tool_response("c1", "a\nb")]).unwrap();
@@ -42,6 +43,7 @@ fn representative_trajectory_is_schema_valid_and_ordered() {
         &[text("done")],
         usage_zero(),
         Some("claude-opus-4-7".to_string()),
+        None,
     )
     .unwrap();
     em.stop(StopReason::Converged, None).unwrap();
