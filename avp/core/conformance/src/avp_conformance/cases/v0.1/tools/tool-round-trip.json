@@ -6,6 +6,9 @@
     "spec/v0.1/trajectory.md#7-event-reference",
     "spec/v0.1/trajectory.md#5-tools"
   ],
+  "requires": [
+    "tools"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "tool-round-trip",

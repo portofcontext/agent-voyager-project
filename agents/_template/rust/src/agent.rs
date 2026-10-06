@@ -2,13 +2,14 @@
 //!
 //! `describe` and `run` are all the stock entrypoint (`avp::agent_cli`) needs.
 
+use avp::preflight::{preflight, Offered};
 use avp::recorder::{AssistantOpts, Recorder, RecorderOptions, StartInfo};
 use avp::sink::Sink;
 use avp::trajectory::{AgentDescriptor, StopReason, ToolDecl};
 use avp::Commission;
 use serde_json::json;
 
-use crate::commission::{fail_fast, from_commission, AGENT_NAME, BUILTIN_TOOLS};
+use crate::commission::{from_commission, AGENT_NAME, BUILTIN_TOOLS};
 use crate::{harness, translate};
 
 pub const AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -45,7 +46,14 @@ pub fn run<S: Sink>(commission: &Commission, sink: S) -> std::io::Result<()> {
         },
     );
     rec.prelude(Some(commission), &describe())?;
-    if let Some((code, message)) = fail_fast(commission, AGENT_VERSION) {
+    // The spec's pre-turn Commission checks (version pin, allow-list keys and
+    // names); add harness-specific refusals (unreachable provider/model) here.
+    let tools: Vec<String> = BUILTIN_TOOLS.iter().map(|t| t.to_string()).collect();
+    let offered = Offered {
+        tools: Some(&tools),
+        ..Default::default()
+    };
+    if let Some((code, message)) = preflight(commission, AGENT_NAME, AGENT_VERSION, offered) {
         rec.error(code, &message)?;
         return rec.stop(StopReason::Error, None);
     }

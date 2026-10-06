@@ -46,6 +46,7 @@ from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
 from avp.commission import Commission
+from avp.preflight import preflight
 from avp.sink import EventSink, stdio_sink
 from avp.trajectory import ErrorCode, StopReason
 from avp_claude_agent_sdk._commission import (
@@ -61,15 +62,6 @@ from avp_claude_agent_sdk._emit import (
 )
 from avp_claude_agent_sdk._runstate import current_run, new_run_state, reset_run, set_run
 from avp_claude_agent_sdk._translator import _AGENT_NAME, tools_from_init
-
-# The four per-agent allowlist maps (Commission §4). Validated together in
-# query(): each present map MUST carry this agent's key.
-_ALLOWLIST_FIELDS = (
-    "enabled_builtin_tools",
-    "enabled_builtin_subagents",
-    "enabled_builtin_skills",
-    "enabled_builtin_mcp_servers",
-)
 
 
 class AVPClaudeSDKClient(ClaudeSDKClient):
@@ -155,65 +147,23 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
                 self._aborted = True
                 return None
 
-            # Fail fast (spec §4.0): the Commission pins this agent at a
-            # different build. Same-name surfaces can change behavior across
-            # builds; refuse loudly instead of running an unvalidated one.
-            pin = (
-                (self._commission.agent_versions or {}).get(_AGENT_NAME)
-                if self._commission
-                else None
-            )
-            if pin is not None:
-                actual = _agent_version()
-                if pin != actual:
-                    await emit_error(
-                        state,
-                        ValueError(
-                            f"Commission pins {_AGENT_NAME} at {pin!r}; this build is {actual!r}"
-                        ),
-                        error_code=ErrorCode.unsupported_agent_version,
-                    )
-                    await emit_agent_stopped(state, StopReason.error)
-                    self._aborted = True
-                    return None
-
-            # Fail fast (spec §4): each present allowlist map MUST carry this
-            # agent's key (a map without it filters a surface the Commission
-            # wasn't authored for on this agent), and every tool name under our
-            # key must be one we offer. Validated against the probe surface
-            # (pre-Commission tools); stop before any model turn.
+            # Fail fast (spec §4): a version pin for a different build, an
+            # allow-list map without this agent's key, or an allow-listed tool
+            # this agent doesn't offer (checked against the probe surface,
+            # i.e. the pre-Commission tools). Stop before any model turn.
             if self._commission is not None:
-                missing_key = [
-                    f
-                    for f in _ALLOWLIST_FIELDS
-                    if (m := getattr(self._commission, f)) is not None and _AGENT_NAME not in m
-                ]
-                if missing_key:
-                    await emit_error(
-                        state,
-                        ValueError(f"no {_AGENT_NAME!r} entry in: " + ", ".join(missing_key)),
-                        error_code=ErrorCode.commission_collision,
-                    )
+                probe_tools = tools_from_init(probe_init, probe_status) if probe_init else None
+                failure = preflight(
+                    self._commission,
+                    agent_name=_AGENT_NAME,
+                    agent_version=_agent_version(),
+                    tools=[t.name for t in probe_tools or []],
+                )
+                if failure is not None:
+                    await emit_error(state, ValueError(failure[1]), error_code=failure[0])
                     await emit_agent_stopped(state, StopReason.error)
                     self._aborted = True
                     return None
-                allow = (self._commission.enabled_builtin_tools or {}).get(_AGENT_NAME)
-                if allow is not None:
-                    probe_tools = tools_from_init(probe_init, probe_status) if probe_init else None
-                    known = {t.name for t in (probe_tools or [])}
-                    unknown = [n for n in allow if n not in known]
-                    if unknown:
-                        await emit_error(
-                            state,
-                            ValueError(
-                                "enabled_builtin_tools names not offered by the agent: "
-                                + ", ".join(unknown)
-                            ),
-                            error_code=ErrorCode.commission_collision,
-                        )
-                        await emit_agent_stopped(state, StopReason.error)
-                        self._aborted = True
-                        return None
 
         return await super().query(final_prompt, session_id)
 

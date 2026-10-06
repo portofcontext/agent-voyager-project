@@ -6,6 +6,9 @@
     "spec/v0.1/trajectory.md#56-subagents",
     "spec/v0.1/trajectory.md#8-conformance-criteria"
   ],
+  "requires": [
+    "subagents"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "subagent-frame-always-closes",
