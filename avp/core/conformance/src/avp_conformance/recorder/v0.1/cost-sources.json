@@ -1,6 +1,6 @@
 {
   "name": "cost-sources",
-  "description": "Cost per turn: computed from the price table (cache reads and writes billed at their own rates, provider-qualified lookup); reported when the adapter passes cost_usd; unknown for an unpriced model; unknown with zero cost when the turn carries no token counts.",
+  "description": "Cost per turn: computed from the price table (cache reads and writes billed at their own rates, provider-qualified lookup); reported when the adapter passes cost_usd; unknown for an unpriced model; unknown with zero cost when the turn carries no token counts; a dated response model the table lacks is priced as the requested model, while avp.response.model keeps what the provider answered.",
   "recorder": {
     "run_id": "run-1",
     "provider": "anthropic",
@@ -136,7 +136,23 @@
       "model": "claude-test-1"
     },
     {
-      "t": 5100,
+      "t": 6000,
+      "op": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "six"
+        }
+      ],
+      "model": "claude-test-1-20260101",
+      "usage": {
+        "input_tokens": 500,
+        "output_tokens": 50
+      },
+      "request_model": "claude-test-1"
+    },
+    {
+      "t": 6100,
       "op": "stop",
       "reason": "converged"
     }
@@ -387,14 +403,45 @@
     {
       "specversion": "1.0",
       "id": "evt-9",
-      "time": "2026-01-01T00:00:05.100Z",
+      "time": "2026-01-01T00:00:06.000Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.assistant_message",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-9",
+        "parent_span_id": "span-3",
+        "avp.step": 6,
+        "avp.duration_ms": 0,
+        "avp.content": [
+          {
+            "type": "text",
+            "text": "six"
+          }
+        ],
+        "avp.provider.name": "anthropic",
+        "avp.request.model": "claude-test-1",
+        "avp.response.model": "claude-test-1-20260101",
+        "avp.usage": {
+          "input_tokens": 500,
+          "output_tokens": 50
+        },
+        "avp.cost_usd": 0.0022500000000000003,
+        "avp.cost.source": "computed"
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-10",
+      "time": "2026-01-01T00:00:06.100Z",
       "subject": "run-1",
       "datacontenttype": "application/json",
       "type": "avp.agent_stopped",
       "source": "avp://agent",
       "data": {
         "trace_id": "0af7651916cd43dd8448eb211c80319c",
-        "span_id": "span-9",
+        "span_id": "span-10",
         "parent_span_id": "span-3",
         "avp.reason": "converged"
       }
