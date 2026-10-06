@@ -7524,6 +7524,7 @@ pub struct ToolReturnedData {
     #[serde(rename = "avp.tool.name")]
     pub avp_tool_name: ::std::string::String,
     #[serde(rename = "avp.tool_result")]
+    #[serde(serialize_with = "tagged_ser::tool_result_block")]
     pub avp_tool_result: ToolResultBlock,
     pub parent_span_id: ParentSpanId,
     pub span_id: SpanId,
@@ -8391,5 +8392,20 @@ pub mod defaults {
     }
     pub(super) fn video_block_type() -> ::std::string::String {
         "video".to_string()
+    }
+}
+
+#[doc = r" Serialize standalone tagged-union members through their enum so the"]
+#[doc = r" `type` tag is written (added by scripts/tag-rust-unions.py)."]
+#[allow(dead_code)]
+mod tagged_ser {
+    pub fn tool_result_block<S: ::serde::Serializer>(v: &super::ToolResultBlock, s: S) -> Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(&super::AvpContentItem::ToolResultBlock(v.clone()), s)
+    }
+    pub fn tool_result_block_opt<S: ::serde::Serializer>(v: &Option<super::ToolResultBlock>, s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            Some(v) => tool_result_block(v, s),
+            None => s.serialize_none(),
+        }
     }
 }
