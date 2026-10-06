@@ -30,6 +30,16 @@ TEST_PKGS := \
 
 
 
+.PHONY: new-agent new-agent-rust
+new-agent:
+	@test -n "$(NAME)" || { echo "usage: make new-agent NAME=avp-<sdk>"; exit 2; }
+	@python3 avp/scripts/new-agent.py $(NAME) --lang python
+
+new-agent-rust:
+	@test -n "$(NAME)" || { echo "usage: make new-agent-rust NAME=avp-<sdk>"; exit 2; }
+	@python3 avp/scripts/new-agent.py $(NAME) --lang rust
+
+
 .PHONY: help
 help:
 	@echo "AVP: orchestration commands"
@@ -47,6 +57,8 @@ help:
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
+	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
+	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
