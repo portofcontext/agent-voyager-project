@@ -40,6 +40,11 @@ binding does the rest.
      that spawned them.
    - End every path with `stop(reason)`; on an exception, `error(...)` first.
    - Keep the SDK import inside `run` / `describe` so `ping` stays cheap.
+   - Tools that touch files resolve against `AVP_WORKSPACE`. Without it, use a
+     fresh temp directory, never the process CWD: an unsandboxed run (e.g.
+     `avp-conformance check` without `--sandbox`) starts in your source tree.
+   - Expected failures (fail-fast, auth, rate limit, refusal) end with `stop`
+     and return normally; re-raise only crashes (see `agent_cli`).
 3. Fill in `commission`: model, `provider` (fail fast with
    `unsupported_provider` when the harness can't reach it), system prompt,
    prompt, `output_schema`, the `enabled_builtin_*` allow-lists under
