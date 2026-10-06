@@ -75,8 +75,8 @@ Commission (stdin / supervisor)
    ├─ build descriptor via Agent::list_tools() + ExtensionConfig set   → agent_described
    ├─ emit run_requested, agent_started (prelude, before reply)
    ├─ Agent::reply(...) -> BoxStream<AgentEvent>
-   │      └─ for each AgentEvent: translate.rs + runstate.rs (turn buffer)
-   │             └─ emit assistant_message / tool_invoked / tool_returned / subagent_* via Sink
+   │      └─ for each AgentEvent: translate.rs + emit.rs → avp::recorder::Recorder
+   │             └─ assistant_message / tool_invoked / tool_returned / subagent_* via Sink
    └─ on stream end / error / cancel: emit agent_stopped
         │
         ▼
@@ -122,9 +122,7 @@ for a build-script copy of the same file.
 |---|---|
 | `runner.rs` | Owns the `Agent`, builds the descriptor, emits the prelude, drives `reply()`, emits stop |
 | `translate.rs` | `MessageContent` → AVP content blocks; `Tool` / `ExtensionConfig` → `*Decl` |
-| `emit.rs` | Per-`AgentEvent` dispatch; constructs lifecycle + tool + subagent events |
-| `runstate.rs` | Turn buffering; one `assistant_message` then buffered tool/subagent events |
-| `events.rs` | Event constructors hiding the CloudEvents envelope + validated newtypes |
+| `emit.rs` | Goose content → `avp::recorder::Recorder` calls (dispatch targets, `summon`/`delegate` subagent frames, error and stop mapping); the Recorder owns ordering, spans, turn buffering, and cost |
 | `commission.rs` | Commission → Goose config |
 
 ## 6. Event mapping: `AgentEvent` → AVP trajectory
@@ -234,7 +232,7 @@ Observing Goose in-process keeps the connector small:
   removed; the live suite at `avp/core/conformance/src/avp_conformance/cases/v0.1/`
   has no resolver cases (see its `COVERAGE.md`).
 - **Conformance.** The connector is validated the same way as the Python
-  agents: replay real Goose content through `translate.rs` + `runstate.rs`,
+  agents: replay real Goose content through `translate.rs` + `emit.rs`,
   validate emitted events against `spec/v0.1/trajectory.schema.json`, run
   `avp-conformance`. Fixture-driven translation stays deterministic and free;
   live Goose runs are the paid smoke layer.
@@ -249,7 +247,7 @@ Observing Goose in-process keeps the connector small:
   prefix is the fallback). `arguments` may be absent; `signature` may be empty.
 - **Full-pipeline golden (validated).** `tests/pipeline.rs` drives a verbatim
   5-message session round (`fixtures/real_session_round.json`) through
-  `translate -> runstate -> emit` and asserts the emitted trajectory. Confirmed
+  `translate -> emit -> Recorder` and asserts the emitted trajectory. Confirmed
   a real pattern: Goose splits an assistant turn's text and its tool call into
   separate messages (so each maps to its own `assistant_message` step), and the
   matching `tool_returned` arrives in a later message and pairs back to the

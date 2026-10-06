@@ -19,10 +19,12 @@ If this appears in a descriptor, describe is reading the host home.\n";
 
 #[tokio::test]
 async fn describe_lists_only_builtin_skills() {
-    let fake_home =
-        std::env::temp_dir().join(format!("avp-goose-hermetic-{}", std::process::id()));
+    let fake_home = std::env::temp_dir().join(format!("avp-goose-hermetic-{}", std::process::id()));
     for root in [".claude", ".agents"] {
-        let dir = fake_home.join(root).join("skills").join("avp-planted-local-skill");
+        let dir = fake_home
+            .join(root)
+            .join("skills")
+            .join("avp-planted-local-skill");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("SKILL.md"), PLANTED_SKILL).unwrap();
     }
@@ -37,20 +39,29 @@ async fn describe_lists_only_builtin_skills() {
     // The probe must have produced the full surface; the identity-only
     // fallback would make the skill assertions below pass vacuously.
     let tools = v["tools"].as_array().cloned().unwrap_or_default();
-    assert!(!tools.is_empty(), "describe fell back to the identity-only descriptor");
+    assert!(
+        !tools.is_empty(),
+        "describe fell back to the identity-only descriptor"
+    );
 
     let skills = v["skills"].as_array().cloned().unwrap_or_default();
-    assert!(!skills.is_empty(), "expected goose's bundled builtin skills");
+    assert!(
+        !skills.is_empty(),
+        "expected goose's bundled builtin skills"
+    );
     for skill in &skills {
         let source = skill["avp.source"].as_str().unwrap_or("");
         assert!(
             source.starts_with("builtin://"),
             "non-builtin skill source leaked into describe: {} ({})",
-            skill["name"], source
+            skill["name"],
+            source
         );
     }
     assert!(
-        !skills.iter().any(|s| s["name"] == "avp-planted-local-skill"),
+        !skills
+            .iter()
+            .any(|s| s["name"] == "avp-planted-local-skill"),
         "host-home skill leaked into describe"
     );
 

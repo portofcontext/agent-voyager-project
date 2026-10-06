@@ -45,7 +45,10 @@ async fn model_dispatches_to_mcp_server_tool() {
     // The MCP server is recorded on the descriptor (mcp_server_connected events
     // were removed; identity + status now ride on agent_described's descriptor).
     let descriptor = &t.find("avp.agent_described")["data"]["avp.descriptor"];
-    let servers = descriptor["mcp_servers"].as_array().cloned().unwrap_or_default();
+    let servers = descriptor["mcp_servers"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     assert!(
         servers.iter().any(|s| s["id"] == TEST_MCP_ID),
         "no {TEST_MCP_ID} in descriptor mcp_servers: {servers:?}"

@@ -38,6 +38,7 @@ fn real_session_round_drives_full_pipeline() {
                     &m.content,
                     usage_zero(),
                     Some("claude-opus-4-7".to_string()),
+                    None,
                 )
                 .unwrap(),
             // User messages carry tool responses (or, for the prompt, nothing

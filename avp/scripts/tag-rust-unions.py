@@ -15,6 +15,10 @@ that carry a `type` const, this rewrites:
   - adds `#[serde(rename = "<const>")]` to each variant (value from the schema)
   - adds `skip_serializing` to each member struct's `type_` field, so serde's
     internal tag is not emitted a second time by the struct on serialize
+  - routes every standalone field of a member struct's type (e.g.
+    `ToolReturnedData.avp_tool_result: ToolResultBlock`) through the tagged
+    enum on serialize, so the `type` the struct no longer writes still lands
+    on the wire there
 
 Tag values come from each `$defs` entry's `properties.type.const` in the
 schema. Deterministic; safe to run inside the binding regen + drift check.
@@ -44,6 +48,8 @@ def main() -> None:
 
     src = rs_path.read_text()
     members: set[str] = set()
+    # member struct -> (tagged enum, variant) used to serialize standalone fields
+    owner: dict[str, tuple[str, str]] = {}
 
     # Untagged enum block: the attr, the `pub enum NAME {` header, the body up
     # to the first line that is just `}`. Newtype-variant enums (our targets)
@@ -55,7 +61,7 @@ def main() -> None:
     variant_re = re.compile(r"^(\s*)(\w+)\((\w+)\),?\s*$")
 
     def transform_enum(m: re.Match[str]) -> str:
-        header, body = m.group(1), m.group(3)
+        header, enum_name, body = m.group(1), m.group(2), m.group(3)
         variants = [variant_re.match(line) for line in body.split("\n")]
         variants = [v for v in variants if v]
         # Only enums where every variant is a newtype over a tagged struct.
@@ -67,6 +73,7 @@ def main() -> None:
             if v:
                 indent, inner = v.group(1), v.group(3)
                 members.add(inner)
+                owner.setdefault(inner, (enum_name, v.group(2)))
                 out.append(f'{indent}#[serde(rename = "{tag_by_struct[inner]}")]')
             out.append(line)
         return f'#[serde(tag = "type")]\n{header}{chr(10).join(out)}\n{m.group(4)}'
@@ -101,8 +108,49 @@ def main() -> None:
         patched = block.replace(attr, new_attr, 1)
         src = src[: bm.start()] + patched + src[bm.end() :]
 
+    # Standalone fields typed as a member struct: serialize through the tagged
+    # enum so the `type` tag is written. Option fields get the `_opt` helper.
+    helpers: list[str] = []
+    used: set[str] = set()
+    field_re = re.compile(r"^(\s*)pub (\w+): (::std::option::Option<)?(\w+)(>)?,$", re.MULTILINE)
+
+    def route(fm: re.Match[str]) -> str:
+        indent, inner, is_opt = fm.group(1), fm.group(4), fm.group(3) is not None
+        if inner not in owner:
+            return fm.group(0)
+        fn = _snake(inner) + ("_opt" if is_opt else "")
+        used.add(inner)
+        return f'{indent}#[serde(serialize_with = "tagged_ser::{fn}")]\n{fm.group(0)}'
+
+    if 'serialize_with = "tagged_ser::' not in src:
+        src = field_re.sub(route, src)
+        for inner in sorted(used):
+            enum_name, variant = owner[inner]
+            snake = _snake(inner)
+            helpers.append(
+                f"    pub fn {snake}<S: ::serde::Serializer>(v: &super::{inner}, s: S) -> Result<S::Ok, S::Error> {{\n"
+                f"        ::serde::Serialize::serialize(&super::{enum_name}::{variant}(v.clone()), s)\n"
+                f"    }}\n"
+                f"    pub fn {snake}_opt<S: ::serde::Serializer>(v: &Option<super::{inner}>, s: S) -> Result<S::Ok, S::Error> {{\n"
+                f"        match v {{\n"
+                f"            Some(v) => {snake}(v, s),\n"
+                f"            None => s.serialize_none(),\n"
+                f"        }}\n"
+                f"    }}"
+            )
+        if helpers:
+            src += (
+                '\n#[doc = r" Serialize standalone tagged-union members through their enum so the"]\n'
+                '#[doc = r" `type` tag is written (added by scripts/tag-rust-unions.py)."]\n'
+                "#[allow(dead_code)]\nmod tagged_ser {\n" + "\n".join(helpers) + "\n}\n"
+            )
+
     rs_path.write_text(src)
     print(f"  tagged: {rs_path.name} ({len(members)} member structs)")
+
+
+def _snake(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 if __name__ == "__main__":

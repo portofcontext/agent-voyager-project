@@ -113,7 +113,9 @@ mod tests {
     fn default_table_loads() {
         let t = load_default_prices();
         // Mirrored from models.dev, keyed by `<provider>/<model>`.
-        let p = t.get("anthropic/claude-opus-4-7").expect("opus 4.7 in default table");
+        let p = t
+            .get("anthropic/claude-opus-4-7")
+            .expect("opus 4.7 in default table");
         assert_eq!(p.input, 5.0);
         assert_eq!(p.output, 25.0);
     }
@@ -124,7 +126,15 @@ mod tests {
         // 700*5 + 200*0.5 + 100*6.25 + 500*25 = 3500 + 100 + 625 + 12500 = 16725 (per 1e6).
         let prices = load_default_prices();
         // Bare wire model is resolved via the provider to `anthropic/claude-opus-4-7`.
-        let (cost, src) = compute_cost(Some("anthropic"), "claude-opus-4-7", 1000, 500, 200, 100, &prices);
+        let (cost, src) = compute_cost(
+            Some("anthropic"),
+            "claude-opus-4-7",
+            1000,
+            500,
+            200,
+            100,
+            &prices,
+        );
         assert!((cost - 0.016725).abs() < 1e-9, "got {cost}");
         assert_eq!(src, CostSource::Computed);
     }

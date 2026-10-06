@@ -27,7 +27,8 @@ an agent must put on the wire; these vectors pin how the Recorder gets it there.
   (`request_model`, `prompt`, `system_prompt`, `tools`, `mcp_servers`, `skills`,
   `subagents`, `session_id`, `thread_id`, `tags`, `meta`), `assistant`
   (`content`, `usage`, `model`, `request_model`, `turn_key`, `finish_reasons`,
-  `meta`, `cost_usd`, `duration_ms`), `close_turn`, `tool_result` (`call_id`,
+  `meta`, `cost_usd`, `duration_ms`), `usage` (`usage`, `turn_key`, `cost_usd`,
+  `duration_ms`), `close_turn`, `tool_result` (`call_id`,
   `content`, `is_error`, `structured_content`), `subagent_start`
   (`invocation_id`, `name`, `input`, `description`), `subagent_result`
   (`invocation_id`, `text`, `reason`, `usage`, `structured`), `error` (`code`,

@@ -442,6 +442,28 @@ class Recorder:
         if turn_key is None:
             await self.close_turn()
 
+    async def usage(
+        self,
+        usage: Usage,
+        *,
+        turn_key: str | None = None,
+        cost_usd: float | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        """Report usage for the open turn after its content, for harnesses that
+        deliver token counts once the inference (or its tool round) is over.
+        Keep the turn open with a ``turn_key`` until then. Applies to the open
+        turn when ``turn_key`` is omitted or matches it; otherwise dropped.
+        Last-write-wins, like the same fields on `assistant`."""
+        turn = self._turn
+        if turn is None or (turn_key is not None and turn_key != turn.key):
+            return
+        turn.usage = usage
+        if cost_usd is not None:
+            turn.cost_usd = cost_usd
+        if duration_ms is not None:
+            turn.duration_ms = duration_ms
+
     def _invoke(self, turn: _Turn, call_id: str, name: str, tool_input: dict[str, Any]) -> None:
         span_id = self._ids.span_id()
         self._calls[call_id] = _Call(
