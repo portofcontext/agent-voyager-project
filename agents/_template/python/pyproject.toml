@@ -13,7 +13,7 @@ requires-python = ">=3.11"
 dependencies = ["agent-voyager-project==0.1.1"]
 
 [tool.uv.sources]
-avp = { workspace = true }
+agent-voyager-project = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=9.0.3"]
