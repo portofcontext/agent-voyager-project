@@ -45,9 +45,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 async-trait = "0.1"
 # Used by the eval harness to schema-validate live trajectories.
 jsonschema = "0.46"
-# Optional: only pulled in for the `conformance` feature, which gates the
-# avp-goose-conformance binary consumed by the avp-conformance harness.
-clap = { version = "4", features = ["derive"], optional = true }
 
 [features]
 # On by default so a plain `cargo build` (and our release binaries) keep the
@@ -59,10 +56,10 @@ default = ["local-inference"]
 # GGUF straight from Hugging Face, no ollama. Forwards to goose's own
 # `local-inference`, which compiles llama.cpp from C++.
 local-inference = ["goose/local-inference"]
-# Compiles the avp-goose-conformance binary (declared below) and pulls in
-# clap. Off by default so a plain `cargo build` doesn't drag clap into the
-# dep graph.
-conformance = ["dep:clap"]
+# Compiles the avp-goose-conformance binary (declared below), the agent
+# entrypoint the avp CLI and avp-conformance run. Off by default so a library
+# consumer's `cargo build` skips it.
+conformance = []
 # GPU-accelerated local inference: forwards to goose's `vulkan` feature (adds
 # `llama-cpp-2/vulkan`) and implies `local-inference`, since the GPU backend is
 # only meaningful with in-process inference compiled in. The Vulkan backend
