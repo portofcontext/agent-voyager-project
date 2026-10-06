@@ -108,13 +108,14 @@ def _expand_fixture_tokens(
     return out
 
 
-def _describe_identity(
+def _describe_agent(
     manifest: AgentManifest, command: list[str], cwd: Path, prefix: list[str], timeout: float
-) -> tuple[str, str]:
-    """The agent-under-test's `(agent_name, agent_version)` from its pre-flight
-    `describe` surface. Cases key per-agent Commission maps with these via the
-    `${AGENT_NAME}` / `${AGENT_VERSION}` fixture tokens; `describe` is a
-    first-class agent contract, so failure here aborts the check loudly."""
+) -> AgentDescriptor:
+    """The agent-under-test's pre-flight `describe` descriptor. Its identity
+    keys per-agent Commission maps via the `${AGENT_NAME}` / `${AGENT_VERSION}`
+    fixture tokens, and its declared surfaces decide which cases apply
+    (`TestCase.requires`). `describe` is a first-class agent contract, so
+    failure here aborts the check loudly."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         out_path = Path(f.name)
     try:
@@ -126,10 +127,32 @@ def _describe_identity(
         if result.returncode != 0:
             tail = result.stderr[-300:].strip() if result.stderr else "(no stderr)"
             raise RuntimeError(f"describe exit={result.returncode}: {tail}")
-        descriptor = AgentDescriptor.model_validate(json.loads(out_path.read_text()))
-        return descriptor.agent_name, descriptor.agent_version
+        return AgentDescriptor.model_validate(json.loads(out_path.read_text()))
     finally:
         out_path.unlink(missing_ok=True)
+
+
+# API hosts a `--model` origin needs when the run is sandboxed (`--sandbox`).
+_PROVIDER_DOMAINS: dict[str, tuple[str, ...]] = {
+    "openai": ("api.openai.com",),
+    "google": ("generativelanguage.googleapis.com",),
+    "mistral": ("api.mistral.ai",),
+    "openrouter": ("openrouter.ai",),
+}
+
+
+def with_model(tc: TestCase, model: str) -> TestCase:
+    """The case on `model`: every occurrence of the model it pins (the
+    Commission, and expectations that assert the Commission snapshot) becomes
+    `model`."""
+    pinned = json.dumps(tc.commission.model)
+    raw = tc.model_dump_json(by_alias=True, exclude_none=True)
+    return TestCase.model_validate_json(raw.replace(pinned, json.dumps(model)))
+
+
+def unmet_requirements(tc: TestCase, descriptor: AgentDescriptor) -> list[str]:
+    """The `requires` surfaces the agent's descriptor doesn't declare."""
+    return [r for r in tc.requires if not getattr(descriptor, r)]
 
 
 def _resolve_command(command: list[str]) -> list[str]:
@@ -428,8 +451,19 @@ def check(
             help="Domain the sandboxed agent may reach (repeatable). Defaults to the Anthropic API.",
         ),
     ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help="Run every case on this model slug (e.g. 'openai/gpt-4o-mini') instead of "
+            "the one the case pins. Rewritten throughout the case, expectations included.",
+        ),
+    ] = None,
 ) -> None:
-    """Run conformance cases against the SDK described by --agent."""
+    """Run conformance cases against the SDK described by --agent.
+
+    A case whose `requires` names a surface the agent's descriptor doesn't
+    declare is reported SKIP and doesn't fail the check."""
     if suite is None and case is None:
         typer.echo("error: check requires either --suite or --case.", err=True)
         raise typer.Exit(code=2)
@@ -446,6 +480,10 @@ def check(
     else:
         assert suite is not None  # narrowed by the guards above
         grouped = discover_suite(suite)
+    if model is not None:
+        grouped = {cat: [with_model(tc, model) for tc in cases] for cat, cases in grouped.items()}
+        origin = model.split("/", 1)[0]
+        allow_domain = [*(allow_domain or []), *_PROVIDER_DOMAINS.get(origin, ())]
 
     total = sum(len(cs) for cs in grouped.values())
     if total == 0:
@@ -455,13 +493,15 @@ def check(
     cleanup: list[Path] = []
     n_pass = 0
     n_fail = 0
+    n_skip = 0
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup, allow_domain)
         try:
-            identity = _describe_identity(manifest, command, cwd, prefix, timeout)
+            descriptor = _describe_agent(manifest, command, cwd, prefix, timeout)
         except Exception as exc:
             typer.echo(f"error: could not learn the agent's identity via describe: {exc}", err=True)
             raise typer.Exit(code=2) from None
+        identity = (descriptor.agent_name, descriptor.agent_version)
         typer.echo(
             f"running {total} case(s) against {manifest.command[0]!r} "
             f"({identity[0]} v{identity[1]})\n"
@@ -469,6 +509,10 @@ def check(
         for cat_name in sorted(grouped):
             typer.echo(f"  {cat_name}:")
             for tc in grouped[cat_name]:
+                if missing := unmet_requirements(tc, descriptor):
+                    typer.echo(f"    SKIP  {tc.id}  (agent declares no {', '.join(missing)})")
+                    n_skip += 1
+                    continue
                 events, error = _run_case(
                     tc, manifest, command, cwd, prefix, timeout, dump_dir, identity
                 )
@@ -490,7 +534,7 @@ def check(
         for path in cleanup:
             path.unlink(missing_ok=True)
 
-    typer.echo(f"\nchecked {total} case(s) ({n_pass} pass, {n_fail} fail)")
+    typer.echo(f"\nchecked {total} case(s) ({n_pass} pass, {n_fail} fail, {n_skip} skip)")
     if n_fail > 0:
         raise typer.Exit(code=1)
 

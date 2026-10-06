@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor, ToolDecl
+from avp.preflight import preflight
 from avp.pricing import load_default_prices
 from avp.recorder import Recorder
 from avp.sink import EventSink
 from avp.trajectory import ErrorCode, StopReason
 from avp_agent_template import harness, translate
-from avp_agent_template.commission import AGENT_NAME, BUILTIN_TOOLS, fail_fast, from_commission
+from avp_agent_template.commission import AGENT_NAME, BUILTIN_TOOLS, from_commission
 
 AGENT_VERSION = "0.0.1"
 # The provider bare model names resolve under in the price table.
@@ -32,7 +33,11 @@ def describe() -> AgentDescriptor:
 async def run(commission: Commission, sink: EventSink) -> None:
     rec = Recorder(sink, run_id=commission.run_id, provider=PROVIDER, prices=load_default_prices())
     await rec.prelude(commission, describe())
-    if failure := fail_fast(commission, AGENT_VERSION):
+    # The spec's pre-turn Commission checks (version pin, allow-list keys and
+    # names); add harness-specific refusals (unreachable provider/model) here.
+    if failure := preflight(
+        commission, agent_name=AGENT_NAME, agent_version=AGENT_VERSION, tools=BUILTIN_TOOLS
+    ):
         await rec.error(*failure)
         await rec.stop(StopReason.error)
         return

@@ -47,6 +47,7 @@ pub mod trajectory;
 // Agent base: runtime machinery shared by AVP agents (not wire types).
 pub mod agent_cli;
 pub mod ids;
+pub mod preflight;
 pub mod pricing;
 pub mod recorder;
 pub mod sink;
