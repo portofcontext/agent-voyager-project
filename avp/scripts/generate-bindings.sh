@@ -26,6 +26,7 @@
 #
 # Prerequisites:
 #   - cargo install cargo-typify
+#   - rustfmt (rustup component add rustfmt)
 #   - npx (ships with Node.js — no global install needed for json-schema-to-typescript)
 #   - jq (for the default-stripping pre-pass)
 
@@ -43,6 +44,10 @@ CONFORMANCE_SCHEMA="$REPO/core/conformance/src/avp_conformance/agent-built-ins.s
 # Tools
 command -v cargo-typify >/dev/null 2>&1 || {
   echo "error: cargo-typify not found. Install: cargo install cargo-typify" >&2
+  exit 1
+}
+command -v rustfmt >/dev/null 2>&1 || {
+  echo "error: rustfmt not found. Install: rustup component add rustfmt" >&2
   exit 1
 }
 command -v jq >/dev/null 2>&1 || {
@@ -77,6 +82,9 @@ generate_rust() {
   # typify ignores the schema discriminator and emits `#[serde(untagged)]` for
   # `type`-discriminated unions; re-tag them so they discriminate by `type`.
   python3 "$REPO/scripts/tag-rust-unions.py" "$RUST_OUT/$name.rs" "$schema"
+  # Emit rustfmt's layout, so `cargo fmt` over the crate is a no-op on generated
+  # files and the drift check (`make bindings-check`) compares like with like.
+  rustfmt --edition 2021 "$RUST_OUT/$name.rs"
   echo "  rust: wrote $RUST_OUT/$name.rs"
 }
 

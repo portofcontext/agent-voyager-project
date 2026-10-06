@@ -112,9 +112,7 @@ def main() -> None:
     # enum so the `type` tag is written. Option fields get the `_opt` helper.
     helpers: list[str] = []
     used: set[str] = set()
-    field_re = re.compile(
-        r"^(\s*)pub (\w+): (::std::option::Option<)?(\w+)(>)?,$", re.MULTILINE
-    )
+    field_re = re.compile(r"^(\s*)pub (\w+): (::std::option::Option<)?(\w+)(>)?,$", re.MULTILINE)
 
     def route(fm: re.Match[str]) -> str:
         indent, inner, is_opt = fm.group(1), fm.group(4), fm.group(3) is not None
@@ -142,8 +140,8 @@ def main() -> None:
             )
         if helpers:
             src += (
-                "\n#[doc = r\" Serialize standalone tagged-union members through their enum so the\"]\n"
-                "#[doc = r\" `type` tag is written (added by scripts/tag-rust-unions.py).\"]\n"
+                '\n#[doc = r" Serialize standalone tagged-union members through their enum so the"]\n'
+                '#[doc = r" `type` tag is written (added by scripts/tag-rust-unions.py)."]\n'
                 "#[allow(dead_code)]\nmod tagged_ser {\n" + "\n".join(helpers) + "\n}\n"
             )
 
