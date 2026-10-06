@@ -46,8 +46,6 @@ from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import ClaudeAgentOptions, McpStatusResponse
 
 from avp.commission import Commission
-from avp.envelope import new_trace_id
-from avp.pricing import load_default_prices
 from avp.sink import EventSink, stdio_sink
 from avp.trajectory import ErrorCode, StopReason
 from avp_claude_agent_sdk._commission import (
@@ -56,13 +54,12 @@ from avp_claude_agent_sdk._commission import (
     apply_prompt,
 )
 from avp_claude_agent_sdk._emit import (
-    emit_agent_described,
     emit_agent_stopped,
     emit_error,
-    emit_run_requested,
+    emit_prelude,
     handle_message,
 )
-from avp_claude_agent_sdk._runstate import RunState, current_run, reset_run, set_run
+from avp_claude_agent_sdk._runstate import current_run, new_run_state, reset_run, set_run
 from avp_claude_agent_sdk._translator import _AGENT_NAME, tools_from_init
 
 # The four per-agent allowlist maps (Commission §4). Validated together in
@@ -122,12 +119,10 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
             final_prompt = apply_prompt(self._commission, prompt)
             # 2. Set up RunState + emit the prelude. agent_described carries
             #    the probe view; agent_started carries the merged-state view
-            state = RunState(
-                prompt=final_prompt,
-                trace_id=new_trace_id(),
+            state = new_run_state(
+                self._sink,
+                final_prompt,
                 run_id=str(uuid.uuid4()),
-                sink=self._sink,
-                prices=load_default_prices(),
                 enabled_builtin_tools=(
                     (self._commission.enabled_builtin_tools or {}).get(_AGENT_NAME)
                     if self._commission
@@ -137,10 +132,10 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
             self._avp_token = set_run(state)
             original_prompt = prompt if isinstance(prompt, str) else None
 
-            await emit_run_requested(state, commission=self._commission)
-            await emit_agent_described(
+            await emit_prelude(
                 state,
                 self._original_options,
+                commission=self._commission,
                 prompt=original_prompt,
                 init_data=probe_init,
                 status=probe_status,
