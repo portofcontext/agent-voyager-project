@@ -26,6 +26,7 @@ TEST_PKGS := \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
 	agents/_template/python \
+	agents/avp-openai-agents/python \
 	avp-cli
 
 
@@ -105,6 +106,7 @@ test-docker:
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
+OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -139,6 +141,9 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
+	@printf "\n\033[1;36m── avp-openai-agents ──\033[0m\n"
+	@$(UV) run avp-conformance ping --agent $(OPENAI_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(OPENAI_MANIFEST)
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────

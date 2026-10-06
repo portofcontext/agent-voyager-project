@@ -1,0 +1,6 @@
+{
+  "command": ["uv", "run", "--no-sync", "python", "-m", "avp_openai_agents.conformance"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-openai-agents entrypoint"
+}

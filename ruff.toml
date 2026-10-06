@@ -41,7 +41,10 @@ ignore = [
 "avp/src/avp/conformance/harness.py" = ["SLF001"]
 
 [lint.isort]
-known-first-party = ["avp", "avp_agent_template", "avp_claude_agent_sdk", "avp_cli"]
+known-first-party = ["avp", "avp_agent_template", "avp_claude_agent_sdk", "avp_cli", "avp_openai_agents"]
+# The OpenAI Agents SDK imports as `agents`, which would otherwise read as the
+# repo's top-level `agents/` directory.
+known-third-party = ["agents"]
 
 [format]
 quote-style = "double"
