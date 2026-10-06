@@ -26,6 +26,7 @@ dependencies = [
     "avp-claude-agent-sdk",
     "avp-agent-template",
     "avp-cli",
+    "avp-openai-agents",
 ]
 
 # Mirror avp-cli's benchmark extras here so `uv sync --extra parsebench` works
@@ -51,6 +52,7 @@ members = [
     "avp-cli",
     "agents/avp-claude-agent-sdk/python",
     "agents/_template/python",
+    "agents/avp-openai-agents/python",
 ]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
@@ -63,6 +65,7 @@ avp-conformance = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
 avp-agent-template = { workspace = true }
 avp-cli = { workspace = true }
+avp-openai-agents = { workspace = true }
 
 [tool.uv]
 # Don't try to package the workspace root itself; no source code here.
