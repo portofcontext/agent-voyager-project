@@ -146,7 +146,10 @@ pub struct StartInfo {
     pub meta: Option<Map<String, Value>>,
 }
 
-/// Per-chunk extras for [`Recorder::assistant`]. Within a turn `finish_reasons`,
+/// Per-chunk extras for [`Recorder::assistant`]. `model` is the response
+/// model: `avp.response.model` on the wire and the price-table key; when the
+/// table doesn't know it, cost is computed for `request_model` instead.
+/// Within a turn `finish_reasons`,
 /// `cost_usd`, and `duration_ms` are last-write-wins, `model` and
 /// `request_model` first-write-wins, and `meta` keys merge.
 #[derive(Default, Clone)]
@@ -637,15 +640,29 @@ impl<S: Sink> Recorder<S> {
         } else if usage.input_tokens == 0 && usage.output_tokens == 0 {
             (0.0, CostSource::Unknown)
         } else {
-            compute_cost(
-                self.provider.as_deref(),
-                turn.response_model.as_deref().unwrap_or(""),
-                usage.input_tokens,
-                usage.output_tokens,
-                usage.cache_read_input_tokens.unwrap_or(0),
-                usage.cache_creation_input_tokens.unwrap_or(0),
-                &self.prices,
-            )
+            // Providers often answer with a dated snapshot id the table lacks
+            // (`gpt-4o-mini-2024-07-18`); price it as the requested model then.
+            let mut candidates = vec![
+                turn.response_model.as_deref(),
+                turn.request_model.as_deref(),
+            ];
+            candidates.dedup();
+            candidates
+                .into_iter()
+                .flatten()
+                .map(|model| {
+                    compute_cost(
+                        self.provider.as_deref(),
+                        model,
+                        usage.input_tokens,
+                        usage.output_tokens,
+                        usage.cache_read_input_tokens.unwrap_or(0),
+                        usage.cache_creation_input_tokens.unwrap_or(0),
+                        &self.prices,
+                    )
+                })
+                .find(|(_, source)| *source != CostSource::Unknown)
+                .unwrap_or((0.0, CostSource::Unknown))
         };
         let duration_ms = turn
             .duration_ms
