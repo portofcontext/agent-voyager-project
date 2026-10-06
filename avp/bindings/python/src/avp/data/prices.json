@@ -1,7 +1,7 @@
 {
   "$schema": "Per-1M-token prices in USD, mirrored from models.dev and keyed by its `<provider>/<model>` id. Fallback table for the `computed` cost source: AVP prefers an agent that reports its own cost (`avp.cost.source` = `reported`), and only when it doesn't is cost `computed` from this table. `compute_cost` normalizes the wire model (+ provider) to a key here. Callers may also pass their own table to `compute_cost(prices=...)`.",
   "$source": "https://models.dev/api.json",
-  "$snapshot_date": "2026-10-05",
+  "$snapshot_date": "2026-10-06",
   "$cache_write_convention": "cache_write is models.dev's cache-write rate (Anthropic's 5-minute rate). Override the table if your traffic is dominantly 1h-cached.",
   "models": {
     "302ai/MiniMax-M1": {
@@ -1881,9 +1881,9 @@
       "output": 1.6,
       "cache_read": 0.1
     },
-    "aki-io/deepseek-v4-flash-0731-284b": {
-      "input": 0.2,
-      "output": 0.5,
+    "aki-io/deepseek-v4.1-flash-552b": {
+      "input": 0.25,
+      "output": 1.0,
       "cache_read": 0.1
     },
     "aki-io/gemma4-26b": {
@@ -8867,9 +8867,15 @@
       "cache_read": 0.2,
       "cache_write": 0.375
     },
+    "edenai/greenference/deepseek-v4.1-flash": {
+      "input": 0.15,
+      "output": 0.882,
+      "cache_read": 0.0069
+    },
     "edenai/greenference/gpt-oss-20b": {
-      "input": 0.0,
-      "output": 0.0
+      "input": 0.009,
+      "output": 0.045,
+      "cache_read": 0.0045
     },
     "edenai/groq/openai/gpt-oss-120b": {
       "input": 0.15,
@@ -8887,16 +8893,16 @@
       "cache_read": 0.0375
     },
     "edenai/infomaniak/mistralai/Ministral-3-14B-Instruct-2512": {
-      "input": 0.33675,
-      "output": 0.449
+      "input": 0.33612,
+      "output": 0.44816
     },
     "edenai/ionos/meta-llama/Llama-3.3-70B-Instruct": {
-      "input": 0.729625,
-      "output": 0.729625
+      "input": 0.72826,
+      "output": 0.72826
     },
     "edenai/ionos/openai/gpt-oss-120b": {
-      "input": 0.168375,
-      "output": 0.729625
+      "input": 0.16806,
+      "output": 0.72826
     },
     "edenai/minimax/MiniMax-M2": {
       "input": 0.3,
@@ -9386,21 +9392,21 @@
       "output": 2.4
     },
     "edenai/scaleway/deepseek-v4-flash-0731": {
-      "input": 0.449,
-      "output": 0.898,
-      "cache_read": 0.0898
+      "input": 0.44816,
+      "output": 0.89632,
+      "cache_read": 0.089632
     },
     "edenai/scaleway/gemma-3-27b-it": {
       "input": 0.287125,
       "output": 0.57425
     },
     "edenai/scaleway/gpt-oss-120b": {
-      "input": 0.168375,
-      "output": 0.6735
+      "input": 0.16806,
+      "output": 0.67224
     },
     "edenai/scaleway/llama-3.3-70b-instruct": {
-      "input": 1.01025,
-      "output": 1.01025
+      "input": 1.00836,
+      "output": 1.00836
     },
     "edenai/tencent/deepseek-v4-pro-0813": {
       "input": 0.66,
@@ -14835,7 +14841,8 @@
     },
     "kilo/moonshotai/kimi-k2-thinking": {
       "input": 0.6,
-      "output": 2.5
+      "output": 2.5,
+      "cache_read": 0.15
     },
     "kilo/moonshotai/kimi-k2.5": {
       "input": 0.6,
@@ -15541,10 +15548,6 @@
       "cache_read": 0.085,
       "cache_write": 0.53125
     },
-    "kilo/qwen/qwen3.8-27b:free": {
-      "input": 0.0,
-      "output": 0.0
-    },
     "kilo/qwen/qwen3.8-flash": {
       "input": 0.15,
       "output": 0.47,
@@ -15644,10 +15647,6 @@
       "output": 1.5,
       "cache_read": 0.025,
       "cache_write": 0.3125
-    },
-    "kilo/stealth/space-bunny-alpha": {
-      "input": 0.0,
-      "output": 0.0
     },
     "kilo/stepfun/step-3.5-flash": {
       "input": 0.1,
@@ -15801,9 +15800,9 @@
       "cache_read": 0.004
     },
     "kilo/xiaomi/mimo-v2.6-flash": {
-      "input": 0.099,
-      "output": 0.252,
-      "cache_read": 0.0025
+      "input": 0.1,
+      "output": 0.28,
+      "cache_read": 0.05
     },
     "kilo/xiaomi/mimo-v2.6-pro": {
       "input": 0.43,
@@ -15924,14 +15923,14 @@
       "cache_read": 0.003
     },
     "kilo/~deepseek/deepseek-pro-latest": {
-      "input": 0.1901,
-      "output": 4.2,
-      "cache_read": 0.19
+      "input": 0.2987,
+      "output": 6.0,
+      "cache_read": 0.3
     },
     "kilo/~deepseek/deepseek-v4-flash-latest": {
-      "input": 0.0152,
+      "input": 0.0134,
       "output": 1.28,
-      "cache_read": 0.0152
+      "cache_read": 0.0134
     },
     "kilo/~google/gemini-flash-latest": {
       "input": 0.75,
@@ -15946,8 +15945,8 @@
       "cache_write": 0.375
     },
     "kilo/~moonshotai/kimi-latest": {
-      "input": 0.6,
-      "output": 15.0,
+      "input": 0.365,
+      "output": 13.0,
       "cache_read": 0.45
     },
     "kilo/~openai/gpt-astra-latest": {
@@ -15985,9 +15984,9 @@
       "cache_read": 0.5
     },
     "kilo/~z-ai/glm-flash-latest": {
-      "input": 0.0352,
+      "input": 0.0317,
       "output": 0.5,
-      "cache_read": 0.0232
+      "cache_read": 0.0209
     },
     "kilo/~z-ai/glm-latest": {
       "input": 0.03,
@@ -17254,7 +17253,7 @@
       "input": 0.07,
       "output": 0.33
     },
-    "llmgateway-providers/luminal/deepseek-ai/DeepSeek-V4.1-Flash": {
+    "llmgateway-providers/luminal/deepseek-v4.1-flash": {
       "input": 0.135,
       "output": 0.54,
       "cache_read": 0.0027
@@ -18424,11 +18423,6 @@
       "input": 0.0,
       "output": 0.0
     },
-    "llmgateway/deepseek-ai/DeepSeek-V4.1-Flash": {
-      "input": 0.135,
-      "output": 0.54,
-      "cache_read": 0.0027
-    },
     "llmgateway/deepseek-v3.2": {
       "input": 0.26,
       "output": 0.38,
@@ -18445,9 +18439,9 @@
       "cache_read": 0.003625
     },
     "llmgateway/deepseek-v4.1-flash": {
-      "input": 0.15,
-      "output": 0.55,
-      "cache_read": 0.005
+      "input": 0.135,
+      "output": 0.54,
+      "cache_read": 0.0027
     },
     "llmgateway/devstral-2512": {
       "input": 0.4,
@@ -20477,8 +20471,8 @@
       "cache_read": 0.023
     },
     "merge-gateway/qwen/qwen3.6-27b": {
-      "input": 0.289,
-      "output": 2.4
+      "input": 0.4126,
+      "output": 2.4754
     },
     "merge-gateway/qwen/qwen3.6-35b-a3b": {
       "input": 0.248,
@@ -23695,7 +23689,17 @@
       "output": 0.7,
       "cache_read": 0.04
     },
+    "nano-gpt/qwen/qwen3.8-27b-antislop": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
     "nano-gpt/qwen/qwen3.8-27b-cybersecurity": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
+    "nano-gpt/qwen/qwen3.8-27b-darkidol": {
       "input": 0.1,
       "output": 0.6,
       "cache_read": 0.05
@@ -23705,10 +23709,30 @@
       "output": 1.5,
       "cache_read": 0.125
     },
+    "nano-gpt/qwen/qwen3.8-27b-fimi": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
     "nano-gpt/qwen/qwen3.8-27b-hemmingway": {
       "input": 0.25,
       "output": 1.5,
       "cache_read": 0.125
+    },
+    "nano-gpt/qwen/qwen3.8-27b-kimiko": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
+    "nano-gpt/qwen/qwen3.8-27b-kiwen": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
+    "nano-gpt/qwen/qwen3.8-27b-novelist": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
     },
     "nano-gpt/qwen/qwen3.8-27b-obliterated": {
       "input": 0.25,
@@ -23724,6 +23748,16 @@
       "input": 0.25,
       "output": 1.5,
       "cache_read": 0.125
+    },
+    "nano-gpt/qwen/qwen3.8-27b-swift": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
+    },
+    "nano-gpt/qwen/qwen3.8-27b-synthia": {
+      "input": 0.1,
+      "output": 0.6,
+      "cache_read": 0.05
     },
     "nano-gpt/qwen/qwen3.8-27b-uncensored": {
       "input": 0.15,
@@ -24188,6 +24222,16 @@
       "input": 0.1,
       "output": 0.3,
       "cache_read": 0.025
+    },
+    "nano-gpt/z-ai/glm-5.3-flash-apex": {
+      "input": 0.15,
+      "output": 0.5,
+      "cache_read": 0.075
+    },
+    "nano-gpt/z-ai/glm-5.3-flash-apex-abliterated": {
+      "input": 0.15,
+      "output": 0.5,
+      "cache_read": 0.075
     },
     "nano-gpt/z-ai/glm-5.3-flash-cybersecurity": {
       "input": 0.15,
@@ -27186,6 +27230,12 @@
       "cache_read": 0.25,
       "cache_write": 2.5
     },
+    "opencode-go/space-bunny": {
+      "input": 0.15,
+      "output": 0.6,
+      "cache_read": 0.03,
+      "cache_write": 0.0
+    },
     "opencode-go/space-bunny-free": {
       "input": 0.0,
       "output": 0.0,
@@ -28059,14 +28109,14 @@
       "output": 0.41
     },
     "openrouter/deepseek/deepseek-v4-flash": {
-      "input": 0.03,
+      "input": 0.0072,
       "output": 1.28,
-      "cache_read": 0.03
+      "cache_read": 0.0072
     },
     "openrouter/deepseek/deepseek-v4-flash-0731": {
-      "input": 0.0152,
+      "input": 0.0134,
       "output": 1.28,
-      "cache_read": 0.0152
+      "cache_read": 0.0134
     },
     "openrouter/deepseek/deepseek-v4-flash-vision-exp": {
       "input": 0.2156,
@@ -28079,9 +28129,9 @@
       "cache_read": 0.0174
     },
     "openrouter/deepseek/deepseek-v4-pro-0813": {
-      "input": 0.55,
-      "output": 5.0,
-      "cache_read": 0.45
+      "input": 0.66,
+      "output": 1.98,
+      "cache_read": 0.022
     },
     "openrouter/deepseek/deepseek-v4.1-flash": {
       "input": 0.003,
@@ -28229,9 +28279,9 @@
       "output": 0.1
     },
     "openrouter/google/gemma-4-26b-a4b-it": {
-      "input": 0.0675,
-      "output": 0.225,
-      "cache_read": 0.0375
+      "input": 0.0765,
+      "output": 0.255,
+      "cache_read": 0.0425
     },
     "openrouter/google/gemma-4-26b-a4b-it:free": {
       "input": 0.0,
@@ -28346,8 +28396,9 @@
       "output": 0.33
     },
     "openrouter/meta-llama/llama-3.3-70b-instruct": {
-      "input": 0.1,
-      "output": 0.32
+      "input": 0.22,
+      "output": 0.5,
+      "cache_read": 0.11
     },
     "openrouter/meta-llama/llama-4-maverick": {
       "input": 0.1875,
@@ -28536,7 +28587,8 @@
     },
     "openrouter/moonshotai/kimi-k2-thinking": {
       "input": 0.6,
-      "output": 2.5
+      "output": 2.5,
+      "cache_read": 0.15
     },
     "openrouter/moonshotai/kimi-k2.5": {
       "input": 0.45,
@@ -28554,9 +28606,9 @@
       "cache_read": 0.18
     },
     "openrouter/moonshotai/kimi-k3": {
-      "input": 0.67,
+      "input": 0.65,
       "output": 14.0,
-      "cache_read": 0.22
+      "cache_read": 0.21
     },
     "openrouter/morph/morph-v3-fast": {
       "input": 0.8,
@@ -29045,9 +29097,8 @@
       "output": 1.82
     },
     "openrouter/qwen/qwen3-235b-a22b-2507": {
-      "input": 0.0875,
-      "output": 0.35,
-      "cache_read": 0.0175
+      "input": 0.09,
+      "output": 0.55
     },
     "openrouter/qwen/qwen3-235b-a22b-thinking-2507": {
       "input": 0.23,
@@ -29058,8 +29109,8 @@
       "output": 0.5
     },
     "openrouter/qwen/qwen3-30b-a3b-instruct-2507": {
-      "input": 0.04815,
-      "output": 0.19305
+      "input": 0.1,
+      "output": 0.3
     },
     "openrouter/qwen/qwen3-30b-a3b-thinking-2507": {
       "input": 0.2,
@@ -29161,9 +29212,9 @@
       "cache_read": 0.05
     },
     "openrouter/qwen/qwen3.5-397b-a17b": {
-      "input": 0.55,
-      "output": 3.5,
-      "cache_read": 0.225
+      "input": 0.45,
+      "output": 3.0,
+      "cache_read": 0.22
     },
     "openrouter/qwen/qwen3.5-9b": {
       "input": 0.1,
@@ -29184,7 +29235,7 @@
     },
     "openrouter/qwen/qwen3.6-27b": {
       "input": 0.32,
-      "output": 2.7,
+      "output": 3.25,
       "cache_read": 0.03
     },
     "openrouter/qwen/qwen3.6-35b-a3b": {
@@ -29235,10 +29286,6 @@
       "output": 2.55,
       "cache_read": 0.085,
       "cache_write": 0.53125
-    },
-    "openrouter/qwen/qwen3.8-27b:free": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/qwen/qwen3.8-flash": {
       "input": 0.15,
@@ -29309,10 +29356,6 @@
     "openrouter/sao10k/l3.3-euryale-70b": {
       "input": 0.65,
       "output": 0.75
-    },
-    "openrouter/stealth/space-bunny-alpha": {
-      "input": 0.0,
-      "output": 0.0
     },
     "openrouter/stepfun/step-3.5-flash": {
       "input": 0.1,
@@ -29529,14 +29572,14 @@
       "cache_read": 0.26
     },
     "openrouter/z-ai/glm-5.2": {
-      "input": 0.0224,
-      "output": 16.0,
-      "cache_read": 0.0224
+      "input": 0.088,
+      "output": 12.0,
+      "cache_read": 0.088
     },
     "openrouter/z-ai/glm-5.3": {
-      "input": 1.4,
-      "output": 4.4,
-      "cache_read": 0.14
+      "input": 0.07,
+      "output": 7.0,
+      "cache_read": 0.065
     },
     "openrouter/z-ai/glm-5.3-flash": {
       "input": 0.15,
@@ -29588,14 +29631,14 @@
       "cache_read": 0.003
     },
     "openrouter/~deepseek/deepseek-pro-latest": {
-      "input": 0.1901,
-      "output": 4.2,
-      "cache_read": 0.19
+      "input": 0.2987,
+      "output": 6.0,
+      "cache_read": 0.3
     },
     "openrouter/~deepseek/deepseek-v4-flash-latest": {
-      "input": 0.0152,
+      "input": 0.0134,
       "output": 1.28,
-      "cache_read": 0.0152
+      "cache_read": 0.0134
     },
     "openrouter/~google/gemini-flash-latest": {
       "input": 0.75,
@@ -29610,8 +29653,8 @@
       "cache_write": 0.375
     },
     "openrouter/~moonshotai/kimi-latest": {
-      "input": 0.6,
-      "output": 15.0,
+      "input": 0.365,
+      "output": 13.0,
       "cache_read": 0.45
     },
     "openrouter/~openai/gpt-astra-latest": {
@@ -29649,9 +29692,9 @@
       "cache_read": 0.5
     },
     "openrouter/~z-ai/glm-flash-latest": {
-      "input": 0.0352,
+      "input": 0.0317,
       "output": 0.5,
-      "cache_read": 0.0232
+      "cache_read": 0.0209
     },
     "openrouter/~z-ai/glm-latest": {
       "input": 0.03,
@@ -36143,7 +36186,7 @@
     },
     "vercel/arcee-ai/trinity-large-thinking": {
       "input": 0.25,
-      "output": 0.9
+      "output": 0.8
     },
     "vercel/bytedance/seed-1.6": {
       "input": 0.25,
@@ -37000,9 +37043,9 @@
       "cache_write": 0.0625
     },
     "vercel/poolside/laguna-s-2.1": {
-      "input": 0.1,
-      "output": 0.2,
-      "cache_read": 0.01
+      "input": 0.09,
+      "output": 0.18,
+      "cache_read": 0.009
     },
     "vercel/poolside/laguna-s-2.1-free": {
       "input": 0.0,
@@ -37689,35 +37732,10 @@
       "output": 13.5,
       "cache_read": 0.27
     },
-    "wandb/JetBrains/Mellum2-12B-A2.5B-Instruct": {
-      "input": 0.05,
-      "output": 0.1,
-      "cache_read": 0.05
-    },
     "wandb/MiniMaxAI/MiniMax-M3": {
       "input": 0.23,
       "output": 0.96,
       "cache_read": 0.05
-    },
-    "wandb/OpenPipe/Qwen3-14B-Instruct": {
-      "input": 0.05,
-      "output": 0.22,
-      "cache_read": 0.05
-    },
-    "wandb/Qwen/Qwen3-30B-A3B-Instruct-2507": {
-      "input": 0.1,
-      "output": 0.3,
-      "cache_read": 0.1
-    },
-    "wandb/Qwen/Qwen3.5-35B-A3B": {
-      "input": 0.25,
-      "output": 1.25,
-      "cache_read": 0.25
-    },
-    "wandb/Qwen/Qwen3.6-27B": {
-      "input": 0.6,
-      "output": 3.6,
-      "cache_read": 0.12
     },
     "wandb/Qwen/Qwen3.6-35B-A3B": {
       "input": 0.25,
@@ -37734,20 +37752,10 @@
       "output": 1.65,
       "cache_read": 0.55
     },
-    "wandb/deepseek-ai/DeepSeek-V4-Flash": {
-      "input": 0.14,
-      "output": 0.28,
-      "cache_read": 0.07
-    },
     "wandb/deepseek-ai/DeepSeek-V4-Flash-0731": {
       "input": 0.13,
       "output": 0.28,
       "cache_read": 0.07
-    },
-    "wandb/deepseek-ai/DeepSeek-V4-Pro": {
-      "input": 1.15,
-      "output": 2.55,
-      "cache_read": 0.2
     },
     "wandb/deepseek-ai/DeepSeek-V4-Pro-0813": {
       "input": 1.31,
@@ -37769,20 +37777,10 @@
       "output": 0.34,
       "cache_read": 0.1
     },
-    "wandb/ibm-granite/granite-4.1-8b": {
-      "input": 0.05,
-      "output": 0.1,
-      "cache_read": 0.05
-    },
     "wandb/ibm-granite/granite-4.2-8b": {
       "input": 0.1,
       "output": 0.15,
       "cache_read": 0.05
-    },
-    "wandb/meta-llama/Llama-3.1-70B-Instruct": {
-      "input": 0.8,
-      "output": 0.8,
-      "cache_read": 0.8
     },
     "wandb/meta-llama/Llama-3.1-8B-Instruct": {
       "input": 0.22,
