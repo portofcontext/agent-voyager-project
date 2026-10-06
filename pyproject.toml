@@ -24,6 +24,7 @@ dependencies = [
     "agent-voyager-project",
     "avp-conformance",
     "avp-claude-agent-sdk",
+    "avp-agent-template",
     "avp-cli",
 ]
 
@@ -60,6 +61,7 @@ members = [
 agent-voyager-project = { workspace = true }
 avp-conformance = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
+avp-agent-template = { workspace = true }
 avp-cli = { workspace = true }
 
 [tool.uv]

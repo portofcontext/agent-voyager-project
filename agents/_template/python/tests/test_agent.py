@@ -7,10 +7,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from avp_agent_template.agent import describe, run
-
 from avp.agent_cli import main
 from avp.trajectory import parse_event
+from avp_agent_template.agent import describe, run
 
 
 def _run(tmp_path: Path, commission: dict) -> list[dict]:

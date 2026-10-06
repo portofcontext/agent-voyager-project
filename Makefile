@@ -92,6 +92,7 @@ test-docker:
 # Manifest paths, relative to the repo root the harness runs from.
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
+TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -123,6 +124,9 @@ conformance:
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-ping
 	@$(MAKE) --no-print-directory goose-describe
+	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
+	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
