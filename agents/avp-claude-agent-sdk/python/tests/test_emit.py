@@ -29,17 +29,15 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 
-from avp.envelope import new_trace_id
 from avp.pricing import load_default_prices
 from avp.trajectory import Event
 from avp_claude_agent_sdk._emit import (
     context_usage_meta,
-    emit_agent_described,
     emit_agent_started,
-    emit_run_requested,
+    emit_prelude,
     handle_message,
 )
-from avp_claude_agent_sdk._runstate import RunState
+from avp_claude_agent_sdk._runstate import RunState, new_run_state
 
 # ---------------------------------------------------------------------------
 # Fixture builders. `_result()` fills the six required ResultMessage fields
@@ -74,13 +72,7 @@ def _make_state(events: list[Event], *, prompt: str | None = "ping") -> RunState
     async def sink(event: Event) -> None:
         events.append(event)
 
-    return RunState(
-        trace_id=new_trace_id(),
-        run_id="test-run",
-        sink=sink,
-        prices=load_default_prices(),
-        prompt=prompt,
-    )
+    return new_run_state(sink, prompt, run_id="test-run", prices=load_default_prices())
 
 
 def _assistant(
@@ -189,9 +181,8 @@ async def _drive_prelude(
     options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
     eff_status = status if status is not None else _status()
     init_data = init.data if init is not None else None
-    await emit_run_requested(state)
-    await emit_agent_described(
-        state, options, prompt=prompt, init_data=init_data, status=eff_status
+    await emit_prelude(
+        state, options, commission=None, prompt=prompt, init_data=init_data, status=eff_status
     )
     await emit_agent_started(
         state,
@@ -218,9 +209,8 @@ async def _drive(
     eff_status = status if status is not None else _status()
     eff_init = init if init is not None else _init(model=model)
     init_data = eff_init.data
-    await emit_run_requested(state)
-    await emit_agent_described(
-        state, options, prompt=prompt, init_data=init_data, status=eff_status
+    await emit_prelude(
+        state, options, commission=None, prompt=prompt, init_data=init_data, status=eff_status
     )
     await emit_agent_started(
         state,
@@ -238,8 +228,7 @@ async def _drive(
     # at end-of-stream; `handle_message` doesn't currently route
     # ResultMessage, so drain here to flush any buffered emissions for
     # the test's open turn.
-    if state.turn is not None:
-        await state.drain()
+    await state.rec.close_turn()
     return events
 
 
@@ -611,7 +600,12 @@ def test_tool_result_boundary_opens_new_turn() -> None:
     events = asyncio.run(
         _drive(
             [
-                _assistant(TextBlock(text="t1"), input_tokens=10, output_tokens=5),
+                _assistant(
+                    TextBlock(text="t1"),
+                    ToolUseBlock(id="toolu_01", name="Read", input={}),
+                    input_tokens=10,
+                    output_tokens=5,
+                ),
                 _user_tool_result(),
                 _assistant(TextBlock(text="t2"), input_tokens=10, output_tokens=7),
                 _result(),
@@ -695,7 +689,12 @@ def test_each_turn_reports_its_own_per_call_usage() -> None:
     events = asyncio.run(
         _drive(
             [
-                _assistant(TextBlock(text="t1"), input_tokens=100, output_tokens=50),
+                _assistant(
+                    TextBlock(text="t1"),
+                    ToolUseBlock(id="toolu_01", name="Read", input={}),
+                    input_tokens=100,
+                    output_tokens=50,
+                ),
                 _user_tool_result(),
                 _assistant(TextBlock(text="t2"), input_tokens=10, output_tokens=7),
                 _result(),
@@ -748,7 +747,7 @@ def test_local_tool_use_emits_invoked_then_returned_paired_by_id() -> None:
     assert returned[0].data.tool_name == "Read"
     assert returned[0].data.parent_span_id == invoked[0].data.span_id
     assert returned[0].data.tool_result.content == "contents"
-    assert returned[0].data.tool_result.is_error is None
+    assert returned[0].data.tool_result.is_error is False
 
 
 def test_mcp_prefixed_tool_dispatch_target_is_mcp_server() -> None:

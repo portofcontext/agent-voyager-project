@@ -1,14 +1,13 @@
-"""AVP event emitters for the Claude Agent SDK adapter.
+"""Claude Agent SDK message handlers: SDK messages in, Recorder calls out.
 
-Currently covers the prelude only (`run_requested`, `agent_described`,
-`agent_started`); per-message handlers and turn lifecycle are
-reintroduced incrementally.
+Everything harness-specific lives here (which SDK message means what, the
+probe-derived descriptor, Anthropic usage extras, stop-reason inference);
+the trajectory's ordering and span rules live in `avp.recorder.Recorder`.
 """
 
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
 
 from claude_agent_sdk import ClaudeSDKClient
@@ -27,40 +26,10 @@ from claude_agent_sdk.types import (
 )
 
 from avp.commission import Commission
-from avp.content import AVPContentBlock
-from avp.content import ServerToolResultBlock as AVPServerToolResultBlock
-from avp.content import ServerToolUseBlock as AVPServerToolUseBlock
-from avp.content import ToolResultBlock as AVPToolResultBlock
-from avp.content import ToolUseBlock as AVPToolUseBlock
 from avp.descriptor import ToolDecl
-from avp.envelope import ZERO_SPAN_ID, new_span_id
-from avp.trajectory import (
-    AgentDescribedData,
-    AgentDescribedEvent,
-    AgentStartedData,
-    AgentStartedEvent,
-    AgentStoppedData,
-    AgentStoppedEvent,
-    ErrorCode,
-    ErrorOccurredData,
-    ErrorOccurredEvent,
-    Event,
-    RunRequestedData,
-    RunRequestedEvent,
-    StopReason,
-    SubagentInvokedData,
-    SubagentInvokedEvent,
-    SubagentReturnedData,
-    SubagentReturnedEvent,
-    SubagentUsage,
-    ToolInvokedData,
-    ToolInvokedEvent,
-    ToolReturnedData,
-    ToolReturnedEvent,
-)
-from avp_claude_agent_sdk._runstate import RunState, TaskInfo, ToolSpan, Turn
+from avp.trajectory import ErrorCode, StopReason, SubagentUsage
+from avp_claude_agent_sdk._runstate import RunState
 from avp_claude_agent_sdk._translator import (
-    get_dispatch_target,
     mcp_servers_from_status,
     request_model_from_init,
     resolve_system_prompt,
@@ -72,56 +41,25 @@ from avp_claude_agent_sdk._translator import (
     translate_usage,
 )
 
-_PROVIDER_NAME = "anthropic"
 
-
-async def emit_run_requested(state: RunState, commission: Commission | None = None) -> None:
-    """First event of the trajectory. Anchors the run.
-
-    Stamps `avp.supervisor.{name,version}` from `Commission.supervisor` for
-    attribution (spec §2.1), matching the avp-goose connector; left unset when
-    the Commission carries no supervisor.
-    """
-    supervisor = commission.supervisor if commission else None
-    await state.sink(
-        RunRequestedEvent(
-            subject=state.run_id,
-            data=RunRequestedData(
-                trace_id=state.trace_id,
-                span_id=new_span_id(),
-                parent_span_id=ZERO_SPAN_ID,
-                supervisor_name=supervisor.name if supervisor else None,
-                supervisor_version=supervisor.version if supervisor else None,
-                commission=commission,
-            ),
-        )
-    )
-
-
-async def emit_agent_described(
+async def emit_prelude(
     state: RunState,
     options: ClaudeAgentOptions,
     *,
+    commission: Commission | None,
     prompt: str | None,
     init_data: dict[str, Any] | None,
     status: McpStatusResponse,
 ) -> None:
-    """Pre-Commission capability surface (probe-derived descriptor).
+    """`run_requested` then `agent_described` (the pre-Commission capability
+    surface from the probe session).
 
     `init_data` from a probe `SystemMessage(init)`; `status` from the
     probe's `get_mcp_status()`. When `init_data is None`, the descriptor
     carries identity + default_model only -- still spec-conformant.
     """
-    await state.sink(
-        AgentDescribedEvent(
-            subject=state.run_id,
-            data=AgentDescribedData(
-                trace_id=state.trace_id,
-                span_id=new_span_id(),
-                parent_span_id=ZERO_SPAN_ID,
-                descriptor=translate_agent_descriptor(options, init_data, status, prompt=prompt),
-            ),
-        )
+    await state.rec.prelude(
+        commission, translate_agent_descriptor(options, init_data, status, prompt=prompt)
     )
 
 
@@ -189,99 +127,42 @@ async def emit_agent_started(
     status: McpStatusResponse,
     context_usage: dict[str, Any] | None = None,
 ) -> None:
-    """Merged-state snapshot for the run. Sets `state.agent_span_id` so
-    subsequent turn / tool events parent under it."""
-    agent_span_id = new_span_id()
-    state.agent_span_id = agent_span_id
+    """Merged-state snapshot for the run (`agent_started`)."""
     sdk_session_id = init_data.get("session_id") if init_data else None
     meta: dict[str, Any] = {}
     if sdk_session_id:
         meta["claude_agent_sdk.session_id"] = sdk_session_id
     if context_usage:
         meta["claude_agent_sdk.context_usage"] = context_usage
-    await state.sink(
-        AgentStartedEvent(
-            subject=state.run_id,
-            data=AgentStartedData(
-                trace_id=state.trace_id,
-                span_id=agent_span_id,
-                parent_span_id=ZERO_SPAN_ID,
-                meta=meta or None,
-                provider_name=_PROVIDER_NAME,
-                operation_name="invoke_agent",
-                request_model=(
-                    request_model_from_init(init_data, options) if init_data else options.model
-                ),
-                prompt=prompt,
-                system_prompt=resolve_system_prompt(options.system_prompt),
-                tools=_apply_enabled_builtin_tools(
-                    tools_from_init(init_data, status) if init_data else None,
-                    state.enabled_builtin_tools,
-                ),
-                mcp_servers=mcp_servers_from_status(status),
-                skills=skills_from_init(init_data) if init_data else None,
-                subagents=subagents_from_init(init_data) if init_data else None,
-            ),
-        )
+    await state.rec.start(
+        request_model=request_model_from_init(init_data, options) if init_data else options.model,
+        prompt=prompt if isinstance(prompt, str) or prompt is None else None,
+        system_prompt=resolve_system_prompt(options.system_prompt),
+        tools=_apply_enabled_builtin_tools(
+            tools_from_init(init_data, status) if init_data else None,
+            state.enabled_builtin_tools,
+        ),
+        mcp_servers=mcp_servers_from_status(status),
+        skills=skills_from_init(init_data) if init_data else None,
+        subagents=subagents_from_init(init_data) if init_data else None,
+        meta=meta,
     )
 
 
-async def emit_agent_stopped(
-    state: RunState,
-    reason: StopReason,
-    *,
-    output: Any = None,
-) -> None:
-    """Final event of the trajectory. Idempotent via `state.stopped` so
-    ResultMessage handling, disconnect fallbacks, and exception paths
-    can all call this safely without double-emitting. Drains any open
-    turn first so the last `assistant_message` lands before the close
-    regardless of which path triggered the stop.
+async def emit_agent_stopped(state: RunState, reason: StopReason, *, output: Any = None) -> None:
+    """Final event of the trajectory. Idempotent, so ResultMessage handling,
+    disconnect fallbacks, and exception paths can all call it.
 
-    Any subagent frame still open at this point is closed as `abandoned`,
-    and a `converged` stop is downgraded to match. A parent that dispatched
-    a background subagent and stopped before the child reported has not
-    converged on anything, however finished its last message sounds; the
-    SDK's `ResultMessage` says `success` in exactly that case, so the
-    correction has to happen here rather than upstream."""
-    if state.stopped:
-        return
-    if state.agent_span_id is not None:
-        await state.drain()
-    if await _close_dangling_subagents(state) and reason is StopReason.converged:
-        reason = StopReason.abandoned
-    state.stopped = True
-    await state.sink(
-        AgentStoppedEvent(
-            subject=state.run_id,
-            data=AgentStoppedData(
-                trace_id=state.trace_id,
-                span_id=new_span_id(),
-                parent_span_id=state.agent_span_id or ZERO_SPAN_ID,
-                reason=reason,
-                output=output,
-            ),
-        )
-    )
+    A subagent still running at this point is closed as `abandoned` and a
+    `converged` stop downgrades to match: the SDK's `ResultMessage` says
+    `success` when a parent stops before its background child reports."""
+    await state.rec.stop(reason, output)
 
 
 async def emit_error(
     state: RunState, exc: Exception, error_code: ErrorCode = ErrorCode.agent_crash
 ) -> None:
-    """Emit `error_occurred`. Parents under the agent span once the loop has
-    started, else the root (a pre-loop fail-fast has no agent frame yet)."""
-    await state.sink(
-        ErrorOccurredEvent(
-            subject=state.run_id,
-            data=ErrorOccurredData(
-                trace_id=state.trace_id,
-                span_id=new_span_id(),
-                parent_span_id=state.agent_span_id or ZERO_SPAN_ID,
-                error_code=error_code,
-                error_message=str(exc) or type(exc).__name__,
-            ),
-        )
-    )
+    await state.rec.error(error_code, str(exc) or type(exc).__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +183,7 @@ async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: Sys
     context_usage = await context_usage_meta(client)
     await emit_agent_started(
         state,
-        prompt=state.prompt,
+        prompt=state.prompt,  # type: ignore[arg-type]
         options=client.options,
         init_data=message.data,
         status=status,
@@ -311,139 +192,32 @@ async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: Sys
 
 
 async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
-    """Handle one AssistantMessage chunk.
-
-    Drains the open turn on a new `message_id`, then opens (if needed)
-    and extends the current turn with the chunk's content, model,
-    stop_reason, and usage. Emits `tool_invoked` for each `ToolUseBlock`
-    (including Task dispatches: per spec §5, the subagent_* events layer
-    on top of the tool dispatch, they don't replace it) and
-    `ServerToolUseBlock`, plus `tool_returned` for each
-    `ServerToolResultBlock` (server tools complete inline in the same
-    response). Subagent-interior chunks (`parent_tool_use_id is not
-    None`) are skipped under the in-process subagent fallback (spec §5.6)."""
+    """Report one AssistantMessage chunk. Chunks of one API response share a
+    `message_id`, which becomes the turn key. Subagent-interior chunks
+    (`parent_tool_use_id is not None`) are skipped under the in-process
+    subagent fallback (spec §5.6)."""
     if message.parent_tool_use_id is not None:
         return
-
-    # The Claude CLI fans one API response's content blocks out as one
-    # AssistantMessage per block, all stamped with the same `message_id`.
-    # One AVP turn = one inference = one `message_id`, so multiple SDK
-    # chunks merge into the open turn; a different non-None `message_id`
-    # is the boundary that closes the prior inference.
-    # Close the prior inference when a new one begins: a different non-None
-    # message_id, OR a turn already marked `tool_resulted` (its inference ended
-    # at the tool call, so this message starts a fresh one even if it shares or
-    # lacks a message_id). Chunks of one inference (same message_id, no tool
-    # result yet) merge into the open turn.
-    if state.turn is not None and (
-        state.turn.tool_resulted
-        or (message.message_id is not None and message.message_id != state.turn.message_id)
-    ):
-        await state.drain()
-
-    if state.turn is None:
-        state.turn = Turn(message_id=message.message_id, step=state.last_step + 1)
-
-    state.turn.meta_chunks_merged += 1
-    translated = translate_content_blocks(message.content)
-    state.turn.content.extend(translated)
-    for block in translated:
-        if isinstance(block, AVPToolUseBlock | AVPServerToolUseBlock):
-            _buffer_tool_invoked(state, block.id, block.name, block.input)
-        elif isinstance(block, AVPServerToolResultBlock):
-            # Server tools execute in the model's runtime and return
-            # inline in the same response, so bracket within this chunk.
-            _buffer_tool_returned(
-                state,
-                block.tool_use_id,
-                AVPToolResultBlock(
-                    tool_use_id=block.tool_use_id,
-                    content=_normalize_tool_result_content(block.content),
-                ),
-            )
-
-    if state.turn.response_model is None:
-        state.turn.response_model = message.model
-    if message.stop_reason:
-        state.turn.stop_reason = message.stop_reason
+    state.turn_key = message.message_id or state.turn_key or "anonymous"
+    meta: dict[str, Any] = {"anthropic.message_id": message.message_id or None}
     if message.usage:
-        state.turn.usage = translate_usage(message.usage)
-        state.turn.meta_service_tier = (
-            message.usage.get("service_tier") or state.turn.meta_service_tier
-        )
+        if message.usage.get("service_tier"):
+            meta["anthropic.service_tier"] = message.usage["service_tier"]
         cache_creation = message.usage.get("cache_creation") or {}
         if isinstance(cache_creation, dict):
-            state.turn.meta_cache_creation_5m = int(
+            meta["anthropic.cache_creation.ephemeral_5m_input_tokens"] = int(
                 cache_creation.get("ephemeral_5m_input_tokens") or 0
             )
-            state.turn.meta_cache_creation_1h = int(
+            meta["anthropic.cache_creation.ephemeral_1h_input_tokens"] = int(
                 cache_creation.get("ephemeral_1h_input_tokens") or 0
             )
-
-
-def _buffer_tool_invoked(
-    state: RunState,
-    tool_use_id: str,
-    tool_name: str,
-    tool_input: dict[str, Any],
-) -> None:
-    """Mint a span, register a `ToolSpan` for later pairing, and append
-    a `tool_invoked` to the open turn's emissions. No-op if no turn open.
-    """
-    if state.turn is None:
-        return
-    span_id = new_span_id()
-    state.turn.tool_spans[tool_use_id] = ToolSpan(
-        span_id=span_id,
-        step=state.turn.step,
-        name=tool_name,
-        started_at=time.monotonic(),
-    )
-    state.turn.emissions.append(
-        ToolInvokedEvent(
-            subject=state.run_id,
-            data=ToolInvokedData(
-                trace_id=state.trace_id,
-                span_id=span_id,
-                parent_span_id=state.turn.span_id,
-                step=state.turn.step,
-                tool_call_id=tool_use_id,
-                tool_name=tool_name,
-                tool_input=tool_input,
-                tool_dispatch_target=get_dispatch_target(tool_name),
-            ),
-        )
-    )
-
-
-def _buffer_tool_returned(
-    state: RunState,
-    tool_use_id: str,
-    tool_result: AVPToolResultBlock,
-) -> None:
-    """Pop the matching `ToolSpan` and append a paired `tool_returned`
-    to the open turn's emissions. Silently drops if no matching
-    invocation: unknown ids or no open turn."""
-    if state.turn is None:
-        return
-    span = state.turn.tool_spans.pop(tool_use_id, None)
-    if span is None:
-        return
-    duration_ms = max(0, int((time.monotonic() - span.started_at) * 1000))
-    state.turn.emissions.append(
-        ToolReturnedEvent(
-            subject=state.run_id,
-            data=ToolReturnedData(
-                trace_id=state.trace_id,
-                span_id=new_span_id(),
-                parent_span_id=span.span_id,
-                step=span.step,
-                tool_call_id=tool_use_id,
-                tool_name=span.name,
-                duration_ms=duration_ms,
-                tool_result=tool_result,
-            ),
-        )
+    await state.rec.assistant(
+        translate_content_blocks(message.content),
+        translate_usage(message.usage) if message.usage else None,
+        model=message.model,
+        turn_key=state.turn_key,
+        finish_reasons=[message.stop_reason] if message.stop_reason else None,
+        meta={k: v for k, v in meta.items() if v is not None},
     )
 
 
@@ -464,19 +238,14 @@ def _normalize_tool_result_content(content: Any) -> str | list[Any]:
 
 
 async def _on_user(state: RunState, message: UserMessage) -> None:
-    """Handle one UserMessage: each `ToolResultBlock` in `content` closes
-    a prior `tool_invoked`. Subagent-interior UserMessages are skipped.
-    Per spec §5, subagent dispatches close their tool-dispatch span here
-    just like any other tool call; the `subagent_*` events are layered
-    on top via `_on_task_*`, they don't replace the tool pair."""
+    """Each `ToolResultBlock` in a UserMessage closes a prior tool call.
+    Subagent-interior UserMessages are skipped. Per spec §5, subagent
+    dispatches close their tool-dispatch span here like any other call; the
+    `subagent_*` events layer on top via `_on_task_*`."""
     if message.parent_tool_use_id is not None:
-        return
-    if state.turn is None:
         return
     content = message.content if isinstance(message.content, list) else []
     tool_results = [b for b in content if isinstance(b, ToolResultBlock)]
-    if not tool_results:
-        return
     # `UserMessage.tool_use_result` is the SDK's structured-payload
     # channel paired with the human-readable `ToolResultBlock.content`
     # string. It's per-message, so attribution is only unambiguous when
@@ -490,20 +259,12 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
     else:
         structured = None
     for block in tool_results:
-        _buffer_tool_returned(
-            state,
+        await state.rec.tool_result(
             block.tool_use_id,
-            AVPToolResultBlock(
-                tool_use_id=block.tool_use_id,
-                content=_normalize_tool_result_content(block.content),
-                structured_content=structured,
-                is_error=block.is_error,
-            ),
+            _normalize_tool_result_content(block.content),
+            is_error=bool(block.is_error),
+            structured_content=structured,
         )
-    # The tool result ends this inference; the next AssistantMessage opens a new
-    # turn. Drain stays deferred to that message so parallel results spanning
-    # several UserMessages all attach to this turn first.
-    state.turn.tool_resulted = True
 
 
 # ---------------------------------------------------------------------------
@@ -540,149 +301,36 @@ def _task_usage_to_subagent_usage(usage: TaskUsage | None) -> SubagentUsage | No
     )
 
 
-def _subagent_input(state_turn_content: list[AVPContentBlock], tool_use_id: str) -> dict[str, Any]:
-    """Find the parent's Task `ToolUseBlock` in the open turn's content
-    and return its input dict (the subagent's prompt / subagent_type /
-    description). Empty dict if not found (defensive)."""
-    for block in state_turn_content:
-        if isinstance(block, AVPToolUseBlock) and block.id == tool_use_id:
-            return block.input
-    return {}
-
-
 async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None:
-    """Buffer a `subagent_invoked` onto the open turn's emissions.
-
-    Fires when the CLI spawns a Task subagent. We record the dispatch
-    in `state.turn.tasks` for `_on_task_notification` to pair against.
-    The matching `ToolUseBlock` (in `state.turn.content`) supplies
-    `subagent_input`. Per spec §5, the subagent frame parents under
-    the enclosing turn span (sibling of `tool_invoked`, not nested
-    under it): the tool pair and the subagent pair are parallel views
-    of the same call.
-    """
-    if state.turn is None or not message.tool_use_id:
+    """Open a subagent frame when the CLI spawns a Task subagent. The frame
+    takes its turn and input from the `Agent` tool call with the same id."""
+    if not message.tool_use_id:
         return
-    span_id = new_span_id()
-    task_type = message.task_type or "Task"
-    state.tasks[message.tool_use_id] = TaskInfo(
-        span_id=span_id,
-        parent_span_id=state.turn.span_id,
-        step=state.turn.step,
-        task_type=task_type,
-        started_at=time.monotonic(),
-    )
-    state.turn.emissions.append(
-        SubagentInvokedEvent(
-            subject=state.run_id,
-            data=SubagentInvokedData(
-                trace_id=state.trace_id,
-                span_id=span_id,
-                parent_span_id=state.turn.span_id,
-                step=state.turn.step,
-                subagent_name=task_type,
-                subagent_invocation_id=message.tool_use_id,
-                subagent_input=_subagent_input(state.turn.content, message.tool_use_id),
-            ),
-        )
-    )
+    await state.rec.subagent_start(message.tool_use_id, message.task_type or "Task")
 
 
 async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
-    """Emit the matching `subagent_returned`. Status maps to
-    `avp.subagent.reason`: completed→converged, stopped→interrupted,
-    failed→error (with `result.text` carrying the failure summary).
-    No-op if the dispatch wasn't recorded.
-
-    The notification can arrive long after the dispatching turn drained
-    (async `Agent` dispatch), so this buffers onto whatever turn is open
-    now and emits directly when none is. Either way the event carries the
-    span / parent / step captured at dispatch, so its place in the trace
-    is fixed regardless of when it lands on the wire."""
+    """Close the subagent frame. Status maps to `avp.subagent.reason`:
+    completed→converged, stopped→interrupted, failed→error (with the summary
+    carrying the failure). The notification can arrive many turns after the
+    dispatch (async `Agent` tool), or not at all (closed as `abandoned` at
+    stop)."""
     if not message.tool_use_id:
         return
-    info = state.tasks.pop(message.tool_use_id, None)
-    if info is None:
-        return
-    duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
-    summary = message.summary or ""
-    reason = _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged)
-    await _emit_or_buffer(
-        state,
-        SubagentReturnedEvent(
-            subject=state.run_id,
-            data=SubagentReturnedData(
-                trace_id=state.trace_id,
-                # span_id matches subagent_invoked (same frame, closed).
-                span_id=info.span_id,
-                # Parent under the turn span (per spec §5: subagent frame
-                # is a sibling of `tool_invoked`, not nested under it).
-                parent_span_id=info.parent_span_id,
-                step=info.step,
-                subagent_name=info.task_type,
-                subagent_invocation_id=message.tool_use_id,
-                duration_ms=duration_ms,
-                subagent_result_text=summary,
-                subagent_reason=reason,
-                subagent_usage=_task_usage_to_subagent_usage(message.usage),
-            ),
-        ),
+    await state.rec.subagent_result(
+        message.tool_use_id,
+        message.summary or "",
+        _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged),
+        usage=_task_usage_to_subagent_usage(message.usage),
     )
-
-
-async def _emit_or_buffer(state: RunState, event: Event) -> None:
-    """Buffer onto the open turn's emissions, or emit straight to the sink
-    when no turn is open. Buffering preserves arrival order relative to the
-    turn's other events; the direct path is for events that outlive every
-    turn (an async subagent closing after the last inference)."""
-    if state.turn is not None:
-        state.turn.emissions.append(event)
-    else:
-        await state.sink(event)
-
-
-async def _close_dangling_subagents(state: RunState) -> bool:
-    """Close every subagent frame still open at run end, and report whether
-    there were any.
-
-    Spec §5.6 requires a `subagent_returned` for every `subagent_invoked`.
-    A background `Agent` dispatch whose notification never arrives would
-    otherwise leave the frame dangling, so we synthesize the close with
-    `reason = abandoned` rather than dropping it: the supervisor learns the
-    child was still in flight, which is the whole signal it needs."""
-    if not state.tasks:
-        return False
-    for tool_use_id, info in list(state.tasks.items()):
-        duration_ms = max(0, int((time.monotonic() - info.started_at) * 1000))
-        await state.sink(
-            SubagentReturnedEvent(
-                subject=state.run_id,
-                data=SubagentReturnedData(
-                    trace_id=state.trace_id,
-                    span_id=info.span_id,
-                    parent_span_id=info.parent_span_id,
-                    step=info.step,
-                    subagent_name=info.task_type,
-                    subagent_invocation_id=tool_use_id,
-                    duration_ms=duration_ms,
-                    subagent_result_text=(
-                        "Run ended while this subagent was still running; "
-                        "it never reported a result."
-                    ),
-                    subagent_reason=StopReason.abandoned,
-                ),
-            )
-        )
-    state.tasks.clear()
-    return True
 
 
 async def _on_result(state: RunState, message: ResultMessage) -> None:
     """Map `ResultMessage` to `agent_stopped`. The wire message carries
     the stop info (`is_error`, `stop_reason`, `result`); only this path
-    can distinguish converged / error / refused. `emit_agent_stopped` is
-    idempotent via `state.stopped`, so the `_client.py` disconnect /
-    exception paths remain safe fallbacks for premature termination."""
+    can distinguish converged / error / refused. Stop is idempotent, so the
+    `_client.py` disconnect / exception paths remain safe fallbacks for
+    premature termination."""
     if message.is_error:
         reason = StopReason.error
     elif message.stop_reason == "refusal":
@@ -698,7 +346,7 @@ async def _on_result(state: RunState, message: ResultMessage) -> None:
 
 
 async def handle_message(client: ClaudeSDKClient, state: RunState, message: Message) -> None:
-    """Dispatch one SDK message to the appropriate AVP emitter. Mutates state."""
+    """Dispatch one SDK message to the appropriate handler."""
     # Task* messages subclass SystemMessage in the SDK, so the subclass
     # branches MUST come before the generic SystemMessage branch.
     if isinstance(message, TaskStartedMessage):
