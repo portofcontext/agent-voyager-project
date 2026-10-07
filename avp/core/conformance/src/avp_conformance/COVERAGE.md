@@ -11,7 +11,9 @@ tests, seam tests (multi-turn history render, translator/SDK token+cost
 parity, supervisor/agent subprocess), and bindings drift detection. The
 conformance suite is the language-agnostic behavioral contract on top: every
 case runs against a real model and is expected to pass on every conforming
-agent (today: `avp-claude-agent-sdk` and `avp-goose`).
+agent (today: `avp-claude-agent-sdk` and `avp-goose`). A case that exercises an
+optional surface declares it in `requires` (e.g. `subagents`) and is skipped,
+not failed, for an agent whose descriptor doesn't declare it.
 
 ## Covered (cross-agent, live)
 

@@ -24,6 +24,7 @@ dependencies = [
     "agent-voyager-project",
     "avp-conformance",
     "avp-claude-agent-sdk",
+    "avp-agent-template",
     "avp-cli",
 ]
 
@@ -49,6 +50,7 @@ members = [
     "avp/core/conformance",
     "avp-cli",
     "agents/avp-claude-agent-sdk/python",
+    "agents/_template/python",
 ]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
@@ -59,6 +61,7 @@ members = [
 agent-voyager-project = { workspace = true }
 avp-conformance = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
+avp-agent-template = { workspace = true }
 avp-cli = { workspace = true }
 
 [tool.uv]

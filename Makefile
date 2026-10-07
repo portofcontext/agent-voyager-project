@@ -25,8 +25,19 @@ TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
+	agents/_template/python \
 	avp-cli
 
+
+
+.PHONY: new-agent new-agent-rust
+new-agent:
+	@test -n "$(NAME)" || { echo "usage: make new-agent NAME=avp-<sdk>"; exit 2; }
+	@python3 avp/scripts/new-agent.py $(NAME) --lang python
+
+new-agent-rust:
+	@test -n "$(NAME)" || { echo "usage: make new-agent-rust NAME=avp-<sdk>"; exit 2; }
+	@python3 avp/scripts/new-agent.py $(NAME) --lang rust
 
 
 .PHONY: help
@@ -46,6 +57,8 @@ help:
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + conformance + bindings-check"
+	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
+	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
@@ -91,6 +104,7 @@ test-docker:
 # Manifest paths, relative to the repo root the harness runs from.
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
+TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -122,6 +136,9 @@ conformance:
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-ping
 	@$(MAKE) --no-print-directory goose-describe
+	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
+	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────

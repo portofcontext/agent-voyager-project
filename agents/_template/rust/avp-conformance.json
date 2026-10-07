@@ -1,0 +1,6 @@
+{
+  "command": ["cargo", "run", "--quiet", "--bin", "avp-agent-template", "--"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-agent-template (rust) entrypoint"
+}

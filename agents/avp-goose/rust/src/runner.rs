@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
-use avp::trajectory::{ErrorCode, StopReason};
+use avp::trajectory::StopReason;
 use avp::Commission;
 use futures::StreamExt;
 use goose::agents::{Agent, AgentEvent, SessionConfig};
@@ -227,96 +227,25 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     );
     emitter.prelude(commission, &descriptor)?;
 
-    // Fail fast (spec §4.0): the Commission pins this agent at a different
-    // build. Same-name surfaces can change behavior across builds; refuse
-    // loudly instead of running an unvalidated one.
-    if let Some(pin) = commission
-        .agent_versions
-        .as_ref()
-        .and_then(|m| m.get(commission::AGENT_NAME))
+    // Fail fast (spec §4): a version pin for a different build, an allow-list
+    // map without our key, or an allow-listed tool the agent doesn't offer.
+    // Emit `error_occurred` + `agent_stopped(error)` before any model turn.
+    let offered_tools: Vec<String> = descriptor
+        .tools
+        .iter()
+        .flatten()
+        .map(|t| t.name.clone())
+        .collect();
+    let offered = avp::preflight::Offered {
+        tools: Some(&offered_tools),
+        ..Default::default()
+    };
+    if let Some((code, message)) =
+        avp::preflight::preflight(commission, commission::AGENT_NAME, AGENT_VERSION, offered)
     {
-        if pin != AGENT_VERSION {
-            emitter.error(
-                ErrorCode::UnsupportedAgentVersion,
-                &format!(
-                    "Commission pins {} at {pin:?}; this build is {AGENT_VERSION:?}",
-                    commission::AGENT_NAME
-                ),
-            )?;
-            emitter.stop(StopReason::Error, None)?;
-            return Ok(());
-        }
-    }
-
-    // Fail fast (spec §4): each present per-agent allowlist map MUST carry our
-    // key (a map without it filters a surface the Commission wasn't authored
-    // for on this agent), and every name under our key must be a tool the
-    // agent actually offers. Either breach is a Commission/agent collision —
-    // emit `error_occurred(commission_collision)` + `agent_stopped(error)`
-    // before the loop, so no model turn runs.
-    let missing_key: Vec<&str> = [
-        (
-            "enabled_builtin_tools",
-            commission.enabled_builtin_tools.as_ref(),
-        ),
-        (
-            "enabled_builtin_subagents",
-            commission.enabled_builtin_subagents.as_ref(),
-        ),
-        (
-            "enabled_builtin_skills",
-            commission.enabled_builtin_skills.as_ref(),
-        ),
-        (
-            "enabled_builtin_mcp_servers",
-            commission.enabled_builtin_mcp_servers.as_ref(),
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(field, m)| {
-        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME))
-            .then_some(field)
-    })
-    .collect();
-    if !missing_key.is_empty() {
-        emitter.error(
-            ErrorCode::CommissionCollision,
-            &format!(
-                "no {:?} entry in: {}",
-                commission::AGENT_NAME,
-                missing_key.join(", ")
-            ),
-        )?;
+        emitter.error(code, &message)?;
         emitter.stop(StopReason::Error, None)?;
         return Ok(());
-    }
-    if let Some(names) = commission
-        .enabled_builtin_tools
-        .as_ref()
-        .and_then(|m| m.get(commission::AGENT_NAME))
-    {
-        let known: HashSet<&str> = descriptor
-            .tools
-            .iter()
-            .flatten()
-            .map(|t| t.name.as_str())
-            .collect();
-        let unknown: Vec<&str> = names
-            .iter()
-            .map(String::as_str)
-            .filter(|n| !known.contains(n))
-            .collect();
-        if !unknown.is_empty() {
-            emitter.error(
-                ErrorCode::CommissionCollision,
-                &format!(
-                    "enabled_builtin_tools names not offered by the agent: {}",
-                    unknown.join(", ")
-                ),
-            )?;
-            emitter.stop(StopReason::Error, None)?;
-            return Ok(());
-        }
     }
 
     emitter.start(Some(&model_name))?;
@@ -647,11 +576,19 @@ async fn build_descriptor(
         })
         .collect();
 
-    // Subagents the model can `delegate` to via the `summon` extension: recipes /
-    // agents discovered on the filesystem (working-dir and configured dirs), the
-    // same filesystem-based discovery as skills. Goose ships no bundled recipes, so
-    // this is empty unless the environment provides some.
-    let subagent_decls: Vec<Value> =
+    // Subagents the model can `delegate` to via the `summon` extension. With the
+    // `delegate` tool loaded, the model can always spawn an ad-hoc subagent from
+    // instructions alone (its frame is named `delegate`, as in `emit`); recipes /
+    // agents discovered on the filesystem (working-dir and configured dirs) add
+    // named ones. Goose ships no bundled recipes.
+    let mut subagent_decls: Vec<Value> = Vec::new();
+    if tools.iter().any(|t| t["name"] == "delegate") {
+        subagent_decls.push(json!({
+            "name": "delegate",
+            "description": "An ad-hoc subagent the model spawns with instructions via summon's `delegate` tool.",
+        }));
+    }
+    subagent_decls.extend(
         goose::agents::platform_extensions::summon::discover_filesystem_sources(working_dir)
             .iter()
             .map(|s| {
@@ -660,8 +597,8 @@ async fn build_descriptor(
                     decl["description"] = json!(s.description);
                 }
                 decl
-            })
-            .collect();
+            }),
+    );
 
     let mut descriptor = json!({
         "agent_name": "goose",

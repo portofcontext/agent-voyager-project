@@ -150,5 +150,12 @@ class TestCase(BaseModel):
     description: str | None = None
     spec_refs: list[str] = Field(default_factory=list)
     built_in: AgentBuiltins | None = None
+    # Capabilities the case exercises, each a descriptor surface the agent must
+    # declare (non-empty) for the case to apply. `avp-conformance check` reports
+    # SKIP, not FAIL, for an agent that doesn't declare one (e.g. a subagent
+    # case against an agent with no subagents).
+    requires: list[Literal["tools", "subagents", "skills", "mcp_servers"]] = Field(
+        default_factory=list
+    )
     commission: Commission
     expectations: Expectations
