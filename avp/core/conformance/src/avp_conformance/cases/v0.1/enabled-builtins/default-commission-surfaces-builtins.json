@@ -7,6 +7,9 @@
     "spec/v0.1/trajectory.md#2-1-run-prelude",
     "spec/v0.1/agent-descriptor.md"
   ],
+  "requires": [
+    "tools"
+  ],
   "commission": {
     "schema_version": "0.1",
     "run_id": "default-commission-surfaces-builtins",
@@ -26,7 +29,9 @@
           "type": "avp.agent_started",
           "source": "avp://agent",
           "data": {
-            "avp.tools": { "$contains": {} }
+            "avp.tools": {
+              "$contains": {}
+            }
           }
         }
       },
