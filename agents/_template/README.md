@@ -110,4 +110,6 @@ can run in the CLI's sandbox.
    and run `make release-<name>` from a clean `main`.
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
-subagents) and `agents/avp-goose/rust/` (late usage, subagents via a tool). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
+subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool), and
+`agents/avp-openai-agents/python/` (complete messages, agents-as-tools
+subagents, the closest to the template). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
