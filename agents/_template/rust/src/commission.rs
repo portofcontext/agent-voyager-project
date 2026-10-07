@@ -7,6 +7,11 @@
 use avp::Commission;
 
 pub const AGENT_NAME: &str = "avp-agent-template";
+/// What the harness ships with, mirrored onto the descriptor. The stand-in
+/// harness ships one `echo` tool; replace this with your harness's real
+/// defaults (a product such as Goose), or `&[]` for a framework whose agents
+/// ship nothing. Never add tools the harness doesn't ship: the supervisor
+/// supplies extra tools through the Commission's `mcp_servers`.
 pub const BUILTIN_TOOLS: &[&str] = &["echo"];
 
 pub struct HarnessConfig {

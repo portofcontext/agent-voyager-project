@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor, ToolDecl
 from avp.preflight import preflight
@@ -15,7 +17,9 @@ from avp.trajectory import ErrorCode, StopReason
 from avp_agent_template import harness, translate
 from avp_agent_template.commission import AGENT_NAME, BUILTIN_TOOLS, from_commission
 
-AGENT_VERSION = "0.0.1"
+# The package version, so it can't drift from pyproject.toml (Commission
+# `agent_versions` pins and the release guard both compare against it).
+AGENT_VERSION = version(AGENT_NAME)
 # The provider bare model names resolve under in the price table.
 PROVIDER = "openai"
 
