@@ -12,6 +12,12 @@ import dataclasses
 from avp.commission import Commission
 
 AGENT_NAME = "avp-agent-template"
+# What the harness ships with, mirrored onto the descriptor. The stand-in
+# harness ships one `echo` tool; replace this with your harness's real
+# defaults (a product such as Claude Code or Goose), or `[]` for a framework
+# whose agents ship nothing (the OpenAI Agents SDK). Never add tools the
+# harness doesn't ship: the supervisor supplies extra tools through the
+# Commission's `mcp_servers`.
 BUILTIN_TOOLS = ["echo"]
 
 

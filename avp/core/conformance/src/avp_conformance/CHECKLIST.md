@@ -7,6 +7,8 @@ The walkthrough with the reasons: `agents/_template/README.md`.
 - [ ] **Harness**: replace the stand-in `harness` with the SDK; report its
       events through the `Recorder` (`assistant` with tool calls as `tool_use`,
       `tool_result`, `subagent_*`, `stop` on every path).
+- [ ] **Built-ins mirror the harness**: declare the tools / skills / subagents
+      the harness ships (none for a framework); never add your own.
 - [ ] **Translate** native content to AVP blocks and native usage to `Usage`
       (`input_tokens` includes cache reads and writes).
 - [ ] **Commission**: model, provider, prompts, `output_schema`, inline
@@ -19,7 +21,7 @@ The walkthrough with the reasons: `agents/_template/README.md`.
       declare; one case: `--case <path>`; keep trajectories: `--dump-dir <dir>`).
 - [ ] **Ship**: out of tree, a manifest `container` block; in tree,
       `AGENT_SOURCES` + release workflow + `make release-<name>` (template
-      README §5).
+      README §6).
 
 Manifest model: `manifest.py`. Case model (incl. `requires`) and `--built-in`
 fixture: `case.py`. Recorder rules: `recorder/v0.1/README.md`.

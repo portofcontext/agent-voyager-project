@@ -55,7 +55,22 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
 - **Imports.** Keep the SDK import inside `run` / `describe` so `ping` stays
   cheap.
 
-## 3. Honor the Commission
+## 3. Mirror what the harness ships
+
+The descriptor records what the agent ships with, and the spec leaves that to
+the agent: built-in tools, skills, and subagents are invisible to AVP except
+through the descriptor (`avp/core/spec/v0.1/README.md` §1). So the descriptor
+mirrors the harness; the adapter never adds built-ins of its own:
+
+- **A product** (Claude Code, Goose) ships default tools, skills, subagents:
+  declare exactly those.
+- **A framework** (the OpenAI Agents SDK) ships agents with none: declare none.
+  Tools then come only from the Commission's `mcp_servers`, and cases that
+  exercise tools or subagents report SKIP.
+
+The template's `echo` tool belongs to its stand-in harness; replace it.
+
+## 4. Honor the Commission
 
 In `commission`, map every field the harness can honor: `model`, `provider`
 (refuse with `unsupported_provider` when the harness can't reach it),
@@ -64,7 +79,7 @@ and the `enabled_builtin_*` allow-lists under `AGENT_NAME`. Pass the names the
 agent offers per surface to `preflight` (the template does this for tools);
 add harness-specific refusals next to it.
 
-## 4. Test and certify
+## 5. Test and certify
 
 - Keep the seam test, pointed at a recorded or stubbed SDK stream.
 - Free: `make test` and `make conformance` (your agent's `ping` / `describe`).
@@ -74,7 +89,7 @@ add harness-specific refusals next to it.
   surface your descriptor doesn't declare (e.g. subagents) reports SKIP.
   `--case <path>` runs one case; `--dump-dir <dir>` keeps the trajectories.
 
-## 5. Ship
+## 6. Ship
 
 **Out of tree** (a third-party agent): nothing in this repo changes. Point the
 `avp` CLI at the manifest (an eval's agent can be a manifest path), and give
