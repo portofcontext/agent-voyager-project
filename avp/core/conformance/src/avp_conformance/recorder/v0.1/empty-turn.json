@@ -1,0 +1,349 @@
+{
+  "name": "empty-turn",
+  "description": "An inference with no output (only an empty text block) emits nothing and does not consume a step; the next turn is step 1. A turn with a tool call but no text is not empty.",
+  "recorder": {
+    "run_id": "run-1",
+    "provider": "anthropic",
+    "prices": {
+      "anthropic/claude-test-1": {
+        "input": 3.0,
+        "output": 15.0,
+        "cache_read": 0.3,
+        "cache_write": 3.75
+      }
+    }
+  },
+  "calls": [
+    {
+      "t": 0,
+      "op": "prelude",
+      "commission": {
+        "schema_version": "0.1",
+        "run_id": "run-1",
+        "model": "anthropic/claude-test-1",
+        "prompt": "Do the task.",
+        "supervisor": {
+          "name": "recorder-vectors",
+          "version": "1"
+        }
+      },
+      "descriptor": {
+        "agent_name": "vector-agent",
+        "agent_version": "0.0.0",
+        "spec_version": "0.1",
+        "default_model": "claude-test-1"
+      }
+    },
+    {
+      "t": 1,
+      "op": "start",
+      "request_model": "claude-test-1",
+      "prompt": "Do the task.",
+      "tools": [
+        {
+          "name": "Read"
+        },
+        {
+          "name": "Bash"
+        },
+        {
+          "name": "search",
+          "avp.mcp_server_id": "docs"
+        },
+        {
+          "name": "Agent"
+        }
+      ],
+      "mcp_servers": [
+        {
+          "id": "docs",
+          "status": "connected"
+        }
+      ]
+    },
+    {
+      "t": 1000,
+      "op": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": ""
+        }
+      ],
+      "model": "claude-test-1",
+      "usage": {
+        "input_tokens": 40,
+        "output_tokens": 0
+      }
+    },
+    {
+      "t": 1500,
+      "op": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "t1",
+          "name": "Read",
+          "input": {
+            "path": "x"
+          }
+        }
+      ],
+      "model": "claude-test-1",
+      "usage": {
+        "input_tokens": 60,
+        "output_tokens": 8
+      }
+    },
+    {
+      "t": 1600,
+      "op": "tool_result",
+      "call_id": "t1",
+      "content": "x"
+    },
+    {
+      "t": 2000,
+      "op": "assistant",
+      "content": [],
+      "model": "claude-test-1",
+      "usage": {
+        "input_tokens": 70,
+        "output_tokens": 0
+      },
+      "turn_key": "m3"
+    },
+    {
+      "t": 2500,
+      "op": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "ok"
+        }
+      ],
+      "model": "claude-test-1",
+      "usage": {
+        "input_tokens": 80,
+        "output_tokens": 1
+      }
+    },
+    {
+      "t": 2600,
+      "op": "stop",
+      "reason": "converged"
+    }
+  ],
+  "expected": [
+    {
+      "specversion": "1.0",
+      "id": "evt-1",
+      "time": "2026-01-01T00:00:00.000Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.run_requested",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-1",
+        "parent_span_id": "0000000000000000",
+        "avp.supervisor.name": "recorder-vectors",
+        "avp.supervisor.version": "1",
+        "avp.commission": {
+          "schema_version": "0.1",
+          "run_id": "run-1",
+          "supervisor": {
+            "name": "recorder-vectors",
+            "version": "1"
+          },
+          "prompt": "Do the task.",
+          "model": "anthropic/claude-test-1"
+        }
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-2",
+      "time": "2026-01-01T00:00:00.000Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.agent_described",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-2",
+        "parent_span_id": "0000000000000000",
+        "avp.descriptor": {
+          "agent_name": "vector-agent",
+          "agent_version": "0.0.0",
+          "spec_version": "0.1",
+          "default_model": "claude-test-1"
+        }
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-3",
+      "time": "2026-01-01T00:00:00.001Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.agent_started",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-3",
+        "parent_span_id": "0000000000000000",
+        "avp.provider.name": "anthropic",
+        "avp.operation.name": "invoke_agent",
+        "avp.request.model": "claude-test-1",
+        "avp.prompt": "Do the task.",
+        "avp.tools": [
+          {
+            "name": "Read"
+          },
+          {
+            "name": "Bash"
+          },
+          {
+            "name": "search",
+            "avp.mcp_server_id": "docs"
+          },
+          {
+            "name": "Agent"
+          }
+        ],
+        "avp.mcp_servers": [
+          {
+            "id": "docs",
+            "status": "connected"
+          }
+        ]
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-4",
+      "time": "2026-01-01T00:00:01.500Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.assistant_message",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-4",
+        "parent_span_id": "span-3",
+        "avp.step": 1,
+        "avp.duration_ms": 0,
+        "avp.content": [
+          {
+            "type": "tool_use",
+            "id": "t1",
+            "name": "Read",
+            "input": {
+              "path": "x"
+            }
+          }
+        ],
+        "avp.provider.name": "anthropic",
+        "avp.request.model": "claude-test-1",
+        "avp.response.model": "claude-test-1",
+        "avp.usage": {
+          "input_tokens": 60,
+          "output_tokens": 8
+        },
+        "avp.cost_usd": 0.00030000000000000003,
+        "avp.cost.source": "computed"
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-5",
+      "time": "2026-01-01T00:00:01.500Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.tool_invoked",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-5",
+        "parent_span_id": "span-4",
+        "avp.step": 1,
+        "avp.tool.call_id": "t1",
+        "avp.tool.name": "Read",
+        "avp.tool.input": {
+          "path": "x"
+        },
+        "avp.tool.dispatch_target": "local"
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-6",
+      "time": "2026-01-01T00:00:01.600Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.tool_returned",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-6",
+        "parent_span_id": "span-5",
+        "avp.step": 1,
+        "avp.tool.call_id": "t1",
+        "avp.tool.name": "Read",
+        "avp.duration_ms": 100,
+        "avp.tool_result": {
+          "type": "tool_result",
+          "tool_use_id": "t1",
+          "content": "x",
+          "is_error": false
+        }
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-7",
+      "time": "2026-01-01T00:00:02.500Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.assistant_message",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-7",
+        "parent_span_id": "span-3",
+        "avp.step": 2,
+        "avp.duration_ms": 0,
+        "avp.content": [
+          {
+            "type": "text",
+            "text": "ok"
+          }
+        ],
+        "avp.provider.name": "anthropic",
+        "avp.request.model": "claude-test-1",
+        "avp.response.model": "claude-test-1",
+        "avp.usage": {
+          "input_tokens": 80,
+          "output_tokens": 1
+        },
+        "avp.cost_usd": 0.000255,
+        "avp.cost.source": "computed"
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-8",
+      "time": "2026-01-01T00:00:02.600Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.agent_stopped",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-8",
+        "parent_span_id": "span-3",
+        "avp.reason": "converged"
+      }
+    }
+  ]
+}
