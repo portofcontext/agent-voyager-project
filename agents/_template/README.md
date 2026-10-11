@@ -49,6 +49,11 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
 - **Ending.** `stop(reason)` on every path. Expected failures (preflight,
   auth, rate limit, refusal) end with `stop` and return normally; a crash
   records `error(...)` and `stop(error)`, then re-raises (non-zero exit).
+- **Invalid reports.** Recorder validation errors are adapter bugs: Python
+  raises `RecorderError`; Rust returns `io::ErrorKind::InvalidInput` (including
+  from `usage`). Propagate them through the crash path. Once stopped, the
+  trajectory is closed, so propagate any later reporting error to the caller.
+  Handle SDK-specific repeated signals explicitly before calling the Recorder.
 - **Files.** Tools that touch files resolve against `AVP_WORKSPACE`. Without
   it use a fresh temp directory, never the process CWD: an unsandboxed run
   starts in your source tree.
