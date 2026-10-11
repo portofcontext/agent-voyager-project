@@ -69,3 +69,33 @@ The packaging layer (what code lives in which package) is the agents-and-supervi
 
 - **Agents** (`agents/`) own the loop and honor the `run --commission --out` contract. `avp-claude-agent-sdk` is a "Wrap an Agent SDK" agent; `avp-goose` is an in-process observer of Goose.
 - **The local CLI** (`avp-cli/`, command `avp`) commissions agents and consumes their trajectories: it runs setups (Commission variants) over a dataset against the agents and ranks a board.
+
+## Launch context
+
+The launcher owns workspace provisioning, credentials, native SDK config/state
+paths, and cleanup. Adapters inherit that context; they do not create a private
+home, override a supplied state directory, or delete caller-owned state. This is
+a deployment convention, outside the Commission and trajectory wire formats.
+
+The CLI and conformance runner share `avp.launch`: each invocation gets a fresh
+home, workspace, and native state directories for **all** adapters. Container
+runs use the mounted workspace. Host conformance runs use a scratch workspace.
+`CODEX_HOME`/`CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `GOOSE_PATH_ROOT`, and XDG
+paths are assigned centrally. Explicit manifest environment settings override
+these defaults, so callers can deliberately retain native state. Only the
+launcher's temporary root or container is cleaned up.
+
+Source commands bootstrap in the manifest directory. The stock Python and Rust
+entrypoints enter `AVP_WORKSPACE` before `describe` or `run`, so SDKs and MCP child
+processes inherit the same working directory. Relative CLI input/output paths
+still resolve against the launch directory. Direct library calls inherit the
+caller's working directory and native environment unchanged. Persistent SDKs
+with process-global configuration, such as Goose, need that context established
+before SDK initialization; use a separate process for a different context.
+
+Credential injection and OS confinement remain launcher responsibilities. Host
+conformance inherits provider environment variables; the CLI container launcher
+selects credentials for the commissioned provider or routes through its broker.
+Fresh state directories are not a security sandbox. Host launchers preserve uv
+and Rust build caches so bootstrapping does not require reinstalling toolchains.
+SDK-specific Commission mapping and tool/skill restrictions remain in adapters.

@@ -44,6 +44,7 @@ fn run(commission: Commission, sink: FileSink) -> Result<(), BoxError> {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         reasoning_output_tokens: None,
+        extra: Default::default(),
     };
     rec.assistant(vec![block], Some(usage), AssistantOpts::default())?;
     rec.stop(StopReason::Converged, Some(Value::String(text)))?;

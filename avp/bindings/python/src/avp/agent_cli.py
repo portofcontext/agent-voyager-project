@@ -40,7 +40,9 @@ import argparse
 import asyncio
 import inspect
 import json
+import os
 from collections.abc import Awaitable, Callable
+from contextlib import chdir
 from pathlib import Path
 from typing import Any
 
@@ -94,9 +96,10 @@ def main(
         return 0
 
     if args.cmd == "describe":
-        descriptor = describe()
-        if inspect.isawaitable(descriptor):
-            descriptor = asyncio.run(_await(descriptor))
+        with chdir(os.environ.get("AVP_WORKSPACE", Path.cwd())):
+            descriptor = describe()
+            if inspect.isawaitable(descriptor):
+                descriptor = asyncio.run(_await(descriptor))
         text = descriptor.model_dump_json(by_alias=True, exclude_none=True, indent=2)
         if args.out:
             Path(args.out).write_text(text + "\n")
@@ -107,7 +110,11 @@ def main(
     commission = Commission.model_validate(read_json_arg(args.commission))
     if args.built_in is not None:
         commission = apply_built_in(commission, read_json_arg(args.built_in))
-    asyncio.run(run(commission, jsonl_sink(Path(args.out))))
+    # CLI file arguments are relative to the launch directory. SDKs and their
+    # subprocess tools share the caller-provisioned workspace instead.
+    out = Path(args.out).resolve()
+    with chdir(os.environ.get("AVP_WORKSPACE", Path.cwd())):
+        asyncio.run(run(commission, jsonl_sink(out)))
     return 0
 
 

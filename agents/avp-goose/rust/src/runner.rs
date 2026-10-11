@@ -93,19 +93,8 @@ fn write_skills(commission: &Commission, working_dir: &std::path::Path) -> anyho
 
 /// Run a Commission live against Goose, emitting the trajectory to `sink`.
 pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()> {
-    // Goose's data + config root. When the supervisor has placed this agent in an
-    // environment it passes `$AVP_ENV_ROOT` (the env home), so Goose's run-scoped
-    // state (`.agents/skills`, `.agents/recipes`, sessions) lives in that env;
-    // otherwise we mint a throwaway root so a live run never opens the user's
-    // production session store. Must be set before the first Goose `Config` /
-    // `SessionManager` access (both are process-global `LazyLock`s). The provider
-    // key still resolves from the OS keychain, which is path-independent.
+    // Native config/state paths are supplied by the launcher before SDK startup.
     let run_id = commission.run_id.to_string();
-    let path_root = std::env::var_os("AVP_ENV_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join(format!("avp-goose-{run_id}")));
-    std::fs::create_dir_all(&path_root)?;
-    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
     // Register goose's bundled built-ins so `Builtin` extensions resolve in-process.
     commission::register_builtins();
@@ -141,16 +130,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             .to_string()
     };
 
-    // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
-    // provides one (so a provisioned environment's code/files actually reach the
-    // agent), else an isolated workspace under the run's path root so Goose's
-    // run-scoped state (`.agents/skills`, `.agents/recipes`) doesn't pollute the
-    // caller's directory.
     let agent = Arc::new(Agent::new());
-    let working_dir = std::env::var_os("AVP_WORKSPACE")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| path_root.join("workspace"));
-    std::fs::create_dir_all(&working_dir)?;
+    let working_dir = std::env::current_dir()?;
     let session = agent
         .config
         .session_manager
@@ -501,20 +482,6 @@ pub async fn describe() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 }
 
 async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
-    // Throwaway data/config root so the probe never opens the user's goose store.
-    let path_root = std::env::temp_dir().join(format!("avp-goose-describe-{}", std::process::id()));
-    std::fs::create_dir_all(&path_root)?;
-    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
-    // GOOSE_PATH_ROOT only reroutes goose's own config/data/state. Skill,
-    // agent, and check discovery also sweep $HOME-anchored dirs
-    // (~/.claude/skills, ~/.agents/skills, ~/.config/agents/skills), which
-    // a sandboxed run will never see; point HOME at the throwaway root so
-    // the descriptor advertises only what the agent intrinsically ships
-    // (builtin:// skills), never the operator's local state.
-    let home = path_root.join("home");
-    std::fs::create_dir_all(&home)?;
-    std::env::set_var("HOME", &home);
-
     // Register goose's bundled built-ins so the full surface resolves in-process.
     commission::register_builtins();
 
@@ -531,8 +498,8 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
         .unwrap_or_else(|| "claude-haiku-4-5".to_string());
     let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
     // Provider construction requires a key to exist, but the probe never
-    // calls the model, and the isolated HOME/GOOSE_PATH_ROOT hide any key
-    // in the operator's goose store (by design). Give the default provider
+    // calls the model. Launchers may supply an empty native config store.
+    // Give the default provider
     // a throwaway key rather than degrading to the identity-only fallback
     // on keyless hosts. An explicitly chosen provider (GOOSE_PROVIDER set)
     // is expected to bring its own env vars, which pass through.
@@ -550,8 +517,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let cfg: GooseRunConfig = commission::from_commission(&commission);
 
     let agent = Arc::new(Agent::new());
-    let working_dir = path_root.join("workspace");
-    std::fs::create_dir_all(&working_dir)?;
+    let working_dir = std::env::current_dir()?;
     let session = agent
         .config
         .session_manager

@@ -71,3 +71,47 @@ def test_run_streams_trajectory_and_seeds_built_ins(tmp_path: Path) -> None:
     ]
     assert events[-1]["data"]["avp.output"] == "be brief|hi"
     assert all(e["subject"] == "r1" for e in events)
+
+
+def test_workspace_includes_subprocesses_and_keeps_cli_paths(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+
+    import pytest
+
+    launch = tmp_path / "launch"
+    workspace = tmp_path / "workspace"
+    launch.mkdir()
+    workspace.mkdir()
+    monkeypatch.chdir(launch)
+    monkeypatch.setenv("AVP_WORKSPACE", str(workspace))
+    (launch / "c.json").write_text(
+        json.dumps({"schema_version": "0.1", "run_id": "r", "model": "x/m"})
+    )
+
+    def inspect_workspace():
+        child = subprocess.check_output(
+            [sys.executable, "-c", "import os; print(os.getcwd())"], text=True
+        ).strip()
+        assert Path(child) == workspace
+        assert Path.cwd() == workspace
+        return DESCRIPTOR
+
+    async def inspect_run(commission, sink):
+        inspect_workspace()
+        await run(commission, sink)
+        raise RuntimeError("after recording")
+
+    assert main(run=run, describe=inspect_workspace, argv=["describe", "--out", "d.json"]) == 0
+    assert (launch / "d.json").exists()
+    with pytest.raises(RuntimeError, match="after recording"):
+        main(
+            run=inspect_run,
+            describe=describe,
+            argv=["run", "--commission", "c.json", "--out", "t.jsonl"],
+        )
+    assert Path.cwd() == launch
+    assert (launch / "t.jsonl").exists()
+    assert not list(workspace.iterdir())
+    assert os.environ["AVP_WORKSPACE"] == str(workspace)

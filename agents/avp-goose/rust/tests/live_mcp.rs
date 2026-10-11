@@ -19,10 +19,12 @@ use common::{test_mcp_command, CapturingSink, TEST_MCP_ID};
 use serde_json::json;
 
 #[tokio::test]
-#[ignore = "live: spawns the uv MCP server and calls a real model (needs provider creds)"]
+#[ignore = "live: spawns the MCP fixture and calls a real model (needs provider creds)"]
 async fn model_dispatches_to_mcp_server_tool() {
+    let _context = common::TestContext::new();
     let token = "avp-mcp-roundtrip-7421";
-    let model = std::env::var("AVP_TEST_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
+    let model = std::env::var("AVP_TEST_MODEL")
+        .unwrap_or_else(|_| "anthropic/claude-sonnet-4-6".to_string());
     let commission: avp::Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": format!("live-mcp-{}", std::process::id()),

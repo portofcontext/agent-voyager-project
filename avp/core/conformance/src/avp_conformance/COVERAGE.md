@@ -11,9 +11,15 @@ tests, seam tests (multi-turn history render, translator/SDK token+cost
 parity, supervisor/agent subprocess), and bindings drift detection. The
 conformance suite is the language-agnostic behavioral contract on top: every
 case runs against a real model and is expected to pass on every conforming
-agent (today: `avp-claude-agent-sdk` and `avp-goose`). A case that exercises an
+agent. A case that exercises an
 optional surface declares it in `requires` (e.g. `subagents`) and is skipped,
 not failed, for an agent whose descriptor doesn't declare it.
+
+Report passes together with skips and the exercised surfaces. Passing the
+applicable cases is not evidence that an undeclared surface works. In particular,
+a framework agent with no built-in tools skips the built-in tool case, but must
+still pass the managed MCP round trip below. This proves actual dispatch, result
+pairing, and a subsequent model response, rather than only MCP connection.
 
 ## Covered (cross-agent, live)
 
@@ -39,7 +45,14 @@ not failed, for an agent whose descriptor doesn't declare it.
   on `agent_started.avp.mcp_servers` with `status: connected`. Also the worked
   example of the `$contains` matcher + fixture-token pattern.
   (`mcp/agent-started-lists-mcp-server`)
-- **Tool round-trip.** A real-model loop where the model calls a built-in tool:
+- **Managed MCP tool round-trip (all agents).** The model invokes the supplied
+  echo tool with a marker, receives a successful matching result, then returns
+  the marker in a subsequent assistant response. The case requires
+  `dispatch_target=mcp_server`; universal structure checks pair the call/result
+  IDs and spans. It has no descriptor-based `requires` gate. `$text_contains`
+  matches either string tool output or a list of text blocks.
+  (`mcp/managed-mcp-tool-round-trip`)
+- **Built-in tool round-trip (declared tools).** A real-model loop where the model calls a built-in tool:
   `tool_invoked` -> `tool_returned` -> `agent_stopped(converged)`. Tool names
   differ cross-agent so only the event types + ordering are pinned, not the name.
   (`tools/tool-round-trip`)

@@ -19,6 +19,40 @@ use serde_json::{json, Value};
 const TRAJECTORY_SCHEMA: &str =
     include_str!("../../../../../avp/core/spec/v0.1/trajectory.schema.json");
 
+/// Caller-owned context for live tests, each of which runs in its own test binary.
+/// Establish it before Goose initializes its process-global stores.
+pub struct TestContext {
+    pub workspace: std::path::PathBuf,
+    root: std::path::PathBuf,
+    previous: std::path::PathBuf,
+}
+
+impl TestContext {
+    pub fn new() -> Self {
+        let root = std::env::temp_dir().join(format!("avp-goose-test-{}", std::process::id()));
+        let workspace = root.join("workspace");
+        for dir in [&workspace, &root.join("home"), &root.join("state")] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::env::set_var("HOME", root.join("home"));
+        std::env::set_var("GOOSE_PATH_ROOT", root.join("state"));
+        let previous = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&workspace).unwrap();
+        Self {
+            workspace,
+            root,
+            previous,
+        }
+    }
+}
+
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.previous);
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
 // --- sink + trajectory ------------------------------------------------------
 
 /// Sink that captures emitted events as wire-form JSON.
@@ -171,19 +205,14 @@ pub fn tool_response_error(id: &str, error: &str) -> GooseContent {
 /// test suites.
 pub const TEST_MCP_ID: &str = "avptest";
 
-/// The argv that launches the shared stdio MCP test server via `uv run` (deps
-/// are declared inline in the script, so `uv` bootstraps them). The server
-/// lives at the repo root (`testing/mcp/`) so every package can spawn it. Used
-/// as a Commission `mcp_servers[].command`: emit-level tests carry it as data,
-/// the live tests actually spawn it.
+/// Launch the dependency-free stdio fixture directly with Python.
+/// AVP_TEST_PYTHON can select an interpreter; otherwise python3 on PATH is enough.
 pub fn test_mcp_command() -> Vec<String> {
     // From `agents/avp-goose/rust` up to the repo root, then into the shared fixture.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../testing/mcp/avp_test_mcp.py");
     vec![
-        "uv".to_string(),
-        "run".to_string(),
-        "--quiet".to_string(),
+        std::env::var("AVP_TEST_PYTHON").unwrap_or_else(|_| "python3".to_string()),
         path.to_string_lossy().into_owned(),
     ]
 }

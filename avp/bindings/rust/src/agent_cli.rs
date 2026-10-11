@@ -101,7 +101,11 @@ where
             Ok(())
         }
         "describe" => {
-            let text = serde_json::to_string_pretty(&describe()?)?;
+            let descriptor = {
+                let _workspace = Workspace::enter()?;
+                describe()?
+            };
+            let text = serde_json::to_string_pretty(&descriptor)?;
             match get("out") {
                 Some(path) => std::fs::write(path, format!("{text}\n"))?,
                 None => println!("{text}"),
@@ -115,10 +119,36 @@ where
                 apply_built_in(&mut commission, &read_json_arg(built_in)?);
             }
             let sink = FileSink::create(need("out")?)?;
+            let _workspace = Workspace::enter()?;
             run(commission, sink)?;
             Ok(())
         }
         other => Err(CliError::Usage(format!("unknown command {other:?}"))),
+    }
+}
+
+// CLI file arguments resolve before entering the caller-provisioned workspace.
+// Restore even on errors/panics so embedding dispatch does not leak the cwd.
+struct Workspace(Option<std::path::PathBuf>);
+
+impl Workspace {
+    fn enter() -> std::io::Result<Self> {
+        match std::env::var_os("AVP_WORKSPACE") {
+            Some(path) => {
+                let previous = std::env::current_dir()?;
+                std::env::set_current_dir(path)?;
+                Ok(Self(Some(previous)))
+            }
+            None => Ok(Self(None)),
+        }
+    }
+}
+
+impl Drop for Workspace {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = std::env::set_current_dir(path);
+        }
     }
 }
 

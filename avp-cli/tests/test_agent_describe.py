@@ -35,6 +35,8 @@ def _fake_agent(tmp_path: Path, envdump: Path, env: dict[str, str]) -> AgentMani
             keep = (
                 "HOME", "USERPROFILE", "PATH",
                 "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+                "CODEX_HOME", "CODEX_SQLITE_HOME", "CLAUDE_CONFIG_DIR", "GOOSE_PATH_ROOT",
+                "AVP_ENV_ROOT", "AVP_WORKSPACE",
                 "AVP_TEST_PASSTHROUGH", "AVP_TEST_MANIFEST",
             )
             json.dump(
@@ -67,10 +69,17 @@ def test_probe_gets_a_throwaway_home(tmp_path, monkeypatch):
     # The probe's home is a throwaway, never the operator's.
     assert seen["HOME"] != os.environ.get("HOME")
     assert seen["USERPROFILE"] == seen["HOME"]
-    # Home-relative XDG overrides are dropped so defaults resolve under the
-    # throwaway home.
-    for var in _SCRUBBED:
-        assert seen[var] is None, f"{var} leaked into the probe"
+    root = Path(seen["AVP_ENV_ROOT"])
+    for var in (
+        *_SCRUBBED,
+        "CODEX_HOME",
+        "CODEX_SQLITE_HOME",
+        "CLAUDE_CONFIG_DIR",
+        "GOOSE_PATH_ROOT",
+        "AVP_WORKSPACE",
+    ):
+        assert Path(seen[var]).is_relative_to(root), f"{var} leaked into the probe"
+    assert not root.exists(), "the launcher must clean up its state"
     # Everything else passes through; manifest env is applied on top.
     assert seen["PATH"] == os.environ.get("PATH")
     assert seen["AVP_TEST_PASSTHROUGH"] == "still-here"

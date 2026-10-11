@@ -7,8 +7,6 @@ loads the Claude Agent SDK.
 
 from __future__ import annotations
 
-import os
-
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.sink import EventSink
@@ -38,14 +36,13 @@ async def run(commission: Commission, sink: EventSink) -> None:
 
     # Isolate the run for determinism: don't inherit the host's settings or
     # filesystem MCP config, so the tool surface is governed only by the
-    # Commission (not the operator's ~/.claude). Run in the supervisor-provided
-    # workspace when set. `bypassPermissions` is required headless: in the
+    # Commission (not the operator's ~/.claude). The shared entrypoint selects
+    # the workspace. `bypassPermissions` is required headless: in the
     # default mode Edit/Bash hit a permission prompt with no approver. AVP owns
     # confinement (the sandbox), so auto-executing tools here is the right posture.
     options = ClaudeAgentOptions(
         setting_sources=[],
         strict_mcp_config=True,
-        cwd=os.environ.get("AVP_WORKSPACE"),
         permission_mode="bypassPermissions",
     )
 

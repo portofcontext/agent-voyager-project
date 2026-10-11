@@ -62,8 +62,8 @@ help:
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
-	@echo "    make test-live          gated avp-goose live tests (mcp_connect / live_mcp /"
-	@echo "                            live_skills; spawn the uv server + call a real model). Needs uv."
+	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
+	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
 	@echo "  Releases (cut from main; push a tag, CI builds + publishes):"
 	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>)"
@@ -231,9 +231,8 @@ check: format-check lint test conformance bindings-check
 
 .PHONY: test-live
 test-live:
-	@command -v uv >/dev/null 2>&1 || { echo "error: uv is required (the bundled MCP server runs via uv run)"; exit 2; }
 	@echo "Running gated avp-goose live tests (mcp_connect is key-free; live_mcp / live_skills / live_subagent call a real model)."
-	@cd agents/avp-goose/rust && cargo test --test mcp_connect --test live_mcp --test live_skills --test live_subagent -- --ignored
+	@cd agents/avp-goose/rust && cargo test --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
 # ── Releases ──────────────────────────────────────────────────────────────────

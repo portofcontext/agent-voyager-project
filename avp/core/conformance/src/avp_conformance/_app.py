@@ -26,6 +26,7 @@ import typer
 from pydantic import ValidationError
 
 from avp.descriptor import AgentDescriptor
+from avp.launch import local_environment
 from avp_conformance._match import match_case
 from avp_conformance._utils import discover_suite, load_case, load_manifest
 from avp_conformance.case import TestCase
@@ -97,11 +98,13 @@ def _expand_fixture_tokens(
     """Expand in-repo fixture placeholders in a serialized Commission so a case
     can reference repo fixtures portably (their absolute path differs per
     checkout). `${AVP_TEST_MCP}` → the bundled stdio test MCP server at
-    `testing/mcp/avp_test_mcp.py`. `${AGENT_NAME}` / `${AGENT_VERSION}` → the
+    `testing/mcp/avp_test_mcp.py`; `${AVP_TEST_PYTHON}` → this harness's Python
+    interpreter. `${AGENT_NAME}` / `${AGENT_VERSION}` → the
     agent-under-test's descriptor identity, so cases can key the per-agent
     `enabled_builtin_*` / `agent_versions` maps portably across agents."""
     test_mcp = _repo_root(cwd) / "testing" / "mcp" / "avp_test_mcp.py"
     out = commission_json.replace("${AVP_TEST_MCP}", str(test_mcp))
+    out = out.replace("${AVP_TEST_PYTHON}", sys.executable)
     if identity is not None:
         name, version = identity
         out = out.replace("${AGENT_NAME}", name).replace("${AGENT_VERSION}", version)
@@ -120,10 +123,10 @@ def _describe_agent(
         out_path = Path(f.name)
     try:
         cmd = [*prefix, *command, "describe", "--out", str(out_path)]
-        env = {**os.environ, **manifest.env}
-        result = subprocess.run(
-            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-        )
+        with local_environment(manifest.env) as env:
+            result = subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+            )
         if result.returncode != 0:
             tail = result.stderr[-300:].strip() if result.stderr else "(no stderr)"
             raise RuntimeError(f"describe exit={result.returncode}: {tail}")
@@ -142,12 +145,37 @@ _PROVIDER_DOMAINS: dict[str, tuple[str, ...]] = {
 
 
 def with_model(tc: TestCase, model: str) -> TestCase:
-    """The case on `model`: every occurrence of the model it pins (the
-    Commission, and expectations that assert the Commission snapshot) becomes
-    `model`."""
+    """Rewrite the fixture model and its native provider, including expectations.
+
+    A native provider follows a change of model origin. Explicit gateways or
+    endpoint overrides retain their routing. Vault handles are opaque fixture
+    data and are preserved; credential injection belongs to the launcher.
+    """
     pinned = json.dumps(tc.commission.model)
     raw = tc.model_dump_json(by_alias=True, exclude_none=True)
-    return TestCase.model_validate_json(raw.replace(pinned, json.dumps(model)))
+    data = json.loads(raw.replace(pinned, json.dumps(model)))
+    provider = tc.commission.provider
+    old_origin = tc.commission.model.split("/", 1)[0]
+    if provider is not None and provider.id == old_origin and provider.base_url is None:
+        new_origin = model.split("/", 1)[0]
+
+        def rewrite_provider(value):
+            if isinstance(value, dict):
+                route = value.get("provider")
+                if (
+                    isinstance(route, dict)
+                    and route.get("id") == old_origin
+                    and not route.get("base_url")
+                ):
+                    route["id"] = new_origin
+                for child in value.values():
+                    rewrite_provider(child)
+            elif isinstance(value, list):
+                for child in value:
+                    rewrite_provider(child)
+
+        rewrite_provider(data)
+    return TestCase.model_validate(data)
 
 
 def unmet_requirements(tc: TestCase, descriptor: AgentDescriptor) -> list[str]:
@@ -252,10 +280,10 @@ def ping(
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup)
         cmd = [*prefix, *command, "ping", "--out", str(out_path)]
-        env = {**os.environ, **manifest.env}
-        result = subprocess.run(
-            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-        )
+        with local_environment(manifest.env) as env:
+            result = subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+            )
 
         if result.returncode != 0:
             typer.echo(f"FAIL  ping  exit={result.returncode}", err=True)
@@ -320,10 +348,10 @@ def describe(
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup)
         cmd = [*prefix, *command, "describe", "--out", str(out_path)]
-        env = {**os.environ, **manifest.env}
-        result = subprocess.run(
-            cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-        )
+        with local_environment(manifest.env) as env:
+            result = subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+            )
 
         if result.returncode != 0:
             typer.echo(f"FAIL  describe  exit={result.returncode}", err=True)
@@ -376,8 +404,10 @@ def _run_case(
     When `dump_dir` is set, the emitted trajectory is also saved to
     `<dump_dir>/<case_id>.jsonl` for inspection (whether or not it matches).
     """
-    env = {**os.environ, **manifest.env}
-    with tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp,
+        local_environment(manifest.env) as env,
+    ):
         tmpd = Path(tmp)
         commission_path = tmpd / "commission.json"
         commission_json = _expand_fixture_tokens(
