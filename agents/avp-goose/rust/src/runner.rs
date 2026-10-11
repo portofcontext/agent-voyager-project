@@ -14,10 +14,12 @@ use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
 use avp::trajectory::{ErrorCode, StopReason};
 use avp::Commission;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use goose::agents::{Agent, AgentEvent, SessionConfig};
 use goose::config::GooseMode;
-use goose::conversation::message::Message;
+use goose::conversation::message::{
+    Message, MessageContent, MessageErrorKind, SystemNotificationType,
+};
 use goose::model_config::model_config_from_user_config;
 use goose::session::session_manager::SessionType;
 use serde_json::{json, Value};
@@ -330,10 +332,20 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         retry_config: None,
     };
     // Goose's default loop; its experimental state-machine loop stays off.
-    let mut stream = agent
+    let stream = agent
         .reply(user_message, session_config, false, None)
         .await?;
 
+    record_reply(&mut emitter, &model_name, stream).await
+}
+
+/// Consume the native Goose stream, including terminal failures that Goose
+/// delivers as successful Message events rather than stream errors.
+async fn record_reply<S: Sink>(
+    emitter: &mut Emitter<S>,
+    model_name: &str,
+    mut stream: impl Stream<Item = anyhow::Result<AgentEvent>> + Unpin,
+) -> anyhow::Result<()> {
     // Coalesce streamed deltas into turns. Goose yields an assistant inference
     // as incremental message deltas (partial `Text` chunks), and a new
     // inference only begins after tool execution, which arrives as a
@@ -372,6 +384,21 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                 )?;
                 match value.get("role").and_then(Value::as_str) {
                     Some("assistant") => {
+                        if let Some((code, diagnostic)) = provider_failure(&message) {
+                            flush_turn(
+                                emitter,
+                                model_name,
+                                &mut pending,
+                                &mut pending_ids,
+                                &mut open_ids,
+                                turn_start,
+                            )?;
+                            emitter.error(code, diagnostic)?;
+                            ended_ok = false;
+                            // Let Goose finish its bookkeeping and deliver any
+                            // final usage for content produced before failure.
+                            continue;
+                        }
                         if let Some(id) = value.get("id").and_then(Value::as_str) {
                             if !pending_ids.iter().any(|p| p == id) {
                                 pending_ids.push(id.to_string());
@@ -381,8 +408,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                     }
                     _ => {
                         flush_turn(
-                            &mut emitter,
-                            &model_name,
+                            emitter,
+                            model_name,
                             &mut pending,
                             &mut pending_ids,
                             &mut open_ids,
@@ -401,8 +428,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                 let id = message_id.unwrap_or_default();
                 if pending_ids.contains(&id) {
                     flush_turn(
-                        &mut emitter,
-                        &model_name,
+                        emitter,
+                        model_name,
                         &mut pending,
                         &mut pending_ids,
                         &mut open_ids,
@@ -418,8 +445,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             | Ok(AgentEvent::HistoryReplaced(_)) => {}
             Err(e) => {
                 flush_turn(
-                    &mut emitter,
-                    &model_name,
+                    emitter,
+                    model_name,
                     &mut pending,
                     &mut pending_ids,
                     &mut open_ids,
@@ -434,8 +461,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     }
     // Final turn: the stream has ended; `stop` closes the open turn.
     flush_turn(
-        &mut emitter,
-        &model_name,
+        emitter,
+        model_name,
         &mut pending,
         &mut pending_ids,
         &mut open_ids,
@@ -443,6 +470,55 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     )?;
     emitter.stop(emit::classify_stop(ended_ok, false, false), None)?;
     Ok(())
+}
+
+/// Goose v1.53.0's default loop renders some provider errors as UI messages.
+/// Model output is stamped with inference metadata; never classify that output
+/// by its text. Prefer typed error/credit notices, and recognize only the exact
+/// wrappers used by the pinned loop for its remaining untyped failures.
+fn provider_failure(message: &Message) -> Option<(ErrorCode, &str)> {
+    if message.metadata.inference.is_some() {
+        return None;
+    }
+    for block in &message.content {
+        match block {
+            MessageContent::Error(error) => {
+                let code = match error.kind {
+                    MessageErrorKind::Authentication => ErrorCode::AuthError,
+                    MessageErrorKind::ContextLengthExceeded => ErrorCode::ContextLimit,
+                    MessageErrorKind::CreditsExhausted => ErrorCode::RateLimit,
+                    MessageErrorKind::Other => emit::classify_error(&error.message),
+                };
+                return Some((code, &error.message));
+            }
+            MessageContent::SystemNotification(notice) => {
+                if notice.notification_type == SystemNotificationType::CreditsExhausted {
+                    return Some((ErrorCode::RateLimit, &notice.msg));
+                }
+                if notice.notification_type == SystemNotificationType::InlineMessage
+                    && notice.msg == "Unable to continue: Context limit still exceeded after compaction. Try using a shorter message, a model with a larger context window, or start a new session."
+                {
+                    return Some((ErrorCode::ContextLimit, &notice.msg));
+                }
+            }
+            MessageContent::Text(text) => {
+                let text = text.text.as_str();
+                if (text.starts_with("Ran into this error: ")
+                    && text.ends_with(
+                        ".\n\nPlease retry if you think this is a transient or recoverable error.",
+                    ))
+                    || (text.starts_with("Network error: ")
+                        && text.ends_with("\n\nPlease resend your message to try again."))
+                    || (text.starts_with("Ran into this error trying to compact: ")
+                        && text.ends_with(".\n\nPlease try again or create a new session"))
+                {
+                    return Some((emit::classify_error(text), text));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Report the coalesced assistant deltas as one turn, keyed by its last Goose
@@ -682,6 +758,169 @@ async fn build_descriptor(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use goose::conversation::message::InferenceMetadata;
+    use std::sync::Mutex;
+
+    const QUOTA_FAILURE: &str = "Ran into this error: Rate limit exceeded: You have no credits remaining..\n\nPlease retry if you think this is a transient or recoverable error.";
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<Value>>>);
+
+    impl Sink for Capture {
+        fn emit(&self, event: &avp::Event) -> std::io::Result<()> {
+            self.0.lock().unwrap().push(serde_json::to_value(event)?);
+            Ok(())
+        }
+    }
+
+    fn model_message(text: &str) -> Message {
+        Message::assistant()
+            .with_id("model-turn")
+            .with_text(text)
+            .with_inference(InferenceMetadata {
+                provider: "openai".into(),
+                requested_model: "gpt-4o-mini".into(),
+                resolved_model: None,
+                provider_session_id: None,
+            })
+    }
+
+    async fn trajectory(items: Vec<anyhow::Result<AgentEvent>>) -> Vec<Value> {
+        let sink = Capture::default();
+        let mut emitter = Emitter::new(
+            sink.clone(),
+            "provider-failure",
+            Some("openai".into()),
+            HashSet::new(),
+            avp::load_default_prices(),
+        );
+        emitter.start(Some("gpt-4o-mini")).unwrap();
+        record_reply(&mut emitter, "gpt-4o-mini", futures::stream::iter(items))
+            .await
+            .unwrap();
+        let events = sink.0.lock().unwrap().clone();
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../../avp/core/spec/v0.1/trajectory.schema.json"
+        ))
+        .unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        for event in &events {
+            assert!(validator.is_valid(event), "invalid event: {event}");
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn provider_failure_messages_close_with_error_without_a_fake_model_turn() {
+        // These are the native forms emitted by the pinned Goose reply loop.
+        let cases = [
+            (Message::assistant().with_text(QUOTA_FAILURE), "rate_limit"),
+            (Message::assistant().with_error(MessageErrorKind::Authentication, "bad credential"), "auth_error"),
+            (Message::assistant().with_error(MessageErrorKind::ContextLengthExceeded, "too many tokens"), "context_limit"),
+            (Message::assistant().with_error(MessageErrorKind::Other, "upstream server failed"), "agent_crash"),
+            (Message::assistant().with_system_notification(SystemNotificationType::CreditsExhausted, "Please add credits"), "rate_limit"),
+            (Message::assistant().with_text("Network error: connection reset\n\nPlease resend your message to try again."), "agent_crash"),
+            (Message::assistant().with_text("Ran into this error trying to compact: unavailable.\n\nPlease try again or create a new session"), "agent_crash"),
+            (Message::assistant().with_system_notification(SystemNotificationType::InlineMessage,
+                "Unable to continue: Context limit still exceeded after compaction. Try using a shorter message, a model with a larger context window, or start a new session."), "context_limit"),
+        ];
+        for (message, code) in cases {
+            let events = trajectory(vec![Ok(AgentEvent::Message(message))]).await;
+            let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+            assert_eq!(
+                types,
+                [
+                    "avp.agent_started",
+                    "avp.error_occurred",
+                    "avp.agent_stopped"
+                ]
+            );
+            assert_eq!(events[1]["data"]["avp.error.code"], code);
+            assert_eq!(events[2]["data"]["avp.reason"], "error");
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_failure_preserves_buffered_model_output() {
+        for failure in [
+            Ok(AgentEvent::Message(
+                Message::assistant().with_text(QUOTA_FAILURE),
+            )),
+            Err(anyhow::anyhow!("Rate limit exceeded")),
+        ] {
+            let events = trajectory(vec![
+                Ok(AgentEvent::Message(model_message("Partial answer"))),
+                failure,
+            ])
+            .await;
+            let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+            assert_eq!(
+                types,
+                [
+                    "avp.agent_started",
+                    "avp.assistant_message",
+                    "avp.error_occurred",
+                    "avp.agent_stopped"
+                ]
+            );
+            assert_eq!(
+                events[1]["data"]["avp.content"][0]["text"],
+                "Partial answer"
+            );
+            assert_eq!(events[2]["data"]["avp.error.code"], "rate_limit");
+            assert_eq!(events[3]["data"]["avp.reason"], "error");
+        }
+    }
+
+    #[tokio::test]
+    async fn failure_notice_does_not_drop_trailing_usage() {
+        let events = trajectory(vec![
+            Ok(AgentEvent::Message(model_message("Partial answer"))),
+            Ok(AgentEvent::Message(
+                Message::assistant().with_text(QUOTA_FAILURE),
+            )),
+            Ok(AgentEvent::MessageUsage {
+                message_id: Some("model-turn".into()),
+                usage: goose::conversation::message::MessageUsage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(2),
+                    ..Default::default()
+                },
+            }),
+        ])
+        .await;
+        assert_eq!(events[1]["type"], "avp.assistant_message");
+        assert_eq!(events[1]["data"]["avp.usage"]["input_tokens"], 10);
+        assert_eq!(events[1]["data"]["avp.usage"]["output_tokens"], 2);
+        assert_eq!(events[2]["type"], "avp.error_occurred");
+        assert_eq!(events[3]["data"]["avp.reason"], "error");
+    }
+
+    #[tokio::test]
+    async fn quoted_provider_error_and_recovery_notice_do_not_fail_a_successful_reply() {
+        let events = trajectory(vec![
+            Ok(AgentEvent::Message(
+                Message::assistant().with_system_notification(
+                    SystemNotificationType::InlineMessage,
+                    "Context limit reached. Compacting to continue conversation...",
+                ),
+            )),
+            Ok(AgentEvent::Message(model_message(QUOTA_FAILURE))),
+        ])
+        .await;
+        let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(
+            types,
+            [
+                "avp.agent_started",
+                "avp.assistant_message",
+                "avp.agent_stopped"
+            ]
+        );
+        assert_eq!(events[1]["data"]["avp.content"][0]["text"], QUOTA_FAILURE);
+        assert_eq!(events[2]["data"]["avp.reason"], "converged");
+    }
 
     #[test]
     fn tool_decls_filters_final_output_and_reshapes() {
