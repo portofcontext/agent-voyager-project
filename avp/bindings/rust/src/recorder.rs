@@ -11,7 +11,10 @@
 //! let mut rec = Recorder::new(avp::StdioSink, RecorderOptions::default());
 //! rec.prelude(None, descriptor)?;                    // run_requested, agent_described
 //! rec.start(StartInfo::default())?;                  // agent_started
-//! rec.assistant(vec![], None, AssistantOpts::default())?;  // assistant_message + tool_invoked
+//! let content = serde_json::from_value(serde_json::json!([
+//!     {"type": "tool_use", "id": "call_1", "name": "Read", "input": {"path": "a.txt"}}
+//! ])).unwrap();
+//! rec.assistant(content, None, AssistantOpts::default())?; // assistant_message + tool_invoked
 //! rec.tool_result("call_1", "ok".into(), false, None)?;   // tool_returned
 //! rec.stop(StopReason::Converged, None)?;            // agent_stopped
 //! # Ok(()) }
@@ -38,6 +41,10 @@
 //! - Cost: `reported` when the adapter passes one, `unknown` for an unpriced
 //!   model or a turn with no token counts, else `computed` from the price table.
 //! - `stop` is idempotent; `error` parents under the agent span once started.
+//! - Invalid adapter reports return `io::ErrorKind::InvalidInput`: unknown or
+//!   duplicate IDs, mismatched usage, repeated prelude/start, and reports after
+//!   stop. Rejected reports leave valid state intact. `stop` and an empty
+//!   `close_turn` remain safe cleanup calls.
 
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -227,6 +234,8 @@ pub struct Recorder<S: Sink> {
     calls: HashMap<String, Call>,
     open_calls: HashSet<String>,
     frames: Vec<(String, Frame)>,
+    frame_ids: HashSet<String>,
+    prelude_emitted: bool,
     stopped: bool,
 }
 
@@ -265,8 +274,74 @@ impl<S: Sink> Recorder<S> {
             calls: HashMap::new(),
             open_calls: HashSet::new(),
             frames: Vec::new(),
+            frame_ids: HashSet::new(),
+            prelude_emitted: false,
             stopped: false,
         }
+    }
+
+    fn require_active(&self, operation: &str, started: bool) -> io::Result<()> {
+        if self.stopped {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Recorder.{operation} called after stop"),
+            ));
+        }
+        if started && self.agent_span_id.is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Recorder.{operation} called before start"),
+            ));
+        }
+        Ok(())
+    }
+
+    fn require_open_call(&self, call_id: &str) -> io::Result<()> {
+        if !self.open_calls.contains(call_id) {
+            let detail = if self.calls.contains_key(call_id) {
+                format!("call_id {call_id} already returned")
+            } else {
+                format!("unknown call_id {call_id}")
+            };
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Recorder.tool_result: {detail}"),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_content(&self, blocks: &[Value]) -> io::Result<()> {
+        // Check the whole batch before flushing or accepting any part of it.
+        let mut new_calls = HashSet::new();
+        let mut returned = HashSet::new();
+        for block in blocks {
+            match block["type"].as_str() {
+                Some("tool_use") | Some("server_tool_use") => {
+                    let id = block["id"].as_str().unwrap_or_default();
+                    if self.calls.contains_key(id) || !new_calls.insert(id) {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Recorder.assistant: duplicate call_id {id}"),
+                        ));
+                    }
+                }
+                Some("server_tool_result") => {
+                    let id = block["tool_use_id"].as_str().unwrap_or_default();
+                    if !returned.insert(id) {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Recorder.tool_result: call_id {id} already returned"),
+                        ));
+                    }
+                    if !new_calls.contains(id) {
+                        self.require_open_call(id)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     pub fn run_id(&self) -> &str {
@@ -345,6 +420,20 @@ impl<S: Sink> Recorder<S> {
         commission: Option<&Commission>,
         descriptor: &AgentDescriptor,
     ) -> io::Result<()> {
+        self.require_active("prelude", false)?;
+        if self.agent_span_id.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Recorder.prelude called after start",
+            ));
+        }
+        if self.prelude_emitted {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Recorder.prelude called more than once",
+            ));
+        }
+        self.prelude_emitted = true;
         let supervisor = commission.and_then(|c| c.supervisor.as_ref());
         let requested = self.now_event(
             "run_requested",
@@ -368,6 +457,13 @@ impl<S: Sink> Recorder<S> {
 
     /// Emit `agent_started` and open the agent span.
     pub fn start(&mut self, info: StartInfo) -> io::Result<()> {
+        self.require_active("start", false)?;
+        if self.agent_span_id.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Recorder.start called more than once",
+            ));
+        }
         let span = self.ids.span_id();
         self.agent_span_id = Some(span.clone());
         self.catalog = info
@@ -404,6 +500,7 @@ impl<S: Sink> Recorder<S> {
     /// Like every event reported while a turn is open, it lands after that
     /// turn's `assistant_message`. Not terminal; follow with `stop`.
     pub fn error(&mut self, code: ErrorCode, message: &str) -> io::Result<()> {
+        self.require_active("error", false)?;
         let event = self.now_event(
             "error_occurred",
             &self.ids.span_id(),
@@ -455,9 +552,9 @@ impl<S: Sink> Recorder<S> {
         usage: Option<Usage>,
         opts: AssistantOpts,
     ) -> io::Result<()> {
-        if self.agent_span_id.is_none() {
-            return Err(io::Error::other("Recorder::assistant called before start"));
-        }
+        self.require_active("assistant", true)?;
+        let blocks: Vec<Value> = content.iter().map(to_value).collect();
+        self.validate_content(&blocks)?;
         let merge = match (&self.turn, &opts.turn_key) {
             (Some(t), Some(k)) => !t.tool_resulted && t.key.as_deref() == Some(k.as_str()),
             _ => false,
@@ -488,7 +585,6 @@ impl<S: Sink> Recorder<S> {
                 tool_resulted: false,
             });
         }
-        let blocks: Vec<Value> = content.iter().map(to_value).collect();
         {
             let turn = self.turn.as_mut().expect("turn opened above");
             turn.last_chunk_at = now;
@@ -548,19 +644,32 @@ impl<S: Sink> Recorder<S> {
     /// Report usage for the open turn after its content, for harnesses that
     /// deliver token counts once the inference (or its tool round) is over.
     /// Keep the turn open with a `turn_key` until then. Applies to the open
-    /// turn when `turn_key` is `None` or matches it; otherwise dropped.
+    /// turn when `turn_key` is `None` or matches it. A missing/mismatched turn
+    /// is an `InvalidInput` error; closed turns cannot accept usage.
     pub fn usage(
         &mut self,
         usage: Usage,
         turn_key: Option<&str>,
         cost_usd: Option<f64>,
         duration_ms: Option<u64>,
-    ) {
+    ) -> io::Result<()> {
+        self.require_active("usage", true)?;
         let Some(turn) = self.turn.as_mut() else {
-            return;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Recorder.usage: no open turn",
+            ));
         };
-        if turn_key.is_some_and(|k| turn.key.as_deref() != Some(k)) {
-            return;
+        if let Some(key) = turn_key {
+            if turn.key.as_deref() != Some(key) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "Recorder.usage: turn_key {key} does not match open turn {}",
+                        turn.key.as_deref().unwrap_or("None")
+                    ),
+                ));
+            }
         }
         turn.usage = Some(usage);
         if cost_usd.is_some() {
@@ -569,6 +678,7 @@ impl<S: Sink> Recorder<S> {
         if duration_ms.is_some() {
             turn.duration_ms = duration_ms;
         }
+        Ok(())
     }
 
     fn invoke(&mut self, call_id: String, name: String, input: Value) {
@@ -699,8 +809,8 @@ impl<S: Sink> Recorder<S> {
 
     /// Report the result of a tool call seen in assistant content. `content`
     /// is the `ToolResultBlock.content` (a string or an array of blocks), or a
-    /// whole `tool_result` block. A result for an unknown or already returned
-    /// call id is dropped.
+    /// whole `tool_result` block. Unknown/returned IDs and mismatched
+    /// `tool_use_id` values are `InvalidInput` errors.
     pub fn tool_result(
         &mut self,
         call_id: &str,
@@ -708,8 +818,14 @@ impl<S: Sink> Recorder<S> {
         is_error: bool,
         structured_content: Option<Map<String, Value>>,
     ) -> io::Result<()> {
-        if !self.open_calls.remove(call_id) {
-            return Ok(());
+        self.require_active("tool_result", true)?;
+        self.require_open_call(call_id)?;
+        if content.get("type").and_then(Value::as_str) == Some("tool_result") {
+            let result_id = content["tool_use_id"].as_str().unwrap_or_default();
+            if result_id != call_id {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    format!("Recorder.tool_result: result tool_use_id {result_id} does not match call_id {call_id}")));
+            }
         }
         let block = if content.get("type").and_then(Value::as_str) == Some("tool_result") {
             content
@@ -723,6 +839,7 @@ impl<S: Sink> Recorder<S> {
             }))
         };
         let call = &self.calls[call_id];
+        self.open_calls.remove(call_id);
         let (call_span, step, name) = (call.span_id.clone(), call.step, call.name.clone());
         let duration_ms = self.elapsed_ms(call.started_at);
         let event = self.now_event(
@@ -757,6 +874,13 @@ impl<S: Sink> Recorder<S> {
         input: Option<Value>,
         description: Option<&str>,
     ) -> io::Result<()> {
+        self.require_active("subagent_start", true)?;
+        if self.frame_ids.contains(invocation_id) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Recorder.subagent_start: duplicate invocation_id {invocation_id}"),
+            ));
+        }
         let (parent, step, frame_input) = if let Some(call) = self.calls.get(invocation_id) {
             (
                 call.turn_span_id.clone(),
@@ -778,7 +902,7 @@ impl<S: Sink> Recorder<S> {
         };
         let span = self.ids.span_id();
         let started_at = self.clock.monotonic();
-        self.frames.retain(|(id, _)| id != invocation_id);
+        self.frame_ids.insert(invocation_id.to_string());
         self.frames.push((
             invocation_id.to_string(),
             Frame {
@@ -804,8 +928,7 @@ impl<S: Sink> Recorder<S> {
         self.emit_or_buffer(event)
     }
 
-    /// Close a subagent frame. A result for an unknown or already closed
-    /// frame is dropped.
+    /// Close a subagent frame. Unknown/closed IDs are `InvalidInput` errors.
     pub fn subagent_result(
         &mut self,
         invocation_id: &str,
@@ -814,8 +937,17 @@ impl<S: Sink> Recorder<S> {
         usage: Option<SubagentUsage>,
         structured: Option<Value>,
     ) -> io::Result<()> {
+        self.require_active("subagent_result", true)?;
         if !self.frames.iter().any(|(id, _)| id == invocation_id) {
-            return Ok(());
+            let detail = if self.frame_ids.contains(invocation_id) {
+                format!("invocation_id {invocation_id} already returned")
+            } else {
+                format!("unknown invocation_id {invocation_id}")
+            };
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Recorder.subagent_result: {detail}"),
+            ));
         }
         self.close_frame(invocation_id, text, reason, usage, structured)
     }

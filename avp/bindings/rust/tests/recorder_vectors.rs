@@ -78,28 +78,26 @@ fn req<T: DeserializeOwned>(a: &Value, key: &str) -> T {
     opt(a, key).unwrap_or_else(|| panic!("missing {key}"))
 }
 
-fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) {
+fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) -> std::io::Result<()> {
     match op {
         "prelude" => {
             let commission: Option<Commission> = opt(a, "commission");
             let descriptor: AgentDescriptor = req(a, "descriptor");
-            rec.prelude(commission.as_ref(), &descriptor).unwrap();
+            rec.prelude(commission.as_ref(), &descriptor)?;
         }
-        "start" => rec
-            .start(StartInfo {
-                request_model: opt(a, "request_model"),
-                prompt: opt(a, "prompt"),
-                system_prompt: opt(a, "system_prompt"),
-                tools: opt(a, "tools"),
-                mcp_servers: opt(a, "mcp_servers"),
-                skills: opt(a, "skills"),
-                subagents: opt(a, "subagents"),
-                session_id: opt(a, "session_id"),
-                thread_id: opt(a, "thread_id"),
-                tags: opt(a, "tags"),
-                meta: opt(a, "meta"),
-            })
-            .unwrap(),
+        "start" => rec.start(StartInfo {
+            request_model: opt(a, "request_model"),
+            prompt: opt(a, "prompt"),
+            system_prompt: opt(a, "system_prompt"),
+            tools: opt(a, "tools"),
+            mcp_servers: opt(a, "mcp_servers"),
+            skills: opt(a, "skills"),
+            subagents: opt(a, "subagents"),
+            session_id: opt(a, "session_id"),
+            thread_id: opt(a, "thread_id"),
+            tags: opt(a, "tags"),
+            meta: opt(a, "meta"),
+        })?,
         "assistant" => {
             let content: Vec<AvpContentItem> = req(a, "content");
             let usage: Option<Usage> = opt(a, "usage");
@@ -115,8 +113,7 @@ fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) {
                     cost_usd: opt(a, "cost_usd"),
                     duration_ms: opt(a, "duration_ms"),
                 },
-            )
-            .unwrap();
+            )?;
         }
         "usage" => {
             let usage: Usage = req(a, "usage");
@@ -126,9 +123,9 @@ fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) {
                 key.as_deref(),
                 opt(a, "cost_usd"),
                 opt(a, "duration_ms"),
-            );
+            )?;
         }
-        "close_turn" => rec.close_turn().unwrap(),
+        "close_turn" => rec.close_turn()?,
         "tool_result" => {
             let call_id: String = req(a, "call_id");
             let is_error: Option<bool> = opt(a, "is_error");
@@ -138,35 +135,33 @@ fn apply(rec: &mut Recorder<Capture>, op: &str, a: &Value) {
                 a["content"].clone(),
                 is_error.unwrap_or(false),
                 structured,
-            )
-            .unwrap();
+            )?;
         }
         "subagent_start" => {
             let id: String = req(a, "invocation_id");
             let name: String = req(a, "name");
             let description: Option<String> = opt(a, "description");
-            rec.subagent_start(&id, &name, opt(a, "input"), description.as_deref())
-                .unwrap();
+            rec.subagent_start(&id, &name, opt(a, "input"), description.as_deref())?;
         }
         "subagent_result" => {
             let id: String = req(a, "invocation_id");
             let text: String = req(a, "text");
             let reason: StopReason = opt(a, "reason").unwrap_or(StopReason::Converged);
             let usage: Option<SubagentUsage> = opt(a, "usage");
-            rec.subagent_result(&id, &text, reason, usage, opt(a, "structured"))
-                .unwrap();
+            rec.subagent_result(&id, &text, reason, usage, opt(a, "structured"))?;
         }
         "error" => {
             let code: ErrorCode = req(a, "code");
             let message: String = req(a, "message");
-            rec.error(code, &message).unwrap();
+            rec.error(code, &message)?;
         }
         "stop" => {
             let reason: StopReason = req(a, "reason");
-            rec.stop(reason, opt(a, "output")).unwrap();
+            rec.stop(reason, opt(a, "output"))?;
         }
         other => panic!("unknown recorder op {other:?}"),
     }
+    Ok(())
 }
 
 /// Rename event ids and span ids by order of first appearance on the wire.
@@ -253,7 +248,20 @@ fn run(vector: &Value) -> Vec<Value> {
     );
     for call in vector["calls"].as_array().unwrap() {
         t.store(call["t"].as_i64().unwrap(), Ordering::SeqCst);
-        apply(&mut rec, call["op"].as_str().unwrap(), call);
+        let before = capture.0.borrow().len();
+        let result = apply(&mut rec, call["op"].as_str().unwrap(), call);
+        if let Some(expected) = call["expect_error"].as_str() {
+            let error = result.expect_err("invalid report must fail");
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+            assert_eq!(error.to_string(), expected);
+            assert_eq!(
+                capture.0.borrow().len(),
+                before,
+                "rejected reports must not emit"
+            );
+        } else {
+            result.unwrap();
+        }
     }
     let events = capture.0.borrow().clone();
     normalize(&events)

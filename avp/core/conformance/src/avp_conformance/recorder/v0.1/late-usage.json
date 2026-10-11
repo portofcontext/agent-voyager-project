@@ -1,6 +1,6 @@
 {
   "name": "late-usage",
-  "description": "Usage reported after the turn's content and tool round: the turn stays open under its turn_key, its tool result buffers onto it, and usage (with duration) lands on its assistant_message when the next turn closes it. Usage for a different key, or with no turn open, is dropped.",
+  "description": "Usage reported after the turn's content and tool round: the turn stays open under its turn_key, its tool result buffers onto it, and usage (with duration) lands on its assistant_message when the next turn closes it. Usage for a different key, or with no turn open, raises a validation error.",
   "recorder": {
     "run_id": "run-1",
     "provider": "anthropic",
@@ -90,7 +90,8 @@
         "input_tokens": 400,
         "output_tokens": 9
       },
-      "turn_key": "other"
+      "turn_key": "other",
+      "expect_error": "Recorder.usage: turn_key other does not match open turn m1"
     },
     {
       "t": 1400,
@@ -133,7 +134,8 @@
       "usage": {
         "input_tokens": 1,
         "output_tokens": 1
-      }
+      },
+      "expect_error": "Recorder.usage called after stop"
     }
   ],
   "expected": [

@@ -30,7 +30,7 @@ The Recorder owns:
   token counts).
 - Idempotent ``stop``, and ``error`` parented under the agent span once started.
 - Invalid adapter reports raise ``RecorderError``: unknown/duplicate IDs,
-  repeated prelude/start, and reports after stop. A rejected
+  mismatched usage, repeated prelude/start, and reports after stop. A rejected
   report leaves valid state intact. ``stop`` and an empty ``close_turn`` remain
   safe cleanup calls.
 
@@ -511,11 +511,17 @@ class Recorder:
         """Report usage for the open turn after its content, for harnesses that
         deliver token counts once the inference (or its tool round) is over.
         Keep the turn open with a ``turn_key`` until then. Applies to the open
-        turn when ``turn_key`` is omitted or matches it; otherwise dropped.
+        turn when ``turn_key`` is omitted or matches it; otherwise raises
+        ``RecorderError``. A closed turn cannot accept usage.
         Last-write-wins, like the same fields on `assistant`."""
+        self._require_active("usage", started=True)
         turn = self._turn
-        if turn is None or (turn_key is not None and turn_key != turn.key):
-            return
+        if turn is None:
+            raise RecorderError("Recorder.usage: no open turn")
+        if turn_key is not None and turn_key != turn.key:
+            raise RecorderError(
+                f"Recorder.usage: turn_key {turn_key} does not match open turn {turn.key}"
+            )
         turn.usage = usage
         if cost_usd is not None:
             turn.cost_usd = cost_usd

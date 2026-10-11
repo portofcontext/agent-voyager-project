@@ -149,8 +149,8 @@ impl<S: Sink> Emitter<S> {
     }
 
     /// Usage for the open turn (see [`Emitter::on_inference`]).
-    pub fn on_usage(&mut self, usage: Usage, duration_ms: Option<u64>) {
-        self.rec.usage(usage, None, None, duration_ms);
+    pub fn on_usage(&mut self, usage: Usage, duration_ms: Option<u64>) -> std::io::Result<()> {
+        self.rec.usage(usage, None, None, duration_ms)
     }
 
     /// Tool requests become `tool_use` blocks (the Recorder derives

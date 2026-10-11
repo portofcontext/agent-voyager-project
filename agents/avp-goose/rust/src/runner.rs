@@ -410,7 +410,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                     )?;
                 }
                 if open_ids.contains(&id) {
-                    emitter.on_usage(translate::message_usage(&usage), usage.elapsed_ms);
+                    emitter.on_usage(translate::message_usage(&usage), usage.elapsed_ms)?;
                 }
             }
             Ok(AgentEvent::Usage(_))

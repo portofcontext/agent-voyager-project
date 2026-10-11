@@ -3,8 +3,8 @@
 Language-neutral test vectors for the `Recorder` each binding ships
 (`avp.recorder` in Python, `avp::recorder` in Rust, `recorder` in TypeScript).
 A vector is a script of Recorder calls plus the trajectory they must produce.
-The Python Recorder runs every vector in its free test tier;
-Recorders in other bindings must run the same vectors. The conformance cases in `../../cases/` pin what
+The Python and Rust Recorders run every vector in their free test tier;
+a future TypeScript Recorder must run the same vectors. The conformance cases in `../../cases/` pin what
 an agent must put on the wire; these vectors pin how the Recorder gets it there.
 
 ## File shape
@@ -40,7 +40,7 @@ an agent must put on the wire; these vectors pin how the Recorder gets it there.
   runner asserts Python `RecorderError` or Rust `io::ErrorKind::InvalidInput`,
   verifies that the call emitted no events, and continues the script. Following
   valid calls and the expected trajectory check that rejection preserved state.
-  Unknown/duplicate IDs, repeated prelude/start, and reports
+  Unknown/duplicate IDs, mismatched usage, repeated prelude/start, and reports
   after stop are errors by default. Repeated `stop` and empty `close_turn` are
   intentional cleanup no-ops. SDK-specific duplicate signals must be handled
   explicitly by the adapter before reporting to the Recorder.
