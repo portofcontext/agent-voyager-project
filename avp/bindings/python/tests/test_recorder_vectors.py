@@ -26,7 +26,7 @@ from avp.commission import Commission
 from avp.content import AVPContentBlock, ToolResultBlock
 from avp.descriptor import AgentDescriptor, McpServerDecl, SkillDecl, SubagentDecl, ToolDecl
 from avp.pricing import ModelPrice
-from avp.recorder import Recorder
+from avp.recorder import Recorder, RecorderError
 from avp.sink import _serialize
 from avp.trajectory import ErrorCode, Event, StopReason, SubagentUsage, Usage
 
@@ -155,8 +155,15 @@ async def _run(vector: dict[str, Any]) -> list[dict[str, Any]]:
     )
     for call in vector["calls"]:
         clock.t_ms = call["t"]
-        args = {k: v for k, v in call.items() if k not in ("t", "op")}
-        await _apply(rec, call["op"], args)
+        args = {k: v for k, v in call.items() if k not in ("t", "op", "expect_error")}
+        if expected_error := call.get("expect_error"):
+            before = len(events)
+            with pytest.raises(RecorderError) as exc:
+                await _apply(rec, call["op"], args)
+            assert str(exc.value) == expected_error
+            assert len(events) == before, "rejected reports must not emit events"
+        else:
+            await _apply(rec, call["op"], args)
     return [json.loads(_serialize(e)) for e in events]
 
 

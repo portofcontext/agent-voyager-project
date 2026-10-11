@@ -1,6 +1,6 @@
 {
   "name": "duration-override",
-  "description": "An adapter that measured the inference itself passes duration_ms, which wins over the Recorder's first-to-last-chunk measure. Unpaired and repeated tool results are dropped.",
+  "description": "An adapter that measured the inference itself passes duration_ms, which wins over the Recorder's first-to-last-chunk measure. Unpaired and repeated tool results raise validation errors.",
   "recorder": {
     "run_id": "run-1",
     "provider": "anthropic",
@@ -91,13 +91,15 @@
       "t": 1200,
       "op": "tool_result",
       "call_id": "t1",
-      "content": "duplicate result is dropped"
+      "content": "duplicate result is dropped",
+      "expect_error": "Recorder.tool_result: call_id t1 already returned"
     },
     {
       "t": 1300,
       "op": "tool_result",
       "call_id": "nope",
-      "content": "unknown call id is dropped"
+      "content": "unknown call id is dropped",
+      "expect_error": "Recorder.tool_result: unknown call_id nope"
     },
     {
       "t": 2000,

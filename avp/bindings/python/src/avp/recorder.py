@@ -29,6 +29,10 @@ The Recorder owns:
   ``cost_usd``; ``unknown`` when the model is unpriced or the turn carries no
   token counts).
 - Idempotent ``stop``, and ``error`` parented under the agent span once started.
+- Invalid adapter reports raise ``RecorderError``: unknown/duplicate IDs,
+  repeated prelude/start, and reports after stop. A rejected
+  report leaves valid state intact. ``stop`` and an empty ``close_turn`` remain
+  safe cleanup calls.
 
 While a turn is open, every event reported (tool results, subagent frames,
 errors) buffers onto it and lands after its ``assistant_message``, which is
@@ -98,6 +102,15 @@ DispatchTarget = Literal["mcp_server", "local"]
 ABANDONED_SUBAGENT_TEXT = (
     "Run ended while this subagent was still running; it never reported a result."
 )
+
+
+class RecorderError(ValueError):
+    """An adapter reported an invalid transition or an unpaired/duplicate ID.
+
+    Rejected reports do not emit events or change Recorder state. Adapters
+    should record the failure with ``error`` and ``stop(error)`` and re-raise;
+    a report after stop can only be surfaced to the caller (the wire is closed).
+    """
 
 
 class Clock(Protocol):
@@ -233,7 +246,42 @@ class Recorder:
         self._calls: dict[str, _Call] = {}
         self._open_calls: set[str] = set()
         self._frames: dict[str, _Frame] = {}
+        self._frame_ids: set[str] = set()
+        self._prelude_emitted = False
         self.stopped = False
+
+    def _require_active(self, operation: str, *, started: bool = False) -> None:
+        if self.stopped:
+            raise RecorderError(f"Recorder.{operation} called after stop")
+        if started and self.agent_span_id is None:
+            raise RecorderError(f"Recorder.{operation} called before start")
+
+    def _require_open_call(self, call_id: str) -> None:
+        if call_id not in self._open_calls:
+            detail = (
+                f"call_id {call_id} already returned"
+                if call_id in self._calls
+                else f"unknown call_id {call_id}"
+            )
+            raise RecorderError(f"Recorder.tool_result: {detail}")
+
+    def _validate_content(self, content: list[AVPContentBlock]) -> None:
+        # Validate the entire batch before closing a previous turn or accepting
+        # any blocks. A bad later block must not leave a half-recorded inference.
+        new_calls: set[str] = set()
+        returned: set[str] = set()
+        for block in content:
+            if isinstance(block, ToolUseBlock | ServerToolUseBlock):
+                if block.id in self._calls or block.id in new_calls:
+                    raise RecorderError(f"Recorder.assistant: duplicate call_id {block.id}")
+                new_calls.add(block.id)
+            elif isinstance(block, ServerToolResultBlock):
+                call_id = block.tool_use_id
+                if call_id in returned:
+                    raise RecorderError(f"Recorder.tool_result: call_id {call_id} already returned")
+                if call_id not in new_calls:
+                    self._require_open_call(call_id)
+                returned.add(call_id)
 
     # ── envelope ──────────────────────────────────────────────────────────
 
@@ -259,6 +307,12 @@ class Recorder:
     async def prelude(self, commission: Commission | None, descriptor: AgentDescriptor) -> None:
         """Emit `run_requested` (carrying the Commission and its supervisor
         attribution) then `agent_described`."""
+        self._require_active("prelude")
+        if self.agent_span_id is not None:
+            raise RecorderError("Recorder.prelude called after start")
+        if self._prelude_emitted:
+            raise RecorderError("Recorder.prelude called more than once")
+        self._prelude_emitted = True
         supervisor = commission.supervisor if commission else None
         await self._sink(
             RunRequestedEvent(
@@ -297,6 +351,9 @@ class Recorder:
     ) -> None:
         """Emit `agent_started` and open the agent span. ``tools`` is also the
         catalog `tool_invoked` dispatch targets resolve against."""
+        self._require_active("start")
+        if self.agent_span_id is not None:
+            raise RecorderError("Recorder.start called more than once")
         self.agent_span_id = self._ids.span_id()
         self._catalog = {t.name: t for t in tools or []}
         await self._sink(
@@ -326,6 +383,7 @@ class Recorder:
         `start`). Like every event reported while a turn is open, it lands
         after that turn's `assistant_message`. Not terminal; follow with
         `stop` when the run ends."""
+        self._require_active("error")
         await self._emit_or_buffer(
             ErrorOccurredEvent(
                 **self._envelope(),
@@ -389,8 +447,8 @@ class Recorder:
         Without ``duration_ms`` the turn's duration runs from its first chunk
         to its last.
         """
-        if self.agent_span_id is None:
-            raise RuntimeError("Recorder.assistant called before start")
+        self._require_active("assistant", started=True)
+        self._validate_content(content)
         turn = self._turn
         if turn is not None and (
             turn.tool_resulted or turn_key is None or turn.key is None or turn_key != turn.key
@@ -549,11 +607,15 @@ class Recorder:
         structured_content: dict[str, Any] | None = None,
     ) -> None:
         """Report the result of a tool call seen in assistant content. Emits
-        the paired `tool_returned`; a result for an unknown or already
-        returned call id is dropped."""
-        if call_id not in self._open_calls:
-            return
-        self._open_calls.discard(call_id)
+        the paired `tool_returned`. Unknown/returned IDs and a whole result
+        block whose ``tool_use_id`` differs from ``call_id`` raise RecorderError."""
+        self._require_active("tool_result", started=True)
+        self._require_open_call(call_id)
+        if isinstance(content, ToolResultBlock) and content.tool_use_id != call_id:
+            raise RecorderError(
+                f"Recorder.tool_result: result tool_use_id {content.tool_use_id} "
+                f"does not match call_id {call_id}"
+            )
         call = self._calls[call_id]
         block = (
             content
@@ -565,6 +627,7 @@ class Recorder:
                 is_error=is_error,
             )
         )
+        self._open_calls.remove(call_id)
         event = ToolReturnedEvent(
             **self._envelope(),
             data=ToolReturnedData(
@@ -593,6 +656,9 @@ class Recorder:
         """Open a subagent frame. When ``invocation_id`` is a tool call seen in
         assistant content, the frame sits under that call's turn and defaults
         its input to the call's input."""
+        self._require_active("subagent_start", started=True)
+        if invocation_id in self._frame_ids:
+            raise RecorderError(f"Recorder.subagent_start: duplicate invocation_id {invocation_id}")
         call = self._calls.get(invocation_id)
         if call is not None:
             parent, step = call.turn_span_id, call.step
@@ -604,6 +670,7 @@ class Recorder:
             parent, step = self.agent_span_id or ZERO_SPAN_ID, self._last_step
             frame_input = input or {}
         span_id = self._ids.span_id()
+        self._frame_ids.add(invocation_id)
         self._frames[invocation_id] = _Frame(
             span_id=span_id,
             parent_span_id=parent,
@@ -634,10 +701,16 @@ class Recorder:
         usage: SubagentUsage | None = None,
         structured: Any = None,
     ) -> None:
-        """Close a subagent frame. A result for an unknown or already closed
-        frame is dropped."""
-        if invocation_id in self._frames:
-            await self._close_frame(invocation_id, text, reason, usage=usage, structured=structured)
+        """Close a subagent frame. Unknown/closed IDs raise RecorderError."""
+        self._require_active("subagent_result", started=True)
+        if invocation_id not in self._frames:
+            detail = (
+                f"invocation_id {invocation_id} already returned"
+                if invocation_id in self._frame_ids
+                else f"unknown invocation_id {invocation_id}"
+            )
+            raise RecorderError(f"Recorder.subagent_result: {detail}")
+        await self._close_frame(invocation_id, text, reason, usage=usage, structured=structured)
 
     async def _close_frame(
         self,

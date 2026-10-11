@@ -3,8 +3,8 @@
 Language-neutral test vectors for the `Recorder` each binding ships
 (`avp.recorder` in Python, `avp::recorder` in Rust, `recorder` in TypeScript).
 A vector is a script of Recorder calls plus the trajectory they must produce.
-Every binding runs every vector in its free test tier, so the three native
-Recorders cannot drift apart. The conformance cases in `../../cases/` pin what
+The Python Recorder runs every vector in its free test tier;
+Recorders in other bindings must run the same vectors. The conformance cases in `../../cases/` pin what
 an agent must put on the wire; these vectors pin how the Recorder gets it there.
 
 ## File shape
@@ -27,7 +27,8 @@ an agent must put on the wire; these vectors pin how the Recorder gets it there.
   (`request_model`, `prompt`, `system_prompt`, `tools`, `mcp_servers`, `skills`,
   `subagents`, `session_id`, `thread_id`, `tags`, `meta`), `assistant`
   (`content`, `usage`, `model`, `request_model`, `turn_key`, `finish_reasons`,
-  `meta`, `cost_usd`, `duration_ms`), `close_turn`, `tool_result` (`call_id`,
+  `meta`, `cost_usd`, `duration_ms`), `usage` (`usage`, `turn_key`, `cost_usd`,
+  `duration_ms`), `close_turn`, `tool_result` (`call_id`,
   `content`, `is_error`, `structured_content`), `subagent_start`
   (`invocation_id`, `name`, `input`, `description`), `subagent_result`
   (`invocation_id`, `text`, `reason`, `usage`, `structured`), `error` (`code`,
@@ -35,6 +36,14 @@ an agent must put on the wire; these vectors pin how the Recorder gets it there.
   tool decls, Commission, descriptor) appear in their wire form.
 - `expected`: the events written to the sink, serialized as NDJSON lines are
   (aliases, nulls omitted).
+- A call may carry `expect_error`, the exact validation error message. The
+  runner asserts Python `RecorderError` or Rust `io::ErrorKind::InvalidInput`,
+  verifies that the call emitted no events, and continues the script. Following
+  valid calls and the expected trajectory check that rejection preserved state.
+  Unknown/duplicate IDs, repeated prelude/start, and reports
+  after stop are errors by default. Repeated `stop` and empty `close_turn` are
+  intentional cleanup no-ops. SDK-specific duplicate signals must be handled
+  explicitly by the adapter before reporting to the Recorder.
 
 ## Runner contract
 

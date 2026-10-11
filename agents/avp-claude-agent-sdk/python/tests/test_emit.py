@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
 from claude_agent_sdk.types import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -30,6 +31,7 @@ from claude_agent_sdk.types import (
 )
 
 from avp.pricing import load_default_prices
+from avp.recorder import RecorderError
 from avp.trajectory import Event
 from avp_claude_agent_sdk._emit import (
     context_usage_meta,
@@ -792,20 +794,57 @@ def test_tool_returned_carries_is_error_for_failed_results() -> None:
     assert "avp.tool_failed" not in {ev.type for ev in events}
 
 
-def test_unmatched_tool_result_is_dropped() -> None:
-    """A `ToolResultBlock` whose `tool_use_id` has no preceding
-    `tool_invoked` MUST NOT produce a `tool_returned`: emitting one
-    would forge a parent span."""
-    events = asyncio.run(
-        _drive(
-            [
-                _assistant(TextBlock(text="hi"), input_tokens=1, output_tokens=1),
-                _user_tool_result(tool_use_id="bogus"),
-                _result(),
-            ]
+def test_unmatched_tool_result_fails_visibly() -> None:
+    """An unpaired SDK result is a translator error, never a silent drop."""
+    with pytest.raises(RecorderError, match="unknown call_id bogus"):
+        asyncio.run(
+            _drive(
+                [
+                    _assistant(TextBlock(text="hi"), input_tokens=1, output_tokens=1),
+                    _user_tool_result(tool_use_id="bogus"),
+                    _result(),
+                ]
+            )
         )
-    )
-    assert not [ev for ev in events if ev.type == "avp.tool_returned"]
+
+
+def test_client_closes_trajectory_on_recorder_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cross the SDK iterator -> translator -> Recorder -> error handler seam."""
+    from claude_agent_sdk import ClaudeSDKClient
+
+    from avp_claude_agent_sdk._client import AVPClaudeSDKClient
+    from avp_claude_agent_sdk._runstate import reset_run, set_run
+
+    async def messages(self):
+        yield _assistant(TextBlock(text="hi"), input_tokens=1, output_tokens=1)
+        yield _user_tool_result(tool_use_id="bogus")
+
+    monkeypatch.setattr(ClaudeSDKClient, "receive_response", messages)
+    events: list[Event] = []
+
+    async def drive():
+        state = _make_state(events)
+        await state.rec.start()
+        token = set_run(state)
+        client = object.__new__(AVPClaudeSDKClient)
+        client._aborted = False
+        try:
+            with pytest.raises(RecorderError, match="unknown call_id bogus"):
+                async for _ in client.receive_response():
+                    pass
+        finally:
+            reset_run(token)
+
+    asyncio.run(drive())
+    assert [event.type for event in events] == [
+        "avp.agent_started",
+        "avp.assistant_message",
+        "avp.error_occurred",
+        "avp.agent_stopped",
+    ]
+    assert events[-2].data.error_code == "agent_crash"
+    assert "unknown call_id bogus" in events[-2].data.error_message
+    assert events[-1].data.reason == "error"
 
 
 def test_server_tool_use_and_result_bracket_within_same_turn() -> None:
