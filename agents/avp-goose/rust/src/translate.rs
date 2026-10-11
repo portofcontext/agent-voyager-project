@@ -39,6 +39,7 @@ pub fn usage(goose: &Value) -> Usage {
             field("cache_write_input_tokens").or_else(|| field("cache_creation_input_tokens")),
         ),
         reasoning_output_tokens: None,
+        extra: Default::default(),
     }
 }
 
@@ -139,6 +140,7 @@ pub fn to_content_block(content: &GooseContent) -> Option<AvpContentItem> {
             text: text.clone(),
             citations: None,
             type_: "text".to_string(),
+            extra: Default::default(),
         })),
         GooseContent::Thinking {
             thinking,
@@ -150,6 +152,7 @@ pub fn to_content_block(content: &GooseContent) -> Option<AvpContentItem> {
                 signature: (!signature.is_empty()).then(|| signature.clone()),
                 redacted: None,
                 type_: "thinking".to_string(),
+                extra: Default::default(),
             }))
         }
         GooseContent::RedactedThinking { data } => {
@@ -160,6 +163,7 @@ pub fn to_content_block(content: &GooseContent) -> Option<AvpContentItem> {
                 signature: None,
                 redacted: Some(true),
                 type_: "thinking".to_string(),
+                extra: Default::default(),
             }))
         }
         _ => None,

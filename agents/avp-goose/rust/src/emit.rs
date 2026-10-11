@@ -189,6 +189,7 @@ impl<S: Sink> Emitter<S> {
                     name: call.name,
                     input: call.input,
                     type_: "tool_use".to_string(),
+                    extra: Default::default(),
                 }));
             }
         }

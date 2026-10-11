@@ -77,7 +77,10 @@ generate_rust() {
   tmp="$(mktemp -t "avp-${name//\//-}-XXXXXX.json")"
   trap "rm -f '$tmp'" RETURN
 
-  strip_null_defaults "$schema" > "$tmp"
+  # Equivalent JSON Schemas, different typify behavior: `true` discards open
+  # fields, while `{}` emits a flattened map that preserves arbitrary values.
+  # Keep this Rust-only; the canonical schema and TypeScript need no change.
+  strip_null_defaults "$schema" | jq 'walk(if type == "object" and .additionalProperties? == true then .additionalProperties = {} else . end)' > "$tmp"
   cargo typify --no-builder "$tmp" -o "$RUST_OUT/$name.rs"
   # typify ignores the schema discriminator and emits `#[serde(untagged)]` for
   # `type`-discriminated unions; re-tag them so they discriminate by `type`.

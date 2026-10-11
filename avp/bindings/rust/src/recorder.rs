@@ -744,6 +744,7 @@ impl<S: Sink> Recorder<S> {
             input_tokens: 0,
             output_tokens: 0,
             reasoning_output_tokens: None,
+            extra: Default::default(),
         });
         let (cost_usd, cost_source) = if let Some(c) = turn.cost_usd {
             (c, CostSource::Reported)

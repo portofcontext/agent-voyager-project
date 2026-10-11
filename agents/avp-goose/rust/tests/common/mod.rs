@@ -226,5 +226,6 @@ pub fn usage_zero() -> avp::trajectory::Usage {
         cache_read_input_tokens: None,
         cache_creation_input_tokens: None,
         reasoning_output_tokens: None,
+        extra: Default::default(),
     }
 }
