@@ -1,12 +1,13 @@
 # avp-codex
 
-An AVP observer over the native [Codex app-server](https://developers.openai.com/codex/app-server).
-Codex owns the loop and tool execution. This package translates its JSON-RPC
-notifications into the Python Recorder; it does not implement a second loop.
+An AVP observer using the official [Codex Python SDK](https://learn.chatgpt.com/docs/codex-sdk)
+(`openai-codex`). The SDK owns process management, transport, notification
+routing, and typed lifecycle/tool events. Codex owns the model/tool loop.
 
-Requires `codex-cli 0.162.1` on PATH and `OPENAI_API_KEY`. The exact runtime pin
-is deliberate: per-inference raw events are experimental. Other versions fail
-before inference until their event contract is verified.
+Requires `OPENAI_API_KEY`. Installing the package also installs the SDK's
+bundled Codex runtime; a separate CLI on PATH is unnecessary. SDK and runtime
+are pinned to `0.162.1` because the fidelity extension described below still
+uses experimental raw events.
 
 ```bash
 uv sync --all-packages
@@ -17,13 +18,28 @@ AVP_TEST_CODEX=1 uv run --no-sync pytest agents/avp-codex/python/tests/test_nati
 
 ## Mapping
 
-| Native signal | AVP |
+| SDK notification | AVP |
 |---|---|
 | `rawResponseItem/completed` | assistant content, reasoning, function/custom tool calls, and paired tool outputs |
 | `rawResponse/completed` | one assistant inference with delta usage, including cache and reasoning tokens |
 | `item/completed` for tools | native tool failure status and MCP structured result |
-| `thread/tokenUsage/updated` | ignored: cumulative usage would double count |
+| `thread/tokenUsage/updated` | contains both per-response `last` and cumulative `total`; neither is added to the usage already recorded at raw response boundaries |
 | `turn/completed` | converged, error, or interrupted according to the native status |
+
+The typed `commandExecution` item normalizes a command and its status. It does
+not preserve the original function name and JSON arguments. A native seam test
+covers `exec_command` followed by `write_stdin`: AVP needs both original calls,
+not just the normalized command. Therefore the adapter uses the SDK's
+`AsyncCodexClient` with `experimentalRawEvents` enabled. The two raw notification
+methods arrive as `UnknownNotification`; their handling is isolated in the
+translator. Malformed known SDK notifications fail visibly.
+
+`rawResponse/completed` supplies the boundary for grouping raw output items
+into one inference, together with that inference's usage. This avoids inferring
+boundaries from tool lifecycle events or later thread usage updates. Normal
+SDK usage **does** expose per-response counts through `last`; lack of such
+counts is not the reason for retaining raw events. The native tests check both
+`last` and `total` alongside the emitted AVP deltas.
 
 One Commission starts an ephemeral Codex thread and one user turn. That turn
 may contain multiple model calls and tool calls. Commission `thread_id` is
@@ -39,8 +55,9 @@ deployment concern, as with the other adapters.
 The child gets a temporary CODEX_HOME and does not use the user's login or
 config. Discovered host/repository skills are disabled; only Commission skills
 are advertised. Workspace is `AVP_WORKSPACE` or the current directory. Native
-workspace-write sandboxing remains enabled; interactive requests receive a
-protocol error because AVP has no mid-run supervisor callback.
+workspace-write sandboxing remains enabled. The adapter requests and verifies
+`approvalPolicy: never` before inference because AVP has no mid-run supervisor
+callback. Explicitly commissioned MCP tools use the native `approve` policy.
 
 ## Supported profile and limits
 
@@ -58,6 +75,12 @@ conformance suite: the empty-allow-list case is a known failure, not a skip.
 
 Missing raw response boundaries, malformed arguments, unknown output item types,
 and unmatched tool results fail the run instead of fabricating usage or success.
+Retries before any partial output are supported. A retry after output but before
+a response usage boundary fails explicitly; it must not merge two attempts into
+one inference. Context compaction is also explicitly unsupported because its
+inference/usage accounting has not been established for this profile.
+
 Native protocol changes require updated translation and native seam tests.
-The scripted native test uses a local model endpoint and real MCP process;
-it spends no API credits. Live conformance remains a separate check.
+Scripted tests exercise the installed SDK and bundled runtime against a local
+model endpoint, including real MCP calls, parallel calls, shell polling, and
+retries. They spend no API credits. Live conformance remains a separate check.

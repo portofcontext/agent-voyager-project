@@ -5,10 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "avp-codex"
 version = "0.0.1"
-description = "AVP observer for the native OpenAI Codex app-server."
+description = "AVP observer using the official OpenAI Codex Python SDK."
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project==0.1.1"]
+dependencies = ["agent-voyager-project==0.1.1", "openai-codex==0.162.1"]
 
 [tool.uv.sources]
 agent-voyager-project = { workspace = true }

@@ -1,4 +1,4 @@
-"""Observe one native Codex turn, including all of its model/tool iterations."""
+"""Observe Codex through the official SDK; Codex owns the model/tool loop."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ import tempfile
 from importlib.metadata import version
 from pathlib import Path
 
+from openai_codex import CodexConfig
+from openai_codex.async_client import AsyncCodexClient
+from openai_codex.generated.v2_all import ListMcpServerStatusResponse, SkillsListResponse
+
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor, McpServerDecl, SkillDecl, ToolDecl
 from avp.pricing import load_default_prices
@@ -15,8 +19,7 @@ from avp.recorder import Recorder
 from avp.sink import EventSink
 from avp.trajectory import ErrorCode, StopReason
 from avp_codex import commission as cm
-from avp_codex.client import AppServer
-from avp_codex.translate import Responses, error_code
+from avp_codex.translate import Responses, error_code, notification_params
 
 AGENT_VERSION = version(cm.AGENT_NAME)
 
@@ -43,22 +46,28 @@ async def run(commission: Commission, sink: EventSink) -> None:
     try:
         # Keep user auth/config/session state out of commissioned runs.
         with tempfile.TemporaryDirectory(prefix="avp-codex-") as home:
-            async with AppServer(home, cwd, cm.config(commission)) as server:
-                await server.request(
-                    "initialize",
-                    {
-                        "clientInfo": {"name": "avp_codex", "version": AGENT_VERSION},
-                        "capabilities": {"experimentalApi": True},
-                    },
-                )
-                await server.send({"method": "initialized"})
+            config = CodexConfig(
+                cwd=cwd,
+                env={"CODEX_HOME": home},
+                config_overrides=cm.config_overrides(commission),
+                client_name="avp_codex",
+                client_version=AGENT_VERSION,
+            )
+            # Use the SDK's typed lower-level client because its high-level
+            # thread_start does not expose the required raw-item opt-in.
+            async with AsyncCodexClient(config) as server:
+                await server.initialize()
                 # Codex discovers host and repository skills even with an empty
                 # CODEX_HOME. Disable those and embed only commissioned skills.
-                listed = await server.request("skills/list", {"cwds": [cwd], "forceReload": True})
+                listed = await server.request(
+                    "skills/list",
+                    {"cwds": [cwd], "forceReload": True},
+                    response_model=SkillsListResponse,
+                )
                 disabled = [
-                    {"path": skill["path"], "enabled": False}
-                    for entry in listed["data"]
-                    for skill in entry["skills"]
+                    {"path": skill.path.root, "enabled": False}
+                    for entry in listed.data
+                    for skill in entry.skills
                 ]
                 params = {
                     "model": commission.model.split("/", 1)[1],
@@ -75,12 +84,14 @@ async def run(commission: Commission, sink: EventSink) -> None:
                     params["baseInstructions"] = commission.system_prompt
                 if instructions := cm.skill_instructions(commission):
                     params["developerInstructions"] = instructions
-                started = await server.request("thread/start", params)
-                if started["thread"]["cliVersion"] != cm.CODEX_VERSION:
+                started = await server.thread_start(params)
+                if started.approval_policy.model_dump(mode="json") != "never":
+                    raise RuntimeError("Codex did not honor the noninteractive approval policy")
+                if started.thread.cli_version != cm.CODEX_VERSION:
                     raise RuntimeError(
                         f"avp-codex requires codex-cli {cm.CODEX_VERSION}; raw events are experimental"
                     )
-                thread = started["thread"]["id"]
+                thread = started.thread.id
                 tools = [ToolDecl(name=name) for name in cm.BUILTIN_TOOLS]
                 declarations = []
                 cursor = None
@@ -92,7 +103,9 @@ async def run(commission: Commission, sink: EventSink) -> None:
                             "threadId": thread,
                             "cursor": cursor,
                         },
+                        response_model=ListMcpServerStatusResponse,
                     )
+                    catalog = catalog.model_dump(mode="json", by_alias=True, exclude_none=True)
                     statuses.update((entry["name"], entry) for entry in catalog["data"])
                     cursor = catalog.get("nextCursor")
                     if not cursor:
@@ -140,41 +153,46 @@ async def run(commission: Commission, sink: EventSink) -> None:
                 }
                 if commission.output_schema is not None:
                     turn_params["outputSchema"] = commission.output_schema
-                turn = await server.request("turn/start", turn_params)
-                turn_id = turn["turn"]["id"]
+                turn = await server.turn_start(thread, turn_params["input"], params=turn_params)
+                turn_id = turn.turn.id
                 responses = Responses(rec, commission.model)
                 terminal_error = False
-                while True:
-                    message = await server.notification()
-                    method, data = message["method"], message.get("params", {})
-                    if data.get("threadId") != thread or data.get("turnId", turn_id) != turn_id:
-                        continue
-                    await responses.accept(method, data)
-                    if method == "error" and not data.get("willRetry", False):
-                        terminal_error = True
-                        await rec.error(error_code(data["error"]), data["error"]["message"])
-                    if method == "turn/completed":
-                        status = data["turn"]["status"]
-                        if status == "completed" and not terminal_error:
-                            responses.finish()
-                            output = responses.output
-                            if commission.output_schema:
-                                import json
+                try:
+                    while True:
+                        message = await server.next_turn_notification(turn_id)
+                        method, data = message.method, notification_params(message)
+                        if data.get("threadId") != thread or data.get("turnId", turn_id) != turn_id:
+                            continue
+                        await responses.accept(method, data)
+                        if method == "error" and not data.get("willRetry", False):
+                            terminal_error = True
+                            await rec.error(error_code(data["error"]), data["error"]["message"])
+                        if method == "turn/completed":
+                            status = data["turn"]["status"]
+                            if status == "completed" and not terminal_error:
+                                responses.finish()
+                                output = responses.output
+                                if commission.output_schema:
+                                    import json
 
-                                output = json.loads(output)
-                            reason = (
-                                StopReason.refused if responses.refused else StopReason.converged
-                            )
-                        elif status == "interrupted":
-                            reason = StopReason.interrupted
-                        else:
-                            if not terminal_error:
-                                error = data["turn"].get("error") or {
-                                    "message": "Codex turn failed"
-                                }
-                                await rec.error(error_code(error), error["message"])
-                            reason = StopReason.error
-                        break
+                                    output = json.loads(output)
+                                reason = (
+                                    StopReason.refused
+                                    if responses.refused
+                                    else StopReason.converged
+                                )
+                            elif status == "interrupted":
+                                reason = StopReason.interrupted
+                            else:
+                                if not terminal_error:
+                                    error = data["turn"].get("error") or {
+                                        "message": "Codex turn failed"
+                                    }
+                                    await rec.error(error_code(error), error["message"])
+                                reason = StopReason.error
+                            break
+                finally:
+                    server.unregister_turn_notifications(turn_id)
         await rec.stop(reason, output)
     except asyncio.CancelledError:
         await rec.stop(StopReason.interrupted)

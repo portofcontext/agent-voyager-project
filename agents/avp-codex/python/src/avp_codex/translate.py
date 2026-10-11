@@ -4,9 +4,33 @@ from __future__ import annotations
 
 import json
 
+from openai_codex.models import Notification, UnknownNotification
+
 from avp.content import RefusalBlock, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock
 from avp.recorder import Recorder
 from avp.trajectory import Usage
+
+
+def notification_params(event: Notification) -> dict:
+    """Isolate the two experimental events absent from the SDK registry.
+
+    The SDK also returns UnknownNotification on typed validation failure.
+    Never reinterpret such a failure as a valid lifecycle/tool notification.
+    """
+    if isinstance(event.payload, UnknownNotification):
+        if event.method in {
+            "item/completed",
+            "turn/completed",
+            "error",
+            "model/rerouted",
+            "thread/tokenUsage/updated",
+            "thread/compacted",
+        }:
+            raise ValueError(f"Codex SDK could not validate {event.method}")
+        if event.method in {"rawResponseItem/completed", "rawResponse/completed"}:
+            return event.payload.params
+        return {}
+    return event.payload.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def tool_name(item: dict) -> str:
@@ -69,10 +93,16 @@ class Responses:
         self.refused = False
 
     async def accept(self, method: str, params: dict):
+        if method == "error" and params.get("willRetry") and self.blocks:
+            raise ValueError("Codex retried a partial response without a usage boundary")
+        if method == "thread/compacted":
+            raise ValueError("Codex context compaction accounting is not supported")
         if method == "model/rerouted":
             self.response_model = "openai/" + params["toModel"]
         elif method == "item/completed":
             item = params["item"]
+            if item["type"] == "contextCompaction":
+                raise ValueError("Codex context compaction accounting is not supported")
             if item["type"] in ("mcpToolCall", "commandExecution", "fileChange"):
                 self.statuses[item["id"]] = item
         elif method == "rawResponseItem/completed":

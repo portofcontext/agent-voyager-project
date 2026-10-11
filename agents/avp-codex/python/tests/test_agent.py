@@ -1,11 +1,15 @@
-"""CLI to Recorder seam, with native app-server notifications scripted."""
+"""CLI to Recorder seam, with official SDK notifications scripted."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from openai_codex.generated.notification_registry import NOTIFICATION_MODELS
+from openai_codex.generated.v2_all import AskForApproval, TurnStartResponse
+from openai_codex.models import Notification, UnknownNotification
 
 from avp.agent_cli import main
 from avp.trajectory import parse_event
@@ -42,7 +46,9 @@ def text_item(text="DONE"):
 
 
 def stopped(status="completed"):
-    return notification("turn/completed", turn={"status": status})
+    return notification(
+        "turn/completed", turn={"id": "turn", "items": [], "itemsView": "full", "status": status}
+    )
 
 
 @pytest.fixture
@@ -57,38 +63,75 @@ def script(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-        def __init__(self, home, cwd, config):
+        def __init__(self, config):
             self.config = config
 
-        async def send(self, message):
+        async def initialize(self):
             pass
 
-        async def request(self, method, params):
+        def unregister_turn_notifications(self, turn_id):
+            assert turn_id == "turn"
+
+        async def thread_start(self, params):
+            self.calls.append(("thread/start", params))
+            return SimpleNamespace(
+                thread=SimpleNamespace(id="thread", cli_version=CODEX_VERSION),
+                approval_policy=AskForApproval.model_validate("never"),
+            )
+
+        async def turn_start(self, thread, input_items, *, params):
+            self.calls.append(("turn/start", params))
+            return TurnStartResponse.model_validate(
+                {"turn": {"id": "turn", "items": [], "itemsView": "full", "status": "inProgress"}}
+            )
+
+        async def request(self, method, params, *, response_model):
             self.calls.append((method, params))
-            return {
-                "initialize": {},
-                "skills/list": {"data": [{"skills": [{"path": "/host/secret/SKILL.md"}]}]},
-                "thread/start": {"thread": {"id": "thread", "cliVersion": CODEX_VERSION}},
+            data = {
+                "skills/list": {
+                    "data": [
+                        {
+                            "cwd": "/workspace",
+                            "errors": [],
+                            "skills": [
+                                {
+                                    "path": "/host/secret/SKILL.md",
+                                    "name": "secret",
+                                    "description": "host",
+                                    "enabled": True,
+                                    "scope": "user",
+                                }
+                            ],
+                        }
+                    ]
+                },
                 "mcpServerStatus/list": {
                     "data": [
                         {
                             "name": "echo",
                             "runtimeStatus": "connected",
+                            "authStatus": "unsupported",
+                            "resources": [],
+                            "resourceTemplates": [],
                             "tools": {
                                 "Echo": {"name": "Echo", "inputSchema": {"type": "object"}},
                             },
                         }
                     ]
                 },
-                "turn/start": {"turn": {"id": "turn"}},
             }[method]
+            return response_model.model_validate(data)
 
-        async def notification(self):
+        async def next_turn_notification(self, turn_id):
             if not self.events:
                 raise RuntimeError("unexpected EOF")
-            return self.events.pop(0)
+            event = self.events.pop(0)
+            method, params = event["method"], event["params"]
+            model = NOTIFICATION_MODELS.get(method)
+            payload = model.model_validate(params) if model else UnknownNotification(params)
+            return Notification(method, payload)
 
-    monkeypatch.setattr(agent, "AppServer", Server)
+    monkeypatch.setattr(agent, "AsyncCodexClient", Server)
     return Server
 
 
@@ -127,7 +170,16 @@ def test_roundtrip_usage_and_failure_status(script, tmp_path):
         raw(call),
         completed(),
         notification(
-            "item/completed", item={"type": "mcpToolCall", "id": "call", "status": "failed"}
+            "item/completed",
+            completedAtMs=1,
+            item={
+                "type": "mcpToolCall",
+                "id": "call",
+                "status": "failed",
+                "server": "echo",
+                "tool": "Echo",
+                "arguments": {"text": "hello"},
+            },
         ),
         raw(
             {
@@ -136,7 +188,19 @@ def test_roundtrip_usage_and_failure_status(script, tmp_path):
                 "output": [{"type": "input_text", "text": "failed"}],
             }
         ),
-        notification("thread/tokenUsage/updated", tokenUsage={"total": {"inputTokens": 999}}),
+        notification(
+            "thread/tokenUsage/updated",
+            tokenUsage={
+                key: {
+                    "inputTokens": tokens,
+                    "outputTokens": 2,
+                    "totalTokens": tokens + 2,
+                    "cachedInputTokens": 3,
+                    "reasoningOutputTokens": 1,
+                }
+                for key, tokens in [("last", 10), ("total", 999)]
+            },
+        ),
         raw(text_item()),
         completed(20),
         stopped(),
@@ -266,7 +330,12 @@ def test_retry_reroute_and_early_result(script, tmp_path):
         ),
         raw({"type": "function_call_output", "call_id": "call", "output": "workspace"}),
         completed(),
-        notification("model/rerouted", toModel="gpt-5"),
+        notification(
+            "model/rerouted",
+            fromModel="gpt-5-mini",
+            toModel="gpt-5",
+            reason="highRiskCyberActivity",
+        ),
         raw(text_item()),
         completed(),
         stopped(),
@@ -288,3 +357,49 @@ def test_shutdown_failure_cannot_follow_converged(script, tmp_path):
     assert events[-1]["data"]["avp.reason"] == "error"
     assert events[-2]["data"]["avp.error.message"] == "native shutdown failed"
     assert sum(e["type"] == "avp.agent_stopped" for e in events) == 1
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "item/completed",
+        "turn/completed",
+        "error",
+        "model/rerouted",
+        "thread/tokenUsage/updated",
+    ],
+)
+def test_sdk_validation_fallback_is_not_silently_accepted(method):
+    from openai_codex.client import CodexClient
+
+    from avp_codex.translate import notification_params
+
+    # This exercises the SDK's actual fallback on malformed known payloads.
+    event = CodexClient()._coerce_notification(method, {"threadId": "thread"})
+    assert isinstance(event.payload, UnknownNotification)
+    with pytest.raises(ValueError, match="could not validate"):
+        notification_params(event)
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        [
+            raw(text_item("partial")),
+            notification("error", error={"message": "retry"}, willRetry=True),
+        ],
+        [
+            notification(
+                "item/completed",
+                completedAtMs=1,
+                item={"id": "compact", "type": "contextCompaction"},
+            )
+        ],
+        [notification("thread/compacted")],
+    ],
+)
+def test_unaccountable_retry_and_compaction_fail_visibly(script, tmp_path, events):
+    script.events = [*events, raw(text_item()), completed(), stopped()]
+    _, trajectory = run_cli(tmp_path, raises=True)
+    assert trajectory[-1]["data"]["avp.reason"] == "error"
+    assert not any(e["type"] == "avp.assistant_message" for e in trajectory)

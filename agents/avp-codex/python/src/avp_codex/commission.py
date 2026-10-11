@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from avp.commission import Commission, McpServerStdio
 from avp.preflight import preflight
 from avp.trajectory import ErrorCode
@@ -93,3 +95,18 @@ def skill_instructions(cm: Commission) -> str | None:
         body = "\n\n".join(f"### {path}\n\n{text}" for path, text in files)
         parts.append(f"## Skill: {skill.name or skill.id}\n\n{body}")
     return "\n\n".join(parts) or None
+
+
+def config_overrides(cm: Commission) -> tuple[str, ...]:
+    """Encode Commission config for CodexConfig's native TOML overrides."""
+    return tuple(f"{key}={_toml(value)}" for key, value in config(cm).items())
+
+
+def _toml(value) -> str:
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(k)} = {_toml(v)}" for k, v in value.items()) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml(v) for v in value) + "]"
+    if value is None:
+        raise ValueError("TOML config cannot contain null")
+    return json.dumps(value)
