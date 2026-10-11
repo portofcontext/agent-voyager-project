@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
-use avp::trajectory::StopReason;
+use avp::trajectory::{ErrorCode, StopReason};
 use avp::Commission;
 use futures::{Stream, StreamExt};
 use goose::agents::{Agent, AgentEvent, SessionConfig};
