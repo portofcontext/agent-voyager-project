@@ -25,6 +25,7 @@ dependencies = [
     "avp-conformance",
     "avp-claude-agent-sdk",
     "avp-agent-template",
+    "avp-codex",
     "avp-cli",
     "avp-openai-agents",
 ]
@@ -52,6 +53,7 @@ members = [
     "avp-cli",
     "agents/avp-claude-agent-sdk/python",
     "agents/_template/python",
+    "agents/avp-codex/python",
     "agents/avp-openai-agents/python",
 ]
 
@@ -64,6 +66,7 @@ agent-voyager-project = { workspace = true }
 avp-conformance = { workspace = true }
 avp-claude-agent-sdk = { workspace = true }
 avp-agent-template = { workspace = true }
+avp-codex = { workspace = true }
 avp-cli = { workspace = true }
 avp-openai-agents = { workspace = true }
 

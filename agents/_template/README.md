@@ -121,6 +121,6 @@ is registered and has a release. Do all of this in the PR that adds the agent:
    together, commit, and run `make release-<name>` from a clean `main`.
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
-subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool), and
-`agents/avp-openai-agents/python/` (complete messages, agents-as-tools
-subagents, the closest to the template). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
+subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
+`agents/avp-openai-agents/python/` (complete Responses messages, managed MCP),
+and `agents/avp-codex/python/` (native app-server raw inference boundaries). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

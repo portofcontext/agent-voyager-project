@@ -17,6 +17,7 @@ members = [
     "avp-agent-template",
     "avp-claude-agent-sdk",
     "avp-cli",
+    "avp-codex",
     "avp-conformance",
     "avp-openai-agents",
     "avp-workspace",
@@ -391,6 +392,25 @@ requires-dist = [
 provides-extras = ["huggingface", "parsebench", "llm-judge", "dev"]
 
 [[package]]
+name = "avp-codex"
+version = "0.0.1"
+source = { editable = "agents/avp-codex/python" }
+dependencies = [
+    { name = "agent-voyager-project" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "agent-voyager-project", editable = "avp/bindings/python" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
+
+[[package]]
 name = "avp-conformance"
 version = "0.1.1"
 source = { editable = "avp/core/conformance" }
@@ -453,6 +473,7 @@ dependencies = [
     { name = "avp-agent-template" },
     { name = "avp-claude-agent-sdk" },
     { name = "avp-cli" },
+    { name = "avp-codex" },
     { name = "avp-conformance" },
     { name = "avp-openai-agents" },
 ]
@@ -483,6 +504,7 @@ requires-dist = [
     { name = "avp-agent-template", editable = "agents/_template/python" },
     { name = "avp-claude-agent-sdk", editable = "agents/avp-claude-agent-sdk/python" },
     { name = "avp-cli", editable = "avp-cli" },
+    { name = "avp-codex", editable = "agents/avp-codex/python" },
     { name = "avp-conformance", editable = "avp/core/conformance" },
     { name = "avp-openai-agents", editable = "agents/avp-openai-agents/python" },
     { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3" },

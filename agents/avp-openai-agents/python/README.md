@@ -38,7 +38,9 @@ No built-ins. The OpenAI Agents SDK is a framework: its agents ship with no
 tools, skills, or subagents, and the descriptor mirrors that rather than adding
 any (see `agents/_template/README.md` §3). Tools come from the Commission's
 `mcp_servers`; every `enabled_builtin_*` list under `avp-openai-agents` must be
-empty. The conformance cases that need tools or subagents report SKIP. The
+empty. Cases requiring built-in tools or subagents report SKIP. The common
+managed MCP round-trip case still runs and checks tool execution plus a
+subsequent model response. The
 adapter sets no turn cap (`max_turns=None`) and uses the SDK's MCP connect
 timeout; the supervisor bounds the run.
 
@@ -49,3 +51,7 @@ timeout; the supervisor bounds the run.
   without raising is not.
 - Hosted tools (web search, file search, code interpreter, hosted MCP) are not
   offered, so `server_tool_use` blocks are never produced.
+
+The separate [`avp-codex`](../../avp-codex/python/README.md) package observes
+the native Codex runtime. It shares the Recorder and entrypoint, while keeping
+its runtime-specific configuration and translation independent.
