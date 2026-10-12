@@ -41,7 +41,7 @@ _translator.py SDK init-data → AgentDescriptor fields
 
 The trajectory's ordering and span rules live in the binding's `avp.recorder.Recorder`. The Claude CLI fans one API response into multiple `AssistantMessage` chunks sharing a `message_id`; the adapter passes that id as the Recorder's `turn_key`, so the chunks merge into one turn and the `assistant_message` lands before the tool / subagent events it triggered.
 
-See [CLAUDE.md](CLAUDE.md) for design notes.
+See the [contributor guide](../../../AGENTS.md) for repository conventions.
 
 ## Contributing
 

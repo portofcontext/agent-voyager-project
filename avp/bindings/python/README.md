@@ -6,7 +6,7 @@ Conformance suite: the separate [`avp-conformance`](../../core/conformance/) pac
 This package supplies the Pydantic source of truth for the AVP v0.1 wire format,
 event sinks, and shared adapter helpers. Adapters report native runtime events
 through the Recorder; the runtime owns the agent loop. See
-[`CLAUDE.md`](CLAUDE.md) for the package charter.
+[`AGENTS.md`](AGENTS.md) for the package charter.
 
 It ships:
 
