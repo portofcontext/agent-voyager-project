@@ -14,7 +14,19 @@ Supervisor ◀── Trajectory ─── Agent
 
 AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [foundations](FOUNDATIONS.md) for how they fit together.
 
-## Quickstart
+## Start with the AVP skill
+
+Install the official skill for your coding agent (requires Node.js 22 or newer):
+
+```bash
+npx skills add portofcontext/agent-voyager-project --skill avp
+```
+
+Then ask: **“Use the AVP skill to set up and run my first agent evaluation.”**
+The skill guides setup, Commission configuration, evaluations, and debugging.
+See [SKILL.md](SKILL.md) for its instructions, or follow the CLI quickstart below.
+
+## CLI quickstart
 
 Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and a running Docker daemon. The CLI runs agents in containers and manages the sandbox setup.
 

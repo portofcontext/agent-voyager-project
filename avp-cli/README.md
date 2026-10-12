@@ -29,13 +29,15 @@ bar. They measure different things, and a good benchmark reports both.
 ```bash
 uv tool install avp-cli         # installs the `avp` command (or: pipx install avp-cli)
 
-avp init                 # pick a benchmark (try 'demo'): writes an eval here + commissions to ~/.avp
-avp eval run <config>    # run it against a real agent, print the board; iterate
+avp agent install goose
+export ANTHROPIC_API_KEY="<your-api-key>"
+avp init capitals --agent goose
+avp eval run capitals.eval.json    # paid model calls; prints the ranked board
 avp eval view            # open the most recent run on agentvoyagerproject.com
 ```
 
 Contributors working in the repo: `make sync && source .venv/bin/activate`
-(then `avp …`, or the Make passthrough `make avp init`).
+(then use `avp …`).
 
 **Docker is the one prerequisite.** Every agent run executes inside an
 [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container; the

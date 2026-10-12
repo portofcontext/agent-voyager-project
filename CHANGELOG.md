@@ -12,6 +12,8 @@ These changes retain the v0.1 wire schemas.
 
 ### Changed
 
+- Onboarding starts with the official AVP skill, updated for current CLI and adapter workflows.
+
 - Managed launches use fresh home, workspace, and SDK state directories. Direct
   library calls inherit their caller's context.
 - Goose uses v1.53.0 and requires Rust 1.94.1 or newer. Its old `events`,
@@ -20,6 +22,8 @@ These changes retain the v0.1 wire schemas.
 - Claude no longer emits `claude_agent_sdk.chunks_merged` metadata.
 
 ### Fixed
+
+- Skill archives preserve spec paths and include the referenced schemas and examples.
 
 - Invalid Recorder reports fail visibly without corrupting valid state.
 - Model-response boundaries, tool pairing, per-response usage, and cost accounting.
