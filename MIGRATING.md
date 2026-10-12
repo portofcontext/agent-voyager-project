@@ -41,7 +41,7 @@ Zero-token responses have unknown cost rather than a fabricated zero.
 
 Expect historical turn counts, durations, and costs to differ. Reduce usage and
 cost from assistant-message deltas; do not add native cumulative session totals.
-Treat `cost_source: "unknown"` as unavailable pricing, even when `cost_usd`
+Treat `avp.cost.source: "unknown"` as unavailable pricing, even when `avp.cost_usd`
 is zero.
 
 ## Conformance and releases
