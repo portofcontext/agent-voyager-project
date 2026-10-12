@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-AVP is pre-launch. These changes retain the v0.1 wire schemas.
+These changes retain the v0.1 wire schemas.
 
 ### Added
 
