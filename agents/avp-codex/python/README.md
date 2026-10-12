@@ -61,17 +61,38 @@ callback. Explicitly commissioned MCP tools use the native `approve` policy.
 
 ## Supported profile and limits
 
-The profile offers native shell, patch, image-viewing, user-input, and MCP
+The profile offers native shell (`exec_command` and `write_stdin`), patch, image-viewing, user-input, and MCP
 resource tools. Codex selects the applicable native tools from model metadata;
 the descriptor lists the available surface. Multi-agent delegation, goals,
 apps, plugins, and web search are disabled. This is a single-agent, API-key integration,
 not support for every feature of the OpenAI suite.
 
-Codex cannot enforce arbitrary built-in tool allow-lists. In particular,
-`request_user_input` remains exposed when other tools are disabled. The adapter
-rejects an unrepresentable allow-list, including `[]`, before inference with
-`commission_collision`. Consequently it does **not** pass the complete v0.1
-conformance suite: the empty-allow-list case is a known failure, not a skip.
+Commission tool allow-lists select both the native runtime configuration and the
+`agent_started` catalog. An empty list disables environment access (shell,
+patch, and images), and disables user input with
+`tools.experimental_request_user_input.enabled = false`. It produces no model
+tools when no MCP servers are commissioned. User-input and image exposure can
+also be switched off in a run that retains other tools.
+
+Tool filtering is verified for `openai/gpt-5-mini` and `openai/gpt-5.5`.
+Filtered runs with other models fail before inference: model catalogs can add
+native tools without independent disable switches. Filtered MCP runs currently
+require `gpt-5-mini`; `gpt-5.5` adds native tool search when MCP is configured.
+
+The pinned runtime still imposes limits on some combinations:
+
+- `exec_command` and `write_stdin` must be selected together.
+- On `gpt-5.5`, keeping environment tools requires allowing `apply_patch`: native patch
+  exposure is model-dependent and has no independent configuration switch.
+  `gpt-5-mini` has no native patch tool and can select shell or images alone.
+- Configuring MCP servers exposes all three native resource helpers. Their
+  names must be allowed; Commission-managed MCP tools remain enabled.
+
+Unrepresentable selections fail before inference with `commission_collision`
+and a specific explanation. The native tests verify empty tool lists on
+`gpt-5-mini` and `gpt-5.5`, partial selections, and preserved MCP tools by
+inspecting the requests sent to the model. `shell_command` is not advertised:
+this pinned runtime uses `exec_command` and `write_stdin` for shell execution.
 
 Missing raw response boundaries, malformed arguments, unknown output item types,
 and unmatched tool results fail the run instead of fabricating usage or success.

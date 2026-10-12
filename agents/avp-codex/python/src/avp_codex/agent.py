@@ -80,6 +80,9 @@ async def run(commission: Commission, sink: EventSink) -> None:
                     "config": {"skills.config": disabled},
                     "allowProviderModelFallback": False,
                 }
+                if not cm.uses_environment(commission):
+                    # No native environment also hides model-selected apply_patch.
+                    params["environments"] = []
                 if commission.system_prompt is not None:
                     params["baseInstructions"] = commission.system_prompt
                 if instructions := cm.skill_instructions(commission):
@@ -92,10 +95,11 @@ async def run(commission: Commission, sink: EventSink) -> None:
                         f"avp-codex requires codex-cli {cm.CODEX_VERSION}; raw events are experimental"
                     )
                 thread = started.thread.id
-                tools = [ToolDecl(name=name) for name in cm.BUILTIN_TOOLS]
+                tools = [ToolDecl(name=name) for name in cm.selected_tools(commission)]
                 declarations = []
                 cursor = None
                 statuses = {}
+                startup_deadline = asyncio.get_running_loop().time() + 30
                 while True:
                     catalog = await server.request(
                         "mcpServerStatus/list",
@@ -109,6 +113,18 @@ async def run(commission: Commission, sink: EventSink) -> None:
                     statuses.update((entry["name"], entry) for entry in catalog["data"])
                     cursor = catalog.get("nextCursor")
                     if not cursor:
+                        starting = any(
+                            statuses.get(entry.id, {}).get("runtimeStatus")
+                            in (None, "notStarted", "starting")
+                            for entry in commission.mcp_servers or []
+                        )
+                        if starting and asyncio.get_running_loop().time() < startup_deadline:
+                            # Status/list is a snapshot, not a startup barrier.
+                            # Do not publish a failed/empty catalog while the SDK
+                            # is still connecting commissioned servers.
+                            statuses = {}
+                            await asyncio.sleep(0.1)
+                            continue
                         break
                 for entry in commission.mcp_servers or []:
                     status = statuses.get(entry.id, {})

@@ -262,7 +262,7 @@ def test_incomplete_or_untranslatable_stream_never_converges(script, tmp_path, e
 @pytest.mark.parametrize(
     "fields, expected",
     [
-        ({"enabled_builtin_tools": {"avp-codex": []}}, "commission_collision"),
+        ({"enabled_builtin_tools": {"avp-codex": ["exec_command"]}}, "commission_collision"),
         ({"enabled_builtin_tools": {"other": []}}, "commission_collision"),
         ({"model": "anthropic/claude-haiku-4-5"}, "unsupported_model"),
         ({"provider": {"id": "anthropic"}}, "unsupported_provider"),
@@ -403,3 +403,63 @@ def test_unaccountable_retry_and_compaction_fail_visibly(script, tmp_path, event
     _, trajectory = run_cli(tmp_path, raises=True)
     assert trajectory[-1]["data"]["avp.reason"] == "error"
     assert not any(e["type"] == "avp.assistant_message" for e in trajectory)
+
+
+@pytest.mark.parametrize(
+    "allowed",
+    [
+        [],
+        ["request_user_input"],
+        ["apply_patch", "view_image"],
+        ["apply_patch", "exec_command", "write_stdin"],
+    ],
+)
+def test_selected_tools_reach_sdk_and_trajectory(script, tmp_path, allowed):
+    script.events = [raw(text_item()), completed(), stopped()]
+    _, events = run_cli(tmp_path, enabled_builtin_tools={"avp-codex": allowed})
+    started = next(e["data"] for e in events if e["type"] == "avp.agent_started")
+    assert {t["name"] for t in started["avp.tools"]} == set(allowed)
+    assert events[-1]["data"]["avp.reason"] == "converged"
+    params = dict(script.calls)["thread/start"]
+    assert (params.get("environments") == []) is (
+        not set(allowed) & {"apply_patch", "view_image", "exec_command"}
+    )
+
+
+@pytest.mark.parametrize(
+    "allowed, mcp, model, message",
+    [
+        (["write_stdin", "apply_patch"], [], "openai/gpt-5-mini", "together"),
+        (["exec_command", "write_stdin"], [], "openai/gpt-5.5", "apply_patch"),
+        (
+            [],
+            [{"id": "echo", "type": "stdio", "command": ["echo"]}],
+            "openai/gpt-5-mini",
+            "MCP servers",
+        ),
+    ],
+)
+def test_unrepresentable_tool_selection_fails_before_sdk(
+    script, tmp_path, allowed, mcp, model, message
+):
+    _, events = run_cli(
+        tmp_path, model=model, enabled_builtin_tools={"avp-codex": allowed}, mcp_servers=mcp
+    )
+    assert script.calls == []
+    assert events[-2]["data"]["avp.error.code"] == "commission_collision"
+    assert message in events[-2]["data"]["avp.error.message"]
+
+
+@pytest.mark.parametrize(
+    "model, mcp, message",
+    [
+        ("openai/gpt-6.1-sol", [], "model catalogs"),
+        ("openai/gpt-5.5", [{"id": "echo", "type": "stdio", "command": ["echo"]}], "tool search"),
+    ],
+)
+def test_model_added_tools_cannot_bypass_allowlist(script, tmp_path, model, mcp, message):
+    _, events = run_cli(
+        tmp_path, model=model, mcp_servers=mcp, enabled_builtin_tools={"avp-codex": []}
+    )
+    assert script.calls == []
+    assert message in events[-2]["data"]["avp.error.message"]
