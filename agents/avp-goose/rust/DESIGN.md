@@ -109,8 +109,7 @@ This base is the deliverable that outlives Goose. The connector itself
 (§5) is the integrator package and stays Goose-specific.
 
 Built flat (`ids`/`pricing`/`sink` at the crate root) rather than under an
-`agent/` module: there is no shared agent base class in any binding (each
-agent inlines its own loop), so the extra nesting would be structure for a
+`agent/` module: the runtime owns the loop and adapters report its events to the binding, so the extra nesting would be structure for a
 hypothetical caller. `cargo test` green (8 base unit
 tests + 3 roundtrip). The `prices.json` `include_str!` reaches into the Python
 package data file; publishing the `avp` crate standalone (§12) will swap that

@@ -54,9 +54,9 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
   from `usage`). Propagate them through the crash path. Once stopped, the
   trajectory is closed, so propagate any later reporting error to the caller.
   Handle SDK-specific repeated signals explicitly before calling the Recorder.
-- **Files.** Tools that touch files resolve against `AVP_WORKSPACE`. Without
-  it use a fresh temp directory, never the process CWD: an unsandboxed run
-  starts in your source tree.
+- **Files.** The stock entrypoint enters `AVP_WORKSPACE` when supplied by the
+  launcher. Direct library calls inherit the caller’s working directory and
+  state; the adapter leaves provisioning and cleanup to the caller.
 - **Imports.** Keep the SDK import inside `run` / `describe` so `ping` stays
   cheap.
 

@@ -22,7 +22,7 @@ The vocabulary below is the ubiquitous language of AVP. Every doc, type, and eve
 
 **Roles**
 
-- **Agent**: the thing that runs the loop. Drives a model, executes tools, emits events. May own the loop directly (it inlines a `while` loop over a per-turn translator) or wrap an SDK that already owns the loop (observer / translator pattern).
+- **Agent**: the thing that runs the loop. Drives a model, executes tools, emits events. AVP adapters observe an existing runtime that owns the model/tool loop.
 - **Supervisor**: the thing that issues the Commission and observes the trajectory. Never pushes mid-run messages to the agent.
 
 **Artifacts** (the two top-level message classes)
@@ -56,46 +56,35 @@ The protocol cares about wire shape, not packaging. But this repo packages two d
 - **Agent**: owns the agent loop, reads a Commission, emits the trajectory, advertises an Agent Descriptor, dispatches tools. An agent is what `avp/core/spec/v0.1/` certifies as conforming, and ships an `avp-conformance.json` manifest honoring `<command> run --commission <path> --out <ndjson>`. Examples: [`agents/avp-claude-agent-sdk/python/`](agents/avp-claude-agent-sdk/python/) (a complete agent built on the Claude Agent SDK, which already ships a loop) and [`agents/avp-goose/rust/`](agents/avp-goose/rust/) (an in-process observer of Block's Goose).
 - **Supervisor**: commissions agents and consumes their trajectories. It builds Commissions, runs agents, and reads the events back; it does not own the agent loop. Example: the local CLI [`avp-cli/`](avp-cli/) (command `avp`), which scaffolds a Commission, runs setups (Commission variants) over a dataset against the agents, and ranks a board.
 
-The wire-types binding ([`avp/bindings/python/`](avp/bindings/python/)) ships no agent base class or driver protocol, so each agent owns its loop and emits to an `EventSink`.
+The binding ([`avp/bindings/python/`](avp/bindings/python/)) supplies wire types, sinks, and a Recorder. Adapters translate native runtime events into Recorder reports; the runtime owns execution.
 
 Rule of thumb: a thing that owns an agent loop and emits a trajectory is an agent under `agents/<name>/<lang>/`; a thing that commissions agents and reads their trajectories is a supervisor (the local one is the `avp` CLI at `avp-cli/`).
 
 ## When to do what
 
-There are three tasks AVP gets used for. Match the user's intent to one of these and follow the relevant pattern.
+AVP integrations either adapt an existing agent runtime or configure one from a supervisor.
 
-### Task A: Build an agent (inline-loop pattern)
+### Task A: Adapt an agent runtime
 
-The user wants their code to OWN the agent loop and use AVP as the wire. Examples: wrapping the Anthropic Messages API, wrapping OpenAI, wrapping a custom LLM, building from scratch.
+Use this when the user wants an SDK or agent runtime to accept Commissions and
+emit AVP trajectories. The runtime owns the model/tool loop.
 
-Use this when: the user says "I want to call Claude / GPT / Gemini and emit AVP" or "wrap my agent loop in AVP" or "build an agent."
+Start with [`agents/_template/README.md`](agents/_template/README.md):
 
-You keep your loop and emit AVP events to an `avp.sink.EventSink` using the wire types in the `avp` binding. The binding imposes no base class or driver protocol. The pattern:
+1. Scaffold a Python or Rust adapter with `make new-agent` or `make new-agent-rust`.
+2. Replace the scripted harness with the runtime and map Commission fields into
+   its configuration. Declare its supported capabilities and built-ins.
+3. Translate native model responses, tool results, subagents, and completion into
+   Recorder reports. Preserve model-response boundaries and per-response usage.
+4. Use the stock `ping`, `describe`, and `run` entrypoint and shared preflight checks.
+5. Validate the adapter with seam tests and the live conformance suite.
 
-1. Read a `Commission` from input. Validate against `avp.commission.Commission`.
-2. Emit the prelude: `run_requested`, `agent_described`, `agent_started` (carrying the agent's tool surface, filtered by `enabled_builtin_tools`, plus any inline `mcp_servers[]` with each dial's `status`).
-3. Loop, per turn: call your model; emit one `assistant_message` with `avp.content`, `avp.usage`, and `avp.cost_usd`; dispatch the model's tool calls, emitting `tool_invoked` / `tool_returned` for each; append the assistant turn (WITH its tool_calls) and the tool results to history; repeat until the model converges.
-4. Emit `agent_stopped` with a `StopReason`. Per-turn cost / token deltas live on each `assistant_message`; the consumer reduces them to compute totals (the agent publishes no cumulative totals).
+Worked adapters: [Claude Agent SDK](agents/avp-claude-agent-sdk/python/),
+[Goose](agents/avp-goose/rust/), [OpenAI Agents](agents/avp-openai-agents/python/),
+and [Codex](agents/avp-codex/python/). See [integration patterns](PATTERNS.md)
+for Recorder responsibilities and launcher-owned context.
 
-Emit events to an `avp.sink.EventSink` (the built-in `stdio_sink` writes NDJSON to stdout; `jsonl_sink` writes to a file, which is what the `run --commission --out` contract uses). `agents/avp-goose/rust/src/runner.rs` is a worked agent loop that emits to a sink.
-
-### Task B: Build an agent (observer pattern)
-
-The user wants AVP observability over an SDK that already owns its loop. Examples: Claude Agent SDK, LangChain, AutoGen, an internal framework.
-
-Use this when: the user says "wrap Claude Code as an agent," "make LangChain emit AVP events," or "translate my SDK's lifecycle into AVP." Anywhere they can't own the loop but can subscribe to lifecycle events.
-
-The reference is [`agents/avp-claude-agent-sdk/python/`](agents/avp-claude-agent-sdk/python/): `AVPClaudeSDKClient` is a drop-in `ClaudeSDKClient` subclass that emits the trajectory across `query()` / `receive_response()` / `disconnect()`. The pattern:
-
-1. Probe the SDK for its capability surface and emit the prelude (`run_requested`, `agent_described`, `agent_started`).
-2. Translate the Commission into the SDK's setup parameters (e.g. the Claude Agent SDK's `tools` / `mcp_servers`).
-3. Subscribe to the SDK's lifecycle (assistant messages, tool use, tool result, completion).
-4. Translate each lifecycle event into the corresponding AVP event using the Pydantic models in `avp.trajectory` and `avp.content`, emitting to a sink.
-5. Put per-turn cost / token deltas on each `assistant_message`; the supervisor reduces the delta stream. The agent does NOT maintain a cumulative accumulator.
-
-The reference implementation is [`agents/avp-claude-agent-sdk/python/`](agents/avp-claude-agent-sdk/python/): `AVPClaudeSDKClient` is a drop-in `ClaudeSDKClient` subclass that emits the trajectory across `query()` / `receive_response()` / `disconnect()`. The Rust analog is [`agents/avp-goose/rust/`](agents/avp-goose/rust/), an in-process observer of Goose's event stream.
-
-### Task C: Compose a supervisor Commission
+### Task B: Compose a supervisor Commission
 
 The user wants to declare an agent environment: what the agent can do, what rules it must respect, what it should observe. This is the supervisor side.
 
@@ -169,14 +158,14 @@ Common temptations to push back on:
 3. `avp/core/spec/v0.1/{trajectory,commission,agent-descriptor}.schema.json`: JSON Schemas per spec; authoritative for field-by-field shape, generated from the Pydantic models.
 4. `avp/core/conformance/src/avp_conformance/cases/v0.1/`: executable test cases that pin down behavior, plus `COVERAGE.md` (what the suite covers and the deliberate gaps). Read the cases as worked examples of "what's the right answer when...".
 5. `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py`: the Pydantic models that are the source of truth for the schemas, one file per spec. Do NOT inline-redefine the wire types; import them.
-6. `agents/avp-goose/rust/src/runner.rs`: a worked agent loop that emits a trajectory to a sink.
+6. `agents/avp-goose/rust/src/runner.rs`: an adapter observing Goose’s native event stream.
 7. `agents/avp-claude-agent-sdk/python/` and `agents/avp-goose/rust/`: observer-pattern agents over the Claude Agent SDK and Goose.
 8. `avp-cli/`: the local CLI `avp`, a worked supervisor that scaffolds Commissions and runs setups over a dataset against the agents to rank a board.
 
 ## How to operate when the user describes a need
 
-1. Identify which of Tasks A / B / C they're asking about (or which combination).
-2. Read the closest match first to ground yourself in current shape: the agent packages under `agents/` for Tasks A/B, and `avp-cli/` (run `avp eval demo`, read the catalog configs under `src/avp_cli/catalog/`) for Task C.
+1. Identify which of Tasks A / B they're asking about (or which combination).
+2. Read the closest match first to ground yourself in current shape: the agent packages under `agents/` for Task A, and `avp-cli/` (read the catalog configs under `src/avp_cli/catalog/`) for Task B.
 3. Cross-reference with the specs: [`commission.md`](avp/core/spec/v0.1/commission.md) (allowlists, inline assets), [`trajectory.md`](avp/core/spec/v0.1/trajectory.md) (the loop, event catalog), [`agent-descriptor.md`](avp/core/spec/v0.1/agent-descriptor.md).
 4. For runtime correctness questions, the conformance cases under `avp/core/conformance/src/avp_conformance/cases/v0.1/` are precedent. Find the case that matches the situation.
 5. Generate code that imports from the spec-scoped modules (`avp.commission`, `avp.descriptor`, `avp.trajectory`, `avp.content`) plus `avp.sink`. Do NOT inline-redefine the wire types.

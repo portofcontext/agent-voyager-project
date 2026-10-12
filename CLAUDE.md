@@ -40,9 +40,9 @@ criteria for its layer; an implementation may adopt one or all.
 The repo packages two kinds of things on top of the wire format. Get the
 right one when picking where new code lives; the contracts differ.
 
-**Agent.** Owns the agent loop. Reads a Commission from input, emits the
-trajectory, advertises an Agent Descriptor, dispatches tools, and produces
-`agent_stopped` with a stop reason. An agent IS what `avp/core/spec/v0.1/`
+**Agent.** An existing runtime owns the model/tool loop and executes tools. Its
+AVP adapter reads a Commission, emits the trajectory, advertises an Agent
+Descriptor, and reports `agent_stopped` with a stop reason. An agent IS what `avp/core/spec/v0.1/`
 certifies as conforming. Every agent ships an `avp-conformance.json` manifest
 and honors the run contract `<command> run --commission <path> --out <ndjson>`.
 Agents in this repo: `avp-claude-agent-sdk` (observer over the Claude Agent
@@ -57,9 +57,8 @@ compared) over a dataset against the real agents and ranks a board, `avp
 commission` builds and inspects a Commission.
 
 The folder split reflects this: `agents/<name>/<lang>/` for agents, `avp-cli/`
-for the local CLI. The orthogonal *integration* axis (who owns the loop, what role
-Commission plays) is described in `PATTERNS.md`. When the question is "where
-does new code live," consult this section; when it's "how does an application
+for the local CLI. Runtime adaptation and launcher responsibilities are described
+in `PATTERNS.md`. When the question is "where does new code live," consult this section; when it's "how does an application
 wire onto AVP," consult `PATTERNS.md`.
 
 ## What AVP is built on (read before changing the wire)

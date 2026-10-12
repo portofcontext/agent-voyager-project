@@ -7,8 +7,8 @@ sends an **agent** a JSON **Commission**, the agent runs and streams back a
 AVP specializes existing standards (CloudEvents, OpenTelemetry, MCP, Agent
 Skills) rather than inventing wire formats.
 
-Deeper references: [`SKILL.md`](SKILL.md) is the full AVP skill (concepts + the
-three build patterns); [`README.md`](README.md) is install + quickstart;
+Deeper references: [`SKILL.md`](SKILL.md) covers concepts and adapter/supervisor
+workflows; [`README.md`](README.md) is install + quickstart;
 [`CLAUDE.md`](CLAUDE.md) is the contributor guide for changing this repo; the
 normative specs live under [`avp/core/spec/v0.1/`](avp/core/spec/v0.1/).
 

@@ -33,6 +33,6 @@ it scaffolds Commissions and runs them over a dataset to rank a board.
 
 ## Optional
 
-- [SKILL.md](SKILL.md): the full AVP skill for AI assistants (concepts, the three build patterns, where to read next).
+- [SKILL.md](SKILL.md): the full AVP skill for AI assistants (concepts, adapter and supervisor workflows, where to read next).
 - [Conformance cases](avp/core/conformance/src/avp_conformance/cases/v0.1/): executable test cases pinning down wire behavior.
 - [llms-full.txt](strategies/llms-txt/llms-full.txt): this index with the key content inlined, for use when the linked docs are not fetchable.
