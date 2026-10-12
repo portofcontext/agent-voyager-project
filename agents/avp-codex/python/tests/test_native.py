@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from test_agent import run_cli
 
+from avp.launch import directory_env
 from avp_codex import agent
 from avp_codex.translate import notification_params
 
@@ -24,6 +25,14 @@ pytestmark = pytest.mark.skipif(
     os.environ.get("AVP_TEST_CODEX") != "1", reason="native Codex integration is opt-in"
 )
 ROOT = Path(__file__).resolve().parents[4]
+
+
+@pytest.fixture(autouse=True)
+def native_context(tmp_path, monkeypatch):
+    # This test is the launcher: the adapter must not replace or clean up state.
+    for name, value in directory_env(tmp_path / "runtime", tmp_path).items():
+        Path(value).mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv(name, value)
 
 
 @pytest.mark.parametrize(
@@ -158,7 +167,7 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
                 {
                     "id": "avptest",
                     "type": "stdio",
-                    "command": ["uv", "run", str(ROOT / "testing/mcp/avp_test_mcp.py")],
+                    "command": [sys.executable, str(ROOT / "testing/mcp/avp_test_mcp.py")],
                 }
             ],
         )
@@ -244,8 +253,8 @@ def test_native_allowlist_filters_model_request(tmp_path, monkeypatch, model, al
     # be ready before the filtered run records its initial catalog.
     slow_mcp = tmp_path / "slow_mcp.py"
     slow_mcp.write_text(
-        "import os, time\ntime.sleep(1.5)\nos.execvp('uv', "
-        + repr(["uv", "run", str(ROOT / "testing/mcp/avp_test_mcp.py")])
+        "import os, sys, time\ntime.sleep(1.5)\nos.execv(sys.executable, "
+        + repr([sys.executable, str(ROOT / "testing/mcp/avp_test_mcp.py")])
         + ")\n"
     )
     requests = []

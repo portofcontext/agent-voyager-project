@@ -6,6 +6,7 @@ OpenAI Agents SDK loop, with only the model scripted (the SDK's own
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,7 +156,9 @@ def test_mcp_server_tools_round_trip(script, tmp_path: Path) -> None:
         tmp_path,
         prompt="echo PING",
         enabled_builtin_tools={"avp-openai-agents": []},
-        mcp_servers=[{"type": "stdio", "id": "avptest", "command": ["uv", "run", str(TEST_MCP)]}],
+        mcp_servers=[
+            {"type": "stdio", "id": "avptest", "command": [sys.executable, str(TEST_MCP)]}
+        ],
     )
     started = events[2]["data"]
     assert started["avp.mcp_servers"] == [{"id": "avptest", "status": "connected"}]

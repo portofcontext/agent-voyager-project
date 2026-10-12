@@ -65,6 +65,7 @@ def script(monkeypatch):
 
         def __init__(self, config):
             self.config = config
+            Server.config = config
 
         async def initialize(self):
             pass
@@ -463,3 +464,23 @@ def test_model_added_tools_cannot_bypass_allowlist(script, tmp_path, model, mcp,
     )
     assert script.calls == []
     assert message in events[-2]["data"]["avp.error.message"]
+
+
+def test_inherits_caller_context_without_deleting_it(script, tmp_path, monkeypatch):
+    import os
+
+    home = tmp_path / "codex-home"
+    home.mkdir()
+    marker = home / "caller-state"
+    marker.write_text("keep")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setenv("AVP_WORKSPACE", str(workspace))
+    script.events = [raw(text_item()), completed(), stopped()]
+    run_cli(tmp_path)
+    assert Path(script.config.cwd) == workspace
+    assert not script.config.env, "the adapter must inherit native env"
+    assert dict(script.calls)["thread/start"]["cwd"] == str(workspace)
+    assert os.environ["CODEX_HOME"] == str(home)
+    assert marker.read_text() == "keep"

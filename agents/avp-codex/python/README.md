@@ -41,7 +41,7 @@ SDK usage **does** expose per-response counts through `last`; lack of such
 counts is not the reason for retaining raw events. The native tests check both
 `last` and `total` alongside the emitted AVP deltas.
 
-One Commission starts an ephemeral Codex thread and one user turn. That turn
+One Commission starts a fresh Codex thread and one user turn. That turn
 may contain multiple model calls and tool calls. Commission `thread_id` is
 attribution, not a request to resume a persisted Codex conversation.
 
@@ -52,9 +52,11 @@ Commission MCP servers are configured in the native runtime, enumerated before
 `agent_started`, and their tools carry `avp.mcp_server_id`. Credentials remain a
 deployment concern, as with the other adapters.
 
-The child gets a temporary CODEX_HOME and does not use the user's login or
-config. Discovered host/repository skills are disabled; only Commission skills
-are advertised. Workspace is `AVP_WORKSPACE` or the current directory. Native
+The launcher owns workspace, credentials, native config/state directories, and
+cleanup, following the [shared launch pattern](../../../PATTERNS.md#launch-context).
+The adapter inherits `CODEX_HOME` and other native environment settings; it does
+not create or delete a private home. Discovered host/repository skills are
+disabled; only Commission skills are advertised. Native
 workspace-write sandboxing remains enabled. The adapter requests and verifies
 `approvalPolicy: never` before inference because AVP has no mid-run supervisor
 callback. Explicitly commissioned MCP tools use the native `approve` policy.
