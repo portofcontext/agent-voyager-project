@@ -68,6 +68,8 @@ cd agent-voyager-project
 make sync && make check
 ```
 
+Upgrading an integration? See the [migration notes](MIGRATING.md).
+
 See the [contributor guide](CLAUDE.md), [spec proposals](proposals/), or `make help` for next steps.
 
 Built by [Port of Context](https://github.com/portofcontext). [Issues](https://github.com/portofcontext/agent-voyager-project/issues) · [Discussions](https://github.com/portofcontext/agent-voyager-project/discussions).
