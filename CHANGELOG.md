@@ -6,7 +6,7 @@ These changes retain the v0.1 wire schemas.
 
 ### Added
 
-- Shared Python and Rust Recorders for trajectory ordering, spans, and accounting.
+- Shared Python, Rust, and TypeScript Recorders for trajectory ordering, spans, and accounting.
 - Stock agent entrypoints, shared preflight checks, and Python/Rust adapter templates.
 - OpenAI Agents SDK and Codex adapters.
 
