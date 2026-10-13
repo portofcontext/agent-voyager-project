@@ -199,3 +199,16 @@ def test_ships_no_builtins_and_rejects_allowlisted_names(script, tmp_path: Path)
     assert "tools" not in described and "subagents" not in described
     assert started.get("avp.tools", []) == []
     assert events[-1]["data"]["avp.reason"] == "converged"
+
+
+def test_exhausted_credits_end_the_run_without_crashing(script, tmp_path: Path) -> None:
+    """OpenAI delivers an empty balance mid-stream as a plain APIError."""
+    import httpx
+    from openai import APIError
+
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    script(APIError("You have no credits remaining. Add credits to continue.", request, body=None))
+    events = _run(tmp_path, prompt="hi")
+    assert _types(events)[-2:] == ["error_occurred", "agent_stopped"]
+    assert events[-2]["data"]["avp.error.code"] == "rate_limit"
+    assert events[-1]["data"]["avp.reason"] == "error"

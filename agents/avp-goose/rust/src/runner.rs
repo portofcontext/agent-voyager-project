@@ -7,6 +7,7 @@
 //! there is no batching.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -23,6 +24,7 @@ use goose::conversation::message::{
 use goose::model_config::model_config_from_user_config;
 use goose::session::session_manager::SessionType;
 use serde_json::{json, Value};
+use tokio_util::sync::CancellationToken;
 
 use crate::commission::{self, GooseRunConfig};
 use crate::emit::{self, Emitter};
@@ -241,12 +243,41 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         max_turns: None,
         retry_config: None,
     };
+    // SIGINT / SIGTERM cancel Goose's run and close the trajectory as
+    // `interrupted`. The handlers are installed before the first inference.
+    let cancel = CancellationToken::new();
+    let interrupt = interrupt_signal()?;
     // Goose's default loop; its experimental state-machine loop stays off.
     let stream = agent
-        .reply(user_message, session_config, false, None)
+        .reply(user_message, session_config, false, Some(cancel.clone()))
         .await?;
 
-    record_reply(&mut emitter, &model_name, stream).await
+    record_reply(&mut emitter, &model_name, stream, async move {
+        interrupt.await;
+        cancel.cancel();
+    })
+    .await
+}
+
+/// Resolves on the first SIGINT or SIGTERM.
+#[cfg(unix)]
+fn interrupt_signal() -> std::io::Result<impl Future<Output = ()>> {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut int = signal(SignalKind::interrupt())?;
+    let mut term = signal(SignalKind::terminate())?;
+    Ok(async move {
+        tokio::select! {
+            _ = int.recv() => {}
+            _ = term.recv() => {}
+        }
+    })
+}
+
+#[cfg(not(unix))]
+fn interrupt_signal() -> std::io::Result<impl Future<Output = ()>> {
+    Ok(async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
 }
 
 /// Consume the native Goose stream, including terminal failures that Goose
@@ -255,6 +286,7 @@ async fn record_reply<S: Sink>(
     emitter: &mut Emitter<S>,
     model_name: &str,
     mut stream: impl Stream<Item = anyhow::Result<AgentEvent>> + Unpin,
+    interrupt: impl Future<Output = ()>,
 ) -> anyhow::Result<()> {
     // Coalesce streamed deltas into turns. Goose yields an assistant inference
     // as incremental message deltas (partial `Text` chunks), and a new
@@ -281,8 +313,20 @@ async fn record_reply<S: Sink>(
     // the turn so `assistant_message.duration_ms` reflects the model's time, not
     // the ~0 between materializing and draining the coalesced turn at flush.
     let mut turn_start = Instant::now();
+    // Set when `interrupt` resolves: stop reading, close what's open, and stop
+    // as `interrupted`.
+    let mut interrupted = false;
+    let mut interrupt = std::pin::pin!(interrupt);
 
-    while let Some(item) = stream.next().await {
+    loop {
+        let item = tokio::select! {
+            item = stream.next() => item,
+            () = &mut interrupt, if !interrupted => {
+                interrupted = true;
+                None
+            }
+        };
+        let Some(item) = item else { break };
         match item {
             Ok(AgentEvent::Message(message)) => {
                 let value = serde_json::to_value(&message)?;
@@ -378,7 +422,7 @@ async fn record_reply<S: Sink>(
         &mut open_ids,
         turn_start,
     )?;
-    emitter.stop(emit::classify_stop(ended_ok, false, false), None)?;
+    emitter.stop(emit::classify_stop(ended_ok, interrupted, false), None)?;
     Ok(())
 }
 
@@ -699,9 +743,14 @@ mod tests {
             avp::load_default_prices(),
         );
         emitter.start(Some("gpt-4o-mini")).unwrap();
-        record_reply(&mut emitter, "gpt-4o-mini", futures::stream::iter(items))
-            .await
-            .unwrap();
+        record_reply(
+            &mut emitter,
+            "gpt-4o-mini",
+            futures::stream::iter(items),
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
         let events = sink.0.lock().unwrap().clone();
         let schema: Value = serde_json::from_str(include_str!(
             "../../../../avp/core/spec/v0.1/trajectory.schema.json"
@@ -712,6 +761,48 @@ mod tests {
             assert!(validator.is_valid(event), "invalid event: {event}");
         }
         events
+    }
+
+    #[tokio::test]
+    async fn an_interrupt_closes_the_open_turn_and_stops_interrupted() {
+        // The model streamed a turn, then the stream stalls; SIGTERM arrives.
+        let sink = Capture::default();
+        let mut emitter = Emitter::new(
+            sink.clone(),
+            "interrupted",
+            Some("openai".into()),
+            HashSet::new(),
+            avp::load_default_prices(),
+        );
+        emitter.start(Some("gpt-4o-mini")).unwrap();
+        let stream = futures::stream::iter(vec![Ok(AgentEvent::Message(model_message(
+            "partial answer",
+        )))])
+        .chain(futures::stream::pending());
+        let (fire, fired) = tokio::sync::oneshot::channel::<()>();
+        let run = record_reply(&mut emitter, "gpt-4o-mini", Box::pin(stream), async {
+            let _ = fired.await;
+        });
+        fire.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), run)
+            .await
+            .expect("an interrupt ends the reply loop")
+            .unwrap();
+        let events = sink.0.lock().unwrap().clone();
+        let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(
+            types,
+            [
+                "avp.agent_started",
+                "avp.assistant_message",
+                "avp.agent_stopped"
+            ]
+        );
+        assert_eq!(
+            events[1]["data"]["avp.content"][0]["text"],
+            "partial answer"
+        );
+        assert_eq!(events[2]["data"]["avp.reason"], "interrupted");
     }
 
     #[tokio::test]

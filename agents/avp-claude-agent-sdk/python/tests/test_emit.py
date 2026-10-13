@@ -1415,3 +1415,42 @@ def test_task_without_lifecycle_emits_tool_pair_only() -> None:
     assert "avp.tool_returned" in types
     assert "avp.subagent_invoked" not in types
     assert "avp.subagent_returned" not in types
+
+
+def test_usage_input_tokens_include_the_cache_split() -> None:
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    TextBlock(text="hi"),
+                    input_tokens=10,
+                    output_tokens=5,
+                    cache_read=1000,
+                    cache_creation=200,
+                ),
+                _result(result="done"),
+            ]
+        )
+    )
+    msg = next(ev for ev in events if ev.type == "avp.assistant_message")
+    assert msg.data.usage.input_tokens == 1210
+    assert msg.data.usage.cache_read_input_tokens == 1000
+    assert msg.data.usage.cache_creation_input_tokens == 200
+    # Haiku 4.5: 10 fresh at $1/M, 1000 cache reads at $0.10/M, 200 cache
+    # writes at $1.25/M, 5 out at $5/M.
+    expected = (10 * 1 + 1000 * 0.1 + 200 * 1.25 + 5 * 5) / 1e6
+    assert msg.data.cost_usd == pytest.approx(expected)
+
+
+def test_a_failed_api_call_is_an_error_not_a_turn() -> None:
+    """The CLI renders an auth failure as a synthetic assistant message."""
+    failure = _assistant(TextBlock(text="Invalid API key · Fix external API key"))
+    failure.error = "authentication_failed"
+    events = asyncio.run(_drive([failure, _result(is_error=True, result="Invalid API key")]))
+    types = [ev.type for ev in events]
+    assert "avp.assistant_message" not in types
+    error = next(ev for ev in events if ev.type == "avp.error_occurred")
+    assert error.data.error_code == "auth_error"
+    assert "Invalid API key" in error.data.error_message
+    assert events[-1].type == "avp.agent_stopped"
+    assert events[-1].data.reason == "error"

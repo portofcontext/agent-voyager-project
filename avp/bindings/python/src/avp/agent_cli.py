@@ -27,6 +27,10 @@ exception escape ``run`` only for a crash (record ``error_occurred`` and
 ``agent_stopped`` first); it exits non-zero with the traceback on stderr, which
 the harness surfaces.
 
+Interruption. SIGINT and SIGTERM during ``run`` cancel it: the adapter's
+``asyncio.CancelledError`` path closes the trajectory with
+``agent_stopped(interrupted)`` and re-raises, and the command exits 130.
+
 ``--built-in`` is the conformance fixture of the agent's pretend defaults. Its
 ``system_prompt`` and ``prompt`` seed the Commission when it leaves them unset
 (the Commission wins). Tool / MCP / subagent built-ins are not simulated.
@@ -41,6 +45,7 @@ import asyncio
 import inspect
 import json
 import os
+import signal
 from collections.abc import Awaitable, Callable
 from contextlib import chdir
 from pathlib import Path
@@ -114,8 +119,26 @@ def main(
     # subprocess tools share the caller-provisioned workspace instead.
     out = Path(args.out).resolve()
     with chdir(os.environ.get("AVP_WORKSPACE", Path.cwd())):
-        asyncio.run(run(commission, jsonl_sink(out)))
+        try:
+            asyncio.run(_interruptible(run(commission, jsonl_sink(out))))
+        except asyncio.CancelledError:
+            return 130
     return 0
+
+
+async def _interruptible(coro: Awaitable[None]) -> None:
+    """Run `coro` with SIGINT / SIGTERM cancelling it, so the adapter closes
+    the trajectory as `interrupted` instead of the process dying mid-run."""
+    task = asyncio.ensure_future(coro)
+    loop = asyncio.get_running_loop()
+    signals = (signal.SIGINT, signal.SIGTERM)
+    for sig in signals:
+        loop.add_signal_handler(sig, task.cancel)
+    try:
+        await task
+    finally:
+        for sig in signals:
+            loop.remove_signal_handler(sig)
 
 
 async def _await(value: Awaitable[AgentDescriptor]) -> AgentDescriptor:

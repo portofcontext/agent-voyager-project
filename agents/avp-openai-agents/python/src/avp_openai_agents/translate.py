@@ -113,10 +113,22 @@ def error_code(exc: BaseException) -> ErrorCode:
     names = {c.__name__ for c in type(exc).__mro__}
     if "AuthenticationError" in names or "PermissionDeniedError" in names:
         return ErrorCode.auth_error
-    if "RateLimitError" in names:
+    if "RateLimitError" in names or _out_of_credits(exc):
         return ErrorCode.rate_limit
     if "context_length_exceeded" in str(exc) or "ContextWindowExceededError" in names:
         return ErrorCode.context_limit
     if "MaxTurnsExceeded" in names:
         return ErrorCode.unknown
     return ErrorCode.agent_crash
+
+
+def _out_of_credits(exc: BaseException) -> bool:
+    """An exhausted balance or quota, which OpenAI can deliver mid-stream as a
+    plain `APIError` (`insufficient_quota`, "You have no credits remaining")."""
+    code = getattr(exc, "code", None)
+    text = str(exc).lower()
+    return (
+        code == "insufficient_quota"
+        or "no credits remaining" in text
+        or "exceeded your current quota" in text
+    )

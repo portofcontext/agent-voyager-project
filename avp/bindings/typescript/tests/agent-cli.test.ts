@@ -98,3 +98,48 @@ test("usage errors are distinguished from failures", async () => {
   await assert.rejects(dispatch(agent({}), ["run", "--out", "x"]), /run needs --commission/);
   await assert.rejects(dispatch(agent({}), ["fly"]), /unknown command/);
 });
+
+test("SIGTERM during run aborts its signal and reports interrupted", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "avp-sig-"));
+  const slow: AgentEntrypoint = {
+    describe: () => DESCRIPTOR,
+    run: async (c, sink, signal) => {
+      const rec = new Recorder(sink, { runId: c.run_id });
+      rec.prelude(c, DESCRIPTOR);
+      rec.start();
+      await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      rec.stop("interrupted");
+    },
+  };
+  const out = join(dir, "o");
+  const pending = dispatch(slow, ["run", "--commission", JSON.stringify(commission()), "--out", out]);
+  setTimeout(() => process.emit("SIGTERM"), 20);
+  assert.equal(await pending, "interrupted");
+  const last = JSON.parse(readFileSync(out, "utf8").trimEnd().split("\n").at(-1)!);
+  assert.equal(last.data["avp.reason"], "interrupted");
+  assert.equal(process.listenerCount("SIGTERM"), 0, "handlers are removed after the run");
+});
+
+test("the interrupt listener stays attached while the signal is delivered", async () => {
+  // `signal-exit` (in Pi's dependency tree) re-raises a signal, killing the
+  // process, when it finds no other listener at delivery time; a `once`
+  // listener has already detached by then.
+  const dir = mkdtempSync(join(tmpdir(), "avp-sigexit-"));
+  const seen: number[] = [];
+  const probe = () => seen.push(process.listenerCount("SIGTERM"));
+  const agent: AgentEntrypoint = {
+    describe: () => DESCRIPTOR,
+    run: async (c, sink, signal) => {
+      process.on("SIGTERM", probe);
+      const rec = new Recorder(sink, { runId: c.run_id });
+      rec.start();
+      await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      rec.stop("interrupted");
+      process.off("SIGTERM", probe);
+    },
+  };
+  const pending = dispatch(agent, ["run", "--commission", JSON.stringify(commission()), "--out", join(dir, "o")]);
+  setTimeout(() => process.emit("SIGTERM"), 20);
+  assert.equal(await pending, "interrupted");
+  assert.deepEqual(seen, [2], "the entrypoint's listener was still attached");
+});

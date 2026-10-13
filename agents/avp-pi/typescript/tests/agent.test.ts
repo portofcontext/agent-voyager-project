@@ -45,10 +45,18 @@ function commission(extra: Partial<Commission> = {}): Commission {
 }
 
 /** Run the adapter in a fresh workspace on a scripted Anthropic-shaped model. */
-async function runScripted(c: Commission, responses: FauxResponseStep[]): Promise<{ events: Json[]; cwd: string }> {
+async function runScripted(
+  c: Commission,
+  responses: FauxResponseStep[],
+  opts: { signal?: AbortSignal; tokensPerSecond?: number } = {},
+): Promise<{ events: Json[]; cwd: string }> {
   const home = mkdtempSync(join(tmpdir(), "avp-pi-home-"));
   const cwd = mkdtempSync(join(tmpdir(), "avp-pi-ws-"));
-  const faux = fauxProvider({ provider: "anthropic", models: [{ id: MODEL }] });
+  const faux = fauxProvider({
+    provider: "anthropic",
+    models: [{ id: MODEL }],
+    ...(opts.tokensPerSecond ? { tokensPerSecond: opts.tokensPerSecond } : {}),
+  });
   faux.setResponses(responses);
   const modelRuntime = await ModelRuntime.create({
     authPath: join(home, "auth.json"),
@@ -61,7 +69,7 @@ async function runScripted(c: Commission, responses: FauxResponseStep[]): Promis
   const previous = process.cwd();
   process.chdir(cwd);
   try {
-    await run(c, sink, { agentDir: home, modelRuntime });
+    await run(c, sink, { agentDir: home, modelRuntime, signal: opts.signal });
   } finally {
     process.chdir(previous);
   }
@@ -184,4 +192,18 @@ test("a Commission the agent cannot honor fails fast before agent_started", asyn
     assert.equal(one(events, "error_occurred").data["avp.error.code"], code);
     assert.equal(one(events, "agent_stopped").data["avp.reason"], "error");
   }
+});
+
+test("an abort mid-inference stops the run as interrupted", async () => {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 300);
+  const { events } = await runScripted(
+    commission(),
+    [fauxAssistantMessage([fauxText("word ".repeat(400))])],
+    { signal: controller.signal, tokensPerSecond: 20 },
+  );
+  const last = events.at(-1)!;
+  assert.equal(last.type, "avp.agent_stopped");
+  assert.equal(last.data["avp.reason"], "interrupted");
+  assert.ok(types(events).includes("agent_started"));
 });

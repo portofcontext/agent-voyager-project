@@ -21,6 +21,7 @@ from claude_agent_sdk.types import (
     TaskNotificationMessage,
     TaskStartedMessage,
     TaskUsage,
+    TextBlock,
     ToolResultBlock,
     UserMessage,
 )
@@ -191,12 +192,31 @@ async def _on_system_init(client: ClaudeSDKClient, state: RunState, message: Sys
     )
 
 
+# The CLI reports a failed API call as a synthetic AssistantMessage whose text
+# is the error ("Invalid API key · ..."), flagged with `error`. It is a
+# failure, not model output.
+_ASSISTANT_ERROR_CODES: dict[str, ErrorCode] = {
+    "authentication_failed": ErrorCode.auth_error,
+    "billing_error": ErrorCode.rate_limit,
+    "rate_limit": ErrorCode.rate_limit,
+    "server_error": ErrorCode.agent_crash,
+}
+
+
 async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
     """Report one AssistantMessage chunk. Chunks of one API response share a
     `message_id`, which becomes the turn key. Subagent-interior chunks
     (`parent_tool_use_id is not None`) are skipped under the in-process
-    subagent fallback (spec §5.6)."""
+    subagent fallback (spec §5.6). A message flagged with `error` is the
+    CLI's rendering of a failed API call and is reported as `error_occurred`;
+    the `ResultMessage` that follows stops the run as `error`."""
     if message.parent_tool_use_id is not None:
+        return
+    if message.error is not None:
+        text = " ".join(b.text for b in message.content if isinstance(b, TextBlock)).strip()
+        await state.rec.error(
+            _ASSISTANT_ERROR_CODES.get(message.error, ErrorCode.unknown), text or message.error
+        )
         return
     state.turn_key = message.message_id or state.turn_key or "anonymous"
     meta: dict[str, Any] = {"anthropic.message_id": message.message_id or None}
