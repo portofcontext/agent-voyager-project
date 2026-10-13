@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
+from avp.pricing import COST_SOURCE_UNKNOWN, PriceTable, compute_cost, load_default_prices
 from avp_conformance.case import EventMatcher, Expectations, FinalState
 
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
@@ -238,6 +240,106 @@ def _check_structure(events: list[dict]) -> list[str]:
     return reasons
 
 
+@cache
+def _prices() -> PriceTable:
+    return load_default_prices()
+
+
+# A computed cost may differ from the harness's recomputation by float noise
+# and by rounding an agent applies, never by a pricing mistake.
+_COST_REL_TOL = 1e-6
+_COST_ABS_TOL = 1e-9
+
+
+def _check_accounting(events: list[dict]) -> list[str]:
+    """Per-turn accounting every conforming trajectory MUST satisfy
+    (trajectory.md §3.3), checked on every case:
+
+    - token counts are non-negative integers, and the cache split is inside
+      `input_tokens` (`cache_read + cache_creation <= input_tokens`);
+    - `avp.cost_usd` is non-negative, and zero when `avp.cost.source` is
+      `unknown`;
+    - a `computed` cost equals the bundled price table's cost for the turn's
+      usage, priced as the response model, else the request model (the
+      Recorder's fallback for dated snapshot ids). A turn whose models the
+      table doesn't know can't be recomputed and is not judged.
+
+    Catches the accounting bugs presence checks miss: double-counted cache
+    tokens, a cache split outside the input total, mis-priced turns.
+    """
+    reasons: list[str] = []
+    for e in events:
+        if e.get("type") != T_ASSISTANT_MESSAGE:
+            continue
+        d = e.get("data") or {}
+        step = d.get("avp.step", "?")
+        where = f"accounting: assistant_message step {step}"
+        usage = d.get("avp.usage") or {}
+        counts = {
+            k: usage.get(k)
+            for k in (
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+                "reasoning_output_tokens",
+            )
+            if usage.get(k) is not None
+        }
+        bad = {k: v for k, v in counts.items() if not (isinstance(v, int) and v >= 0)}
+        if bad:
+            reasons.append(f"{where}: token counts must be non-negative integers, got {bad}")
+            continue
+        inp = counts.get("input_tokens", 0)
+        cached = counts.get("cache_read_input_tokens", 0) + counts.get(
+            "cache_creation_input_tokens", 0
+        )
+        if cached > inp:
+            reasons.append(
+                f"{where}: cache_read + cache_creation ({cached}) exceeds input_tokens ({inp});"
+                " input_tokens must include the cache split"
+            )
+        cost = d.get("avp.cost_usd")
+        source = d.get("avp.cost.source")
+        if not isinstance(cost, int | float) or cost < 0:
+            reasons.append(f"{where}: avp.cost_usd must be a non-negative number, got {cost!r}")
+            continue
+        if source == COST_SOURCE_UNKNOWN and cost != 0:
+            reasons.append(f"{where}: avp.cost.source is unknown but avp.cost_usd is {cost}")
+        if source != "computed":
+            continue
+        expected = _recompute_cost(d, counts)
+        if expected is not None and abs(cost - expected) > max(
+            _COST_ABS_TOL, _COST_REL_TOL * expected
+        ):
+            reasons.append(
+                f"{where}: computed avp.cost_usd {cost} != {expected} from the price table"
+                f" for {d.get('avp.response.model') or d.get('avp.request.model')!r} and its usage"
+            )
+    return reasons
+
+
+def _recompute_cost(data: dict, counts: dict[str, int]) -> float | None:
+    """The turn's cost from the bundled price table, or None when neither
+    model is priced there."""
+    provider = data.get("avp.provider.name")
+    for model in dict.fromkeys(
+        m for m in (data.get("avp.response.model"), data.get("avp.request.model")) if m
+    ):
+        cost, source = compute_cost(
+            model,
+            provider=provider,
+            input_tokens=counts.get("input_tokens", 0),
+            output_tokens=counts.get("output_tokens", 0),
+            cache_read=counts.get("cache_read_input_tokens", 0),
+            cache_write=counts.get("cache_creation_input_tokens", 0),
+            prices=_prices(),
+        )
+        if source != COST_SOURCE_UNKNOWN:
+            return cost
+    return None
+
+
 def _check_subagent_frames(events: list[dict]) -> list[str]:
     """Every subagent frame opened must be closed, and an abandoned frame
     must not coexist with a `converged` run.
@@ -287,12 +389,12 @@ def _check_subagent_frames(events: list[dict]) -> list[str]:
 def match_case(events: list[dict], expectations: Expectations) -> MatchResult:
     """Match an emitted trajectory against a case's expectations.
 
-    Checks, in order: universal span-tree structure, positive `events` per
+    Checks, in order: universal span-tree structure and accounting, positive `events` per
     `ordering`, `forbidden_events` (none may appear), and `final_state`.
     Collects every failure into one `MatchResult` so a run surfaces all
     problems at once.
     """
-    reasons: list[str] = _check_structure(events)
+    reasons: list[str] = [*_check_structure(events), *_check_accounting(events)]
 
     dispatch = {
         "in_order_subsequence": _match_subsequence,

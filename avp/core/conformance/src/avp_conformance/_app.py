@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
@@ -133,6 +135,34 @@ def _describe_agent(
         return AgentDescriptor.model_validate(json.loads(out_path.read_text()))
     finally:
         out_path.unlink(missing_ok=True)
+
+
+# Credential variables per model origin, for `credentials: "invalid"` cases.
+# The first is set to a well-formed but invalid key; every one is overridden,
+# and the alternates listed in `_ALT_CREDENTIALS` are removed, so no fallback
+# credential (an OAuth token, a second key name) rescues the run.
+_CREDENTIAL_VARS: dict[str, tuple[str, ...]] = {
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "openai": ("OPENAI_API_KEY", "CODEX_API_KEY"),
+    "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "mistral": ("MISTRAL_API_KEY",),
+    "openrouter": ("OPENROUTER_API_KEY",),
+}
+_ALT_CREDENTIALS: dict[str, tuple[str, ...]] = {
+    "anthropic": ("ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+}
+_INVALID_KEY = "sk-avp-conformance-invalid-0000000000000000000000000000"
+
+
+def _invalid_credentials(env: dict[str, str], model: str) -> dict[str, str]:
+    """`env` with the model provider's credentials replaced by an invalid key."""
+    origin = model.split("/", 1)[0]
+    names = _CREDENTIAL_VARS.get(origin)
+    if names is None:
+        raise ValueError(f"no known credential variables for model origin {origin!r}")
+    out = {k: v for k, v in env.items() if k not in _ALT_CREDENTIALS.get(origin, ())}
+    out.update(dict.fromkeys(names, _INVALID_KEY))
+    return out
 
 
 # API hosts a `--model` origin needs when the run is sandboxed (`--sandbox`).
@@ -423,17 +453,35 @@ def _run_case(
             args += ["--built-in", str(built_in_path)]
         args += ["--out", str(out_path)]
 
-        cmd = [*prefix, *command, *args]
-        try:
-            result = subprocess.run(
-                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-            )
-        except subprocess.TimeoutExpired:
-            return None, f"timed out after {timeout}s"
+        if tc.credentials == "invalid":
+            try:
+                env = _invalid_credentials(env, tc.commission.model)
+            except ValueError as exc:
+                return None, str(exc)
 
-        if result.returncode != 0:
-            tail = result.stderr[-500:].strip() if result.stderr else "(no stderr)"
-            return None, f"agent exit={result.returncode}: {tail}"
+        cmd = [*prefix, *command, *args]
+        stderr_path = tmpd / "stderr.txt"
+        with stderr_path.open("w") as stderr:
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=stderr, text=True
+            )
+            try:
+                if tc.interrupt is not None and (error := _interrupt(proc, tc, out_path, timeout)):
+                    proc.kill()
+                    proc.wait()
+                    return None, error
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                return None, f"timed out after {timeout}s"
+        stderr_text = stderr_path.read_text()
+
+        # An interrupted agent's exit status is its own business; its
+        # trajectory is what the case judges.
+        if returncode != 0 and tc.interrupt is None:
+            tail = stderr_text[-500:].strip() or "(no stderr)"
+            return None, f"agent exit={returncode}: {tail}"
 
         if not out_path.exists():
             return None, "agent wrote no --out file"
@@ -443,9 +491,41 @@ def _run_case(
             (dump_dir / f"{tc.id}.jsonl").write_text(raw)
             # Agent stderr is free-form logging; capture it too so a clean
             # exit-0 run with a suspicious trajectory can still be debugged.
-            (dump_dir / f"{tc.id}.stderr").write_text(result.stderr or "")
+            (dump_dir / f"{tc.id}.stderr").write_text(stderr_text)
         events = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
         return events, None
+
+
+def _interrupt(proc: subprocess.Popen, tc: TestCase, out_path: Path, timeout: float) -> str | None:
+    """Wait for `tc.interrupt.after` on the trajectory, then signal the agent.
+    Returns an error when the agent exits or times out before that point."""
+    assert tc.interrupt is not None
+    deadline = time.monotonic() + timeout
+    while not _has_event(out_path, tc.interrupt.after):
+        if proc.poll() is not None:
+            return f"agent exited before {tc.interrupt.after} (nothing to interrupt)"
+        if time.monotonic() > deadline:
+            return f"timed out after {timeout}s waiting for {tc.interrupt.after}"
+        time.sleep(0.05)
+    time.sleep(tc.interrupt.delay_s)
+    if proc.poll() is not None:
+        return f"agent finished within {tc.interrupt.delay_s}s of {tc.interrupt.after}"
+    proc.send_signal(getattr(signal, tc.interrupt.signal))
+    return None
+
+
+def _has_event(out_path: Path, event_type: str) -> bool:
+    try:
+        text = out_path.read_text()
+    except OSError:
+        return False
+    for line in text.splitlines():
+        try:
+            if json.loads(line).get("type") == event_type:
+                return True
+        except json.JSONDecodeError:
+            continue  # a line still being written
+    return False
 
 
 @app.command()

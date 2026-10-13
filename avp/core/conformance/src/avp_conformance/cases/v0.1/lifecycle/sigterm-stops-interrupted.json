@@ -1,0 +1,47 @@
+{
+  "id": "sigterm-stops-interrupted",
+  "title": "SIGTERM mid-run closes the trajectory with agent_stopped(interrupted)",
+  "description": "The harness sends SIGTERM one second after agent_started, while the model is still writing a long answer. The agent MUST stop its runtime, close any open turn, and end the trajectory with agent_stopped(interrupted) rather than dying with no terminal event. The exit status is not judged.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#8-conformance"
+  ],
+  "interrupt": {
+    "after": "avp.agent_started",
+    "delay_s": 1.0,
+    "signal": "SIGTERM"
+  },
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "sigterm-stops-interrupted",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Write a detailed 1500-word story about a lighthouse keeper. Do not use any tools.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started",
+        "match": {
+          "type": "avp.agent_started",
+          "source": "avp://agent"
+        }
+      },
+      {
+        "label": "agent_stopped(interrupted)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "interrupted"
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "interrupted"
+    }
+  }
+}

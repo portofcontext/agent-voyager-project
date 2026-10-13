@@ -60,6 +60,30 @@ pairing, and a subsequent model response, rather than only MCP connection.
   `avp.cost_usd`; the harness folds the stream and asserts nonzero totals (the
   agent publishes no cumulative totals on `agent_stopped`, consumers reduce).
   (`accounting/assistant-message-carries-usage-and-cost`)
+- **Accounting correctness (universal).** An always-on check
+  (`_check_accounting`, every trajectory, every case): token counts are
+  non-negative integers, the cache split sits inside `input_tokens`, an
+  `unknown` cost is `0`, and every `computed` cost equals the bundled price
+  table's figure for the turn's usage (response model, else request model). A
+  turn whose models the table can't price is not judged. This is what catches
+  double-counted cache tokens and mis-priced turns, which nonzero totals miss.
+- **Provider authentication failure.** With the provider's credential variables
+  replaced by an invalid key (`credentials: "invalid"`), the run ends
+  `error_occurred(auth_error)` + `agent_stopped(error)` and emits no
+  `assistant_message`: a failed inference is never presented as model output.
+  (`errors/invalid-credentials-fail-cleanly`)
+- **Commission system prompt.** A marker only the system prompt asks for appears
+  in the reply. (`commission/system-prompt-is-honored`)
+- **Inline skills.** `agent_started.avp.skills` lists the Commission's skill,
+  and a codeword that lives only in its body appears in the reply, so the skill
+  was materialized and reached the model. (`commission/inline-skill-is-loaded`)
+- **Interruption.** SIGTERM one second after `agent_started`, mid-inference,
+  ends the trajectory with `agent_stopped(interrupted)`
+  (`interrupt` in the case; the exit status is not judged).
+  (`lifecycle/sigterm-stops-interrupted`)
+- **Subagent frames (declared subagents).** Every `subagent_invoked` closes, and
+  an abandoned frame never coexists with `converged`.
+  (`lifecycle/subagent-frame-always-closes`, plus the universal structure check)
 - **Span-tree structure (universal).** Not a case but an always-on harness check
   (`_check_structure`, runs on every checked trajectory): one `trace_id` per run,
   well-formed non-zero `span_id` / `parent_span_id`, prelude events at the root,
@@ -67,11 +91,8 @@ pairing, and a subsequent model response, rather than only MCP connection.
   (this is what pairs `tool_returned` under its `tool_invoked`, turns under the
   agent span). Both agents satisfy it across all cases.
 
-Prelude, descriptor, Commission-side tool filtering, the tool round-trip, cost
-accounting, and span structure are all covered. The remaining gaps are the
-provider-nondeterministic events, the invalid-Commission entrypoint behavior,
-and the inline assets a Commission carries (skills, and the subagent frames an
-agent opens on its own trajectory).
+The remaining gaps are the provider-nondeterministic events and the
+invalid-Commission entrypoint behavior below.
 
 ## Gaps
 
@@ -101,27 +122,22 @@ agent opens on its own trajectory).
   asserted (the decl side is covered by `default-commission-surfaces-builtins`;
   `ToolDecl` no longer carries a positive dispatch field, local is the absence of
   `avp.mcp_server_id`).
-- **Unsupported model.** A bogus `model` does not reject consistently: neither
-  agent pre-validates against `descriptor.supported_models`, so claude surfaces
-  the provider's rejection as `agent_stopped(error)` while goose's provider
-  silently falls back and converges. Making this a case requires agents to
-  enumerate `supported_models` and fail fast with
-  `error_occurred(unsupported_model)`: a real feature, not a quick green.
-- **Subagent frames.** `subagent_invoked` -> `subagent_returned` pairing on the
-  shared frame `span_id`, with the sub-loop's events chaining off it. v0.1
-  subagents are in-process frames on the parent's trajectory, so nothing is
-  missing infrastructurally; the blocker is that delegation is the model's
-  decision and no case can force it. (`avp.subagent.run_id` is reserved for a
-  future revision and is absent here, so it is not part of what a case would
-  assert.)
+- **Unsupported model.** A bogus `model` does not reject consistently: Claude
+  surfaces the provider's rejection as `agent_stopped(error)`, Goose's provider
+  silently falls back and converges, and Pi fails fast with
+  `error_occurred(unsupported_model)` from its model catalog. A cross-agent case
+  needs every agent to fail fast the way Pi does.
+- **Forced delegation.** Whether the model delegates is its decision, so the
+  subagent case asks for delegation and judges the frames only where the agent
+  declares subagents. No case can force a child run that then fails.
 
-### Feasible, just not written
+### Feasible, deliberately deferred
 
-- **Inline skills.** A `Commission.skills[]` entry carries its content inline,
-  so the case needs no infrastructure: assert the agent materializes it and
-  that `agent_started` lists it. goose materializes inline skills today; the
-  claude SDK path is unverified, which is exactly what makes this worth a
-  cross-agent case.
+- **Multi-round, parallel, and failing tool calls.** Several sequential tool
+  rounds, parallel calls in one inference, and a tool that returns
+  `is_error: true`. The MCP fixture would need a failing tool.
+- **Live runs in CI.** The live suites run on demand from contributors'
+  machines; the manual CI jobs (Claude, Pi) have not been dispatched.
 
 ## Not expressible cross-agent
 

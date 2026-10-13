@@ -1,0 +1,47 @@
+{
+  "id": "system-prompt-is-honored",
+  "title": "Commission.system_prompt reaches the model",
+  "description": "The system prompt asks for a marker the user prompt never mentions; the reply must carry it. Agents may keep their own system context alongside it, but the Commission's instruction must reach the model.",
+  "spec_refs": [
+    "spec/v0.1/commission.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "system-prompt-is-honored",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "system_prompt": "You are under a conformance test. End every reply with the exact token AVP-SYSTEM-9K2 on its own line.",
+    "prompt": "Say hello in one short sentence.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "a reply carrying the system prompt's marker",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-SYSTEM-9K2"
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

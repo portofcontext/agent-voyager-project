@@ -137,6 +137,20 @@ class Expectations(BaseModel):
     final_state: FinalState | None = None
 
 
+# ── Run conditions ───────────────────────────────────────────────────────────
+
+
+class Interrupt(BaseModel):
+    """Signal the agent mid-run: once an event of type `after` is on the
+    trajectory, wait `delay_s`, then send `signal`. The agent's exit status is
+    not judged; its trajectory is."""
+
+    model_config = _STRICT
+    after: str = Field(pattern=r"^avp\.[a-z_]+$")
+    delay_s: float = Field(default=0.0, ge=0, le=30)
+    signal: Literal["SIGTERM", "SIGINT"] = "SIGTERM"
+
+
 # ── Top-level case ───────────────────────────────────────────────────────────
 
 
@@ -157,5 +171,9 @@ class TestCase(BaseModel):
     requires: list[Literal["tools", "subagents", "skills", "mcp_servers"]] = Field(
         default_factory=list
     )
+    # `invalid`: the harness replaces the model provider's credential variables
+    # with a well-formed but invalid key, so the provider rejects the run.
+    credentials: Literal["invalid"] | None = None
+    interrupt: Interrupt | None = None
     commission: Commission
     expectations: Expectations

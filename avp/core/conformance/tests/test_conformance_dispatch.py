@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from avp_conformance._app import app
+from avp_conformance._app import _INVALID_KEY, _invalid_credentials, app
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -257,3 +257,102 @@ def test_model_override_preserves_explicit_gateway_routing():
         rewritten = with_model(TestCase.model_validate(data), "openai/gpt-x")
         assert rewritten.commission.model == "openai/gpt-x"
         assert rewritten.commission.provider.model_dump(exclude_none=True) == provider
+
+
+# ── run conditions: invalid credentials, interrupts ─────────────────────────
+
+# A stub whose `run` records its credential environment on agent_started, then
+# (when told to by SLOW) waits for a signal and stops `interrupted`.
+CONDITION_AGENT = """\
+import json, os, signal, sys, time
+_T, _Z, _AGENT = "a" * 32, "0" * 16, "3" * 16
+def _s(span_id, parent):
+    return {"trace_id": _T, "span_id": span_id, "parent_span_id": parent}
+cmd = sys.argv[1]
+out = sys.argv[sys.argv.index("--out") + 1]
+if cmd == "describe":
+    open(out, "w").write(json.dumps(
+        {"agent_name": "stub", "agent_version": "0.0.1", "spec_version": "0.1"}))
+    sys.exit(0)
+keys = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+seen = {k: os.environ.get(k) for k in keys}
+f = open(out, "w")
+def emit(t, span, parent, **data):
+    f.write(json.dumps({"type": t, "source": "avp://agent", "data": {**_s(span, parent), **data}}) + "\\n")
+    f.flush()
+emit("avp.run_requested", "1" * 16, _Z)
+emit("avp.agent_described", "2" * 16, _Z)
+emit("avp.agent_started", _AGENT, _Z, **{"avp.meta": seen})
+if os.environ.get("SLOW"):
+    def stop(*_):
+        emit("avp.agent_stopped", "5" * 16, _AGENT, **{"avp.reason": "interrupted"})
+        sys.exit(143)
+    signal.signal(signal.SIGTERM, stop)
+    time.sleep(30)
+emit("avp.agent_stopped", "5" * 16, _AGENT, **{"avp.reason": "converged"})
+"""
+
+
+def _condition_setup(tmp_path: Path, env: dict) -> Path:
+    agent_py = tmp_path / "condition_agent.py"
+    agent_py.write_text(CONDITION_AGENT)
+    manifest = tmp_path / "avp-conformance.json"
+    manifest.write_text(
+        json.dumps({"command": [sys.executable, str(agent_py)], "cwd": ".", "env": env})
+    )
+    return manifest
+
+
+def _condition_case(stop_reason: str, **extra) -> dict:
+    return {
+        "id": "condition",
+        "title": "run condition",
+        "commission": {
+            "schema_version": "0.1",
+            "run_id": "c",
+            "model": "anthropic/claude-haiku-4-5",
+        },
+        "expectations": {
+            "events": [{"match": {"type": "avp.agent_stopped"}}],
+            "final_state": {"stop_reason": stop_reason},
+        },
+        **extra,
+    }
+
+
+def test_invalid_credentials_replace_the_provider_key_and_drop_fallbacks(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "real-key")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "real-oauth")
+    manifest = _condition_setup(tmp_path, {})
+    case = _write_case(tmp_path, _condition_case("converged", credentials="invalid"))
+    dump = tmp_path / "dump"
+    result = runner.invoke(
+        app, ["check", "--agent", str(manifest), "--case", str(case), "--dump-dir", str(dump)]
+    )
+    assert result.exit_code == 0, result.output
+    started = [json.loads(line) for line in (dump / "condition.jsonl").read_text().splitlines()][2]
+    assert started["data"]["avp.meta"] == {
+        "ANTHROPIC_API_KEY": _INVALID_KEY,
+        "CLAUDE_CODE_OAUTH_TOKEN": None,
+    }
+    openai = _invalid_credentials({"OPENAI_API_KEY": "real"}, "openai/gpt-5-mini")
+    assert openai["OPENAI_API_KEY"] == _INVALID_KEY == openai["CODEX_API_KEY"]
+
+
+def test_an_interrupt_signals_the_agent_and_judges_its_trajectory(tmp_path):
+    manifest = _condition_setup(tmp_path, {"SLOW": "1"})
+    interrupt = {"after": "avp.agent_started", "delay_s": 0.2, "signal": "SIGTERM"}
+    case = _write_case(tmp_path, _condition_case("interrupted", interrupt=interrupt))
+    result = runner.invoke(app, ["check", "--agent", str(manifest), "--case", str(case)])
+    # Exit 143 is the agent's business; the interrupted trajectory passes.
+    assert result.exit_code == 0, result.output
+    assert "PASS  condition" in result.output
+
+
+def test_an_agent_that_finishes_before_the_interrupt_point_fails(tmp_path):
+    manifest = _condition_setup(tmp_path, {})
+    interrupt = {"after": "avp.assistant_message", "signal": "SIGTERM"}
+    case = _write_case(tmp_path, _condition_case("interrupted", interrupt=interrupt))
+    result = runner.invoke(app, ["check", "--agent", str(manifest), "--case", str(case)])
+    assert result.exit_code == 1
+    assert "nothing to interrupt" in result.output
