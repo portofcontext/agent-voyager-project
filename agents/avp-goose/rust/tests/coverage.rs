@@ -63,6 +63,7 @@ fn full_event_surface_is_emitted_and_schema_valid() {
         ],
         usage_zero(),
         Some("claude-opus-4-7".to_string()),
+        None,
     )
     .unwrap();
 

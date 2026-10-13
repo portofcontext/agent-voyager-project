@@ -75,6 +75,15 @@
       "expect_error": "Recorder.assistant called before start"
     },
     {
+      "op": "usage",
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": 1
+      },
+      "t": 0,
+      "expect_error": "Recorder.usage called before start"
+    },
+    {
       "op": "tool_result",
       "call_id": "missing",
       "content": "oops",
@@ -190,6 +199,15 @@
       ]
     },
     {
+      "op": "usage",
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": 1
+      },
+      "t": 1100,
+      "expect_error": "Recorder.usage: no open turn"
+    },
+    {
       "t": 1200,
       "op": "stop",
       "reason": "converged",
@@ -262,6 +280,15 @@
         "end_turn"
       ],
       "expect_error": "Recorder.assistant called after stop"
+    },
+    {
+      "op": "usage",
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": 1
+      },
+      "t": 1300,
+      "expect_error": "Recorder.usage called after stop"
     },
     {
       "op": "tool_result",

@@ -9,6 +9,26 @@ use avp::trajectory::{ErrorCode, StopReason};
 use common::*;
 use serde_json::json;
 
+#[test]
+fn invalid_usage_propagates_through_emitter() {
+    let sink = CapturingSink::default();
+    let mut em = emitter(sink.clone(), &[]);
+    em.start(None).unwrap();
+    let error = em.on_usage(usage_zero(), None).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(error.to_string(), "Recorder.usage: no open turn");
+    em.error(ErrorCode::AgentCrash, &error.to_string()).unwrap();
+    em.stop(StopReason::Error, None).unwrap();
+    let t = sink.trajectory();
+    assert!(t.find_all("avp.assistant_message").is_empty());
+    t.assert_order(&[
+        "avp.agent_started",
+        "avp.error_occurred",
+        "avp.agent_stopped",
+    ]);
+    t.assert_schema_valid();
+}
+
 // --- error_occurred (implemented) -------------------------------------------
 
 #[test]
@@ -51,6 +71,7 @@ fn summon_tool_call_emits_both_tool_and_subagent_events() {
         )],
         usage_zero(),
         None,
+        None,
     )
     .unwrap();
     em.on_tool_results(&[tool_response("s1", "subagent finished")])
@@ -85,8 +106,14 @@ fn summon_failure_emits_subagent_returned_with_error_reason() {
     let mut em = emitter(sink.clone(), &[]);
     em.start(None).unwrap();
     em.on_assistant(
-        &[tool_request("s1", "delegate", json!({ "source": "broken" }), Some("summon"))],
+        &[tool_request(
+            "s1",
+            "delegate",
+            json!({ "source": "broken" }),
+            Some("summon"),
+        )],
         usage_zero(),
+        None,
         None,
     )
     .unwrap();
@@ -94,7 +121,10 @@ fn summon_failure_emits_subagent_returned_with_error_reason() {
         .unwrap();
 
     let t = sink.trajectory();
-    assert!(t.find_all("avp.subagent_failed").is_empty(), "subagent_failed is gone");
+    assert!(
+        t.find_all("avp.subagent_failed").is_empty(),
+        "subagent_failed is gone"
+    );
     let returned = t.find_all("avp.subagent_returned");
     assert_eq!(returned.len(), 1);
     assert_eq!(returned[0]["data"]["avp.subagent.reason"], "error");
