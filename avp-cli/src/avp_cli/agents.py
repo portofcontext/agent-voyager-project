@@ -13,7 +13,7 @@ harness drives. An agent can come from one of three places, tried in order by
    from source (`cargo run` / `uv run`), so it's slow and needs the toolchain.
 
 `AGENT_SOURCES` describes, per known agent, how it's distributed (a prebuilt
-binary vs. a Python wheel set) and where its dev-fallback manifest lives; the
+binary, a Python wheel set, or a Node package archive) and where its dev-fallback manifest lives; the
 installer (`avp_cli.agent_install`) consumes it. `preflight` reports why an
 agent can't run *on the host* (the `describe` path); actual runs happen inside
 a sandbox, where `container_recipe` supplies the Linux install + run recipe
@@ -23,7 +23,9 @@ a sandbox, where `container_recipe` supplies the Linux install + run recipe
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,14 +40,15 @@ class AgentSource:
     """How a known agent is distributed and how the CLI installs / falls back to it.
 
     `kind` selects the install mechanism: `"binary"` (a prebuilt executable
-    extracted to `bin/`) or `"python"` (a wheel set installed into a managed
-    `venv/`). `tag_prefix` is the GitHub release tag stem (`agent-goose` →
+    extracted to `bin/`), `"python"` (a wheel set installed into a managed
+    `venv/`), or `"node"` (a self-contained package archive extracted to `app/`
+    and run with the host's `node`). `tag_prefix` is the GitHub release tag stem (`agent-goose` →
     `agent-goose-v0.0.1`). `dev_manifest` is the in-repo manifest used only from
     a source checkout.
     """
 
     name: str
-    kind: str  # "binary" | "python"
+    kind: str  # "binary" | "python" | "node"
     tag_prefix: str
     dev_manifest: str
     # The agent's self-declared `descriptor.agent_name` (what its `describe`
@@ -67,6 +70,10 @@ class AgentSource:
     wheel_dists: tuple[str, ...] = field(default_factory=tuple)
     container_setup: tuple[str, ...] = ()
     container_env: tuple[tuple[str, str], ...] = ()
+    # node agents: the release asset (one archive for every platform) and the
+    # entry script inside it, run as `node <entry>`.
+    package_asset: str | None = None
+    entry: str | None = None
 
 
 AGENT_SOURCES: dict[str, AgentSource] = {
@@ -143,11 +150,28 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dist="avp-openai-agents",
         wheel_dists=("agent-voyager-project", "avp-openai-agents"),
     ),
+    "pi": AgentSource(
+        name="pi",
+        kind="node",
+        descriptor_name="avp-pi",
+        tag_prefix="agent-pi",
+        dev_manifest="agents/avp-pi/typescript/avp-conformance.json",
+        # 0.1.0: Pi coding agent 1.2.0 on the TypeScript Recorder; Commission
+        # MCP servers through Pi's MCP extension.
+        container_version="0.1.0",
+        package_asset="avp-pi.tar.gz",
+        entry="dist/src/main.js",
+    ),
 }
 
 # The in-repo library wheels every Python agent release ships next to its own
 # (the wire types and the conformance harness), versioned in lockstep.
 _LIBRARY_WHEEL_VERSION = "0.1.1"
+
+# Node agents need at least this runtime (Pi's own `engines` floor); the
+# container recipe installs the pinned NODE_VERSION.
+NODE_MIN = (22, 19, 0)
+NODE_VERSION = "22.23.3"
 
 _RELEASE_DL = "https://github.com/portofcontext/agent-voyager-project/releases/download"
 
@@ -181,6 +205,22 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
                 f"&& chmod +x /usr/local/bin/{source.binary_name}",
             ),
             command=(source.binary_name or source.name,),
+        )
+    if source.kind == "node":
+        # Official Node build for the image's arch (x64 / arm64), then the
+        # agent's self-contained archive. Nothing else comes from npm.
+        node = f"https://nodejs.org/dist/v{NODE_VERSION}"
+        arch = "$(uname -m | sed -e s/x86_64/x64/ -e s/aarch64/arm64/)"
+        return ContainerRecipe(
+            install=(
+                "apt-get update && apt-get install -y --no-install-recommends "
+                "curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+                f"curl -fsSL {node}/node-v{NODE_VERSION}-linux-{arch}.tar.gz "
+                "| tar -xz -C /usr/local --strip-components=1",
+                f"mkdir -p /opt/{source.name} && curl -fsSL "
+                f"{_RELEASE_DL}/{tag}/{source.package_asset} | tar -xz -C /opt/{source.name}",
+            ),
+            command=("node", f"/opt/{source.name}/{source.entry}"),
         )
 
     # Python agent: the in-repo wheels come off the GitHub release (they are not
@@ -331,11 +371,38 @@ def preflight(name: str) -> str | None:
         if shutil.which("claude") is None:
             return "the `claude` CLI is not on PATH"
         return None
+    source = AGENT_SOURCES.get(name)
+    if source is not None and source.kind == "node":
+        if reason := node_problem():
+            return reason
+        built = _repo_root() / Path(source.dev_manifest).parent / (source.entry or "")
+        if not built.is_file():
+            return f"the in-repo {name} agent is not built (make pi-build, or avp agent install {name})"
+        return None
     return None  # custom manifest: trust the caller
+
+
+def node_problem() -> str | None:
+    """Why the host's `node` can't run a Node agent, or None."""
+    node = shutil.which("node")
+    floor = ".".join(map(str, NODE_MIN))
+    if node is None:
+        return f"`node` is not on PATH (Node {floor} or newer runs this agent)"
+    try:
+        out = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return f"could not run `{node} --version`"
+    match = re.match(r"v(\d+)\.(\d+)\.(\d+)", out.strip())
+    if match is None or tuple(map(int, match.groups())) < NODE_MIN:
+        return f"`node` is {out.strip() or 'unknown'}; this agent needs Node {floor} or newer"
+    return None
 
 
 def _installed_preflight(name: str) -> str | None:
     """Runtime prerequisites for an already-installed agent."""
     if name == "claude-code" and shutil.which("claude") is None:
         return "the `claude` CLI is not on PATH (the Claude agent shells out to it)"
+    source = AGENT_SOURCES.get(name)
+    if source is not None and source.kind == "node":
+        return node_problem()
     return None

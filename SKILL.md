@@ -43,7 +43,8 @@ instructions, not the CLI or an agent runtime.
 
 Use `avp --help` and subcommand help for the installed release's options.
 `avp agent list` shows availability; prebuilt install names are `goose`,
-`claude-code`, `codex`, and `openai-agents`.
+`claude-code`, `codex`, `openai-agents`, and `pi` (Pi needs Node 22.19 or newer
+on the host for `describe`; runs install Node in the sandbox).
 
 ## Configure a Commission or evaluation
 

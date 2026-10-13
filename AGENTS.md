@@ -90,7 +90,7 @@ Run paid conformance after changes to wire contracts, runtime integration,
 translators, drop-in SDK clients, or Commission-to-SDK configuration. Use
 `avp-conformance check --agent <manifest> --suite v0.1`, optionally with
 `--model <origin>/<model>`, and the appropriate provider credentials.
-`make conformance-check` runs Claude and Goose with Anthropic credentials.
+`make conformance-check` runs Claude, Goose, and Pi with Anthropic credentials.
 Documentation, test-only changes, and internal refactors without observable
 wire impact do not require paid runs. When uncertain about integration impact,
 run the real-model checks.
@@ -109,6 +109,6 @@ that matches `origin/main`:
 - `make release-cli`: derives `pypi-v<version>` from `avp-cli/pyproject.toml`.
   The CLI wheel vendors the Python wire types.
 - `make release-goose` / `make release-claude-code` / `make release-codex` /
-  `make release-openai-agents`: derive the agent tag from its package version,
-  checked against `container_version` in `avp_cli.agents`. Update the package
-  version and artifact pin together before publishing.
+  `make release-openai-agents` / `make release-pi`: derive the agent tag from its
+  package version, checked against `container_version` in `avp_cli.agents`.
+  Update the package version and artifact pin together before publishing.

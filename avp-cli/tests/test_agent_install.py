@@ -121,3 +121,62 @@ def test_missing_binary_file_rejected(avp_home, tmp_path) -> None:
 
 def test_current_target_is_mac_or_linux() -> None:
     assert any(s in agent_install.current_target() for s in ("apple-darwin", "linux-gnu"))
+
+
+# ── local node install ────────────────────────────────────────────────────────
+
+
+def _package(tmp_path, *, entry: str = "dist/src/main.js"):
+    """A minimal Node package archive shaped like the pi release asset."""
+    import tarfile
+
+    root = tmp_path / "pkg"
+    script = root / entry
+    script.parent.mkdir(parents=True)
+    script.write_text("console.log('pi')\n")
+    archive = tmp_path / "avp-pi.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(root, arcname=".")
+    return archive
+
+
+def test_install_local_node_extracts_and_runs_the_entry_with_node(avp_home, tmp_path) -> None:
+    result = agent_install.install("pi", package=_package(tmp_path))
+    assert result.kind == "node" and result.source == "local"
+
+    d = avp_home / "agents" / "pi"
+    entry = d / "app" / "dist" / "src" / "main.js"
+    assert entry.is_file()
+    manifest = json.loads((d / "avp-conformance.json").read_text())
+    assert manifest["command"] == ["node", str(entry)]
+    assert json.loads((d / "installed.json").read_text())["kind"] == "node"
+    assert agents.resolve_agent("pi").agent_name == "avp-pi"
+
+
+def test_node_package_without_the_entry_is_rejected(avp_home, tmp_path) -> None:
+    with pytest.raises(agent_install.InstallError, match="did not contain"):
+        agent_install.install("pi", package=_package(tmp_path, entry="other.js"))
+    assert not (avp_home / "agents" / "pi").exists()
+
+
+def test_package_flag_applies_only_to_node_agents(avp_home, tmp_path) -> None:
+    with pytest.raises(agent_install.InstallError, match="--package applies to node"):
+        agent_install.install("goose", package=_package(tmp_path))
+    with pytest.raises(agent_install.InstallError, match="--binary applies to binary"):
+        agent_install.install("pi", binary=tmp_path / "x")
+
+
+def test_node_preflight_checks_the_runtime_version(monkeypatch) -> None:
+    import subprocess
+
+    monkeypatch.setattr(agents.shutil, "which", lambda _: "/usr/bin/node")
+
+    def version(out):
+        return lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out)
+
+    monkeypatch.setattr(agents.subprocess, "run", version("v22.17.1\n"))
+    assert "needs Node 22.19.0" in agents.node_problem()
+    monkeypatch.setattr(agents.subprocess, "run", version("v22.19.0\n"))
+    assert agents.node_problem() is None
+    monkeypatch.setattr(agents.shutil, "which", lambda _: None)
+    assert "not on PATH" in agents.node_problem()

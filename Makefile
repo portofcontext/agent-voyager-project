@@ -63,8 +63,8 @@ help:
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
-	@echo "    make pi-check           run the v0.1 suite against avp-pi (Node >= 22.19)"
+	@echo "    make conformance-check  run the v0.1 suite against Claude, Goose, and Pi on a real model"
+	@echo "    make pi-check           run the v0.1 suite against avp-pi only (Node >= 22.19)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
@@ -74,6 +74,7 @@ help:
 	@echo "    make release-claude-code release the claude-code agent (tag agent-claude-code-v<pinned version>)"
 	@echo "    make release-codex       release the codex agent (tag agent-codex-v<pinned version>)"
 	@echo "    make release-openai-agents release the openai-agents agent (tag agent-openai-agents-v<pinned version>)"
+	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
 	@echo "  Other:"
@@ -192,6 +193,8 @@ conformance-check:
 	@$(MAKE) --no-print-directory claude-check
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-check
+	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
+	@$(MAKE) --no-print-directory pi-check
 
 
 .PHONY: lint
@@ -346,6 +349,14 @@ release-openai-agents: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-openai-agents-v$$version" MSG="openai-agents agent $$version"
 
 
+.PHONY: release-pi
+release-pi: _release-guard
+	@version=$$(node -p 'require("./agents/avp-pi/typescript/package.json").version'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['pi'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-pi package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-pi-v$$version" MSG="pi agent $$version"
+
+
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
 # compute TAG in a recipe shell, then hand it to the cut_release template.
 .PHONY: _cut
@@ -390,6 +401,8 @@ build-agents:
 	@echo "→ building codex + openai-agents wheels..."
 	@$(UV) build --package avp-codex --out-dir dist/agents
 	@$(UV) build --package avp-openai-agents --out-dir dist/agents
+	@echo "→ packaging the pi archive (npm; Node >= 22.19)..."
+	@agents/avp-pi/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo ""
 	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
 	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
@@ -401,6 +414,7 @@ build-agents:
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_codex-*.whl"
 	@echo "  uv run avp agent install openai-agents \"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
+	@echo "  uv run avp agent install pi --package dist/agents/avp-pi.tar.gz"
 
 
 # Default goal

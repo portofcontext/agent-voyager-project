@@ -64,7 +64,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp ../python/src/avp/data/prices.json dist/prices.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsc -p tsconfig.test.json && node --test 'dist-test/tests/*.test.js'",
     "clean": "rm -rf dist dist-test"

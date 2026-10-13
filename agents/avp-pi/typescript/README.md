@@ -5,7 +5,9 @@ AVP adapter for the [Pi coding agent](https://github.com/earendil-works/pi)
 `Recorder`. Pi owns the loop, tools, and MCP connections; the adapter maps the
 Commission into a Pi session and reports Pi's session events.
 
-Requires Node 22.19 or newer.
+Requires Node 22.19 or newer. Install the released agent with
+`avp agent install pi`; sandboxed runs install Node and the same archive from
+the agent's container recipe.
 
 ```bash
 make pi-build                      # npm ci + build (binding and adapter)
@@ -13,7 +15,12 @@ make test-pi                       # seam tests on Pi's scripted faux model
 node dist/src/main.js describe     # Pi's default tools: read, bash, edit, write
 node dist/src/main.js run --commission commission.json --out trajectory.ndjson
 make pi-check                      # v0.1 conformance on a real model (paid)
+scripts/package.sh                 # the release archive, dist/release/avp-pi.tar.gz
 ```
+
+Releases: bump `version` in `package.json` and `container_version` for `pi` in
+`avp-cli/src/avp_cli/agents.py` together, then `make release-pi` from a clean
+`main`.
 
 ## Mapping
 
