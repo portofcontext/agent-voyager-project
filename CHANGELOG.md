@@ -9,6 +9,7 @@ These changes retain the v0.1 wire schemas.
 - Shared Python, Rust, and TypeScript Recorders for trajectory ordering, spans, and accounting.
 - Stock agent entrypoints, shared preflight checks, and Python/Rust adapter templates.
 - OpenAI Agents SDK and Codex adapters, installable as `openai-agents` and `codex`.
+- Pi coding agent adapter (TypeScript), with a TypeScript stock entrypoint and preflight checks.
 
 ### Changed
 

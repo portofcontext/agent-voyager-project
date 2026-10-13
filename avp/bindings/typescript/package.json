@@ -53,6 +53,14 @@
     "./ids": {
       "types": "./dist/ids.d.ts",
       "import": "./dist/ids.js"
+    },
+    "./preflight": {
+      "types": "./dist/preflight.d.ts",
+      "import": "./dist/preflight.js"
+    },
+    "./agent-cli": {
+      "types": "./dist/agent-cli.d.ts",
+      "import": "./dist/agent-cli.js"
     }
   },
   "scripts": {

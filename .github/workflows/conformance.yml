@@ -86,6 +86,9 @@ jobs:
       - name: TypeScript binding tests
         working-directory: avp/bindings/typescript
         run: npm ci && npm test
+      - name: Pi adapter seam tests
+        working-directory: agents/avp-pi/typescript
+        run: npm ci && npm test
 
   goose:
     name: Goose Rust tests

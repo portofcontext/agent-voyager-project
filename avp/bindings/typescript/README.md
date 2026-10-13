@@ -69,13 +69,26 @@ Invalid reports (unknown or duplicate call ids, mismatched usage, reports after
 `loadDefaultPrices()` reads the canonical table from the Python package in this
 repository, so the binding is used from a checkout (a `file:` dependency).
 
+## Agent entrypoint and preflight
+
+`main` from `@avp/types/agent-cli` gives an adapter the stock `ping` /
+`describe` / `run` command line (the same contract as `avp.agent_cli` and
+`avp::agent_cli`), and `preflight` runs the spec's pre-turn Commission checks.
+`agents/avp-pi/typescript/` is a worked adapter.
+
+```typescript
+import { main } from "@avp/types/agent-cli";
+
+process.exitCode = await main({ describe, run });
+```
+
 ## Source of truth
 
 - `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
   -> `avp/core/spec/v0.1/*.schema.json` (auto-generated; `avp/scripts/generate-schemas.py`)
   -> `avp/bindings/typescript/src/*.ts` (generated here, via `json-schema-to-typescript`)
 
-Don't edit `src/{commission,trajectory,agent-descriptor}.ts` by hand; they're regenerated. Edit the Python sources upstream. `recorder.ts`, `pricing.ts`, `sink.ts`, and `ids.ts` are hand-written.
+Don't edit `src/{commission,trajectory,agent-descriptor}.ts` by hand; they're regenerated. Edit the Python sources upstream. `recorder.ts`, `pricing.ts`, `sink.ts`, `ids.ts`, `agent-cli.ts`, and `preflight.ts` are hand-written.
 
 ## Regenerating
 
