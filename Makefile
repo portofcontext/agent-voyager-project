@@ -59,7 +59,7 @@ help:
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
-	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + conformance + bindings-check"
+	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + test-opencode + conformance + bindings-check"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
@@ -67,6 +67,7 @@ help:
 	@echo "    make conformance-check  run the v0.1 suite against Claude, Goose, and Pi on a real model"
 	@echo "    make pi-check           run the v0.1 suite against avp-pi only (Node >= 22.19)"
 	@echo "    make gemini-cli-check   run the v0.1 suite against avp-gemini-cli on Gemini (GEMINI_API_KEY)"
+	@echo "    make opencode-check     run the v0.1 suite against avp-opencode (OPENAI_API_KEY)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
@@ -79,6 +80,7 @@ help:
 	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
 	@echo "    make release-gemini-cli  release the gemini-cli agent (tag agent-gemini-cli-v<pinned version>)"
 	@echo "    make release-deep-agents release the deep-agents agent (tag agent-deep-agents-v<pinned version>)"
+	@echo "    make release-opencode    release the opencode agent (tag agent-opencode-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
 	@echo "  Other:"
@@ -125,6 +127,8 @@ GEMINI_CLI_DIR := agents/avp-gemini-cli/typescript
 GEMINI_CLI_MANIFEST := $(GEMINI_CLI_DIR)/avp-conformance.json
 # The cases pin a Claude model; Gemini CLI runs them on a Gemini one.
 GEMINI_CLI_MODEL ?= google/gemini-3.1-flash-lite
+OPENCODE_DIR := agents/avp-opencode/typescript
+OPENCODE_MANIFEST := $(OPENCODE_DIR)/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -176,6 +180,10 @@ conformance:
 	@$(MAKE) --no-print-directory gemini-cli-build
 	@$(UV) run avp-conformance ping --agent $(GEMINI_CLI_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(GEMINI_CLI_MANIFEST)
+	@printf "\n\033[1;36m── avp-opencode ──\033[0m\n"
+	@$(MAKE) --no-print-directory opencode-build
+	@$(UV) run avp-conformance ping --agent $(OPENCODE_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(OPENCODE_MANIFEST)
 
 .PHONY: pi-build test-pi
 pi-build:
@@ -198,6 +206,16 @@ gemini-cli-build:
 test-gemini-cli: gemini-cli-build
 	@cd $(GEMINI_CLI_DIR) && node --test 'dist/tests/*.test.js'
 
+.PHONY: opencode-build test-opencode
+opencode-build:
+	@cd $(OPENCODE_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
+
+# OpenCode's seam tests: the real `opencode serve` (pinned binary), its tools,
+# MCP client, and subagents on a scripted model. Free; needs Node >= 22.19 and
+# python3 (the MCP fixture).
+test-opencode: opencode-build
+	@cd $(OPENCODE_DIR) && node --test --test-concurrency=1 'dist/tests/*.test.js'
+
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
 .PHONY: claude-check goose-check
@@ -217,6 +235,12 @@ gemini-cli-check: gemini-cli-build
 		echo "error: GEMINI_API_KEY is not set; gemini-cli-check runs cases on a real model"; exit 2; \
 	fi
 	@$(UV) run avp-conformance check --agent $(GEMINI_CLI_MANIFEST) --suite v0.1 --model $(GEMINI_CLI_MODEL) $(SANDBOX)
+
+# OpenCode on an OpenAI model (OPENAI_API_KEY); override with OPENCODE_MODEL.
+OPENCODE_MODEL ?= openai/gpt-5-mini
+.PHONY: opencode-check
+opencode-check: opencode-build
+	@$(UV) run avp-conformance check --agent $(OPENCODE_MANIFEST) --suite v0.1 --model $(OPENCODE_MODEL) $(SANDBOX)
 
 
 .PHONY: conformance-check
@@ -293,7 +317,7 @@ bindings-test:
 
 
 .PHONY: check
-check: format-check lint test test-pi test-gemini-cli conformance bindings-check
+check: format-check lint test test-pi test-gemini-cli test-opencode conformance bindings-check
 	@echo ""; echo "✓ All free checks passed."
 
 
@@ -407,6 +431,14 @@ release-deep-agents: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-deep-agents-v$$version" MSG="deep-agents agent $$version"
 
 
+.PHONY: release-opencode
+release-opencode: _release-guard
+	@version=$$(node -p 'require("./agents/avp-opencode/typescript/package.json").version'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['opencode'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-opencode package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-opencode-v$$version" MSG="opencode agent $$version"
+
+
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
 # compute TAG in a recipe shell, then hand it to the cut_release template.
 .PHONY: _cut
@@ -457,6 +489,8 @@ build-agents:
 	@agents/avp-gemini-cli/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo "→ building deep-agents wheel..."
 	@$(UV) build --package avp-deep-agents --out-dir dist/agents
+	@echo "→ packaging the opencode archives (npm; one per platform)..."
+	@agents/avp-opencode/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo ""
 	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
 	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
@@ -472,6 +506,7 @@ build-agents:
 	@echo "  uv run avp agent install gemini-cli --package dist/agents/avp-gemini-cli.tar.gz"
 	@echo "  uv run avp agent install deep-agents \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_deep_agents-*.whl"
+	@echo "  uv run avp agent install opencode --package dist/agents/avp-opencode-<os>-<arch>.tar.gz"
 
 
 # Default goal

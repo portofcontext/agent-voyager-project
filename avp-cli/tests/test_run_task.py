@@ -171,3 +171,13 @@ def test_builtin_gemini_cli_recipe_installs_node_and_the_release_archive() -> No
     assert f"node-v{NODE_VERSION}-linux-" in steps
     assert f"agent-gemini-cli-v{source.container_version}/avp-gemini-cli.tar.gz" in steps
     assert recipe.command == ("node", "/opt/gemini-cli/dist/src/main.js")
+
+
+def test_builtin_opencode_recipe_installs_the_archive_for_the_image_arch() -> None:
+    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
+
+    source = AGENT_SOURCES["opencode"]
+    steps = "\n".join(_builtin_recipe(source).install)
+    tag = f"agent-opencode-v{source.container_version}"
+    assert f"{tag}/avp-opencode-linux-$(uname -m | sed" in steps
+    assert "ripgrep" in steps

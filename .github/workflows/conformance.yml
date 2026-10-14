@@ -92,6 +92,9 @@ jobs:
       - name: Gemini CLI adapter seam tests
         working-directory: agents/avp-gemini-cli/typescript
         run: npm ci --omit=optional && npm test
+      - name: OpenCode adapter seam tests
+        working-directory: agents/avp-opencode/typescript
+        run: npm ci && npm test
 
   goose:
     name: Goose Rust tests
@@ -255,4 +258,44 @@ jobs:
         if: always()
         with:
           name: gemini-cli-live-conformance
+          path: live-results/
+
+  opencode-live:
+    name: OpenCode live conformance (manual only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Manual-trigger only, like the Pi job: it spends API credits and exposes
+    # OPENAI_API_KEY. Run it after OpenCode bumps and before releases.
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Sync the workspace
+        run: uv sync --locked
+
+      - name: Run OpenCode live conformance
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY repository secret is required for live conformance."
+            exit 1
+          fi
+          make opencode-build
+          uv run avp-conformance check --agent agents/avp-opencode/typescript/avp-conformance.json --suite v0.1 --model openai/gpt-5-mini --dump-dir live-results/opencode
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencode-live-conformance
           path: live-results/

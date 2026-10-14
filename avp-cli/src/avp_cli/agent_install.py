@@ -79,6 +79,16 @@ def current_target() -> str:
     raise InstallError(f"unsupported platform {system!r} (prebuilt agents are macOS/Linux only)")
 
 
+def node_platform() -> str:
+    """The `<os>-<arch>` naming a per-platform Node archive (`linux-arm64`, `darwin-x64`)."""
+    machine = platform.machine().lower()
+    arch = {"x86_64": "x64", "amd64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get(machine)
+    system = {"Darwin": "darwin", "Linux": "linux"}.get(platform.system())
+    if arch is None or system is None:
+        raise InstallError(f"no prebuilt archive for {platform.system()} {platform.machine()}")
+    return f"{system}-{arch}"
+
+
 def install(
     name: str,
     *,
@@ -137,7 +147,7 @@ def install_release(
                 source, binary, version=resolved, force=force, origin="release", target=target
             )
         if source.kind == "node":
-            asset = source.package_asset or ""
+            asset = (source.package_asset or "").replace("{platform}", node_platform())
             url = by_name.get(asset)
             if url is None:
                 have = ", ".join(by_name) or "none"

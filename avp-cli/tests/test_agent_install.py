@@ -180,3 +180,24 @@ def test_node_preflight_checks_the_runtime_version(monkeypatch) -> None:
     assert agents.node_problem() is None
     monkeypatch.setattr(agents.shutil, "which", lambda _: None)
     assert "not on PATH" in agents.node_problem()
+
+
+def test_per_platform_node_release_picks_the_host_archive(avp_home, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(agent_install.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(agent_install.platform, "machine", lambda: "aarch64")
+    archive = _package(tmp_path)
+    assets = [
+        {"name": f"avp-opencode-{p}.tar.gz", "browser_download_url": f"https://x/{p}"}
+        for p in ("linux-arm64", "linux-x64")
+    ]
+    monkeypatch.setattr(agent_install, "_resolve_release", lambda s, v: ("t", "0.1.0", assets))
+    fetched = []
+
+    def download(url, dest):
+        fetched.append(url)
+        dest.write_bytes(archive.read_bytes())
+
+    monkeypatch.setattr(agent_install, "_download", download)
+    result = agent_install.install("opencode")
+    assert fetched == ["https://x/linux-arm64"]
+    assert result.kind == "node" and result.version == "0.1.0"
