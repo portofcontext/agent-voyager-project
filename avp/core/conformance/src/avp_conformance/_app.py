@@ -12,6 +12,7 @@ the run's scratch dirs and reach only the model provider's API.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -469,19 +470,28 @@ def _run_case(
         cmd = [*prefix, *command, *args]
         stderr_path = tmpd / "stderr.txt"
         with stderr_path.open("w") as stderr:
+            # Its own process group, so a kill reaches the agent and not only
+            # its launcher (see `_kill`).
             proc = subprocess.Popen(
-                cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=stderr, text=True
+                cmd,
+                cwd=cwd,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr,
+                text=True,
+                start_new_session=True,
             )
             try:
                 if tc.interrupt is not None and (error := _interrupt(proc, tc, out_path, timeout)):
-                    proc.kill()
-                    proc.wait()
+                    _kill(proc)
                     return None, error
                 returncode = proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+                _kill(proc)
                 return None, f"timed out after {timeout}s"
+            except BaseException:
+                _kill(proc)
+                raise
         stderr_text = stderr_path.read_text()
 
         # An interrupted agent's exit status is its own business; its
@@ -501,6 +511,15 @@ def _run_case(
             (dump_dir / f"{tc.id}.stderr").write_text(stderr_text)
         events = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
         return events, None
+
+
+def _kill(proc: subprocess.Popen) -> None:
+    """Kill the agent's whole process group. Launchers such as `uv run` and
+    `cargo run` cannot forward SIGKILL, so killing only the launcher leaves the
+    agent running, orphaned, past the case."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    proc.wait()
 
 
 def _interrupt(proc: subprocess.Popen, tc: TestCase, out_path: Path, timeout: float) -> str | None:
