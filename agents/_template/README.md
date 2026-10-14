@@ -101,18 +101,24 @@ add harness-specific refusals next to it.
 the manifest a `container` block (`install` steps, in-sandbox `command`) so it
 can run in the CLI's sandbox.
 
-**In tree** (published from this repo, installable with `avp agent install`):
+**In tree** (published from this repo): an agent is added when `avp agent
+install <name>` can fetch it, not when conformance passes.
+`avp-cli/tests/test_agent_sources.py` fails until every adapter under `agents/`
+is registered and has a release. Do all of this in the PR that adds the agent:
 
 1. Register it in `AGENT_SOURCES` (`avp-cli/src/avp_cli/agents.py`): `kind`
    (`"python"` wheels or a `"binary"`), `tag_prefix`, `dev_manifest`,
    `descriptor_name`, `container_version`, and `module` / `dist` /
-   `wheel_dists` (Python) or `binary_name` (binary).
+   `wheel_dists` (Python) or `binary_name` (binary). Check the container
+   recipe it gets (`_builtin_recipe`) installs whatever the runtime needs.
 2. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
    (Python) or `release-goose.yml` (binary) and change the tag prefix.
 3. Add a `release-<name>` target to the `Makefile`, copying
-   `release-claude-code` / `release-goose`.
-4. Release: bump the package version and `container_version` together, commit,
-   and run `make release-<name>` from a clean `main`.
+   `release-claude-code` / `release-goose`, and list it with the other release
+   targets in the contributor instructions.
+4. Add the install name to the `avp-cli` README and `SKILL.md`.
+5. Release once merged: bump the package version and `container_version`
+   together, commit, and run `make release-<name>` from a clean `main`.
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
 subagents) and `agents/avp-goose/rust/` (late usage, subagents via a tool). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
