@@ -464,7 +464,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "avp",
- "clap",
  "futures",
  "goose",
  "goose-mcp",

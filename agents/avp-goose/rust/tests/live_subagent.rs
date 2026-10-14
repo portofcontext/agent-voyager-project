@@ -31,17 +31,16 @@ prompt: Reply with exactly this and nothing else - SUBAGENT-OK\n";
 #[tokio::test]
 #[ignore = "live: calls a real model to exercise subagent delegation (needs provider creds)"]
 async fn model_delegates_to_a_subagent_recipe() {
+    let _context = common::TestContext::new();
     let run_id = format!("live-subagent-{}", std::process::id());
 
-    // Provision the recipe into the run's isolated workspace, where the runner
-    // points Goose's working dir (so the summon extension scans it).
-    let recipes = std::env::temp_dir()
-        .join(format!("avp-goose-{run_id}"))
-        .join("workspace/.agents/recipes");
+    // The caller provisions the recipe in the supplied workspace.
+    let recipes = _context.workspace.join(".agents/recipes");
     std::fs::create_dir_all(&recipes).unwrap();
     std::fs::write(recipes.join("echoer.yaml"), RECIPE_YAML).unwrap();
 
-    let model = std::env::var("AVP_TEST_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
+    let model = std::env::var("AVP_TEST_MODEL")
+        .unwrap_or_else(|_| "anthropic/claude-sonnet-4-6".to_string());
     let commission: avp::Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": run_id,

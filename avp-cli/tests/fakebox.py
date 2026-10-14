@@ -11,7 +11,9 @@ boundary is simulated. Tests monkeypatch `avp_cli.runtime.get_runtime` with this
 from __future__ import annotations
 
 import os
+import re
 import subprocess
+import tempfile
 from typing import Any
 
 from avp_cli.runtime import ExecResult, Mount
@@ -21,14 +23,15 @@ class FakeBox:
     def __init__(self, env: dict[str, str], mounts: list[Mount]) -> None:
         self.env = env or {}
         self.mounts: dict[str, str] = {m.target: m.host for m in mounts}
+        self.root = tempfile.TemporaryDirectory(prefix="avp-fake-container-")
+        self.mounts.setdefault("/avp", self.root.name)
         self.commands_run: list[str] = []
         self.killed = False
 
     def substitute(self, text: str) -> str:
         # Longest mount first so /avp/workspace wins over a hypothetical /avp.
-        for mnt in sorted(self.mounts, key=len, reverse=True):
-            text = text.replace(mnt, self.mounts[mnt])
-        return text
+        pattern = "|".join(re.escape(mnt) for mnt in sorted(self.mounts, key=len, reverse=True))
+        return re.sub(r"(?<![\w/.-])(?:" + pattern + ")", lambda match: self.mounts[match[0]], text)
 
     def run(self, command: str, *, cwd: str | None = None, timeout_s: float) -> ExecResult:
         cmd = self.substitute(command)
@@ -51,6 +54,7 @@ class FakeBox:
 
     def kill(self) -> None:
         self.killed = True
+        self.root.cleanup()
 
 
 class FakeRuntime:

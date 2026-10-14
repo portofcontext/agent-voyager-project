@@ -1,15 +1,15 @@
 //! Deterministic MCP connection test.
 //!
-//! Stands up the bundled stdio MCP server (`tests/fixtures/avp_test_mcp.py`)
+//! Stands up the bundled stdio MCP server (`testing/mcp/avp_test_mcp.py`)
 //! through Goose, using the connector's own Commission-to-extension mapping,
 //! and confirms its tools are discovered. No model and no API key: extension
 //! loading and `list_tools` do not touch the provider. It does spawn a
-//! subprocess and, on first run, fetch the server's dependency via `uv`, so it
-//! is `#[ignore]`d out of the default suite; run it with:
+//! subprocess running the dependency-free Python fixture. It runs in the default
+//! suite; no model or credentials are needed.
 //!
-//!     cargo test -p avp-goose --test mcp_connect -- --ignored
+//!     cargo test -p avp-goose --test mcp_connect
 //!
-//! Requires `uv` on PATH.
+//! Requires Python 3 on PATH (or AVP_TEST_PYTHON).
 
 mod common;
 
@@ -23,9 +23,8 @@ use goose::session::session_manager::SessionType;
 use serde_json::json;
 
 #[tokio::test]
-#[ignore = "spawns the uv-run MCP server fixture; needs `uv` on PATH"]
 async fn stdio_mcp_server_connects_and_exposes_its_tools() {
-    // Isolate Goose state, like the runner does, so the test never touches the
+    // Supply isolated Goose state as the caller, so the test never touches the
     // user's real session store.
     let tmp = std::env::temp_dir().join(format!("avp-goose-mcp-connect-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
@@ -36,7 +35,7 @@ async fn stdio_mcp_server_connects_and_exposes_its_tools() {
     let commission: avp::Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": "mcp-connect",
-        "model": "claude-opus-4-7",
+        "model": "anthropic/claude-opus-4-7",
         "mcp_servers": [{ "type": "stdio", "id": TEST_MCP_ID, "command": test_mcp_command() }],
     }))
     .unwrap();
@@ -57,7 +56,7 @@ async fn stdio_mcp_server_connects_and_exposes_its_tools() {
         .unwrap();
     let session_id = session.id.clone();
 
-    // Real stdio MCP handshake: spawns `uv run avp_test_mcp.py`, initializes,
+    // Real stdio MCP handshake: spawns `python3 avp_test_mcp.py`, initializes,
     // and lists tools.
     let load = agent
         .add_extensions_bulk(cfg.extensions, &session_id)
@@ -73,7 +72,7 @@ async fn stdio_mcp_server_connects_and_exposes_its_tools() {
         .collect();
 
     // The server's two tools surface through Goose (Goose namespaces extension
-    // tools, and arcade title-cases them, so match on substring, not exact).
+    // tools, so match on substring, not exact).
     let lower: Vec<String> = names.iter().map(|n| n.to_lowercase()).collect();
     assert!(
         lower.iter().any(|n| n.contains("echo")),

@@ -1,21 +1,16 @@
 # Shared MCP test server
 
-`avp_test_mcp.py` is a tiny, deterministic stdio [MCP](https://modelcontextprotocol.io)
-server for the repo's test suites. It is the stable, self-contained fixture any
-AVP agent or SDK can point an `mcp_server` at to exercise the real MCP connect
-and dispatch path, instead of depending on a server that only exists on one
-machine.
-
-It is built on [`arcade-mcp-server`](https://pypi.org/project/arcade-mcp-server/)
-(`MCPApp` + `@app.tool`) The
-dependency is declared inline (PEP 723), so `uv run` bootstraps it into an
-ephemeral environment; nothing to install first.
-
-## Running it
+`avp_test_mcp.py` is a dependency-free, deterministic stdio MCP fixture shared
+across AVP's conformance and adapter tests. It implements initialization, ping,
+tool listing, and two tools: `Avptest_Echo` and `Avptest_Add`. It is a small test
+fixture, not a general MCP server or an HTTP transport implementation.
 
 ```bash
-uv run testing/mcp/avp_test_mcp.py          # stdio (default; how tests spawn it)
-uv run testing/mcp/avp_test_mcp.py http     # HTTP streaming
+python3 testing/mcp/avp_test_mcp.py
 ```
 
-Requires `uv` on PATH. Logs go to stderr; stdout is reserved for JSON-RPC.
+Only Python's standard library is needed. There is no package installation,
+network access, or persistent state. Stdout contains only JSON-RPC responses.
+The conformance harness and Python tests select their own interpreter; Rust
+tests use `python3` on PATH or `AVP_TEST_PYTHON` when supplied. Real adapter SDKs
+exercise the MCP handshake, discovery, and tool dispatch against this fixture.

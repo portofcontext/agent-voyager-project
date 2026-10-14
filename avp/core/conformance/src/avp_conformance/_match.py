@@ -47,8 +47,23 @@ def _partial(value: Any, pattern: Any) -> bool:
     least one element partial-matches `X`. Use it to assert presence within
     an order-/length-variable list (e.g. a text block in `avp.content`, an
     MCP server in `avp.mcp_servers`) without pinning the whole list.
+    `{"$text_contains": "text"}` searches a string or the text blocks in a
+    content list, accommodating both valid tool-result representations.
     """
     if isinstance(pattern, dict):
+        if set(pattern) == {"$text_contains"}:
+            needle = pattern["$text_contains"]
+            if not isinstance(needle, str):
+                return False
+            if isinstance(value, str):
+                return needle in value
+            return isinstance(value, list) and any(
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+                and needle in block["text"]
+                for block in value
+            )
         if set(pattern) == {"$contains"}:
             return isinstance(value, list) and any(
                 _partial(elem, pattern["$contains"]) for elem in value

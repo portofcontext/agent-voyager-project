@@ -302,3 +302,14 @@ def test_match_case_surfaces_structure_failure():
     result = match_case(bad, Expectations(events=[_m(type="avp.run_requested")]))
     assert not result.ok
     assert any(r.startswith("structure:") for r in result.reasons)
+
+
+def test_text_contains_accepts_both_tool_result_representations():
+    pattern = {"$text_contains": "echoed"}
+    assert _partial("echoed", pattern)
+    assert _partial('[{"type":"text","text":"echoed"}]', pattern)
+    assert _partial([{"type": "text", "text": "echoed"}], pattern)
+    assert not _partial("wrong result", pattern)
+    assert not _partial([{"type": "image", "text": "echoed"}], pattern)
+    assert not _partial({"text": "echoed"}, pattern)
+    assert not _partial("echoed", {"$text_contains": 3})

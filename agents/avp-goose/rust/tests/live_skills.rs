@@ -28,7 +28,9 @@ AVP-GREETING::<name>\n";
 #[tokio::test]
 #[ignore = "live: calls a real model to exercise skill discovery (needs provider creds)"]
 async fn model_discovers_and_uses_an_inline_skill() {
-    let model = std::env::var("AVP_TEST_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
+    let _context = common::TestContext::new();
+    let model = std::env::var("AVP_TEST_MODEL")
+        .unwrap_or_else(|_| "anthropic/claude-sonnet-4-6".to_string());
     let commission: avp::Commission = serde_json::from_value(json!({
         "schema_version": "0.1",
         "run_id": format!("live-skill-{}", std::process::id()),
