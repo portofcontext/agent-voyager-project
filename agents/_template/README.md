@@ -107,14 +107,16 @@ install <name>` can fetch it, not when conformance passes.
 is registered and has a release. Do all of this in the PR that adds the agent:
 
 1. Register it in `AGENT_SOURCES` (`avp-cli/src/avp_cli/agents.py`): `kind`
-   (`"python"` wheels or a `"binary"`), `tag_prefix`, `dev_manifest`,
-   `descriptor_name`, `container_version`, and `module` / `dist` /
-   `wheel_dists` (Python) or `binary_name` (binary). Check the container
+   (`"python"` wheels, a `"binary"`, or a `"node"` package archive),
+   `tag_prefix`, `dev_manifest`, `descriptor_name`, `container_version`, and
+   `module` / `dist` / `wheel_dists` (Python), `binary_name` (binary), or
+   `package_asset` / `entry` (Node). Check the container
    recipe it gets (`_builtin_recipe`) installs whatever the runtime needs.
 2. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
-   (Python) or `release-goose.yml` (binary) and change the tag prefix.
+   (Python), `release-goose.yml` (binary), or `release-pi.yml` (Node) and
+   change the tag prefix.
 3. Add a `release-<name>` target to the `Makefile`, copying
-   `release-claude-code` / `release-goose`, and list it with the other release
+   `release-claude-code` / `release-goose` / `release-pi`, and list it with the other release
    targets in the contributor instructions.
 4. Add the install name to the `avp-cli` README and `SKILL.md`.
 5. Release once merged: bump the package version and `container_version`
