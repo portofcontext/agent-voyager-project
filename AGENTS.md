@@ -108,6 +108,7 @@ that matches `origin/main`:
 
 - `make release-cli`: derives `pypi-v<version>` from `avp-cli/pyproject.toml`.
   The CLI wheel vendors the Python wire types.
-- `make release-goose` / `make release-claude-code`: derive the agent tag from
-  its package version, checked against `container_version` in `avp_cli.agents`.
-  Update the package version and artifact pin together before publishing.
+- `make release-goose` / `make release-claude-code` / `make release-codex` /
+  `make release-openai-agents`: derive the agent tag from its package version,
+  checked against `container_version` in `avp_cli.agents`. Update the package
+  version and artifact pin together before publishing.

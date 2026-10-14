@@ -205,11 +205,12 @@ the prebuilt agent once:
 ```bash
 avp agent install goose          # latest release, or --version 0.0.1
 avp agent install claude-code
+avp agent install codex          # or openai-agents
 avp agent list                   # shows installed version + readiness
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
-(claude-code) installs into a managed venv (needs `uv`). Release downloads go over
+(claude-code, codex, openai-agents) installs into a managed venv (needs `uv`). Release downloads go over
 plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
 fork or to avoid API rate limits. The host install serves `avp agent describe`
 (the free pre-flight view); actual runs install the agent's **Linux build into
@@ -230,6 +231,9 @@ avp agent install claude-code --force \
   --wheel dist/agents/avp-*.whl \
   --wheel dist/agents/avp_conformance-*.whl \
   --wheel dist/agents/avp_claude_agent_sdk-*.whl
+avp agent install codex --force \
+  --wheel dist/agents/agent_voyager_project-*.whl \
+  --wheel dist/agents/avp_codex-*.whl
 ```
 
 That's the contributor loop: build, install locally, run an eval against it.

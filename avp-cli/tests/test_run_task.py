@@ -131,3 +131,17 @@ def test_builtin_claude_recipe_carries_is_sandbox_env() -> None:
     recipe = _builtin_recipe(AGENT_SOURCES["claude-code"])
     assert ("IS_SANDBOX", "1") in recipe.env
     assert _builtin_recipe(AGENT_SOURCES["goose"]).env == ()
+
+
+def test_builtin_python_recipes_install_their_release_wheels() -> None:
+    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
+
+    for name, module in [("codex", "avp_codex"), ("openai-agents", "avp_openai_agents")]:
+        source = AGENT_SOURCES[name]
+        recipe = _builtin_recipe(source)
+        (pip,) = recipe.install  # no runtime besides the wheels
+        tag = f"agent-{name}-v{source.container_version}"
+        assert f"{tag}/{module}-{source.container_version}-py3-none-any.whl" in pip
+        assert f"{tag}/agent_voyager_project-0.1.1-py3-none-any.whl" in pip
+        assert recipe.command == ("python", "-m", f"{module}.conformance")
+        assert recipe.env == ()

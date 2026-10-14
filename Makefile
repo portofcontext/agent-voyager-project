@@ -71,11 +71,13 @@ help:
 	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>)"
 	@echo "    make release-goose       release the goose agent (tag agent-goose-v<pinned version>)"
 	@echo "    make release-claude-code release the claude-code agent (tag agent-claude-code-v<pinned version>)"
+	@echo "    make release-codex       release the codex agent (tag agent-codex-v<pinned version>)"
+	@echo "    make release-openai-agents release the openai-agents agent (tag agent-openai-agents-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
-	@echo "    make build-agents    build both agents' artifacts into dist/agents for local install"
+	@echo "    make build-agents    build the in-tree agents' artifacts into dist/agents for local install"
 	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete; PAID=1 adds the vault-broker finale)"
 
 
@@ -307,6 +309,22 @@ release-claude-code: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-claude-code-v$$version" MSG="claude-code agent $$version"
 
 
+.PHONY: release-codex
+release-codex: _release-guard
+	@version=$$(grep -m1 '^version' agents/avp-codex/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['codex'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-codex pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-codex-v$$version" MSG="codex agent $$version"
+
+
+.PHONY: release-openai-agents
+release-openai-agents: _release-guard
+	@version=$$(grep -m1 '^version' agents/avp-openai-agents/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['openai-agents'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-openai-agents pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-openai-agents-v$$version" MSG="openai-agents agent $$version"
+
+
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
 # compute TAG in a recipe shell, then hand it to the cut_release template.
 .PHONY: _cut
@@ -348,6 +366,9 @@ build-agents:
 	@$(UV) build --package agent-voyager-project --out-dir dist/agents
 	@$(UV) build --package avp-conformance --out-dir dist/agents
 	@$(UV) build --package avp-claude-agent-sdk --out-dir dist/agents
+	@echo "→ building codex + openai-agents wheels..."
+	@$(UV) build --package avp-codex --out-dir dist/agents
+	@$(UV) build --package avp-openai-agents --out-dir dist/agents
 	@echo ""
 	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
 	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
@@ -355,6 +376,10 @@ build-agents:
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl \\"
 	@echo "    --wheel dist/agents/avp_conformance-*.whl \\"
 	@echo "    --wheel dist/agents/avp_claude_agent_sdk-*.whl"
+	@echo "  uv run avp agent install codex \"
+	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_codex-*.whl"
+	@echo "  uv run avp agent install openai-agents \"
+	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
 
 
 # Default goal

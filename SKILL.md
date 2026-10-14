@@ -42,10 +42,8 @@ instructions, not the CLI or an agent runtime.
    rate, cost, and turns separately, and point to the saved run artifacts.
 
 Use `avp --help` and subcommand help for the installed release's options.
-`avp agent list` shows availability; prebuilt install names are `goose` and
-`claude-code`. The OpenAI Agents SDK and Codex adapters are available in the
-[source repository](https://github.com/portofcontext/agent-voyager-project/tree/main/agents);
-use their manifests when working from source.
+`avp agent list` shows availability; prebuilt install names are `goose`,
+`claude-code`, `codex`, and `openai-agents`.
 
 ## Configure a Commission or evaluation
 
