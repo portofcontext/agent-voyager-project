@@ -129,6 +129,8 @@ is registered and has a release. Do all of this in the PR that adds the agent:
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
 subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
 `agents/avp-openai-agents/python/` (complete Responses messages, managed MCP),
-`agents/avp-codex/python/` (native app-server raw inference boundaries), and
+`agents/avp-codex/python/` (native app-server raw inference boundaries),
 `agents/avp-pi/typescript/` (a TypeScript runtime on the TypeScript Recorder, MCP
-through the harness's own extension). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
+through the harness's own extension), and `agents/avp-gemini-cli/typescript/` (a
+product's own headless session, subagent spend rolled up from its content
+generator). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

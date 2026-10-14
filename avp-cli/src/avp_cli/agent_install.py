@@ -6,7 +6,7 @@ CLI drives):
 - **Release** (`install_release`): download the prebuilt artifacts from a GitHub
   release over HTTPS (no `gh`, no auth for a public repo). Binary agents (goose)
   get an extracted executable; Python agents (claude-code) get a managed `venv/`
-  built from the release's wheels; Node agents (pi) get their package archive
+  built from the release's wheels; Node agents (pi, gemini-cli) get their package archive
   extracted to `app/`. This is the normal path.
 - **Local** (`install_local_binary` / `install_local_python` /
   `install_local_node`): point the CLI at a locally built binary, wheel set, or
