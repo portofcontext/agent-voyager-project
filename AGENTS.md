@@ -111,6 +111,6 @@ that matches `origin/main`:
   The CLI wheel vendors the Python wire types.
 - `make release-goose` / `make release-claude-code` / `make release-codex` /
   `make release-openai-agents` / `make release-pi` / `make release-gemini-cli` /
-  `make release-deep-agents`: derive the agent tag from its package version,
-  checked against `container_version` in `avp_cli.agents`. Update the package
-  version and artifact pin together before publishing.
+  `make release-deep-agents` / `make release-opencode`: derive the agent tag from
+  its package version, checked against `container_version` in `avp_cli.agents`.
+  Update the package version and artifact pin together before publishing.
