@@ -145,3 +145,14 @@ def test_builtin_python_recipes_install_their_release_wheels() -> None:
         assert f"{tag}/agent_voyager_project-0.1.1-py3-none-any.whl" in pip
         assert recipe.command == ("python", "-m", f"{module}.conformance")
         assert recipe.env == ()
+
+
+def test_builtin_pi_recipe_installs_node_and_the_release_archive() -> None:
+    from avp_cli.agents import AGENT_SOURCES, NODE_VERSION, _builtin_recipe
+
+    source = AGENT_SOURCES["pi"]
+    recipe = _builtin_recipe(source)
+    steps = "\n".join(recipe.install)
+    assert f"node-v{NODE_VERSION}-linux-" in steps
+    assert f"agent-pi-v{source.container_version}/avp-pi.tar.gz" in steps
+    assert recipe.command == ("node", "/opt/pi/dist/src/main.js")

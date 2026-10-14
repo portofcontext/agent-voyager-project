@@ -58,12 +58,13 @@ help:
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
-	@echo "    make check           format-check + lint + test + conformance + bindings-check"
+	@echo "    make check           format-check + lint + test + test-pi + conformance + bindings-check"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make conformance-check  run the v0.1 suite against both agents on a real model"
+	@echo "    make conformance-check  run the v0.1 suite against Claude, Goose, and Pi on a real model"
+	@echo "    make pi-check           run the v0.1 suite against avp-pi only (Node >= 22.19)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
@@ -73,6 +74,7 @@ help:
 	@echo "    make release-claude-code release the claude-code agent (tag agent-claude-code-v<pinned version>)"
 	@echo "    make release-codex       release the codex agent (tag agent-codex-v<pinned version>)"
 	@echo "    make release-openai-agents release the openai-agents agent (tag agent-openai-agents-v<pinned version>)"
+	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
 	@echo "  Other:"
@@ -111,6 +113,9 @@ GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
+# TypeScript adapters run from their build output; `pi-build` installs and builds.
+PI_DIR := agents/avp-pi/typescript
+PI_MANIFEST := $(PI_DIR)/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -151,6 +156,19 @@ conformance:
 	@printf "\n\033[1;36m── avp-openai-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(OPENAI_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(OPENAI_MANIFEST)
+	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
+	@$(MAKE) --no-print-directory pi-build
+	@$(UV) run avp-conformance ping --agent $(PI_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(PI_MANIFEST)
+
+.PHONY: pi-build test-pi
+pi-build:
+	@cd $(PI_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
+
+# Pi's seam tests: its real session loop, tools, and MCP extension on a
+# scripted model. Free; needs Node >= 22.19 and python3 (the MCP fixture).
+test-pi: pi-build
+	@cd $(PI_DIR) && node --test 'dist/tests/*.test.js'
 
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
@@ -160,6 +178,10 @@ claude-check:
 
 goose-check:
 	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
+
+.PHONY: pi-check
+pi-check: pi-build
+	@$(UV) run avp-conformance check --agent $(PI_MANIFEST) --suite v0.1 $(SANDBOX)
 
 
 .PHONY: conformance-check
@@ -171,6 +193,8 @@ conformance-check:
 	@$(MAKE) --no-print-directory claude-check
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-check
+	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
+	@$(MAKE) --no-print-directory pi-check
 
 
 .PHONY: lint
@@ -234,7 +258,7 @@ bindings-test:
 
 
 .PHONY: check
-check: format-check lint test conformance bindings-check
+check: format-check lint test test-pi conformance bindings-check
 	@echo ""; echo "✓ All free checks passed."
 
 
@@ -325,6 +349,14 @@ release-openai-agents: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-openai-agents-v$$version" MSG="openai-agents agent $$version"
 
 
+.PHONY: release-pi
+release-pi: _release-guard
+	@version=$$(node -p 'require("./agents/avp-pi/typescript/package.json").version'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['pi'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-pi package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-pi-v$$version" MSG="pi agent $$version"
+
+
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
 # compute TAG in a recipe shell, then hand it to the cut_release template.
 .PHONY: _cut
@@ -369,6 +401,8 @@ build-agents:
 	@echo "→ building codex + openai-agents wheels..."
 	@$(UV) build --package avp-codex --out-dir dist/agents
 	@$(UV) build --package avp-openai-agents --out-dir dist/agents
+	@echo "→ packaging the pi archive (npm; Node >= 22.19)..."
+	@agents/avp-pi/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo ""
 	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
 	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
@@ -380,6 +414,7 @@ build-agents:
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_codex-*.whl"
 	@echo "  uv run avp agent install openai-agents \"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
+	@echo "  uv run avp agent install pi --package dist/agents/avp-pi.tar.gz"
 
 
 # Default goal

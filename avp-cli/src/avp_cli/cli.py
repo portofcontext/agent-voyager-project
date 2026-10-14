@@ -7,7 +7,7 @@
     avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
     avp run "TASK" --agent A [--env E]   commission an agent to do a task (in a sandbox)
-    avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel local)
+    avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel/--package local)
     avp env create NAME [flags]      create a declarative environment (--image/--pip/--file/--net ...)
     avp env run NAME -- CMD          run a command inside a declarative environment (sandboxed)
     avp sandbox status|stop          inspect or stop the managed sandbox server
@@ -686,6 +686,7 @@ def _cmd_agent_install(args: argparse.Namespace) -> int:
             version=args.version,
             binary=args.binary,
             wheels=args.wheel or None,
+            package=args.package,
             force=args.force,
         )
     except agent_install.InstallError as exc:
@@ -1638,6 +1639,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="WHL",
         help="Install a Python agent from local wheel(s), skipping the release (repeatable).",
+    )
+    p_ainstall.add_argument(
+        "--package",
+        default=None,
+        metavar="TGZ",
+        help="Install a Node agent from a local package archive, skipping the release.",
     )
     p_ainstall.add_argument(
         "--force", action="store_true", help="Reinstall over an existing install"

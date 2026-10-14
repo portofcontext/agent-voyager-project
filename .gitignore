@@ -59,4 +59,5 @@ node_modules/
 dist-test/
 package-lock.json
 !avp/bindings/typescript/package-lock.json
+!agents/avp-pi/typescript/package-lock.json
 

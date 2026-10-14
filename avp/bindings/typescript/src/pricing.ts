@@ -2,10 +2,10 @@
  * Shared model pricing for AVP agents.
  *
  * The price table has a single source of truth: `prices.json` in the Python
- * `avp` package (`avp/data/prices.json`, synced from models.dev). Like the
- * Rust crate, this module reads that same file rather than committing a
- * per-language copy, so it resolves the path relative to the repository
- * checkout. Callers may build or override their own `PriceTable`.
+ * `avp` package (`avp/data/prices.json`, synced from models.dev). Nothing
+ * commits a per-language copy: `npm run build` copies it into `dist/`, so a
+ * packaged build carries it, and a source checkout reads the Python file.
+ * Callers may build or override their own `PriceTable`.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,9 +25,14 @@ export interface ModelPrice {
 /** Model key to price. Keys are models.dev `<provider>/<model>` ids. */
 export type PriceTable = Record<string, ModelPrice>;
 
-/** `avp/bindings/python/src/avp/data/prices.json`, found from this module (`src/` or a build dir). */
+/**
+ * `prices.json` beside this module (a build), else the Python package's copy
+ * found by walking up from it (a source checkout).
+ */
 function bundledPrices(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
+  const packaged = join(dir, "prices.json");
+  if (existsSync(packaged)) return packaged;
   for (;;) {
     const candidate = join(dir, "python", "src", "avp", "data", "prices.json");
     if (existsSync(candidate)) return candidate;

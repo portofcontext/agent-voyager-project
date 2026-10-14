@@ -86,6 +86,9 @@ jobs:
       - name: TypeScript binding tests
         working-directory: avp/bindings/typescript
         run: npm ci && npm test
+      - name: Pi adapter seam tests
+        working-directory: agents/avp-pi/typescript
+        run: npm ci && npm test
 
   goose:
     name: Goose Rust tests
@@ -168,4 +171,44 @@ jobs:
         if: always()
         with:
           name: claude-live-conformance
+          path: live-results/
+
+  pi-live:
+    name: Pi live conformance (manual only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Manual-trigger only, like the Claude job: it spends API credits and exposes
+    # ANTHROPIC_API_KEY. Run it after Pi bumps and before releases.
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Sync the workspace
+        run: uv sync --locked
+
+      - name: Run Pi live conformance
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "ANTHROPIC_API_KEY repository secret is required for live conformance."
+            exit 1
+          fi
+          make pi-build
+          uv run avp-conformance check --agent agents/avp-pi/typescript/avp-conformance.json --suite v0.1 --dump-dir live-results/pi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pi-live-conformance
           path: live-results/

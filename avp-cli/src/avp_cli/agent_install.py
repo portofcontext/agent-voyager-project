@@ -6,9 +6,11 @@ CLI drives):
 - **Release** (`install_release`): download the prebuilt artifacts from a GitHub
   release over HTTPS (no `gh`, no auth for a public repo). Binary agents (goose)
   get an extracted executable; Python agents (claude-code) get a managed `venv/`
-  built from the release's wheels. This is the normal path.
-- **Local** (`install_local_binary` / `install_local_python`): point the CLI at a
-  locally built binary or wheel set, no release needed. This is the contributor
+  built from the release's wheels; Node agents (pi) get their package archive
+  extracted to `app/`. This is the normal path.
+- **Local** (`install_local_binary` / `install_local_python` /
+  `install_local_node`): point the CLI at a locally built binary, wheel set, or
+  package archive, no release needed. This is the contributor
   loop for testing your own agent or a new version before cutting a release
   (`make build-agents` produces the artifacts; see avp-cli/README.md).
 
@@ -55,7 +57,7 @@ class InstallError(Exception):
 class InstallResult:
     name: str
     version: str
-    kind: str  # "binary" | "python"
+    kind: str  # "binary" | "python" | "node"
     source: str  # "local" | "release"
     install_dir: Path
     command: list[str]
@@ -83,9 +85,11 @@ def install(
     version: str | None = None,
     binary: str | Path | None = None,
     wheels: list[str | Path] | None = None,
+    package: str | Path | None = None,
     force: bool = False,
 ) -> InstallResult:
-    """Install a known agent. With `binary`/`wheels`, install locally; else from a release."""
+    """Install a known agent. With `binary`/`wheels`/`package`, install locally;
+    else from a release."""
     source = AGENT_SOURCES.get(name)
     if source is None:
         raise InstallError(f"unknown agent {name!r}; known: {', '.join(AGENT_SOURCES)}")
@@ -99,6 +103,10 @@ def install(
         if source.kind != "python":
             raise InstallError(f"{name} is a {source.kind} agent; --wheel applies to python agents")
         return install_local_python(source, wheels, force=force)
+    if package is not None:
+        if source.kind != "node":
+            raise InstallError(f"{name} is a {source.kind} agent; --package applies to node agents")
+        return install_local_node(source, package, force=force)
     return install_release(source, version=version, force=force)
 
 
@@ -127,6 +135,17 @@ def install_release(
             binary = _extract_binary(archive, source.binary_name or "", tmpdir)
             return install_local_binary(
                 source, binary, version=resolved, force=force, origin="release", target=target
+            )
+        if source.kind == "node":
+            asset = source.package_asset or ""
+            url = by_name.get(asset)
+            if url is None:
+                have = ", ".join(by_name) or "none"
+                raise InstallError(f"release {tag} has no asset {asset!r} (assets: {have})")
+            archive = tmpdir / asset
+            _download(url, archive)
+            return install_local_node(
+                source, archive, version=resolved, force=force, origin="release"
             )
         wheels = []
         for name, url in by_name.items():
@@ -197,6 +216,37 @@ def install_local_python(
     command = [str(py), "-m", source.module or ""]
     _finalize(d, source, command, version=version, kind="python", origin=origin)
     return InstallResult(source.name, version, "python", origin, d, command)
+
+
+def install_local_node(
+    source: AgentSource,
+    package: str | Path,
+    *,
+    version: str = "local",
+    force: bool = False,
+    origin: str = "local",
+) -> InstallResult:
+    """Install a Node agent from its package archive (`.tar.gz`): extract it to
+    `app/` and run its entry script with the host's `node`."""
+    package = Path(package)
+    if not package.is_file():
+        raise InstallError(f"package archive not found: {package}")
+    d = _prepare_dir(source.name, force=force)
+    app = d / "app"
+    app.mkdir()
+    try:
+        with tarfile.open(package) as tar:
+            tar.extractall(app, filter="data")
+    except (tarfile.TarError, OSError) as exc:
+        shutil.rmtree(d)
+        raise InstallError(f"could not extract {package.name}: {exc}") from exc
+    entry = app / (source.entry or "")
+    if not entry.is_file():
+        shutil.rmtree(d)
+        raise InstallError(f"{package.name} did not contain {source.entry!r}")
+    command = ["node", str(entry)]
+    _finalize(d, source, command, version=version, kind="node", origin=origin)
+    return InstallResult(source.name, version, "node", origin, d, command)
 
 
 def uninstall(name: str) -> bool:
