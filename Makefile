@@ -26,6 +26,7 @@ TEST_PKGS := \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
 	agents/_template/python \
+	agents/avp-deep-agents/python \
 	agents/avp-codex/python \
 	agents/avp-openai-agents/python \
 	avp-cli
@@ -114,6 +115,7 @@ CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
+AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
@@ -157,6 +159,9 @@ conformance:
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
 	@printf "\n\033[1;36m── avp-codex ──\033[0m\n"
+	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
+	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@$(UV) run avp-conformance ping --agent $(AVP_CODEX_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_CODEX_MANIFEST)
 	@printf "\n\033[1;36m── avp-openai-agents ──\033[0m\n"
