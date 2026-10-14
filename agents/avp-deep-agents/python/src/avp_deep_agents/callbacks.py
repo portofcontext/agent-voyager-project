@@ -107,7 +107,7 @@ class AvpCallbackHandler(AsyncCallbackHandler):
         Recorder and its sink belong to the run's loop."""
         loop = asyncio.get_running_loop()
         if self._loop is None or self._loop.is_closed():
-            self._loop = loop
+            self._loop, self._lock = loop, asyncio.Lock()
         if loop is self._loop:
             await work
         else:
