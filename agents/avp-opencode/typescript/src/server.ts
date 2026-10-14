@@ -19,7 +19,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -167,10 +167,10 @@ function serverEnv(opts: ServerOptions, password: string): Record<string, string
 export function opencodeBinary(): string {
   const os = { darwin: "darwin", linux: "linux", win32: "windows" }[process.platform as string] ?? process.platform;
   const base = `opencode-${os}-${process.arch}`;
-  const musl = os === "linux" && isMusl();
-  const names = musl
-    ? [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
-    : [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`];
+  const libc = os === "linux" && isMusl() ? ["-musl", ""] : ["", "-musl"];
+  // x64 builds need AVX2; the baseline build runs without it.
+  const cpu = process.arch === "x64" && !hasAvx2() ? ["-baseline", ""] : ["", "-baseline"];
+  const names = libc.flatMap((l) => cpu.map((c) => `${base}${c}${l}`));
   const require = createRequire(import.meta.url);
   for (const name of names) {
     try {
@@ -181,6 +181,15 @@ export function opencodeBinary(): string {
     }
   }
   throw new Error(`no OpenCode binary for ${process.platform}-${process.arch} (expected the ${base} package)`);
+}
+
+function hasAvx2(): boolean {
+  if (process.platform !== "linux") return true;
+  try {
+    return /(^|\s)avx2(\s|$)/i.test(readFileSync("/proc/cpuinfo", "utf8"));
+  } catch {
+    return false;
+  }
 }
 
 function isMusl(): boolean {

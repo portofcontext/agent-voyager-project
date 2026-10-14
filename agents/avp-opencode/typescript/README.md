@@ -110,8 +110,9 @@ packages), so the release carries one archive per platform:
 `avp-opencode-{darwin,linux}-{arm64,x64}.tar.gz`, each with exactly one binary,
 fetched from npm at package time whatever the build host. `avp agent install
 opencode` picks the host's archive; the container recipe picks
-`linux-$(arch)`. Linux archives carry the glibc builds (`linux-x64` needs
-AVX2); musl images are not covered.
+`linux-$(arch)`. Linux archives carry the glibc builds; `linux-x64` also
+carries OpenCode's baseline build, used on CPUs without AVX2. Musl images are
+not covered.
 
 ## Gaps
 

@@ -407,8 +407,9 @@ function stringEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 /** A request's body, or an error carrying the server's reply. */
-async function data<T>(request: Promise<{ data?: T; error?: unknown }>): Promise<T> {
-  const { data, error } = await request;
-  if (error !== undefined || data === undefined) throw new Error(`opencode request failed: ${JSON.stringify(error)}`);
-  return data;
+async function data<T>(request: Promise<{ data?: T; error?: unknown; response?: Response }>): Promise<T> {
+  const { data, error, response } = await request;
+  if (error === undefined && data !== undefined) return data;
+  const status = response ? `${response.status} ${response.url}` : "no response";
+  throw new Error(`opencode request failed (${status}): ${JSON.stringify(error)}`);
 }

@@ -5,9 +5,9 @@
 #
 # Each archive is the built adapter with its production dependencies, the
 # TypeScript binding installed as a real copy (with its bundled price table),
-# and exactly one OpenCode binary: the pinned `opencode-<platform>` package,
-# fetched from npm whatever the build host is. OpenCode is a native binary per
-# platform, so one archive can't serve them all. Run the result with
+# and the pinned `opencode-<platform>` package (plus its `-baseline` build on
+# x64), fetched from npm whatever the build host is. OpenCode is a native
+# binary per platform, so one archive can't serve them all. Run the result with
 # `node dist/src/main.js` from the extracted directory.
 set -euo pipefail
 
@@ -43,11 +43,15 @@ node -e '
 for platform in $platforms; do
   stage="$work/$platform"
   cp -R "$base" "$stage"
-  pkg="opencode-$platform"
-  tarball="$(cd "$work" && npm pack --silent "$pkg@$version")"
-  mkdir -p "$stage/node_modules/$pkg"
-  tar -xzf "$work/$tarball" -C "$stage/node_modules/$pkg" --strip-components=1
-  chmod +x "$stage/node_modules/$pkg/bin/opencode"
+  pkgs="opencode-$platform"
+  # The x64 builds need AVX2; the baseline build serves CPUs (and emulators) without it.
+  case "$platform" in *-x64) pkgs="$pkgs opencode-$platform-baseline" ;; esac
+  for pkg in $pkgs; do
+    tarball="$(cd "$work" && npm pack --silent "$pkg@$version")"
+    mkdir -p "$stage/node_modules/$pkg"
+    tar -xzf "$work/$tarball" -C "$stage/node_modules/$pkg" --strip-components=1
+    chmod +x "$stage/node_modules/$pkg/bin/opencode"
+  done
   tar -czf "$out/avp-opencode-$platform.tar.gz" -C "$stage" .
   echo "wrote $out/avp-opencode-$platform.tar.gz"
 done
