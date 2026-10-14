@@ -5,127 +5,74 @@
 
 > **Status:** Draft v0.1
 
-AVP is an open standard for AI agents and the systems that run them. A supervisor sends a job, the agent runs it and reports back, and both sides know what to expect because both sides speak AVP.
+AVP is an open standard for running and observing AI agents. A supervisor sends a JSON **Commission** with the task, model, and resources. The agent streams back a **Trajectory** of model calls, tool calls, usage, cost, and outcome.
 
-<div align="center">
-<pre>
-≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
-
-   I.   SUPERVISOR  ═════ Commission ══════▶  AGENT
-        what to do · which model · what's available
-
-  II.   SUPERVISOR  ◀═════ Trajectory ══════  AGENT
-        every model + tool call · usage · outcome
-
-≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈
-</pre>
-</div>
-
-The supervisor sends a small JSON **Commission** (what to do, which model, what resources are available); the agent runs the work and streams back a **Trajectory** of events that records every model and tool call, what the run cost, and how it ended.
-
-AVP picks a shared vocabulary instead of inventing new wire formats: [CloudEvents](https://cloudevents.io/) for the event envelope, [OpenTelemetry](https://opentelemetry.io/) for spans and token usage, [MCP](https://modelcontextprotocol.io/) for the tool-server connections a Commission carries, and [Agent Skills](https://agentskills.io/specification) for the skill content it carries. What AVP adds on top is small. See [FOUNDATIONS.md](FOUNDATIONS.md) for the full mapping.
-
-Built and maintained by the [Port of Context](https://github.com/portofcontext) team.
-
----
-
-## Quickstart
-
-Install and run AVP with the CLI. Currently supports on **macOS and Linux**.
-
-### 1 · Install and run Docker
-
-Every agent run executes in a sandbox backed by a Docker daemon. Any one of [Docker Desktop](https://docs.docker.com/desktop/), [OrbStack](https://orbstack.dev/), or [colima](https://github.com/abiosoft/colima) works.
-
-**Skip this you already have Docker running.**
-
-```bash
-brew install --cask docker  # or: brew install colima docker && colima start
+```text
+Supervisor ─── Commission ──▶ Agent
+Supervisor ◀── Trajectory ─── Agent
 ```
 
-### 2 · Install the avp CLI
+AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [foundations](FOUNDATIONS.md) for how they fit together.
+
+## Start with the AVP skill
+
+Install the official skill for your coding agent (requires Node.js 22 or newer):
 
 ```bash
-# install uv (if you don't have it)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# installs the `avp` command
-uv tool install avp-cli                            
+npx skills add portofcontext/agent-voyager-project --skill avp
 ```
 
-That's it — `avp` is installed.
+Then ask: **“Use the AVP skill to set up and run my first agent evaluation.”**
+The skill guides setup, Commission configuration, evaluations, and debugging.
+See [SKILL.md](SKILL.md) for its instructions, or follow the CLI quickstart below.
 
-### 3 · Install agents
+## CLI quickstart
 
-Agents are prebuilt GitHub releases
+Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and a running Docker daemon. The CLI runs agents in containers and manages the sandbox setup.
 
 ```bash
+uv tool install avp-cli
 avp agent install goose
-avp agent install claude-code
-avp agent list
-```
-
-### 4 · Run an eval
-
-The example eval runs on a Claude model, so set an `ANTHROPIC_API_KEY`. That's the example's choice, not a limitation: the commission picks the model, and goose runs other providers too, so you can target a different model with that provider's key. (The `claude-code` agent can instead run on a Claude subscription token from `claude setup-token`, exported as `CLAUDE_CODE_OAUTH_TOKEN`; goose calls the API directly and needs a platform key. See [`avp-cli/README.md`](avp-cli/README.md) for the full credential rules.)
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY="<your-api-key>"
 avp init capitals --agent goose
 avp eval run capitals.eval.json
 ```
 
-The first run sets up the sandbox stack (starts the managed server, builds the
-agent's image); later runs reuse all of it and start in a couple of seconds.
+This example makes paid model calls and ranks Commission variants by accuracy, pass rate, cost, and turns. The first run builds the agent's container image.
 
-This runs the agent on each task and prints a **scorecard** — every commission (one agent-config variant) scored and ranked by accuracy, pass-rate, cost per run, and turns:
-
-```
-avp eval · capitals-extraction · 2 items · agent=goose
- #  commission         accuracy  pass_rate    $/run  turns/run
- 1  capitals-few-shot      100%       100%  $0.0164        2.0
- 2  capitals-baseline      100%       100%  $0.0166        2.0
-```
-
-`avp` with no arguments shows the full command map; the complete CLI guide is in [`avp-cli/`](avp-cli/).
-
-> **Sandboxing (always on):** every `avp eval` / `avp run` executes the agent inside an [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container — the agent's writes stay in its workspace and its network is a default-deny egress allowlist (enforcement needs kernel netfilter support; `make test-docker` verifies it on your host). The one prerequisite is a running Docker daemon (Docker Desktop, OrbStack, or colima); the CLI manages the rest itself. `avp sandbox status` shows the stack.
->
-> **Vault (secrets the agent can't read):** store a credential once with `avp env secret create <handle>` (kept in `~/.avp/secrets.toml`, mode 0600), then reference it in a Commission by handle: `{"vault": "<handle>"}` — never the value (see [commission spec §2.4](avp/core/spec/v0.1/commission.md)). For runs that use them, the CLI starts a host-side credential-injecting broker: the sandboxed agent is pointed at the broker with only sentinels, and the broker overwrites the auth with the real value on the host before forwarding to the provider / MCP server. The secret never enters the sandbox. If the broker can't be reached from the sandbox, the run fails closed rather than expose it.
-
-### 5 · Add a second agent and compare (optional)
-
-Claude Code gives you a head-to-head. [Claude Code installation](https://code.claude.com/docs/en/quickstart)
+To give an agent a task in your own project:
 
 ```bash
-avp agent install claude-code
-avp init capitals --agent goose,claude-code
-avp eval run capitals.eval.json
-```
-
-## Run an agent on a task, in an environment
-
-Beyond evals, `avp` can drop an agent into a declarative **environment** (a container image plus a real codebase) and hand it a task. The environment is the agent's whole world; your machine isn't part of it.
-
-```bash
-# define an environment: a base image + a directory of code to work on
 avp env create myproj --image python:3.12-slim --path ./my-project
-
-# commission an agent to do a task inside it (always sandboxed)
 avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
-Each run gets a fresh copy of the environment; `avp run` prints where the workspace landed so you can inspect what the agent changed. `--path` re-copies your source each run (skipping `.git`/`node_modules`/caches), so it's a tight curate-with-an-agent loop. `avp env run myproj -- <cmd>` runs an arbitrary command in the same environment (no agent) to see what's provisioned.
+Each run uses a copy of your project and prints the resulting workspace path. See the [CLI guide](avp-cli/README.md) for comparing agents, configuring models, credentials, and sandboxing.
 
-## Use AVP
+## Integrate an agent
 
-- **Drop an agent into a sandboxed environment and give it a task:** `avp run --agent A --env E "<task>"` builds the env's image, seeds your code into the workspace, and runs the agent in a container. Full reference in [`avp-cli/`](avp-cli/).
-- **Run an agent that emits AVP out of the box:** [`avp-claude-agent-sdk`](agents/avp-claude-agent-sdk/python/) wraps the Claude Agent SDK, which ships its own loop and tools; [`avp-goose`](agents/avp-goose/rust/) is an in-process observer of Block's Goose.
-- **Build, run, and iterate on Commissions:** [`avp`](avp-cli/), the local CLI, scaffolds a Commission, runs setups (Commission variants) over a dataset against the real agents, and ranks a board by accuracy / pass-rate / cost / turns.
-- **Consume a trajectory from another language:** typed bindings generated from the same JSON Schemas the Python types use, so they cannot drift: [Python](avp/bindings/python/), [Rust](avp/bindings/rust/), [TypeScript](avp/bindings/typescript/).
+Adapters in this repository:
 
-## Develop AVP
+| Runtime | Adapter |
+|---|---|
+| Claude Agent SDK | [avp-claude-agent-sdk](agents/avp-claude-agent-sdk/python/) |
+| Goose | [avp-goose](agents/avp-goose/rust/) |
+| OpenAI Agents SDK | [avp-openai-agents](agents/avp-openai-agents/python/) |
+| Codex | [avp-codex](agents/avp-codex/python/) |
 
-The core project lives under [`avp/`](avp/) (spec plus Python/Rust/TS bindings), with [`agents/`](agents/) and the local CLI [`avp-cli/`](avp-cli/) alongside. Python uses [uv](https://github.com/astral-sh/uv) with its workspace root at the repo root.
+To add another runtime, follow the [adapter guide](agents/_template/README.md). See [integration patterns](PATTERNS.md) for runtime adaptation and launch context.
+
+## Specs and bindings
+
+Each spec can be adopted independently:
+
+- [Commission](avp/core/spec/v0.1/commission.md): the run configuration.
+- [Trajectory](avp/core/spec/v0.1/trajectory.md): the execution event stream.
+- [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md): the agent's capabilities.
+
+Typed bindings: [Python](avp/bindings/python/) · [Rust](avp/bindings/rust/) · [TypeScript](avp/bindings/typescript/). Validate integrations with the [conformance suite](avp/core/conformance/).
+
+## Develop
 
 ```bash
 git clone https://github.com/portofcontext/agent-voyager-project
@@ -133,24 +80,6 @@ cd agent-voyager-project
 make sync && make check
 ```
 
-`make help` lists every target. `make check` is the free floor (format, lint, tests, conformance, bindings drift). The paid target `make conformance-check` runs the v0.1 suite against real models. See [CLAUDE.md](CLAUDE.md) to contribute and [`proposals/`](proposals/) for the spec RFC process.
+See the [contributor guide](AGENTS.md), [spec proposals](proposals/), or `make help` for next steps.
 
-## What AVP defines
-
-Three specs, each adoptable on its own:
-
-| Sub-spec | What it covers |
-|---|---|
-| [Trajectory](avp/core/spec/v0.1/trajectory.md) | The stream of events an agent emits as it runs. |
-| [Commission](avp/core/spec/v0.1/commission.md) | The run configuration the supervisor sends at startup. |
-| [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md) | What an agent advertises about itself before a run. |
-
-All three are data-shape specs and compose independently. The umbrella [`avp/core/spec/v0.1/README.md`](avp/core/spec/v0.1/README.md) indexes them and the shared concerns.
-
-## More
-
-- [PATTERNS.md](PATTERNS.md): how an application wires onto AVP, with worked examples.
-- [`avp/core/conformance/`](avp/core/conformance/src/avp_conformance/cases/v0.1/): the language-agnostic suite every conforming implementation MUST pass, driven by the `avp-conformance` CLI.
-- [SKILL.md](SKILL.md): a skill file for AI assistants working in this repo.
-
-Questions or bugs: open an [issue](https://github.com/portofcontext/agent-voyager-project/issues) or use [Discussions](https://github.com/portofcontext/agent-voyager-project/discussions).
+Built by [Port of Context](https://github.com/portofcontext). [Issues](https://github.com/portofcontext/agent-voyager-project/issues) · [Discussions](https://github.com/portofcontext/agent-voyager-project/discussions).

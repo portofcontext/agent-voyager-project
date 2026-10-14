@@ -1,4 +1,4 @@
-"""The agents an eval can run against: Goose and Claude Code.
+"""The agents an eval can run against: the in-tree agents and any manifest.
 
 Each is just its `avp-conformance.json` manifest, the same one the conformance
 harness drives. An agent can come from one of three places, tried in order by
@@ -60,9 +60,13 @@ class AgentSource:
     # python agents: `python -m <module>`, install `dist` (pulls third-party
     # deps from PyPI), with `wheel_dists` the unpublished in-repo wheels shipped
     # on the release (resolved via --find-links so PyPI's unrelated `avp` isn't).
+    # `container_setup` / `container_env` are what the runtime needs in the
+    # sandbox besides its wheels (a CLI it shells out to, say).
     module: str | None = None
     dist: str | None = None
     wheel_dists: tuple[str, ...] = field(default_factory=tuple)
+    container_setup: tuple[str, ...] = ()
+    container_env: tuple[tuple[str, str], ...] = ()
 
 
 AGENT_SOURCES: dict[str, AgentSource] = {
@@ -104,8 +108,46 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # / load_built_in), which pulls the wire types + typer; ship all the
         # in-repo wheels. `agent-voyager-project` is the renamed `avp` dist.
         wheel_dists=("agent-voyager-project", "avp-conformance", "avp-claude-agent-sdk"),
+        # The SDK shells out to the `claude` CLI, which refuses bypassPermissions
+        # as root (the container's default user) unless it's told it is already
+        # inside a sandbox. It is.
+        container_setup=(
+            "apt-get update && apt-get install -y --no-install-recommends "
+            "nodejs npm ca-certificates && rm -rf /var/lib/apt/lists/*",
+            "npm install -g @anthropic-ai/claude-code",
+        ),
+        container_env=(("IS_SANDBOX", "1"),),
+    ),
+    "codex": AgentSource(
+        name="codex",
+        kind="python",
+        descriptor_name="avp-codex",
+        tag_prefix="agent-codex",
+        dev_manifest="agents/avp-codex/python/avp-conformance.json",
+        # 0.0.1: the official Codex Python SDK (openai-codex 0.162.1), whose
+        # platform wheel bundles the Codex runtime; nothing else to install.
+        container_version="0.0.1",
+        module="avp_codex.conformance",
+        dist="avp-codex",
+        wheel_dists=("agent-voyager-project", "avp-codex"),
+    ),
+    "openai-agents": AgentSource(
+        name="openai-agents",
+        kind="python",
+        descriptor_name="avp-openai-agents",
+        tag_prefix="agent-openai-agents",
+        dev_manifest="agents/avp-openai-agents/python/avp-conformance.json",
+        # 0.0.1: the OpenAI Agents SDK, tools from Commission MCP servers only.
+        container_version="0.0.1",
+        module="avp_openai_agents.conformance",
+        dist="avp-openai-agents",
+        wheel_dists=("agent-voyager-project", "avp-openai-agents"),
     ),
 }
+
+# The in-repo library wheels every Python agent release ships next to its own
+# (the wire types and the conformance harness), versioned in lockstep.
+_LIBRARY_WHEEL_VERSION = "0.1.1"
 
 _RELEASE_DL = "https://github.com/portofcontext/agent-voyager-project/releases/download"
 
@@ -140,28 +182,21 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
             ),
             command=(source.binary_name or source.name,),
         )
+
     # Python agent: the in-repo wheels come off the GitHub release (they are not
-    # on PyPI); third-party deps resolve from PyPI at build time. Node ships the
-    # `claude` CLI the agent shells out to. Assumes a python base image (the
-    # default env image is one); a wrong base fails loudly in the build log.
-    # Shared wheel version on the release: the three in-repo wheels
-    # (wire types, conformance harness, agent) are versioned in lockstep.
-    version = "0.1.1"
-    wheels = " ".join(
-        f"{_RELEASE_DL}/{tag}/{d.replace('-', '_')}-{version}-py3-none-any.whl"
-        for d in source.wheel_dists
-    )
+    # on PyPI); third-party deps resolve from PyPI at build time. Assumes a
+    # python base image (the default env image is one); a wrong base fails
+    # loudly in the build log. The agent's own wheel carries its release
+    # version; the library wheels carry theirs.
+    def wheel(dist: str) -> str:
+        version = source.container_version if dist == source.dist else _LIBRARY_WHEEL_VERSION
+        return f"{_RELEASE_DL}/{tag}/{dist.replace('-', '_')}-{version}-py3-none-any.whl"
+
+    wheels = " ".join(wheel(d) for d in source.wheel_dists)
     return ContainerRecipe(
-        install=(
-            "apt-get update && apt-get install -y --no-install-recommends "
-            "nodejs npm ca-certificates && rm -rf /var/lib/apt/lists/*",
-            "npm install -g @anthropic-ai/claude-code",
-            f"pip install --no-cache-dir {wheels}",
-        ),
+        install=(*source.container_setup, f"pip install --no-cache-dir {wheels}"),
         command=("python", "-m", source.module or ""),
-        # The claude CLI refuses bypassPermissions as root (the container's
-        # default user) unless it's told it is already inside a sandbox. It is.
-        env=(("IS_SANDBOX", "1"),),
+        env=source.container_env,
     )
 
 

@@ -1,68 +1,114 @@
-# AGENTS.md: Agent Voyager Project (AVP)
+# Working on AVP
 
-Orientation for any coding agent working with AVP. AVP (the **Agent Voyager
-Project**) is an open standard for the agent-execution case: a **supervisor**
-sends an **agent** a JSON **Commission**, the agent runs and streams back a
-**Trajectory** of events, and the supervisor only observes (no mid-run push).
-AVP specializes existing standards (CloudEvents, OpenTelemetry, MCP, Agent
-Skills) rather than inventing wire formats.
+AVP (Agent Voyager Project) defines Commission, Agent Descriptor, and Trajectory
+specs for running and observing agents. A supervisor sends one Commission; the
+agent runs and streams its trajectory. There is no mid-run supervisor push channel.
 
-Deeper references: [`SKILL.md`](SKILL.md) is the full AVP skill (concepts + the
-three build patterns); [`README.md`](README.md) is install + quickstart;
-[`CLAUDE.md`](CLAUDE.md) is the contributor guide for changing this repo; the
-normative specs live under [`avp/core/spec/v0.1/`](avp/core/spec/v0.1/).
+## References
 
-## Using AVP (the `avp` CLI)
+- [README](README.md): installation and quickstart.
+- [Specs](avp/core/spec/v0.1/): normative wire contracts.
+- [Integration patterns](PATTERNS.md): runtime adaptation and launch context.
+- [Adapter template](agents/_template/README.md): adding a runtime.
+- [CLI guide](avp-cli/README.md): Commissions, environments, and evaluations.
+- [Skill](SKILL.md): agent and supervisor workflows.
+- [Foundations](FOUNDATIONS.md): upstream standards and the OTel projection.
 
-- `avp init [benchmark]`: scaffold a `<name>.eval.json` and seed its commissions into `~/.avp/commissions/`.
-- `avp eval run <config>.eval.json`: run the commissions over the dataset and print a ranked board (accuracy, pass-rate, $/run, turns/run).
-- `avp cm create [id]` / `avp cm check <id|file>`: build a Commission into your library / validate one.
-- `avp agent install <name>`: install a prebuilt agent (goose, claude-code).
-- `avp run --agent A --env E "<task>"`: drop an agent into an environment and give it a task.
+## Design boundaries
 
-Every `avp eval` / `avp run` executes the agent inside a Docker-backed sandbox
-(default-deny network); the one prerequisite is a running Docker daemon.
+- The existing agent runtime owns model calls, tool execution, and the loop.
+  Adapters map Commissions into runtime configuration and report native events to
+  the Recorder. Do not reintroduce agent base classes or driver protocols.
+- The supervisor configures and observes. Runtime gating belongs in a managed
+  MCP server the agent calls, never a supervisor-to-agent callback.
+- Workspace provisioning, credentials, native SDK state, and OS confinement are
+  launcher responsibilities, outside the wire specs. Adapters inherit that
+  context. Stock entrypoints honor `AVP_WORKSPACE`; direct library callers own
+  their working directory, state, and cleanup.
+- AVP defines data shapes. Transport, multi-run orchestration, and persistence
+  belong to the deployment or supervisor. In-tree agents use the file contract
+  `run --commission <path> --out <ndjson>`.
+- v0.1 permits breaking changes without compatibility shims or a deprecation
+  cycle. Update every affected schema, binding, case, adapter, example, and doc
+  together. Question unnecessary concepts rather than preserving them by habit.
 
-An eval config is `{name, agents, dataset, scorer, commissions}`:
-- `dataset.source`: `inline` | `file` | `huggingface`.
-- `scorer.name`: `exact-match` | `structural-match` | `structural-fidelity` | `llm-judge`.
-- `commissions`: ids resolved from the library; each carries its own `model`.
+## Wire conventions
 
-The bundled ParseBench example uses a `huggingface` dataset (`llamaindex/ParseBench`),
-the `structural-fidelity` scorer, and a commission wiring a PDF-vision MCP server.
+- Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`;
+  never redefine them inline. Pydantic models under `avp/bindings/python/src/avp/`
+  are the source of truth. Run `make schemas` after wire changes and
+  `make bindings` to regenerate Rust and TypeScript bindings.
+- Models use canonical `origin/model` slugs, never bare model names.
+- Commission requires `schema_version`, `run_id`, and `model`. Inline MCP server
+  configuration and skill content travel on the Commission. Built-in allowlists
+  are subtractive: absent exposes all, `[]` exposes none.
+- Preserve compatibility with CloudEvents 1.0, OTel span identification,
+  MCP 2025-11-25, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
+  projection is for consumers, not the wire.
+- Agent events use `source: avp://agent`. A trajectory opens `run_requested`,
+  `agent_described`, `agent_started` and closes `agent_stopped` with a stop reason.
+- Each `assistant_message` represents a model response with per-response usage
+  and cost. Consumers reduce these deltas; never add cumulative runtime totals.
+  Preserve tool calls alongside assistant content when translating history.
 
-## Authoring a Commission
+## Repository layout
 
-A Commission is JSON. Required: `schema_version` (`"0.1"`), `run_id`, and `model`
-as a canonical `origin/model` slug (`anthropic/claude-haiku-4-5`, `openai/gpt-4o`).
-Optional: `prompt`, `system_prompt`, `mcp_servers` (inline: stdio
-`{"type":"stdio","id":...,"command":[...]}` or http `{"type":"http","id":...,"url":...}`),
-`skills` (inline `{"id":..., "files": {"SKILL.md": "<content>"}}`),
-`enabled_builtin_tools` (subtractive allowlist: absent = all, `[]` = none),
-`output_schema`.
+- `avp/core/spec/v0.1/`: normative specs and generated JSON Schemas.
+- `avp/core/conformance/`: separate harness, cases, and shared Recorder vectors.
+- `avp/bindings/{python,rust,typescript}/`: wire bindings and shared helpers.
+  Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.
+- `agents/<name>/<lang>/`: runtime adapters, descriptors, and conformance manifests.
+  Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust`.
+- `avp-cli/`: the supervisor CLI. Evaluations are JSON configurations containing
+  `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
+  its own model. `avp eval run` and `avp run` use Docker-backed OpenSandbox containers
+  with default-deny networking. Vault credentials go through the host-side broker.
+- `avp/scripts/`: schema/binding generation, prices, and skill packaging.
+- The repository root is the uv workspace. `make help` lists development commands.
 
-```json
-{"schema_version":"0.1","run_id":"demo","model":"anthropic/claude-haiku-4-5","prompt":"Say hi."}
-```
+## Verification
 
-## Reading a Trajectory
+Run `make check` on every change. It covers format, lint, Python tests,
+conformance validation and liveness, and generated-binding drift. Rust and
+TypeScript tests run with `make bindings-test`; they do not make model calls.
+`make test-docker` exercises real container launches and requires a Docker daemon.
 
-Ten v0.1 event types, every one with `source: avp://agent`: `run_requested`,
-`agent_described`, `agent_started`, `agent_stopped`, `assistant_message`,
-`tool_invoked`, `tool_returned`, `subagent_invoked`, `subagent_returned`,
-`error_occurred`. A run opens `run_requested` → `agent_described` →
-`agent_started` and closes `agent_stopped` (with a stop reason). Each
-`assistant_message` is one model turn carrying `avp.content`, per-turn
-`avp.usage`, and `avp.cost_usd`; totals are reduced from those deltas, not
-published. Every event is a CloudEvents 1.0 envelope carrying OTel span ids
-(`trace_id` / `span_id` / `parent_span_id`).
+Add tests at the boundary where a change can fail:
 
-## Conventions
+- Wire requirements: conformance cases plus schema validation.
+- Local behavior: the affected package's tests.
+- Cross-component behavior: a seam test, such as SDK events to Recorder output,
+  cumulative usage to per-response accounting, subprocess trajectories, or
+  workspace-relative tool execution.
+- Native/provider behavior: the affected adapter's real-model conformance suite.
 
-- `model` is always `origin/model`, never a bare model name.
-- Don't invent supervisor→agent callbacks; runtime rules belong in a managed MCP
-  server the agent calls, not a push channel.
-- Import the wire types from `avp` (Python: `avp.commission` / `avp.trajectory` /
-  `avp.descriptor`); never redefine them inline.
-- Workspace provisioning, secret injection, and OS sandboxing are deployment
-  concerns, outside AVP's scope.
+Features need a test crossing a relevant seam. Do not rely on unit tests alone
+for stateful translation or lifecycle behavior. Report conformance passes and
+capability skips together.
+
+Run paid conformance after changes to wire contracts, runtime integration,
+translators, drop-in SDK clients, or Commission-to-SDK configuration. Use
+`avp-conformance check --agent <manifest> --suite v0.1`, optionally with
+`--model <origin>/<model>`, and the appropriate provider credentials.
+`make conformance-check` runs Claude and Goose with Anthropic credentials.
+Documentation, test-only changes, and internal refactors without observable
+wire impact do not require paid runs. When uncertain about integration impact,
+run the real-model checks.
+
+## Documentation
+
+Keep change notes in `CHANGELOG.md`. Keep the README concise and link to existing
+guides. Do not duplicate normative specs, add compatibility guides for draft
+changes, or put test counts in documentation. Avoid em dashes in prose.
+
+## Releases
+
+Release tags trigger CI publication. Use the Makefile targets from a clean `main`
+that matches `origin/main`:
+
+- `make release-cli`: derives `pypi-v<version>` from `avp-cli/pyproject.toml`.
+  The CLI wheel vendors the Python wire types.
+- `make release-goose` / `make release-claude-code` / `make release-codex` /
+  `make release-openai-agents`: derive the agent tag from its package version,
+  checked against `container_version` in `avp_cli.agents`. Update the package
+  version and artifact pin together before publishing.

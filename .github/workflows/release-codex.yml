@@ -1,0 +1,61 @@
+name: Release codex agent
+
+# Publishes the codex agent's wheels as a GitHub release, which
+# `avp agent install codex` then downloads and installs into a managed venv.
+# The unpublished in-repo `avp` wheel ships alongside the agent wheel so the
+# installer installs it by path (PyPI's unrelated `avp` is never pulled); the
+# Codex SDK (openai-codex), whose platform wheel bundles the Codex runtime comes from PyPI.
+#
+# Triggered by pushing a tag `agent-codex-v<version>`, or run manually with an
+# explicit version.
+
+on:
+  push:
+    tags: ["agent-codex-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.0.1 (tag becomes agent-codex-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    name: Build wheels + publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the agent + its in-repo dependency wheel
+        run: |
+          uv build --package agent-voyager-project --out-dir dist
+          uv build --package avp-codex --out-dir dist
+
+      - name: Roll up checksums
+        run: cd dist && shasum -a 256 *.whl > SHA256SUMS
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="agent-codex-v${{ inputs.version }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          gh release create "$TAG" dist/*.whl dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "codex agent $TAG" \
+            --notes "Wheels for the codex agent (+ the avp wire-types wheel). Install with: avp agent install codex --version ${TAG#agent-codex-v}" \
+            || gh release upload "$TAG" dist/*.whl dist/SHA256SUMS --repo "${{ github.repository }}" --clobber

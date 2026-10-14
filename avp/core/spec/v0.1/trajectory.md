@@ -20,7 +20,7 @@ The trajectory holds two semantically distinct kinds of facts:
 |---|---|---|
 | **What the agent did** | `assistant_message` (carries `avp.content`, the model's content-block array for the turn), `tool_invoked`, `tool_returned`, `subagent_invoked`, `subagent_returned`, `error_occurred` | Mechanical actions the agent took |
 | **What the run cost** | `assistant_message.avp.usage.*`, `assistant_message.avp.cost_usd` | Resource accounting (per-turn deltas; consumer reduces). |
-| **What the model output** | `assistant_message.avp.content: list[AVPContentBlock]` | Provider-agnostic content blocks (`text`, `thinking`, `tool_use`, `image`, `document`, `audio`, `video`, `refusal`, `server_tool_use`, `server_tool_result`). Reconstructing a provider message array is a direct read of this field per turn, paired with the `avp.tool_result` blocks on intervening `tool_returned` events to form the user-role tool-result messages. Block taxonomy: [`avp.content`](../../python/avp/src/avp/content.py). |
+| **What the model output** | `assistant_message.avp.content: list[AVPContentBlock]` | Provider-agnostic content blocks (`text`, `thinking`, `tool_use`, `image`, `document`, `audio`, `video`, `refusal`, `server_tool_use`, `server_tool_result`). Reconstructing a provider message array is a direct read of this field per turn, paired with the `avp.tool_result` blocks on intervening `tool_returned` events to form the user-role tool-result messages. Block taxonomy: [`avp.content`](https://github.com/portofcontext/agent-voyager-project/blob/main/avp/bindings/python/src/avp/content.py). |
 
 Interpretive narrative (the supervisor saying "this is a SuspiciousWriteDetected") is a post-hoc concern: annotation of saved trajectories, not a runtime event class. v0.1 deliberately leaves this out of the wire.
 
@@ -45,7 +45,7 @@ Every event's `data` payload carries an OpenTelemetry **span triple**: `trace_id
 
 Every event's `data` payload MAY also carry **`avp.meta`**: an optional object (`dict[str, any]`) for agent- or caller-supplied annotations. Its contents are opaque to AVP; conformance validators MUST NOT assert on its values. Omit the key entirely when empty.
 
-All `data` fields beyond the span triple (`trace_id`, `span_id`, `parent_span_id`) MUST be namespaced under a dotted prefix. AVP-defined attributes live under `avp.*`; vendors MAY add their own namespaces (e.g. `acme.*`). Un-namespaced keys are reserved for the span triple only. AVP does not carry OpenTelemetry GenAI semconv (`gen_ai.*`) attribute names on the wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../FOUNDATIONS.md).
+All `data` fields beyond the span triple (`trace_id`, `span_id`, `parent_span_id`) MUST be namespaced under a dotted prefix. AVP-defined attributes live under `avp.*`; vendors MAY add their own namespaces (e.g. `acme.*`). Un-namespaced keys are reserved for the span triple only. AVP does not carry OpenTelemetry GenAI semconv (`gen_ai.*`) attribute names on the wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../../../FOUNDATIONS.md).
 
 ### 2.1 Run prelude
 
@@ -148,7 +148,7 @@ Wire flow:
 2. Agent dispatches: locally for tools without `avp.mcp_server_id`; via MCP for tools carrying one.
 3. Agent emits `avp.tool_returned` (`avp.tool_result.is_error` discriminates success, rejection, and execution errors).
 
-**Tool result shape.** The `avp.tool_result` field on `tool_returned` is an AVP [`ToolResultBlock`](../../python/avp/src/avp/content.py): `tool_use_id`, `content` (a string or a list of nested `text` / `image` / `document` blocks for providers that permit them), `structured_content` (an optional programmatic payload alongside the human-readable content, mirroring MCP's `structuredContent` / Gemini `function_response.response` / Bedrock `toolResult.content.json`), and `is_error`. `is_error` discriminates all outcomes: `false` (or absent) for success, `true` for rejections (tool declined by the agent) or execution errors, with the reason in `content[0].text`. During reconstruction this block becomes one entry of the next user-role message's content array.
+**Tool result shape.** The `avp.tool_result` field on `tool_returned` is an AVP [`ToolResultBlock`](https://github.com/portofcontext/agent-voyager-project/blob/main/avp/bindings/python/src/avp/content.py): `tool_use_id`, `content` (a string or a list of nested `text` / `image` / `document` blocks for providers that permit them), `structured_content` (an optional programmatic payload alongside the human-readable content, mirroring MCP's `structuredContent` / Gemini `function_response.response` / Bedrock `toolResult.content.json`), and `is_error`. `is_error` discriminates all outcomes: `false` (or absent) for success, `true` for rejections (tool declined by the agent) or execution errors, with the reason in `content[0].text`. During reconstruction this block becomes one entry of the next user-role message's content array.
 
 There is no AVP-flavored RPC channel for tool dispatch. Supervisors that want to expose Python (or shell, or HTTP-backed) tools wrap them in an MCP server and declare the server in `Commission.mcp_servers[]`.
 
@@ -218,7 +218,7 @@ All non-RPC-request event types are past-tense facts. Event `type` values are re
 | `avp.subagent_returned` | `avp://agent` | Subagent's frame closed for any reason (converged / refused / errored / interrupted / abandoned). Pairs with `subagent_invoked` by `span_id`. `avp.subagent.reason` is a `StopReason`; on `error`, `avp.subagent.result.text` carries the error string and the paired `tool_returned` sets `is_error = true`. |
 | `avp.error_occurred` | `avp://agent` | Non-tool error. Includes `data["avp.error.code"]: "mcp_connect_failed"` when a Commission-declared MCP server fails to dial at startup. |
 
-Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `python/avp/src/avp/trajectory.py`).
+Field-level definitions are in [`trajectory.schema.json`](./trajectory.schema.json) (auto-generated from the Pydantic models in `avp/bindings/python/src/avp/trajectory.py`).
 
 ### 7.1 Cumulative state is the consumer's responsibility
 
