@@ -61,4 +61,5 @@ package-lock.json
 !avp/bindings/typescript/package-lock.json
 !agents/avp-pi/typescript/package-lock.json
 !agents/avp-gemini-cli/typescript/package-lock.json
+!agents/avp-opencode/typescript/package-lock.json
 
