@@ -188,7 +188,7 @@ def error_code(exc: BaseException) -> ErrorCode:
     `Model*Error` taxonomy (which the Google integration raises) ends in them."""
     names = {c.__name__ for c in type(exc).__mro__}
     text = str(exc).lower()
-    if names & _AUTH or _no_key(names, text):
+    if names & _AUTH or _bad_key(names, text):
         return ErrorCode.auth_error
     if names & _RATE or _out_of_credits(exc, text):
         return ErrorCode.rate_limit
@@ -210,10 +210,17 @@ _AUTH = {
 _RATE = {"RateLimitError", "ModelRateLimitError"}
 
 
-def _no_key(names: set[str], text: str) -> bool:
-    """A client built without credentials (the SDKs raise at construction or
-    on the first request, before any HTTP status)."""
-    return ("OpenAIError" in names and "api_key" in text) or "authentication method" in text
+def _bad_key(names: set[str], text: str) -> bool:
+    """Credentials missing or rejected without an auth error class: a client
+    built without a key (the SDKs raise at construction or on the first
+    request), and Google, which answers an invalid key with a 400
+    `INVALID_ARGUMENT` whose reason is `API_KEY_INVALID`."""
+    return (
+        ("OpenAIError" in names and "api_key" in text)
+        or "authentication method" in text
+        or "api_key_invalid" in text
+        or "api key not valid" in text
+    )
 
 
 def _out_of_credits(exc: BaseException, text: str) -> bool:

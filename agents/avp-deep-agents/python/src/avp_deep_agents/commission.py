@@ -40,6 +40,8 @@ AGENT_NAME = "avp-deep-agents"
 # `init_chat_model` provider each maps to.
 ORIGINS = {"openai": "openai", "anthropic": "anthropic", "google": "google_genai"}
 TASK_TOOL = "task"
+# Total request attempts for Google models (Google counts the first request).
+GOOGLE_ATTEMPTS = 3
 SKILLS_ROUTE = "/.avp-skills/"
 
 
@@ -83,6 +85,11 @@ def chat_model(commission: Commission) -> Any:
     origin, name = commission.model.split("/", 1)
     spec = f"{ORIGINS[origin]}:{name}"
     kwargs: dict[str, Any] = {}
+    if origin == "google":
+        # The Google SDK makes six attempts with exponential backoff, which
+        # can keep a rate-limited run going for minutes. Match the OpenAI and
+        # Anthropic SDKs' two retries; the run reports the rest as rate_limit.
+        kwargs["max_retries"] = GOOGLE_ATTEMPTS
     if commission.provider and commission.provider.base_url:
         kwargs["base_url"] = commission.provider.base_url
     return init_chat_model(spec, **apply_provider_profile(spec, kwargs))

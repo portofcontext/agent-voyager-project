@@ -278,7 +278,11 @@ def _http_error(cls: type, status: int, body: dict) -> Exception:
 def _provider_failures() -> list:
     import anthropic
     import openai
-    from langchain_google_genai.chat_models import GoogleAuthenticationError
+    from langchain_google_genai.chat_models import (
+        GoogleAuthenticationError,
+        GoogleInvalidRequestError,
+        GoogleRateLimitError,
+    )
 
     return [
         pytest.param(
@@ -318,6 +322,22 @@ def _provider_failures() -> list:
             GoogleAuthenticationError("Error calling model (UNAUTHENTICATED)"),
             "auth_error",
             id="google-auth",
+        ),
+        pytest.param(
+            # What the Gemini API answers an invalid key with: a 400, not a 401.
+            GoogleInvalidRequestError(
+                "Error calling model 'gemini-3.1-flash-lite' (INVALID_ARGUMENT): 400"
+                " INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid."
+                " Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details':"
+                " [{'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com'}]}}"
+            ),
+            "auth_error",
+            id="google-invalid-key",
+        ),
+        pytest.param(
+            GoogleRateLimitError("429 RESOURCE_EXHAUSTED. You exceeded your current quota"),
+            "rate_limit",
+            id="google-quota",
         ),
     ]
 
@@ -411,6 +431,7 @@ def test_chat_model_follows_the_commission(monkeypatch: pytest.MonkeyPatch) -> N
     google = cm.chat_model(Commission(**base, model="google/gemini-2.5-flash"))
     assert type(google).__name__ == "ChatGoogleGenerativeAI"
     assert google.model.endswith("gemini-2.5-flash")
+    assert google.max_retries == cm.GOOGLE_ATTEMPTS
 
 
 def test_output_schema_is_the_run_output(script, workspace: Path, tmp_path: Path) -> None:
