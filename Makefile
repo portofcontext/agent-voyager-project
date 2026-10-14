@@ -78,6 +78,7 @@ help:
 	@echo "    make release-openai-agents release the openai-agents agent (tag agent-openai-agents-v<pinned version>)"
 	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
 	@echo "    make release-gemini-cli  release the gemini-cli agent (tag agent-gemini-cli-v<pinned version>)"
+	@echo "    make release-deep-agents release the deep-agents agent (tag agent-deep-agents-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
 	@echo "  Other:"
@@ -114,8 +115,8 @@ test-docker:
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
-AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
 AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
+AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
@@ -158,10 +159,10 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-codex ──\033[0m\n"
 	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
+	@printf "\n\033[1;36m── avp-codex ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(AVP_CODEX_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_CODEX_MANIFEST)
 	@printf "\n\033[1;36m── avp-openai-agents ──\033[0m\n"
@@ -398,6 +399,14 @@ release-gemini-cli: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-gemini-cli-v$$version" MSG="gemini-cli agent $$version"
 
 
+.PHONY: release-deep-agents
+release-deep-agents: _release-guard
+	@version=$$(grep -m1 '^version' agents/avp-deep-agents/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['deep-agents'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-deep-agents pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-deep-agents-v$$version" MSG="deep-agents agent $$version"
+
+
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
 # compute TAG in a recipe shell, then hand it to the cut_release template.
 .PHONY: _cut
@@ -446,6 +455,8 @@ build-agents:
 	@agents/avp-pi/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo "→ packaging the gemini-cli archive (npm; Node >= 22.19)..."
 	@agents/avp-gemini-cli/typescript/scripts/package.sh $(CURDIR)/dist/agents
+	@echo "→ building deep-agents wheel..."
+	@$(UV) build --package avp-deep-agents --out-dir dist/agents
 	@echo ""
 	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
 	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
@@ -459,6 +470,8 @@ build-agents:
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
 	@echo "  uv run avp agent install pi --package dist/agents/avp-pi.tar.gz"
 	@echo "  uv run avp agent install gemini-cli --package dist/agents/avp-gemini-cli.tar.gz"
+	@echo "  uv run avp agent install deep-agents \\"
+	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_deep_agents-*.whl"
 
 
 # Default goal
