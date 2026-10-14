@@ -190,7 +190,7 @@ def error_code(exc: BaseException) -> ErrorCode:
     text = str(exc).lower()
     if names & _AUTH or _bad_key(names, text):
         return ErrorCode.auth_error
-    if names & _RATE or _out_of_credits(exc, text):
+    if names & _RATE or _out_of_credits(exc, text) or _overloaded(exc, names, text):
         return ErrorCode.rate_limit
     if (
         "ContextOverflowError" in names
@@ -220,6 +220,19 @@ def _bad_key(names: set[str], text: str) -> bool:
         or "authentication method" in text
         or "api_key_invalid" in text
         or "api key not valid" in text
+    )
+
+
+def _overloaded(exc: BaseException, names: set[str], text: str) -> bool:
+    """The provider is out of capacity once the SDK's own retries are spent:
+    Anthropic's 529 `overloaded_error`, a 503 `UNAVAILABLE` from Gemini or
+    OpenAI. A throttle the run can't wait out, so `rate_limit`, not a crash."""
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return (
+        "OverloadedError" in names
+        or status in (503, 529)
+        or "503 unavailable" in text
+        or "overloaded_error" in text
     )
 
 

@@ -279,6 +279,7 @@ def _provider_failures() -> list:
     import anthropic
     import openai
     from langchain_google_genai.chat_models import (
+        GoogleAPIError,
         GoogleAuthenticationError,
         GoogleInvalidRequestError,
         GoogleRateLimitError,
@@ -338,6 +339,27 @@ def _provider_failures() -> list:
             GoogleRateLimitError("429 RESOURCE_EXHAUSTED. You exceeded your current quota"),
             "rate_limit",
             id="google-quota",
+        ),
+        pytest.param(
+            # What a Gemini model out of capacity raises once retries are spent.
+            GoogleAPIError(
+                code=503,
+                response_json={
+                    "error": {
+                        "code": 503,
+                        "message": "This model is currently experiencing high demand.",
+                        "status": "UNAVAILABLE",
+                    }
+                },
+                response=None,
+            ),
+            "rate_limit",
+            id="google-unavailable",
+        ),
+        pytest.param(
+            _http_error(anthropic.InternalServerError, 529, {"message": "Overloaded"}),
+            "rate_limit",
+            id="anthropic-overloaded",
         ),
     ]
 

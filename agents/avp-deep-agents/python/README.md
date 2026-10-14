@@ -34,7 +34,7 @@ Agents registers for Codex models, so the descriptor does not declare it.
 
 | Commission | Deep Agents |
 |---|---|
-| `model` `openai/<id>`, `anthropic/<id>`, `google/<id>` | `init_chat_model` (`openai`, `anthropic`, `google_genai`) with Deep Agents' provider profile, so OpenAI runs on the Responses API |
+| `model` `openai/<id>`, `anthropic/<id>`, `google/<id>` | `init_chat_model` (`openai`, `anthropic`, `google_genai`) with Deep Agents' provider profile, so OpenAI runs on the Responses API; Google models make at most three attempts, like the other SDKs |
 | `provider.base_url` | the chat model's `base_url` |
 | `provider.id` other than the model's origin, any other origin | fail fast: `unsupported_provider` / `unsupported_model` |
 | `system_prompt` | `create_deep_agent(system_prompt=...)`; Deep Agents appends its harness profile's suffix for the models it has one for (Claude Haiku 4.5, Sonnet 4.6, Opus 4.7, the Codex models) |
@@ -54,7 +54,7 @@ Agents registers for Codex models, so the descriptor does not declare it.
 | `task` tool start / end | `subagent_start` / `subagent_result` with the child's spend as `avp.subagent.usage` |
 | `on_llm_error` | nothing: a failed attempt is not a turn |
 | run ends | `stop(converged, output)`; a refusal is `stop(refused)` |
-| auth / rate limit (incl. `insufficient_quota`) / context overflow | `error(auth_error / rate_limit / context_limit)` + `stop(error)` |
+| auth (incl. Gemini's 400 `API_KEY_INVALID`) / rate limit (incl. `insufficient_quota`, and a 503 / 529 overload once retries are spent) / context overflow | `error(auth_error / rate_limit / context_limit)` + `stop(error)` |
 | SIGINT / SIGTERM | `stop(interrupted)` |
 
 **Why callbacks, not `astream_events`.** A chat model's callback run is exactly
