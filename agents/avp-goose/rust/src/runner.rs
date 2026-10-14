@@ -775,15 +775,20 @@ mod tests {
             avp::load_default_prices(),
         );
         emitter.start(Some("gpt-4o-mini")).unwrap();
+        // The signal fires only once the stream has handed over its message,
+        // then the stream stalls: `select!` picks randomly between ready
+        // branches, so firing earlier could interrupt before the message.
+        let (fire, fired) = tokio::sync::oneshot::channel::<()>();
         let stream = futures::stream::iter(vec![Ok(AgentEvent::Message(model_message(
             "partial answer",
         )))])
-        .chain(futures::stream::pending());
-        let (fire, fired) = tokio::sync::oneshot::channel::<()>();
+        .chain(futures::stream::once(async move {
+            let _ = fire.send(());
+            futures::future::pending::<anyhow::Result<AgentEvent>>().await
+        }));
         let run = record_reply(&mut emitter, "gpt-4o-mini", Box::pin(stream), async {
             let _ = fired.await;
         });
-        fire.send(()).unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(5), run)
             .await
             .expect("an interrupt ends the reply loop")
