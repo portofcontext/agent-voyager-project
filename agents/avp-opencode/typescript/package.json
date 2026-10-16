@@ -1,0 +1,30 @@
+{
+  "name": "avp-opencode",
+  "version": "0.1.0",
+  "description": "AVP adapter for the OpenCode coding agent.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "avp-opencode": "./dist/src/main.js"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "npm --prefix ../../../avp/bindings/typescript run build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test --test-concurrency=1 'dist/tests/*.test.js'"
+  },
+  "dependencies": {
+    "@avp/types": "file:../../../avp/bindings/typescript",
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "@opencode-ai/sdk": "1.18.34",
+    "opencode-ai": "1.18.34",
+    "undici": "7.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

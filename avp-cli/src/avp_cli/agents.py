@@ -70,8 +70,10 @@ class AgentSource:
     wheel_dists: tuple[str, ...] = field(default_factory=tuple)
     container_setup: tuple[str, ...] = ()
     container_env: tuple[tuple[str, str], ...] = ()
-    # node agents: the release asset (one archive for every platform) and the
-    # entry script inside it, run as `node <entry>`.
+    # node agents: the release asset and the entry script inside it, run as
+    # `node <entry>`. An asset containing `{platform}` is one archive per
+    # platform (`linux-arm64`, `darwin-x64`, ...) for agents that ship a native
+    # binary. `container_setup` also applies (extra packages the agent needs).
     package_asset: str | None = None
     entry: str | None = None
 
@@ -188,6 +190,22 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dist="avp-deep-agents",
         wheel_dists=("agent-voyager-project", "avp-deep-agents"),
     ),
+    "opencode": AgentSource(
+        name="opencode",
+        kind="node",
+        descriptor_name="avp-opencode",
+        tag_prefix="agent-opencode",
+        dev_manifest="agents/avp-opencode/typescript/avp-conformance.json",
+        # 0.1.0: OpenCode 1.18.34 (`opencode serve` per run) on the TypeScript
+        # Recorder. Its grep and glob tools use ripgrep.
+        container_version="0.1.0",
+        package_asset="avp-opencode-{platform}.tar.gz",
+        entry="dist/src/main.js",
+        container_setup=(
+            "apt-get update && apt-get install -y --no-install-recommends ripgrep "
+            "&& rm -rf /var/lib/apt/lists/*",
+        ),
+    ),
 }
 
 # The in-repo library wheels every Python agent release ships next to its own
@@ -237,14 +255,16 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
         # agent's self-contained archive. Nothing else comes from npm.
         node = f"https://nodejs.org/dist/v{NODE_VERSION}"
         arch = "$(uname -m | sed -e s/x86_64/x64/ -e s/aarch64/arm64/)"
+        asset = (source.package_asset or "").replace("{platform}", f"linux-{arch}")
         return ContainerRecipe(
             install=(
                 "apt-get update && apt-get install -y --no-install-recommends "
                 "curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+                *source.container_setup,
                 f"curl -fsSL {node}/node-v{NODE_VERSION}-linux-{arch}.tar.gz "
                 "| tar -xz -C /usr/local --strip-components=1",
                 f"mkdir -p /opt/{source.name} && curl -fsSL "
-                f"{_RELEASE_DL}/{tag}/{source.package_asset} | tar -xz -C /opt/{source.name}",
+                f"{_RELEASE_DL}/{tag}/{asset} | tar -xz -C /opt/{source.name}",
             ),
             command=("node", f"/opt/{source.name}/{source.entry}"),
         )

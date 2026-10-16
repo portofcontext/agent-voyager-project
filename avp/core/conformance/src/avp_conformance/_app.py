@@ -151,7 +151,7 @@ def _describe_agent(
 _CREDENTIAL_VARS: dict[str, tuple[str, ...]] = {
     "anthropic": ("ANTHROPIC_API_KEY",),
     "openai": ("OPENAI_API_KEY", "CODEX_API_KEY"),
-    "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"),
     "mistral": ("MISTRAL_API_KEY",),
     "openrouter": ("OPENROUTER_API_KEY",),
 }

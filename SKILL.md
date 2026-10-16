@@ -43,9 +43,9 @@ instructions, not the CLI or an agent runtime.
 
 Use `avp --help` and subcommand help for the installed release's options.
 `avp agent list` shows availability; prebuilt install names are `goose`,
-`claude-code`, `codex`, `openai-agents`, `pi`, `gemini-cli`, and `deep-agents` (Pi
-and Gemini CLI need Node 22.19 or newer on the host for `describe`; runs install
-Node in the sandbox).
+`claude-code`, `codex`, `openai-agents`, `pi`, `gemini-cli`, `deep-agents`, and
+`opencode` (Pi, Gemini CLI, and OpenCode need Node 22.19 or newer on the host for
+`describe`; runs install Node in the sandbox).
 
 ## Configure a Commission or evaluation
 
