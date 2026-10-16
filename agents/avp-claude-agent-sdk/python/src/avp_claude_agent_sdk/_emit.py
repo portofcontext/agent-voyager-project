@@ -8,7 +8,7 @@ the trajectory's ordering and span rules live in `avp.recorder.Recorder`.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypeVar
 
 from claude_agent_sdk import ClaudeSDKClient
 from claude_agent_sdk.types import (
@@ -27,7 +27,7 @@ from claude_agent_sdk.types import (
 )
 
 from avp.commission import Commission
-from avp.descriptor import ToolDecl
+from avp.descriptor import SkillDecl, SubagentDecl, ToolDecl
 from avp.trajectory import ErrorCode, StopReason, SubagentUsage
 from avp_claude_agent_sdk._runstate import RunState
 from avp_claude_agent_sdk._translator import (
@@ -64,19 +64,20 @@ async def emit_prelude(
     )
 
 
-def _apply_enabled_builtin_tools(
-    tools: list[ToolDecl] | None, allow: list[str] | None
-) -> list[ToolDecl] | None:
-    """Apply the Commission's `enabled_builtin_tools` allow-list to the merged
-    `agent_started` tool bag. `None` (no allow-list) exposes all and is passed
-    through unchanged; any concrete list keeps only the named tools, so `[]`
-    yields `[]` (none) even when the CLI reported no tools section. This is the
-    spec's subtractive filter over `descriptor.tools` (which, for claude, is the
-    single bag of built-in AND MCP-surfaced tools)."""
+_Decl = TypeVar("_Decl", ToolDecl, SubagentDecl, SkillDecl)
+
+
+def _apply_allow_list(decls: list[_Decl] | None, allow: list[str] | None) -> list[_Decl] | None:
+    """Apply a Commission allow-list to the merged `agent_started` view.
+    `None` (no allow-list) exposes all and is passed through unchanged; any
+    concrete list keeps only the named entries, so `[]` yields `[]` (none) even
+    when the CLI reported no such section. This is the spec's subtractive
+    filter over the descriptor (whose tools, for claude, are the single bag of
+    built-in AND MCP-surfaced tools)."""
     if allow is None:
-        return tools
+        return decls
     allowed = set(allow)
-    return [t for t in (tools or []) if t.name in allowed]
+    return [d for d in (decls or []) if d.name in allowed]
 
 
 # Context-usage keys worth carrying on the wire: the ones that attribute the
@@ -139,13 +140,18 @@ async def emit_agent_started(
         request_model=request_model_from_init(init_data, options) if init_data else options.model,
         prompt=prompt if isinstance(prompt, str) or prompt is None else None,
         system_prompt=resolve_system_prompt(options.system_prompt),
-        tools=_apply_enabled_builtin_tools(
+        tools=_apply_allow_list(
             tools_from_init(init_data, status) if init_data else None,
             state.enabled_builtin_tools,
         ),
         mcp_servers=mcp_servers_from_status(status),
-        skills=skills_from_init(init_data) if init_data else None,
-        subagents=subagents_from_init(init_data) if init_data else None,
+        skills=_apply_allow_list(
+            skills_from_init(init_data) if init_data else None, state.skills_filter
+        ),
+        subagents=_apply_allow_list(
+            subagents_from_init(init_data) if init_data else None,
+            state.enabled_builtin_subagents,
+        ),
         meta=meta,
     )
 

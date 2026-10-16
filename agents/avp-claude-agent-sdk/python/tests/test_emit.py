@@ -256,7 +256,7 @@ def test_apply_enabled_builtin_tools_filters_the_bag() -> None:
     None passes through (all), [] yields [] (none), a list keeps only the named
     tools, and [] yields [] even when the bag was None."""
     from avp.descriptor import ToolDecl
-    from avp_claude_agent_sdk._emit import _apply_enabled_builtin_tools
+    from avp_claude_agent_sdk._emit import _apply_allow_list as _apply_enabled_builtin_tools
 
     bag = [ToolDecl(name="Bash"), ToolDecl(name="Read"), ToolDecl(name="mcp__x__y")]
     assert _apply_enabled_builtin_tools(bag, None) == bag
@@ -305,10 +305,60 @@ def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
     skill_md = tmp_path / ".claude" / "skills" / "avp" / "SKILL.md"
     assert skill_md.read_text() == "---\nname: avp\n---\nbody"
     assert (tmp_path / ".claude" / "skills" / "avp" / "ref.md").read_text() == "x"
-    assert options.skills == ["avp"]  # frontmatter name, passed as the SDK filter
+    # No built-in allow-list: every skill, so the filter keeps the built-ins.
+    assert options.skills == "all"
     # The materialized skill is a PROJECT skill; it loads only if setting_sources
     # includes "project". Must be added even when the caller isolated with [].
     assert "project" in (options.setting_sources or [])
+
+
+@pytest.mark.parametrize(
+    ("inline", "allow", "expected"),
+    [
+        (False, None, None),
+        (False, [], []),
+        (False, ["verify"], ["verify"]),
+        (True, None, "all"),
+        (True, [], ["avp"]),
+        (True, ["verify"], ["avp", "verify"]),
+    ],
+)
+def test_skills_filter_follows_the_built_in_allow_list(tmp_path, inline, allow, expected) -> None:
+    """The SDK `skills` filter hides every skill it does not name: an absent
+    allow-list keeps the built-ins, and `[]` hides them even with no inline skill."""
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody"}}]
+        if inline
+        else None,
+        enabled_builtin_skills=None if allow is None else {"avp-claude-agent-sdk": allow},
+    )
+    options = apply_commission(commission, ClaudeAgentOptions(cwd=str(tmp_path)))
+    assert options.skills == expected
+
+
+def test_mcp_allow_list_filters_base_servers_and_keeps_commission_ones() -> None:
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    base = ClaudeAgentOptions(mcp_servers={"keep": {"command": "a"}, "drop": {"command": "b"}})
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        mcp_servers=[{"type": "stdio", "id": "mine", "command": ["c"]}],
+        enabled_builtin_mcp_servers={"avp-claude-agent-sdk": ["keep"]},
+    )
+    assert set(apply_commission(commission, base).mcp_servers) == {"keep", "mine"}
 
 
 def test_inline_skill_adds_project_to_isolated_setting_sources(tmp_path) -> None:

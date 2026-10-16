@@ -31,6 +31,12 @@ class RunState:
     # to `agent_started.data.avp.tools` so the merged surface reflects the
     # Commission's subtractive filter over the descriptor's tool bag.
     enabled_builtin_tools: list[str] | None = None
+    # Commission `enabled_builtin_subagents` allow-list (None = expose all). The
+    # CLI's init still lists subagents its deny rules hide, so this filters them.
+    enabled_builtin_subagents: list[str] | None = None
+    # The run's SDK `skills` filter when it names skills (None = all). The
+    # CLI's init lists the skills it hides too.
+    skills_filter: list[str] | None = None
     # `message_id` of the inference currently streaming. The CLI fans one API
     # response out as one AssistantMessage per content block, all sharing the
     # id; a chunk without one belongs to the inference already streaming.
@@ -48,6 +54,8 @@ def new_run_state(
     run_id: str | None = None,
     prices: PriceTable | None = None,
     enabled_builtin_tools: list[str] | None = None,
+    enabled_builtin_subagents: list[str] | None = None,
+    skills_filter: list[str] | None = None,
 ) -> RunState:
     return RunState(
         prompt=prompt,
@@ -61,6 +69,8 @@ def new_run_state(
             dispatch_target=get_dispatch_target,
         ),
         enabled_builtin_tools=enabled_builtin_tools,
+        enabled_builtin_subagents=enabled_builtin_subagents,
+        skills_filter=skills_filter,
     )
 
 

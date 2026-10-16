@@ -38,6 +38,10 @@ These changes retain the v0.1 wire schemas.
 
 - Invalid Recorder reports fail visibly without corrupting valid state.
 - Model-response boundaries, tool pairing, per-response usage, and cost accounting.
+- Claude enforces `enabled_builtin_subagents` (as `Agent(<name>)` deny rules),
+  `enabled_builtin_mcp_servers`, and an empty `enabled_builtin_skills`, which
+  it had ignored; inline skills no longer hide the built-in ones. Preflight
+  checks every Claude allow-list, not only tools.
 - Goose provider failures, cached-token double counting, and session-naming usage.
 - Claude's `input_tokens` now include cache reads and writes, and a failed API call
   (for example an invalid key) is reported as `error_occurred` rather than as a
