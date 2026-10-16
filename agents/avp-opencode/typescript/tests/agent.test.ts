@@ -195,6 +195,159 @@ test("Commission MCP tools run through OpenCode's MCP client", async () => {
   assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
 });
 
+const MCP_ONLY: Partial<Commission> = {
+  mcp_servers: [{ type: "stdio", id: "avptest", command: ["python3", FIXTURE] }],
+  enabled_builtin_tools: { "avp-opencode": [] },
+};
+
+/** A tool_returned's content as text. */
+const resultText = (returned: Json) => {
+  const content = returned["avp.tool_result"].content;
+  return typeof content === "string" ? content : JSON.stringify(content);
+};
+
+test("parallel calls in one response pair each result, success or failure, with its own call", async () => {
+  const calls = [
+    { id: "call_e1", name: "avptest_Avptest_Echo", args: { text: "ECHO-ONE" } },
+    { id: "call_f1", name: "avptest_Avptest_Fail", args: { message: "FAIL-RESULT", mode: "result" } },
+    { id: "call_e2", name: "avptest_Avptest_Echo", args: { text: "ECHO-TWO" } },
+    { id: "call_f2", name: "avptest_Avptest_Fail", args: { message: "FAIL-PROTOCOL", mode: "protocol" } },
+  ];
+  const { events } = await runScripted(commission(MCP_ONLY), [{ calls }, { text: "DONE" }]);
+
+  const turns = all(events, "assistant_message");
+  assert.equal(turns.length, 2, "one turn per model response");
+  assert.deepEqual(
+    turns[0]["avp.content"].map((b: Json) => [b.type, b.id]),
+    calls.map((c) => ["tool_use", c.id]),
+  );
+  assert.deepEqual(turns[0]["avp.response.finish_reasons"], ["tool-calls"]);
+
+  const invoked = all(events, "tool_invoked").map((d) => d["avp.tool.call_id"]);
+  assert.deepEqual(invoked.sort(), calls.map((c) => c.id).sort());
+  const returned = all(events, "tool_returned");
+  assert.equal(returned.length, calls.length, "one tool_returned per call");
+  const byId = new Map(returned.map((d) => [d["avp.tool.call_id"], d]));
+  assert.equal(byId.size, calls.length);
+  for (const [id, text, isError] of [
+    ["call_e1", "ECHO-ONE", false],
+    ["call_e2", "ECHO-TWO", false],
+    ["call_f1", "FAIL-RESULT", true],
+    ["call_f2", "FAIL-PROTOCOL", true],
+  ] as const) {
+    const result = byId.get(id)!;
+    assert.equal(result["avp.tool_result"].is_error, isError, `${id}: ${JSON.stringify(result)}`);
+    assert.match(resultText(result), new RegExp(text), id);
+    for (const other of ["ECHO-ONE", "ECHO-TWO", "FAIL-RESULT", "FAIL-PROTOCOL"].filter((t) => t !== text)) {
+      assert.doesNotMatch(resultText(result), new RegExp(other), `${id} carries another call's result`);
+    }
+  }
+  // Every result follows its call's turn and precedes the next turn.
+  const order = types(events);
+  const first = order.indexOf("assistant_message");
+  const second = order.lastIndexOf("assistant_message");
+  order.forEach((t, i) => {
+    if (t === "tool_returned") assert.ok(first < i && i < second, `tool_returned at ${i} outside its turn`);
+  });
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});
+
+test("parallel calls that finish out of order still pair by call id", async () => {
+  const { events } = await runScripted(commission({ enabled_builtin_tools: { "avp-opencode": ["bash"] } }), [
+    {
+      calls: [
+        { id: "call_slow", name: "bash", args: { command: "sleep 1.5; echo SLOW-OUT", description: "slow" } },
+        { id: "call_fast", name: "bash", args: { command: "echo FAST-OUT", description: "fast" } },
+        { id: "call_mid", name: "bash", args: { command: "sleep 0.5; echo MID-OUT", description: "mid" } },
+      ],
+    },
+    { text: "DONE" },
+  ]);
+  assert.equal(all(events, "assistant_message").length, 2);
+  const returned = all(events, "tool_returned");
+  assert.equal(returned.length, 3, "one tool_returned per call");
+  const byId = new Map(returned.map((d) => [d["avp.tool.call_id"], d]));
+  for (const [id, text, others] of [
+    ["call_slow", "SLOW-OUT", ["FAST-OUT", "MID-OUT"]],
+    ["call_fast", "FAST-OUT", ["SLOW-OUT", "MID-OUT"]],
+    ["call_mid", "MID-OUT", ["SLOW-OUT", "FAST-OUT"]],
+  ] as const) {
+    const result = byId.get(id)!;
+    assert.equal(result["avp.tool_result"].is_error, false, id);
+    assert.match(resultText(result), new RegExp(text), id);
+    for (const other of others) assert.doesNotMatch(resultText(result), new RegExp(other), id);
+  }
+  // Results land in completion order, each at its own end time, so a fast
+  // call's duration is not stretched to the slowest call's.
+  const returnedEvents = events.filter((e) => e.type === "avp.tool_returned");
+  assert.deepEqual(
+    returnedEvents.map((e) => e.data["avp.tool.call_id"]),
+    ["call_fast", "call_mid", "call_slow"],
+  );
+  const invokedAt = Date.parse(events.find((e) => e.type === "avp.tool_invoked")!.time);
+  const [fast, mid, slow] = returnedEvents.map((e) => Date.parse(e.time) - invokedAt);
+  assert.ok(fast! < 400 && mid! >= 400 && mid! < 1400 && slow! >= 1400, `durations ${fast}/${mid}/${slow}ms`);
+  const times = events.map((e) => Date.parse(e.time));
+  times.slice(1).forEach((t, i) => assert.ok(t >= times[i]!, `event ${i + 1} is earlier than event ${i}`));
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});
+
+test("dependent rounds are one turn per model response, each with its own usage", async () => {
+  const usages = [
+    { input: 100, cached: 10, output: 11 },
+    { input: 200, cached: 20, output: 22 },
+    { input: 300, cached: 30, output: 33 },
+  ];
+  const { events } = await runScripted(commission(MCP_ONLY), [
+    { call: { id: "call_a1", name: "avptest_Avptest_Add", args: { a: 2, b: 3 } }, usage: usages[0] },
+    { call: { id: "call_a2", name: "avptest_Avptest_Add", args: { a: 5, b: 4 } }, usage: usages[1] },
+    { text: "The total is 9.", usage: usages[2] },
+  ]);
+  assert.deepEqual(types(events).slice(2), [
+    "agent_started",
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "agent_stopped",
+  ]);
+  // Each round's request carried the previous round's result.
+  assert.equal(model.requests.length, 3);
+  assert.match(JSON.stringify(model.requests[1]!.input), /sum: 5/);
+  assert.match(JSON.stringify(model.requests[2]!.input), /sum: 9/);
+
+  const turns = all(events, "assistant_message");
+  turns.forEach((turn, i) => {
+    assert.deepEqual(turn["avp.usage"], {
+      input_tokens: usages[i]!.input,
+      output_tokens: usages[i]!.output,
+      cache_read_input_tokens: usages[i]!.cached,
+      cache_creation_input_tokens: 0,
+    });
+    assert.equal(turn["avp.cost.source"], "computed");
+  });
+  assert.deepEqual(turns[0]["avp.content"].map((b: Json) => b.id), ["call_a1"]);
+  assert.deepEqual(turns[1]["avp.content"].map((b: Json) => b.id), ["call_a2"]);
+  assert.deepEqual(turns[2]["avp.content"], [{ type: "text", text: "The total is 9." }]);
+
+  const returned = all(events, "tool_returned");
+  assert.deepEqual(
+    returned.map((d) => [d["avp.tool.call_id"], d["avp.tool_result"].is_error]),
+    [
+      ["call_a1", false],
+      ["call_a2", false],
+    ],
+  );
+  assert.match(resultText(returned[0]!), /sum: 5/);
+  assert.match(resultText(returned[1]!), /sum: 9/);
+  const stopped = one(events, "agent_stopped").data;
+  assert.equal(stopped["avp.reason"], "converged");
+  assert.equal(stopped["avp.output"], "The total is 9.");
+});
+
 test("an MCP server that fails to connect is reported and the run continues", async () => {
   const { events } = await runScripted(
     commission({ mcp_servers: [{ type: "stdio", id: "broken", command: ["/nonexistent/avp-mcp"] }] }),

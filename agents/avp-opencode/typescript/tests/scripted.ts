@@ -2,13 +2,22 @@
  * A scripted OpenAI Responses endpoint for the seam tests. Each `POST
  * /v1/responses` streams the next scripted step as Responses SSE, the shape
  * OpenCode's OpenAI SDK parses; a step can instead fail with an HTTP status.
+ * A step's `calls` are several function calls in one response, and its
+ * `usage` replaces the default `USAGE`.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
+export interface Call {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
 export type Step =
-  | { text: string; chunkDelayMs?: number }
-  | { call: { id: string; name: string; args: Record<string, unknown> }; text?: string }
+  | { text: string; chunkDelayMs?: number; usage?: Usage }
+  | { call: Call; text?: string; usage?: Usage }
+  | { calls: Call[]; text?: string; usage?: Usage }
   | { status: number; body: Record<string, unknown> };
 
 export interface Usage {
@@ -87,8 +96,8 @@ async function stream(res: import("node:http").ServerResponse, step: Exclude<Ste
     await send({ type: "response.output_item.done", output_index: index, item: { type: "message", id: item } });
     index++;
   }
-  if ("call" in step) {
-    const { id: callId, name, args } = step.call;
+  const calls = "calls" in step ? step.calls : "call" in step ? [step.call] : [];
+  for (const { id: callId, name, args } of calls) {
     const item = `fc_${index}`;
     const json = JSON.stringify(args);
     await send({
@@ -102,15 +111,17 @@ async function stream(res: import("node:http").ServerResponse, step: Exclude<Ste
       output_index: index,
       item: { type: "function_call", id: item, call_id: callId, name, arguments: json, status: "completed" },
     });
+    index++;
   }
+  const usage = step.usage ?? USAGE;
   await send({
     type: "response.completed",
     response: {
       incomplete_details: null,
       usage: {
-        input_tokens: USAGE.input,
-        input_tokens_details: { cached_tokens: USAGE.cached },
-        output_tokens: USAGE.output,
+        input_tokens: usage.input,
+        input_tokens_details: { cached_tokens: usage.cached },
+        output_tokens: usage.output,
         output_tokens_details: { reasoning_tokens: 0 },
       },
     },

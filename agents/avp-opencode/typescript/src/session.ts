@@ -231,15 +231,17 @@ export class SessionTranslator {
         );
         this.opened.add(tool.callID);
       }
-      if (translate.toolResult(tool)) this.result(tool);
     }
+    // Parallel calls finish in any order; report results as they finished, so
+    // each lands at its own end time on the monotonic clock.
+    const finished = tools.filter((t) => translate.toolResult(t)).sort((a, b) => (ended(a) ?? 0) - (ended(b) ?? 0));
+    for (const tool of finished) this.result(tool);
   }
 
   private result(tool: ToolPart): void {
     const result = translate.toolResult(tool)!;
     this.pending.delete(tool.callID);
-    const ended = "time" in tool.state && "end" in tool.state.time ? tool.state.time.end : undefined;
-    this.clock.at(ended, () => {
+    this.clock.at(ended(tool), () => {
       if (this.opened.delete(tool.callID)) {
         const child = this.children.get(tool.callID);
         const spend = child ? this.spend.get(child) : undefined;
@@ -302,6 +304,10 @@ function endOf(part: Part): number | undefined {
 
 function started(tool: ToolPart): number | undefined {
   return "time" in tool.state ? tool.state.time.start : undefined;
+}
+
+function ended(tool: ToolPart): number | undefined {
+  return "time" in tool.state && "end" in tool.state.time ? tool.state.time.end : undefined;
 }
 
 function text(message: Message | undefined): string {
