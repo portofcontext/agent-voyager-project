@@ -29,7 +29,8 @@ from pydantic import ValidationError
 
 from avp.descriptor import AgentDescriptor
 from avp.launch import local_environment
-from avp_conformance._match import match_case
+from avp_conformance._match import MatchResult, match_case
+from avp_conformance._meter import Meter, reconcile
 from avp_conformance._utils import discover_suite, load_case, load_manifest
 from avp_conformance.case import TestCase
 from avp_conformance.manifest import AgentManifest
@@ -114,7 +115,12 @@ def _expand_fixture_tokens(
 
 
 def _describe_agent(
-    manifest: AgentManifest, command: list[str], cwd: Path, prefix: list[str], timeout: float
+    manifest: AgentManifest,
+    command: list[str],
+    cwd: Path,
+    prefix: list[str],
+    timeout: float,
+    extra_env: dict[str, str] | None = None,
 ) -> AgentDescriptor:
     """The agent-under-test's pre-flight `describe` descriptor. Its identity
     keys per-agent Commission maps via the `${AGENT_NAME}` / `${AGENT_VERSION}`
@@ -125,7 +131,7 @@ def _describe_agent(
         out_path = Path(f.name)
     try:
         cmd = [*prefix, *command, "describe", "--out", str(out_path)]
-        with local_environment(manifest.env) as env:
+        with local_environment({**manifest.env, **(extra_env or {})}) as env:
             result = subprocess.run(
                 cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
             )
@@ -426,6 +432,7 @@ def _run_case(
     timeout: float,
     dump_dir: Path | None = None,
     identity: tuple[str, str] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[list[dict] | None, str | None]:
     """Spawn the agent's `run` for one case; return (events, error).
 
@@ -436,7 +443,7 @@ def _run_case(
     """
     with (
         tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp,
-        local_environment(manifest.env) as env,
+        local_environment({**manifest.env, **(extra_env or {})}) as env,
     ):
         tmpd = Path(tmp)
         commission_path = tmpd / "commission.json"
@@ -569,6 +576,15 @@ def check(
             "the one the case pins. Rewritten throughout the case, expectations included.",
         ),
     ] = None,
+    meter: Annotated[
+        bool,
+        typer.Option(
+            "--meter/--no-meter",
+            help="Route provider traffic through a local metering proxy and fail a case whose "
+            "trajectory omits tokens the provider billed (and a describe that calls a model). "
+            "It sets the provider endpoint variables; use --no-meter to keep your own.",
+        ),
+    ] = True,
 ) -> None:
     """Run conformance cases against the SDK described by --agent.
 
@@ -604,10 +620,14 @@ def check(
     n_pass = 0
     n_fail = 0
     n_skip = 0
+    metering = Meter().start() if meter else None
+    routing = metering.env() if metering else {}
+    if metering is not None and sandbox:
+        allow_domain = [*(allow_domain or []), "localhost", "127.0.0.1"]
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup, allow_domain)
         try:
-            descriptor = _describe_agent(manifest, command, cwd, prefix, timeout)
+            descriptor = _describe_agent(manifest, command, cwd, prefix, timeout, routing)
         except Exception as exc:
             typer.echo(f"error: could not learn the agent's identity via describe: {exc}", err=True)
             raise typer.Exit(code=2) from None
@@ -616,6 +636,13 @@ def check(
             f"running {total} case(s) against {manifest.command[0]!r} "
             f"({identity[0]} v{identity[1]})\n"
         )
+        if metering is not None and (billed := metering.take()):
+            typer.echo(
+                f"  FAIL  describe called a model ({len(billed)} billed response(s)); "
+                "describe must be free",
+                err=True,
+            )
+            n_fail += 1
         for cat_name in sorted(grouped):
             typer.echo(f"  {cat_name}:")
             for tc in grouped[cat_name]:
@@ -623,8 +650,10 @@ def check(
                     typer.echo(f"    SKIP  {tc.id}  (agent declares no {', '.join(missing)})")
                     n_skip += 1
                     continue
+                if metering is not None:
+                    metering.take()
                 events, error = _run_case(
-                    tc, manifest, command, cwd, prefix, timeout, dump_dir, identity
+                    tc, manifest, command, cwd, prefix, timeout, dump_dir, identity, routing
                 )
                 if error is not None:
                     typer.echo(f"    FAIL  {tc.id}  {error}", err=True)
@@ -632,6 +661,8 @@ def check(
                     continue
                 assert events is not None
                 result = match_case(events, tc.expectations)
+                if metering is not None and (unbilled := reconcile(metering.take(), events)):
+                    result = MatchResult(ok=False, reasons=[*result.reasons, *unbilled])
                 if result.ok:
                     typer.echo(f"    PASS  {tc.id}")
                     n_pass += 1
@@ -641,6 +672,8 @@ def check(
                         typer.echo(f"          {reason}", err=True)
                     n_fail += 1
     finally:
+        if metering is not None:
+            metering.stop()
         for path in cleanup:
             path.unlink(missing_ok=True)
 

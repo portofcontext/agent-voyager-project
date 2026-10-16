@@ -17,6 +17,10 @@ These changes retain the v0.1 wire schemas.
   table) and adds cases for invalid provider credentials, the Commission system
   prompt, inline skills, and SIGTERM. Cases can set `credentials: "invalid"` and
   an `interrupt`.
+- `avp-conformance check` meters provider traffic (`--meter`, on by default):
+  a local proxy per provider reads each response's usage, and a case fails
+  when the trajectory omits billed tokens or the agent ignores the endpoint
+  variables. A `describe` that calls a model fails too.
 
 ### Changed
 
@@ -42,6 +46,21 @@ These changes retain the v0.1 wire schemas.
   `enabled_builtin_mcp_servers`, and an empty `enabled_builtin_skills`, which
   it had ignored; inline skills no longer hide the built-in ones. Preflight
   checks every Claude allow-list, not only tools.
+- Provider endpoints follow one convention: `<PROVIDER>_HOST` is the root that
+  stands in for the provider's origin and `<PROVIDER>_BASE_URL` adds the API's
+  version path (`OPENAI_BASE_URL` ends in `/v1`). The CLI set both to the same
+  value, and its broker dropped the version path, so vault-credentialed OpenAI
+  and OpenRouter runs requested the wrong URL. Google runs now get endpoint
+  variables, including `GOOGLE_GEMINI_BASE_URL`.
+- Pi and Codex ignored the launcher's endpoint variables, so their traffic
+  bypassed the credential broker. Pi now moves its catalog endpoint under
+  `<ORIGIN>_HOST`, and Codex reads `OPENAI_BASE_URL`.
+- Claude and Goose no longer generate session titles, model calls outside the
+  loop the trajectory never recorded. Claude names its CLI session after the
+  run; Goose turns session naming off.
+- Claude turns recorded the `message_start` placeholder as `output_tokens`
+  (typically 1). Each turn now carries its response's final `message_delta`
+  usage.
 - Claude's capability probe no longer calls the model. It sent its probe prompt
   to the CLI's default model on every run, spend the trajectory never recorded.
 - Goose provider failures, cached-token double counting, and session-naming usage.
