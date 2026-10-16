@@ -61,8 +61,14 @@ export const AGENT_VERSION: string = JSON.parse(
 /** Where OpenCode lists a skill compiled into the binary. */
 const BUILTIN_SKILL_LOCATION = "<built-in>";
 
-/** OpenCode gates these under one `edit` permission: withholding one withholds all. */
-const EDIT_TOOLS = ["edit", "write", "apply_patch"];
+/**
+ * OpenCode turns a prompt's `edit: false` into a deny rule on the `edit`
+ * permission, which `write` and `apply_patch` also ask for. A later rule on a
+ * pattern matching `edit` re-allows that permission, so only the `edit` tool
+ * stays hidden.
+ */
+const EDIT_PERMISSION_TOOLS = ["write", "apply_patch"];
+const EDIT_PERMISSION_REALLOW = "edit*";
 
 /** Models whose tool lists together cover every built-in (OpenCode offers GPT models `apply_patch` instead of `edit` / `write`). */
 const SURVEY_MODELS = [
@@ -208,13 +214,15 @@ async function session(
     (t) => surface.tools.includes(t.id),
   );
   let enabled = allowed(commission.enabled_builtin_tools, offered.map((t) => t.id));
-  const edits = offered.filter((t) => EDIT_TOOLS.includes(t.id)).map((t) => t.id);
-  if (edits.some((t) => !enabled.includes(t))) enabled = enabled.filter((t) => !EDIT_TOOLS.includes(t));
   const subagents = surface.descriptor.subagents!.filter((s) =>
     allowed(commission.enabled_builtin_subagents, surface.subagents).includes(s.name),
   );
   if (subagents.length === 0) enabled = enabled.filter((t) => t !== "task");
   const off = (await data(client.tool.ids())).filter((id) => id !== "invalid" && !enabled.includes(id));
+  const tools: Record<string, boolean> = Object.fromEntries(off.map((id) => [id, false]));
+  if (off.includes("edit") && enabled.some((t) => EDIT_PERMISSION_TOOLS.includes(t))) {
+    tools[EDIT_PERMISSION_REALLOW] = true;
+  }
 
   const mcp = await mcpServers(client, plan.mcpServers, rec);
   const withheldSkills = withheld(commission.enabled_builtin_skills, surface.skills);
@@ -274,7 +282,7 @@ async function session(
       parts: [{ type: "text", text: plan.prompt }],
       ...(plan.system ? { system: plan.system } : {}),
       ...(plan.outputSchema ? { format: { type: "json_schema" as const, schema: plan.outputSchema } } : {}),
-      ...(off.length > 0 ? { tools: Object.fromEntries(off.map((id) => [id, false])) } : {}),
+      ...(off.length > 0 ? { tools } : {}),
     });
     if (sent.error) throw new Error(`opencode rejected the prompt: ${JSON.stringify(sent.error)}`);
     const exited = server.exited.then((why) => {

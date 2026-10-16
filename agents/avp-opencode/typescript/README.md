@@ -36,7 +36,7 @@ Releases: bump `version` in `package.json` and `container_version` for
 | `skills` | written to a scratch directory listed in `skills.paths` |
 | `mcp_servers` | OpenCode `local` (stdio) and `remote` (HTTP, OAuth off) servers; tools are `mcp__<server>__<tool>` |
 | `mcp_servers[].auth` | `Authorization: Bearer` from `AVP_VAULT_<HANDLE>` |
-| `enabled_builtin_tools["avp-opencode"]` | tools switched off on the prompt |
+| `enabled_builtin_tools["avp-opencode"]` | tools switched off on the prompt; withholding `edit` re-allows the `edit` permission that `write` and `apply_patch` share |
 | `enabled_builtin_subagents["avp-opencode"]` | `deny` rules on the `task` permission |
 | `enabled_builtin_skills["avp-opencode"]` | `deny` rules on the `skill` permission |
 
@@ -116,8 +116,6 @@ not covered.
 
 ## Gaps
 
-- `edit`, `write`, and `apply_patch` share OpenCode's `edit` permission: an
-  allow-list that withholds one of the ones the model is offered withholds all.
 - Withheld subagents and skills are denied for every agent in the run,
   including subagents.
 - Child-session turns are rolled up onto `subagent_returned`, not emitted.

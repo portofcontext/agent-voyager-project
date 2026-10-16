@@ -132,6 +132,34 @@ test("a built-in tool round trip is one turn per model response with paired tool
   assert.match(JSON.stringify(model.requests[0]!.input), /do the thing/);
 });
 
+test("withholding edit leaves write and apply_patch callable, and the reverse", async () => {
+  const offered = () => model.requests.at(-2)!.tools.map((t: Json) => t.name);
+  const keepWrite = commission({ enabled_builtin_tools: { "avp-opencode": ["read", "write"] } });
+  const { events, cwd: ws } = await runScripted(keepWrite, (cwd) => [
+    { call: { id: "call_w", name: "write", args: { filePath: join(cwd, "out.txt"), content: "OK" } } },
+    { text: "DONE" },
+  ]);
+  assert.deepEqual(offered().sort(), ["read", "write"]);
+  assert.deepEqual(
+    one(events, "agent_started").data["avp.tools"].map((t: Json) => t.name),
+    ["read", "write"],
+  );
+  assert.equal(one(events, "tool_returned").data["avp.tool_result"].is_error, false);
+  assert.equal(readFileSync(join(ws, "out.txt"), "utf8"), "OK");
+
+  const keepEdit = commission({ enabled_builtin_tools: { "avp-opencode": ["read", "edit"] } });
+  const edited = await runScripted(keepEdit, (cwd) => {
+    writeFileSync(join(cwd, "in.txt"), "old");
+    return [
+      { call: { id: "call_e", name: "edit", args: { filePath: join(cwd, "in.txt"), oldString: "old", newString: "new" } } },
+      { text: "DONE" },
+    ];
+  });
+  assert.deepEqual(offered().sort(), ["edit", "read"]);
+  assert.equal(one(edited.events, "tool_returned").data["avp.tool_result"].is_error, false);
+  assert.equal(readFileSync(join(edited.cwd, "in.txt"), "utf8"), "new");
+});
+
 test("Commission MCP tools run through OpenCode's MCP client", async () => {
   const { events } = await runScripted(
     commission({
