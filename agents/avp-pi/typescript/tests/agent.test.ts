@@ -4,6 +4,8 @@
  */
 import { strict as assert } from "node:assert";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -206,4 +208,58 @@ test("an abort mid-inference stops the run as interrupted", async () => {
   assert.equal(last.type, "avp.agent_stopped");
   assert.equal(last.data["avp.reason"], "interrupted");
   assert.ok(types(events).includes("agent_started"));
+});
+
+test("the launcher's ANTHROPIC_HOST routes Pi's catalog model", async () => {
+  const paths: string[] = [];
+  const sse = [
+    {
+      type: "message_start",
+      message: {
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        model: MODEL,
+        content: [],
+        stop_reason: null,
+        usage: { input_tokens: 11, output_tokens: 1 },
+      },
+    },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "routed" } },
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+    { type: "message_stop" },
+  ];
+  const server = createServer((req, res) => {
+    paths.push((req.url ?? "").split("?")[0]!);
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      for (const e of sse) res.write(`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const home = mkdtempSync(join(tmpdir(), "avp-pi-home-"));
+  const modelRuntime = await ModelRuntime.create({
+    authPath: join(home, "auth.json"),
+    modelsPath: null,
+    refreshOnCreate: false,
+  });
+  await modelRuntime.setRuntimeApiKey("anthropic", "test-key");
+  const before = process.env.ANTHROPIC_HOST;
+  process.env.ANTHROPIC_HOST = `http://127.0.0.1:${(server.address() as AddressInfo).port}/llm/anthropic`;
+  const sink = new MemorySink();
+  try {
+    await run(commission({ enabled_builtin_tools: { "avp-pi": [] } }), sink, { agentDir: home, modelRuntime });
+  } finally {
+    if (before === undefined) delete process.env.ANTHROPIC_HOST;
+    else process.env.ANTHROPIC_HOST = before;
+    server.close();
+  }
+  const events: Json[] = JSON.parse(JSON.stringify(sink.events));
+  assert.deepEqual(paths, ["/llm/anthropic/v1/messages"]);
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+  assert.equal(one(events, "assistant_message").data["avp.usage"].input_tokens, 11);
 });

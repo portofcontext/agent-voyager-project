@@ -300,12 +300,13 @@ def test_native_allowlist_filters_model_request(tmp_path, monkeypatch, model, al
     thread.start()
     monkeypatch.setenv("OPENAI_API_KEY", "local-scripted-key")
     monkeypatch.setenv("AVP_WORKSPACE", str(tmp_path))
+    # Routed the way a launcher routes it, through the environment.
+    monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{server.server_port}/v1")
     try:
         code, events = run_cli(
             tmp_path,
             model=f"openai/{model}",
             enabled_builtin_tools={"avp-codex": allowed},
-            provider={"id": "openai", "base_url": f"http://127.0.0.1:{server.server_port}/v1"},
             mcp_servers=[
                 {
                     "id": "avptest",

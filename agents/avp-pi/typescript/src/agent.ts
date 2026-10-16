@@ -33,6 +33,7 @@ import {
   DEFAULT_TOOLS,
   failFast,
   fromCommission,
+  launcherBaseUrl,
   mcpToolName,
   splitModel,
   writeSkills,
@@ -113,7 +114,8 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
     rec.stop("error");
     return;
   }
-  const model = plan.baseUrl ? { ...found, baseUrl: plan.baseUrl } : found;
+  const baseUrl = plan.baseUrl ?? launcherBaseUrl(plan.origin, found.baseUrl);
+  const model = baseUrl ? { ...found, baseUrl } : found;
 
   const scratch = mkdtempSync(join(tmpdir(), "avp-pi-"));
   let session: Awaited<ReturnType<typeof pi.createAgentSession>>["session"] | undefined;
