@@ -176,6 +176,126 @@ test("Commission MCP tools run through Gemini CLI's MCP client", async () => {
   assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
 });
 
+const AVPTEST = {
+  mcp_servers: [{ type: "stdio", id: "avptest", command: ["python3", FIXTURE] }],
+  enabled_builtin_tools: { "avp-gemini-cli": [] },
+} as Partial<Commission>;
+
+/** Each tool_returned's result by call id, asserting one per call. */
+function resultsById(events: Json[]): Map<string, Json> {
+  const results = new Map<string, Json>();
+  for (const r of all(events, "tool_returned")) {
+    assert.ok(!results.has(r["avp.tool.call_id"]), `one tool_returned per call: ${r["avp.tool.call_id"]}`);
+    results.set(r["avp.tool.call_id"], r["avp.tool_result"]);
+  }
+  return results;
+}
+
+test("parallel calls in one response pair each result with its own call", async () => {
+  const { events } = await runWith(
+    commission(AVPTEST),
+    scripted([
+      response([
+        call("p1", "mcp_avptest_Avptest_Echo", { text: "AVP-ECHO-ONE" }),
+        call("p2", "mcp_avptest_Avptest_Fail", { message: "AVP-FAIL-RESULT", mode: "result" }),
+        call("p3", "mcp_avptest_Avptest_Echo", { text: "AVP-ECHO-TWO" }),
+        call("p4", "mcp_avptest_Avptest_Fail", { message: "AVP-FAIL-PROTOCOL", mode: "protocol" }),
+      ]),
+      response([{ text: "done" }]),
+    ]),
+  );
+  const turns = all(events, "assistant_message");
+  assert.equal(turns.length, 2);
+  const uses = turns[0]["avp.content"].filter((b: Json) => b.type === "tool_use");
+  assert.deepEqual(
+    uses.map((b: Json) => b.name),
+    ["mcp_avptest_Avptest_Echo", "mcp_avptest_Avptest_Fail", "mcp_avptest_Avptest_Echo", "mcp_avptest_Avptest_Fail"],
+  );
+  const ids: string[] = uses.map((b: Json) => b.id);
+  assert.equal(new Set(ids).size, 4);
+  assert.deepEqual(
+    all(events, "tool_invoked").map((d) => d["avp.tool.call_id"]).sort(),
+    [...ids].sort(),
+  );
+
+  const results = resultsById(events);
+  assert.deepEqual([...results.keys()].sort(), [...ids].sort());
+  const expected = [
+    ["AVP-ECHO-ONE", false],
+    ["AVP-FAIL-RESULT", true],
+    ["AVP-ECHO-TWO", false],
+    ["AVP-FAIL-PROTOCOL", true],
+  ] as const;
+  const markers = expected.map(([m]) => m);
+  ids.forEach((id, i) => {
+    const [marker, isError] = expected[i]!;
+    const result = results.get(id)!;
+    const text = JSON.stringify(result.content);
+    assert.equal(result.is_error, isError, `${marker} is_error`);
+    assert.match(text, new RegExp(marker), `${id} carries its own result`);
+    for (const other of markers) if (other !== marker) assert.doesNotMatch(text, new RegExp(other));
+  });
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});
+
+test("dependent rounds are one turn per response, each with its own usage", async () => {
+  const { events } = await runWith(
+    commission(AVPTEST),
+    scripted([
+      response([call("r1", "mcp_avptest_Avptest_Add", { a: 2, b: 3 })], {
+        promptTokenCount: 101,
+        candidatesTokenCount: 11,
+      }),
+      response([call("r2", "mcp_avptest_Avptest_Add", { a: 5, b: 7 })], {
+        promptTokenCount: 202,
+        candidatesTokenCount: 22,
+      }),
+      response([call("r3", "mcp_avptest_Avptest_Echo", { text: "sum is 12" })], {
+        promptTokenCount: 303,
+        candidatesTokenCount: 33,
+      }),
+      response([{ text: "12" }], { promptTokenCount: 404, candidatesTokenCount: 44 }),
+    ]),
+  );
+  assert.deepEqual(types(events).slice(3), [
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "agent_stopped",
+  ]);
+  const turns = all(events, "assistant_message");
+  assert.deepEqual(
+    turns.map((t) => [t["avp.usage"].input_tokens, t["avp.usage"].output_tokens]),
+    [
+      [101, 11],
+      [202, 22],
+      [303, 33],
+      [404, 44],
+    ],
+  );
+  turns.slice(0, 3).forEach((t, i) => {
+    const uses = t["avp.content"].filter((b: Json) => b.type === "tool_use");
+    assert.equal(uses.length, 1, `turn ${i} has its own call`);
+  });
+  const results = resultsById(events);
+  const callIds = turns.slice(0, 3).map((t) => t["avp.content"].find((b: Json) => b.type === "tool_use").id);
+  const texts = callIds.map((id) => JSON.stringify(results.get(id)!.content));
+  assert.match(texts[0]!, /sum: 5/);
+  assert.match(texts[1]!, /sum: 12/);
+  assert.match(texts[2]!, /sum is 12/);
+  for (const id of callIds) assert.equal(results.get(id)!.is_error, false);
+  const stopped = one(events, "agent_stopped").data;
+  assert.equal(stopped["avp.reason"], "converged");
+  assert.equal(stopped["avp.output"], "12");
+});
+
 test("a subagent runs in a frame closed before its tool result, with its spend rolled up", async () => {
   const { events } = await runWith(
     commission(),
