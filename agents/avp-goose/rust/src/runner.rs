@@ -378,17 +378,16 @@ async fn record_reply<S: Sink>(
                             turn_start,
                         )?;
                         if let Some(sessions) = sessions {
-                            for ret in content.iter().filter_map(translate::as_tool_return) {
-                                let Some(child) = translate::subagent_session(&ret) else {
-                                    continue;
-                                };
-                                if let Ok(totals) = sessions.get_session_usage_totals(child).await {
-                                    emitter.on_subagent_usage(
-                                        &ret.id,
-                                        translate::subagent_usage(&totals),
-                                    );
-                                }
-                            }
+                            let children: Vec<String> = content
+                                .iter()
+                                .filter_map(translate::as_tool_return)
+                                .filter_map(|ret| {
+                                    translate::subagent_session(&ret)
+                                        .or_else(|| emitter.loaded_subagent(&ret.id))
+                                        .map(str::to_string)
+                                })
+                                .collect();
+                            read_subagent_usage(emitter, sessions, children).await;
                         }
                         emitter.on_tool_results(&content)?;
                         // The next inference begins now that Goose has the tool
@@ -443,6 +442,10 @@ async fn record_reply<S: Sink>(
         &mut open_ids,
         turn_start,
     )?;
+    if let Some(sessions) = sessions {
+        let children = emitter.background_subagents();
+        read_subagent_usage(emitter, sessions, children).await;
+    }
     emitter.stop(emit::classify_stop(ended_ok, interrupted, false), None)?;
     Ok(())
 }
@@ -494,6 +497,20 @@ fn provider_failure(message: &Message) -> Option<(ErrorCode, &str)> {
         }
     }
     None
+}
+
+/// Hand the emitter each child session's usage totals, which Goose keeps per
+/// session while dropping the child's own usage events.
+async fn read_subagent_usage<S: Sink>(
+    emitter: &mut Emitter<S>,
+    sessions: &SessionManager,
+    children: Vec<String>,
+) {
+    for child in children {
+        if let Ok(totals) = sessions.get_session_usage_totals(&child).await {
+            emitter.on_subagent_usage(&child, translate::subagent_usage(&totals));
+        }
+    }
 }
 
 /// Report the coalesced assistant deltas as one turn, keyed by its last Goose
@@ -750,11 +767,47 @@ mod tests {
         assert!(new_agent().config.disable_session_naming);
     }
 
-    #[tokio::test]
-    async fn a_delegate_result_carries_the_child_sessions_usage() {
-        // Goose drops a subagent's own usage events; its session keeps the
-        // totals, and the `delegate` result names that session.
-        let dir = std::env::temp_dir().join(format!("avp-goose-sessions-{}", std::process::id()));
+    /// A Goose message from its JSON wire form.
+    fn wire(id: &str, role: &str, content: Value) -> anyhow::Result<AgentEvent> {
+        Ok(AgentEvent::Message(
+            serde_json::from_value(json!({
+                "id": id, "role": role, "created": 0,
+                "metadata": { "userVisible": true, "agentVisible": true },
+                "content": content
+            }))
+            .unwrap(),
+        ))
+    }
+
+    fn summon_call(id: &str, name: &str, arguments: Value) -> Value {
+        json!([{
+            "type": "toolRequest", "id": id,
+            "_meta": { "goose_extension": "summon" },
+            "toolCall": { "status": "success", "value": { "name": name, "arguments": arguments } }
+        }])
+    }
+
+    fn tool_result(id: &str, text: &str, meta: Value) -> Value {
+        json!([{
+            "type": "toolResponse", "id": id,
+            "toolResult": { "status": "success", "value": {
+                "content": [{ "type": "text", "text": text }],
+                "_meta": meta
+            } }
+        }])
+    }
+
+    /// Drive `record_reply` with a session store holding one child session
+    /// that spent 1200 input / 34 output tokens; `items` gets its id.
+    async fn with_child(items: impl FnOnce(&str) -> Vec<anyhow::Result<AgentEvent>>) -> Vec<Value> {
+        let dir = std::env::temp_dir().join(format!(
+            "avp-goose-sessions-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let sessions = SessionManager::new(dir.clone());
         let child = sessions
             .create_session(
@@ -775,28 +828,6 @@ mod tests {
             .apply()
             .await
             .unwrap();
-        let message = |value: Value| AgentEvent::Message(serde_json::from_value(value).unwrap());
-        let items = vec![
-            Ok(message(json!({
-                "id": "parent-1", "role": "assistant", "created": 0, "metadata": { "userVisible": true, "agentVisible": true },
-                "content": [{
-                    "type": "toolRequest", "id": "d1",
-                    "_meta": { "goose_extension": "summon" },
-                    "toolCall": { "status": "success",
-                        "value": { "name": "delegate", "arguments": { "instructions": "say PONG" } } }
-                }]
-            }))),
-            Ok(message(json!({
-                "id": "tool-1", "role": "user", "created": 0, "metadata": { "userVisible": true, "agentVisible": true },
-                "content": [{
-                    "type": "toolResponse", "id": "d1",
-                    "toolResult": { "status": "success", "value": {
-                        "content": [{ "type": "text", "text": "PONG" }],
-                        "_meta": { "subagent_session_id": child.id }
-                    } }
-                }]
-            }))),
-        ];
         let sink = Capture::default();
         let mut emitter = Emitter::new(
             sink.clone(),
@@ -810,20 +841,130 @@ mod tests {
             &mut emitter,
             "gpt-4o-mini",
             Some(&sessions),
-            futures::stream::iter(items),
+            futures::stream::iter(items(&child.id)),
             std::future::pending(),
         )
         .await
         .unwrap();
         let _ = std::fs::remove_dir_all(dir);
         let events = sink.0.lock().unwrap().clone();
-        let returned = events
+        events
+    }
+
+    fn subagent_returned(events: &[Value]) -> &Value {
+        let returned: Vec<_> = events
             .iter()
-            .find(|e| e["type"] == "avp.subagent_returned")
-            .expect("the delegate closes a subagent frame");
-        let usage = &returned["data"]["avp.subagent.usage"];
-        assert_eq!(usage["tokens_input"], 1200);
-        assert_eq!(usage["tokens_output"], 34);
+            .filter(|e| e["type"] == "avp.subagent_returned")
+            .collect();
+        assert_eq!(returned.len(), 1, "one subagent frame closes");
+        &returned[0]["data"]
+    }
+
+    #[tokio::test]
+    async fn a_delegate_result_carries_the_child_sessions_usage() {
+        // Goose drops a subagent's own usage events; its session keeps the
+        // totals, and the `delegate` result names that session.
+        let events = with_child(|child| {
+            vec![
+                wire(
+                    "p1",
+                    "assistant",
+                    summon_call("d1", "delegate", json!({ "instructions": "say PONG" })),
+                ),
+                wire(
+                    "t1",
+                    "user",
+                    tool_result("d1", "PONG", json!({ "subagent_session_id": child })),
+                ),
+            ]
+        })
+        .await;
+        let returned = subagent_returned(&events);
+        assert_eq!(returned["avp.subagent.result.text"], "PONG");
+        assert_eq!(returned["avp.subagent.usage"]["tokens_input"], 1200);
+        assert_eq!(returned["avp.subagent.usage"]["tokens_output"], 34);
+    }
+
+    #[tokio::test]
+    async fn a_background_delegate_closes_when_its_result_is_loaded() {
+        // `async: true` returns at launch; the child's answer and spend arrive
+        // through a later `load` of its task id.
+        let events = with_child(|child| {
+            vec![
+                wire(
+                    "p1",
+                    "assistant",
+                    summon_call(
+                        "d1",
+                        "delegate",
+                        json!({ "async": true, "instructions": "say PONG" }),
+                    ),
+                ),
+                wire(
+                    "t1",
+                    "user",
+                    tool_result(
+                        "d1",
+                        "started in background",
+                        json!({ "subagent_session_id": child }),
+                    ),
+                ),
+                wire(
+                    "p2",
+                    "assistant",
+                    summon_call("l1", "load", json!({ "source": child })),
+                ),
+                wire("t2", "user", tool_result("l1", "PONG", json!({}))),
+            ]
+        })
+        .await;
+        let returned = subagent_returned(&events);
+        assert_eq!(returned["avp.subagent.invocation_id"], "d1");
+        assert_eq!(returned["avp.subagent.reason"], "converged");
+        assert_eq!(returned["avp.subagent.result.text"], "PONG");
+        assert_eq!(returned["avp.subagent.usage"]["tokens_input"], 1200);
+        let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        let load_returned = events
+            .iter()
+            .rposition(|e| e["type"] == "avp.tool_returned")
+            .unwrap();
+        assert!(
+            types
+                .iter()
+                .position(|t| *t == "avp.subagent_returned")
+                .unwrap()
+                > load_returned
+        );
+    }
+
+    #[tokio::test]
+    async fn a_background_delegate_never_loaded_is_abandoned_with_its_spend() {
+        let events = with_child(|child| {
+            vec![
+                wire(
+                    "p1",
+                    "assistant",
+                    summon_call(
+                        "d1",
+                        "delegate",
+                        json!({ "async": true, "instructions": "say PONG" }),
+                    ),
+                ),
+                wire(
+                    "t1",
+                    "user",
+                    tool_result(
+                        "d1",
+                        "started in background",
+                        json!({ "subagent_session_id": child }),
+                    ),
+                ),
+            ]
+        })
+        .await;
+        let returned = subagent_returned(&events);
+        assert_eq!(returned["avp.subagent.reason"], "abandoned");
+        assert_eq!(returned["avp.subagent.usage"]["tokens_output"], 34);
     }
 
     #[derive(Clone, Default)]

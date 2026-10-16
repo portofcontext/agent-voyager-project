@@ -64,7 +64,10 @@ These changes retain the v0.1 wire schemas.
 - Subagent rollups carry the child's final usage. Claude's came from the task
   notification, taken before the child's last response completed, and its
   result text was the task description; both now come from the `Agent` tool
-  result. Goose's had no usage; it now reads the child session's totals.
+  result. Goose's had no usage; it now reads the child session's totals. A
+  Goose subagent launched in the background (`delegate` with `async`) closed
+  at launch with no result; its frame now closes when `load` returns the
+  result, or as `abandoned` at stop.
 - Claude's capability probe no longer calls the model. It sent its probe prompt
   to the CLI's default model on every run, spend the trajectory never recorded.
 - Goose provider failures, cached-token double counting, and session-naming usage.
