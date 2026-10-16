@@ -41,7 +41,8 @@ goose-mcp = { git = "https://github.com/aaif-goose/goose", tag = "v1.53.0", defa
 ] }
 futures = "0.3"
 anyhow = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tokio-util = "0.7"
 async-trait = "0.1"
 # Used by the eval harness to schema-validate live trajectories.
 jsonschema = "0.46"

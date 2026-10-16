@@ -23,6 +23,10 @@
  * a crash, after recording `error_occurred` and `agent_stopped`. `main` then
  * returns 1 with the error on stderr.
  *
+ * Interruption: SIGINT and SIGTERM during `run` abort the `AbortSignal` passed
+ * to it. The adapter stops its runtime and closes the trajectory with
+ * `agent_stopped(interrupted)`; `main` then returns 130.
+ *
  * `--built-in` is the conformance fixture of the agent's pretend defaults: its
  * `system_prompt` and `prompt` seed the Commission when it leaves them unset
  * (the Commission wins). Matches the Python `avp.agent_cli` and the Rust
@@ -35,7 +39,7 @@ import { FileSink } from "./sink.js";
 
 export interface AgentEntrypoint {
   describe: () => AgentDescriptor | Promise<AgentDescriptor>;
-  run: (commission: Commission, sink: FileSink) => Promise<void>;
+  run: (commission: Commission, sink: FileSink, signal: AbortSignal) => Promise<void>;
 }
 
 const USAGE = `usage: <agent> ping --out <path>
@@ -47,8 +51,7 @@ class UsageError extends Error {}
 /** Parse `argv` (default: `process.argv` after the script) and dispatch. Returns the exit code. */
 export async function main(agent: AgentEntrypoint, argv = process.argv.slice(2)): Promise<number> {
   try {
-    await dispatch(agent, argv);
-    return 0;
+    return (await dispatch(agent, argv)) === "interrupted" ? 130 : 0;
   } catch (err) {
     if (err instanceof UsageError) {
       process.stderr.write(`error: ${err.message}\n${USAGE}\n`);
@@ -59,8 +62,11 @@ export async function main(agent: AgentEntrypoint, argv = process.argv.slice(2))
   }
 }
 
-/** `main` over explicit arguments (without the program name); throws instead of returning a code. */
-export async function dispatch(agent: AgentEntrypoint, argv: string[]): Promise<void> {
+/**
+ * `main` over explicit arguments (without the program name); throws instead
+ * of returning a code. Resolves `"interrupted"` when a signal aborted `run`.
+ */
+export async function dispatch(agent: AgentEntrypoint, argv: string[]): Promise<"interrupted" | void> {
   const [cmd, ...rest] = argv;
   if (!cmd) throw new UsageError("missing command");
   const flags = parseFlags(rest);
@@ -86,12 +92,19 @@ export async function dispatch(agent: AgentEntrypoint, argv: string[]): Promise<
       const builtIn = flags.get("built-in");
       if (builtIn !== undefined) applyBuiltIn(commission, readJsonArg(builtIn) as Record<string, unknown>);
       const sink = new FileSink(need("out"));
+      const controller = new AbortController();
+      // A persistent listener, not `once`: a dependency using `signal-exit`
+      // re-raises the signal (killing the process) when it finds no other
+      // listener left at delivery time.
+      const abort = () => controller.abort();
+      process.on("SIGINT", abort).on("SIGTERM", abort);
       try {
-        await inWorkspace(() => agent.run(commission, sink));
+        await inWorkspace(() => agent.run(commission, sink, controller.signal));
       } finally {
+        process.off("SIGINT", abort).off("SIGTERM", abort);
         sink.close();
       }
-      return;
+      return controller.signal.aborted ? "interrupted" : undefined;
     }
     default:
       throw new UsageError(`unknown command ${JSON.stringify(cmd)}`);

@@ -12,12 +12,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
-from avp_conformance.case import EventMatcher, Expectations, FinalState
+from avp.pricing import COST_SOURCE_UNKNOWN, PriceTable, compute_cost, load_default_prices
+from avp_conformance.case import EventMatcher, Expectations, FinalState, ToolCallMatcher
 
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_AGENT_STOPPED = "avp.agent_stopped"
+T_TOOL_INVOKED = "avp.tool_invoked"
+T_TOOL_RETURNED = "avp.tool_returned"
 
 # OTel span identification (FOUNDATIONS.md): trace_id is 32 hex chars, span_id
 # is 16. ZERO_SPAN is the root sentinel (no parent).
@@ -117,6 +121,22 @@ def _match_any(events: list[dict], matchers: list[EventMatcher]) -> int | None:
         if not any(_partial(e, m.match) for e in events):
             return i
     return None
+
+
+def _match_tool_call(events: list[dict], call: ToolCallMatcher) -> bool:
+    """Some call's `tool_invoked` matches `call.invoked` and its own
+    `tool_returned` matches `call.returned`."""
+    returned = {
+        (e.get("data") or {}).get("avp.tool.call_id"): e.get("data") or {}
+        for e in events
+        if e.get("type") == T_TOOL_RETURNED
+    }
+    return any(
+        _partial(e.get("data") or {}, call.invoked)
+        and _partial(returned.get((e.get("data") or {}).get("avp.tool.call_id"), {}), call.returned)
+        for e in events
+        if e.get("type") == T_TOOL_INVOKED
+    )
 
 
 def _check_final_state(events: list[dict], fs: FinalState) -> list[str]:
@@ -235,7 +255,171 @@ def _check_structure(events: list[dict]) -> list[str]:
             reasons.append(f"structure: {t} parent_span_id {pid!r} resolves to no emitted span")
 
     reasons.extend(_check_subagent_frames(events))
+    reasons.extend(_check_tool_pairing(events))
     return reasons
+
+
+def _check_tool_pairing(events: list[dict]) -> list[str]:
+    """Every tool call is one `tool_invoked` and, once it ran, one
+    `tool_returned` carrying its own result (trajectory.md §8 rule 4):
+
+    - each `tool_use` block in a turn's content has exactly one `tool_invoked`
+      with that call id, under that turn;
+    - each `tool_returned` sits under the `tool_invoked` with its call id, and
+      its `tool_result.tool_use_id` is that call id;
+    - no call returns twice, and in a converged run every call returned. An
+      interrupted or failed run may stop with a call still in flight.
+
+    Parallel calls are where translators pair results by position or batch
+    instead of by id; these catch it on every case.
+    """
+    reasons: list[str] = []
+    uses: dict[str, str] = {}
+    for e in events:
+        if e.get("type") != T_ASSISTANT_MESSAGE:
+            continue
+        d = e.get("data") or {}
+        for block in d.get("avp.content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                uses[block.get("id")] = d.get("span_id")
+    invoked: dict[str, dict] = {}
+    for e in events:
+        if e.get("type") != T_TOOL_INVOKED:
+            continue
+        d = e.get("data") or {}
+        call = d.get("avp.tool.call_id")
+        if call in invoked:
+            reasons.append(f"tools: call {call!r} has more than one tool_invoked")
+            continue
+        invoked[call] = d
+        if call not in uses:
+            reasons.append(f"tools: tool_invoked {call!r} has no tool_use block in any turn")
+        elif d.get("parent_span_id") != uses[call]:
+            reasons.append(f"tools: tool_invoked {call!r} is not under the turn that called it")
+    for call in uses.keys() - invoked.keys():
+        reasons.append(f"tools: tool_use {call!r} has no tool_invoked")
+    returned: set[str] = set()
+    for e in events:
+        if e.get("type") != T_TOOL_RETURNED:
+            continue
+        d = e.get("data") or {}
+        call = d.get("avp.tool.call_id")
+        result_id = (d.get("avp.tool_result") or {}).get("tool_use_id")
+        if call not in invoked:
+            reasons.append(f"tools: tool_returned {call!r} has no tool_invoked")
+            continue
+        if call in returned:
+            reasons.append(f"tools: call {call!r} returned more than once")
+        returned.add(call)
+        if d.get("parent_span_id") != invoked[call].get("span_id"):
+            reasons.append(f"tools: tool_returned {call!r} is not under its tool_invoked")
+        if result_id != call:
+            reasons.append(f"tools: tool_returned {call!r} carries the result for {result_id!r}")
+    stopped = [e for e in events if e.get("type") == T_AGENT_STOPPED]
+    if stopped and (stopped[-1].get("data") or {}).get("avp.reason") == "converged":
+        for call in invoked.keys() - returned:
+            reasons.append(f"tools: call {call!r} never returned in a converged run")
+    return reasons
+
+
+@cache
+def _prices() -> PriceTable:
+    return load_default_prices()
+
+
+# A computed cost may differ from the harness's recomputation by float noise
+# and by rounding an agent applies, never by a pricing mistake.
+_COST_REL_TOL = 1e-6
+_COST_ABS_TOL = 1e-9
+
+
+def _check_accounting(events: list[dict]) -> list[str]:
+    """Per-turn accounting every conforming trajectory MUST satisfy
+    (trajectory.md §3.3), checked on every case:
+
+    - token counts are non-negative integers, and the cache split is inside
+      `input_tokens` (`cache_read + cache_creation <= input_tokens`);
+    - `avp.cost_usd` is non-negative, and zero when `avp.cost.source` is
+      `unknown`;
+    - a `computed` cost equals the bundled price table's cost for the turn's
+      usage, priced as the response model, else the request model (the
+      Recorder's fallback for dated snapshot ids). A turn whose models the
+      table doesn't know can't be recomputed and is not judged.
+
+    Catches the accounting bugs presence checks miss: double-counted cache
+    tokens, a cache split outside the input total, mis-priced turns.
+    """
+    reasons: list[str] = []
+    for e in events:
+        if e.get("type") != T_ASSISTANT_MESSAGE:
+            continue
+        d = e.get("data") or {}
+        step = d.get("avp.step", "?")
+        where = f"accounting: assistant_message step {step}"
+        usage = d.get("avp.usage") or {}
+        counts = {
+            k: usage.get(k)
+            for k in (
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+                "cache_creation_input_tokens",
+                "reasoning_output_tokens",
+            )
+            if usage.get(k) is not None
+        }
+        bad = {k: v for k, v in counts.items() if not (isinstance(v, int) and v >= 0)}
+        if bad:
+            reasons.append(f"{where}: token counts must be non-negative integers, got {bad}")
+            continue
+        inp = counts.get("input_tokens", 0)
+        cached = counts.get("cache_read_input_tokens", 0) + counts.get(
+            "cache_creation_input_tokens", 0
+        )
+        if cached > inp:
+            reasons.append(
+                f"{where}: cache_read + cache_creation ({cached}) exceeds input_tokens ({inp});"
+                " input_tokens must include the cache split"
+            )
+        cost = d.get("avp.cost_usd")
+        source = d.get("avp.cost.source")
+        if not isinstance(cost, int | float) or cost < 0:
+            reasons.append(f"{where}: avp.cost_usd must be a non-negative number, got {cost!r}")
+            continue
+        if source == COST_SOURCE_UNKNOWN and cost != 0:
+            reasons.append(f"{where}: avp.cost.source is unknown but avp.cost_usd is {cost}")
+        if source != "computed":
+            continue
+        expected = _recompute_cost(d, counts)
+        if expected is not None and abs(cost - expected) > max(
+            _COST_ABS_TOL, _COST_REL_TOL * expected
+        ):
+            reasons.append(
+                f"{where}: computed avp.cost_usd {cost} != {expected} from the price table"
+                f" for {d.get('avp.response.model') or d.get('avp.request.model')!r} and its usage"
+            )
+    return reasons
+
+
+def _recompute_cost(data: dict, counts: dict[str, int]) -> float | None:
+    """The turn's cost from the bundled price table, or None when neither
+    model is priced there."""
+    provider = data.get("avp.provider.name")
+    for model in dict.fromkeys(
+        m for m in (data.get("avp.response.model"), data.get("avp.request.model")) if m
+    ):
+        cost, source = compute_cost(
+            model,
+            provider=provider,
+            input_tokens=counts.get("input_tokens", 0),
+            output_tokens=counts.get("output_tokens", 0),
+            cache_read=counts.get("cache_read_input_tokens", 0),
+            cache_write=counts.get("cache_creation_input_tokens", 0),
+            prices=_prices(),
+        )
+        if source != COST_SOURCE_UNKNOWN:
+            return cost
+    return None
 
 
 def _check_subagent_frames(events: list[dict]) -> list[str]:
@@ -287,12 +471,12 @@ def _check_subagent_frames(events: list[dict]) -> list[str]:
 def match_case(events: list[dict], expectations: Expectations) -> MatchResult:
     """Match an emitted trajectory against a case's expectations.
 
-    Checks, in order: universal span-tree structure, positive `events` per
+    Checks, in order: universal span-tree structure and accounting, positive `events` per
     `ordering`, `forbidden_events` (none may appear), and `final_state`.
     Collects every failure into one `MatchResult` so a run surfaces all
     problems at once.
     """
-    reasons: list[str] = _check_structure(events)
+    reasons: list[str] = [*_check_structure(events), *_check_accounting(events)]
 
     dispatch = {
         "in_order_subsequence": _match_subsequence,
@@ -309,6 +493,10 @@ def match_case(events: list[dict], expectations: Expectations) -> MatchResult:
         else:
             m = expectations.events[failed]
             reasons.append(f"events ({expectations.ordering}): unmatched matcher {_label(m)!r}")
+
+    for call in expectations.tool_calls:
+        if not _match_tool_call(events, call):
+            reasons.append(f"tool_calls: no call matched {call.label or call.invoked!r}")
 
     for m in expectations.forbidden_events:
         if any(_partial(e, m.match) for e in events):

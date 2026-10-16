@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from avp.commission import Commission, McpServerStdio
 from avp.preflight import preflight
@@ -112,6 +113,7 @@ def config(cm: Commission) -> dict:
         "model_providers.avp": {
             "name": "AVP",
             "base_url": (cm.provider.base_url if cm.provider else None)
+            or os.environ.get("OPENAI_BASE_URL")
             or "https://api.openai.com/v1",
             "env_key": "OPENAI_API_KEY",
             "wire_api": "responses",

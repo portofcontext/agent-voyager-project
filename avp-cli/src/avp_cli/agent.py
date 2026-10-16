@@ -32,7 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from pydantic import BaseModel
 
@@ -225,6 +225,8 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
     prov = commission.provider
     if _provider_credentialed(commission):
         base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1] or ""
+        # The agent's SDK appends the API path to the route (see `_endpoint_env`).
+        upstream = base.rstrip("/").removesuffix(_api_path(prov.id))
         header, prefix = (
             ("x-api-key", "") if prov.id == "anthropic" else ("authorization", "Bearer ")
         )
@@ -232,7 +234,7 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
             (
                 f"llm/{prov.id}",
                 broker.Route(
-                    upstream=broker.origin_of(base),
+                    upstream=upstream,
                     header=header,
                     prefix=prefix,
                     secret=vault.resolve_ref(prov.credential),
@@ -270,6 +272,32 @@ _CREDENTIAL_ALIASES = {
 }
 
 
+# Further base-URL variables agents read for a provider.
+_BASE_URL_ALIASES = {
+    "google": ("GOOGLE_GEMINI_BASE_URL",),
+    "gemini": ("GOOGLE_GEMINI_BASE_URL",),
+}
+
+
+def _api_path(provider_id: str) -> str:
+    """The version path a provider's API lives under (`/v1` for OpenAI)."""
+    default = osb.PROVIDER_REGISTRY.get(provider_id, (None, None))[1]
+    return urlsplit(default).path.rstrip("/") if default else ""
+
+
+def _endpoint_env(provider_id: str, host: str) -> dict[str, str]:
+    """The endpoint variables for a provider reached at `host`, which stands
+    in for its origin. `<PREFIX>_HOST` is that root and `<PREFIX>_BASE_URL`
+    adds the API's version path (`OPENAI_BASE_URL` ends in `/v1`), matching how
+    provider SDKs read them."""
+    prefix = provider_id.upper().replace("-", "_")
+    host = host.rstrip("/")
+    full = host + _api_path(provider_id)
+    env = {f"{prefix}_HOST": host, f"{prefix}_BASE_URL": full}
+    env.update(dict.fromkeys(_BASE_URL_ALIASES.get(provider_id, ()), full))
+    return env
+
+
 def _sandbox_env(
     agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
 ) -> dict[str, str]:
@@ -277,22 +305,26 @@ def _sandbox_env(
     provider = commission.provider or Provider(id=commission.model.split("/", 1)[0])
     prefix = provider.id.upper().replace("-", "_")
     api_key = f"{prefix}_API_KEY"
-    endpoints = (f"{prefix}_HOST", f"{prefix}_BASE_URL")
+    endpoints = (
+        f"{prefix}_HOST",
+        f"{prefix}_BASE_URL",
+        *_BASE_URL_ALIASES.get(provider.id, ()),
+    )
     provider_vars = (api_key, *endpoints, *_CREDENTIAL_ALIASES.get(provider.id, ()))
+    base = provider.base_url or osb.PROVIDER_REGISTRY.get(provider.id, (None, None))[1]
 
     if provider.credential is not None:
         if brk is None:
             raise ValueError("vault credential requires a running broker")
         env = {k: v for k, v in agent.env.items() if k not in provider_vars}
         env[api_key] = brk.token
-        env.update(dict.fromkeys(endpoints, brk.route_url(f"llm/{provider.id}")))
+        env.update(_endpoint_env(provider.id, brk.route_url(f"llm/{provider.id}")))
     else:
         env = {k: os.environ[k] for k in provider_vars if k in os.environ}
         env.update(agent.env)
-        if commission.provider is not None:
-            base = provider.base_url or osb.PROVIDER_REGISTRY.get(provider.id, (None, None))[1]
-            if base:
-                env.update(dict.fromkeys(endpoints, base))
+        if commission.provider is not None and base:
+            base = base.rstrip("/")
+            env.update(_endpoint_env(provider.id, base.removesuffix(_api_path(provider.id))))
 
     # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
     env["GOOSE_PROVIDER"] = provider.id

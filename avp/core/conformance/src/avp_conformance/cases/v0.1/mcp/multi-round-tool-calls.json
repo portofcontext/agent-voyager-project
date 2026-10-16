@@ -1,0 +1,196 @@
+{
+  "id": "multi-round-tool-calls",
+  "title": "Dependent tool calls across several rounds each pair with their result, one turn per model response",
+  "description": "Three rounds where each call needs the previous result: 17+25, then that sum +8, then an echo of the total. Every call pairs with its result (the universal tool-pairing check), each round is its own assistant_message with its own usage, and metering matches each billed response to one turn.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#8-conformance"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "multi-round-tool-calls",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Use the avptest MCP tools, one call at a time. First call Avptest_Add with a=17 and b=25. After you have its result, call Avptest_Add again with a set to that result and b=8. After you have that result, call Avptest_Echo with text AVP-SUM- followed by that result (for example AVP-SUM-123). Finally reply with exactly the echoed text. You must call the tools, not simulate them, and make each call only after the previous result arrives.",
+    "mcp_servers": [
+      {
+        "type": "stdio",
+        "id": "avptest",
+        "command": [
+          "${AVP_TEST_PYTHON}",
+          "${AVP_TEST_MCP}"
+        ]
+      }
+    ],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started lists the connected avptest server",
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "avp.mcp_servers": {
+              "$contains": {
+                "id": "avptest",
+                "status": "connected"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "first Avptest_Add (17 + 25)",
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "a": 17,
+              "b": 25
+            }
+          }
+        }
+      },
+      {
+        "label": "its result, 42",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "42"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "the second Avptest_Add's result, 50",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "50"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "Avptest_Echo with the total",
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "text": "AVP-SUM-50"
+            }
+          }
+        }
+      },
+      {
+        "label": "the echoed total",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "AVP-SUM-50"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "a reply carrying the total",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-SUM-50"
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ],
+    "tool_calls": [
+      {
+        "label": "17 + 25 returns 42",
+        "invoked": {
+          "avp.tool.input": {
+            "a": 17,
+            "b": 25
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": false,
+            "content": {
+              "$text_contains": "42"
+            }
+          }
+        }
+      },
+      {
+        "label": "the second Add, given 42, returns 50",
+        "invoked": {
+          "avp.tool.input": {
+            "b": 8
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": false,
+            "content": {
+              "$text_contains": "50"
+            }
+          }
+        }
+      },
+      {
+        "label": "the echo of the total returns it",
+        "invoked": {
+          "avp.tool.input": {
+            "text": "AVP-SUM-50"
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": false,
+            "content": {
+              "$text_contains": "AVP-SUM-50"
+            }
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

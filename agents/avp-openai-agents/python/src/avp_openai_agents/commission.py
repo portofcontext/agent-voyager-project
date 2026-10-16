@@ -55,12 +55,14 @@ def _instructions(system_prompt: str | None, skills: list[Skill]) -> str | None:
     return "\n\n".join(parts) or None
 
 
-def mcp_server(entry: Any, on_failure: Any) -> Any:
+def mcp_server(entry: Any, on_failure: Any, on_result: Any) -> Any:
     """An unconnected SDK MCP server for one inline Commission entry.
-    `on_failure` turns a failed tool call into the model-facing message."""
+    `on_failure` turns a failed tool call into the model-facing message;
+    `on_result` sees every result, as the SDK's custom-data extractor (the one
+    place its `isError` flag surfaces)."""
     from agents.mcp import MCPServerStdio, MCPServerStreamableHttp
 
-    opts = {"failure_error_function": on_failure}
+    opts = {"failure_error_function": on_failure, "custom_data_extractor": on_result}
 
     if isinstance(entry, McpServerStdio):
         params: dict[str, Any] = {

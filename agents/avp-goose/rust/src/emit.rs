@@ -13,7 +13,7 @@ use avp::pricing::PriceTable;
 use avp::recorder::{AssistantOpts, DispatchTarget, Recorder, RecorderOptions, StartInfo};
 use avp::sink::Sink;
 use avp::trajectory::{
-    AgentDescriptor, AvpContentItem, ErrorCode, StopReason, ToolUseBlock, Usage,
+    AgentDescriptor, AvpContentItem, ErrorCode, StopReason, SubagentUsage, ToolUseBlock, Usage,
 };
 use serde_json::{Map, Value};
 
@@ -21,9 +21,11 @@ use crate::translate::{self, GooseContent};
 
 /// Goose's `summon` platform extension. It exposes two tools: `delegate` (run a
 /// subagent recipe) and `load` (pull content into context). Only `delegate` is a
-/// subagent invocation; `load` is a plain tool call.
+/// subagent invocation; `load` is a plain tool call, which also returns a
+/// background subagent's result.
 const SUMMON_EXTENSION: &str = "summon";
 const DELEGATE_TOOL: &str = "delegate";
+const LOAD_TOOL: &str = "load";
 
 /// Drives a single agent run's trajectory.
 pub struct Emitter<S: Sink> {
@@ -32,9 +34,16 @@ pub struct Emitter<S: Sink> {
     /// before the Recorder sees the call.
     targets: Arc<Mutex<HashMap<String, DispatchTarget>>>,
     mcp_servers: HashSet<String>,
-    /// Call ids of in-flight `delegate` calls: their result also closes a
-    /// subagent frame.
-    delegates: HashSet<String>,
+    /// In-flight `delegate` calls, by call id, and whether each runs in the
+    /// background. A foreground delegate's result closes its subagent frame.
+    delegates: HashMap<String, bool>,
+    /// Background subagents still running: child session id to the call id
+    /// whose frame stays open until a `load` returns the result.
+    background: HashMap<String, String>,
+    /// In-flight `load` calls: call id to the `source` they load.
+    loads: HashMap<String, String>,
+    /// Subagent usage by child session id, attached when its frame closes.
+    subagent_usage: HashMap<String, SubagentUsage>,
     /// Captured in `prelude`; `start` mirrors its surface onto `agent_started`.
     descriptor: Option<AgentDescriptor>,
 }
@@ -67,7 +76,10 @@ impl<S: Sink> Emitter<S> {
             rec,
             targets,
             mcp_servers,
-            delegates: HashSet::new(),
+            delegates: HashMap::new(),
+            background: HashMap::new(),
+            loads: HashMap::new(),
+            subagent_usage: HashMap::new(),
             descriptor: None,
         }
     }
@@ -174,15 +186,20 @@ impl<S: Sink> Emitter<S> {
                     .lock()
                     .unwrap()
                     .insert(call.name.clone(), target);
-                if call.extension.as_deref() == Some(SUMMON_EXTENSION) && call.name == DELEGATE_TOOL
-                {
+                let summon = call.extension.as_deref() == Some(SUMMON_EXTENSION);
+                if summon && call.name == DELEGATE_TOOL {
                     let name = call
                         .input
                         .get("source")
                         .and_then(Value::as_str)
                         .unwrap_or(&call.name)
                         .to_string();
-                    delegated.push((call.id.clone(), name));
+                    let background = call.input.get("async").and_then(Value::as_bool) == Some(true);
+                    delegated.push((call.id.clone(), name, background));
+                } else if summon && call.name == LOAD_TOOL {
+                    if let Some(source) = call.input.get("source").and_then(Value::as_str) {
+                        self.loads.insert(call.id.clone(), source.to_string());
+                    }
                 }
                 blocks.push(AvpContentItem::ToolUseBlock(ToolUseBlock {
                     id: call.id,
@@ -194,16 +211,37 @@ impl<S: Sink> Emitter<S> {
             }
         }
         self.rec.assistant(blocks, usage, opts)?;
-        for (id, name) in delegated {
+        for (id, name, background) in delegated {
             self.rec.subagent_start(&id, &name, None, None)?;
-            self.delegates.insert(id);
+            self.delegates.insert(id, background);
         }
         Ok(())
     }
 
+    /// Attach a subagent's usage, by its child session, to the frame that
+    /// closes on it. Goose drops the child's per-response usage events, so the
+    /// parent reads its session totals instead.
+    pub fn on_subagent_usage(&mut self, session_id: &str, usage: SubagentUsage) {
+        self.subagent_usage.insert(session_id.to_string(), usage);
+    }
+
+    /// The background subagent session a `load` call returns, if any.
+    pub fn loaded_subagent(&self, call_id: &str) -> Option<&str> {
+        self.loads
+            .get(call_id)
+            .filter(|source| self.background.contains_key(*source))
+            .map(String::as_str)
+    }
+
+    /// Background subagents whose result was never loaded.
+    pub fn background_subagents(&self) -> Vec<String> {
+        self.background.keys().cloned().collect()
+    }
+
     /// Report one tool-result message: a `tool_returned` per result paired to
-    /// a prior call, plus `subagent_returned` for a `delegate` call (mirroring
-    /// the tool's error as `reason = error`).
+    /// a prior call, plus `subagent_returned` for a foreground `delegate` call
+    /// (mirroring the tool's error as `reason = error`) or a `load` of a
+    /// background subagent's result. A background launch keeps its frame open.
     pub fn on_tool_results(&mut self, content: &[GooseContent]) -> std::io::Result<()> {
         for item in content {
             let Some(ret) = translate::as_tool_return(item) else {
@@ -211,22 +249,48 @@ impl<S: Sink> Emitter<S> {
             };
             let block = translate::tool_result_block(&ret.id, &ret.output, ret.is_error);
             self.rec.tool_result(&ret.id, block, ret.is_error, None)?;
-            if self.delegates.remove(&ret.id) {
-                let reason = if ret.is_error {
-                    StopReason::Error
-                } else {
-                    StopReason::Converged
-                };
-                self.rec.subagent_result(
-                    &ret.id,
-                    &translate::result_text(&ret.output),
-                    reason,
-                    None,
-                    None,
-                )?;
-            }
+            let session = translate::subagent_session(&ret).map(str::to_string);
+            let call = if let Some(background) = self.delegates.remove(&ret.id) {
+                if let (true, false, Some(session)) = (background, ret.is_error, &session) {
+                    self.background.insert(session.clone(), ret.id.clone());
+                    continue;
+                }
+                ret.id.clone()
+            } else if let Some(source) = self.loads.remove(&ret.id) {
+                match self.background.remove(&source) {
+                    Some(call) => {
+                        self.close_subagent(&call, &ret, Some(&source))?;
+                        continue;
+                    }
+                    None => continue,
+                }
+            } else {
+                continue;
+            };
+            self.close_subagent(&call, &ret, session.as_deref())?;
         }
         Ok(())
+    }
+
+    fn close_subagent(
+        &mut self,
+        call: &str,
+        ret: &translate::ToolReturn,
+        session: Option<&str>,
+    ) -> std::io::Result<()> {
+        let reason = if ret.is_error {
+            StopReason::Error
+        } else {
+            StopReason::Converged
+        };
+        let usage = session.and_then(|s| self.subagent_usage.remove(s));
+        self.rec.subagent_result(
+            call,
+            &translate::result_text(&ret.output),
+            reason,
+            usage,
+            None,
+        )
     }
 
     /// Report a non-terminal `error_occurred` (e.g. a provider/stream error).
@@ -235,7 +299,21 @@ impl<S: Sink> Emitter<S> {
     }
 
     /// Close any open turn and frame, then emit `agent_stopped`. Idempotent.
+    /// A background subagent whose result was never loaded closes as
+    /// `abandoned`, carrying whatever it spent, and the run then cannot
+    /// report `converged` (trajectory.md §5).
     pub fn stop(&mut self, reason: StopReason, output: Option<Value>) -> std::io::Result<()> {
+        let mut reason = reason;
+        if !self.rec.is_stopped() && !self.background.is_empty() {
+            for (session, call) in std::mem::take(&mut self.background) {
+                let usage = self.subagent_usage.remove(&session);
+                self.rec
+                    .subagent_result(&call, "", StopReason::Abandoned, usage, None)?;
+            }
+            if reason == StopReason::Converged {
+                reason = StopReason::Abandoned;
+            }
+        }
         self.rec.stop(reason, output)
     }
 }

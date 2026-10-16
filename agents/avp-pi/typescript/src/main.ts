@@ -7,5 +7,5 @@ import { main } from "@avp/types/agent-cli";
 
 process.exitCode = await main({
   describe: async () => (await import("./agent.js")).describe(),
-  run: async (commission, sink) => (await import("./agent.js")).run(commission, sink),
+  run: async (commission, sink, signal) => (await import("./agent.js")).run(commission, sink, { signal }),
 });

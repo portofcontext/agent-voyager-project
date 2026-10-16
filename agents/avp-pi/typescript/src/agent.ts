@@ -33,6 +33,7 @@ import {
   DEFAULT_TOOLS,
   failFast,
   fromCommission,
+  launcherBaseUrl,
   mcpToolName,
   splitModel,
   writeSkills,
@@ -53,6 +54,8 @@ export interface RunOptions {
   agentDir?: string;
   /** A configured model runtime, such as one with a scripted provider. */
   modelRuntime?: ModelRuntime;
+  /** Aborting it stops Pi and closes the trajectory as `interrupted`. */
+  signal?: AbortSignal;
 }
 
 /** What the agent ships with, before any Commission. */
@@ -111,12 +114,13 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
     rec.stop("error");
     return;
   }
-  const model = plan.baseUrl ? { ...found, baseUrl: plan.baseUrl } : found;
+  const baseUrl = plan.baseUrl ?? launcherBaseUrl(plan.origin, found.baseUrl);
+  const model = baseUrl ? { ...found, baseUrl } : found;
 
   const scratch = mkdtempSync(join(tmpdir(), "avp-pi-"));
   let session: Awaited<ReturnType<typeof pi.createAgentSession>>["session"] | undefined;
-  const onSignal = () => void session?.abort();
-  process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+  const onAbort = () => void session?.abort();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
   try {
     const mcp = await dial(plan.mcpServers, rec);
     const skillsDir = writeSkills(commission.skills ?? [], join(scratch, "skills"));
@@ -215,7 +219,7 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
       }
     });
     try {
-      if (plan.prompt) await session.prompt(plan.prompt);
+      if (plan.prompt && !options.signal?.aborted) await session.prompt(plan.prompt);
     } finally {
       unsubscribe();
     }
@@ -225,7 +229,7 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
       const message = last.errorMessage || "provider error";
       rec.error(translate.errorCode(message), message);
       rec.stop("error");
-    } else if (last?.stopReason === "aborted") {
+    } else if (last?.stopReason === "aborted" || options.signal?.aborted) {
       rec.stop("interrupted");
     } else {
       rec.stop("converged", session.getLastAssistantText() || undefined);
@@ -243,7 +247,7 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
     rec.error(code, message);
     rec.stop("error");
   } finally {
-    process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+    options.signal?.removeEventListener("abort", onAbort);
     if (session) {
       // As Pi's own runtime does on quit: `session_shutdown` lets extensions
       // (MCP connections and their server processes) close before dispose.
