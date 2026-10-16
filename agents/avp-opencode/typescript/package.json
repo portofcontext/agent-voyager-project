@@ -20,7 +20,8 @@
     "@avp/types": "file:../../../avp/bindings/typescript",
     "@modelcontextprotocol/sdk": "1.31.0",
     "@opencode-ai/sdk": "1.18.34",
-    "opencode-ai": "1.18.34"
+    "opencode-ai": "1.18.34",
+    "undici": "7.30.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -14,6 +14,10 @@
  * is not on PATH, happens once. Child processes (tools, stdio MCP servers)
  * inherit these XDG directories.
  *
+ * Each server's client has its own connection pool, closed with the server.
+ * Linux hands a freed ephemeral port to the next server at once, and a shared
+ * pool would reuse a kept-alive socket to the dead one (ECONNRESET).
+ *
  * `close` disposes the server (closing MCP connections), then kills the
  * process group; an exit hook kills it if Node exits first.
  */
@@ -25,6 +29,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { Agent, fetch as poolFetch } from "undici";
 
 const START_TIMEOUT_MS = 60_000;
 const STOP_GRACE_MS = 3_000;
@@ -51,6 +56,7 @@ export class OpencodeServer {
     /** Resolves with a description once the server process is gone. */
     readonly exited: Promise<string>,
     private readonly proc: ChildProcess,
+    private readonly pool: Agent,
     private readonly output: () => string,
   ) {
     process.on("exit", this.onExit);
@@ -93,8 +99,22 @@ export class OpencodeServer {
     });
     proc.stdout!.resume();
     const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-    const client = createOpencodeClient({ baseUrl: url, directory: opts.cwd, headers: { Authorization: auth } });
-    return new OpencodeServer(url, client, exited, proc, () => output);
+    const pool = new Agent();
+    const client = createOpencodeClient({
+      baseUrl: url,
+      directory: opts.cwd,
+      headers: { Authorization: auth },
+      fetch: ((input: Request) =>
+        poolFetch(input.url, {
+          method: input.method,
+          headers: [...input.headers],
+          body: input.body,
+          signal: input.signal,
+          duplex: "half",
+          dispatcher: pool,
+        })) as unknown as typeof fetch,
+    });
+    return new OpencodeServer(url, client, exited, proc, pool, () => output);
   }
 
   /** The tail of the server's log output, for error messages. */
@@ -113,6 +133,7 @@ export class OpencodeServer {
       );
       if (!stopped) this.kill("SIGKILL");
     }
+    await this.pool.destroy().catch(() => {});
     process.off("exit", this.onExit);
   }
 
