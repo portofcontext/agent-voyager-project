@@ -98,3 +98,8 @@ call that made them.
   description); thought signatures are not carried.
 - Gemini CLI writes its own error reports (`gemini-client-error-*.json`) to
   the system temporary directory when a request fails.
+- Gemini CLI parses an MCP tool's text result as JSON and stores it as
+  `structuredContent` when the server sends none. A result whose text is bare
+  JSON that isn't an object (`42`, `"ok"`) then fails MCP validation, and the
+  call ends as an error the model sees. The adapter records it faithfully as
+  `is_error: true`; the behavior is Gemini CLI's (`McpComplianceTransport`).
