@@ -52,6 +52,17 @@ pairing, and a subsequent model response, rather than only MCP connection.
   IDs and spans. It has no descriptor-based `requires` gate. `$text_contains`
   matches either string tool output or a list of text blocks.
   (`mcp/managed-mcp-tool-round-trip`)
+- **Tool calls beyond one round trip (all agents, through the MCP fixture).**
+  Three dependent rounds, two calls requested in one response, and a tool that
+  fails both ways an MCP tool can (an `isError` result and a protocol error).
+  Each case judges every call's own result through `tool_calls` (a call whose
+  input matches must have its own result match), so results handed to the
+  wrong call fail even when every id is consistent. Failures must be
+  `is_error: true` with the failure text, and the run must still converge.
+  Whether the model really calls in parallel is its choice; the pairing
+  requirements hold either way, and adapters' seam tests script the parallel
+  path. (`mcp/{multi-round-tool-calls, parallel-tool-calls,
+  tool-error-result-is-recorded, tool-protocol-error-is-recorded}`)
 - **Built-in tool round-trip (declared tools).** A real-model loop where the model calls a built-in tool:
   `tool_invoked` -> `tool_returned` -> `agent_stopped(converged)`. Tool names
   differ cross-agent so only the event types + ordering are pinned, not the name.
@@ -90,6 +101,15 @@ pairing, and a subsequent model response, rather than only MCP connection.
   and every other event's `parent_span_id` resolving to a span the run emitted
   (this is what pairs `tool_returned` under its `tool_invoked`, turns under the
   agent span). Both agents satisfy it across all cases.
+- **Tool pairing (universal).** Every `tool_use` block in a turn has exactly one
+  `tool_invoked` under that turn; every `tool_returned` sits under its
+  `tool_invoked` and carries that call's id; no call returns twice; and a
+  converged run leaves no call unreturned (an interrupted or failed run may stop
+  with one in flight).
+- **Metering (universal, `--meter`).** Provider traffic runs through a local
+  proxy; the bill must equal the trajectory's turns plus subagent rollups. With
+  no rollups and no cut-off responses, each billed response must also be one
+  turn's usage, so usage filed on the wrong turn fails even when totals match.
 
 The remaining gaps are the provider-nondeterministic events and the
 invalid-Commission entrypoint behavior below.
@@ -117,7 +137,8 @@ invalid-Commission entrypoint behavior below.
   thinking-enabled model + config; provider-specific.
 - **Forced bad / disabled tool.** Model invoking a missing tool ->
   `tool_invoked` -> `tool_returned(is_error=true)`, no execution. Needs a way to
-  make the model call a bad tool. This is also where the explicit
+  make the model call a bad tool (a tool that runs and fails is covered above).
+  This is also where the explicit
   `avp.tool.dispatch_target=local` discriminator on `tool_invoked` would be
   asserted (the decl side is covered by `default-commission-surfaces-builtins`;
   `ToolDecl` no longer carries a positive dispatch field, local is the absence of
@@ -133,9 +154,6 @@ invalid-Commission entrypoint behavior below.
 
 ### Feasible, deliberately deferred
 
-- **Multi-round, parallel, and failing tool calls.** Several sequential tool
-  rounds, parallel calls in one inference, and a tool that returns
-  `is_error: true`. The MCP fixture would need a failing tool.
 - **Live runs in CI.** The live suites run on demand from contributors'
   machines; the manual CI jobs (Claude, Pi) have not been dispatched.
 

@@ -124,6 +124,19 @@ class FinalState(BaseModel):
     max_total_tokens: int | None = Field(default=None, ge=0)
 
 
+class ToolCallMatcher(BaseModel):
+    """One tool call, judged across its pair: some `tool_invoked` whose `data`
+    matches `invoked` must have its own `tool_returned` (same call id) whose
+    `data` matches `returned`. Event matchers judge events one at a time, so a
+    translator that hands parallel calls each other's results passes them;
+    this does not."""
+
+    model_config = _STRICT
+    invoked: dict[str, Any]
+    returned: dict[str, Any]
+    label: str | None = None
+
+
 Ordering = Literal["in_order_subsequence", "in_order_strict", "any_order"]
 
 
@@ -134,6 +147,7 @@ class Expectations(BaseModel):
     events: list[EventMatcher]
     ordering: Ordering = "in_order_subsequence"
     forbidden_events: list[EventMatcher] = Field(default_factory=list)
+    tool_calls: list[ToolCallMatcher] = Field(default_factory=list)
     final_state: FinalState | None = None
 
 

@@ -16,10 +16,12 @@ from functools import cache
 from typing import Any
 
 from avp.pricing import COST_SOURCE_UNKNOWN, PriceTable, compute_cost, load_default_prices
-from avp_conformance.case import EventMatcher, Expectations, FinalState
+from avp_conformance.case import EventMatcher, Expectations, FinalState, ToolCallMatcher
 
 T_ASSISTANT_MESSAGE = "avp.assistant_message"
 T_AGENT_STOPPED = "avp.agent_stopped"
+T_TOOL_INVOKED = "avp.tool_invoked"
+T_TOOL_RETURNED = "avp.tool_returned"
 
 # OTel span identification (FOUNDATIONS.md): trace_id is 32 hex chars, span_id
 # is 16. ZERO_SPAN is the root sentinel (no parent).
@@ -119,6 +121,22 @@ def _match_any(events: list[dict], matchers: list[EventMatcher]) -> int | None:
         if not any(_partial(e, m.match) for e in events):
             return i
     return None
+
+
+def _match_tool_call(events: list[dict], call: ToolCallMatcher) -> bool:
+    """Some call's `tool_invoked` matches `call.invoked` and its own
+    `tool_returned` matches `call.returned`."""
+    returned = {
+        (e.get("data") or {}).get("avp.tool.call_id"): e.get("data") or {}
+        for e in events
+        if e.get("type") == T_TOOL_RETURNED
+    }
+    return any(
+        _partial(e.get("data") or {}, call.invoked)
+        and _partial(returned.get((e.get("data") or {}).get("avp.tool.call_id"), {}), call.returned)
+        for e in events
+        if e.get("type") == T_TOOL_INVOKED
+    )
 
 
 def _check_final_state(events: list[dict], fs: FinalState) -> list[str]:
@@ -237,6 +255,70 @@ def _check_structure(events: list[dict]) -> list[str]:
             reasons.append(f"structure: {t} parent_span_id {pid!r} resolves to no emitted span")
 
     reasons.extend(_check_subagent_frames(events))
+    reasons.extend(_check_tool_pairing(events))
+    return reasons
+
+
+def _check_tool_pairing(events: list[dict]) -> list[str]:
+    """Every tool call is one `tool_invoked` and, once it ran, one
+    `tool_returned` carrying its own result (trajectory.md §8 rule 4):
+
+    - each `tool_use` block in a turn's content has exactly one `tool_invoked`
+      with that call id, under that turn;
+    - each `tool_returned` sits under the `tool_invoked` with its call id, and
+      its `tool_result.tool_use_id` is that call id;
+    - no call returns twice, and in a converged run every call returned. An
+      interrupted or failed run may stop with a call still in flight.
+
+    Parallel calls are where translators pair results by position or batch
+    instead of by id; these catch it on every case.
+    """
+    reasons: list[str] = []
+    uses: dict[str, str] = {}
+    for e in events:
+        if e.get("type") != T_ASSISTANT_MESSAGE:
+            continue
+        d = e.get("data") or {}
+        for block in d.get("avp.content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                uses[block.get("id")] = d.get("span_id")
+    invoked: dict[str, dict] = {}
+    for e in events:
+        if e.get("type") != T_TOOL_INVOKED:
+            continue
+        d = e.get("data") or {}
+        call = d.get("avp.tool.call_id")
+        if call in invoked:
+            reasons.append(f"tools: call {call!r} has more than one tool_invoked")
+            continue
+        invoked[call] = d
+        if call not in uses:
+            reasons.append(f"tools: tool_invoked {call!r} has no tool_use block in any turn")
+        elif d.get("parent_span_id") != uses[call]:
+            reasons.append(f"tools: tool_invoked {call!r} is not under the turn that called it")
+    for call in uses.keys() - invoked.keys():
+        reasons.append(f"tools: tool_use {call!r} has no tool_invoked")
+    returned: set[str] = set()
+    for e in events:
+        if e.get("type") != T_TOOL_RETURNED:
+            continue
+        d = e.get("data") or {}
+        call = d.get("avp.tool.call_id")
+        result_id = (d.get("avp.tool_result") or {}).get("tool_use_id")
+        if call not in invoked:
+            reasons.append(f"tools: tool_returned {call!r} has no tool_invoked")
+            continue
+        if call in returned:
+            reasons.append(f"tools: call {call!r} returned more than once")
+        returned.add(call)
+        if d.get("parent_span_id") != invoked[call].get("span_id"):
+            reasons.append(f"tools: tool_returned {call!r} is not under its tool_invoked")
+        if result_id != call:
+            reasons.append(f"tools: tool_returned {call!r} carries the result for {result_id!r}")
+    stopped = [e for e in events if e.get("type") == T_AGENT_STOPPED]
+    if stopped and (stopped[-1].get("data") or {}).get("avp.reason") == "converged":
+        for call in invoked.keys() - returned:
+            reasons.append(f"tools: call {call!r} never returned in a converged run")
     return reasons
 
 
@@ -411,6 +493,10 @@ def match_case(events: list[dict], expectations: Expectations) -> MatchResult:
         else:
             m = expectations.events[failed]
             reasons.append(f"events ({expectations.ordering}): unmatched matcher {_label(m)!r}")
+
+    for call in expectations.tool_calls:
+        if not _match_tool_call(events, call):
+            reasons.append(f"tool_calls: no call matched {call.label or call.invoked!r}")
 
     for m in expectations.forbidden_events:
         if any(_partial(e, m.match) for e in events):

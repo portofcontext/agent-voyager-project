@@ -1,0 +1,175 @@
+{
+  "id": "parallel-tool-calls",
+  "title": "Two calls in one model response each pair with their own result",
+  "description": "The model is asked to make two independent calls in a single response. Each tool_invoked MUST be followed by exactly one tool_returned carrying its own call's result (by call id, not by position), which the universal tool-pairing check enforces. Models may still issue the calls one per turn; the pairing requirements hold either way.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#8-conformance"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "parallel-tool-calls",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "In a single response, call the avptest MCP tool Avptest_Echo twice in parallel: once with text AVP-PAR-ALPHA and once with text AVP-PAR-BETA. Do not wait for the first result before making the second call. After both results arrive, reply with both echoed texts. You must call the tools, not simulate them. Do not use any other tools.",
+    "mcp_servers": [
+      {
+        "type": "stdio",
+        "id": "avptest",
+        "command": [
+          "${AVP_TEST_PYTHON}",
+          "${AVP_TEST_MCP}"
+        ]
+      }
+    ],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "any_order",
+    "events": [
+      {
+        "label": "agent_started lists the connected avptest server",
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "avp.mcp_servers": {
+              "$contains": {
+                "id": "avptest",
+                "status": "connected"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "Avptest_Echo with AVP-PAR-ALPHA",
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "text": "AVP-PAR-ALPHA"
+            }
+          }
+        }
+      },
+      {
+        "label": "Avptest_Echo with AVP-PAR-BETA",
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "text": "AVP-PAR-BETA"
+            }
+          }
+        }
+      },
+      {
+        "label": "the ALPHA result",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "AVP-PAR-ALPHA"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "the BETA result",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "AVP-PAR-BETA"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "a reply carrying ALPHA",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-PAR-ALPHA"
+            }
+          }
+        }
+      },
+      {
+        "label": "a reply carrying BETA",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-PAR-BETA"
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ],
+    "tool_calls": [
+      {
+        "label": "the ALPHA call returns ALPHA",
+        "invoked": {
+          "avp.tool.input": {
+            "text": "AVP-PAR-ALPHA"
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": false,
+            "content": {
+              "$text_contains": "AVP-PAR-ALPHA"
+            }
+          }
+        }
+      },
+      {
+        "label": "the BETA call returns BETA",
+        "invoked": {
+          "avp.tool.input": {
+            "text": "AVP-PAR-BETA"
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": false,
+            "content": {
+              "$text_contains": "AVP-PAR-BETA"
+            }
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

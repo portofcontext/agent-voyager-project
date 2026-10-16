@@ -32,6 +32,19 @@ def test_cold_stdio_fixture_needs_only_stdlib():
         },
         {"id": 6, "method": "missing"},
         {"id": 7, "method": "ping"},
+        {
+            "id": 8,
+            "method": "tools/call",
+            "params": {"name": "Avptest_Fail", "arguments": {"message": "boom", "mode": "result"}},
+        },
+        {
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "Avptest_Fail",
+                "arguments": {"message": "boom", "mode": "protocol"},
+            },
+        },
     ]
     with local_environment({}) as env:
         result = subprocess.run(
@@ -45,12 +58,18 @@ def test_cold_stdio_fixture_needs_only_stdlib():
             check=True,
         )
     replies = [json.loads(line) for line in result.stdout.splitlines()]
-    assert [r["id"] for r in replies] == list(range(1, 8))
+    assert [r["id"] for r in replies] == list(range(1, 10))
     assert replies[0]["result"]["protocolVersion"] == "2025-11-25"
-    assert {t["name"] for t in replies[1]["result"]["tools"]} == {"Avptest_Echo", "Avptest_Add"}
+    assert {t["name"] for t in replies[1]["result"]["tools"]} == {
+        "Avptest_Echo",
+        "Avptest_Add",
+        "Avptest_Fail",
+    }
     assert replies[2]["result"]["content"] == [{"type": "text", "text": "hello\n世界"}]
-    assert replies[3]["result"]["content"] == [{"type": "text", "text": "5"}]
+    assert replies[3]["result"]["content"] == [{"type": "text", "text": "sum: 5"}]
     assert replies[4]["error"]["code"] == -32602
     assert replies[5]["error"]["code"] == -32601
     assert replies[6]["result"] == {}
+    assert replies[7]["result"] == {"content": [{"type": "text", "text": "boom"}], "isError": True}
+    assert replies[8]["error"] == {"code": -32000, "message": "boom"}
     assert result.stderr == ""

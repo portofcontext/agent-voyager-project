@@ -300,7 +300,12 @@ def reconcile(billed: list[Billed], events: list[dict]) -> list[str]:
 
     A cut-off response's full usage is unknown, so when one exists the
     trajectory must record at least the completed responses' tokens rather
-    than exactly the bill."""
+    than exactly the bill.
+
+    Matching totals is not enough: usage filed on the wrong turn still sums
+    right. When every response completed and no subagent rolled up its spend,
+    each billed response must also be one turn's usage. Responses can finish
+    out of order, so the two are compared as multisets."""
     done = [b for b in billed if b.complete]
     b_in = sum(b.input_tokens for b in done)
     b_out = sum(b.output_tokens for b in done)
@@ -314,6 +319,8 @@ def reconcile(billed: list[Billed], events: list[dict]) -> list[str]:
         where = f"{b_all} tokens"
         recorded = f"{a_all}"
     else:
+        if (b_in, b_out) == (a_in, a_out) and not cut and not _has_rollups(events):
+            return _per_response(done, events)
         if (b_in, b_out) == (a_in, a_out) or (cut and a_in >= b_in and a_out >= b_out):
             return []
         where = f"{b_in} input / {b_out} output tokens"
@@ -322,4 +329,28 @@ def reconcile(billed: list[Billed], events: list[dict]) -> list[str]:
     return [
         f"metering: the provider billed {where} across {len(done)} completed "
         f"response(s){partial}; the trajectory records {recorded} ({turns} turn(s))"
+    ]
+
+
+def _has_rollups(events: list[dict]) -> bool:
+    return any(
+        e.get("type") == "avp.subagent_returned" and (e.get("data") or {}).get("avp.subagent.usage")
+        for e in events
+    )
+
+
+def _per_response(billed: list[Billed], events: list[dict]) -> list[str]:
+    """Reasons the bill's responses are not the trajectory's turns, one for one."""
+    responses = sorted((b.input_tokens, b.output_tokens) for b in billed)
+    turns = sorted(
+        (usage.get("input_tokens") or 0, usage.get("output_tokens") or 0)
+        for e in events
+        if e.get("type") == "avp.assistant_message"
+        for usage in [(e.get("data") or {}).get("avp.usage") or {}]
+    )
+    if responses == turns:
+        return []
+    return [
+        "metering: the totals match but the turns do not: the provider billed "
+        f"responses {responses} (input, output); the trajectory's turns record {turns}"
     ]

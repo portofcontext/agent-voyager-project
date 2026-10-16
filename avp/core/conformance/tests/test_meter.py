@@ -227,3 +227,29 @@ def test_reconcile_needs_at_least_the_completed_bill_when_a_response_was_cut() -
     assert reconcile(billed, [_turn(100, 10)]) == []
     [reason] = reconcile(billed, [_turn(90, 10)])
     assert "1 cut off" in reason
+
+
+def test_reconcile_matches_each_response_to_a_turn() -> None:
+    billed = [Billed("/v1/messages", 100, 10), Billed("/v1/messages", 120, 4)]
+    # Out of order is fine: concurrent responses can finish either way.
+    assert reconcile(billed, [_turn(120, 4), _turn(100, 10)]) == []
+    # Same totals, but a turn carries part of the other's usage.
+    [reason] = reconcile(billed, [_turn(100, 4), _turn(120, 10)])
+    assert "the turns do not" in reason
+    # Two responses folded into one turn.
+    [reason] = reconcile(billed, [_turn(220, 14)])
+    assert "the turns do not" in reason
+
+
+def test_reconcile_compares_totals_alone_when_a_subagent_rolls_up() -> None:
+    # A child's responses are billed but reach the trajectory as one rollup.
+    billed = [
+        Billed("/v1/messages", 100, 10),
+        Billed("/v1/messages", 30, 2),
+        Billed("/v1/messages", 20, 3),
+    ]
+    child = {
+        "type": "avp.subagent_returned",
+        "data": {"avp.subagent.usage": {"tokens_input": 50, "tokens_output": 5}},
+    }
+    assert reconcile(billed, [_turn(100, 10), child]) == []

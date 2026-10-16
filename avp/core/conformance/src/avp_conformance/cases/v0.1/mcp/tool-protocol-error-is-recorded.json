@@ -1,0 +1,124 @@
+{
+  "id": "tool-protocol-error-is-recorded",
+  "title": "A tool call that fails at the protocol level is recorded as is_error, and the run continues",
+  "description": "An MCP server can fail a call with a JSON-RPC error instead of a result. The agent's MCP client turns that into an error the model sees; the wire MUST record it as tool_returned with is_error true carrying the error message, not drop the call or record a success.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#4-tool-dispatch",
+    "spec/v0.1/trajectory.md#8-conformance"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "tool-protocol-error-is-recorded",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Call the avptest MCP tool Avptest_Fail exactly once with message AVP-FAIL-PROTOCOL and mode protocol. It will fail. After it fails, reply with exactly the error message it returned. You must call the tool, not simulate it. Do not use any other tools.",
+    "mcp_servers": [
+      {
+        "type": "stdio",
+        "id": "avptest",
+        "command": [
+          "${AVP_TEST_PYTHON}",
+          "${AVP_TEST_MCP}"
+        ]
+      }
+    ],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started lists the connected avptest server",
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "avp.mcp_servers": {
+              "$contains": {
+                "id": "avptest",
+                "status": "connected"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "tool_invoked for Avptest_Fail (mode protocol)",
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "message": "AVP-FAIL-PROTOCOL",
+              "mode": "protocol"
+            }
+          }
+        }
+      },
+      {
+        "label": "tool_returned with is_error and the error message",
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": true,
+              "content": {
+                "$text_contains": "AVP-FAIL-PROTOCOL"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "a reply carrying the error message",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-FAIL-PROTOCOL"
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ],
+    "tool_calls": [
+      {
+        "label": "Avptest_Fail (protocol) returns is_error with its message",
+        "invoked": {
+          "avp.tool.input": {
+            "message": "AVP-FAIL-PROTOCOL",
+            "mode": "protocol"
+          }
+        },
+        "returned": {
+          "avp.tool_result": {
+            "is_error": true,
+            "content": {
+              "$text_contains": "AVP-FAIL-PROTOCOL"
+            }
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}
