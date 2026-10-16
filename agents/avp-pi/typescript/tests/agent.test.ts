@@ -263,3 +263,103 @@ test("the launcher's ANTHROPIC_HOST routes Pi's catalog model", async () => {
   assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
   assert.equal(one(events, "assistant_message").data["avp.usage"].input_tokens, 11);
 });
+
+const MCP_ONLY = {
+  mcp_servers: [{ type: "stdio", id: "avptest", command: ["python3", FIXTURE] }],
+  enabled_builtin_tools: { "avp-pi": [] },
+} as Partial<Commission>;
+
+const turns = (events: Json[]) => events.filter((e) => e.type === "avp.assistant_message").map((e) => e.data);
+const results = (events: Json[]) =>
+  new Map<string, Json>(
+    events
+      .filter((e) => e.type === "avp.tool_returned")
+      .map((e) => [e.data["avp.tool.call_id"], e.data["avp.tool_result"]]),
+  );
+
+test("parallel tool calls in one response are one turn, each call paired with its own result", async () => {
+  const calls = [
+    fauxToolCall("mcp__avptest__Avptest_Echo", { text: "ALPHA" }, { id: "call_a" }),
+    fauxToolCall("mcp__avptest__Avptest_Echo", { text: "BRAVO" }, { id: "call_b" }),
+    fauxToolCall("mcp__avptest__Avptest_Fail", { message: "RESULT-FAILED", mode: "result" }, { id: "call_r" }),
+    fauxToolCall("mcp__avptest__Avptest_Fail", { message: "PROTOCOL-FAILED", mode: "protocol" }, { id: "call_p" }),
+  ];
+  const { events } = await runScripted(commission(MCP_ONLY), [
+    fauxAssistantMessage(calls, { stopReason: "toolUse" }),
+    fauxAssistantMessage([fauxText("DONE")]),
+  ]);
+
+  const [first, second] = turns(events);
+  assert.equal(turns(events).length, 2);
+  assert.deepEqual(
+    first!["avp.content"].map((b: Json) => [b.type, b.id]),
+    calls.map((c) => ["tool_use", c.id]),
+  );
+  assert.deepEqual(second!["avp.content"], [{ type: "text", text: "DONE" }]);
+
+  assert.equal(events.filter((e) => e.type === "avp.tool_returned").length, calls.length);
+  const byId = results(events);
+  for (const [id, text, isError] of [
+    ["call_a", "ALPHA", false],
+    ["call_b", "BRAVO", false],
+    ["call_r", "RESULT-FAILED", true],
+    ["call_p", "PROTOCOL-FAILED", true],
+  ] as const) {
+    const result = byId.get(id)!;
+    assert.equal(result.is_error, isError, id);
+    const own = JSON.stringify(result.content);
+    assert.match(own, new RegExp(text), id);
+    for (const other of ["ALPHA", "BRAVO", "RESULT-FAILED", "PROTOCOL-FAILED"].filter((t) => t !== text)) {
+      assert.doesNotMatch(own, new RegExp(other), `${id} carries ${other}`);
+    }
+  }
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});
+
+test("dependent rounds are one turn per response, each with its own usage", async () => {
+  const steps = [
+    [fauxText("First I add."), fauxToolCall("mcp__avptest__Avptest_Add", { a: 2, b: 3 }, { id: "call_1" })],
+    [
+      fauxText("Now I echo the sum, at somewhat greater length than before."),
+      fauxToolCall("mcp__avptest__Avptest_Echo", { text: "sum was 5" }, { id: "call_2" }),
+    ],
+    [fauxText("The answer is 5. ".repeat(20))],
+  ];
+  const { events } = await runScripted(commission(MCP_ONLY), [
+    fauxAssistantMessage(steps[0]!, { stopReason: "toolUse" }),
+    fauxAssistantMessage(steps[1]!, { stopReason: "toolUse" }),
+    fauxAssistantMessage(steps[2]!),
+  ]);
+  assert.deepEqual(types(events).slice(3), [
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "tool_invoked",
+    "tool_returned",
+    "assistant_message",
+    "agent_stopped",
+  ]);
+
+  const byId = results(events);
+  assert.match(JSON.stringify(byId.get("call_1")!.content), /sum: 5/);
+  assert.match(JSON.stringify(byId.get("call_2")!.content), /sum was 5/);
+
+  // The faux provider bills ceil(chars / 4) output tokens for the response's
+  // own content (a running total would read 13, 40, 125), and each later
+  // request reads the longer transcript so far from cache.
+  const own = (blocks: Json[]) =>
+    Math.ceil(
+      blocks.map((b) => (b.type === "text" ? b.text : `${b.name}:${JSON.stringify(b.arguments)}`)).join("\n").length / 4,
+    );
+  const recorded = turns(events);
+  assert.equal(recorded.length, steps.length);
+  recorded.forEach((turn, i) => {
+    assert.equal(turn["avp.usage"].output_tokens, own(steps[i]!), `turn ${i} output`);
+    if (i > 0) {
+      const [now, before] = [turn["avp.usage"], recorded[i - 1]!["avp.usage"]];
+      assert.ok(now.cache_read_input_tokens > before.cache_read_input_tokens, `turn ${i} input`);
+    }
+  });
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});

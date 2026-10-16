@@ -36,7 +36,8 @@ def native_context(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "operation", ["mcp", "mcp_parallel", "shell_error", "shell_poll", "http_retry", "partial_retry"]
+    "operation",
+    ["mcp", "mcp_parallel", "mcp_fail", "shell_error", "shell_poll", "http_retry", "partial_retry"],
 )
 def test_native_roundtrip(tmp_path, monkeypatch, operation):
     requests = []
@@ -111,6 +112,18 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
             items = [item]
             if operation == "mcp_parallel" and index == 1:
                 items.append({**item, "id": "fc_2", "call_id": "call_2"})
+            if operation == "mcp_fail" and index == 1:
+                # A success, an isError result, and a JSON-RPC error in one response.
+                items.extend(
+                    {
+                        **item,
+                        "id": f"fc_{n}",
+                        "call_id": f"call_{n}",
+                        "name": "Avptest_Fail",
+                        "arguments": json.dumps({"message": f"AVP-FAIL-{mode}", "mode": mode}),
+                    }
+                    for n, mode in ((2, "result"), (3, "protocol"))
+                )
             response = {
                 "id": f"resp_{index}",
                 "object": "response",
@@ -183,10 +196,13 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
     assert len(requests) == (3 if operation in ("shell_poll", "http_retry") else 2)
     assert events[-1]["data"]["avp.reason"] == "converged"
     returned = next(
-        e["data"]["avp.tool_result"] for e in events if e["type"] == "avp.tool_returned"
+        e["data"]["avp.tool_result"]
+        for e in events
+        if e["type"] == "avp.tool_returned"
+        and e["data"]["avp.tool_result"]["tool_use_id"] == "call_1"
     )
     assert returned["is_error"] is (operation == "shell_error")
-    if operation in ("mcp", "mcp_parallel", "http_retry"):
+    if operation in ("mcp", "mcp_parallel", "mcp_fail", "http_retry"):
         assert "AVP-MCP-ROUNDTRIP" in json.dumps(returned["content"])
     assert [
         e["data"]["avp.usage"]["input_tokens"]
@@ -200,8 +216,31 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         if e["type"] == "avp.tool_returned"
     ]
     assert sorted(returned_ids) == (
-        ["call_1", "call_2"] if operation in ("mcp_parallel", "shell_poll") else ["call_1"]
+        ["call_1", "call_2", "call_3"]
+        if operation == "mcp_fail"
+        else ["call_1", "call_2"]
+        if operation in ("mcp_parallel", "shell_poll")
+        else ["call_1"]
     )
+    if operation == "mcp_fail":
+        results = {
+            e["data"]["avp.tool_result"]["tool_use_id"]: e["data"]["avp.tool_result"]
+            for e in events
+            if e["type"] == "avp.tool_returned"
+        }
+        assert sorted(results) == ["call_1", "call_2", "call_3"]
+        assert results["call_1"]["is_error"] is False
+        assert "AVP-MCP-ROUNDTRIP" in json.dumps(results["call_1"]["content"])
+        for call, mode in (("call_2", "result"), ("call_3", "protocol")):
+            assert results[call]["is_error"] is True, results[call]
+            text = json.dumps(results[call]["content"])
+            assert f"AVP-FAIL-{mode}" in text
+            assert (
+                "AVP-MCP-ROUNDTRIP" not in text
+                and "AVP-FAIL-" + ("protocol" if mode == "result" else "result") not in text
+            )
+        messages = [e for e in events if e["type"] == "avp.assistant_message"]
+        assert len([b for b in messages[0]["data"]["avp.content"] if b["type"] == "tool_use"]) == 3
     if operation == "mcp_parallel":
         messages = [e for e in events if e["type"] == "avp.assistant_message"]
         assert len([b for b in messages[0]["data"]["avp.content"] if b["type"] == "tool_use"]) == 2
