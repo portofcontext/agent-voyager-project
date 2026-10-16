@@ -136,7 +136,11 @@ def test_builtin_claude_recipe_carries_is_sandbox_env() -> None:
 def test_builtin_python_recipes_install_their_release_wheels() -> None:
     from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
 
-    for name, module in [("codex", "avp_codex"), ("openai-agents", "avp_openai_agents")]:
+    for name, module in [
+        ("codex", "avp_codex"),
+        ("openai-agents", "avp_openai_agents"),
+        ("deep-agents", "avp_deep_agents"),
+    ]:
         source = AGENT_SOURCES[name]
         recipe = _builtin_recipe(source)
         (pip,) = recipe.install  # no runtime besides the wheels
