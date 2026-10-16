@@ -136,6 +136,39 @@ def test_parallel_tool_calls_pair_by_id(script, workspace: Path, tmp_path: Path)
     assert events[-1]["data"]["avp.reason"] == "converged"
 
 
+def test_failing_mcp_calls_return_to_the_model(script, workspace: Path, tmp_path: Path) -> None:
+    """Both ways an MCP tool fails, beside a call that succeeds. A protocol
+    error used to escape the loop and crash the run."""
+    fail = "mcp__avptest__Avptest_Fail"
+    script(
+        reply(
+            "",
+            ("ok", "mcp__avptest__Avptest_Echo", {"text": "FINE"}),
+            ("res", fail, {"message": "BAD-RESULT", "mode": "result"}),
+            ("proto", fail, {"message": "BAD-PROTO", "mode": "protocol"}),
+        ),
+        reply("DONE"),
+    )
+    events = _run(
+        tmp_path,
+        prompt="use the tools",
+        enabled_builtin_tools={"avp-deep-agents": []},
+        mcp_servers=[
+            {"type": "stdio", "id": "avptest", "command": [sys.executable, str(TEST_MCP)]}
+        ],
+    )
+    results = {r["avp.tool.call_id"]: r["avp.tool_result"] for r in _of(events, "tool_returned")}
+    assert set(results) == {"ok", "res", "proto"}
+    for call, text, failed in [
+        ("ok", "FINE", False),
+        ("res", "BAD-RESULT", True),
+        ("proto", "BAD-PROTO", True),
+    ]:
+        assert text in json.dumps(results[call]["content"]), call
+        assert bool(results[call]["is_error"]) is failed, call
+    assert events[-1]["data"]["avp.reason"] == "converged"
+
+
 def test_mcp_server_tools_round_trip(script, workspace: Path, tmp_path: Path) -> None:
     tool = "mcp__avptest__Avptest_Echo"
     model = script(reply("", ("call_1", tool, {"text": "PING"})), reply("PING"))
@@ -149,7 +182,11 @@ def test_mcp_server_tools_round_trip(script, workspace: Path, tmp_path: Path) ->
     )
     started = events[2]["data"]
     assert started["avp.mcp_servers"] == [{"id": "avptest", "status": "connected"}]
-    assert {t["name"] for t in started["avp.tools"]} == {tool, "mcp__avptest__Avptest_Add"}
+    assert {t["name"] for t in started["avp.tools"]} == {
+        tool,
+        "mcp__avptest__Avptest_Add",
+        "mcp__avptest__Avptest_Fail",
+    }
     assert all(t["avp.mcp_server_id"] == "avptest" for t in started["avp.tools"])
     assert sorted(model.tool_sets[0]) == sorted(t["name"] for t in started["avp.tools"])
     invoked, returned = _of(events, "tool_invoked")[0], _of(events, "tool_returned")[0]

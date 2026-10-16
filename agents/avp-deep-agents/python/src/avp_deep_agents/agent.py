@@ -98,9 +98,48 @@ async def _dial(
         decls.append(McpServerDecl(id=entry.id, status="connected"))
         for tool in listed:
             tool.name = cm.mcp_tool_name(entry.id, tool.name)
+            _recover_protocol_errors(tool)
             owners[tool.name] = entry.id
             tools.append(tool)
     return tools, decls, owners
+
+
+class _McpProtocolError(Exception):
+    """An MCP server's JSON-RPC error for one call, as a failed tool result."""
+
+
+def _recover_protocol_errors(tool: Any) -> None:
+    """Return an MCP server's JSON-RPC error to the model as a failed call.
+
+    `langchain-mcp-adapters` turns an `isError` result into an error
+    `ToolMessage` but lets a protocol error (`McpError`) propagate, which
+    ends the whole run. Every other runtime hands the model that failure, so
+    this one does too: it becomes a handled `ToolException`, recorded as
+    `is_error: true`."""
+    from langchain_core.tools import ToolException
+    from mcp.shared.exceptions import McpError
+
+    call, handle = tool.coroutine, tool.handle_tool_error
+
+    async def coroutine(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await call(*args, **kwargs)
+        except McpError as exc:
+            raise ToolException(str(exc)) from _McpProtocolError(str(exc))
+
+    def handle_tool_error(error: Exception) -> Any:
+        if isinstance(error.__cause__, _McpProtocolError):
+            return str(error) or "MCP tool call failed"
+        if callable(handle):
+            return handle(error)
+        if isinstance(handle, str):
+            return handle
+        if handle:
+            return str(error) or "Tool execution error"
+        raise error
+
+    tool.coroutine = coroutine
+    tool.handle_tool_error = handle_tool_error
 
 
 def _reason(exc: BaseException) -> str:
