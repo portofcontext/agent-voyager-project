@@ -75,6 +75,11 @@ before SDK initialization; use a separate process for a different context.
 Credential injection and OS confinement remain launcher responsibilities. Host
 conformance inherits provider environment variables; the CLI container launcher
 selects credentials for the commissioned provider or routes through its broker.
+A launcher redirects a provider with `<PROVIDER>_HOST`, the root standing in for
+the provider's origin, and `<PROVIDER>_BASE_URL`, that root plus the API's
+version path (`OPENAI_BASE_URL=http://broker/llm/openai/v1`). Adapters route
+every model call through them, translating to the SDK's own setting when it
+reads neither; `avp-conformance check` meters the traffic to verify it.
 Fresh state directories are not a security sandbox. Host launchers preserve uv
 and Rust build caches so bootstrapping does not require reinstalling toolchains.
 SDK-specific Commission mapping and tool/skill restrictions remain in adapters.

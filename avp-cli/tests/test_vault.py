@@ -277,6 +277,62 @@ def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:
         assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
 
 
+@pytest.mark.parametrize(
+    ("provider", "expected"),
+    [
+        (
+            Provider(id="openai"),
+            {
+                "OPENAI_HOST": "https://api.openai.com",
+                "OPENAI_BASE_URL": "https://api.openai.com/v1",
+            },
+        ),
+        (
+            Provider(id="openai", base_url="https://proxy.test/openai/v1/"),
+            {
+                "OPENAI_HOST": "https://proxy.test/openai",
+                "OPENAI_BASE_URL": "https://proxy.test/openai/v1",
+            },
+        ),
+        (
+            Provider(id="anthropic"),
+            {
+                "ANTHROPIC_HOST": "https://api.anthropic.com",
+                "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+            },
+        ),
+        (
+            Provider(id="google"),
+            {
+                "GOOGLE_HOST": "https://generativelanguage.googleapis.com",
+                "GOOGLE_BASE_URL": "https://generativelanguage.googleapis.com",
+                "GOOGLE_GEMINI_BASE_URL": "https://generativelanguage.googleapis.com",
+            },
+        ),
+    ],
+)
+def test_endpoint_vars_split_the_root_from_the_api_path(provider, expected) -> None:
+    env = agent._sandbox_env(_Agent, _commission(provider=provider), None)
+    assert {k: env[k] for k in expected} == expected
+
+
+def test_broker_routes_keep_the_api_path(monkeypatch) -> None:
+    """The SDK appends its path to `<PREFIX>_BASE_URL`; the broker must forward
+    that path under the provider's real API root."""
+    monkeypatch.setenv("AVP_VAULT_OAI", "sk-REAL")
+    c = _commission(provider=Provider(id="openai", credential=SecretRef(vault="oai")))
+    brk = agent._start_broker(c)
+    assert brk is not None
+    try:
+        env = agent._sandbox_env(_Agent, c, brk)
+        assert env["OPENAI_BASE_URL"] == brk.route_url("llm/openai") + "/v1"
+        assert env["OPENAI_HOST"] == brk.route_url("llm/openai")
+        route, rest = brk._match("/llm/openai/v1/responses")
+        assert brk._target_url(route, rest, "") == "https://api.openai.com/v1/responses"
+    finally:
+        brk.stop()
+
+
 def test_start_broker_builds_routes_and_resolves_handles(monkeypatch) -> None:
     monkeypatch.setenv("AVP_VAULT_OPENROUTER", "sk-or-REAL")
     monkeypatch.setenv("AVP_VAULT_MOT", "tok-REAL")
@@ -321,6 +377,7 @@ def test_sandbox_env_broker_mode_has_no_ambient_credentials(monkeypatch) -> None
         env = agent._sandbox_env(_Agent, c, brk)
         assert env["OPENROUTER_API_KEY"] == brk.token
         assert env["OPENROUTER_HOST"] == brk.route_url("llm/openrouter")
+        assert env["OPENROUTER_BASE_URL"] == brk.route_url("llm/openrouter") + "/api/v1"
         assert env["GOOSE_PROVIDER"] == "openrouter"
         assert not any("sk-or-REAL" in v for v in env.values())  # real key never in sandbox env
         assert "ambient-secret" not in env.values()

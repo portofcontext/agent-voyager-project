@@ -29,7 +29,7 @@ import secrets
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -60,7 +60,8 @@ class Route:
     """One destination the broker injects credentials for.
 
     `upstream` is where the request is forwarded. For a provider it is the
-    origin (`https://api.anthropic.com`) and the agent's SDK supplies the path;
+    API root without its version path (`https://api.openai.com`) and the
+    agent's SDK supplies the rest;
     for an MCP server it is the full real url. `header`/`prefix` name the auth
     header to overwrite (e.g. `authorization` + `Bearer `, or `x-api-key` + ``);
     `secret` is the resolved value, held only here on the host.
@@ -230,10 +231,3 @@ def _make_handler(broker: Broker) -> type[BaseHTTPRequestHandler]:
         do_PATCH = _handle
 
     return Handler
-
-
-def origin_of(url: str) -> str:
-    """The scheme://host[:port] origin of a url (provider routes forward here;
-    the agent SDK supplies the path)."""
-    s = urlsplit(url)
-    return urlunsplit((s.scheme, s.netloc, "", "", ""))
