@@ -6,6 +6,8 @@
 import { strict as assert } from "node:assert";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
@@ -14,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { MemorySink, type Commission } from "@avp/types";
 
 import { describe, run } from "../src/agent.js";
-import { BUILTIN_SKILLS, BUILTIN_SUBAGENTS, launcherBaseUrl } from "../src/commission.js";
+import { BUILTIN_SKILLS, BUILTIN_SUBAGENTS, keyVar, launcherBaseUrl } from "../src/commission.js";
 import { opencodeBinary } from "../src/server.js";
 import { ScriptedModel, USAGE, type Step } from "./scripted.js";
 
@@ -375,4 +377,44 @@ test("the launcher's <PROVIDER>_HOST routes the provider, keeping its SDK's vers
   const events: Json[] = JSON.parse(JSON.stringify(sink.events));
   assert.equal(model.requests.length, 1);
   assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+});
+
+test("a launcher's GEMINI_API_KEY authenticates Google", async () => {
+  assert.equal(keyVar("google", { GOOGLE_GENERATIVE_AI_API_KEY: "a", GEMINI_API_KEY: "b" }), undefined);
+  assert.equal(keyVar("google", { GOOGLE_API_KEY: "c" }), "GOOGLE_API_KEY");
+  assert.equal(keyVar("openai", { GEMINI_API_KEY: "b" }), undefined);
+
+  const keys: (string | undefined)[] = [];
+  const gemini = createServer((req, res) => {
+    keys.push(req.headers["x-goog-api-key"] as string | undefined);
+    req.resume();
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const chunk = {
+      candidates: [{ content: { role: "model", parts: [{ text: "routed" }] }, finishReason: "STOP", index: 0 }],
+      usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 3, totalTokenCount: 15 },
+    };
+    res.end(`data: ${JSON.stringify(chunk)}\n\n`);
+  });
+  await new Promise<void>((resolve) => gemini.listen(0, "127.0.0.1", resolve));
+  const { port } = gemini.address() as AddressInfo;
+  const cwd = mkdtempSync(join(tmpdir(), "avp-opencode-ws-"));
+  const sink = new MemorySink();
+  const previous = process.cwd();
+  process.chdir(cwd);
+  try {
+    const { provider: _, ...unrouted } = commission();
+    await run({ ...unrouted, model: "google/gemini-3.1-flash-lite" } as Commission, sink, {
+      env: {
+        GOOGLE_GENERATIVE_AI_API_KEY: "",
+        GEMINI_API_KEY: "launcher-key",
+        GOOGLE_HOST: `http://127.0.0.1:${port}`,
+      },
+    });
+  } finally {
+    process.chdir(previous);
+    gemini.close();
+  }
+  const events: Json[] = JSON.parse(JSON.stringify(sink.events));
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+  assert.ok(keys.length > 0 && keys.every((k) => k === "launcher-key"), `keys sent: ${JSON.stringify(keys)}`);
 });

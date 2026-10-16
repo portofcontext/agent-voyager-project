@@ -6,7 +6,8 @@
  *   know, or whose SDK it doesn't bundle (it would install one from npm), is
  *   `unsupported_provider`; a model missing from that provider is
  *   `unsupported_model`. Credentials come from the provider's environment
- *   variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...).
+ *   variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); Google's also
+ *   from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, which launchers set.
  * - `provider.base_url` is the provider's `baseURL`. Without it, a launcher's
  *   `<PROVIDER>_HOST` stands in for the provider's root and the SDK's version
  *   path is appended (`ANTHROPIC_HOST=http://broker/llm/anthropic` becomes
@@ -99,6 +100,8 @@ export interface RunPlan {
   /** The model's id in `route`'s catalog. */
   routeModel: string;
   baseUrl: string | undefined;
+  /** The variable holding the key when the SDK's own is unset (see `KEY_VARS`). */
+  keyVar: string | undefined;
   prompt: string;
   system: string | undefined;
   outputSchema: Record<string, unknown> | undefined;
@@ -117,6 +120,22 @@ const API_PATHS: Record<string, string> = {
   openrouter: "/api/v1",
 };
 
+/**
+ * Where a launcher puts a provider's key when it isn't the variable the
+ * bundled SDK reads: the first is the SDK's own, the rest are read in order.
+ * Google's SDK reads `GOOGLE_GENERATIVE_AI_API_KEY`; launchers and the Gemini
+ * tools set `GEMINI_API_KEY` or `GOOGLE_API_KEY`.
+ */
+const KEY_VARS: Record<string, string[]> = {
+  google: ["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"],
+};
+
+/** The variable to read `route`'s key from, when it isn't the SDK's own. */
+export function keyVar(route: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const [own, ...aliases] = KEY_VARS[route] ?? [];
+  return own && !env[own] ? aliases.find((name) => env[name]) : undefined;
+}
+
 /** `route`'s `baseURL` under the launcher's `<PROVIDER>_HOST`, if it sets one. */
 export function launcherBaseUrl(route: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   const host = env[`${route.toUpperCase().replace(/-/g, "_")}_HOST`];
@@ -132,6 +151,7 @@ export function fromCommission(commission: Commission, env: NodeJS.ProcessEnv = 
     route,
     routeModel: route === origin ? modelId : `${origin}/${modelId}`,
     baseUrl: commission.provider?.base_url ?? launcherBaseUrl(route, env),
+    keyVar: keyVar(route, env),
     prompt: commission.prompt ?? "",
     system: commission.system_prompt ?? undefined,
     outputSchema: commission.output_schema ?? undefined,
@@ -192,10 +212,18 @@ export function opencodeConfig(
     model,
     small_model: model,
     enabled_providers: [plan.route],
-    ...(plan.baseUrl ? { provider: { [plan.route]: { options: { baseURL: plan.baseUrl } } } } : {}),
+    ...(plan.baseUrl || plan.keyVar ? { provider: { [plan.route]: { options: providerOptions(plan) } } } : {}),
     ...(plan.mcpServers.length > 0 ? { mcp: Object.fromEntries(plan.mcpServers.map((e) => [e.id, mcpConfig(e)])) } : {}),
     ...(opts.skillsDir ? { skills: { paths: [opts.skillsDir] } } : {}),
     permission,
+  };
+}
+
+/** The route's SDK options: its `baseURL`, and its key by `{env:...}` reference. */
+function providerOptions(plan: RunPlan): Record<string, string> {
+  return {
+    ...(plan.baseUrl ? { baseURL: plan.baseUrl } : {}),
+    ...(plan.keyVar ? { apiKey: `{env:${plan.keyVar}}` } : {}),
   };
 }
 
