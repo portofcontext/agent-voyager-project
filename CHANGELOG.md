@@ -61,6 +61,10 @@ These changes retain the v0.1 wire schemas.
 - Claude turns recorded the `message_start` placeholder as `output_tokens`
   (typically 1). Each turn now carries its response's final `message_delta`
   usage.
+- Subagent rollups carry the child's final usage. Claude's came from the task
+  notification, taken before the child's last response completed, and its
+  result text was the task description; both now come from the `Agent` tool
+  result. Goose's had no usage; it now reads the child session's totals.
 - Claude's capability probe no longer calls the model. It sent its probe prompt
   to the CLI's default model on every run, spend the trajectory never recorded.
 - Goose provider failures, cached-token double counting, and session-naming usage.

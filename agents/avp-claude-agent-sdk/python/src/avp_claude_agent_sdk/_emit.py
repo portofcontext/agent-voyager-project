@@ -164,6 +164,9 @@ async def emit_agent_stopped(state: RunState, reason: StopReason, *, output: Any
     A subagent still running at this point is closed as `abandoned` and a
     `converged` stop downgrades to match: the SDK's `ResultMessage` says
     `success` when a parent stops before its background child reports."""
+    if not state.stopped:
+        for message in list(state.finished_tasks.values()):
+            await _close_task(state, message)
     await state.rec.stop(reason, output)
 
 
@@ -308,6 +311,10 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
     else:
         structured = None
     for block in tool_results:
+        state.answered_calls.add(block.tool_use_id)
+        finished = state.finished_tasks.get(block.tool_use_id)
+        if finished is not None:
+            await _close_task(state, finished, structured)
         await state.rec.tool_result(
             block.tool_use_id,
             _normalize_tool_result_content(block.content),
@@ -359,18 +366,54 @@ async def _on_task_started(state: RunState, message: TaskStartedMessage) -> None
 
 
 async def _on_task_notification(state: RunState, message: TaskNotificationMessage) -> None:
-    """Close the subagent frame. Status maps to `avp.subagent.reason`:
-    completed→converged, stopped→interrupted, failed→error (with the summary
-    carrying the failure). The notification can arrive many turns after the
-    dispatch (async `Agent` tool), or not at all (closed as `abandoned` at
-    stop)."""
+    """A subagent finished. The notification arrives before the `Agent` tool
+    result, whose payload carries the child's final usage and answer, so the
+    frame closes there. A background subagent's tool result came back at
+    launch, so its frame closes here. A subagent that never reports is closed
+    as `abandoned` at stop."""
     if not message.tool_use_id:
         return
+    if message.tool_use_id in state.answered_calls:
+        await _close_task(state, message)
+    else:
+        state.finished_tasks[message.tool_use_id] = message
+
+
+def _agent_result_usage(result: dict[str, Any]) -> SubagentUsage | None:
+    """The `Agent` tool result's final usage, split like a turn's. `TaskUsage`
+    totals are taken before the child's last response completes."""
+    usage = result.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    split = translate_usage(usage)
+    return SubagentUsage(
+        tokens_input=split.input_tokens,
+        tokens_output=split.output_tokens,
+        total_tokens=result.get("totalTokens"),
+        tool_uses=result.get("totalToolUseCount"),
+        duration_ms=result.get("totalDurationMs"),
+    )
+
+
+async def _close_task(
+    state: RunState, message: TaskNotificationMessage, result: dict[str, Any] | None = None
+) -> None:
+    """Close the subagent frame. Status maps to `avp.subagent.reason`:
+    completed→converged, stopped→interrupted, failed→error (with the summary
+    carrying the failure)."""
+    state.finished_tasks.pop(message.tool_use_id, None)
+    usage = _agent_result_usage(result) if result else None
+    blocks = (result or {}).get("content")
+    text = (
+        "".join(b.get("text", "") for b in blocks if isinstance(b, dict))
+        if isinstance(blocks, list)
+        else None
+    )
     await state.rec.subagent_result(
         message.tool_use_id,
-        message.summary or "",
+        text or message.summary or "",
         _TASK_STATUS_TO_REASON.get(message.status, StopReason.converged),
-        usage=_task_usage_to_subagent_usage(message.usage),
+        usage=usage or _task_usage_to_subagent_usage(message.usage),
     )
 
 

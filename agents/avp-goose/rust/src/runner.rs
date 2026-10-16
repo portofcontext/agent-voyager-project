@@ -252,10 +252,17 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         .reply(user_message, session_config, false, Some(cancel.clone()))
         .await?;
 
-    record_reply(&mut emitter, &model_name, stream, async move {
-        interrupt.await;
-        cancel.cancel();
-    })
+    let sessions = agent.config.session_manager.clone();
+    record_reply(
+        &mut emitter,
+        &model_name,
+        Some(&sessions),
+        stream,
+        async move {
+            interrupt.await;
+            cancel.cancel();
+        },
+    )
     .await
 }
 
@@ -285,6 +292,7 @@ fn interrupt_signal() -> std::io::Result<impl Future<Output = ()>> {
 async fn record_reply<S: Sink>(
     emitter: &mut Emitter<S>,
     model_name: &str,
+    sessions: Option<&SessionManager>,
     mut stream: impl Stream<Item = anyhow::Result<AgentEvent>> + Unpin,
     interrupt: impl Future<Output = ()>,
 ) -> anyhow::Result<()> {
@@ -369,6 +377,19 @@ async fn record_reply<S: Sink>(
                             &mut open_ids,
                             turn_start,
                         )?;
+                        if let Some(sessions) = sessions {
+                            for ret in content.iter().filter_map(translate::as_tool_return) {
+                                let Some(child) = translate::subagent_session(&ret) else {
+                                    continue;
+                                };
+                                if let Ok(totals) = sessions.get_session_usage_totals(child).await {
+                                    emitter.on_subagent_usage(
+                                        &ret.id,
+                                        translate::subagent_usage(&totals),
+                                    );
+                                }
+                            }
+                        }
                         emitter.on_tool_results(&content)?;
                         // The next inference begins now that Goose has the tool
                         // output; time it from here.
@@ -729,6 +750,82 @@ mod tests {
         assert!(new_agent().config.disable_session_naming);
     }
 
+    #[tokio::test]
+    async fn a_delegate_result_carries_the_child_sessions_usage() {
+        // Goose drops a subagent's own usage events; its session keeps the
+        // totals, and the `delegate` result names that session.
+        let dir = std::env::temp_dir().join(format!("avp-goose-sessions-{}", std::process::id()));
+        let sessions = SessionManager::new(dir.clone());
+        let child = sessions
+            .create_session(
+                dir.clone(),
+                "child".into(),
+                SessionType::SubAgent,
+                GooseMode::Auto,
+            )
+            .await
+            .unwrap();
+        sessions
+            .update(&child.id)
+            .accumulated_usage(goose::providers::base::Usage::new(
+                Some(1200),
+                Some(34),
+                None,
+            ))
+            .apply()
+            .await
+            .unwrap();
+        let message = |value: Value| AgentEvent::Message(serde_json::from_value(value).unwrap());
+        let items = vec![
+            Ok(message(json!({
+                "id": "parent-1", "role": "assistant", "created": 0, "metadata": { "userVisible": true, "agentVisible": true },
+                "content": [{
+                    "type": "toolRequest", "id": "d1",
+                    "_meta": { "goose_extension": "summon" },
+                    "toolCall": { "status": "success",
+                        "value": { "name": "delegate", "arguments": { "instructions": "say PONG" } } }
+                }]
+            }))),
+            Ok(message(json!({
+                "id": "tool-1", "role": "user", "created": 0, "metadata": { "userVisible": true, "agentVisible": true },
+                "content": [{
+                    "type": "toolResponse", "id": "d1",
+                    "toolResult": { "status": "success", "value": {
+                        "content": [{ "type": "text", "text": "PONG" }],
+                        "_meta": { "subagent_session_id": child.id }
+                    } }
+                }]
+            }))),
+        ];
+        let sink = Capture::default();
+        let mut emitter = Emitter::new(
+            sink.clone(),
+            "delegate",
+            Some("openai".into()),
+            HashSet::new(),
+            avp::load_default_prices(),
+        );
+        emitter.start(Some("gpt-4o-mini")).unwrap();
+        record_reply(
+            &mut emitter,
+            "gpt-4o-mini",
+            Some(&sessions),
+            futures::stream::iter(items),
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+        let events = sink.0.lock().unwrap().clone();
+        let returned = events
+            .iter()
+            .find(|e| e["type"] == "avp.subagent_returned")
+            .expect("the delegate closes a subagent frame");
+        let usage = &returned["data"]["avp.subagent.usage"];
+        assert_eq!(usage["tokens_input"], 1200);
+        assert_eq!(usage["tokens_output"], 34);
+    }
+
     #[derive(Clone, Default)]
     struct Capture(Arc<Mutex<Vec<Value>>>);
 
@@ -764,6 +861,7 @@ mod tests {
         record_reply(
             &mut emitter,
             "gpt-4o-mini",
+            None,
             futures::stream::iter(items),
             std::future::pending(),
         )
@@ -804,7 +902,7 @@ mod tests {
             let _ = fire.send(());
             futures::future::pending::<anyhow::Result<AgentEvent>>().await
         }));
-        let run = record_reply(&mut emitter, "gpt-4o-mini", Box::pin(stream), async {
+        let run = record_reply(&mut emitter, "gpt-4o-mini", None, Box::pin(stream), async {
             let _ = fired.await;
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), run)

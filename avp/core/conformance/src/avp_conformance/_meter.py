@@ -53,6 +53,9 @@ _HOP_BY_HOP = {
     "accept-encoding",
 }
 _MAX_CAPTURE = 64 * 1024 * 1024
+# How long `take` waits for responses still streaming. A provider can close a
+# stream after its final event, when the agent has already exited.
+_SETTLE_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -144,7 +147,8 @@ class Meter:
         self._upstreams = upstreams if upstreams is not None else UPSTREAMS
         self._servers: dict[str, ThreadingHTTPServer] = {}
         self._billed: list[Billed] = []
-        self._lock = threading.Lock()
+        self._in_flight = 0
+        self._lock = threading.Condition()
 
     def start(self) -> Meter:
         for origin, upstream in self._upstreams.items():
@@ -177,15 +181,22 @@ class Meter:
             for var, suffix in variables.items()
         }
 
-    def take(self) -> list[Billed]:
-        """The responses billed since the last call."""
+    def take(self, settle: float = _SETTLE_SECONDS) -> list[Billed]:
+        """The responses billed since the last call, once the responses still
+        in flight finish (waiting at most `settle` seconds)."""
         with self._lock:
+            self._lock.wait_for(lambda: self._in_flight == 0, timeout=settle)
             billed, self._billed = self._billed, []
         return billed
 
     def _record(self, billed: Billed) -> None:
         with self._lock:
             self._billed.append(billed)
+
+    def _track(self, delta: int) -> None:
+        with self._lock:
+            self._in_flight += delta
+            self._lock.notify_all()
 
     def _handler(self, upstream: Any) -> type[BaseHTTPRequestHandler]:
         meter = self
@@ -195,6 +206,13 @@ class Meter:
                 pass
 
             def _forward(self) -> None:
+                meter._track(1)
+                try:
+                    self._proxy()
+                finally:
+                    meter._track(-1)
+
+            def _proxy(self) -> None:
                 body = self._request_body()
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in _HOP_BY_HOP}
                 headers["Accept-Encoding"] = "identity"

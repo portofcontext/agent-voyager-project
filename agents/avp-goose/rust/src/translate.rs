@@ -15,7 +15,7 @@
 use std::collections::HashSet;
 
 use avp::recorder::DispatchTarget;
-use avp::trajectory::{AvpContentItem, TextBlock, ThinkingBlock, Usage};
+use avp::trajectory::{AvpContentItem, SubagentUsage, TextBlock, ThinkingBlock, Usage};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
@@ -39,6 +39,29 @@ pub fn usage(goose: &Value) -> Usage {
             field("cache_write_input_tokens").or_else(|| field("cache_creation_input_tokens")),
         ),
         reasoning_output_tokens: None,
+        extra: Default::default(),
+    }
+}
+
+/// The child session a `delegate` result names in its `_meta`.
+pub fn subagent_session(ret: &ToolReturn) -> Option<&str> {
+    ret.output
+        .get("_meta")?
+        .get("subagent_session_id")?
+        .as_str()
+}
+
+/// AVP `SubagentUsage` from a Goose session's accumulated usage. Goose counts
+/// `input_tokens` the way AVP does, cache reads and writes included.
+pub fn subagent_usage(
+    totals: &goose::session::session_manager::SessionUsageTotals,
+) -> SubagentUsage {
+    let tokens = |n: Option<i32>| n.map(|n| n.max(0) as u64);
+    SubagentUsage {
+        tokens_input: tokens(totals.accumulated_usage.input_tokens),
+        tokens_output: tokens(totals.accumulated_usage.output_tokens),
+        cost_usd: None,
+        turns: None,
         extra: Default::default(),
     }
 }

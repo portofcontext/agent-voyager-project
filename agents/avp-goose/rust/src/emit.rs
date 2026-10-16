@@ -13,7 +13,7 @@ use avp::pricing::PriceTable;
 use avp::recorder::{AssistantOpts, DispatchTarget, Recorder, RecorderOptions, StartInfo};
 use avp::sink::Sink;
 use avp::trajectory::{
-    AgentDescriptor, AvpContentItem, ErrorCode, StopReason, ToolUseBlock, Usage,
+    AgentDescriptor, AvpContentItem, ErrorCode, StopReason, SubagentUsage, ToolUseBlock, Usage,
 };
 use serde_json::{Map, Value};
 
@@ -35,6 +35,9 @@ pub struct Emitter<S: Sink> {
     /// Call ids of in-flight `delegate` calls: their result also closes a
     /// subagent frame.
     delegates: HashSet<String>,
+    /// The usage of finished `delegate` subagents, by call id, attached when
+    /// their result closes the frame.
+    subagent_usage: HashMap<String, SubagentUsage>,
     /// Captured in `prelude`; `start` mirrors its surface onto `agent_started`.
     descriptor: Option<AgentDescriptor>,
 }
@@ -68,6 +71,7 @@ impl<S: Sink> Emitter<S> {
             targets,
             mcp_servers,
             delegates: HashSet::new(),
+            subagent_usage: HashMap::new(),
             descriptor: None,
         }
     }
@@ -201,6 +205,13 @@ impl<S: Sink> Emitter<S> {
         Ok(())
     }
 
+    /// Attach a `delegate` subagent's usage to the frame its result closes.
+    /// Goose drops the child's per-response usage events, so the parent reads
+    /// its session totals instead.
+    pub fn on_subagent_usage(&mut self, call_id: &str, usage: SubagentUsage) {
+        self.subagent_usage.insert(call_id.to_string(), usage);
+    }
+
     /// Report one tool-result message: a `tool_returned` per result paired to
     /// a prior call, plus `subagent_returned` for a `delegate` call (mirroring
     /// the tool's error as `reason = error`).
@@ -221,7 +232,7 @@ impl<S: Sink> Emitter<S> {
                     &ret.id,
                     &translate::result_text(&ret.output),
                     reason,
-                    None,
+                    self.subagent_usage.remove(&ret.id),
                     None,
                 )?;
             }

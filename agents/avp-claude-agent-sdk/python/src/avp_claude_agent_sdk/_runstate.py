@@ -11,6 +11,8 @@ import dataclasses
 from collections.abc import AsyncIterable
 from typing import Any
 
+from claude_agent_sdk.types import TaskNotificationMessage
+
 from avp.pricing import PriceTable, load_default_prices
 from avp.recorder import Recorder
 from avp.sink import EventSink
@@ -46,6 +48,12 @@ class RunState:
     # partial-message StreamEvent) completes it. None once a tool result has
     # closed the turn.
     turn_usage: dict[str, Any] | None = None
+    # Subagent completions waiting for their `Agent` tool result, which
+    # carries the child's final usage and answer, keyed by tool_use_id.
+    finished_tasks: dict[str, TaskNotificationMessage] = dataclasses.field(default_factory=dict)
+    # Tool calls whose result has arrived. A subagent launched in the
+    # background returns before it finishes and closes on its notification.
+    answered_calls: set[str] = dataclasses.field(default_factory=set)
 
     @property
     def stopped(self) -> bool:

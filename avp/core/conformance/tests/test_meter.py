@@ -6,6 +6,7 @@ from __future__ import annotations
 import http.client
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -120,9 +121,10 @@ def test_usage_of_reads_each_provider_format(body, content_type, expected) -> No
 
 
 class _Upstream:
-    """Serves ANTHROPIC_SSE on POST (or `status`), recording request bodies."""
+    """Serves ANTHROPIC_SSE on POST (or `status`), recording request bodies,
+    and closes the stream `linger` seconds after its last event."""
 
-    def __init__(self, status: int = 200) -> None:
+    def __init__(self, status: int = 200, linger: float = 0.0) -> None:
         self.bodies: list[bytes] = []
         bodies = self.bodies
 
@@ -136,6 +138,8 @@ class _Upstream:
                 self.send_header("content-type", "text/event-stream")
                 self.end_headers()
                 self.wfile.write(ANTHROPIC_SSE)
+                self.wfile.flush()
+                time.sleep(linger)
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -165,6 +169,18 @@ def test_the_meter_forwards_and_records_completed_responses() -> None:
         assert upstream.bodies == [b'{"a":1}', b'{"b":2}']
         assert meter.take() == [Billed("/v1/messages", 115, 42)] * 2
         assert meter.take() == []
+    upstream.server.shutdown()
+
+
+def test_take_waits_for_a_stream_the_provider_closes_late() -> None:
+    # The agent reads the final event and exits; the provider closes after.
+    upstream = _Upstream(linger=0.5)
+    with Meter({"anthropic": upstream.url}) as meter:
+        conn = http.client.HTTPConnection(meter.url("anthropic").removeprefix("http://"))
+        conn.request("POST", "/v1/messages", body=b"{}")
+        assert conn.getresponse().read(len(ANTHROPIC_SSE)) == ANTHROPIC_SSE
+        conn.close()
+        assert meter.take() == [Billed("/v1/messages", 115, 42)]
     upstream.server.shutdown()
 
 

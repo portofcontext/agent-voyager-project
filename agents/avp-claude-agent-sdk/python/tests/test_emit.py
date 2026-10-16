@@ -1153,6 +1153,70 @@ def test_task_dispatch_emits_tool_pair_with_subagent_overlay() -> None:
     assert tool_returned.data.parent_span_id == tool_invoked.data.span_id
 
 
+def test_subagent_rollup_takes_the_agent_results_final_usage() -> None:
+    """The notification's `TaskUsage` is taken before the child's last
+    response completes and its summary is the task description; the `Agent`
+    tool result carries the final usage and the answer. Live, the notification
+    was a token short of the provider's bill."""
+    result = UserMessage(
+        content=[ToolResultBlock(tool_use_id="toolu_task_1", content="PONG")],
+        tool_use_result={
+            "status": "completed",
+            "content": [{"type": "text", "text": "PONG"}],
+            "totalTokens": 17394,
+            "totalToolUseCount": 0,
+            "totalDurationMs": 673,
+            "usage": {
+                "input_tokens": 3,
+                "cache_creation_input_tokens": 17385,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 6,
+            },
+        },
+    )
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=4, output_tokens=4),
+                _task_started(),
+                _task_notification(
+                    summary="Reply with PONG",
+                    usage={"total_tokens": 17393, "tool_uses": 0, "duration_ms": 673},
+                ),
+                result,
+                _result(),
+            ]
+        )
+    )
+    types = [ev.type for ev in events]
+    assert types.index("avp.subagent_returned") < types.index("avp.tool_returned")
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert returned.data.subagent_result_text == "PONG"
+    usage = returned.data.subagent_usage.model_dump()
+    assert (usage["tokens_input"], usage["tokens_output"]) == (17388, 6)
+    assert usage["total_tokens"] == 17394
+
+
+def test_background_subagent_closes_on_its_notification() -> None:
+    """A background `Agent` call returns at launch; the frame closes when the
+    child's notification arrives later."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=4, output_tokens=4),
+                _task_started(),
+                _user_tool_result(tool_use_id="toolu_task_1", content="launched"),
+                _task_notification(summary="done", usage={"total_tokens": 42}),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert returned.data.subagent_reason == "converged"
+    assert returned.data.subagent_result_text == "done"
+    assert returned.data.subagent_usage.model_dump()["total_tokens"] == 42
+
+
 def test_task_failed_status_emits_returned_with_error_reason() -> None:
     """TaskNotification.status == 'failed' maps to `subagent_returned`
     with `reason = error` and the failure summary on `result.text`. The
