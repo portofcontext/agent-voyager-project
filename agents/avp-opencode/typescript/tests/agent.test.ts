@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { MemorySink, type Commission } from "@avp/types";
 
 import { describe, run } from "../src/agent.js";
-import { BUILTIN_SKILLS, BUILTIN_SUBAGENTS } from "../src/commission.js";
+import { BUILTIN_SKILLS, BUILTIN_SUBAGENTS, launcherBaseUrl } from "../src/commission.js";
 import { opencodeBinary } from "../src/server.js";
 import { ScriptedModel, USAGE, type Step } from "./scripted.js";
 
@@ -352,4 +352,27 @@ test("output_schema returns OpenCode's structured output", async () => {
   const stopped = one(events, "agent_stopped").data;
   assert.equal(stopped["avp.reason"], "converged");
   assert.deepEqual(stopped["avp.output"], { answer: "42" });
+});
+
+test("the launcher's <PROVIDER>_HOST routes the provider, keeping its SDK's version path", async () => {
+  assert.equal(launcherBaseUrl("anthropic", { ANTHROPIC_HOST: "http://b/llm/anthropic/" }), "http://b/llm/anthropic/v1");
+  assert.equal(launcherBaseUrl("google", { GOOGLE_HOST: "http://b/llm/google" }), "http://b/llm/google/v1beta");
+  assert.equal(launcherBaseUrl("openai", {}), undefined);
+
+  const cwd = mkdtempSync(join(tmpdir(), "avp-opencode-ws-"));
+  model.script([{ text: "routed" }]);
+  const sink = new MemorySink();
+  const previous = process.cwd();
+  process.chdir(cwd);
+  try {
+    const { provider: _, ...unrouted } = commission();
+    await run(unrouted as Commission, sink, {
+      env: { OPENAI_API_KEY: "test-key", OPENAI_HOST: model.baseUrl.replace(/\/v1$/, "") },
+    });
+  } finally {
+    process.chdir(previous);
+  }
+  const events: Json[] = JSON.parse(JSON.stringify(sink.events));
+  assert.equal(model.requests.length, 1);
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
 });

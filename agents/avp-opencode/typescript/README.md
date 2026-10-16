@@ -28,7 +28,7 @@ Releases: bump `version` in `package.json` and `container_version` for
 | Commission | OpenCode |
 |---|---|
 | `model` `<origin>/<id>` | provider `<origin>`, model `<id>` from the catalog the binary bundles; an unknown model is `unsupported_model`, an unknown origin or one whose SDK OpenCode would install from npm is `unsupported_provider` |
-| `provider.base_url` | the provider's `baseURL` |
+| `provider.base_url` | the provider's `baseURL`; without it, a launcher's `<PROVIDER>_HOST` plus the SDK's version path |
 | `provider.id` | the OpenCode provider that serves the model, when its catalog lists `<origin>/<id>` (OpenRouter, say) |
 | `system_prompt` | the prompt's `system`, appended to OpenCode's system prompt |
 | `prompt` | the session's single user message |

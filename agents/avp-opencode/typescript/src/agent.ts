@@ -155,7 +155,7 @@ export async function run(commission: Commission, sink: Sink, options: RunOption
     clock,
     dispatchTarget: (name) => (name.startsWith("mcp__") ? "mcp_server" : "local"),
   });
-  const plan = fromCommission(commission);
+  const plan = fromCommission(commission, { ...process.env, ...options.env });
   const cwd = process.cwd();
   const scratch = mkdtempSync(join(tmpdir(), "avp-opencode-"));
   const skillsDir = join(scratch, "skills");

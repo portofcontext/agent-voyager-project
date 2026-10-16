@@ -7,7 +7,10 @@
  *   `unsupported_provider`; a model missing from that provider is
  *   `unsupported_model`. Credentials come from the provider's environment
  *   variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...).
- * - `provider.base_url` is the provider's `baseURL`. A `provider.id` other
+ * - `provider.base_url` is the provider's `baseURL`. Without it, a launcher's
+ *   `<PROVIDER>_HOST` stands in for the provider's root and the SDK's version
+ *   path is appended (`ANTHROPIC_HOST=http://broker/llm/anthropic` becomes
+ *   `http://broker/llm/anthropic/v1`). A `provider.id` other
  *   than the origin routes through that OpenCode provider when its catalog
  *   lists the model as `<origin>/<id>` (OpenRouter, say); pricing stays keyed
  *   by the origin.
@@ -102,7 +105,25 @@ export interface RunPlan {
   mcpServers: McpEntry[];
 }
 
-export function fromCommission(commission: Commission): RunPlan {
+/**
+ * The version path each bundled provider SDK expects at the end of its
+ * `baseURL` (its default URL minus the provider's root).
+ */
+const API_PATHS: Record<string, string> = {
+  anthropic: "/v1",
+  openai: "/v1",
+  google: "/v1beta",
+  mistral: "/v1",
+  openrouter: "/api/v1",
+};
+
+/** `route`'s `baseURL` under the launcher's `<PROVIDER>_HOST`, if it sets one. */
+export function launcherBaseUrl(route: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const host = env[`${route.toUpperCase().replace(/-/g, "_")}_HOST`];
+  return host ? host.replace(/\/+$/, "") + (API_PATHS[route] ?? "") : undefined;
+}
+
+export function fromCommission(commission: Commission, env: NodeJS.ProcessEnv = process.env): RunPlan {
   const [origin, modelId] = splitModel(commission.model);
   const route = commission.provider?.id ?? origin;
   return {
@@ -110,7 +131,7 @@ export function fromCommission(commission: Commission): RunPlan {
     modelId,
     route,
     routeModel: route === origin ? modelId : `${origin}/${modelId}`,
-    baseUrl: commission.provider?.base_url ?? undefined,
+    baseUrl: commission.provider?.base_url ?? launcherBaseUrl(route, env),
     prompt: commission.prompt ?? "",
     system: commission.system_prompt ?? undefined,
     outputSchema: commission.output_schema ?? undefined,
