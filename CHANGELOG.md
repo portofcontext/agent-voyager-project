@@ -12,6 +12,9 @@ These changes retain the v0.1 wire schemas.
 - Pi coding agent adapter (TypeScript), installable with `avp agent install pi` and
   released as `agent-pi-v<version>`. The TypeScript binding gains the stock
   entrypoint and preflight checks, and the CLI a `node` agent kind (`--package`).
+- Gemini CLI adapter (TypeScript), installable with `avp agent install gemini-cli`
+  and released as `agent-gemini-cli-v<version>`. The CLI's vault broker routes
+  `google` credentials with `x-goog-api-key` and sets `GEMINI_API_KEY`.
 - Conformance checks accounting on every trajectory (the cache split inside
   `input_tokens`, `unknown` costs of zero, `computed` costs matching the price
   table) and adds cases for invalid provider credentials, the Commission system

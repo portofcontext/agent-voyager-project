@@ -162,6 +162,18 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         package_asset="avp-pi.tar.gz",
         entry="dist/src/main.js",
     ),
+    "gemini-cli": AgentSource(
+        name="gemini-cli",
+        kind="node",
+        descriptor_name="avp-gemini-cli",
+        tag_prefix="agent-gemini-cli",
+        dev_manifest="agents/avp-gemini-cli/typescript/avp-conformance.json",
+        # 0.1.0: Gemini CLI core 0.63.0 (its headless session) on the
+        # TypeScript Recorder; Commission MCP servers through its MCP client.
+        container_version="0.1.0",
+        package_asset="avp-gemini-cli.tar.gz",
+        entry="dist/src/main.js",
+    ),
 }
 
 # The in-repo library wheels every Python agent release ships next to its own
@@ -377,7 +389,7 @@ def preflight(name: str) -> str | None:
             return reason
         built = _repo_root() / Path(source.dev_manifest).parent / (source.entry or "")
         if not built.is_file():
-            return f"the in-repo {name} agent is not built (make pi-build, or avp agent install {name})"
+            return f"the in-repo {name} agent is not built (make {name}-build, or avp agent install {name})"
         return None
     return None  # custom manifest: trust the caller
 

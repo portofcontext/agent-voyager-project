@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from avp.commission import Commission, McpServerHttp, Provider, SecretRef
-from avp_cli import agent, broker, vault
+from avp_cli import agent, broker, osb, vault
 
 # ── vault resolution ─────────────────────────────────────────────────────────
 
@@ -85,6 +85,7 @@ def fake_upstream():
             seen["path"] = self.path
             seen["authorization"] = self.headers.get("authorization")
             seen["x-api-key"] = self.headers.get("x-api-key")
+            seen["x-goog-api-key"] = self.headers.get("x-goog-api-key")
             body = b'{"ok":true}'
             self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
@@ -329,6 +330,44 @@ def test_broker_routes_keep_the_api_path(monkeypatch) -> None:
         assert env["OPENAI_HOST"] == brk.route_url("llm/openai")
         route, rest = brk._match("/llm/openai/v1/responses")
         assert brk._target_url(route, rest, "") == "https://api.openai.com/v1/responses"
+    finally:
+        brk.stop()
+
+
+def test_sandbox_env_passes_gemini_api_key_for_google_models(monkeypatch) -> None:
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.setenv(name, name)
+    env = agent._sandbox_env(_Agent, _commission(model="google/gemini-3.1-flash-lite"), None)
+    assert {k for k in env if k.endswith("API_KEY")} == {"GEMINI_API_KEY", "GOOGLE_API_KEY"}
+
+
+def test_vault_routing_for_google_uses_the_gemini_names_and_header(
+    monkeypatch, fake_upstream
+) -> None:
+    origin, seen = fake_upstream
+    monkeypatch.setenv("AVP_VAULT_GEM", "AIza-REAL")
+    monkeypatch.setitem(osb.PROVIDER_REGISTRY, "google", ("localhost", origin))
+    monkeypatch.setenv("GEMINI_API_KEY", "ambient-secret")
+    c = _commission(
+        model="google/gemini-3.1-flash-lite",
+        provider=Provider(id="google", credential=SecretRef(vault="gem")),
+    )
+    brk = agent._start_broker(c)
+    assert brk is not None
+    try:
+        env = agent._sandbox_env(_Agent, c, brk)
+        # Gemini CLI reads GEMINI_API_KEY and GOOGLE_GEMINI_BASE_URL.
+        assert env["GEMINI_API_KEY"] == env["GOOGLE_API_KEY"] == brk.token
+        assert env["GOOGLE_GEMINI_BASE_URL"] == brk.route_url("llm/google")
+        assert "ambient-secret" not in env.values()
+        # The Gemini API takes its key in x-goog-api-key; the broker swaps it.
+        r = httpx.post(
+            f"http://127.0.0.1:{brk.port}/llm/google/v1beta/models/m:generateContent",
+            headers={"x-goog-api-key": brk.token},
+            content=b"{}",
+        )
+        assert r.status_code == 200
+        assert seen["x-goog-api-key"] == "AIza-REAL"
     finally:
         brk.stop()
 

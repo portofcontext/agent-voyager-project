@@ -1,0 +1,27 @@
+{
+  "name": "avp-gemini-cli",
+  "version": "0.1.0",
+  "description": "AVP adapter for Gemini CLI.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "avp-gemini-cli": "./dist/src/main.js"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "npm --prefix ../../../avp/bindings/typescript run build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test 'dist/tests/*.test.js'"
+  },
+  "dependencies": {
+    "@avp/types": "file:../../../avp/bindings/typescript",
+    "@google/gemini-cli-core": "0.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -89,6 +89,9 @@ jobs:
       - name: Pi adapter seam tests
         working-directory: agents/avp-pi/typescript
         run: npm ci && npm test
+      - name: Gemini CLI adapter seam tests
+        working-directory: agents/avp-gemini-cli/typescript
+        run: npm ci --omit=optional && npm test
 
   goose:
     name: Goose Rust tests
@@ -211,4 +214,45 @@ jobs:
         if: always()
         with:
           name: pi-live-conformance
+          path: live-results/
+
+  gemini-cli-live:
+    name: Gemini CLI live conformance (manual only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Manual-trigger only, like the Claude and Pi jobs: it spends API credits
+    # and exposes GEMINI_API_KEY. Run it after Gemini CLI bumps and before
+    # releases.
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Sync the workspace
+        run: uv sync --locked
+
+      - name: Run Gemini CLI live conformance
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY repository secret is required for live conformance."
+            exit 1
+          fi
+          make gemini-cli-build
+          uv run avp-conformance check --agent agents/avp-gemini-cli/typescript/avp-conformance.json --suite v0.1 --model google/gemini-3.1-flash-lite --dump-dir live-results/gemini-cli
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemini-cli-live-conformance
           path: live-results/
