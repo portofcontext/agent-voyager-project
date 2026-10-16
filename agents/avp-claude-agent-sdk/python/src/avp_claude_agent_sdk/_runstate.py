@@ -41,6 +41,11 @@ class RunState:
     # response out as one AssistantMessage per content block, all sharing the
     # id; a chunk without one belongs to the inference already streaming.
     turn_key: str | None = None
+    # The streaming inference's usage so far: the CLI stamps every block with
+    # the `message_start` snapshot, and the response's `message_delta` (a
+    # partial-message StreamEvent) completes it. None once a tool result has
+    # closed the turn.
+    turn_usage: dict[str, Any] | None = None
 
     @property
     def stopped(self) -> bool:

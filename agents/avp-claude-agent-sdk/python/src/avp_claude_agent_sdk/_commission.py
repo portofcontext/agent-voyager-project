@@ -27,8 +27,9 @@
 | `enabled_builtin_subagents`   | `disallowed_tools`              | `Agent(<name>)` for each probed built-in subagent the list leaves out; `[]`  |
 |                               |                                 | disallows the `Agent` tool. Set in `connect()`, after the probe.             |
 | `output_schema`               | `output_format`                 | Wrapped as `{"type": "json_schema", "schema": output_schema}`.              |
-| `run_id`                      | *(AVP-only)*                    | Used as the trajectory run_id; not passed to SDK `session_id` (avoids       |
-|                               |                                 | namespace coupling / UUID-format conflicts).                                 |
+| `run_id`                      | `extra_args["name"]`            | Used as the trajectory run_id; not passed to SDK `session_id` (avoids       |
+|                               |                                 | namespace coupling / UUID-format conflicts). It names the CLI session, so    |
+|                               |                                 | the CLI makes no title request outside the recorded loop.                    |
 | `supervisor`                  | *(AVP-only)*                    | Stamped on `run_requested` event; no SDK field.                              |
 | `thread_id`                   | *(AVP-only)*                    | Stamped on `agent_started` event; no SDK field.                              |
 | `tags`                        | *(AVP-only)*                    | Stamped on `agent_started` event; no SDK field.                              |
@@ -107,6 +108,11 @@ def apply_commission(
 
     # model is a canonical "origin/model" slug; the SDK wants the bare model id.
     updates["model"] = commission.model.split("/", 1)[1]
+    # A named session skips the CLI's title request: a model call outside the
+    # agent loop that the trajectory could not account for.
+    updates["extra_args"] = {"name": commission.run_id, **base.extra_args}
+    # Each response's final usage arrives only as a partial-message event.
+    updates["include_partial_messages"] = True
     if commission.system_prompt is not None:
         updates["system_prompt"] = commission.system_prompt
     # Per AVP spec §4: the allowlist maps are keyed by descriptor.agent_name;

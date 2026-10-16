@@ -16,13 +16,13 @@ use avp::sink::Sink;
 use avp::trajectory::{ErrorCode, StopReason};
 use avp::Commission;
 use futures::{Stream, StreamExt};
-use goose::agents::{Agent, AgentEvent, SessionConfig};
-use goose::config::GooseMode;
+use goose::agents::{Agent, AgentConfig, AgentEvent, GoosePlatform, SessionConfig};
+use goose::config::{Config, GooseMode, PermissionManager};
 use goose::conversation::message::{
     Message, MessageContent, MessageErrorKind, SystemNotificationType,
 };
 use goose::model_config::model_config_from_user_config;
-use goose::session::session_manager::SessionType;
+use goose::session::session_manager::{SessionManager, SessionType};
 use serde_json::{json, Value};
 use tokio_util::sync::CancellationToken;
 
@@ -132,7 +132,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             .to_string()
     };
 
-    let agent = Arc::new(Agent::new());
+    let agent = Arc::new(new_agent());
     let working_dir = std::env::current_dir()?;
     let session = agent
         .config
@@ -560,7 +560,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     }))?;
     let cfg: GooseRunConfig = commission::from_commission(&commission);
 
-    let agent = Arc::new(Agent::new());
+    let agent = Arc::new(new_agent());
     let working_dir = std::env::current_dir()?;
     let session = agent
         .config
@@ -702,6 +702,19 @@ async fn build_descriptor(
     serde_json::from_value(descriptor).map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }
 
+/// Goose's default agent without session naming: the title Goose generates
+/// is a model call outside the reply loop, spend the trajectory never records.
+fn new_agent() -> Agent {
+    Agent::with_config(AgentConfig::new(
+        Arc::new(SessionManager::instance()),
+        PermissionManager::instance(),
+        None,
+        Config::global().get_goose_mode().unwrap_or_default(),
+        true,
+        GoosePlatform::GooseCli,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -710,6 +723,11 @@ mod tests {
     use std::sync::Mutex;
 
     const QUOTA_FAILURE: &str = "Ran into this error: Rate limit exceeded: You have no credits remaining..\n\nPlease retry if you think this is a transient or recoverable error.";
+
+    #[tokio::test]
+    async fn the_agent_never_names_its_session() {
+        assert!(new_agent().config.disable_session_naming);
+    }
 
     #[derive(Clone, Default)]
     struct Capture(Arc<Mutex<Vec<Value>>>);

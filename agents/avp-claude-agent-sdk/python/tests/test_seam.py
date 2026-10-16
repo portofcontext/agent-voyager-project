@@ -20,12 +20,30 @@ from avp_claude_agent_sdk.conformance import run
 _AGENT = "avp-claude-agent-sdk"
 
 
-def _sse(text: str) -> bytes:
+def _sse(text: str, tool: dict[str, Any] | None = None, output_tokens: int = 7) -> bytes:
+    """One streamed response: `text`, then `tool` (a `tool_use` block) if given.
+    `message_start` reports 1 output token; `message_delta` the real count."""
+    blocks: list[dict[str, Any]] = [
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text}},
+        {"type": "content_block_stop", "index": 0},
+    ]
+    if tool is not None:
+        start = {"type": "tool_use", "id": tool["id"], "name": tool["name"], "input": {}}
+        blocks += [
+            {"type": "content_block_start", "index": 1, "content_block": start},
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": json.dumps(tool["input"])},
+            },
+            {"type": "content_block_stop", "index": 1},
+        ]
     events = [
         {
             "type": "message_start",
             "message": {
-                "id": "msg_1",
+                "id": f"msg_{output_tokens}",
                 "type": "message",
                 "role": "assistant",
                 "model": "claude-haiku-4-5",
@@ -34,13 +52,11 @@ def _sse(text: str) -> bytes:
                 "usage": {"input_tokens": 10, "output_tokens": 1},
             },
         },
-        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
-        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text}},
-        {"type": "content_block_stop", "index": 0},
+        *blocks,
         {
             "type": "message_delta",
-            "delta": {"stop_reason": "end_turn"},
-            "usage": {"output_tokens": 1},
+            "delta": {"stop_reason": "tool_use" if tool else "end_turn"},
+            "usage": {"output_tokens": output_tokens},
         },
         {"type": "message_stop"},
     ]
@@ -48,11 +64,14 @@ def _sse(text: str) -> bytes:
 
 
 class _Model:
-    """Answers every streamed Messages request with `DONE`, recording the bodies."""
+    """Answers streamed Messages requests with the `script`ed responses, then
+    `DONE`, recording the bodies (`posted` also keeps the requests it refuses)."""
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
-        requests = self.requests
+        self.posted: list[dict[str, Any]] = []
+        self.script: list[bytes] = []
+        requests, posted, script = self.requests, self.posted, self.script
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args: Any) -> None:
@@ -60,6 +79,11 @@ class _Model:
 
             def do_POST(self) -> None:
                 body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
+                if self.path.split("?")[0].endswith("/count_tokens"):
+                    # Free on the real API, so not a model request.
+                    self._json({"input_tokens": 10})
+                    return
+                posted.append(body)
                 if not body.get("stream"):
                     self.send_response(404)
                     self.end_headers()
@@ -68,7 +92,15 @@ class _Model:
                 self.send_response(200)
                 self.send_header("content-type", "text/event-stream")
                 self.end_headers()
-                self.wfile.write(_sse("DONE"))
+                self.wfile.write(script.pop(0) if script else _sse("DONE"))
+
+            def _json(self, payload: dict[str, Any]) -> None:
+                data = json.dumps(payload).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -150,3 +182,26 @@ def test_the_probe_reaches_no_model(model: _Model) -> None:
     assert not [r for r in model.requests if "probing claude" in json.dumps(r)]
     turns = [e for e in events if e["type"] == "avp.assistant_message"]
     assert len(turns) == 1
+
+
+def test_every_model_request_is_a_recorded_turn(model: _Model) -> None:
+    """No side request (a session title) spends tokens the trajectory omits,
+    and each turn carries its response's final usage: `message_start` says 1
+    output token, `message_delta` the real 7."""
+    events = _run()
+    turns = [e for e in events if e["type"] == "avp.assistant_message"]
+    assert len(model.posted) == len(turns), [json.dumps(r["messages"])[:80] for r in model.posted]
+    assert [t["data"]["avp.usage"]["output_tokens"] for t in turns] == [7]
+    assert [t["data"]["avp.usage"]["input_tokens"] for t in turns] == [10]
+
+
+def test_a_tool_turn_carries_its_final_usage(model: _Model) -> None:
+    """The final usage of a response that calls a tool lands on its own turn,
+    not the turn after the tool result."""
+    bash = {"id": "toolu_1", "name": "Bash", "input": {"command": "echo hi", "description": "hi"}}
+    model.script.append(_sse("running", tool=bash, output_tokens=30))
+    events = _run(enabled_builtin_tools={_AGENT: ["Bash"]})
+    turns = [e["data"] for e in events if e["type"] == "avp.assistant_message"]
+    assert [t["avp.usage"]["output_tokens"] for t in turns] == [30, 7]
+    assert any(e["type"] == "avp.tool_returned" for e in events)
+    assert events[-1]["data"]["avp.reason"] == "converged"

@@ -17,6 +17,7 @@ from claude_agent_sdk.types import (
     McpStatusResponse,
     Message,
     ResultMessage,
+    StreamEvent,
     SystemMessage,
     TaskNotificationMessage,
     TaskStartedMessage,
@@ -237,6 +238,8 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
             meta["anthropic.cache_creation.ephemeral_1h_input_tokens"] = int(
                 cache_creation.get("ephemeral_1h_input_tokens") or 0
             )
+    if message.usage:
+        state.turn_usage = dict(message.usage)
     await state.rec.assistant(
         translate_content_blocks(message.content),
         translate_usage(message.usage) if message.usage else None,
@@ -245,6 +248,24 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
         finish_reasons=[message.stop_reason] if message.stop_reason else None,
         meta={k: v for k, v in meta.items() if v is not None},
     )
+
+
+async def _on_stream_event(state: RunState, message: StreamEvent) -> None:
+    """Complete the streaming turn's usage from its response's `message_delta`.
+
+    The CLI stamps each AssistantMessage with the `message_start` usage, whose
+    `output_tokens` is a placeholder; the final, cumulative counts arrive in
+    `message_delta`, before any tool result closes the turn."""
+    event = message.event
+    if (
+        message.parent_tool_use_id is not None
+        or event.get("type") != "message_delta"
+        or state.turn_usage is None
+    ):
+        return
+    delta = {k: v for k, v in (event.get("usage") or {}).items() if v is not None}
+    state.turn_usage = {**state.turn_usage, **delta}
+    await state.rec.assistant([], translate_usage(state.turn_usage), turn_key=state.turn_key)
 
 
 def _normalize_tool_result_content(content: Any) -> str | list[Any]:
@@ -272,6 +293,8 @@ async def _on_user(state: RunState, message: UserMessage) -> None:
         return
     content = message.content if isinstance(message.content, list) else []
     tool_results = [b for b in content if isinstance(b, ToolResultBlock)]
+    if tool_results:
+        state.turn_usage = None
     # `UserMessage.tool_use_result` is the SDK's structured-payload
     # channel paired with the human-readable `ToolResultBlock.content`
     # string. It's per-message, so attribution is only unambiguous when
@@ -387,5 +410,7 @@ async def handle_message(client: ClaudeSDKClient, state: RunState, message: Mess
         await _on_user(state, message)
     elif isinstance(message, ResultMessage):
         await _on_result(state, message)
-    # TaskProgressMessage, MirrorErrorMessage, StreamEvent, RateLimitEvent:
-    # drop. Honest-silent beats fabricated events.
+    elif isinstance(message, StreamEvent):
+        await _on_stream_event(state, message)
+    # TaskProgressMessage, MirrorErrorMessage, RateLimitEvent: drop.
+    # Honest-silent beats fabricated events.
