@@ -42,6 +42,8 @@ These changes retain the v0.1 wire schemas.
   `enabled_builtin_mcp_servers`, and an empty `enabled_builtin_skills`, which
   it had ignored; inline skills no longer hide the built-in ones. Preflight
   checks every Claude allow-list, not only tools.
+- Claude's capability probe no longer calls the model. It sent its probe prompt
+  to the CLI's default model on every run, spend the trajectory never recorded.
 - Goose provider failures, cached-token double counting, and session-naming usage.
 - Claude's `input_tokens` now include cache reads and writes, and a failed API call
   (for example an invalid key) is reported as `error_occurred` rather than as a

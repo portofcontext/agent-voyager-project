@@ -30,16 +30,17 @@ use"). For Claude Code there is no static `describe` surface to probe;
 booting a session and reading its init message is the only way to learn
 the actual tool catalog (CLI built-ins, skill discovery, MCP states).
 
-Cost: the probe session runs no model turn, so the heavy first-turn
-context load ($0.05-$0.10) shouldn't fire on it. Subprocess startup +
-init message exchange is the only overhead. TODO: empirically measure
-probe cost; consider caching probe results across runs by options hash.
+Cost: the CLI emits `init` only after a user message, which it then
+sends to the model. The probe session points at a closed local port, so
+that call fails on the host and no model spend happens; subprocess startup
+is the only overhead (see `_probe_describe`).
 """
 
 from __future__ import annotations
 
 import contextlib
 import dataclasses
+import socket
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
@@ -272,19 +273,41 @@ def _agent_version() -> str:
     return version(_AGENT_NAME)
 
 
+# The CLI's switches to Bedrock, Vertex, and Foundry, which would bypass the
+# Anthropic base URL.
+_NO_MODEL_ROUTE = {
+    "CLAUDE_CODE_USE_BEDROCK": "0",
+    "CLAUDE_CODE_USE_VERTEX": "0",
+    "CLAUDE_CODE_USE_FOUNDRY": "0",
+}
+
+
+def _closed_endpoint() -> dict[str, str]:
+    """An Anthropic base URL on a local port nothing listens on."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return {"ANTHROPIC_BASE_URL": f"http://127.0.0.1:{port}"}
+
+
 async def _probe_describe(
     options: ClaudeAgentOptions | None,
 ) -> tuple[dict[str, Any] | None, McpStatusResponse]:
     """Boot a transient CLI session to discover the agent's pre-Commission
     capability surface; return `(init_data, mcp_status)`.
 
-    The probe runs no `query()` so no model turn fires; only the
-    subprocess startup + `init` message exchange happens. On any
-    exception during probe, returns `(None, empty status)` so the caller
-    can still emit a spec-conformant prelude (descriptor will carry
-    identity + default_model only).
+    The CLI reports its surface (`init`) only once it has a user message,
+    and then calls the model. The probe session has no route to one: it
+    points at a closed local port with the cloud backends switched off, so
+    the call fails on this host and nothing is spent. On any exception
+    during probe, returns `(None, empty status)` so the caller can still
+    emit a spec-conformant prelude (descriptor will carry identity +
+    default_model only).
     """
-    probe = ClaudeSDKClient(options=options)
+    base = options if options is not None else ClaudeAgentOptions()
+    probe = ClaudeSDKClient(
+        options=dataclasses.replace(base, env={**base.env, **_NO_MODEL_ROUTE, **_closed_endpoint()})
+    )
     try:
         await probe.connect("probing claude capabilities")
         status = await probe.get_mcp_status()
@@ -299,5 +322,9 @@ async def _probe_describe(
     except Exception:
         return None, McpStatusResponse(mcpServers=[])
     finally:
+        # Interrupt the doomed model call first: the CLI otherwise retries it
+        # through the SDK's shutdown grace period.
+        with contextlib.suppress(Exception):
+            await probe.interrupt()
         with contextlib.suppress(Exception):
             await probe.disconnect()

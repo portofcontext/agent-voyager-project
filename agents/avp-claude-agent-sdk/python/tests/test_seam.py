@@ -140,3 +140,13 @@ def test_no_built_in_skills_hides_them_from_the_model(model: _Model) -> None:
     events = _run(enabled_builtin_skills={_AGENT: []})
     assert "update-config" not in json.dumps(model.requests[-1])
     assert _started(events).get("avp.skills", []) == []
+
+
+def test_the_probe_reaches_no_model(model: _Model) -> None:
+    """The probe session's own prompt never reaches the endpoint: every request
+    the model sees belongs to the run, so the trajectory accounts for all spend."""
+    events = _run()
+    assert model.requests, "the run itself calls the model"
+    assert not [r for r in model.requests if "probing claude" in json.dumps(r)]
+    turns = [e for e in events if e["type"] == "avp.assistant_message"]
+    assert len(turns) == 1
