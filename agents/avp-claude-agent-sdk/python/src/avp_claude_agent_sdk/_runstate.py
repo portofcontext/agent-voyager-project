@@ -11,7 +11,7 @@ import dataclasses
 from collections.abc import AsyncIterable
 from typing import Any
 
-from claude_agent_sdk.types import TaskNotificationMessage
+from claude_agent_sdk.types import TaskNotificationMessage, UserMessage
 
 from avp.pricing import PriceTable, load_default_prices
 from avp.recorder import Recorder
@@ -48,6 +48,12 @@ class RunState:
     # partial-message StreamEvent) completes it. None once a tool result has
     # closed the turn.
     turn_usage: dict[str, Any] | None = None
+    # Whether a main-thread response is still streaming (`message_start` until
+    # `message_stop`). The CLI runs a tool as soon as its call streams in, so a
+    # response's later calls can arrive after an earlier call's result.
+    streaming: bool = False
+    # Tool-result messages held until the response that called them completes.
+    held_results: list[UserMessage] = dataclasses.field(default_factory=list)
     # Subagent completions waiting for their `Agent` tool result, which
     # carries the child's final usage and answer, keyed by tool_use_id.
     finished_tasks: dict[str, TaskNotificationMessage] = dataclasses.field(default_factory=dict)

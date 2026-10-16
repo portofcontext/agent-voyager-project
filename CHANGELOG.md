@@ -20,7 +20,16 @@ These changes retain the v0.1 wire schemas.
 - `avp-conformance check` meters provider traffic (`--meter`, on by default):
   a local proxy per provider reads each response's usage, and a case fails
   when the trajectory omits billed tokens or the agent ignores the endpoint
-  variables. A `describe` that calls a model fails too.
+  variables. A `describe` that calls a model fails too. With no subagent
+  rollups, each billed response must also be one turn's usage, so usage on
+  the wrong turn fails even when the totals match.
+- Tool-call conformance: cases for dependent rounds, parallel calls, and a
+  tool that fails with an `isError` result or a protocol error
+  (`Avptest_Fail` in the MCP fixture). A case's `tool_calls` judges each
+  call's own result, and every trajectory is checked for tool pairing: each
+  call invoked once under the turn that made it, returned once with its own
+  id, and none left open in a converged run. PATTERNS.md gains the rules for
+  translating native events.
 
 ### Changed
 
@@ -67,7 +76,15 @@ These changes retain the v0.1 wire schemas.
   result. Goose's had no usage; it now reads the child session's totals. A
   Goose subagent launched in the background (`delegate` with `async`) closed
   at launch with no result; its frame now closes when `load` returns the
-  result, or as `abandoned` at stop.
+  result, or as `abandoned` at stop, after which the run no longer reports
+  `converged`.
+- Claude and Goose split a response with several tool calls into one turn
+  per call, because both runtimes run a tool as soon as its call streams in;
+  the extra turns repeated the response's usage. Results are now held until
+  the response completes, so it is one turn with all its calls.
+- OpenAI Agents recorded an MCP result flagged `isError` as a success, with
+  its content as a JSON string of SDK items. It is now `is_error: true` with
+  text blocks.
 - Claude's capability probe no longer calls the model. It sent its probe prompt
   to the CLI's default model on every run, spend the trajectory never recorded.
 - Goose provider failures, cached-token double counting, and session-naming usage.

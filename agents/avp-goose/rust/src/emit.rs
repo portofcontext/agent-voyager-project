@@ -300,13 +300,18 @@ impl<S: Sink> Emitter<S> {
 
     /// Close any open turn and frame, then emit `agent_stopped`. Idempotent.
     /// A background subagent whose result was never loaded closes as
-    /// `abandoned`, carrying whatever it spent.
+    /// `abandoned`, carrying whatever it spent, and the run then cannot
+    /// report `converged` (trajectory.md §5).
     pub fn stop(&mut self, reason: StopReason, output: Option<Value>) -> std::io::Result<()> {
-        if !self.rec.is_stopped() {
+        let mut reason = reason;
+        if !self.rec.is_stopped() && !self.background.is_empty() {
             for (session, call) in std::mem::take(&mut self.background) {
                 let usage = self.subagent_usage.remove(&session);
                 self.rec
                     .subagent_result(&call, "", StopReason::Abandoned, usage, None)?;
+            }
+            if reason == StopReason::Converged {
+                reason = StopReason::Abandoned;
             }
         }
         self.rec.stop(reason, output)

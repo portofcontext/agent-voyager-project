@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -23,23 +24,34 @@ _AGENT = "avp-claude-agent-sdk"
 def _sse(text: str, tool: dict[str, Any] | None = None, output_tokens: int = 7) -> bytes:
     """One streamed response: `text`, then `tool` (a `tool_use` block) if given.
     `message_start` reports 1 output token; `message_delta` the real count."""
-    blocks: list[dict[str, Any]] = [
+    return b"".join(_sse_parts(text, [tool] if tool else [], output_tokens))
+
+
+def _sse_parts(text: str, tools: list[dict[str, Any]], output_tokens: int = 7) -> list[bytes]:
+    """`_sse`, split after each tool call's block so a server can pause there."""
+    head: list[dict[str, Any]] = [
         {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
         {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": text}},
         {"type": "content_block_stop", "index": 0},
     ]
-    if tool is not None:
+    calls: list[list[dict[str, Any]]] = []
+    for index, tool in enumerate(tools, start=1):
         start = {"type": "tool_use", "id": tool["id"], "name": tool["name"], "input": {}}
-        blocks += [
-            {"type": "content_block_start", "index": 1, "content_block": start},
-            {
-                "type": "content_block_delta",
-                "index": 1,
-                "delta": {"type": "input_json_delta", "partial_json": json.dumps(tool["input"])},
-            },
-            {"type": "content_block_stop", "index": 1},
-        ]
-    events = [
+        calls.append(
+            [
+                {"type": "content_block_start", "index": index, "content_block": start},
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": json.dumps(tool["input"]),
+                    },
+                },
+                {"type": "content_block_stop", "index": index},
+            ]
+        )
+    opening = [
         {
             "type": "message_start",
             "message": {
@@ -52,25 +64,34 @@ def _sse(text: str, tool: dict[str, Any] | None = None, output_tokens: int = 7) 
                 "usage": {"input_tokens": 10, "output_tokens": 1},
             },
         },
-        *blocks,
+        *head,
+    ]
+    closing = [
         {
             "type": "message_delta",
-            "delta": {"stop_reason": "tool_use" if tool else "end_turn"},
+            "delta": {"stop_reason": "tool_use" if tools else "end_turn"},
             "usage": {"output_tokens": output_tokens},
         },
         {"type": "message_stop"},
     ]
-    return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode()
+    groups = [opening + (calls[0] if calls else []), *calls[1:], closing]
+    return [
+        "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in group).encode()
+        for group in groups
+    ]
 
 
 class _Model:
     """Answers streamed Messages requests with the `script`ed responses, then
-    `DONE`, recording the bodies (`posted` also keeps the requests it refuses)."""
+    `DONE`, recording the bodies (`posted` also keeps the requests it refuses).
+    A response given as parts is streamed with `PAUSE` seconds between them."""
+
+    PAUSE = 1.5
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
         self.posted: list[dict[str, Any]] = []
-        self.script: list[bytes] = []
+        self.script: list[bytes | list[bytes]] = []
         requests, posted, script = self.requests, self.posted, self.script
 
         class Handler(BaseHTTPRequestHandler):
@@ -92,7 +113,12 @@ class _Model:
                 self.send_response(200)
                 self.send_header("content-type", "text/event-stream")
                 self.end_headers()
-                self.wfile.write(script.pop(0) if script else _sse("DONE"))
+                response = script.pop(0) if script else _sse("DONE")
+                for i, part in enumerate([response] if isinstance(response, bytes) else response):
+                    if i:
+                        self.wfile.flush()
+                        time.sleep(_Model.PAUSE)
+                    self.wfile.write(part)
 
             def _json(self, payload: dict[str, Any]) -> None:
                 data = json.dumps(payload).encode()
@@ -204,4 +230,23 @@ def test_a_tool_turn_carries_its_final_usage(model: _Model) -> None:
     turns = [e["data"] for e in events if e["type"] == "avp.assistant_message"]
     assert [t["avp.usage"]["output_tokens"] for t in turns] == [30, 7]
     assert any(e["type"] == "avp.tool_returned" for e in events)
+    assert events[-1]["data"]["avp.reason"] == "converged"
+
+
+def test_parallel_calls_streamed_apart_are_one_turn(model: _Model) -> None:
+    """The CLI runs a tool as soon as its call streams in, so the first call's
+    result arrives while the response is still streaming the second. Live,
+    that split one response into two turns, each carrying its input tokens."""
+    first = {"id": "toolu_a", "name": "Bash", "input": {"command": "echo a", "description": "a"}}
+    second = {"id": "toolu_b", "name": "Bash", "input": {"command": "echo b", "description": "b"}}
+    model.script.append(_sse_parts("running both", [first, second], output_tokens=40))
+    events = _run(enabled_builtin_tools={_AGENT: ["Bash"]})
+    turns = [e["data"] for e in events if e["type"] == "avp.assistant_message"]
+    assert len(turns) == 2, "one turn per model response"
+    calls = [b["id"] for b in turns[0]["avp.content"] if b["type"] == "tool_use"]
+    assert calls == ["toolu_a", "toolu_b"]
+    assert [t["avp.usage"]["output_tokens"] for t in turns] == [40, 7]
+    assert [t["avp.usage"]["input_tokens"] for t in turns] == [10, 10]
+    returned = [e["data"]["avp.tool.call_id"] for e in events if e["type"] == "avp.tool_returned"]
+    assert sorted(returned) == ["toolu_a", "toolu_b"]
     assert events[-1]["data"]["avp.reason"] == "converged"

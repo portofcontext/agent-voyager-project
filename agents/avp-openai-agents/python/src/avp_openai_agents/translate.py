@@ -94,13 +94,22 @@ def finish_reasons(response: Any) -> list[str] | None:
     return [response.status] if response.status else None
 
 
-def tool_output(item: Any) -> str:
-    """The tool result as sent back to the model."""
+def tool_output(item: Any) -> str | list[dict[str, Any]]:
+    """The tool result as sent back to the model. The SDK's `input_text` items
+    (an MCP tool's text content) become AVP text blocks."""
     raw = item.raw_item
     out = raw.get("output") if isinstance(raw, dict) else getattr(raw, "output", None)
     if out is None:
         out = item.output
-    return out if isinstance(out, str) else json.dumps(out, default=str)
+    if isinstance(out, str):
+        return out
+    if (
+        isinstance(out, list)
+        and out
+        and all(isinstance(p, dict) and p.get("type") == "input_text" for p in out)
+    ):
+        return [{"type": "text", "text": p.get("text", "")} for p in out]
+    return json.dumps(out, default=str)
 
 
 def call_id(item: Any) -> str | None:

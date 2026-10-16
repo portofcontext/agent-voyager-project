@@ -172,6 +172,82 @@ def test_mcp_server_tools_round_trip(script, tmp_path: Path) -> None:
     assert events[-1]["data"]["avp.reason"] == "converged"
 
 
+def _fixture_tool(call, name: str) -> str:
+    return next(t.name for t in call.tools if t.name.endswith(name))
+
+
+def _with_fixture(tmp_path: Path, **fields: object) -> list[dict]:
+    return _run(
+        tmp_path,
+        prompt="use the tools",
+        enabled_builtin_tools={"avp-openai-agents": []},
+        mcp_servers=[
+            {"type": "stdio", "id": "avptest", "command": [sys.executable, str(TEST_MCP)]}
+        ],
+        **fields,
+    )
+
+
+def _results(events: list[dict]) -> dict[str, dict]:
+    return {
+        e["data"]["avp.tool.call_id"]: e["data"]["avp.tool_result"]
+        for e in events
+        if e["type"] == "avp.tool_returned"
+    }
+
+
+def test_parallel_and_failing_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
+    """Four calls in one response: two echoes and both ways an MCP tool fails.
+    Each result pairs with its own call, and only the failures are errors;
+    the SDK hands an `isError` result to the model as ordinary output."""
+    from agents.testing import ModelStep
+
+    def calls(call):
+        echo, fail = _fixture_tool(call, "Avptest_Echo"), _fixture_tool(call, "Avptest_Fail")
+        return [
+            function_call(echo, {"text": "ALPHA"}, call_id="c_alpha"),
+            function_call(echo, {"text": "BETA"}, call_id="c_beta"),
+            function_call(fail, {"message": "BAD-RESULT", "mode": "result"}, call_id="c_result"),
+            function_call(fail, {"message": "BAD-PROTO", "mode": "protocol"}, call_id="c_proto"),
+        ]
+
+    script(ModelStep.respond(calls), [assistant_message("done")])
+    events = _with_fixture(tmp_path)
+    turns = [e for e in events if e["type"] == "avp.assistant_message"]
+    assert len(turns) == 2, "one turn per model response"
+    results = _results(events)
+    assert set(results) == {"c_alpha", "c_beta", "c_result", "c_proto"}
+    for call, text, failed in [
+        ("c_alpha", "ALPHA", False),
+        ("c_beta", "BETA", False),
+        ("c_result", "BAD-RESULT", True),
+        ("c_proto", "BAD-PROTO", True),
+    ]:
+        assert text in json.dumps(results[call]["content"]), call
+        assert bool(results[call].get("is_error")) is failed, call
+    assert results["c_alpha"]["content"] == [{"type": "text", "text": "ALPHA"}]
+    assert events[-1]["data"]["avp.reason"] == "converged"
+
+
+def test_dependent_rounds_are_one_turn_each(script, tmp_path: Path) -> None:
+    from agents.testing import ModelStep
+
+    def add(a: int, b: int, call_id: str):
+        return ModelStep.respond(
+            lambda call: [
+                function_call(_fixture_tool(call, "Avptest_Add"), {"a": a, "b": b}, call_id=call_id)
+            ]
+        )
+
+    script(add(17, 25, "r1"), add(42, 8, "r2"), [assistant_message("50")])
+    events = _with_fixture(tmp_path)
+    assert len([e for e in events if e["type"] == "avp.assistant_message"]) == 3
+    results = _results(events)
+    assert "42" in json.dumps(results["r1"]["content"])
+    assert "50" in json.dumps(results["r2"]["content"])
+    assert events[-1]["data"]["avp.reason"] == "converged"
+
+
 def test_unreachable_mcp_server_is_reported(script, tmp_path: Path) -> None:
     script([assistant_message("DONE")])
     events = _run(

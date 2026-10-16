@@ -300,8 +300,14 @@ async fn record_reply<S: Sink>(
     // as incremental message deltas (partial `Text` chunks), and a new
     // inference only begins after tool execution, which arrives as a
     // non-assistant (tool-result) message. So consecutive assistant messages
-    // are one inference: accumulate their content, then close the turn when a
-    // non-assistant message arrives or the stream ends.
+    // are one inference: accumulate their content.
+    //
+    // Goose runs each tool as soon as its request streams in, so one response
+    // with several calls interleaves them with results: call a, result a, call
+    // b (same message id), result b. Tool results are therefore held while the
+    // response can still grow, and released, after the turn is reported with
+    // all its calls, once the response is complete: its `MessageUsage`, a
+    // message from a new response, an error, or the end of the stream.
     //
     // Goose attributes an inference's usage to its assistant message with a
     // `MessageUsage` event that lands after the turn's tool results, before the
@@ -315,6 +321,8 @@ async fn record_reply<S: Sink>(
     // Goose message ids coalesced into `pending`, then into the open turn.
     let mut pending_ids: Vec<String> = Vec::new();
     let mut open_ids: Vec<String> = Vec::new();
+    // Tool-result messages held until the response that called them is complete.
+    let mut held: Vec<Vec<GooseContent>> = Vec::new();
     // Wall-clock start of the inference whose deltas we are coalescing. Set when
     // `reply()` is dispatched (turn 1) and reset after each tool-result batch
     // (the next inference begins once Goose has the tool output). Carried into
@@ -355,13 +363,28 @@ async fn record_reply<S: Sink>(
                                 &mut open_ids,
                                 turn_start,
                             )?;
+                            release(emitter, sessions, &mut held).await?;
                             emitter.error(code, diagnostic)?;
                             ended_ok = false;
                             // Let Goose finish its bookkeeping and deliver any
                             // final usage for content produced before failure.
                             continue;
                         }
-                        if let Some(id) = value.get("id").and_then(Value::as_str) {
+                        let id = value.get("id").and_then(Value::as_str);
+                        let continues = id.is_some_and(|id| pending_ids.iter().any(|p| p == id));
+                        if !held.is_empty() && !continues {
+                            flush_turn(
+                                emitter,
+                                model_name,
+                                &mut pending,
+                                &mut pending_ids,
+                                &mut open_ids,
+                                turn_start,
+                            )?;
+                            release(emitter, sessions, &mut held).await?;
+                            turn_start = Instant::now();
+                        }
+                        if let Some(id) = id {
                             if !pending_ids.iter().any(|p| p == id) {
                                 pending_ids.push(id.to_string());
                             }
@@ -369,30 +392,14 @@ async fn record_reply<S: Sink>(
                         translate::append_coalescing(&mut pending, content)
                     }
                     _ => {
-                        flush_turn(
-                            emitter,
-                            model_name,
-                            &mut pending,
-                            &mut pending_ids,
-                            &mut open_ids,
-                            turn_start,
-                        )?;
-                        if let Some(sessions) = sessions {
-                            let children: Vec<String> = content
-                                .iter()
-                                .filter_map(translate::as_tool_return)
-                                .filter_map(|ret| {
-                                    translate::subagent_session(&ret)
-                                        .or_else(|| emitter.loaded_subagent(&ret.id))
-                                        .map(str::to_string)
-                                })
-                                .collect();
-                            read_subagent_usage(emitter, sessions, children).await;
+                        if pending.is_empty() {
+                            // No response in progress: nothing more can join it.
+                            held.push(content);
+                            release(emitter, sessions, &mut held).await?;
+                            turn_start = Instant::now();
+                        } else {
+                            held.push(content);
                         }
-                        emitter.on_tool_results(&content)?;
-                        // The next inference begins now that Goose has the tool
-                        // output; time it from here.
-                        turn_start = Instant::now();
                     }
                 }
             }
@@ -409,6 +416,10 @@ async fn record_reply<S: Sink>(
                         &mut open_ids,
                         turn_start,
                     )?;
+                    if !held.is_empty() {
+                        release(emitter, sessions, &mut held).await?;
+                        turn_start = Instant::now();
+                    }
                 }
                 if open_ids.contains(&id) {
                     emitter.on_usage(translate::message_usage(&usage), usage.elapsed_ms)?;
@@ -426,6 +437,7 @@ async fn record_reply<S: Sink>(
                     &mut open_ids,
                     turn_start,
                 )?;
+                release(emitter, sessions, &mut held).await?;
                 let message = e.to_string();
                 emitter.error(emit::classify_error(&message), &message)?;
                 ended_ok = false;
@@ -442,6 +454,7 @@ async fn record_reply<S: Sink>(
         &mut open_ids,
         turn_start,
     )?;
+    release(emitter, sessions, &mut held).await?;
     if let Some(sessions) = sessions {
         let children = emitter.background_subagents();
         read_subagent_usage(emitter, sessions, children).await;
@@ -497,6 +510,30 @@ fn provider_failure(message: &Message) -> Option<(ErrorCode, &str)> {
         }
     }
     None
+}
+
+/// Report held tool results, reading each finished subagent's usage first.
+async fn release<S: Sink>(
+    emitter: &mut Emitter<S>,
+    sessions: Option<&SessionManager>,
+    held: &mut Vec<Vec<GooseContent>>,
+) -> anyhow::Result<()> {
+    for content in std::mem::take(held) {
+        if let Some(sessions) = sessions {
+            let children: Vec<String> = content
+                .iter()
+                .filter_map(translate::as_tool_return)
+                .filter_map(|ret| {
+                    translate::subagent_session(&ret)
+                        .or_else(|| emitter.loaded_subagent(&ret.id))
+                        .map(str::to_string)
+                })
+                .collect();
+            read_subagent_usage(emitter, sessions, children).await;
+        }
+        emitter.on_tool_results(&content)?;
+    }
+    Ok(())
 }
 
 /// Hand the emitter each child session's usage totals, which Goose keeps per
@@ -860,6 +897,91 @@ mod tests {
         &returned[0]["data"]
     }
 
+    fn usage_for(id: &str, input: i32, output: i32) -> anyhow::Result<AgentEvent> {
+        Ok(AgentEvent::MessageUsage {
+            message_id: Some(id.into()),
+            usage: goose::conversation::message::MessageUsage {
+                input_tokens: Some(input),
+                output_tokens: Some(output),
+                ..Default::default()
+            },
+        })
+    }
+
+    fn echo_call(id: &str, text: &str) -> Value {
+        json!({
+            "type": "toolRequest", "id": id,
+            "_meta": { "goose_extension": "avptest" },
+            "toolCall": { "status": "success",
+                "value": { "name": "avptest__Avptest_Echo", "arguments": { "text": text } } }
+        })
+    }
+
+    #[tokio::test]
+    async fn parallel_calls_in_one_response_are_one_turn() {
+        // Goose runs each tool as its request streams in, so the response's
+        // second call arrives after the first call's result, under the same
+        // message id. Live, this produced a second, usage-less turn.
+        let sink = Capture::default();
+        let mut emitter = Emitter::new(
+            sink.clone(),
+            "parallel",
+            Some("anthropic".into()),
+            HashSet::from(["avptest".to_string()]),
+            avp::load_default_prices(),
+        );
+        emitter.start(Some("claude-haiku-4-5")).unwrap();
+        let items = vec![
+            wire(
+                "m1",
+                "assistant",
+                json!([{ "type": "text", "text": "Calling both." }, echo_call("a", "ALPHA")]),
+            ),
+            wire("r1", "user", tool_result("a", "ALPHA", json!({}))),
+            wire("m1", "assistant", json!([echo_call("b", "BETA")])),
+            wire("r2", "user", tool_result("b", "BETA", json!({}))),
+            usage_for("m1", 100, 20),
+            wire(
+                "m2",
+                "assistant",
+                json!([{ "type": "text", "text": "ALPHA BETA" }]),
+            ),
+            usage_for("m2", 130, 5),
+        ];
+        record_reply(
+            &mut emitter,
+            "claude-haiku-4-5",
+            None,
+            futures::stream::iter(items),
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+        let events = sink.0.lock().unwrap().clone();
+        let turns: Vec<_> = events
+            .iter()
+            .filter(|e| e["type"] == "avp.assistant_message")
+            .collect();
+        assert_eq!(turns.len(), 2, "one turn per model response");
+        let calls: Vec<_> = turns[0]["data"]["avp.content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| b["type"] == "tool_use")
+            .map(|b| b["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(calls, ["a", "b"]);
+        assert_eq!(turns[0]["data"]["avp.usage"]["input_tokens"], 100);
+        assert_eq!(turns[0]["data"]["avp.usage"]["output_tokens"], 20);
+        assert_eq!(turns[1]["data"]["avp.usage"]["input_tokens"], 130);
+        let returned: Vec<_> = events
+            .iter()
+            .filter(|e| e["type"] == "avp.tool_returned")
+            .map(|e| e["data"]["avp.tool.call_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(returned, ["a", "b"]);
+    }
+
     #[tokio::test]
     async fn a_delegate_result_carries_the_child_sessions_usage() {
         // Goose drops a subagent's own usage events; its session keeps the
@@ -965,6 +1087,9 @@ mod tests {
         let returned = subagent_returned(&events);
         assert_eq!(returned["avp.subagent.reason"], "abandoned");
         assert_eq!(returned["avp.subagent.usage"]["tokens_output"], 34);
+        let stopped = events.last().unwrap();
+        assert_eq!(stopped["type"], "avp.agent_stopped");
+        assert_eq!(stopped["data"]["avp.reason"], "abandoned");
     }
 
     #[derive(Clone, Default)]

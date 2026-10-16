@@ -55,7 +55,7 @@ async def _dial(
     left out of the run."""
     servers, decls, tool_decls = [], [], []
     for entry in commission.mcp_servers or []:
-        server = cm.mcp_server(entry, _failure_recorder(errored))
+        server = cm.mcp_server(entry, _failure_recorder(errored), _error_result_recorder(errored))
         try:
             await server.connect()
             listed = await server.list_tools()
@@ -92,7 +92,8 @@ async def run(commission: Commission, sink: EventSink) -> None:
     from agents.exceptions import ModelRefusalError
 
     plan = cm.from_commission(commission)
-    # MCP tool calls that failed; the SDK's tool output item has no error flag.
+    # MCP tool calls that failed, by raising or with an `isError` result; the
+    # SDK's tool output item has no error flag.
     errored: set[str] = set()
     servers: list[Any] = []
     try:
@@ -163,6 +164,19 @@ async def run(commission: Commission, sink: EventSink) -> None:
     finally:
         for server in servers:
             await server.cleanup()
+
+
+def _error_result_recorder(errored: set[str]) -> Any:
+    """Marks a call whose MCP result carries `isError`. The SDK hands that
+    result to the model as ordinary output."""
+
+    def on_result(ctx: Any) -> None:
+        call_id = getattr(ctx.run_context, "tool_call_id", None)
+        if ctx.is_error and call_id:
+            errored.add(call_id)
+        return None
+
+    return on_result
 
 
 def _failure_recorder(errored: set[str]) -> Any:

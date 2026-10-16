@@ -165,6 +165,7 @@ async def emit_agent_stopped(state: RunState, reason: StopReason, *, output: Any
     `converged` stop downgrades to match: the SDK's `ResultMessage` says
     `success` when a parent stops before its background child reports."""
     if not state.stopped:
+        await _release_results(state)
         for message in list(state.finished_tasks.values()):
             await _close_task(state, message)
     await state.rec.stop(reason, output)
@@ -228,6 +229,9 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
             _ASSISTANT_ERROR_CODES.get(message.error, ErrorCode.unknown), text or message.error
         )
         return
+    if message.message_id and message.message_id != state.turn_key:
+        # A new response: whatever the previous one called has run.
+        await _release_results(state)
     state.turn_key = message.message_id or state.turn_key or "anonymous"
     meta: dict[str, Any] = {"anthropic.message_id": message.message_id or None}
     if message.usage:
@@ -254,17 +258,24 @@ async def _on_assistant(state: RunState, message: AssistantMessage) -> None:
 
 
 async def _on_stream_event(state: RunState, message: StreamEvent) -> None:
-    """Complete the streaming turn's usage from its response's `message_delta`.
+    """Track the main-thread response's stream and complete its turn's usage.
 
     The CLI stamps each AssistantMessage with the `message_start` usage, whose
     `output_tokens` is a placeholder; the final, cumulative counts arrive in
-    `message_delta`, before any tool result closes the turn."""
+    `message_delta`. Tool results held while the response streamed are
+    reported at `message_stop`, once the turn holds every call and its usage."""
     event = message.event
-    if (
-        message.parent_tool_use_id is not None
-        or event.get("type") != "message_delta"
-        or state.turn_usage is None
-    ):
+    if message.parent_tool_use_id is not None:
+        return
+    kind = event.get("type")
+    if kind == "message_start":
+        state.streaming = True
+        return
+    if kind == "message_stop":
+        state.streaming = False
+        await _release_results(state)
+        return
+    if kind != "message_delta" or state.turn_usage is None:
         return
     delta = {k: v for k, v in (event.get("usage") or {}).items() if v is not None}
     state.turn_usage = {**state.turn_usage, **delta}
@@ -289,11 +300,29 @@ def _normalize_tool_result_content(content: Any) -> str | list[Any]:
 
 async def _on_user(state: RunState, message: UserMessage) -> None:
     """Each `ToolResultBlock` in a UserMessage closes a prior tool call.
-    Subagent-interior UserMessages are skipped. Per spec §5, subagent
-    dispatches close their tool-dispatch span here like any other call; the
-    `subagent_*` events layer on top via `_on_task_*`."""
+    Subagent-interior UserMessages are skipped. A result that arrives while
+    its response is still streaming is held until the response completes
+    (see `RunState.streaming`), so the turn carries all of its calls."""
     if message.parent_tool_use_id is not None:
         return
+    content = message.content if isinstance(message.content, list) else []
+    if state.streaming and any(isinstance(b, ToolResultBlock) for b in content):
+        state.held_results.append(message)
+        return
+    await _report_results(state, message)
+
+
+async def _release_results(state: RunState) -> None:
+    """Report the tool results held for the response that just completed."""
+    held, state.held_results = state.held_results, []
+    for message in held:
+        await _report_results(state, message)
+
+
+async def _report_results(state: RunState, message: UserMessage) -> None:
+    """Per spec §5, subagent dispatches close their tool-dispatch span here
+    like any other call; the `subagent_*` events layer on top via
+    `_on_task_*`."""
     content = message.content if isinstance(message.content, list) else []
     tool_results = [b for b in content if isinstance(b, ToolResultBlock)]
     if tool_results:
