@@ -1,0 +1,128 @@
+{
+  "name": "error-before-start",
+  "description": "A fail-fast before start: error_occurred and agent_stopped parent under the root (zero span) because no agent span exists yet.",
+  "recorder": {
+    "run_id": "run-1",
+    "provider": "anthropic",
+    "prices": {
+      "anthropic/claude-test-1": {
+        "input": 3.0,
+        "output": 15.0,
+        "cache_read": 0.3,
+        "cache_write": 3.75
+      }
+    }
+  },
+  "calls": [
+    {
+      "t": 0,
+      "op": "prelude",
+      "commission": {
+        "schema_version": "0.1",
+        "run_id": "run-1",
+        "model": "anthropic/claude-test-1",
+        "prompt": "Do the task.",
+        "supervisor": {
+          "name": "recorder-vectors",
+          "version": "1"
+        }
+      },
+      "descriptor": {
+        "agent_name": "vector-agent",
+        "agent_version": "0.0.0",
+        "spec_version": "0.1",
+        "default_model": "claude-test-1"
+      }
+    },
+    {
+      "t": 10,
+      "op": "error",
+      "code": "unsupported_provider",
+      "message": "provider 'openai' is not supported"
+    },
+    {
+      "t": 11,
+      "op": "stop",
+      "reason": "error"
+    }
+  ],
+  "expected": [
+    {
+      "specversion": "1.0",
+      "id": "evt-1",
+      "time": "2026-01-01T00:00:00.000Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.run_requested",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-1",
+        "parent_span_id": "0000000000000000",
+        "avp.supervisor.name": "recorder-vectors",
+        "avp.supervisor.version": "1",
+        "avp.commission": {
+          "schema_version": "0.1",
+          "run_id": "run-1",
+          "supervisor": {
+            "name": "recorder-vectors",
+            "version": "1"
+          },
+          "prompt": "Do the task.",
+          "model": "anthropic/claude-test-1"
+        }
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-2",
+      "time": "2026-01-01T00:00:00.000Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.agent_described",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-2",
+        "parent_span_id": "0000000000000000",
+        "avp.descriptor": {
+          "agent_name": "vector-agent",
+          "agent_version": "0.0.0",
+          "spec_version": "0.1",
+          "default_model": "claude-test-1"
+        }
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-3",
+      "time": "2026-01-01T00:00:00.010Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.error_occurred",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-3",
+        "parent_span_id": "0000000000000000",
+        "avp.error.code": "unsupported_provider",
+        "avp.error.message": "provider 'openai' is not supported"
+      }
+    },
+    {
+      "specversion": "1.0",
+      "id": "evt-4",
+      "time": "2026-01-01T00:00:00.011Z",
+      "subject": "run-1",
+      "datacontenttype": "application/json",
+      "type": "avp.agent_stopped",
+      "source": "avp://agent",
+      "data": {
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "span_id": "span-4",
+        "parent_span_id": "0000000000000000",
+        "avp.reason": "error"
+      }
+    }
+  ]
+}

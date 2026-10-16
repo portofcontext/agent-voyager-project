@@ -10,6 +10,14 @@ In scope:
   type for "consume one trajectory event"; `stdio_sink` is the trivial
   NDJSON-to-stdout built-in. No base class, no agent abstraction: integrator
   packages own their own agent shape and just take an `EventSink`.
+- **Recorder** — `recorder.py`. A plain object an adapter calls to report what
+  happened (`prelude`, `start`, `assistant`, `tool_result`, `subagent_*`,
+  `error`, `stop`); it owns the trajectory's ordering and span rules (turn
+  buffering, step counter, tool pairing, subagent frames, cost, idempotent
+  stop). It is not a base class, owns no loop, and calls nothing back. Its
+  behavior is pinned by the language-neutral vectors under
+  `avp/core/conformance/src/avp_conformance/recorder/v0.1/`; the Rust and
+  TypeScript Recorders run the same vectors. Change a rule there first.
 
 The **conformance harness** is NOT here anymore: it ships as the separate
 `avp-conformance` package at `avp/core/conformance/` (it depends on these
@@ -23,8 +31,10 @@ Out of scope here (belongs in the agent package that needs it, not in `avp`):
 - MCP / skill / subagent dispatch helpers
 - Opinionated tracers with scope ergonomics
 
-Duplication across two integrator packages is cheaper than a shared helper
-that keeps regrowing.
+Harness-specific logic (Commission mapping, native-to-AVP translation, the
+descriptor, stop-reason inference, harness quirks) stays in the agent package.
+The trajectory's generic ordering and span rules live once, in the Recorder,
+because every adapter needs exactly the same ones.
 
 ## Working rules
 
