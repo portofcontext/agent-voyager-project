@@ -40,7 +40,7 @@ jobs:
           - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System build deps (Linux)
         if: runner.os == 'Linux'
@@ -80,7 +80,7 @@ jobs:
           tar -czf "$asset" -C target/release avp-goose-conformance
           shasum -a 256 "$asset" > "$asset.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: goose-${{ matrix.target }}
           path: agents/avp-goose/rust/avp-goose-conformance*-${{ matrix.target }}.tar.gz*
@@ -92,7 +92,7 @@ jobs:
     needs: build
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
