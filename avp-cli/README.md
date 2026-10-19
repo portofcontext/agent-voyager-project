@@ -33,7 +33,7 @@ avp agent install goose
 export ANTHROPIC_API_KEY="<your-api-key>"
 avp init capitals --agent goose
 avp eval run capitals.eval.json    # paid model calls; prints the ranked board
-avp eval view            # open the most recent run on agentvoyagerproject.com
+avp eval share           # upload the most recent run, print a short link
 ```
 
 Contributors working in the repo: `make sync && source .venv/bin/activate`
@@ -154,7 +154,8 @@ already have is left untouched):
 | `avp init [key] [--dir D]` | scaffold an eval (in place) + its commissions (to the library) |
 | `avp eval run CONFIG` | run a config, print the ranked board |
 | `avp eval list` | list recent eval runs by voyage id (newest first) |
-| `avp eval view [ID]` | open an eval on agentvoyagerproject.com (default: most recent run) |
+| `avp eval share [ID]` | upload an eval and print a short agentvoyagerproject.com link that lasts 30 days (default: most recent run) |
+| `avp eval unshare [ID]` | take a shared eval's link down |
 | `avp eval delete ID [--all]` | delete one recorded run by id (or `--all` for every run, `~/.avp/runs`) |
 | `avp cm create ID --agent A` | generate a complete commission (full tool/skill surface + version pin); edit the JSON |
 | `avp cm list` | list your portable commission library (`~/.avp/commissions`) |
@@ -289,15 +290,17 @@ workspace shared across cells, one fresh sandbox per cell).
 
 Every `avp eval run` ends with a **voyage id** (e.g. `swift-harbor`) and writes
 the eval's data. The CLI produces the data; the site renders it. A benchmark post
-is: run the eval → view it → write.
+is: run the eval → share it → write.
 
 - **the voyage id** — a short, memorable handle for the run, printed when it
-  finishes. `avp eval view <id>` opens it on the site; `avp eval list` shows recent
-  ids. (Bare `avp eval view` opens the latest, no id needed.)
+  finishes. `avp eval share <id>` uploads it and prints a short link; `avp eval list`
+  shows recent ids. (Bare `avp eval share` shares the latest.) Sharing uploads the
+  run's prompts, replies, and tool inputs and outputs; links expire after 30 days,
+  and `avp eval unshare <id>` takes one down sooner.
 - **`trajectories.json`** — the whole eval in the `by_commission` shape
   [agentvoyagerproject.com](https://agentvoyagerproject.com) renders (keyed by
   commission, each carrying every run's full AVP trajectory, plus a `commissions`
-  block of each one's config). `avp eval view` opens it; or drop it into the site.
+  block of each one's config). `avp eval share` uploads it.
   One file per agent when you compare several.
 
 ## How it works
@@ -321,7 +324,7 @@ src/avp_cli/
   commission.py     # inspect a Commission a library commission yields (show / validate)
   console.py        # rich Console + stdout(results)/stderr(progress) discipline
   brand.py          # the AVP ship logo + palette for the terminal
-  viz.py            # trajectories -> agentvoyagerproject.com payload + view URL (avp eval view)
+  viz.py            # trajectories -> agentvoyagerproject.com payload + share API (avp eval share)
   osb.py            # the managed OpenSandbox control plane (config, spawn, egress policy)
   images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
   environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding

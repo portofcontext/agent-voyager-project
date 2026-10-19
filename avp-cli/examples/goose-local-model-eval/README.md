@@ -63,7 +63,7 @@ cp gsm8k-local.commission.json ~/.avp/commissions/gsm8k-local.json
 avp eval run gsm8k.eval.json --env env.json
 ```
 
-`avp eval view` opens the scored board.
+`avp eval share` uploads the scored board and prints a link.
 
 ## Run a different / bigger brain
 

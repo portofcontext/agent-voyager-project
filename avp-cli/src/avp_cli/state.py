@@ -1,4 +1,4 @@
-"""Track recent eval runs so `avp eval view` / `list` can find them — even when
+"""Track recent eval runs so `avp eval share` / `list` can find them — even when
 a run wrote to a `--out` directory.
 
 A small JSONL history under the run-outputs root (`~/.avp/runs`, see `paths`).
@@ -21,7 +21,7 @@ from avp_cli import paths
 
 # Voyage names: each eval run is a voyage, so its handle is a short, memorable
 # two-word slug (e.g. "swift-harbor") rather than a temp-dir path. This is the id
-# `avp eval run` prints, `avp eval list` shows, and `avp eval view <id>` opens.
+# `avp eval run` prints, `avp eval list` shows, and `avp eval share <id>` uploads.
 _ADJ = (
     "calm", "swift", "bold", "brisk", "clear", "fair", "steady", "bright",
     "deep", "lone", "north", "south", "salt", "tidal", "open", "still",
@@ -54,7 +54,7 @@ def new_id(*, home: Path | None = None) -> str:
     """A short, memorable voyage handle for one eval run (e.g. 'swift-harbor').
 
     Unique against the ids already in history and any existing run dir under the
-    default home, so `avp eval view <id>` resolves to exactly one run.
+    default home, so `avp eval share <id>` resolves to exactly one run.
     """
     home = home or _home()
     taken = _taken_ids(home)

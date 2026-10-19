@@ -4,7 +4,8 @@
     avp init [KEY] [--dir D]         scaffold an eval (in place) + its commissions (to ~/.avp)
     avp eval run CONFIG              run an eval config, print a ranked board
     avp eval list                    list recent eval runs (with their ids)
-    avp eval view [ID]               open an eval on agentvoyagerproject.com (default: most recent)
+    avp eval share [ID]              upload an eval, print a short link (default: most recent)
+    avp eval unshare [ID]            take a shared eval's link down
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
     avp run "TASK" --agent A [--env E]   commission an agent to do a task (in a sandbox)
     avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel/--package local)
@@ -30,7 +31,6 @@ import argparse
 import json
 import re
 import sys
-import webbrowser
 from pathlib import Path
 
 import questionary
@@ -307,7 +307,7 @@ def _finish_run(ev: Eval, boards: list, out: Path, run_id: str) -> None:
 
     The CLI produces the data, the site renders it: `trajectories.json` (one per
     agent, the site's `by_commission` shape + a `commissions` config block) is
-    what `avp eval view <id>` opens. The run is recorded so `view` / `list` find
+    what `avp eval share <id>` uploads. The run is recorded so `share` / `list` find
     it by id even when `--out` was used.
     """
     from datetime import datetime
@@ -333,7 +333,7 @@ def _finish_run(ev: Eval, boards: list, out: Path, run_id: str) -> None:
     console.out.print()
     console.out.print(
         f"  [bold {brand.SAIL}]{brand.SAILBOAT} {run_id}[/]   "
-        f"view it: [bold]avp eval view {run_id}[/bold]"
+        f"share it: [bold]avp eval share {run_id}[/bold]"
     )
 
 
@@ -775,9 +775,6 @@ def _render_descriptor(name: str, d) -> None:
 
 # ── eval ───────────────────────────────────────────────────────────────────────
 
-# Browsers cap total URL length (~2 MB in Chrome); budget the encoded blob under it.
-_MAX_VIEW_URL = 1_900_000
-
 
 def _run_trajectories(path: str | None) -> list[Path]:
     """Every `trajectories*.json` for a run (one per agent when several were compared).
@@ -797,11 +794,17 @@ def _run_trajectories(path: str | None) -> list[Path]:
     return sorted(base.glob("trajectories*.json")) if base.is_dir() else []
 
 
-def _cmd_eval_view(args: argparse.Namespace) -> int:
-    """Open a finished eval on the site by encoding its trajectories into the URL.
+# What a run's share record (written next to its trajectories) is called.
+_SHARE_RECORD = "share.json"
 
-    A run compared against several agents has one trajectories file per agent; this
-    opens them all (a tab each) unless `--agent` narrows it to one.
+
+def _cmd_eval_share(args: argparse.Namespace) -> int:
+    """Upload a finished eval and print its short link on agentvoyagerproject.com.
+
+    A run compared against several agents has one trajectories file per agent;
+    the link shows them all head-to-head unless `--agent` narrows it to one. The
+    delete token is kept in the run's `share.json`, so `avp eval unshare` can
+    take the link down later.
     """
     files = _run_trajectories(args.path)
     if not files:
@@ -811,15 +814,6 @@ def _cmd_eval_view(args: argparse.Namespace) -> int:
             "`avp eval list` (or a path to a trajectories.json / eval out dir).",
         )
         return 1
-
-    # Point at the immutable input snapshot for this run, if present.
-    mani = run_manifest.read(files[0].parent)
-    if mani:
-        cids = ", ".join(mani.get("commissions", {}))
-        console.note(
-            f"config snapshot: {files[0].parent / run_manifest.MANIFEST_NAME}"
-            + (f"  (commissions: {cids})" if cids else "")
-        )
 
     payloads = [json.loads(f.read_text()) for f in files]
     runs = [(p.get("agent") or f.stem, p) for f, p in zip(files, payloads, strict=True)]
@@ -833,26 +827,69 @@ def _cmd_eval_view(args: argparse.Namespace) -> int:
             )
             return 1
 
-    # One link, all agents: the site shows them head-to-head on a single page.
-    labels = [label for label, _ in runs]
-    url = viz.view_url(viz.combine_payloads([p for _, p in runs]), site=args.site)
-    if len(url) > _MAX_VIEW_URL:
+    payload = dict(viz.combine_payloads([p for _, p in runs]))
+    mani = run_manifest.read(files[0].parent)
+    name = ((mani or {}).get("eval_config") or {}).get("name")
+    if name:
+        payload["name"] = name
+
+    if not args.yes:
+        if not sys.stdin.isatty():
+            console.error_panel(
+                "confirm the share",
+                "sharing uploads every prompt, model reply, and tool input and output in "
+                "this run. Re-run with --yes to share without a prompt.",
+            )
+            return 1
+        console.note(
+            "Sharing uploads this run's prompts, model replies, and tool inputs and "
+            "outputs (including anything the agents read) to agentvoyagerproject.com. "
+            "Anyone with the link can view it for 30 days."
+        )
+        if not questionary.confirm("Share it?", default=False).ask():
+            console.note("not shared")
+            return 1
+
+    try:
+        shared = viz.share(payload, site=args.site)
+    except viz.ShareError as err:
+        console.error_panel("share failed", str(err))
+        return 1
+    record = {**shared, "site": args.site}
+    (files[0].parent / _SHARE_RECORD).write_text(json.dumps(record, indent=2) + "\n")
+    console.out.print(shared["url"])
+    console.note(
+        f"expires {shared['expires_at'][:10]} · take it down: "
+        f"avp eval unshare {args.path or ''}".rstrip()
+    )
+    return 0
+
+
+def _cmd_eval_unshare(args: argparse.Namespace) -> int:
+    """Take a shared eval down, using the delete token `avp eval share` saved."""
+    files = _run_trajectories(args.path)
+    record_path = files[0].parent / _SHARE_RECORD if files else None
+    if record_path is None or not record_path.is_file():
         console.error_panel(
-            "eval too large to view via link",
-            f"the encoded link is ~{len(url) // 1024} KB, over the ~{_MAX_VIEW_URL // 1024} KB "
-            "URL budget. Narrow it (`--agent <name>`, or fewer items/commissions) to view it.",
+            "no share for this run",
+            "share it first with `avp eval share`, or pass a voyage id from `avp eval list`.",
         )
         return 1
-    if args.no_open:
-        console.out.print(url)
-    else:
-        webbrowser.open(url)
-        console.note(f"opening {args.site}/view for: {', '.join(labels)}")
+    record = json.loads(record_path.read_text())
+    try:
+        viz.unshare(record["id"], record["delete_token"], site=record.get("site", viz.SITE))
+    except viz.ShareError as err:
+        # Already gone (expired or deleted elsewhere) is the outcome we wanted.
+        if str(err) != "not found":
+            console.error_panel("unshare failed", str(err))
+            return 1
+    record_path.unlink()
+    console.note(f"taken down: {record['url']}")
     return 0
 
 
 def _cmd_eval_list(args: argparse.Namespace) -> int:
-    """List recent eval runs (newest first) so you can `view` one."""
+    """List recent eval runs (newest first) so you can `share` one."""
     from rich.table import Table
 
     runs = state.recent_runs()
@@ -875,7 +912,7 @@ def _cmd_eval_list(args: argparse.Namespace) -> int:
             str(len(r.get("commissions", []))),
         )
     console.out.print(table)
-    console.note("view one:  avp eval view <id>   (no arg opens the most recent)")
+    console.note("share one:  avp eval share <id>   (no arg shares the most recent)")
     return 0
 
 
@@ -957,8 +994,10 @@ def _resume_drift(out: Path, ev: Eval) -> str | None:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    if args.eval_cmd == "view":
-        return _cmd_eval_view(args)
+    if args.eval_cmd == "share":
+        return _cmd_eval_share(args)
+    if args.eval_cmd == "unshare":
+        return _cmd_eval_unshare(args)
     if args.eval_cmd == "list":
         return _cmd_eval_list(args)
     if args.eval_cmd == "delete":
@@ -1447,7 +1486,7 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
     p.add_argument(
         "--name",
         default=None,
-        help="Name this voyage (its id for `eval view`/`list`). Prompts if a TTY; else autogenerates.",
+        help="Name this voyage (its id for `eval share`/`list`). Prompts if a TTY; else autogenerates.",
     )
     p.add_argument("--out", default=None, help="Directory for NDJSON trajectories")
     p.add_argument("--json", dest="json_path", default=None, help="Write a machine-readable board")
@@ -1516,10 +1555,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Delete every recorded run + its outputs (~/.avp/runs)",
     )
 
-    p_view = esub.add_parser(
-        "view", help="Open a finished eval on agentvoyagerproject.com (encodes it into the URL)"
+    p_share = esub.add_parser(
+        "share", help="Upload a finished eval and print a short link (expires in 30 days)"
     )
-    p_view.add_argument(
+    p_share.add_argument(
         "path",
         nargs="?",
         default=None,
@@ -1527,14 +1566,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="A voyage id from `avp eval list` (or a trajectories.json / out dir). "
         "Default: the most recent run.",
     )
-    p_view.add_argument(
+    p_share.add_argument(
         "--agent",
         default=None,
-        help="Open only this agent's trajectories (default: all in the run)",
+        help="Share only this agent's trajectories (default: all in the run)",
     )
-    p_view.add_argument("--site", default=viz.SITE, help="Viewer base URL (override for dev)")
-    p_view.add_argument(
-        "--no-open", action="store_true", help="Print the URL(s), don't open a browser"
+    p_share.add_argument(
+        "--yes", "-y", action="store_true", help="Share without the confirmation prompt"
+    )
+    p_share.add_argument("--site", default=viz.SITE, help="Site to share to (override for dev)")
+
+    p_unshare = esub.add_parser("unshare", help="Take a shared eval's link down")
+    p_unshare.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        metavar="ID",
+        help="The voyage id you shared (default: the most recent run)",
     )
 
     com_p = groups.add_parser("cm", help="Build and inspect commissions in your library")

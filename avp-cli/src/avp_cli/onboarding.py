@@ -30,7 +30,8 @@ _COMMISSIONS = [
 _EVAL = [
     ("avp eval run <config>", "run the eval"),
     ("avp eval list", "list recent eval runs"),
-    ("avp eval view", "visualize the latest eval (on agentvoyagerproject.com)"),
+    ("avp eval share", "share the latest eval as a link on agentvoyagerproject.com"),
+    ("avp eval unshare", "take a shared eval's link down"),
     ("avp eval delete <id>", "delete one recorded run (--all for every run)"),
 ]
 

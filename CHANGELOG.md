@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `avp eval share` replaces `avp eval view`. It uploads a finished eval to
+  agentvoyagerproject.com after a confirmation (`--yes` to skip it) and prints
+  a short `/r/<id>` link that unfurls in Slack and expires after 30 days.
+  `avp eval unshare` takes a link down with the delete token the share saved.
+  Links that carried the whole eval in the URL are retired: they were too long
+  to paste into chat.
+
 ## 0.2.0 (2026-10-19)
 
 These changes retain the v0.1 wire schemas.
