@@ -227,9 +227,7 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
         base = prov.base_url or (osb.PROVIDER_REGISTRY.get(prov.id) or (None, None))[1] or ""
         # The agent's SDK appends the API path to the route (see `_endpoint_env`).
         upstream = base.rstrip("/").removesuffix(_api_path(prov.id))
-        header, prefix = (
-            ("x-api-key", "") if prov.id == "anthropic" else ("authorization", "Bearer ")
-        )
+        header, prefix = _PROVIDER_AUTH_HEADERS.get(prov.id, ("authorization", "Bearer "))
         routes.append(
             (
                 f"llm/{prov.id}",
@@ -264,6 +262,14 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
     return brk
 
 
+# The request header each provider's API key travels in, where it isn't
+# `Authorization: Bearer`; the broker swaps the run token in that header.
+_PROVIDER_AUTH_HEADERS = {
+    "anthropic": ("x-api-key", ""),
+    "google": ("x-goog-api-key", ""),
+    "gemini": ("x-goog-api-key", ""),
+}
+
 # Alternate credential names supported by the bundled agents.
 _CREDENTIAL_ALIASES = {
     "anthropic": ("CLAUDE_CODE_OAUTH_TOKEN",),
@@ -271,8 +277,10 @@ _CREDENTIAL_ALIASES = {
     "gemini": ("GOOGLE_API_KEY",),
 }
 
-
-# Further base-URL variables agents read for a provider.
+# Alternate API-key and base-URL names a bundled agent reads for a provider
+# (Gemini CLI: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`). Under the broker
+# they carry the run token and route like the provider's own names.
+_KEY_ALIASES = {"google": ("GEMINI_API_KEY",)}
 _BASE_URL_ALIASES = {
     "google": ("GOOGLE_GEMINI_BASE_URL",),
     "gemini": ("GOOGLE_GEMINI_BASE_URL",),
@@ -317,7 +325,7 @@ def _sandbox_env(
         if brk is None:
             raise ValueError("vault credential requires a running broker")
         env = {k: v for k, v in agent.env.items() if k not in provider_vars}
-        env[api_key] = brk.token
+        env.update(dict.fromkeys((api_key, *_KEY_ALIASES.get(provider.id, ())), brk.token))
         env.update(_endpoint_env(provider.id, brk.route_url(f"llm/{provider.id}")))
     else:
         env = {k: os.environ[k] for k in provider_vars if k in os.environ}

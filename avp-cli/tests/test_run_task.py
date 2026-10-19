@@ -156,3 +156,14 @@ def test_builtin_pi_recipe_installs_node_and_the_release_archive() -> None:
     assert f"node-v{NODE_VERSION}-linux-" in steps
     assert f"agent-pi-v{source.container_version}/avp-pi.tar.gz" in steps
     assert recipe.command == ("node", "/opt/pi/dist/src/main.js")
+
+
+def test_builtin_gemini_cli_recipe_installs_node_and_the_release_archive() -> None:
+    from avp_cli.agents import AGENT_SOURCES, NODE_VERSION, _builtin_recipe
+
+    source = AGENT_SOURCES["gemini-cli"]
+    recipe = _builtin_recipe(source)
+    steps = "\n".join(recipe.install)
+    assert f"node-v{NODE_VERSION}-linux-" in steps
+    assert f"agent-gemini-cli-v{source.container_version}/avp-gemini-cli.tar.gz" in steps
+    assert recipe.command == ("node", "/opt/gemini-cli/dist/src/main.js")

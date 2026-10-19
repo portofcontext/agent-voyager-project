@@ -60,6 +60,7 @@ Adapters in this repository:
 | OpenAI Agents SDK | [avp-openai-agents](agents/avp-openai-agents/python/) |
 | Codex | [avp-codex](agents/avp-codex/python/) |
 | Pi | [avp-pi](agents/avp-pi/typescript/) |
+| Gemini CLI | [avp-gemini-cli](agents/avp-gemini-cli/typescript/) |
 
 To add another runtime, follow the [adapter guide](agents/_template/README.md). See [integration patterns](PATTERNS.md) for runtime adaptation and launch context.
 
