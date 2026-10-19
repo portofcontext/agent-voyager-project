@@ -4,6 +4,7 @@
     avp init [KEY] [--dir D]         scaffold an eval (in place) + its commissions (to ~/.avp)
     avp eval run CONFIG              run an eval config, print a ranked board
     avp eval list                    list recent eval runs (with their ids)
+    avp eval view [ID]               browse an eval in the terminal (default: most recent)
     avp eval share [ID]              upload an eval, print a short link (default: most recent)
     avp eval unshare [ID]            take a shared eval's link down
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
@@ -799,6 +800,55 @@ def _run_trajectories(path: str | None) -> list[Path]:
 _SHARE_RECORD = "share.json"
 
 
+def _eval_payload(path: str | None, agent: str | None) -> dict | None:
+    """A finished eval's payload, as `share` uploads and `view` shows it: every
+    agent's trajectories combined, filled in from the run's raw trajectories,
+    and named. Reports and returns None when the run can't be found."""
+    files = _run_trajectories(path)
+    if not files:
+        console.error_panel(
+            "no trajectories.json found",
+            "run `avp eval run <config>` first, or pass a voyage id from "
+            "`avp eval list` (or a path to a trajectories.json / eval out dir).",
+        )
+        return None
+    payloads = [json.loads(f.read_text()) for f in files]
+    runs = [(p.get("agent") or f.stem, p) for f, p in zip(files, payloads, strict=True)]
+    available = [label for label, _ in runs]
+    if agent:
+        runs = [(label, p) for label, p in runs if label == agent]
+        if not runs:
+            console.error_panel(
+                f"no trajectories for agent {agent!r}",
+                f"this run has: {', '.join(available)}",
+            )
+            return None
+    payload = dict(viz.combine_payloads([p for _, p in runs]))
+    mani = run_manifest.read(files[0].parent)
+    eval_config = (mani or {}).get("eval_config") or {}
+    viz.enrich_payload(payload, files[0].parent, eval_config)
+    if eval_config.get("name"):
+        payload["name"] = eval_config["name"]
+    return payload
+
+
+def _cmd_eval_view(args: argparse.Namespace) -> int:
+    """Browse a finished eval in the terminal: the leaderboard, then each run
+    as its vessel, orders, and log."""
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        console.error_panel(
+            "avp eval view needs a terminal", "run it interactively, or share the eval instead."
+        )
+        return 1
+    payload = _eval_payload(args.path, args.agent)
+    if payload is None:
+        return 1
+    from avp_cli.tui import EvalApp
+
+    EvalApp(payload).run()
+    return 0
+
+
 def _cmd_eval_share(args: argparse.Namespace) -> int:
     """Upload a finished eval and print its short link on agentvoyagerproject.com.
 
@@ -808,31 +858,9 @@ def _cmd_eval_share(args: argparse.Namespace) -> int:
     take the link down later.
     """
     files = _run_trajectories(args.path)
-    if not files:
-        console.error_panel(
-            "no trajectories.json found",
-            "run `avp eval run <config>` first, or pass a voyage id from "
-            "`avp eval list` (or a path to a trajectories.json / eval out dir).",
-        )
+    payload = _eval_payload(args.path, args.agent)
+    if payload is None:
         return 1
-
-    payloads = [json.loads(f.read_text()) for f in files]
-    runs = [(p.get("agent") or f.stem, p) for f, p in zip(files, payloads, strict=True)]
-    available = [label for label, _ in runs]
-    if args.agent:
-        runs = [(label, p) for label, p in runs if label == args.agent]
-        if not runs:
-            console.error_panel(
-                f"no trajectories for agent {args.agent!r}",
-                f"this run has: {', '.join(available)}",
-            )
-            return 1
-
-    payload = dict(viz.combine_payloads([p for _, p in runs]))
-    mani = run_manifest.read(files[0].parent)
-    name = ((mani or {}).get("eval_config") or {}).get("name")
-    if name:
-        payload["name"] = name
 
     if not args.yes:
         if not sys.stdin.isatty():
@@ -995,6 +1023,8 @@ def _resume_drift(out: Path, ev: Eval) -> str | None:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
+    if args.eval_cmd == "view":
+        return _cmd_eval_view(args)
     if args.eval_cmd == "share":
         return _cmd_eval_share(args)
     if args.eval_cmd == "unshare":
@@ -1555,6 +1585,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         help="Delete every recorded run + its outputs (~/.avp/runs)",
+    )
+
+    p_view = esub.add_parser("view", help="Browse a finished eval in the terminal")
+    p_view.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        metavar="ID",
+        help="A voyage id from `avp eval list` (or a trajectories.json / out dir). "
+        "Default: the most recent run.",
+    )
+    p_view.add_argument(
+        "--agent", default=None, help="Show only this agent (default: all in the run)"
     )
 
     p_share = esub.add_parser(
