@@ -26,7 +26,7 @@ members = [
 
 [[package]]
 name = "agent-voyager-project"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "avp/bindings/python" }
 dependencies = [
     { name = "pydantic" },
@@ -316,7 +316,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-claude-agent-sdk"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "agents/avp-claude-agent-sdk/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -347,7 +347,7 @@ dev = [
 
 [[package]]
 name = "avp-cli"
-version = "0.1.4"
+version = "0.2.0"
 source = { editable = "avp-cli" }
 dependencies = [
     { name = "httpx" },
@@ -416,7 +416,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-conformance"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "avp/core/conformance" }
 dependencies = [
     { name = "agent-voyager-project" },

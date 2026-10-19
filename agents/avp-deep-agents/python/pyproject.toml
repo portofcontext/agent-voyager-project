@@ -9,7 +9,7 @@ description = "AVP agent over LangChain Deep Agents, plus a LangChain callback h
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
-    "agent-voyager-project==0.1.1",
+    "agent-voyager-project==0.2.0",
     "deepagents==0.7.25",
     "langchain-anthropic==1.7.6",
     "langchain-google-genai==4.4.2",

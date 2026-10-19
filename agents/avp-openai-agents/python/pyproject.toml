@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "AVP agent over the OpenAI Agents SDK: the SDK owns the loop, the adapter records the trajectory."
 license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project==0.1.1", "openai-agents>=0.23"]
+dependencies = ["agent-voyager-project==0.2.0", "openai-agents>=0.23"]
 
 [project.optional-dependencies]
 # Non-OpenAI `Commission.model` origins route through the SDK's LiteLLM extension.
