@@ -93,19 +93,8 @@ fn write_skills(commission: &Commission, working_dir: &std::path::Path) -> anyho
 
 /// Run a Commission live against Goose, emitting the trajectory to `sink`.
 pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()> {
-    // Goose's data + config root. When the supervisor has placed this agent in an
-    // environment it passes `$AVP_ENV_ROOT` (the env home), so Goose's run-scoped
-    // state (`.agents/skills`, `.agents/recipes`, sessions) lives in that env;
-    // otherwise we mint a throwaway root so a live run never opens the user's
-    // production session store. Must be set before the first Goose `Config` /
-    // `SessionManager` access (both are process-global `LazyLock`s). The provider
-    // key still resolves from the OS keychain, which is path-independent.
+    // Native config/state paths are supplied by the launcher before SDK startup.
     let run_id = commission.run_id.to_string();
-    let path_root = std::env::var_os("AVP_ENV_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join(format!("avp-goose-{run_id}")));
-    std::fs::create_dir_all(&path_root)?;
-    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
 
     // Register goose's bundled built-ins so `Builtin` extensions resolve in-process.
     commission::register_builtins();
@@ -141,16 +130,8 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             .to_string()
     };
 
-    // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
-    // provides one (so a provisioned environment's code/files actually reach the
-    // agent), else an isolated workspace under the run's path root so Goose's
-    // run-scoped state (`.agents/skills`, `.agents/recipes`) doesn't pollute the
-    // caller's directory.
     let agent = Arc::new(Agent::new());
-    let working_dir = std::env::var_os("AVP_WORKSPACE")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| path_root.join("workspace"));
-    std::fs::create_dir_all(&working_dir)?;
+    let working_dir = std::env::current_dir()?;
     let session = agent
         .config
         .session_manager
@@ -229,96 +210,25 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     );
     emitter.prelude(commission, &descriptor)?;
 
-    // Fail fast (spec §4.0): the Commission pins this agent at a different
-    // build. Same-name surfaces can change behavior across builds; refuse
-    // loudly instead of running an unvalidated one.
-    if let Some(pin) = commission
-        .agent_versions
-        .as_ref()
-        .and_then(|m| m.get(commission::AGENT_NAME))
+    // Fail fast (spec §4): a version pin for a different build, an allow-list
+    // map without our key, or an allow-listed tool the agent doesn't offer.
+    // Emit `error_occurred` + `agent_stopped(error)` before any model turn.
+    let offered_tools: Vec<String> = descriptor
+        .tools
+        .iter()
+        .flatten()
+        .map(|t| t.name.clone())
+        .collect();
+    let offered = avp::preflight::Offered {
+        tools: Some(&offered_tools),
+        ..Default::default()
+    };
+    if let Some((code, message)) =
+        avp::preflight::preflight(commission, commission::AGENT_NAME, AGENT_VERSION, offered)
     {
-        if pin != AGENT_VERSION {
-            emitter.error(
-                ErrorCode::UnsupportedAgentVersion,
-                &format!(
-                    "Commission pins {} at {pin:?}; this build is {AGENT_VERSION:?}",
-                    commission::AGENT_NAME
-                ),
-            )?;
-            emitter.stop(StopReason::Error, None)?;
-            return Ok(());
-        }
-    }
-
-    // Fail fast (spec §4): each present per-agent allowlist map MUST carry our
-    // key (a map without it filters a surface the Commission wasn't authored
-    // for on this agent), and every name under our key must be a tool the
-    // agent actually offers. Either breach is a Commission/agent collision —
-    // emit `error_occurred(commission_collision)` + `agent_stopped(error)`
-    // before the loop, so no model turn runs.
-    let missing_key: Vec<&str> = [
-        (
-            "enabled_builtin_tools",
-            commission.enabled_builtin_tools.as_ref(),
-        ),
-        (
-            "enabled_builtin_subagents",
-            commission.enabled_builtin_subagents.as_ref(),
-        ),
-        (
-            "enabled_builtin_skills",
-            commission.enabled_builtin_skills.as_ref(),
-        ),
-        (
-            "enabled_builtin_mcp_servers",
-            commission.enabled_builtin_mcp_servers.as_ref(),
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(field, m)| {
-        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME))
-            .then_some(field)
-    })
-    .collect();
-    if !missing_key.is_empty() {
-        emitter.error(
-            ErrorCode::CommissionCollision,
-            &format!(
-                "no {:?} entry in: {}",
-                commission::AGENT_NAME,
-                missing_key.join(", ")
-            ),
-        )?;
+        emitter.error(code, &message)?;
         emitter.stop(StopReason::Error, None)?;
         return Ok(());
-    }
-    if let Some(names) = commission
-        .enabled_builtin_tools
-        .as_ref()
-        .and_then(|m| m.get(commission::AGENT_NAME))
-    {
-        let known: HashSet<&str> = descriptor
-            .tools
-            .iter()
-            .flatten()
-            .map(|t| t.name.as_str())
-            .collect();
-        let unknown: Vec<&str> = names
-            .iter()
-            .map(String::as_str)
-            .filter(|n| !known.contains(n))
-            .collect();
-        if !unknown.is_empty() {
-            emitter.error(
-                ErrorCode::CommissionCollision,
-                &format!(
-                    "enabled_builtin_tools names not offered by the agent: {}",
-                    unknown.join(", ")
-                ),
-            )?;
-            emitter.stop(StopReason::Error, None)?;
-            return Ok(());
-        }
     }
 
     emitter.start(Some(&model_name))?;
@@ -572,20 +482,6 @@ pub async fn describe() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 }
 
 async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
-    // Throwaway data/config root so the probe never opens the user's goose store.
-    let path_root = std::env::temp_dir().join(format!("avp-goose-describe-{}", std::process::id()));
-    std::fs::create_dir_all(&path_root)?;
-    std::env::set_var("GOOSE_PATH_ROOT", &path_root);
-    // GOOSE_PATH_ROOT only reroutes goose's own config/data/state. Skill,
-    // agent, and check discovery also sweep $HOME-anchored dirs
-    // (~/.claude/skills, ~/.agents/skills, ~/.config/agents/skills), which
-    // a sandboxed run will never see; point HOME at the throwaway root so
-    // the descriptor advertises only what the agent intrinsically ships
-    // (builtin:// skills), never the operator's local state.
-    let home = path_root.join("home");
-    std::fs::create_dir_all(&home)?;
-    std::env::set_var("HOME", &home);
-
     // Register goose's bundled built-ins so the full surface resolves in-process.
     commission::register_builtins();
 
@@ -602,8 +498,8 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
         .unwrap_or_else(|| "claude-haiku-4-5".to_string());
     let provider_name = std::env::var("GOOSE_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
     // Provider construction requires a key to exist, but the probe never
-    // calls the model, and the isolated HOME/GOOSE_PATH_ROOT hide any key
-    // in the operator's goose store (by design). Give the default provider
+    // calls the model. Launchers may supply an empty native config store.
+    // Give the default provider
     // a throwaway key rather than degrading to the identity-only fallback
     // on keyless hosts. An explicitly chosen provider (GOOSE_PROVIDER set)
     // is expected to bring its own env vars, which pass through.
@@ -621,8 +517,7 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let cfg: GooseRunConfig = commission::from_commission(&commission);
 
     let agent = Arc::new(Agent::new());
-    let working_dir = path_root.join("workspace");
-    std::fs::create_dir_all(&working_dir)?;
+    let working_dir = std::env::current_dir()?;
     let session = agent
         .config
         .session_manager
@@ -723,11 +618,19 @@ async fn build_descriptor(
         })
         .collect();
 
-    // Subagents the model can `delegate` to via the `summon` extension: recipes /
-    // agents discovered on the filesystem (working-dir and configured dirs), the
-    // same filesystem-based discovery as skills. Goose ships no bundled recipes, so
-    // this is empty unless the environment provides some.
-    let subagent_decls: Vec<Value> =
+    // Subagents the model can `delegate` to via the `summon` extension. With the
+    // `delegate` tool loaded, the model can always spawn an ad-hoc subagent from
+    // instructions alone (its frame is named `delegate`, as in `emit`); recipes /
+    // agents discovered on the filesystem (working-dir and configured dirs) add
+    // named ones. Goose ships no bundled recipes.
+    let mut subagent_decls: Vec<Value> = Vec::new();
+    if tools.iter().any(|t| t["name"] == "delegate") {
+        subagent_decls.push(json!({
+            "name": "delegate",
+            "description": "An ad-hoc subagent the model spawns with instructions via summon's `delegate` tool.",
+        }));
+    }
+    subagent_decls.extend(
         goose::agents::platform_extensions::summon::discover_filesystem_sources(working_dir)
             .iter()
             .map(|s| {
@@ -736,8 +639,8 @@ async fn build_descriptor(
                     decl["description"] = json!(s.description);
                 }
                 decl
-            })
-            .collect();
+            }),
+    );
 
     let mut descriptor = json!({
         "agent_name": "goose",

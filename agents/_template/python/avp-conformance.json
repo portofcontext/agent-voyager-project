@@ -1,0 +1,6 @@
+{
+  "command": ["uv", "run", "--no-sync", "python", "-m", "avp_agent_template.conformance"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-agent-template entrypoint"
+}

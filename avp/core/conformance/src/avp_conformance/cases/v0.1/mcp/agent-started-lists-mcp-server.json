@@ -15,7 +15,7 @@
       {
         "type": "stdio",
         "id": "avptest",
-        "command": ["uv", "run", "${AVP_TEST_MCP}"]
+        "command": ["${AVP_TEST_PYTHON}", "${AVP_TEST_MCP}"]
       }
     ],
     "supervisor": {

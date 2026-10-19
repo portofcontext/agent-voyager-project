@@ -1,55 +1,99 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["arcade-mcp-server>=1.17,<2"]
-# ///
-"""Tiny deterministic MCP server shared across the AVP test suites.
+"""Dependency-free stdio MCP fixture: initialize, ping, list tools, and call tools.
 
-A stable, self-contained stdio MCP server any agent or SDK can spawn to exercise
-the real MCP connection and dispatch path, replacing the machine-specific
-`gtmagent` one-off. Lives at the repo root (`testing/mcp/`) so every package can
-reach it. Built on `arcade-mcp-server` (`MCPApp` + `@app.tool`), the same
-framework our teammates' example servers use and have verified works with Goose.
-The dependency is declared inline (PEP 723), so `uv run` bootstraps it into an
-ephemeral environment; the server runs anywhere `uv` does with no project
-install. See `README.md` alongside this file.
-
-    uv run testing/mcp/avp_test_mcp.py          # stdio (default; how tests spawn it)
-    uv run testing/mcp/avp_test_mcp.py http     # HTTP streaming
-
-Tools are intentionally trivial and pure so assertions are deterministic.
+This deliberately implements only the subset used by AVP's integration tests.
+Run directly with Python; no package installation, network, or persistent state.
+The real SDK clients in the adapter tests validate interoperability.
 """
 
+import json
 import sys
-from os import getenv
-from typing import Annotated, Literal, cast
 
-from arcade_mcp_server import MCPApp
+VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+TOOLS = [
+    {
+        "name": "Avptest_Echo",
+        "description": "Echo the given text unchanged.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "Avptest_Add",
+        "description": "Return the sum of two integers.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}},
+            "required": ["a", "b"],
+            "additionalProperties": False,
+        },
+    },
+]
 
-app = MCPApp(name="avptest", version="0.1.0", log_level="WARNING")
+
+def error(code, message):
+    return {"error": {"code": code, "message": message}}
 
 
-@app.tool
-def echo(text: Annotated[str, "The text to echo back verbatim"]) -> str:
-    """Return the given text unchanged. Deterministic; used to assert an MCP round-trip."""
-    return text
+def respond(method, params):
+    if method == "initialize":
+        requested = params.get("protocolVersion")
+        return {
+            "result": {
+                "protocolVersion": requested if requested in VERSIONS else VERSIONS[0],
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "avptest", "version": "0.1.0"},
+            }
+        }
+    if method == "ping":
+        return {"result": {}}
+    if method == "tools/list":
+        return {"result": {"tools": TOOLS}}
+    if method == "tools/call":
+        name, args = params.get("name"), params.get("arguments", {})
+        if not isinstance(args, dict):
+            return error(-32602, "arguments must be an object")
+        if name == "Avptest_Echo" and set(args) == {"text"} and isinstance(args["text"], str):
+            text = args["text"]
+        elif (
+            name == "Avptest_Add"
+            and set(args) == {"a", "b"}
+            and all(type(v) is int for v in args.values())
+        ):
+            text = str(args["a"] + args["b"])
+        else:
+            return error(-32602, "Unknown tool or invalid arguments")
+        return {"result": {"content": [{"type": "text", "text": text}], "isError": False}}
+    return error(-32601, "Method not found")
 
 
-@app.tool
-def add(
-    a: Annotated[int, "First addend"],
-    b: Annotated[int, "Second addend"],
-) -> int:
-    """Return the sum a + b. A second tool so the served descriptor carries more than one."""
-    return a + b
-
-
-def main() -> None:
-    transport = cast(
-        Literal["stdio", "http"],
-        sys.argv[1] if len(sys.argv) > 1 else getenv("AVP_TEST_MCP_TRANSPORT", "stdio"),
-    )
-    app.run(transport=transport)
+def main():
+    for line in sys.stdin:
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError:
+            response = {"id": None, **error(-32700, "Parse error")}
+        else:
+            if (
+                not isinstance(request, dict)
+                or request.get("jsonrpc") != "2.0"
+                or not isinstance(request.get("method"), str)
+            ):
+                response = {"id": None, **error(-32600, "Invalid request")}
+            elif "id" not in request:
+                continue  # Initialized/cancelled notifications have no response.
+            else:
+                params = request.get("params", {})
+                result = (
+                    respond(request["method"], params)
+                    if isinstance(params, dict)
+                    else error(-32602, "params must be an object")
+                )
+                response = {"id": request["id"], **result}
+        print(json.dumps({"jsonrpc": "2.0", **response}), flush=True)
 
 
 if __name__ == "__main__":

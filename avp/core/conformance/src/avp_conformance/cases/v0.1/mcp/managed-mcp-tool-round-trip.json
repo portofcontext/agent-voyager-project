@@ -1,0 +1,99 @@
+{
+  "id": "managed-mcp-tool-round-trip",
+  "title": "A Commission-provided MCP tool is invoked and its successful result reaches the model",
+  "description": "Exercises managed tools even for framework agents with no built-ins. Requires the avptest echo input, an MCP dispatch, a successful result containing the echoed marker, and a subsequent assistant reply containing it. Universal structure checks verify tool-call and span pairing. Tool name prefixes may differ between SDKs.",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#5-tools",
+    "spec/v0.1/commission.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "managed-mcp-tool-round-trip",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "prompt": "Call the avptest MCP echo tool (Avptest_Echo) exactly once with text AVP-MCP-ROUNDTRIP. After receiving its result, reply with exactly the echoed text. You must call the tool, not simulate it. Do not use any other tools.",
+    "mcp_servers": [
+      {
+        "type": "stdio",
+        "id": "avptest",
+        "command": [
+          "${AVP_TEST_PYTHON}",
+          "${AVP_TEST_MCP}"
+        ]
+      }
+    ],
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "avp.mcp_servers": {
+              "$contains": {
+                "id": "avptest",
+                "status": "connected"
+              }
+            }
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.tool_invoked",
+          "data": {
+            "avp.tool.dispatch_target": "mcp_server",
+            "avp.tool.input": {
+              "text": "AVP-MCP-ROUNDTRIP"
+            }
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.tool_returned",
+          "data": {
+            "avp.tool_result": {
+              "is_error": false,
+              "content": {
+                "$text_contains": "AVP-MCP-ROUNDTRIP"
+              }
+            }
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-MCP-ROUNDTRIP"
+            }
+          }
+        }
+      },
+      {
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "forbidden_events": [
+      {
+        "match": {
+          "type": "avp.error_occurred"
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

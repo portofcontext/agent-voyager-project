@@ -88,9 +88,3 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   a standalone crates.io/PyPI publish of `avp` would need the file vendored into
   each package (a `build.rs` copy for Rust, a build hook for Python). Revisit if
   we ever publish the crates independently.
-- **Runs use an isolated workspace, not the caller's CWD.** The runner points
-  Goose's working dir at `<path_root>/workspace`, so run-scoped state
-  (`.agents/skills`, `.agents/recipes`) never pollutes the caller's directory and
-  the Commission fully defines the environment. If a future use case needs the
-  agent to operate on the caller's project tree, make the working dir
-  Commission/env-configurable.

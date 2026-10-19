@@ -47,7 +47,7 @@ certifies as conforming. Every agent ships an `avp-conformance.json` manifest
 and honors the run contract `<command> run --commission <path> --out <ndjson>`.
 Agents in this repo: `avp-claude-agent-sdk` (observer over the Claude Agent
 SDK, which already owns a loop) and `avp-goose` (in-process Rust observer of
-Block's Goose). New agent: `agents/<name>/<lang>/`.
+Block's Goose). New agent: `make new-agent NAME=avp-<sdk>` (or `new-agent-rust`) scaffolds `agents/<name>/<lang>/` from `agents/_template/`.
 
 **Supervisor.** Commissions agents and consumes their trajectories. It builds
 Commissions, runs agents, and reads the events back; it does not own the agent

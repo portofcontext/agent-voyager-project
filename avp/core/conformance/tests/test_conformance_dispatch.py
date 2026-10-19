@@ -60,6 +60,8 @@ with open(a.out, "w") as f:
     elif a.cmd == "describe":
         f.write(json.dumps(DESCRIPTOR) + "\\n")
     else:
+        # Echo the Commission onto run_requested, as real agents do.
+        TRAJECTORY[0]["data"]["avp.commission"] = json.load(open(a.commission))
         for ev in TRAJECTORY:
             f.write(json.dumps(ev) + "\\n")
 """
@@ -135,3 +137,123 @@ def test_ping_passes_for_stub_agent(tmp_path):
     result = runner.invoke(app, ["ping", "--agent", str(manifest)])
     assert result.exit_code == 0, result.output
     assert "PASS  ping" in result.output
+
+
+SUBAGENT_CASE = {
+    "id": "stub-delegates",
+    "title": "needs subagents the stub doesn't declare",
+    "requires": ["subagents"],
+    "commission": {"schema_version": "0.1", "run_id": "stub-delegates", "model": "stub/mock"},
+    "expectations": {"events": [{"match": {"type": "avp.subagent_invoked"}}]},
+}
+
+SNAPSHOT_CASE = {
+    "id": "stub-snapshot",
+    "title": "run_requested echoes the Commission model",
+    "commission": {"schema_version": "0.1", "run_id": "stub-snapshot", "model": "stub/mock"},
+    "expectations": {
+        "events": [
+            {
+                "match": {
+                    "type": "avp.run_requested",
+                    "data": {"avp.commission": {"model": "stub/mock"}},
+                }
+            }
+        ]
+    },
+}
+
+
+def test_case_requiring_an_undeclared_surface_is_skipped(tmp_path):
+    manifest = _setup(tmp_path)
+    case = _write_case(tmp_path, SUBAGENT_CASE)
+    result = runner.invoke(app, ["check", "--agent", str(manifest), "--case", str(case)])
+    assert result.exit_code == 0, result.output
+    assert "SKIP  stub-delegates  (agent declares no subagents)" in result.output
+    assert "0 pass, 0 fail, 1 skip" in result.output
+
+
+def test_model_override_rewrites_commission_and_expectations(tmp_path):
+    manifest = _setup(tmp_path)
+    case = _write_case(tmp_path, SNAPSHOT_CASE)
+    argv = ["check", "--agent", str(manifest), "--case", str(case), "--model", "openai/gpt-x"]
+    dump = tmp_path / "dump"
+    result = runner.invoke(app, [*argv, "--dump-dir", str(dump)])
+    assert result.exit_code == 0, result.output
+    assert "PASS  stub-snapshot" in result.output
+    first = json.loads((dump / "stub-snapshot.jsonl").read_text().splitlines()[0])
+    assert first["data"]["avp.commission"]["model"] == "openai/gpt-x"
+
+
+def test_every_command_gets_fresh_launcher_owned_state(tmp_path, monkeypatch):
+    from avp.launch import directory_env
+
+    manifest = _setup(tmp_path)
+    dump = tmp_path / "environments.jsonl"
+    stub = tmp_path / "stub_agent.py"
+    stub.write_text(
+        "import os\n"
+        + STUB_AGENT
+        + f'\nwith open({str(dump)!r}, "a") as log:\n'
+        + '    log.write(json.dumps(dict(os.environ)) + "\\n")\n'
+    )
+    for name in directory_env(tmp_path / "ambient"):
+        monkeypatch.setenv(name, str(tmp_path / "ambient" / name))
+    case = _write_case(tmp_path, PASSING_CASE)
+    for cmd in (["ping"], ["describe"], ["check", "--case", str(case)]):
+        result = runner.invoke(app, [*cmd, "--agent", str(manifest)])
+        assert result.exit_code == 0, result.output
+    environments = [json.loads(line) for line in dump.read_text().splitlines()]
+    roots = [Path(env["AVP_ENV_ROOT"]) for env in environments]
+    assert len(set(roots)) == 4  # ping, describe, check's describe, check's run
+    for env, root in zip(environments, roots, strict=True):
+        for name in directory_env(root):
+            assert Path(env[name]).is_relative_to(root)
+        assert not root.exists()
+
+
+def test_model_override_updates_native_provider_and_snapshot(tmp_path):
+    from avp_conformance._utils import load_case
+
+    path = (
+        Path(__file__).parents[1]
+        / "src/avp_conformance/cases/v0.1/security/commission-snapshot-carries-secret-handles.json"
+    )
+    case = load_case(path, str(path))
+    manifest = _setup(tmp_path)
+    dump = tmp_path / "dump"
+    result = runner.invoke(
+        app,
+        [
+            "check",
+            "--agent",
+            str(manifest),
+            "--case",
+            str(path),
+            "--model",
+            "openai/gpt-x",
+            "--dump-dir",
+            str(dump),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    first = json.loads((dump / f"{case.id}.jsonl").read_text().splitlines()[0])
+    assert first["data"]["avp.commission"]["provider"] == {
+        "id": "openai",
+        "credential": {"vault": "anthropic"},
+    }
+
+
+def test_model_override_preserves_explicit_gateway_routing():
+    from avp_conformance._app import with_model
+    from avp_conformance.case import TestCase
+
+    for provider in (
+        {"id": "openrouter"},
+        {"id": "anthropic", "base_url": "https://gateway.example/v1"},
+    ):
+        data = json.loads(json.dumps(PASSING_CASE))
+        data["commission"].update(model="anthropic/claude-haiku-4-5", provider=provider)
+        rewritten = with_model(TestCase.model_validate(data), "openai/gpt-x")
+        assert rewritten.commission.model == "openai/gpt-x"
+        assert rewritten.commission.provider.model_dump(exclude_none=True) == provider

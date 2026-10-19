@@ -38,6 +38,7 @@ from pydantic import BaseModel
 
 from avp.commission import Commission, Provider
 from avp.descriptor import AgentDescriptor
+from avp.launch import directory_env, local_environment
 from avp.trajectory import parse_event
 from avp_cli import broker, local_models, osb, paths, runtime, vault
 from avp_cli.agent_manifest import AgentManifest
@@ -161,9 +162,10 @@ def run_agent(
             # broker host (the broker reaches providers/MCP from the host);
             # otherwise the provider + MCP hosts the Commission names. A run can
             # never be commissioned to call a URL the sandbox blocks.
+            env = _sandbox_env(agent, commission, brk)
             box = runtime.get_runtime(ctx.runtime, ctx.connection.config()).create(
                 image=agent.image,
-                env=_sandbox_env(agent, commission, brk),
+                env=env,
                 mounts=mounts,
                 egress=[*ctx.net, *_egress_extra(commission, brk)],
                 resources={**_DEFAULT_RESOURCES, **ctx.resources},
@@ -176,7 +178,7 @@ def run_agent(
             # refuse the run rather than ever placing the secret inside it.
             err = _preflight_broker(box, brk) if brk is not None else None
             if err is None:
-                err = _run_setup(box, ctx.setup)
+                err = _run_setup(box, ctx.setup, env)
             if err is None:
                 argv = [
                     *agent.command,
@@ -293,8 +295,8 @@ def _sandbox_env(
                 env.update(dict.fromkeys(endpoints, base))
 
     # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
-    env.update(GOOSE_PROVIDER=provider.id, AVP_WORKSPACE=_WORKSPACE_MNT, AVP_ENV_ROOT="/avp")
-    return env
+    env["GOOSE_PROVIDER"] = provider.id
+    return {**directory_env(Path("/avp"), Path(_WORKSPACE_MNT)), **env}
 
 
 def _commission_for_sandbox(commission: Commission, brk: broker.Broker | None) -> str:
@@ -384,9 +386,11 @@ def _preflight_broker(box: runtime.Box, brk: broker.Broker) -> str | None:
     return None
 
 
-def _run_setup(box: runtime.Box, setup: list[str]) -> str | None:
+def _run_setup(box: runtime.Box, setup: list[str], env: dict[str, str]) -> str | None:
     """Run the env's setup commands in the workspace; first failure reports."""
-    for command in setup:
+    directories = directory_env(Path("/avp"), Path(_WORKSPACE_MNT))
+    prepare = shlex.join(["mkdir", "-p", *dict.fromkeys(env[name] for name in directories)])
+    for command in [prepare, *setup]:
         try:
             result = box.run(command, cwd=_WORKSPACE_MNT, timeout_s=600)
         except Exception as exc:
@@ -484,16 +488,8 @@ def describe_agent(
     ships. Everything else in the environment (PATH, provider keys) passes
     through; `manifest.env` wins over the scrub.
     """
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmp:
-        home = Path(tmp) / "home"
-        home.mkdir()
-        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
-        for var in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
-            env.pop(var, None)
-        env.update(manifest.env)
-        out = Path(tmp) / "descriptor.json"
+    with local_environment(manifest.env) as env:
+        out = Path(env["AVP_ENV_ROOT"]) / "descriptor.json"
         cmd = [*manifest.command, "describe", "--out", str(out)]
         err = _run_blocking(cmd, manifest_cwd, env, timeout_s)
         if err is not None:
