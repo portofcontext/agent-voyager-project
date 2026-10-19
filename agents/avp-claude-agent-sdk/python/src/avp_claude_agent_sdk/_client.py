@@ -31,18 +31,22 @@ booting a session and reading its init message is the only way to learn
 the actual tool catalog (CLI built-ins, skill discovery, MCP states).
 
 Cost: the CLI emits `init` only after a user message, which it then
-sends to the model. The probe session points at a closed local port, so
-that call fails on the host and no model spend happens; subprocess startup
-is the only overhead (see `_probe_describe`).
+sends to the model. The probe session points at a local stand-in endpoint
+that records the tool definitions in that request and refuses it, so no
+model spend happens; subprocess startup is the only overhead (see
+`_probe_describe`).
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import dataclasses
-import socket
+import json
+import threading
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from claude_agent_sdk import ClaudeSDKClient
@@ -66,6 +70,8 @@ from avp_claude_agent_sdk._emit import (
 from avp_claude_agent_sdk._runstate import current_run, new_run_state, reset_run, set_run
 from avp_claude_agent_sdk._translator import (
     _AGENT_NAME,
+    CATALOG_KEY,
+    listed_descriptions,
     mcp_servers_from_status,
     skills_from_init,
     subagents_from_init,
@@ -152,6 +158,7 @@ class AVPClaudeSDKClient(ClaudeSDKClient):
                 if isinstance(self.options.skills, list)
                 else None,
             )
+            state.catalog = (probe_init or {}).get(CATALOG_KEY) or {}
             self._avp_token = set_run(state)
             original_prompt = prompt if isinstance(prompt, str) else None
 
@@ -282,12 +289,90 @@ _NO_MODEL_ROUTE = {
 }
 
 
-def _closed_endpoint() -> dict[str, str]:
-    """An Anthropic base URL on a local port nothing listens on."""
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    return {"ANTHROPIC_BASE_URL": f"http://127.0.0.1:{port}"}
+class _CatalogCapture:
+    """A local stand-in for the Anthropic API that records the tools the CLI
+    sends with its first model request, then refuses the request (400), so
+    the probe learns each built-in's description and input schema without
+    reaching a model. Those definitions exist only in the request; the CLI's
+    `init` message names its tools and nothing more."""
+
+    def __init__(self) -> None:
+        self.tools: dict[str, dict[str, Any]] = {}
+        self.request: dict[str, Any] = {}
+        self.seen = threading.Event()
+        capture = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:
+                pass
+
+            def do_POST(self) -> None:
+                try:
+                    body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
+                except (ValueError, TypeError):
+                    body = {}
+                tools = body.get("tools") if isinstance(body, dict) else None
+                # Side calls (titles, quota checks) carry `tools: []`; wait for
+                # the agent's turn, which carries the full set.
+                if isinstance(tools, list) and tools and not capture.seen.is_set():
+                    for tool in tools:
+                        if isinstance(tool, dict) and tool.get("name"):
+                            capture.tools[tool["name"]] = {
+                                k: tool[k] for k in ("description", "input_schema") if tool.get(k)
+                            }
+                    capture.request = body
+                    capture.seen.set()
+                data = json.dumps(
+                    {
+                        "type": "error",
+                        "error": {"type": "invalid_request_error", "message": "avp probe"},
+                    }
+                ).encode()
+                self.send_response(400)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    @property
+    def text(self) -> str:
+        """Every string in the captured request (system, messages, tool
+        descriptions), where the CLI lists subagents and skills."""
+        parts: list[str] = []
+
+        def walk(value: Any) -> None:
+            if isinstance(value, str):
+                parts.append(value)
+            elif isinstance(value, dict):
+                for v in value.values():
+                    walk(v)
+            elif isinstance(value, list):
+                for v in value:
+                    walk(v)
+
+        walk({k: v for k, v in self.request.items() if k != "tools"})
+        walk([t.get("description") for t in self.request.get("tools") or [] if isinstance(t, dict)])
+        return "\n".join(parts)
+
+    @property
+    def env(self) -> dict[str, str]:
+        # A placeholder key: the CLI sends nothing without credentials, and the
+        # host's real key has no business reaching the stand-in.
+        return {
+            "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{self.server.server_address[1]}",
+            "ANTHROPIC_API_KEY": "avp-probe",
+        }
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+# How long the probe waits, after `init`, for the CLI's first model request.
+_CATALOG_WAIT_S = 10.0
 
 
 async def _probe_describe(
@@ -298,15 +383,17 @@ async def _probe_describe(
 
     The CLI reports its surface (`init`) only once it has a user message,
     and then calls the model. The probe session has no route to one: it
-    points at a closed local port with the cloud backends switched off, so
-    the call fails on this host and nothing is spent. On any exception
-    during probe, returns `(None, empty status)` so the caller can still
-    emit a spec-conformant prelude (descriptor will carry identity +
-    default_model only).
+    points at a local `_CatalogCapture` with the cloud backends switched
+    off, which records the tool definitions in that request and refuses it,
+    so nothing is spent. The definitions ride on `init_data` under
+    `CATALOG_KEY`. On any exception during probe, returns
+    `(None, empty status)` so the caller can still emit a spec-conformant
+    prelude (descriptor will carry identity + default_model only).
     """
     base = options if options is not None else ClaudeAgentOptions()
+    capture = _CatalogCapture()
     probe = ClaudeSDKClient(
-        options=dataclasses.replace(base, env={**base.env, **_NO_MODEL_ROUTE, **_closed_endpoint()})
+        options=dataclasses.replace(base, env={**base.env, **_NO_MODEL_ROUTE, **capture.env})
     )
     try:
         await probe.connect("probing claude capabilities")
@@ -318,10 +405,21 @@ async def _probe_describe(
                 init_data = getattr(msg, "data", None)
                 break
 
+        if init_data is not None:
+            await asyncio.to_thread(capture.seen.wait, _CATALOG_WAIT_S)
+            if capture.tools:
+                text = capture.text
+                catalog = {
+                    "tools": capture.tools,
+                    "subagents": listed_descriptions(text, init_data.get("agents") or []),
+                    "skills": listed_descriptions(text, init_data.get("skills") or []),
+                }
+                init_data = {**init_data, CATALOG_KEY: catalog}
         return init_data, status
     except Exception:
         return None, McpStatusResponse(mcpServers=[])
     finally:
+        capture.close()
         # Interrupt the doomed model call first: the CLI otherwise retries it
         # through the SDK's shutdown grace period.
         with contextlib.suppress(Exception):

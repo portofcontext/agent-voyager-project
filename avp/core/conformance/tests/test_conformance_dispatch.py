@@ -383,3 +383,29 @@ def test_a_timed_out_agent_is_killed_with_everything_it_launched(tmp_path):
     except ProcessLookupError:
         return
     raise AssertionError(f"the launched agent (pid {pid}) outlived the case")
+
+
+def test_describe_requires_tool_details():
+    """Every declared tool carries a description; a schema, when present, is
+    an object schema. Freeform tools may omit it."""
+    from avp_conformance._app import tool_detail_gaps
+
+    from avp.descriptor import AgentDescriptor
+
+    descriptor = AgentDescriptor.model_validate(
+        {
+            "agent_name": "a",
+            "agent_version": "1",
+            "spec_version": "0.1",
+            "tools": [
+                {"name": "ok", "description": "Does it.", "inputSchema": {"type": "object"}},
+                {"name": "freeform", "description": "Takes text."},
+                {"name": "bare"},
+                {"name": "odd", "description": "x", "inputSchema": {"type": "string"}},
+            ],
+        }
+    )
+    assert tool_detail_gaps(descriptor) == [
+        "bare: no description",
+        "odd: inputSchema is not an object schema",
+    ]

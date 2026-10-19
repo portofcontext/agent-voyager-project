@@ -14,6 +14,7 @@ from openai_codex.models import Notification, UnknownNotification
 from avp.agent_cli import main
 from avp.trajectory import parse_event
 from avp_codex import agent
+from avp_codex import commission as cm
 from avp_codex.commission import CODEX_VERSION
 
 
@@ -484,3 +485,24 @@ def test_inherits_caller_context_without_deleting_it(script, tmp_path, monkeypat
     assert dict(script.calls)["thread/start"]["cwd"] == str(workspace)
     assert os.environ["CODEX_HOME"] == str(home)
     assert marker.read_text() == "keep"
+
+
+def test_descriptor_carries_what_codex_sends_the_model():
+    """Decl fidelity (spec SHOULD): each built-in carries the description and
+    input schema the pinned CLI sends; freeform apply_patch has no schema."""
+    tools = {t.name: t for t in agent.describe().tools}
+    assert set(tools) == set(cm.BUILTIN_TOOLS)
+    assert all(t.description for t in tools.values())
+    assert tools["exec_command"].inputSchema["type"] == "object"
+    assert tools["apply_patch"].inputSchema is None
+
+
+def test_started_tools_follow_the_commissioned_model(script, tmp_path):
+    """A run declares the definitions its model gets: view_image takes a
+    `detail` argument on gpt-5.5 and not on gpt-5-mini."""
+    script.events = [raw(text_item()), completed(), stopped()]
+    _, events = run_cli(tmp_path)
+    started = next(e["data"] for e in events if e["type"] == "avp.agent_started")
+    view = next(t for t in started["avp.tools"] if t["name"] == "view_image")
+    assert view["description"]
+    assert set(view["inputSchema"]["properties"]) == {"path"}

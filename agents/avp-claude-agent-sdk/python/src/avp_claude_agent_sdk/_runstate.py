@@ -48,6 +48,9 @@ class RunState:
     # partial-message StreamEvent) completes it. None once a tool result has
     # closed the turn.
     turn_usage: dict[str, Any] | None = None
+    # Tool definitions the capability probe captured (name -> description and
+    # input schema); the run's own `init` names its tools only.
+    catalog: dict[str, Any] = dataclasses.field(default_factory=dict)
     # Whether a main-thread response is still streaming (`message_start` until
     # `message_stop`). The CLI runs a tool as soon as its call streams in, so a
     # response's later calls can arrive after an earlier call's result.

@@ -19,6 +19,19 @@ AGENT_NAME = "avp-agent-template"
 # harness doesn't ship: the supervisor supplies extra tools through the
 # Commission's `mcp_servers`.
 BUILTIN_TOOLS = ["echo"]
+# What the model is told about each built-in: the description and input schema
+# the harness sends with its model requests. Declare them from the harness
+# itself (its tool registry, or the request it sends), not paraphrased.
+TOOL_DEFINITIONS = {
+    "echo": {
+        "description": "Echo the given text back.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "Text to echo."}},
+            "required": ["text"],
+        },
+    },
+}
 
 
 @dataclasses.dataclass
