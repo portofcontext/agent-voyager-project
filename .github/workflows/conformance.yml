@@ -4,11 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # All AVP-conforming implementations must pass the language-agnostic conformance
 # suite. This workflow gates that contract on every push and PR.
+
+concurrency:
+  group: conformance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -18,21 +21,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
-          cache: pip
-      - name: Install ruff
-        run: python -m pip install "ruff>=0.6"
+          enable-cache: true
+      - name: Sync the workspace
+        run: uv sync --locked
       - name: ruff check
-        run: ruff check .
+        run: uv run --no-sync ruff check .
       - name: ruff format --check
-        run: ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
   spec-and-conformance:
     name: Spec validation + Python conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: lint
 
     steps:
@@ -49,25 +52,45 @@ jobs:
           enable-cache: true
 
       - name: Sync the workspace
-        run: uv sync
+        run: uv sync --locked
 
       - name: Validate conformance case files against the test-case schema
         run: uv run avp-conformance validate
 
-      - name: Run avp wire-types package tests
-        run: cd avp/bindings/python && uv run python -m pytest -v -m "not real_llm"
+      # Use the same package list as local checks, including new adapters and templates.
+      - name: Run every Python package's deterministic tests
+        env:
+          AVP_TEST_CODEX: "1"
+        run: make test
 
-      - name: Run avp-conformance harness tests (matcher + dispatch seam)
-        run: cd avp/core/conformance && uv run python -m pytest -v -m "not real_llm"
-
-      - name: Run avp-claude-agent-sdk translator tests
-        run: cd agents/avp-claude-agent-sdk/python && uv run python -m pytest -v -m "not real_llm"
-
-      - name: Run avp-cli tests
-        run: cd avp-cli && uv run python -m pytest -v -m "not real_llm"
+  bindings:
+    name: Rust and TypeScript bindings
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            avp/bindings/rust
+            agents/_template/rust
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Rust binding tests
+        run: cargo test --locked --manifest-path avp/bindings/rust/Cargo.toml
+      - name: Rust template tests when present
+        run: |
+          if [ -f agents/_template/rust/Cargo.toml ]; then
+            cargo test --locked --manifest-path agents/_template/rust/Cargo.toml
+          fi
+      - name: TypeScript binding tests
+        working-directory: avp/bindings/typescript
+        run: npm ci && npm test
 
   real-llm-smoke:
-    name: Real-LLM smoke tests (manual only)
+    name: Claude live conformance (manual only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Manual-trigger only: never auto-fires on push/PR. Burns API credits and exposes
@@ -95,14 +118,19 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Sync the workspace
-        run: uv sync
+        run: uv sync --locked
 
-      - name: Run real-LLM smoke tests
+      - name: Run Claude live conformance
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ANTHROPIC_API_KEY secret not set; configure it in repo Settings → Secrets and variables → Actions."
+            echo "ANTHROPIC_API_KEY repository secret is required for live conformance."
             exit 1
           fi
-          cd agents/avp-claude-agent-sdk/python && uv run python -m pytest -v -m real_llm
+          uv run avp-conformance check --agent agents/avp-claude-agent-sdk/python/avp-conformance.json --suite v0.1 --dump-dir live-results/claude
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-live-conformance
+          path: live-results/
