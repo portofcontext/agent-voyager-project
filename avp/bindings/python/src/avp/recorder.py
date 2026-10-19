@@ -30,7 +30,7 @@ The Recorder owns:
   token counts).
 - Idempotent ``stop``, and ``error`` parented under the agent span once started.
 - Invalid adapter reports raise ``RecorderError``: unknown/duplicate IDs,
-  repeated prelude/start, and reports after stop. A rejected
+  mismatched usage, repeated prelude/start, and reports after stop. A rejected
   report leaves valid state intact. ``stop`` and an empty ``close_turn`` remain
   safe cleanup calls.
 
@@ -499,6 +499,34 @@ class Recorder:
 
         if turn_key is None:
             await self.close_turn()
+
+    async def usage(
+        self,
+        usage: Usage,
+        *,
+        turn_key: str | None = None,
+        cost_usd: float | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        """Report usage for the open turn after its content, for harnesses that
+        deliver token counts once the inference (or its tool round) is over.
+        Keep the turn open with a ``turn_key`` until then. Applies to the open
+        turn when ``turn_key`` is omitted or matches it; otherwise raises
+        ``RecorderError``. A closed turn cannot accept usage.
+        Last-write-wins, like the same fields on `assistant`."""
+        self._require_active("usage", started=True)
+        turn = self._turn
+        if turn is None:
+            raise RecorderError("Recorder.usage: no open turn")
+        if turn_key is not None and turn_key != turn.key:
+            raise RecorderError(
+                f"Recorder.usage: turn_key {turn_key} does not match open turn {turn.key}"
+            )
+        turn.usage = usage
+        if cost_usd is not None:
+            turn.cost_usd = cost_usd
+        if duration_ms is not None:
+            turn.duration_ms = duration_ms
 
     def _invoke(self, turn: _Turn, call_id: str, name: str, tool_input: dict[str, Any]) -> None:
         span_id = self._ids.span_id()

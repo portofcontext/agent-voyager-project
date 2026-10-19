@@ -67,19 +67,18 @@ clear items when fixed. Not blockers — deliberate, recorded debt.
   the secret never appears inline.
 
 ## Accepted (revisit at upstream; not worth churning now)
-- **Per-turn input tokens follow Goose's additive accounting.** Goose sums every
-  `ProviderUsage` it sees, and a provider can report usage more than once per
-  inference (Anthropic reports at `message_start` and `message_delta`). The tap
-  sums the same way, so a turn's totals match Goose's own metrics by
-  construction. If a provider re-reports input across stream chunks this can
-  over-count input vs. the provider's bill; consistency with Goose is the chosen
-  invariant.
+- **Per-turn usage is Goose's `MessageUsage`.** Goose attaches an inference's
+  usage to its assistant message after the turn's tool results; the runner
+  keeps the turn open under the message id until it arrives. It reflects the
+  last `ProviderUsage` Goose saw for the inference. A turn whose message never
+  gets one (Goose skips messages with no user-visible content) reports cost
+  `unknown`.
 - **`trajectory::Commission` vs `commission::AvpV01Commission` round-trip** — a
   2-line serde bridge for the schema's embedded types. Inherent to the
   embedded-commission shape; only removable by changing schema generation.
-- **Goose git dep pinned to a `main` rev** (`728d72a`). Works and is isolated
-  from the user's install; track a release tag for an external crate, moot once
-  upstreamed into the Goose tree.
+- **Goose git dep pinned to the `v1.53.0` release tag.** `goose` and `goose-mcp`
+  are not on crates.io (the `goose` name there is an unrelated crate); moot once
+  upstreamed into the Goose tree. v1.53 needs rustc >= 1.94.1.
 - **One committed `prices.json`, embedded cross-tree.** To avoid a per-language
   duplicate (the table is ~0.5MB and grows), the single canonical copy lives in
   the Python package and the Rust binding embeds it via

@@ -12,19 +12,20 @@ use std::time::Instant;
 
 use avp::commission::AvpV01CommissionMcpServersItem;
 use avp::sink::Sink;
-use avp::trajectory::{ErrorCode, StopReason, Usage};
+use avp::trajectory::{ErrorCode, StopReason};
 use avp::Commission;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use goose::agents::{Agent, AgentEvent, SessionConfig};
 use goose::config::GooseMode;
-use goose::conversation::message::Message;
-use goose::model::ModelConfig;
+use goose::conversation::message::{
+    Message, MessageContent, MessageErrorKind, SystemNotificationType,
+};
+use goose::model_config::model_config_from_user_config;
 use goose::session::session_manager::SessionType;
 use serde_json::{json, Value};
 
 use crate::commission::{self, GooseRunConfig};
 use crate::emit::{self, Emitter};
-use crate::provider_tap::{self, UsageTap};
 use crate::translate::{self, GooseContent};
 
 /// The descriptor's `agent_version`: THIS connector build's version (the
@@ -133,7 +134,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     let native_model = if provider_name != origin {
         model_name.clone()
     } else {
-        model_name.split_once('/').map(|(_, m)| m).unwrap_or(&model_name).to_string()
+        model_name
+            .split_once('/')
+            .map(|(_, m)| m)
+            .unwrap_or(&model_name)
+            .to_string()
     };
 
     // Agent + session. The working dir is `$AVP_WORKSPACE` when the supervisor
@@ -162,13 +167,11 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     write_skills(commission, &working_dir)?;
 
     // Provider, extensions, system prompt, structured output.
-    let model_config = ModelConfig::new(&native_model)?;
-    let provider =
-        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
-    // Wrap the provider to capture per-inference usage (incl. cache split) off
-    // its stream — the signal that never reaches the AgentEvent level.
-    let (provider, usage_tap) = provider_tap::tap(provider);
-    agent.update_provider(provider, &session_id).await?;
+    let model_config = model_config_from_user_config(&provider_name, &native_model)?;
+    let provider = goose::providers::create(&provider_name, cfg.extensions.clone()).await?;
+    agent
+        .update_provider(provider, model_config, &session_id)
+        .await?;
     // `add_extensions_bulk` reports per-extension outcomes in its return value
     // rather than failing the call, so a built-in that won't load (missing
     // factory, init error) is otherwise silent. Surface failures on stderr.
@@ -190,7 +193,7 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             .await;
     }
     if let Some(response) = cfg.response {
-        agent.add_final_output_tool(response).await;
+        agent.add_final_output_tool(response).await?;
     }
 
     // The set of MCP-extension ids (for tool dispatch-target classification and
@@ -208,8 +211,14 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // Static descriptor from the agent's live tool registry (no probe needed).
     // Skills are discovered from disk (built-ins + the working dir's `.agents/skills`,
     // where `write_skills` materialized the Commission's inline skills).
-    let descriptor =
-        build_descriptor(&agent, &session_id, Some(&model_name), &mcp_servers, &working_dir).await?;
+    let descriptor = build_descriptor(
+        &agent,
+        &session_id,
+        Some(&model_name),
+        &mcp_servers,
+        &working_dir,
+    )
+    .await?;
 
     let mut emitter = Emitter::new(
         sink,
@@ -223,8 +232,10 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // Fail fast (spec §4.0): the Commission pins this agent at a different
     // build. Same-name surfaces can change behavior across builds; refuse
     // loudly instead of running an unvalidated one.
-    if let Some(pin) =
-        commission.agent_versions.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    if let Some(pin) = commission
+        .agent_versions
+        .as_ref()
+        .and_then(|m| m.get(commission::AGENT_NAME))
     {
         if pin != AGENT_VERSION {
             emitter.error(
@@ -246,14 +257,27 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
     // emit `error_occurred(commission_collision)` + `agent_stopped(error)`
     // before the loop, so no model turn runs.
     let missing_key: Vec<&str> = [
-        ("enabled_builtin_tools", commission.enabled_builtin_tools.as_ref()),
-        ("enabled_builtin_subagents", commission.enabled_builtin_subagents.as_ref()),
-        ("enabled_builtin_skills", commission.enabled_builtin_skills.as_ref()),
-        ("enabled_builtin_mcp_servers", commission.enabled_builtin_mcp_servers.as_ref()),
+        (
+            "enabled_builtin_tools",
+            commission.enabled_builtin_tools.as_ref(),
+        ),
+        (
+            "enabled_builtin_subagents",
+            commission.enabled_builtin_subagents.as_ref(),
+        ),
+        (
+            "enabled_builtin_skills",
+            commission.enabled_builtin_skills.as_ref(),
+        ),
+        (
+            "enabled_builtin_mcp_servers",
+            commission.enabled_builtin_mcp_servers.as_ref(),
+        ),
     ]
     .into_iter()
     .filter_map(|(field, m)| {
-        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME)).then_some(field)
+        m.is_some_and(|m| !m.contains_key(commission::AGENT_NAME))
+            .then_some(field)
     })
     .collect();
     if !missing_key.is_empty() {
@@ -268,13 +292,22 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         emitter.stop(StopReason::Error, None)?;
         return Ok(());
     }
-    if let Some(names) =
-        commission.enabled_builtin_tools.as_ref().and_then(|m| m.get(commission::AGENT_NAME))
+    if let Some(names) = commission
+        .enabled_builtin_tools
+        .as_ref()
+        .and_then(|m| m.get(commission::AGENT_NAME))
     {
-        let known: HashSet<&str> =
-            descriptor.tools.iter().flatten().map(|t| t.name.as_str()).collect();
-        let unknown: Vec<&str> =
-            names.iter().map(String::as_str).filter(|n| !known.contains(n)).collect();
+        let known: HashSet<&str> = descriptor
+            .tools
+            .iter()
+            .flatten()
+            .map(|t| t.name.as_str())
+            .collect();
+        let unknown: Vec<&str> = names
+            .iter()
+            .map(String::as_str)
+            .filter(|n| !known.contains(n))
+            .collect();
         if !unknown.is_empty() {
             emitter.error(
                 ErrorCode::CommissionCollision,
@@ -298,20 +331,40 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
         max_turns: None,
         retry_config: None,
     };
-    let mut stream = agent.reply(user_message, session_config, None).await?;
+    // Goose's default loop; its experimental state-machine loop stays off.
+    let stream = agent
+        .reply(user_message, session_config, false, None)
+        .await?;
 
+    record_reply(&mut emitter, &model_name, stream).await
+}
+
+/// Consume the native Goose stream, including terminal failures that Goose
+/// delivers as successful Message events rather than stream errors.
+async fn record_reply<S: Sink>(
+    emitter: &mut Emitter<S>,
+    model_name: &str,
+    mut stream: impl Stream<Item = anyhow::Result<AgentEvent>> + Unpin,
+) -> anyhow::Result<()> {
     // Coalesce streamed deltas into turns. Goose yields an assistant inference
     // as incremental message deltas (partial `Text` chunks), and a new
     // inference only begins after tool execution, which arrives as a
     // non-assistant (tool-result) message. So consecutive assistant messages
     // are one inference: accumulate their content, then close the turn when a
-    // non-assistant message arrives or the stream ends. By the close trigger
-    // the inference is complete, so the provider tap has captured all of its
-    // usage; we drain it then. This also preserves ordering (a turn's
-    // `tool_invoked` lands before its `tool_returned`).
-    let mut consumed: usize = 0;
+    // non-assistant message arrives or the stream ends.
+    //
+    // Goose attributes an inference's usage to its assistant message with a
+    // `MessageUsage` event that lands after the turn's tool results, before the
+    // next inference. So a turn is reported under its message id and kept open:
+    // tool results buffer onto it, `MessageUsage` fills in its usage and the
+    // inference's own elapsed time, and the next inference (or the stop) closes
+    // it. Ordering holds: a turn's `tool_invoked` lands before its
+    // `tool_returned`.
     let mut ended_ok = true;
     let mut pending: Vec<GooseContent> = Vec::new();
+    // Goose message ids coalesced into `pending`, then into the open turn.
+    let mut pending_ids: Vec<String> = Vec::new();
+    let mut open_ids: Vec<String> = Vec::new();
     // Wall-clock start of the inference whose deltas we are coalescing. Set when
     // `reply()` is dispatched (turn 1) and reset after each tool-result batch
     // (the next inference begins once Goose has the tool output). Carried into
@@ -330,14 +383,36 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                         .unwrap_or_else(|| Value::Array(Vec::new())),
                 )?;
                 match value.get("role").and_then(Value::as_str) {
-                    Some("assistant") => translate::append_coalescing(&mut pending, content),
+                    Some("assistant") => {
+                        if let Some((code, diagnostic)) = provider_failure(&message) {
+                            flush_turn(
+                                emitter,
+                                model_name,
+                                &mut pending,
+                                &mut pending_ids,
+                                &mut open_ids,
+                                turn_start,
+                            )?;
+                            emitter.error(code, diagnostic)?;
+                            ended_ok = false;
+                            // Let Goose finish its bookkeeping and deliver any
+                            // final usage for content produced before failure.
+                            continue;
+                        }
+                        if let Some(id) = value.get("id").and_then(Value::as_str) {
+                            if !pending_ids.iter().any(|p| p == id) {
+                                pending_ids.push(id.to_string());
+                            }
+                        }
+                        translate::append_coalescing(&mut pending, content)
+                    }
                     _ => {
                         flush_turn(
-                            &mut emitter,
-                            &usage_tap,
-                            &model_name,
-                            &mut consumed,
+                            emitter,
+                            model_name,
                             &mut pending,
+                            &mut pending_ids,
+                            &mut open_ids,
                             turn_start,
                         )?;
                         emitter.on_tool_results(&content)?;
@@ -347,14 +422,34 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
                     }
                 }
             }
-            Ok(AgentEvent::McpNotification(_)) | Ok(AgentEvent::HistoryReplaced(_)) => {}
+            Ok(AgentEvent::MessageUsage { message_id, usage }) => {
+                // An inference with no tool round reaches `MessageUsage` before
+                // any close trigger; report its turn first so usage lands on it.
+                let id = message_id.unwrap_or_default();
+                if pending_ids.contains(&id) {
+                    flush_turn(
+                        emitter,
+                        model_name,
+                        &mut pending,
+                        &mut pending_ids,
+                        &mut open_ids,
+                        turn_start,
+                    )?;
+                }
+                if open_ids.contains(&id) {
+                    emitter.on_usage(translate::message_usage(&usage), usage.elapsed_ms)?;
+                }
+            }
+            Ok(AgentEvent::Usage(_))
+            | Ok(AgentEvent::McpNotification(_))
+            | Ok(AgentEvent::HistoryReplaced(_)) => {}
             Err(e) => {
                 flush_turn(
-                    &mut emitter,
-                    &usage_tap,
-                    &model_name,
-                    &mut consumed,
+                    emitter,
+                    model_name,
                     &mut pending,
+                    &mut pending_ids,
+                    &mut open_ids,
                     turn_start,
                 )?;
                 let message = e.to_string();
@@ -364,35 +459,92 @@ pub async fn run<S: Sink>(commission: &Commission, sink: S) -> anyhow::Result<()
             }
         }
     }
-    // Final turn: the stream has ended, so all usage has been tapped.
+    // Final turn: the stream has ended; `stop` closes the open turn.
     flush_turn(
-        &mut emitter,
-        &usage_tap,
-        &model_name,
-        &mut consumed,
+        emitter,
+        model_name,
         &mut pending,
+        &mut pending_ids,
+        &mut open_ids,
         turn_start,
     )?;
     emitter.stop(emit::classify_stop(ended_ok, false, false), None)?;
     Ok(())
 }
 
-/// Close the open assistant turn, if any: emit one `assistant_message` from the
-/// coalesced deltas with the usage tapped since the last turn. Clears `pending`.
+/// Goose v1.53.0's default loop renders some provider errors as UI messages.
+/// Model output is stamped with inference metadata; never classify that output
+/// by its text. Prefer typed error/credit notices, and recognize only the exact
+/// wrappers used by the pinned loop for its remaining untyped failures.
+fn provider_failure(message: &Message) -> Option<(ErrorCode, &str)> {
+    if message.metadata.inference.is_some() {
+        return None;
+    }
+    for block in &message.content {
+        match block {
+            MessageContent::Error(error) => {
+                let code = match error.kind {
+                    MessageErrorKind::Authentication => ErrorCode::AuthError,
+                    MessageErrorKind::ContextLengthExceeded => ErrorCode::ContextLimit,
+                    MessageErrorKind::CreditsExhausted => ErrorCode::RateLimit,
+                    MessageErrorKind::Other => emit::classify_error(&error.message),
+                };
+                return Some((code, &error.message));
+            }
+            MessageContent::SystemNotification(notice) => {
+                if notice.notification_type == SystemNotificationType::CreditsExhausted {
+                    return Some((ErrorCode::RateLimit, &notice.msg));
+                }
+                if notice.notification_type == SystemNotificationType::InlineMessage
+                    && notice.msg == "Unable to continue: Context limit still exceeded after compaction. Try using a shorter message, a model with a larger context window, or start a new session."
+                {
+                    return Some((ErrorCode::ContextLimit, &notice.msg));
+                }
+            }
+            MessageContent::Text(text) => {
+                let text = text.text.as_str();
+                if (text.starts_with("Ran into this error: ")
+                    && text.ends_with(
+                        ".\n\nPlease retry if you think this is a transient or recoverable error.",
+                    ))
+                    || (text.starts_with("Network error: ")
+                        && text.ends_with("\n\nPlease resend your message to try again."))
+                    || (text.starts_with("Ran into this error trying to compact: ")
+                        && text.ends_with(".\n\nPlease try again or create a new session"))
+                {
+                    return Some((emit::classify_error(text), text));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Report the coalesced assistant deltas as one turn, keyed by its last Goose
+/// message id and left open for that message's `MessageUsage`. The turn's
+/// duration is a fallback from `turn_start`, replaced by Goose's own
+/// `elapsed_ms` when the usage arrives. Clears `pending`.
 fn flush_turn<S: Sink>(
     emitter: &mut Emitter<S>,
-    usage_tap: &UsageTap,
     model: &str,
-    consumed: &mut usize,
     pending: &mut Vec<GooseContent>,
+    pending_ids: &mut Vec<String>,
+    open_ids: &mut Vec<String>,
     turn_start: Instant,
 ) -> anyhow::Result<()> {
     if pending.is_empty() {
         return Ok(());
     }
     let content = std::mem::take(pending);
-    let usage = tap_usage(usage_tap, consumed);
-    emitter.on_assistant(&content, usage, Some(model.to_string()), turn_start)?;
+    *open_ids = std::mem::take(pending_ids);
+    // A message without an id still needs a key unique to this turn.
+    let key = open_ids
+        .last()
+        .cloned()
+        .unwrap_or_else(|| format!("turn@{turn_start:?}"));
+    let duration_ms = turn_start.elapsed().as_millis() as u64;
+    emitter.on_inference(&content, Some(model.to_string()), key, Some(duration_ms))?;
     Ok(())
 }
 
@@ -474,15 +626,24 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
     let session = agent
         .config
         .session_manager
-        .create_session(working_dir.clone(), "describe".to_string(), SessionType::User, GooseMode::Auto)
+        .create_session(
+            working_dir.clone(),
+            "describe".to_string(),
+            SessionType::User,
+            GooseMode::Auto,
+        )
         .await?;
     let session_id = session.id.clone();
 
-    let model_config = ModelConfig::new(&native_model)?;
-    let provider =
-        goose::providers::create(&provider_name, model_config, cfg.extensions.clone()).await?;
-    agent.update_provider(provider, &session_id).await?;
-    for result in agent.add_extensions_bulk(cfg.extensions.clone(), &session_id).await? {
+    let model_config = model_config_from_user_config(&provider_name, &native_model)?;
+    let provider = goose::providers::create(&provider_name, cfg.extensions.clone()).await?;
+    agent
+        .update_provider(provider, model_config, &session_id)
+        .await?;
+    for result in agent
+        .add_extensions_bulk(cfg.extensions.clone(), &session_id)
+        .await?
+    {
         if !result.success {
             eprintln!(
                 "avp-goose: extension '{}' failed to load: {}",
@@ -494,8 +655,14 @@ async fn describe_live() -> anyhow::Result<avp::trajectory::AgentDescriptor> {
 
     // The pre-flight view carries no Commission MCP servers or skills, and only
     // advertises a default_model if goose actually has one configured.
-    build_descriptor(&agent, &session_id, configured_model.as_deref(), &HashSet::new(), &working_dir)
-        .await
+    build_descriptor(
+        &agent,
+        &session_id,
+        configured_model.as_deref(),
+        &HashSet::new(),
+        &working_dir,
+    )
+    .await
 }
 
 /// Build the AVP descriptor from the agent's live tool registry. `list_tools`
@@ -509,17 +676,13 @@ async fn build_descriptor(
     mcp_servers: &HashSet<String>,
     working_dir: &std::path::Path,
 ) -> anyhow::Result<avp::trajectory::AgentDescriptor> {
-    let tool_names = |tools: Vec<rmcp::model::Tool>| -> Vec<String> {
-        tools.iter().map(|t| t.name.to_string()).collect()
-    };
-
     // Map each MCP-surfaced tool to its server id by querying the registry
     // per-extension (tool names from `list_tools(None)` are not reliably
     // prefixed, so a per-server query is the dependable correlation).
     let mut mcp_tool_to_server: HashMap<String, String> = HashMap::new();
     for id in mcp_servers {
-        for name in tool_names(agent.list_tools(session_id, Some(id.clone())).await) {
-            mcp_tool_to_server.insert(name, id.clone());
+        for tool in agent.list_tools(session_id, Some(id.clone())).await {
+            mcp_tool_to_server.insert(tool.name.to_string(), id.clone());
         }
     }
 
@@ -592,30 +755,172 @@ async fn build_descriptor(
     serde_json::from_value(descriptor).map_err(|e| anyhow::anyhow!("building descriptor: {e}"))
 }
 
-/// AVP usage from the provider tap: sum the per-inference `ProviderUsage`s
-/// captured since the last flush. AVP convention folds cache reads/writes into
-/// `input_tokens`; the split is also carried in its own fields.
-fn tap_usage(tap: &UsageTap, consumed: &mut usize) -> Usage {
-    let (mut input, mut output, mut cache_read, mut cache_write) = (0i64, 0i64, 0i64, 0i64);
-    for pu in tap.drain_new(consumed) {
-        input += pu.usage.input_tokens.unwrap_or(0) as i64;
-        output += pu.usage.output_tokens.unwrap_or(0) as i64;
-        cache_read += pu.usage.cache_read_input_tokens.unwrap_or(0) as i64;
-        cache_write += pu.usage.cache_write_input_tokens.unwrap_or(0) as i64;
-    }
-    let nonzero = |v: i64| (v > 0).then_some(v as u64);
-    Usage {
-        input_tokens: (input + cache_read + cache_write).max(0) as u64,
-        output_tokens: output.max(0) as u64,
-        cache_read_input_tokens: nonzero(cache_read),
-        cache_creation_input_tokens: nonzero(cache_write),
-        reasoning_output_tokens: None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use goose::conversation::message::InferenceMetadata;
+    use std::sync::Mutex;
+
+    const QUOTA_FAILURE: &str = "Ran into this error: Rate limit exceeded: You have no credits remaining..\n\nPlease retry if you think this is a transient or recoverable error.";
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<Value>>>);
+
+    impl Sink for Capture {
+        fn emit(&self, event: &avp::Event) -> std::io::Result<()> {
+            self.0.lock().unwrap().push(serde_json::to_value(event)?);
+            Ok(())
+        }
+    }
+
+    fn model_message(text: &str) -> Message {
+        Message::assistant()
+            .with_id("model-turn")
+            .with_text(text)
+            .with_inference(InferenceMetadata {
+                provider: "openai".into(),
+                requested_model: "gpt-4o-mini".into(),
+                resolved_model: None,
+                provider_session_id: None,
+            })
+    }
+
+    async fn trajectory(items: Vec<anyhow::Result<AgentEvent>>) -> Vec<Value> {
+        let sink = Capture::default();
+        let mut emitter = Emitter::new(
+            sink.clone(),
+            "provider-failure",
+            Some("openai".into()),
+            HashSet::new(),
+            avp::load_default_prices(),
+        );
+        emitter.start(Some("gpt-4o-mini")).unwrap();
+        record_reply(&mut emitter, "gpt-4o-mini", futures::stream::iter(items))
+            .await
+            .unwrap();
+        let events = sink.0.lock().unwrap().clone();
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../../avp/core/spec/v0.1/trajectory.schema.json"
+        ))
+        .unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        for event in &events {
+            assert!(validator.is_valid(event), "invalid event: {event}");
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn provider_failure_messages_close_with_error_without_a_fake_model_turn() {
+        // These are the native forms emitted by the pinned Goose reply loop.
+        let cases = [
+            (Message::assistant().with_text(QUOTA_FAILURE), "rate_limit"),
+            (Message::assistant().with_error(MessageErrorKind::Authentication, "bad credential"), "auth_error"),
+            (Message::assistant().with_error(MessageErrorKind::ContextLengthExceeded, "too many tokens"), "context_limit"),
+            (Message::assistant().with_error(MessageErrorKind::Other, "upstream server failed"), "agent_crash"),
+            (Message::assistant().with_system_notification(SystemNotificationType::CreditsExhausted, "Please add credits"), "rate_limit"),
+            (Message::assistant().with_text("Network error: connection reset\n\nPlease resend your message to try again."), "agent_crash"),
+            (Message::assistant().with_text("Ran into this error trying to compact: unavailable.\n\nPlease try again or create a new session"), "agent_crash"),
+            (Message::assistant().with_system_notification(SystemNotificationType::InlineMessage,
+                "Unable to continue: Context limit still exceeded after compaction. Try using a shorter message, a model with a larger context window, or start a new session."), "context_limit"),
+        ];
+        for (message, code) in cases {
+            let events = trajectory(vec![Ok(AgentEvent::Message(message))]).await;
+            let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+            assert_eq!(
+                types,
+                [
+                    "avp.agent_started",
+                    "avp.error_occurred",
+                    "avp.agent_stopped"
+                ]
+            );
+            assert_eq!(events[1]["data"]["avp.error.code"], code);
+            assert_eq!(events[2]["data"]["avp.reason"], "error");
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_failure_preserves_buffered_model_output() {
+        for failure in [
+            Ok(AgentEvent::Message(
+                Message::assistant().with_text(QUOTA_FAILURE),
+            )),
+            Err(anyhow::anyhow!("Rate limit exceeded")),
+        ] {
+            let events = trajectory(vec![
+                Ok(AgentEvent::Message(model_message("Partial answer"))),
+                failure,
+            ])
+            .await;
+            let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+            assert_eq!(
+                types,
+                [
+                    "avp.agent_started",
+                    "avp.assistant_message",
+                    "avp.error_occurred",
+                    "avp.agent_stopped"
+                ]
+            );
+            assert_eq!(
+                events[1]["data"]["avp.content"][0]["text"],
+                "Partial answer"
+            );
+            assert_eq!(events[2]["data"]["avp.error.code"], "rate_limit");
+            assert_eq!(events[3]["data"]["avp.reason"], "error");
+        }
+    }
+
+    #[tokio::test]
+    async fn failure_notice_does_not_drop_trailing_usage() {
+        let events = trajectory(vec![
+            Ok(AgentEvent::Message(model_message("Partial answer"))),
+            Ok(AgentEvent::Message(
+                Message::assistant().with_text(QUOTA_FAILURE),
+            )),
+            Ok(AgentEvent::MessageUsage {
+                message_id: Some("model-turn".into()),
+                usage: goose::conversation::message::MessageUsage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(2),
+                    ..Default::default()
+                },
+            }),
+        ])
+        .await;
+        assert_eq!(events[1]["type"], "avp.assistant_message");
+        assert_eq!(events[1]["data"]["avp.usage"]["input_tokens"], 10);
+        assert_eq!(events[1]["data"]["avp.usage"]["output_tokens"], 2);
+        assert_eq!(events[2]["type"], "avp.error_occurred");
+        assert_eq!(events[3]["data"]["avp.reason"], "error");
+    }
+
+    #[tokio::test]
+    async fn quoted_provider_error_and_recovery_notice_do_not_fail_a_successful_reply() {
+        let events = trajectory(vec![
+            Ok(AgentEvent::Message(
+                Message::assistant().with_system_notification(
+                    SystemNotificationType::InlineMessage,
+                    "Context limit reached. Compacting to continue conversation...",
+                ),
+            )),
+            Ok(AgentEvent::Message(model_message(QUOTA_FAILURE))),
+        ])
+        .await;
+        let types: Vec<_> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        assert_eq!(
+            types,
+            [
+                "avp.agent_started",
+                "avp.assistant_message",
+                "avp.agent_stopped"
+            ]
+        );
+        assert_eq!(events[1]["data"]["avp.content"][0]["text"], QUOTA_FAILURE);
+        assert_eq!(events[2]["data"]["avp.reason"], "converged");
+    }
 
     #[test]
     fn tool_decls_filters_final_output_and_reshapes() {

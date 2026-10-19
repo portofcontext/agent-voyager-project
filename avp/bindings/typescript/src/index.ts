@@ -46,3 +46,9 @@ export type { AVPV01AgentDescriptor as AgentDescriptor } from "./agent-descripto
 export * as commission from "./commission.js";
 export * as trajectory from "./trajectory.js";
 export * as agentDescriptor from "./agent-descriptor.js";
+
+// Runtime: the Recorder and the helpers it is built on (Node).
+export * from "./recorder.js";
+export * from "./pricing.js";
+export * from "./sink.js";
+export * from "./ids.js";

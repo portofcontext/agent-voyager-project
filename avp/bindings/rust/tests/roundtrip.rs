@@ -104,3 +104,50 @@ fn agent_stopped_refused_parses() {
     let parsed: Event = serde_json::from_str(raw).expect("agent_stopped should deserialize");
     assert!(matches!(parsed, Event::AgentStoppedEvent(_)));
 }
+
+#[test]
+fn open_event_fields_survive_typed_roundtrip() {
+    let mut raw = serde_json::json!({
+        "specversion": "1.0", "id": "extras", "source": "avp://agent",
+        "type": "avp.assistant_message", "time": "2026-01-01T00:00:00Z",
+        "data": {
+            "trace_id": "00000000000000000000000000000000",
+            "span_id": "1111111111111111", "parent_span_id": "0000000000000000",
+            "avp.step": 1, "avp.duration_ms": 1,
+            "avp.content": [{"type":"text", "text":"hello"}],
+            "avp.usage": {"input_tokens":1, "output_tokens":2},
+            "avp.cost_usd":0.0, "avp.cost.source":"unknown"
+        }
+    });
+    let extension = serde_json::json!({"list":[1, null, true, {"x":"y"}]});
+    for pointer in ["/data", "/data/avp.usage", "/data/avp.content/0"] {
+        raw.pointer_mut(pointer)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("vendor_extra".into(), extension.clone());
+    }
+    let parsed: Event = serde_json::from_value(raw).unwrap();
+    let output = serde_json::to_value(parsed).unwrap();
+    for pointer in [
+        "/data/vendor_extra",
+        "/data/avp.usage/vendor_extra",
+        "/data/avp.content/0/vendor_extra",
+    ] {
+        assert_eq!(output.pointer(pointer), Some(&extension), "{pointer}");
+    }
+    assert_eq!(output["data"]["avp.content"][0]["type"], "text");
+}
+
+#[test]
+fn descriptor_extras_survive_but_closed_commission_rejects_unknown_fields() {
+    let raw = serde_json::json!({"agent_name":"test", "agent_version":"1", "spec_version":"0.1", "tools":[{"name":"echo","vendor_extra":{"flag":true}}]});
+    let parsed: avp::agent_descriptor::AvpV01AgentDescriptor =
+        serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(parsed).unwrap()["tools"][0]["vendor_extra"],
+        raw["tools"][0]["vendor_extra"]
+    );
+    let commission = serde_json::json!({"schema_version":"0.1", "run_id":"test", "model":"openai/test", "unknown":true});
+    assert!(serde_json::from_value::<avp::Commission>(commission).is_err());
+}

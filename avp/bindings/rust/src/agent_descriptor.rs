@@ -473,7 +473,7 @@ impl<'de> ::serde::Deserialize<'de> for Id {
 #[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
+#[doc = "  \"additionalProperties\": {}"]
 #[doc = "}"]
 #[doc = r" ```"]
 #[doc = r" </details>"]
@@ -486,6 +486,8 @@ pub struct McpServerDecl {
     pub name: ::std::option::Option<::std::string::String>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub status: ::std::option::Option<McpServerDeclStatus>,
+    #[serde(flatten)]
+    pub extra: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
 }
 #[doc = "`McpServerDeclStatus`"]
 #[doc = r""]
@@ -625,7 +627,7 @@ impl ::std::convert::TryFrom<::std::string::String> for McpServerDeclStatus {
 #[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
+#[doc = "  \"additionalProperties\": {}"]
 #[doc = "}"]
 #[doc = r" ```"]
 #[doc = r" </details>"]
@@ -642,6 +644,8 @@ pub struct SkillDecl {
     pub name: ::std::string::String,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub version: ::std::option::Option<::std::string::String>,
+    #[serde(flatten)]
+    pub extra: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
 }
 #[doc = "Subagent descriptor in `agent_started.data[\"avp.subagents\"]`: what the\nparent model sees when deciding whether to delegate. Same MCP-shaped\ntriple (`name`, `description`, `inputSchema`) tools use, so adapters\ncan render subagents to the model's tool list with no translation.\n\n`description` is optional to match `ToolDecl`: when surfacing a\nagent-built-in subagent (e.g. the Claude Agent SDK's `general-purpose`)\nthe agent has authoritative knowledge of the name but not the prose\ndescription. Honest-null beats authored-prose-that-drifts."]
 #[doc = r""]
@@ -683,7 +687,7 @@ pub struct SkillDecl {
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"additionalProperties\": {}"]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -695,7 +699,7 @@ pub struct SkillDecl {
 #[doc = "      \"type\": \"string\""]
 #[doc = "    }"]
 #[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
+#[doc = "  \"additionalProperties\": {}"]
 #[doc = "}"]
 #[doc = r" ```"]
 #[doc = r" </details>"]
@@ -717,6 +721,8 @@ pub struct SubagentDecl {
     pub input_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
     pub name: ::std::string::String,
+    #[serde(flatten)]
+    pub extra: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
 }
 #[doc = "Tool descriptor used by `AgentDescriptor.tools` and\n`agent_started.data[\"avp.tools\"]`.\n\nMCP-shaped: `name` plus optional `description`, `inputSchema`, and\n`outputSchema`. The decl describes a single tool's model-facing\nidentity, and agents SHOULD carry `description` / `inputSchema` /\n`outputSchema` exactly as surfaced to the model when the runtime\nexposes them: the tool catalog is the dominant fixed input-token\ncost of every turn, and name-only decls make that cost\nunattributable. Name-only entries remain valid (honest-null when\nthe wrapped runtime doesn't expose the catalog text). Dispatch is\ndiscriminated by `avp.mcp_server_id`: when set, the tool is sourced\nfrom the MCP server with that `id` in `mcp_servers[]`; when absent,\nthe tool runs locally in the agent's process. The per-invocation\ndiscriminator `avp.tool.dispatch_target` on `tool_invoked` mirrors\npresence of this field."]
 #[doc = r""]
@@ -758,7 +764,7 @@ pub struct SubagentDecl {
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"additionalProperties\": {}"]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -774,7 +780,7 @@ pub struct SubagentDecl {
 #[doc = "      \"anyOf\": ["]
 #[doc = "        {"]
 #[doc = "          \"type\": \"object\","]
-#[doc = "          \"additionalProperties\": true"]
+#[doc = "          \"additionalProperties\": {}"]
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"type\": \"null\""]
@@ -782,7 +788,7 @@ pub struct SubagentDecl {
 #[doc = "      ]"]
 #[doc = "    }"]
 #[doc = "  },"]
-#[doc = "  \"additionalProperties\": true"]
+#[doc = "  \"additionalProperties\": {}"]
 #[doc = "}"]
 #[doc = r" ```"]
 #[doc = r" </details>"]
@@ -811,4 +817,6 @@ pub struct ToolDecl {
     )]
     pub output_schema:
         ::std::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+    #[serde(flatten)]
+    pub extra: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
 }
