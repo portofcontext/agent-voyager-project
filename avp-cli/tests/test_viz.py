@@ -223,3 +223,30 @@ def test_share_reports_a_refused_upload() -> None:
 
     with pytest.raises(viz.ShareError, match="could not reach"):
         viz.share({"eval_version": "0.1"}, site="http://127.0.0.1:9")
+
+
+def test_a_rate_limited_share_says_so() -> None:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import pytest
+
+    class Limited(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            body = b'{"error":{"code":"429","message":"Too Many Requests"}}'
+            self.send_response(429)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Limited)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(viz.ShareError, match="too many shares"):
+            viz.share({"eval_version": "0.1"}, site=f"http://127.0.0.1:{server.server_address[1]}")
+    finally:
+        server.shutdown()
