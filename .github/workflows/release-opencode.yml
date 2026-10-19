@@ -50,6 +50,12 @@ jobs:
           test "agent-opencode-v$version" = "${{ steps.tag.outputs.tag }}" \
             || { echo "package.json version $version does not match ${{ steps.tag.outputs.tag }}"; exit 1; }
 
+      # The adapter's build compiles the in-repo TypeScript binding, which needs
+      # its own dependencies (CI's bindings job installs them in an earlier step).
+      - name: Install the TypeScript binding's dependencies
+        working-directory: avp/bindings/typescript
+        run: npm ci
+
       - name: Seam tests
         working-directory: agents/avp-opencode/typescript
         run: npm ci && npm test
