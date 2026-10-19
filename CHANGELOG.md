@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-10-19)
 
 ### Changed
 
@@ -10,6 +10,17 @@
   `avp eval unshare` takes a link down with the delete token the share saved.
   Links that carried the whole eval in the URL are retired: they were too long
   to paste into chat.
+- `avp --version` prints the CLI version.
+
+### Fixed
+
+- `avp init --dir` creates the directory instead of crashing when it is missing.
+- The `llm-judge` scorer takes the canonical `anthropic/<model>` slug (a bare id
+  still works) and rejects other providers with a clear message; it passed the
+  slug straight to the Anthropic API, which refused it.
+- A sandbox server started from another `AVP_HOME` answered health checks but
+  refused this home's key, so every sandbox failed with "invalid credentials".
+  The CLI now reports the conflicting server instead of reusing it.
 
 ## 0.2.0 (2026-10-19)
 

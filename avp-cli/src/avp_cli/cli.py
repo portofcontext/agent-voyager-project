@@ -65,6 +65,7 @@ from avp_cli.eval.engine import Eval, RunObserver, RunResult, run_matrix, setups
 from avp_cli.eval.report import board_table, comparison_table, dump_json, failures
 from avp_cli.observability import tool_tally
 from avp_cli.onboarding import welcome
+from avp_cli.run_manifest import _cli_version
 
 _SKIP = 2  # the sandbox stack / agent can't run here; skip cleanly rather than error
 
@@ -1519,6 +1520,7 @@ def _add_run_args(p: argparse.ArgumentParser, *, needs_path: bool) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="avp", description="The local AVP CLI.")
+    parser.add_argument("--version", action="version", version=f"avp {_cli_version()}")
     groups = parser.add_subparsers(dest="group")  # not required: no args -> WELCOME
 
     p_init = groups.add_parser("init", help="Scaffold an eval config from the catalog")
