@@ -222,7 +222,7 @@ def test_bad_agents_type_errors(lib) -> None:
 
 
 def test_scaffold_installs_wire_commissions_and_eval_reloads(tmp_path) -> None:
-    # Seam: scaffold writes wire Commissions to the library + an eval in place;
+    # Integration: scaffold writes wire Commissions to the library + an eval in place;
     # load_eval reads the eval and resolves its commission ids from the library.
     lib = tmp_path / "commissions"
     result = catalog.scaffold(

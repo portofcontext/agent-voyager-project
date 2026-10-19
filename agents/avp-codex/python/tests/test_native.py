@@ -1,4 +1,4 @@
-"""Opt-in native Codex/MCP seam with a local scripted Responses endpoint.
+"""Opt-in native Codex/MCP boundary with a local scripted Responses endpoint.
 
 AVP_TEST_CODEX=1 uv run --no-sync pytest agents/avp-codex/python/tests/test_native.py
 No paid model call. Uses the SDK-bundled Codex CLI and requires localhost sockets.

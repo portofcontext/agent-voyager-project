@@ -1,5 +1,5 @@
 """Generating commissions into the library: `commission.build_commission` (unit)
-and the `avp cm create` generator path crossing the describe seam."""
+and the `avp cm create` generator path crossing the describe boundary."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def test_descriptor_validation_ignores_other_agents_keys() -> None:
     assert c.enabled_builtin_tools["someone-else"] == ["whatever"]  # not ours to judge
 
 
-# ── avp cm create (CLI seam: create -> describe -> generate) ─────────────
+# ── avp cm create (CLI integration: create -> describe -> generate) ─────────────
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def test_create_without_agent_writes_a_minimal_runnable_commission(avp_home) -> 
 
 
 def test_create_with_agent_generates_the_full_surface(avp_home, monkeypatch) -> None:
-    # Stub the describe seam so the test is deterministic without an agent binary.
+    # Stub the describe boundary so the test is deterministic without an agent binary.
     monkeypatch.setattr(cli, "_describe_for_create", lambda spec: (_descriptor(), None))
     rc = cli.main(["cm", "create", "x", "--agent", "demo"])
     assert rc == 0

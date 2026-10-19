@@ -1,5 +1,5 @@
 /**
- * Seam tests: Gemini CLI's real headless session, tool scheduler, built-in
+ * Integration tests: Gemini CLI's real headless session, tool scheduler, built-in
  * tools, and MCP client on its own scripted content generator
  * (`FakeContentGenerator`, what `gemini --fake-responses` replays), through
  * the adapter, into the Recorder's trajectory. No network.
@@ -37,7 +37,7 @@ const FIXTURE = (() => {
 function commission(extra: Partial<Commission> = {}): Commission {
   return {
     schema_version: "0.1",
-    run_id: "gemini-cli-seam",
+    run_id: "gemini-cli-test",
     model: `google/${MODEL}`,
     prompt: "do the thing",
     ...extra,

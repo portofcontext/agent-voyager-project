@@ -1,4 +1,4 @@
-"""The real-sandbox seam (gated: `-m docker`, needs a Docker daemon).
+"""The real-sandbox boundary (gated: `-m docker`, needs a Docker daemon).
 
 Everything the unit tests simulate, for real: the managed server comes up, a
 sandbox boots from a stock image, the agent run contract executes inside it,
@@ -36,8 +36,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 emit() {
-  printf '{"specversion":"1.0","id":"e%s","source":"urn:seam-test","type":"x.test",' "$1"
-  printf '"subject":"seam","time":"2026-01-01T00:00:00Z","data":{'
+  printf '{"specversion":"1.0","id":"e%s","source":"urn:avp-test","type":"x.test",' "$1"
+  printf '"subject":"test","time":"2026-01-01T00:00:00Z","data":{'
   printf '"trace_id":"0af7651916cd43dd8448eb211c80319c","span_id":"b7ad6b716920333%s",' "$1"
   printf '"parent_span_id":"0000000000000000","beat":%s}}\\n' "$1"
 }
@@ -78,7 +78,7 @@ def _ctx(server, workspace):
 def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
     from avp_cli import paths
 
-    ws = paths.avp_home() / "runs" / "seam" / "workspace"
+    ws = paths.avp_home() / "runs" / "docker-test" / "workspace"
     ctx = _ctx(server, ws)
     (ws / "agent.sh").write_text(_AGENT_SH)
 
@@ -87,11 +87,11 @@ def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
     agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
     commission = Commission(
         schema_version="0.1",
-        run_id="seam",
+        run_id="docker-test",
         model="anthropic/claude-haiku-4-5-20251001",
         prompt="hi",
     )
-    out = paths.avp_home() / "runs" / "seam" / "trajectory.ndjson"
+    out = paths.avp_home() / "runs" / "docker-test" / "trajectory.ndjson"
 
     def beat(e) -> int:
         return e.data.beat if hasattr(e.data, "beat") else e.data["beat"]
@@ -179,7 +179,7 @@ def test_default_deny_egress_blocks_unlisted_domains(server) -> None:
 
 
 # A fake agent honoring the run contract that emits, in its trajectory, the
-# provider key it actually sees in its env — so the seam can prove the real
+# provider key it actually sees in its env — so the boundary can prove the real
 # secret never reached the sandbox (only the per-run broker token did).
 _AGENT_ECHOENV_SH = """\
 #!/bin/sh
@@ -187,8 +187,8 @@ while [ $# -gt 0 ]; do
   if [ "$1" = "--out" ]; then out=$2; fi
   shift
 done
-printf '{"specversion":"1.0","id":"e1","source":"urn:seam","type":"x.test",' > "$out"
-printf '"subject":"seam","time":"2026-01-01T00:00:00Z","data":{' >> "$out"
+printf '{"specversion":"1.0","id":"e1","source":"urn:avp-test","type":"x.test",' > "$out"
+printf '"subject":"test","time":"2026-01-01T00:00:00Z","data":{' >> "$out"
 printf '"trace_id":"0af7651916cd43dd8448eb211c80319c","span_id":"b7ad6b7169203331",' >> "$out"
 printf '"parent_span_id":"0000000000000000","seen_key":"%s","host":"%s"}}\\n' \
   "$OPENROUTER_API_KEY" "$OPENROUTER_HOST" >> "$out"

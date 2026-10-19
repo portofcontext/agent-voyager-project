@@ -14,7 +14,7 @@ The walkthrough with the reasons: `agents/_template/README.md`.
 - [ ] **Commission**: model, provider, prompts, `output_schema`, inline
       `mcp_servers` and `skills`, `enabled_builtin_*` under your agent's key;
       pass the offered names to `preflight`.
-- [ ] **Seam test** a recorded or stubbed run through the entrypoint.
+- [ ] **Integration test** a recorded or stubbed run through the entrypoint.
 - [ ] **Free checks**: `make test`, `make conformance`.
 - [ ] **Suite on a real model**: `avp-conformance check --agent <manifest>
       --suite v0.1 --model <origin>/<model>` (SKIP = a surface you don't

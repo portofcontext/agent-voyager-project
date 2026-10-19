@@ -1,5 +1,5 @@
 /**
- * Seam tests: the real OpenCode server (the pinned binary), its loop, tools,
+ * Integration tests: the real OpenCode server (the pinned binary), its loop, tools,
  * MCP client, and task subagents, on a scripted OpenAI Responses endpoint,
  * through the adapter, into the Recorder's trajectory. No network.
  */
@@ -40,7 +40,7 @@ after(async () => model.close());
 function commission(extra: Partial<Commission> = {}): Commission {
   return {
     schema_version: "0.1",
-    run_id: "opencode-seam",
+    run_id: "opencode-test",
     model: `openai/${MODEL}`,
     provider: { id: "openai", base_url: model.baseUrl },
     prompt: "do the thing",

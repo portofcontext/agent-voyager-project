@@ -56,7 +56,7 @@ jobs:
         working-directory: avp/bindings/typescript
         run: npm ci
 
-      - name: Seam tests
+      - name: Integration tests
         working-directory: agents/avp-gemini-cli/typescript
         run: npm ci --omit=optional && npm test
 

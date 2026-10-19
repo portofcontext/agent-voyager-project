@@ -35,7 +35,7 @@ The connector sits as a **sibling of the existing ACP server**
 `AgentEvent` stream and translates it to a wire protocol. We are adding a
 second translator, not a new integration point.
 
-## 2. The Goose seam (verified against current source)
+## 2. The Goose integration point (verified against current source)
 
 | Concern | Goose API | Location |
 |---|---|---|

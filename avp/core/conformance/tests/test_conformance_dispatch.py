@@ -1,6 +1,6 @@
-"""Seam test: `avp-conformance check` ↔ agent subprocess.
+"""Integration test: `avp-conformance check` ↔ agent subprocess.
 
-Crosses the harness↔agent seam without a real model. A stub agent script
+Crosses the harness↔agent boundary without a real model. A stub agent script
 honors the agent CLI contract (`ping`, `describe`, `run --commission --out`)
 by writing a canned NDJSON trajectory; the harness writes the Commission to a
 temp file, spawns the stub, reads the trajectory back, and matches it. This

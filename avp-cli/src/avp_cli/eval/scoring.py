@@ -221,7 +221,7 @@ class LLMJudgeScorer:
     `browsecomp_eval.py` reports). Confidence is parsed into `detail` only; it is
     not aggregated (no calibration metric on the board yet).
 
-    Crosses a new seam (scorer ↔ grader model) — the one network-calling scorer.
+    Crosses a new boundary (scorer ↔ grader model) — the one network-calling scorer.
     Needs the `llm-judge` extra (the `anthropic` SDK) and `ANTHROPIC_API_KEY`.
     Tests inject a fake `client`; production lazily builds `anthropic.Anthropic()`.
     """

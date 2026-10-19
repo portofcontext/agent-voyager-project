@@ -4,7 +4,7 @@ Agent frameworks sweep $HOME-anchored dirs for ambient state (~/.claude/skills,
 ~/.agents/skills); runs execute in a sandbox where none of that exists, so the
 descriptor must list only what the agent intrinsically ships. These tests
 spawn a fake `describe`-contract agent that records its environment and assert
-the scrub at the seam.
+the scrub at the boundary.
 """
 
 from __future__ import annotations

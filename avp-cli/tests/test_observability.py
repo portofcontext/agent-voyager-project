@@ -1,7 +1,7 @@
 """Trajectory → Summary reduction (the per-turn assistant_message delta fold).
 
 The eval engine (setups, scoring, board) is covered in test_eval_engine.py; the
-supervisor↔agent subprocess seam is covered there too (run_eval driving a
+supervisor↔agent subprocess boundary is covered there too (run_eval driving a
 scripted agent).
 """
 

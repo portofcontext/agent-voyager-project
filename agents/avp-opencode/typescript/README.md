@@ -12,7 +12,7 @@ Linux archive for the image's architecture from the agent's container recipe.
 
 ```bash
 make opencode-build                # npm ci + build (binding and adapter)
-make test-opencode                 # seam tests: the real server on a scripted model
+make test-opencode                 # integration tests: the real server on a scripted model
 node dist/src/main.js describe     # OpenCode's default tools, subagents, skills
 node dist/src/main.js run --commission commission.json --out trajectory.ndjson
 make opencode-check                # v0.1 conformance on a real model (paid; OPENCODE_MODEL=...)

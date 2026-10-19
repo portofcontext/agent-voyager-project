@@ -7,7 +7,7 @@ never from this file.
 
 Coverage is layered. Below the conformance cases sit the JSON Schemas (every
 `Event` / `Commission` / `AgentDescriptor` field shape), per-package unit
-tests, seam tests (multi-turn history render, translator/SDK token+cost
+tests, integration tests (multi-turn history render, translator/SDK token+cost
 parity, supervisor/agent subprocess), and bindings drift detection. The
 conformance suite is the language-agnostic behavioral contract on top: every
 case runs against a real model and is expected to pass on every conforming
@@ -35,7 +35,7 @@ pairing, and a subsequent model response, rather than only MCP connection.
   (asserted on every case's events).
 - **Assistant content.** A turn surfaces its text in `assistant_message.avp.content`.
   (`content/assistant-message-carries-text-content`)
-- **`enabled_builtin_tools` (the deepest seam).** `None` exposes all (non-empty
+- **`enabled_builtin_tools` (the deepest boundary).** `None` exposes all (non-empty
   `agent_started.avp.tools`), `[]` exposes none, and a name the agent does not
   offer is a `commission_collision`: `error_occurred(commission_collision)` +
   `agent_stopped(error)` before any model turn.
@@ -60,7 +60,7 @@ pairing, and a subsequent model response, rather than only MCP connection.
   wrong call fail even when every id is consistent. Failures must be
   `is_error: true` with the failure text, and the run must still converge.
   Whether the model really calls in parallel is its choice; the pairing
-  requirements hold either way, and adapters' seam tests script the parallel
+  requirements hold either way, and adapters' integration tests script the parallel
   path. (`mcp/{multi-round-tool-calls, parallel-tool-calls,
   tool-error-result-is-recorded, tool-protocol-error-is-recorded}`)
 - **Built-in tool round-trip (declared tools).** A real-model loop where the model calls a built-in tool:

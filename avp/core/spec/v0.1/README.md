@@ -32,9 +32,9 @@ AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory
 
 ---
 
-## 1. The seam
+## 1. The boundary
 
-AVP defines exactly one seam, between two roles, with **two unidirectional flows** crossing it:
+AVP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
 
 - **Supervisor**: declares a Commission at startup with the prompt, model, and managed assets (`mcp_servers`, `skills`) with inline connection material. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
 - **Agent**: runs inside the Commission. Dials MCP servers and loads skills directly from the Commission. Emits a stream of facts (events), the trajectory, that the supervisor observes.

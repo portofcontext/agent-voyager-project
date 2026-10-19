@@ -77,12 +77,12 @@ Add tests at the boundary where a change can fail:
 
 - Wire requirements: conformance cases plus schema validation.
 - Local behavior: the affected package's tests.
-- Cross-component behavior: a seam test, such as SDK events to Recorder output,
+- Cross-component behavior: a integration test, such as SDK events to Recorder output,
   cumulative usage to per-response accounting, subprocess trajectories, or
   workspace-relative tool execution.
 - Native/provider behavior: the affected adapter's real-model conformance suite.
 
-Features need a test crossing a relevant seam. Do not rely on unit tests alone
+Features need a test crossing a relevant boundary. Do not rely on unit tests alone
 for stateful translation or lifecycle behavior. Report conformance passes and
 capability skips together.
 

@@ -79,7 +79,7 @@ const SURVEY_MODELS = [
 /** How long to wait for the session to settle after an abort. */
 const ABORT_SETTLE_MS = 10_000;
 
-/** Seams for tests and embedders; every field is optional. */
+/** Hooks for tests and embedders; every field is optional. */
 export interface RunOptions {
   /** Aborting it stops OpenCode and closes the trajectory as `interrupted`. */
   signal?: AbortSignal;

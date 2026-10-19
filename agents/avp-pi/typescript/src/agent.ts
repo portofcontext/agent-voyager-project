@@ -48,7 +48,7 @@ export const AGENT_VERSION: string = JSON.parse(
 /** How long to wait for an MCP server to connect and list its tools. */
 const MCP_CONNECT_MS = 30_000;
 
-/** Seams for tests and embedders; every field is optional. */
+/** Hooks for tests and embedders; every field is optional. */
 export interface RunOptions {
   /** Pi's agent directory (credentials, MCP sign-ins). Defaults to Pi's own. */
   agentDir?: string;

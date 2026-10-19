@@ -27,7 +27,7 @@ AVP_TEST_CODEX=1 uv run --no-sync pytest agents/avp-codex/python/tests/test_nati
 | `turn/completed` | converged, error, or interrupted according to the native status |
 
 The typed `commandExecution` item normalizes a command and its status. It does
-not preserve the original function name and JSON arguments. A native seam test
+not preserve the original function name and JSON arguments. A native integration test
 covers `exec_command` followed by `write_stdin`: AVP needs both original calls,
 not just the normalized command. Therefore the adapter uses the SDK's
 `AsyncCodexClient` with `experimentalRawEvents` enabled. The two raw notification
@@ -103,7 +103,7 @@ a response usage boundary fails explicitly; it must not merge two attempts into
 one inference. Context compaction is also explicitly unsupported because its
 inference/usage accounting has not been established for this profile.
 
-Native protocol changes require updated translation and native seam tests.
+Native protocol changes require updated translation and native integration tests.
 Scripted tests exercise the installed SDK and bundled runtime against a local
 model endpoint, including real MCP calls, parallel calls, shell polling, and
 retries. They spend no API credits. Live conformance remains a separate check.

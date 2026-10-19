@@ -1,4 +1,4 @@
-"""The sandbox-runtime seam: create a sandbox from an image, run commands in it,
+"""The sandbox-runtime boundary: create a sandbox from an image, run commands in it,
 tear it down. Everything else in `agent.run_agent` (building the env, deriving the
 egress allowlist, seeding the io dir, tailing the trajectory file through the io
 bind mount) is runtime-agnostic, so the backends only have to provide three
@@ -13,7 +13,7 @@ Two backends:
   virtio-gpu Venus, so an in-process local model (goose's `local` provider) runs
   GPU-accelerated. Selected with `AVP_RUNTIME=libkrun`.
 
-The selection is a deliberate seam for the planned move off OpenSandbox; see the
+The selection is a deliberate boundary for the planned move off OpenSandbox; see the
 coupling map in the design notes. The interface is intentionally minimal so a
 third backend (e.g. OpenShell) drops in behind the same `Box`.
 """
@@ -58,7 +58,7 @@ class Box(Protocol):
 
 class OpenSandboxBox:
     """Wraps an OpenSandbox `SandboxSync`. Faithful to the prior inline calls so
-    the existing docker-seam behavior is unchanged."""
+    the existing Docker behavior is unchanged."""
 
     def __init__(self, box: object) -> None:
         self._box = box

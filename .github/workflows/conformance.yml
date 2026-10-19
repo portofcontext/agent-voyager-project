@@ -86,13 +86,13 @@ jobs:
       - name: TypeScript binding tests
         working-directory: avp/bindings/typescript
         run: npm ci && npm test
-      - name: Pi adapter seam tests
+      - name: Pi adapter integration tests
         working-directory: agents/avp-pi/typescript
         run: npm ci && npm test
-      - name: Gemini CLI adapter seam tests
+      - name: Gemini CLI adapter integration tests
         working-directory: agents/avp-gemini-cli/typescript
         run: npm ci --omit=optional && npm test
-      - name: OpenCode adapter seam tests
+      - name: OpenCode adapter integration tests
         working-directory: agents/avp-opencode/typescript
         run: npm ci && npm test
 

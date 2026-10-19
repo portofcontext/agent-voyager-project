@@ -1,5 +1,5 @@
 /**
- * A scripted OpenAI Responses endpoint for the seam tests. Each `POST
+ * A scripted OpenAI Responses endpoint for the integration tests. Each `POST
  * /v1/responses` streams the next scripted step as Responses SSE, the shape
  * OpenCode's OpenAI SDK parses; a step can instead fail with an HTTP status.
  * A step's `calls` are several function calls in one response, and its

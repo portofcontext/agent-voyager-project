@@ -1,4 +1,4 @@
-"""Seam test: the agent's command line drives a run end to end and the
+"""Integration test: the agent's command line drives a run end to end and the
 trajectory parses as AVP. Keep this test when you replace the harness; point
 it at a recorded or stubbed SDK stream."""
 

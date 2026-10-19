@@ -1,7 +1,7 @@
 """Tests for the eval engine: setups, output extraction, scoring, board, report.
 
-Most are pure unit tests. One crosses the supervisor↔agent subprocess seam
-(`run_eval` driving a scripted inline agent with no LLM), which is the seam the
+Most are pure unit tests. One crosses the supervisor↔agent subprocess boundary
+(`run_eval` driving a scripted inline agent with no LLM), which is the boundary the
 repo flags as where bugs hide.
 """
 
@@ -220,7 +220,7 @@ def test_fidelity_scores_cell_content_not_markup_chrome() -> None:
     assert not bad.passed  # wrong cell content still fails
 
 
-# ── llm-judge scorer (scorer ↔ grader-model seam) ───────────────────────────
+# ── llm-judge scorer (scorer ↔ grader-model boundary) ───────────────────────────
 
 
 class _FakeBlock:
@@ -259,7 +259,7 @@ def test_llm_judge_interpolates_and_reads_correct_yes() -> None:
     out = FinalOutput("Explanation: ...\nExact Answer: 1988-96\nConfidence: 90%", None, "converged")
     score = s.score(item, out, _summary())
     assert score.value == 1.0 and score.passed
-    # the seam: question / response / correct_answer all reach the grader prompt
+    # the boundary: question / response / correct_answer all reach the grader prompt
     assert "probation officer" in seen["prompt"]
     assert "Exact Answer: 1988-96" in seen["prompt"]
     assert "[correct_answer]: 1988-96" in seen["prompt"]
@@ -356,7 +356,7 @@ def test_render_and_dump_round_trip() -> None:
     json.dumps(d)
 
 
-# ── Seam: run_eval drives a real agent's run contract (no LLM) ─────────────────
+# ── Integration: run_eval drives a real agent's run contract (no LLM) ─────────────────
 
 # A dependency-free agent honoring the AVP run contract
 # (`run --commission <path> --out <path>`), emitting a canned trajectory. The
@@ -441,7 +441,7 @@ def _ctx(tmp_path):
 
 
 @pytest.fixture
-def sandbox_seam(tmp_path, monkeypatch):
+def sandbox_runtime(tmp_path, monkeypatch):
     """The simulated sandbox boundary + an isolated AVP_HOME for run_agent's io."""
     from fakebox import install
 
@@ -467,7 +467,7 @@ raise SystemExit(3)
 """
 
 
-def test_failed_run_preserves_its_partial_trajectory(tmp_path, sandbox_seam) -> None:
+def test_failed_run_preserves_its_partial_trajectory(tmp_path, sandbox_runtime) -> None:
     """A run that errors/times out must still leave its (partial) trajectory at
     `out` — that's exactly when you need to see what the agent did."""
     from avp.commission import Commission
@@ -486,7 +486,7 @@ def test_failed_run_preserves_its_partial_trajectory(tmp_path, sandbox_seam) -> 
     assert "avp.assistant_message" in out.read_text()
 
 
-def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path, sandbox_seam) -> None:
+def test_run_eval_drives_a_scripted_agent_end_to_end(tmp_path, sandbox_runtime) -> None:
     agent_script = tmp_path / "tiny_agent.py"
     agent_script.write_text(_INLINE_AGENT)
     out_dir = tmp_path / "runs"
@@ -566,8 +566,8 @@ def _solo_eval() -> Eval:
     )
 
 
-def test_resume_reuses_finished_cell_without_running_agent(tmp_path, sandbox_seam) -> None:
-    # Crossing the resume seam: a finished trajectory on disk is re-read and
+def test_resume_reuses_finished_cell_without_running_agent(tmp_path, sandbox_runtime) -> None:
+    # Crossing the resume boundary: a finished trajectory on disk is re-read and
     # re-scored; the (poison) agent is never spawned. Baseline first: with no
     # resume the poison agent runs and the cell errors.
     ev, agent, ctx = _solo_eval(), _poison_agent(tmp_path), _ctx(tmp_path)
@@ -582,7 +582,7 @@ def test_resume_reuses_finished_cell_without_running_agent(tmp_path, sandbox_sea
     assert board.rows[0].accuracy == 1.0  # re-scored from the saved "all done"
 
 
-def test_resume_reruns_partial_cell(tmp_path, sandbox_seam) -> None:
+def test_resume_reruns_partial_cell(tmp_path, sandbox_runtime) -> None:
     # A trajectory with no terminal agent_stopped (killed mid-run) is NOT reused;
     # the cell re-runs — and the poison agent makes that visible as an error.
     ev, agent = _solo_eval(), _poison_agent(tmp_path)
@@ -593,9 +593,9 @@ def test_resume_reruns_partial_cell(tmp_path, sandbox_seam) -> None:
     assert board.rows[0].n_errors == 1
 
 
-def test_run_eval_streams_events_to_observer(tmp_path, sandbox_seam) -> None:
+def test_run_eval_streams_events_to_observer(tmp_path, sandbox_runtime) -> None:
     """With an observer.on_event, run_agent tails the trajectory and the engine
-    feeds each event through — the live-progress seam, no LLM."""
+    feeds each event through — the live-progress boundary, no LLM."""
     from avp_cli.eval.engine import RunObserver
 
     agent_script = tmp_path / "tiny_agent.py"
@@ -641,7 +641,7 @@ def test_tool_tally_is_busiest_first_and_compact() -> None:
     assert tool_tally(Summary(run_id="r")) == ""  # no tools
 
 
-def test_run_matrix_interleaves_agents_and_compares(tmp_path, sandbox_seam) -> None:
+def test_run_matrix_interleaves_agents_and_compares(tmp_path, sandbox_runtime) -> None:
     """Two agents over one task: task-major order (both agents per item) and an
     on_compare callback fires once per task with both results."""
     from avp_cli.eval.engine import RunObserver, run_matrix
@@ -676,8 +676,8 @@ def test_run_matrix_interleaves_agents_and_compares(tmp_path, sandbox_seam) -> N
     assert all(b.rows[0].accuracy == 1.0 for b in boards)
 
 
-def test_run_matrix_binds_commissions_to_their_agent(tmp_path, sandbox_seam) -> None:
-    """Seam: a commission bound to one agent (the `{agent: [ids]}` map form) runs
+def test_run_matrix_binds_commissions_to_their_agent(tmp_path, sandbox_runtime) -> None:
+    """Integration: a commission bound to one agent (the `{agent: [ids]}` map form) runs
     only on that agent; an unbound one still runs on every agent. Each board
     carries only its agent's commissions, and no head-to-head fires for a
     commission that ran on a single agent."""

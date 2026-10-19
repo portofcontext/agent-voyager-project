@@ -14,7 +14,7 @@ Gemini API; Vertex AI and Google sign-in are not used).
 
 ```bash
 make gemini-cli-build              # npm ci + build (binding and adapter)
-make test-gemini-cli               # seam tests on Gemini CLI's scripted content generator
+make test-gemini-cli               # integration tests on Gemini CLI's scripted content generator
 node dist/src/main.js describe     # Gemini CLI's default tools, subagents, and skills
 node dist/src/main.js run --commission commission.json --out trajectory.ndjson
 make gemini-cli-check              # v0.1 conformance on google/gemini-3.1-flash-lite (paid)
