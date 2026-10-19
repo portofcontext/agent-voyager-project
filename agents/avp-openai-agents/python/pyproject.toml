@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avp-openai-agents"
+version = "0.0.1"
+description = "AVP agent over the OpenAI Agents SDK: the SDK owns the loop, the adapter records the trajectory."
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = ["agent-voyager-project==0.1.1", "openai-agents>=0.23"]
+
+[project.optional-dependencies]
+# Non-OpenAI `Commission.model` origins route through the SDK's LiteLLM extension.
+litellm = ["openai-agents[litellm]>=0.23"]
+
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avp_openai_agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

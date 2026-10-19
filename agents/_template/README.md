@@ -54,9 +54,9 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
   from `usage`). Propagate them through the crash path. Once stopped, the
   trajectory is closed, so propagate any later reporting error to the caller.
   Handle SDK-specific repeated signals explicitly before calling the Recorder.
-- **Files.** Tools that touch files resolve against `AVP_WORKSPACE`. Without
-  it use a fresh temp directory, never the process CWD: an unsandboxed run
-  starts in your source tree.
+- **Files.** The stock entrypoint enters `AVP_WORKSPACE` when supplied by the
+  launcher. Direct library calls inherit the caller’s working directory and
+  state; the adapter leaves provisioning and cleanup to the caller.
 - **Imports.** Keep the SDK import inside `run` / `describe` so `ping` stays
   cheap.
 
@@ -121,4 +121,6 @@ is registered and has a release. Do all of this in the PR that adds the agent:
    together, commit, and run `make release-<name>` from a clean `main`.
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
-subagents) and `agents/avp-goose/rust/` (late usage, subagents via a tool). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
+subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
+`agents/avp-openai-agents/python/` (complete Responses messages, managed MCP),
+and `agents/avp-codex/python/` (native app-server raw inference boundaries). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

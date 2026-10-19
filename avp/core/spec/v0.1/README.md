@@ -4,7 +4,7 @@
 **Umbrella version:** v0.1
 **$id base:** `https://avp.dev/schema/v0.1/`
 
-This directory is the **normative specification** for v0.1 of the Agent Voyager Project (AVP). AVP is a collection of four specs that compose into a coherent wire format for the agent-execution case:
+This directory is the **normative specification** for v0.1 of the Agent Voyager Project (AVP). AVP is a collection of three specs that compose into a coherent wire format for the agent-execution case:
 
 | Sub-spec | Kind | What it defines | File |
 |---|---|---|---|
@@ -23,12 +23,12 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 AVP specializes (it does not reinvent) the following industry specs:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../FOUNDATIONS.md).
+- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../../../FOUNDATIONS.md).
 - **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` carry inline connection material; the agent runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
 - **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries carry inline file content including `SKILL.md`.
 - **JSON Schema Draft 2020-12** for this specification's machine-readable form.
 
-AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace. See [`../../FOUNDATIONS.md`](../../FOUNDATIONS.md) for the full mapping rationale and ATIF (Harbor) positioning.
+AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace. See [`../../../../FOUNDATIONS.md`](../../../../FOUNDATIONS.md) for the full mapping rationale and ATIF (Harbor) positioning.
 
 ---
 
@@ -122,7 +122,7 @@ The agent's **workspace** is conventionally the agent's current working director
 
 A common temptation is "I want to update the agent's view of the world between turns": re-read a config file, re-fetch a dashboard, inject the current build status. This is sometimes called *re-observation*. **AVP does not provide a hook for this**, by design. Mid-run reach-in by the supervisor breaks the bounded-context guarantee that makes trajectories meaningful.
 
-The supported pattern is to expose the world refresh as an **MCP-server tool**. The agent calls it; the supervisor's MCP server computes the current value; the agent records the MCP dispatch on the wire as `tool_invoked` / `tool_returned`. The agent decides when to refresh and which information to pull, the trajectory shows exactly what context informed each turn, and there's no asymmetry between driver-pattern and translator-pattern agents.
+The supported pattern is to expose the world refresh as an **MCP-server tool**. The agent calls it; the supervisor's MCP server computes the current value; the agent records the MCP dispatch on the wire as `tool_invoked` / `tool_returned`. The agent decides when to refresh and which information to pull, the trajectory shows exactly what context informed each turn, and the runtime retains control of its loop.
 
 This section names the lines so readers don't trip on them. A complete production deployment will involve more than this spec covers; that's by design.
 

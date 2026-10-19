@@ -45,7 +45,8 @@ avp-workspace/
 browse_comp*.jsonl
 **/browse_comp*.jsonl
 
-.claude/
+.claude/*
+!.claude/skills/
 
 .ruff_cache
 

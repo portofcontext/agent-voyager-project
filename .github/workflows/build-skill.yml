@@ -1,8 +1,6 @@
 name: Build skill artifact
 
-# Re-package avp.skill whenever the skill bundle's contents change. Path filter
-# scopes this to files that actually end up inside the .skill — code-only changes
-# under agents/ or root README.md don't trigger a rebuild.
+# Package instructions and offline references; check every base in a PR stack.
 
 on:
   push:
@@ -10,14 +8,17 @@ on:
     paths:
       - "SKILL.md"
       - "avp/core/spec/v0.1/**"
-      - "avp/bindings/python/**"
+      - "FOUNDATIONS.md"
+      - "LICENSE"
       - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
     tags: ["v*"]
   pull_request:
-    branches: [main]
     paths:
       - "SKILL.md"
+      - "avp/core/spec/v0.1/**"
+      - "FOUNDATIONS.md"
+      - "LICENSE"
       - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
   workflow_dispatch:
@@ -37,31 +38,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-
-      - name: Install pyyaml (required by quick_validate)
-        run: python -m pip install pyyaml
-
-      - name: Fetch anthropics/skills (source of package_skill.py)
-        run: |
-          git clone --depth 1 https://github.com/anthropics/skills.git /tmp/anthropics-skills
 
       - name: Build avp.skill
-        env:
-          # Locate the skill-creator subdir inside the cloned anthropics/skills repo.
-          SKILL_CREATOR_DIR: /tmp/anthropics-skills/skills/skill-creator
-          PYTHON: python
         run: bash avp/scripts/build-skill.sh dist
 
-      - name: Verify .skill is a valid zip and contains SKILL.md
+      - name: Verify archive and bundled references
         run: |
-          python -c "
-          import zipfile, sys
-          with zipfile.ZipFile('dist/avp.skill') as z:
-              names = z.namelist()
-              assert any(n == 'avp/SKILL.md' for n in names), f'avp/SKILL.md missing from .skill; saw {names[:5]}...'
-              print(f'✓ avp.skill OK — {len(names)} files')
-          "
+          python - <<'PY'
+          import posixpath
+          import re
+          import zipfile
+          from urllib.parse import unquote, urlsplit
+
+          with zipfile.ZipFile("dist/avp.skill") as bundle:
+              assert bundle.testzip() is None
+              names = set(bundle.namelist())
+              assert "avp/SKILL.md" in names
+              for name in names:
+                  if not name.endswith(".md"):
+                      continue
+                  for target in re.findall(r"\]\(([^)]+)\)", bundle.read(name).decode()):
+                      url = urlsplit(target)
+                      if url.scheme or not url.path:
+                          continue
+                      path = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(url.path)))
+                      assert path in names or any(n.startswith(path.rstrip("/") + "/") for n in names), (name, target)
+              print("Archive and local reference paths verified")
+          PY
 
       - name: Upload avp.skill as workflow artifact
         uses: actions/upload-artifact@v4

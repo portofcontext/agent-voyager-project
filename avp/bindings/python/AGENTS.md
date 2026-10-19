@@ -1,23 +1,24 @@
-# avp — spec + thin SDK
+# avp: spec + thin SDK
 
 ## Goal: spec + thin SDK. Nothing more.
 
 In scope:
 
-- **Spec types** — `commission.py`, `descriptor.py`, `trajectory.py`.
+- **Spec types**: `commission.py`, `descriptor.py`, `trajectory.py`.
   Pydantic models matching the JSON Schemas under `avp/core/spec/v0.1/`. Source of truth.
-- **Sink type + stdio sink** — `sink.py`. `EventSink` is the async-callable
+- **Sink type + stdio sink**: `sink.py`. `EventSink` is the async-callable
   type for "consume one trajectory event"; `stdio_sink` is the trivial
   NDJSON-to-stdout built-in. No base class, no agent abstraction: integrator
   packages own their own agent shape and just take an `EventSink`.
-- **Recorder** — `recorder.py`. A plain object an adapter calls to report what
+- **Recorder**: `recorder.py`. A plain object an adapter calls to report what
   happened (`prelude`, `start`, `assistant`, `tool_result`, `subagent_*`,
   `error`, `stop`); it owns the trajectory's ordering and span rules (turn
   buffering, step counter, tool pairing, subagent frames, cost, idempotent
   stop). It is not a base class, owns no loop, and calls nothing back. Its
   behavior is pinned by the language-neutral vectors under
-  `avp/core/conformance/src/avp_conformance/recorder/v0.1/`; the Rust and
-  TypeScript Recorders run the same vectors. Change a rule there first.
+  `avp/core/conformance/src/avp_conformance/recorder/v0.1/`. The Rust Recorder
+  runs the same vectors; future language implementations must do likewise.
+  Change a rule there first.
 
 The **conformance harness** is NOT here anymore: it ships as the separate
 `avp-conformance` package at `avp/core/conformance/` (it depends on these
@@ -27,7 +28,7 @@ Out of scope here (belongs in the agent package that needs it, not in `avp`):
 
 - Agent base classes / ABCs and any agent-lifecycle abstraction
 - Agent loops, driver protocols (`ModelDriver`, `ToolDriver`, etc.)
-- Transport stubs (serve_stdio, serve_ws) — deployment concern
+- Transport stubs (serve_stdio, serve_ws): deployment concern
 - MCP / skill / subagent dispatch helpers
 - Opinionated tracers with scope ergonomics
 

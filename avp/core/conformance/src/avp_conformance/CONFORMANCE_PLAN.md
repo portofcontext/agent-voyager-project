@@ -19,7 +19,7 @@ Slim, single-runner conformance for AVP v0.1.
 - **AGENT-CLI.md is the only normative SDK-facing doc.** Lives at `python/avp/src/avp/conformance/AGENT-CLI.md`.
 - **Manifest format is JSON, not TOML.** Consistent with the rest of the wire.
 - **Pydantic is the source of truth for case + manifest shape.** No hand-maintained JSON Schema files. If one is ever needed externally, generate it from the models, same pattern as `avp.commission` / `avp.descriptor` / `avp.trajectory`.
-- **No embedded reference agent.** Per `python/avp/CLAUDE.md`. The CLI shells out to the SDK under test for every `run` invocation.
+- **No embedded reference agent.** Per `avp/bindings/python/AGENTS.md`. The CLI shells out to the SDK under test for every `run` invocation.
 - **Agent CLI contract: `run` + `ping` subcommands.** Commission delivered via `--commission <json|path>`; trajectory written to `--out <path.jsonl>`; `ping --out <path>` writes `{"type": "pong"}` as a liveness check. The conformance CLI appends these subcommands + flags to the manifest's `command` prefix.
 - **Cases are cross-SDK; built-ins are injected as fixtures.** A test case's optional `built_in` field tells the SDK what to pretend its built-ins are for the run (system prompt, tools, skills, mcp_servers, subagents). The SDK then applies Commission overrides per spec. This is how merge / override behavior gets tested deterministically across any SDK without coupling case files to a specific implementation.
 - **No stubbing of model / tool outcomes.** Cases run against the SDK's real model; expectations are structural (event ordering, source field, presence of fields), not numeric. Numeric bounds on `final_state` remain available for SDKs that opt into determinism.
@@ -113,7 +113,7 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 ### Docs
 - [ ] Write `python/avp/src/avp/conformance/AGENT-CLI.md` (agent `run` + `ping` subcommand contract + manifest fields, with the pydantic model as cited source of truth).
 - [ ] Write `python/avp/src/avp/conformance/README.md`: short walk-through of the CLI (`run`, `validate`), manifest example, where cases live, link to AGENT-CLI.md for the agent-side contract.
-- [ ] Update top-level `README.md` and `CLAUDE.md` references to the new path.
+- [ ] Update top-level `README.md` and `AGENTS.md` references to the new path.
 
 ### Reference SDKs
 - [x] Add `avp-conformance.json` manifest + `conformance.py` entrypoint to `python/agents/avp-claude-agent-sdk/` (ping verified end-to-end; run is a stub).

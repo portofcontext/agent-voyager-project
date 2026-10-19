@@ -3,11 +3,10 @@
 Spec: [`avp/core/spec/v0.1/`](../../core/spec/v0.1/)
 Conformance suite: the separate [`avp-conformance`](../../core/conformance/) package.
 
-This package is **wire-types-only**: the Pydantic source of truth for the AVP
-v0.1 wire format plus a minimal event sink. It ships NO agent loop, driver
-protocols, or tracer. Those belong in the integrator package that needs them
-(an agent inlines its own loop and emits events to an `EventSink`). See
-[`CLAUDE.md`](CLAUDE.md) for the package charter.
+This package supplies the Pydantic source of truth for the AVP v0.1 wire format,
+event sinks, and shared adapter helpers. Adapters report native runtime events
+through the Recorder; the runtime owns the agent loop. See
+[`AGENTS.md`](AGENTS.md) for the package charter.
 
 It ships:
 
@@ -18,6 +17,9 @@ It ships:
   envelope + OTel span-id helpers), `avp.gen_ai` (the AVP to `gen_ai.*`
   projection), `avp.history` (provider-history helpers), and `avp.pricing`
   (the bundled price table + `compute_cost`).
+- **Adapter helpers**: `avp.recorder` handles trajectory ordering, spans, and
+  accounting; `avp.preflight` checks Commission compatibility; `avp.agent_cli`
+  supplies the stock entrypoint; `avp.launch` supplies launcher context.
 - **Sink** (`avp.sink`): `EventSink`, the async-callable type for "consume one
   trajectory event", with the built-in `stdio_sink` (NDJSON to stdout) and
   `jsonl_sink(path)`. No base class, no agent abstraction.
@@ -56,6 +58,10 @@ src/avp/
   gen_ai.py         # AVP to OpenTelemetry gen_ai.* projection
   history.py        # provider-history helpers
   pricing.py        # bundled price table + compute_cost
+  recorder.py       # trajectory ordering, spans, pairing, and accounting
+  preflight.py      # Commission compatibility checks
+  agent_cli.py      # stock ping / describe / run entrypoint
+  launch.py         # launcher environment and directory lifecycle
   sink.py           # EventSink type + stdio_sink / jsonl_sink
   data/prices.json  # bundled price table (synced from models.dev)
 ```

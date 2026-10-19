@@ -59,8 +59,6 @@ jobs:
 
       # Use the same package list as local checks, including new adapters and templates.
       - name: Run every Python package's deterministic tests
-        env:
-          AVP_TEST_CODEX: "1"
         run: make test
 
   bindings:
@@ -104,6 +102,27 @@ jobs:
       # Hosted-provider tests do not need the optional llama.cpp backend.
       - name: Test the Goose adapter and native MCP connection
         run: cargo test --locked --manifest-path agents/avp-goose/rust/Cargo.toml --no-default-features --features conformance
+
+  codex-native:
+    name: Native Codex (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Native shell tests need a host that permits Bubblewrap network namespaces.
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Exercise the bundled Codex runtime and managed MCP tools
+        env:
+          AVP_TEST_CODEX: "1"
+        run: uv run --no-sync pytest -q agents/avp-codex/python/tests/test_native.py
 
   real-llm-smoke:
     name: Claude live conformance (manual only)
