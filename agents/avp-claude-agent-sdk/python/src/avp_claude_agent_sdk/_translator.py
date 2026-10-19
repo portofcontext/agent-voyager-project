@@ -105,12 +105,17 @@ def translate_usage(usage: dict[str, Any]) -> Usage:
     The SDK reports the API call's response totals (duplicated on every
     chunk of one `message_id`), so overwriting on each chunk converges
     to the inference's true totals by the time the turn drains.
+
+    Anthropic's `input_tokens` excludes cache reads and writes, which it
+    reports separately; AVP's `input_tokens` includes them (trajectory §3.3).
     """
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
     return Usage(
-        input_tokens=int(usage.get("input_tokens") or 0),
+        input_tokens=int(usage.get("input_tokens") or 0) + cache_read + cache_creation,
         output_tokens=int(usage.get("output_tokens") or 0),
-        cache_read_input_tokens=int(usage.get("cache_read_input_tokens") or 0) or None,
-        cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens") or 0) or None,
+        cache_read_input_tokens=cache_read or None,
+        cache_creation_input_tokens=cache_creation or None,
     )
 
 

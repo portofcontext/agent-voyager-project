@@ -1,0 +1,68 @@
+{
+  "id": "inline-skill-is-loaded",
+  "title": "An inline Commission skill is registered and its content reaches the model",
+  "description": "The Commission carries one skill inline. agent_started MUST list it in avp.skills, and the model must be able to use it: the codeword lives only in the skill body, never in the prompt, so a reply containing it proves the agent materialized and loaded the skill (by injecting it or by letting the model read it with a tool).",
+  "spec_refs": [
+    "spec/v0.1/trajectory.md#6-skills",
+    "spec/v0.1/commission.md"
+  ],
+  "commission": {
+    "schema_version": "0.1",
+    "run_id": "inline-skill-is-loaded",
+    "model": "anthropic/claude-haiku-4-5-20251001",
+    "skills": [
+      {
+        "id": "avp-codeword",
+        "files": {
+          "SKILL.md": "---\nname: avp-codeword\ndescription: Look up the AVP conformance codeword. Use whenever you are asked for the AVP codeword.\n---\n\n# AVP codeword\n\nThe AVP conformance codeword is AVP-SKILL-4M7. When asked for it, reply with exactly that codeword and nothing else.\n"
+        }
+      }
+    ],
+    "prompt": "What is the AVP conformance codeword? Use your avp-codeword skill to find it, then reply with only the codeword.",
+    "supervisor": {
+      "name": "avp-conformance",
+      "version": "0.1"
+    }
+  },
+  "expectations": {
+    "ordering": "in_order_subsequence",
+    "events": [
+      {
+        "label": "agent_started lists the skill",
+        "match": {
+          "type": "avp.agent_started",
+          "data": {
+            "avp.skills": {
+              "$contains": {
+                "name": "avp-codeword"
+              }
+            }
+          }
+        }
+      },
+      {
+        "label": "a reply carrying the codeword from the skill body",
+        "match": {
+          "type": "avp.assistant_message",
+          "data": {
+            "avp.content": {
+              "$text_contains": "AVP-SKILL-4M7"
+            }
+          }
+        }
+      },
+      {
+        "label": "agent_stopped(converged)",
+        "match": {
+          "type": "avp.agent_stopped",
+          "data": {
+            "avp.reason": "converged"
+          }
+        }
+      }
+    ],
+    "final_state": {
+      "stop_reason": "converged"
+    }
+  }
+}

@@ -49,7 +49,7 @@ stack's health.
 
 **Credentials.** Without a vault credential, the CLI forwards only the selected
 provider's API key and endpoint variables (`<PROVIDER>_API_KEY`, `_HOST`, and
-`_BASE_URL`). The Commission's provider (or its model origin when omitted)
+`_BASE_URL`; see [PATTERNS](../PATTERNS.md) for how they differ). The Commission's provider (or its model origin when omitted)
 selects credentials and Goose routing; host or manifest `GOOSE_PROVIDER` values
 do not override that selection. Anthropic runs also accept
 `CLAUDE_CODE_OAUTH_TOKEN` for claude-code subscriptions; Google/Gemini runs accept

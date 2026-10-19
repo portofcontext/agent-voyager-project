@@ -11,6 +11,8 @@ import dataclasses
 from collections.abc import AsyncIterable
 from typing import Any
 
+from claude_agent_sdk.types import TaskNotificationMessage, UserMessage
+
 from avp.pricing import PriceTable, load_default_prices
 from avp.recorder import Recorder
 from avp.sink import EventSink
@@ -31,10 +33,33 @@ class RunState:
     # to `agent_started.data.avp.tools` so the merged surface reflects the
     # Commission's subtractive filter over the descriptor's tool bag.
     enabled_builtin_tools: list[str] | None = None
+    # Commission `enabled_builtin_subagents` allow-list (None = expose all). The
+    # CLI's init still lists subagents its deny rules hide, so this filters them.
+    enabled_builtin_subagents: list[str] | None = None
+    # The run's SDK `skills` filter when it names skills (None = all). The
+    # CLI's init lists the skills it hides too.
+    skills_filter: list[str] | None = None
     # `message_id` of the inference currently streaming. The CLI fans one API
     # response out as one AssistantMessage per content block, all sharing the
     # id; a chunk without one belongs to the inference already streaming.
     turn_key: str | None = None
+    # The streaming inference's usage so far: the CLI stamps every block with
+    # the `message_start` snapshot, and the response's `message_delta` (a
+    # partial-message StreamEvent) completes it. None once a tool result has
+    # closed the turn.
+    turn_usage: dict[str, Any] | None = None
+    # Whether a main-thread response is still streaming (`message_start` until
+    # `message_stop`). The CLI runs a tool as soon as its call streams in, so a
+    # response's later calls can arrive after an earlier call's result.
+    streaming: bool = False
+    # Tool-result messages held until the response that called them completes.
+    held_results: list[UserMessage] = dataclasses.field(default_factory=list)
+    # Subagent completions waiting for their `Agent` tool result, which
+    # carries the child's final usage and answer, keyed by tool_use_id.
+    finished_tasks: dict[str, TaskNotificationMessage] = dataclasses.field(default_factory=dict)
+    # Tool calls whose result has arrived. A subagent launched in the
+    # background returns before it finishes and closes on its notification.
+    answered_calls: set[str] = dataclasses.field(default_factory=set)
 
     @property
     def stopped(self) -> bool:
@@ -48,6 +73,8 @@ def new_run_state(
     run_id: str | None = None,
     prices: PriceTable | None = None,
     enabled_builtin_tools: list[str] | None = None,
+    enabled_builtin_subagents: list[str] | None = None,
+    skills_filter: list[str] | None = None,
 ) -> RunState:
     return RunState(
         prompt=prompt,
@@ -61,6 +88,8 @@ def new_run_state(
             dispatch_target=get_dispatch_target,
         ),
         enabled_builtin_tools=enabled_builtin_tools,
+        enabled_builtin_subagents=enabled_builtin_subagents,
+        skills_filter=skills_filter,
     )
 
 

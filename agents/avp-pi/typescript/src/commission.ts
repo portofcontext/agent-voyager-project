@@ -3,10 +3,11 @@
  *
  * - `model` `<origin>/<id>` resolves in Pi's model catalog as provider
  *   `<origin>`, model `<id>`; an unknown model is `unsupported_model`.
- *   `provider.base_url` redirects that model's endpoint; a `provider.id` other
- *   than the origin is `unsupported_provider`. Credentials come from Pi's
- *   usual sources (the provider's environment variable, or `auth.json` in
- *   Pi's agent directory).
+ *   `provider.base_url` redirects that model's endpoint; otherwise a
+ *   launcher's `<ORIGIN>_HOST` replaces the endpoint's root and keeps its API
+ *   path. A `provider.id` other than the origin is `unsupported_provider`.
+ *   Credentials come from Pi's usual sources (the provider's environment
+ *   variable, or `auth.json` in Pi's agent directory).
  * - `system_prompt` is appended to Pi's own system prompt, which carries its
  *   tool and skill guidance.
  * - `prompt` is the run's single user message.
@@ -58,6 +59,21 @@ export function fromCommission(commission: Commission): RunPlan {
     tools: [...builtins, "mcp__*"],
     mcpServers: (commission.mcp_servers ?? []) as McpEntry[],
   };
+}
+
+/**
+ * `catalogUrl` moved under the launcher's `<ORIGIN>_HOST`, which stands in for
+ * the provider's root: `OPENAI_HOST=http://broker/llm/openai` turns
+ * `https://api.openai.com/v1` into `http://broker/llm/openai/v1`.
+ */
+export function launcherBaseUrl(
+  origin: string,
+  catalogUrl: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const host = env[`${origin.toUpperCase().replace(/-/g, "_")}_HOST`];
+  if (!host) return undefined;
+  return host.replace(/\/+$/, "") + new URL(catalogUrl).pathname.replace(/\/+$/, "");
 }
 
 export function splitModel(model: string): [string, string] {

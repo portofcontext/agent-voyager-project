@@ -115,3 +115,53 @@ def test_workspace_includes_subprocesses_and_keeps_cli_paths(tmp_path, monkeypat
     assert (launch / "t.jsonl").exists()
     assert not list(workspace.iterdir())
     assert os.environ["AVP_WORKSPACE"] == str(workspace)
+
+
+_SLOW_AGENT = """
+import asyncio
+from avp.agent_cli import main
+from avp.descriptor import AgentDescriptor
+from avp.recorder import Recorder
+from avp.trajectory import StopReason
+
+DESCRIPTOR = AgentDescriptor(agent_name="slow", agent_version="0.0.1", spec_version="0.1")
+
+async def run(commission, sink):
+    rec = Recorder(sink, run_id=commission.run_id)
+    await rec.prelude(commission, DESCRIPTOR)
+    await rec.start(request_model=commission.model)
+    try:
+        await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        await rec.stop(StopReason.interrupted)
+        raise
+    await rec.stop(StopReason.converged)
+
+raise SystemExit(main(run=run, describe=lambda: DESCRIPTOR))
+"""
+
+
+def test_sigterm_closes_the_trajectory_as_interrupted(tmp_path: Path) -> None:
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    (tmp_path / "agent.py").write_text(_SLOW_AGENT)
+    (tmp_path / "c.json").write_text(
+        json.dumps({"schema_version": "0.1", "run_id": "r", "model": "x/m"})
+    )
+    out = tmp_path / "t.jsonl"
+    proc = subprocess.Popen(
+        [sys.executable, "agent.py", "run", "--commission", "c.json", "--out", str(out)],
+        cwd=tmp_path,
+    )
+    deadline = time.monotonic() + 30
+    while "avp.agent_started" not in (out.read_text() if out.exists() else ""):
+        assert proc.poll() is None and time.monotonic() < deadline
+        time.sleep(0.05)
+    proc.send_signal(signal.SIGTERM)
+    assert proc.wait(timeout=30) == 130
+    events = [json.loads(line) for line in out.read_text().splitlines()]
+    assert events[-1]["type"] == "avp.agent_stopped"
+    assert events[-1]["data"]["avp.reason"] == "interrupted"

@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
@@ -27,7 +29,8 @@ from pydantic import ValidationError
 
 from avp.descriptor import AgentDescriptor
 from avp.launch import local_environment
-from avp_conformance._match import match_case
+from avp_conformance._match import MatchResult, match_case
+from avp_conformance._meter import Meter, reconcile
 from avp_conformance._utils import discover_suite, load_case, load_manifest
 from avp_conformance.case import TestCase
 from avp_conformance.manifest import AgentManifest
@@ -112,7 +115,12 @@ def _expand_fixture_tokens(
 
 
 def _describe_agent(
-    manifest: AgentManifest, command: list[str], cwd: Path, prefix: list[str], timeout: float
+    manifest: AgentManifest,
+    command: list[str],
+    cwd: Path,
+    prefix: list[str],
+    timeout: float,
+    extra_env: dict[str, str] | None = None,
 ) -> AgentDescriptor:
     """The agent-under-test's pre-flight `describe` descriptor. Its identity
     keys per-agent Commission maps via the `${AGENT_NAME}` / `${AGENT_VERSION}`
@@ -123,7 +131,7 @@ def _describe_agent(
         out_path = Path(f.name)
     try:
         cmd = [*prefix, *command, "describe", "--out", str(out_path)]
-        with local_environment(manifest.env) as env:
+        with local_environment({**manifest.env, **(extra_env or {})}) as env:
             result = subprocess.run(
                 cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
             )
@@ -133,6 +141,34 @@ def _describe_agent(
         return AgentDescriptor.model_validate(json.loads(out_path.read_text()))
     finally:
         out_path.unlink(missing_ok=True)
+
+
+# Credential variables per model origin, for `credentials: "invalid"` cases.
+# The first is set to a well-formed but invalid key; every one is overridden,
+# and the alternates listed in `_ALT_CREDENTIALS` are removed, so no fallback
+# credential (an OAuth token, a second key name) rescues the run.
+_CREDENTIAL_VARS: dict[str, tuple[str, ...]] = {
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "openai": ("OPENAI_API_KEY", "CODEX_API_KEY"),
+    "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "mistral": ("MISTRAL_API_KEY",),
+    "openrouter": ("OPENROUTER_API_KEY",),
+}
+_ALT_CREDENTIALS: dict[str, tuple[str, ...]] = {
+    "anthropic": ("ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+}
+_INVALID_KEY = "sk-avp-conformance-invalid-0000000000000000000000000000"
+
+
+def _invalid_credentials(env: dict[str, str], model: str) -> dict[str, str]:
+    """`env` with the model provider's credentials replaced by an invalid key."""
+    origin = model.split("/", 1)[0]
+    names = _CREDENTIAL_VARS.get(origin)
+    if names is None:
+        raise ValueError(f"no known credential variables for model origin {origin!r}")
+    out = {k: v for k, v in env.items() if k not in _ALT_CREDENTIALS.get(origin, ())}
+    out.update(dict.fromkeys(names, _INVALID_KEY))
+    return out
 
 
 # API hosts a `--model` origin needs when the run is sandboxed (`--sandbox`).
@@ -396,6 +432,7 @@ def _run_case(
     timeout: float,
     dump_dir: Path | None = None,
     identity: tuple[str, str] | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[list[dict] | None, str | None]:
     """Spawn the agent's `run` for one case; return (events, error).
 
@@ -406,7 +443,7 @@ def _run_case(
     """
     with (
         tempfile.TemporaryDirectory(prefix=f"avp-case-{tc.id}-") as tmp,
-        local_environment(manifest.env) as env,
+        local_environment({**manifest.env, **(extra_env or {})}) as env,
     ):
         tmpd = Path(tmp)
         commission_path = tmpd / "commission.json"
@@ -423,17 +460,35 @@ def _run_case(
             args += ["--built-in", str(built_in_path)]
         args += ["--out", str(out_path)]
 
-        cmd = [*prefix, *command, *args]
-        try:
-            result = subprocess.run(
-                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-            )
-        except subprocess.TimeoutExpired:
-            return None, f"timed out after {timeout}s"
+        if tc.credentials == "invalid":
+            try:
+                env = _invalid_credentials(env, tc.commission.model)
+            except ValueError as exc:
+                return None, str(exc)
 
-        if result.returncode != 0:
-            tail = result.stderr[-500:].strip() if result.stderr else "(no stderr)"
-            return None, f"agent exit={result.returncode}: {tail}"
+        cmd = [*prefix, *command, *args]
+        stderr_path = tmpd / "stderr.txt"
+        with stderr_path.open("w") as stderr:
+            proc = subprocess.Popen(
+                cmd, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=stderr, text=True
+            )
+            try:
+                if tc.interrupt is not None and (error := _interrupt(proc, tc, out_path, timeout)):
+                    proc.kill()
+                    proc.wait()
+                    return None, error
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                return None, f"timed out after {timeout}s"
+        stderr_text = stderr_path.read_text()
+
+        # An interrupted agent's exit status is its own business; its
+        # trajectory is what the case judges.
+        if returncode != 0 and tc.interrupt is None:
+            tail = stderr_text[-500:].strip() or "(no stderr)"
+            return None, f"agent exit={returncode}: {tail}"
 
         if not out_path.exists():
             return None, "agent wrote no --out file"
@@ -443,9 +498,41 @@ def _run_case(
             (dump_dir / f"{tc.id}.jsonl").write_text(raw)
             # Agent stderr is free-form logging; capture it too so a clean
             # exit-0 run with a suspicious trajectory can still be debugged.
-            (dump_dir / f"{tc.id}.stderr").write_text(result.stderr or "")
+            (dump_dir / f"{tc.id}.stderr").write_text(stderr_text)
         events = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
         return events, None
+
+
+def _interrupt(proc: subprocess.Popen, tc: TestCase, out_path: Path, timeout: float) -> str | None:
+    """Wait for `tc.interrupt.after` on the trajectory, then signal the agent.
+    Returns an error when the agent exits or times out before that point."""
+    assert tc.interrupt is not None
+    deadline = time.monotonic() + timeout
+    while not _has_event(out_path, tc.interrupt.after):
+        if proc.poll() is not None:
+            return f"agent exited before {tc.interrupt.after} (nothing to interrupt)"
+        if time.monotonic() > deadline:
+            return f"timed out after {timeout}s waiting for {tc.interrupt.after}"
+        time.sleep(0.05)
+    time.sleep(tc.interrupt.delay_s)
+    if proc.poll() is not None:
+        return f"agent finished within {tc.interrupt.delay_s}s of {tc.interrupt.after}"
+    proc.send_signal(getattr(signal, tc.interrupt.signal))
+    return None
+
+
+def _has_event(out_path: Path, event_type: str) -> bool:
+    try:
+        text = out_path.read_text()
+    except OSError:
+        return False
+    for line in text.splitlines():
+        try:
+            if json.loads(line).get("type") == event_type:
+                return True
+        except json.JSONDecodeError:
+            continue  # a line still being written
+    return False
 
 
 @app.command()
@@ -489,6 +576,15 @@ def check(
             "the one the case pins. Rewritten throughout the case, expectations included.",
         ),
     ] = None,
+    meter: Annotated[
+        bool,
+        typer.Option(
+            "--meter/--no-meter",
+            help="Route provider traffic through a local metering proxy and fail a case whose "
+            "trajectory omits tokens the provider billed (and a describe that calls a model). "
+            "It sets the provider endpoint variables; use --no-meter to keep your own.",
+        ),
+    ] = True,
 ) -> None:
     """Run conformance cases against the SDK described by --agent.
 
@@ -524,10 +620,14 @@ def check(
     n_pass = 0
     n_fail = 0
     n_skip = 0
+    metering = Meter().start() if meter else None
+    routing = metering.env() if metering else {}
+    if metering is not None and sandbox:
+        allow_domain = [*(allow_domain or []), "localhost", "127.0.0.1"]
     try:
         prefix = _sandbox_prefix(sandbox, cwd, cleanup, allow_domain)
         try:
-            descriptor = _describe_agent(manifest, command, cwd, prefix, timeout)
+            descriptor = _describe_agent(manifest, command, cwd, prefix, timeout, routing)
         except Exception as exc:
             typer.echo(f"error: could not learn the agent's identity via describe: {exc}", err=True)
             raise typer.Exit(code=2) from None
@@ -536,6 +636,13 @@ def check(
             f"running {total} case(s) against {manifest.command[0]!r} "
             f"({identity[0]} v{identity[1]})\n"
         )
+        if metering is not None and (billed := metering.take()):
+            typer.echo(
+                f"  FAIL  describe called a model ({len(billed)} billed response(s)); "
+                "describe must be free",
+                err=True,
+            )
+            n_fail += 1
         for cat_name in sorted(grouped):
             typer.echo(f"  {cat_name}:")
             for tc in grouped[cat_name]:
@@ -543,8 +650,10 @@ def check(
                     typer.echo(f"    SKIP  {tc.id}  (agent declares no {', '.join(missing)})")
                     n_skip += 1
                     continue
+                if metering is not None:
+                    metering.take()
                 events, error = _run_case(
-                    tc, manifest, command, cwd, prefix, timeout, dump_dir, identity
+                    tc, manifest, command, cwd, prefix, timeout, dump_dir, identity, routing
                 )
                 if error is not None:
                     typer.echo(f"    FAIL  {tc.id}  {error}", err=True)
@@ -552,6 +661,8 @@ def check(
                     continue
                 assert events is not None
                 result = match_case(events, tc.expectations)
+                if metering is not None and (unbilled := reconcile(metering.take(), events)):
+                    result = MatchResult(ok=False, reasons=[*result.reasons, *unbilled])
                 if result.ok:
                     typer.echo(f"    PASS  {tc.id}")
                     n_pass += 1
@@ -561,6 +672,8 @@ def check(
                         typer.echo(f"          {reason}", err=True)
                     n_fail += 1
     finally:
+        if metering is not None:
+            metering.stop()
         for path in cleanup:
             path.unlink(missing_ok=True)
 

@@ -256,7 +256,7 @@ def test_apply_enabled_builtin_tools_filters_the_bag() -> None:
     None passes through (all), [] yields [] (none), a list keeps only the named
     tools, and [] yields [] even when the bag was None."""
     from avp.descriptor import ToolDecl
-    from avp_claude_agent_sdk._emit import _apply_enabled_builtin_tools
+    from avp_claude_agent_sdk._emit import _apply_allow_list as _apply_enabled_builtin_tools
 
     bag = [ToolDecl(name="Bash"), ToolDecl(name="Read"), ToolDecl(name="mcp__x__y")]
     assert _apply_enabled_builtin_tools(bag, None) == bag
@@ -305,10 +305,60 @@ def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
     skill_md = tmp_path / ".claude" / "skills" / "avp" / "SKILL.md"
     assert skill_md.read_text() == "---\nname: avp\n---\nbody"
     assert (tmp_path / ".claude" / "skills" / "avp" / "ref.md").read_text() == "x"
-    assert options.skills == ["avp"]  # frontmatter name, passed as the SDK filter
+    # No built-in allow-list: every skill, so the filter keeps the built-ins.
+    assert options.skills == "all"
     # The materialized skill is a PROJECT skill; it loads only if setting_sources
     # includes "project". Must be added even when the caller isolated with [].
     assert "project" in (options.setting_sources or [])
+
+
+@pytest.mark.parametrize(
+    ("inline", "allow", "expected"),
+    [
+        (False, None, None),
+        (False, [], []),
+        (False, ["verify"], ["verify"]),
+        (True, None, "all"),
+        (True, [], ["avp"]),
+        (True, ["verify"], ["avp", "verify"]),
+    ],
+)
+def test_skills_filter_follows_the_built_in_allow_list(tmp_path, inline, allow, expected) -> None:
+    """The SDK `skills` filter hides every skill it does not name: an absent
+    allow-list keeps the built-ins, and `[]` hides them even with no inline skill."""
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody"}}]
+        if inline
+        else None,
+        enabled_builtin_skills=None if allow is None else {"avp-claude-agent-sdk": allow},
+    )
+    options = apply_commission(commission, ClaudeAgentOptions(cwd=str(tmp_path)))
+    assert options.skills == expected
+
+
+def test_mcp_allow_list_filters_base_servers_and_keeps_commission_ones() -> None:
+    from claude_agent_sdk.types import ClaudeAgentOptions
+
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    base = ClaudeAgentOptions(mcp_servers={"keep": {"command": "a"}, "drop": {"command": "b"}})
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        mcp_servers=[{"type": "stdio", "id": "mine", "command": ["c"]}],
+        enabled_builtin_mcp_servers={"avp-claude-agent-sdk": ["keep"]},
+    )
+    assert set(apply_commission(commission, base).mcp_servers) == {"keep", "mine"}
 
 
 def test_inline_skill_adds_project_to_isolated_setting_sources(tmp_path) -> None:
@@ -1103,6 +1153,70 @@ def test_task_dispatch_emits_tool_pair_with_subagent_overlay() -> None:
     assert tool_returned.data.parent_span_id == tool_invoked.data.span_id
 
 
+def test_subagent_rollup_takes_the_agent_results_final_usage() -> None:
+    """The notification's `TaskUsage` is taken before the child's last
+    response completes and its summary is the task description; the `Agent`
+    tool result carries the final usage and the answer. Live, the notification
+    was a token short of the provider's bill."""
+    result = UserMessage(
+        content=[ToolResultBlock(tool_use_id="toolu_task_1", content="PONG")],
+        tool_use_result={
+            "status": "completed",
+            "content": [{"type": "text", "text": "PONG"}],
+            "totalTokens": 17394,
+            "totalToolUseCount": 0,
+            "totalDurationMs": 673,
+            "usage": {
+                "input_tokens": 3,
+                "cache_creation_input_tokens": 17385,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 6,
+            },
+        },
+    )
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=4, output_tokens=4),
+                _task_started(),
+                _task_notification(
+                    summary="Reply with PONG",
+                    usage={"total_tokens": 17393, "tool_uses": 0, "duration_ms": 673},
+                ),
+                result,
+                _result(),
+            ]
+        )
+    )
+    types = [ev.type for ev in events]
+    assert types.index("avp.subagent_returned") < types.index("avp.tool_returned")
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert returned.data.subagent_result_text == "PONG"
+    usage = returned.data.subagent_usage.model_dump()
+    assert (usage["tokens_input"], usage["tokens_output"]) == (17388, 6)
+    assert usage["total_tokens"] == 17394
+
+
+def test_background_subagent_closes_on_its_notification() -> None:
+    """A background `Agent` call returns at launch; the frame closes when the
+    child's notification arrives later."""
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(_task_use_block(), input_tokens=4, output_tokens=4),
+                _task_started(),
+                _user_tool_result(tool_use_id="toolu_task_1", content="launched"),
+                _task_notification(summary="done", usage={"total_tokens": 42}),
+                _result(),
+            ]
+        )
+    )
+    returned = next(ev for ev in events if ev.type == "avp.subagent_returned")
+    assert returned.data.subagent_reason == "converged"
+    assert returned.data.subagent_result_text == "done"
+    assert returned.data.subagent_usage.model_dump()["total_tokens"] == 42
+
+
 def test_task_failed_status_emits_returned_with_error_reason() -> None:
     """TaskNotification.status == 'failed' maps to `subagent_returned`
     with `reason = error` and the failure summary on `result.text`. The
@@ -1415,3 +1529,42 @@ def test_task_without_lifecycle_emits_tool_pair_only() -> None:
     assert "avp.tool_returned" in types
     assert "avp.subagent_invoked" not in types
     assert "avp.subagent_returned" not in types
+
+
+def test_usage_input_tokens_include_the_cache_split() -> None:
+    events = asyncio.run(
+        _drive(
+            [
+                _assistant(
+                    TextBlock(text="hi"),
+                    input_tokens=10,
+                    output_tokens=5,
+                    cache_read=1000,
+                    cache_creation=200,
+                ),
+                _result(result="done"),
+            ]
+        )
+    )
+    msg = next(ev for ev in events if ev.type == "avp.assistant_message")
+    assert msg.data.usage.input_tokens == 1210
+    assert msg.data.usage.cache_read_input_tokens == 1000
+    assert msg.data.usage.cache_creation_input_tokens == 200
+    # Haiku 4.5: 10 fresh at $1/M, 1000 cache reads at $0.10/M, 200 cache
+    # writes at $1.25/M, 5 out at $5/M.
+    expected = (10 * 1 + 1000 * 0.1 + 200 * 1.25 + 5 * 5) / 1e6
+    assert msg.data.cost_usd == pytest.approx(expected)
+
+
+def test_a_failed_api_call_is_an_error_not_a_turn() -> None:
+    """The CLI renders an auth failure as a synthetic assistant message."""
+    failure = _assistant(TextBlock(text="Invalid API key · Fix external API key"))
+    failure.error = "authentication_failed"
+    events = asyncio.run(_drive([failure, _result(is_error=True, result="Invalid API key")]))
+    types = [ev.type for ev in events]
+    assert "avp.assistant_message" not in types
+    error = next(ev for ev in events if ev.type == "avp.error_occurred")
+    assert error.data.error_code == "auth_error"
+    assert "Invalid API key" in error.data.error_message
+    assert events[-1].type == "avp.agent_stopped"
+    assert events[-1].data.reason == "error"

@@ -8,7 +8,7 @@ stream-folded `final_state` totals are pinned directly.
 
 from __future__ import annotations
 
-from avp_conformance._match import _check_structure, _partial, match_case
+from avp_conformance._match import _check_accounting, _check_structure, _partial, match_case
 from avp_conformance.case import EventMatcher, Expectations, FinalState
 
 # A minimal but realistic trajectory: prelude at the root, one assistant turn
@@ -313,3 +313,85 @@ def test_text_contains_accepts_both_tool_result_representations():
     assert not _partial([{"type": "image", "text": "echoed"}], pattern)
     assert not _partial({"text": "echoed"}, pattern)
     assert not _partial("echoed", {"$text_contains": 3})
+
+
+# ── accounting (universal) ─────────────────────────────────────────────────
+
+
+def _turn(**data) -> list[dict]:
+    """TRAJECTORY with its assistant_message data replaced by `data`."""
+    events = [dict(e) for e in TRAJECTORY]
+    events[3] = {**events[3], "data": {**_span("4" * 16, _AGENT), "avp.step": 1, **data}}
+    return events
+
+
+_HAIKU = {
+    "avp.provider.name": "anthropic",
+    "avp.request.model": "claude-haiku-4-5-20251001",
+    "avp.response.model": "claude-haiku-4-5-20251001",
+}
+# claude-haiku-4-5 lists at $1 / $5 per 1M tokens; 1000 fresh in + 200 out.
+_USAGE = {"input_tokens": 1000, "output_tokens": 200}
+_COST = 1000 * 1 / 1e6 + 200 * 5 / 1e6
+
+
+def test_accounting_accepts_a_correctly_computed_cost():
+    events = _turn(
+        **_HAIKU, **{"avp.usage": _USAGE, "avp.cost_usd": _COST, "avp.cost.source": "computed"}
+    )
+    assert _check_accounting(events) == []
+
+
+def test_accounting_flags_a_mispriced_computed_cost():
+    events = _turn(
+        **_HAIKU, **{"avp.usage": _USAGE, "avp.cost_usd": 2 * _COST, "avp.cost.source": "computed"}
+    )
+    (reason,) = _check_accounting(events)
+    assert "computed avp.cost_usd" in reason
+
+
+def test_accounting_prices_a_dated_snapshot_as_the_request_model():
+    data = {
+        **_HAIKU,
+        "avp.request.model": "claude-haiku-4-5",
+        "avp.response.model": "claude-haiku-4-5-29990101",
+    }
+    events = _turn(
+        **data, **{"avp.usage": _USAGE, "avp.cost_usd": _COST, "avp.cost.source": "computed"}
+    )
+    assert _check_accounting(events) == []
+
+
+def test_accounting_flags_a_cache_split_outside_input_tokens():
+    usage = {"input_tokens": 100, "output_tokens": 5, "cache_read_input_tokens": 150}
+    events = _turn(**{"avp.usage": usage, "avp.cost_usd": 0.0, "avp.cost.source": "unknown"})
+    (reason,) = _check_accounting(events)
+    assert "exceeds input_tokens" in reason
+
+
+def test_accounting_flags_a_nonzero_unknown_cost_and_bad_counts():
+    events = _turn(**{"avp.usage": _USAGE, "avp.cost_usd": 0.5, "avp.cost.source": "unknown"})
+    assert "source is unknown" in _check_accounting(events)[0]
+    events = _turn(**{"avp.usage": {"input_tokens": -1, "output_tokens": 0}, "avp.cost_usd": 0})
+    assert "non-negative integers" in _check_accounting(events)[0]
+
+
+def test_accounting_does_not_judge_a_model_the_table_cannot_price():
+    data = {
+        "avp.provider.name": "acme",
+        "avp.request.model": "acme-1",
+        "avp.response.model": "acme-1",
+    }
+    events = _turn(
+        **data, **{"avp.usage": _USAGE, "avp.cost_usd": 0.42, "avp.cost.source": "computed"}
+    )
+    assert _check_accounting(events) == []
+
+
+def test_match_case_surfaces_accounting_failures():
+    events = _turn(
+        **_HAIKU, **{"avp.usage": _USAGE, "avp.cost_usd": 3 * _COST, "avp.cost.source": "computed"}
+    )
+    result = match_case(events, Expectations(events=[_m(type="avp.agent_stopped")]))
+    assert not result.ok
+    assert any(r.startswith("accounting:") for r in result.reasons)

@@ -20,16 +20,16 @@
 |                               |                                 | passed in `skills`, merged with `enabled_builtin_skills`.                     |
 | `enabled_builtin_tools`       | `tools`                         | `None` → leave `options.tools` untouched (AVP spec: expose all); `[]` →      |
 |                               |                                 | `tools=[]` (expose none); `[...]` → `tools=[...]` (expose only the listed). |
-| `enabled_builtin_skills`      | `skills`                        | Merged with Commission-supplied skill names.                                 |
-| `enabled_builtin_mcp_servers` | *(no clean mapping)*            | No per-server filter in SDK options. Workaround: `strict_mcp_config=True`   |
-|                               |                                 | + pass only the listed server configs in `mcp_servers`. Loses built-in CLI  |
-|                               |                                 | servers not in the Commission. TODO: confirm with SDK team.                  |
-| `enabled_builtin_subagents`   | *(no clean mapping)*            | `options.agents` defines custom agents, not filters built-in ones. The SDK  |
-|                               |                                 | has no `disallowed_agents` / `allowed_agents` knob. Enforcement would have  |
-|                               |                                 | to be in-loop (reject hallucinated Agent calls not in the allowlist).        |
+| `enabled_builtin_skills`      | `skills`                        | Absent → `"all"` when the Commission brings skills, else unset; present →    |
+|                               |                                 | the Commission's skill names plus the listed built-ins (`[]` exposes none).  |
+| `enabled_builtin_mcp_servers` | `mcp_servers`                   | Filters the base options' servers (the built-ins); Commission servers stay.  |
+|                               |                                 | Callers pass `strict_mcp_config` so the CLI loads no others.                 |
+| `enabled_builtin_subagents`   | `disallowed_tools`              | `Agent(<name>)` for each probed built-in subagent the list leaves out; `[]`  |
+|                               |                                 | disallows the `Agent` tool. Set in `connect()`, after the probe.             |
 | `output_schema`               | `output_format`                 | Wrapped as `{"type": "json_schema", "schema": output_schema}`.              |
-| `run_id`                      | *(AVP-only)*                    | Used as the trajectory run_id; not passed to SDK `session_id` (avoids       |
-|                               |                                 | namespace coupling / UUID-format conflicts).                                 |
+| `run_id`                      | `extra_args["name"]`            | Used as the trajectory run_id; not passed to SDK `session_id` (avoids       |
+|                               |                                 | namespace coupling / UUID-format conflicts). It names the CLI session, so    |
+|                               |                                 | the CLI makes no title request outside the recorded loop.                    |
 | `supervisor`                  | *(AVP-only)*                    | Stamped on `run_requested` event; no SDK field.                              |
 | `thread_id`                   | *(AVP-only)*                    | Stamped on `agent_started` event; no SDK field.                              |
 | `tags`                        | *(AVP-only)*                    | Stamped on `agent_started` event; no SDK field.                              |
@@ -43,7 +43,7 @@ material; the agent dials and loads them directly.
 import dataclasses
 from collections.abc import AsyncIterable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from claude_agent_sdk import ClaudeAgentOptions, McpServerConfig
 
@@ -89,10 +89,11 @@ def apply_commission(
     - `mcp_servers` (inline)  → `mcp_servers`
     - `skills` (inline)       → files materialized to `<cwd>/.claude/skills/<id>/`
                                 + `skills` (names), merged with `enabled_builtin_skills`
-    - `enabled_builtin_skills`→ `skills` (names)
+    - `enabled_builtin_skills`→ `skills` (see `_map_skills`)
+    - `enabled_builtin_mcp_servers` → filters the base `mcp_servers`
 
-    TODO:
-    - `enabled_builtin_mcp_servers`
+    `enabled_builtin_subagents` needs the probed surface, so
+    `AVPClaudeSDKClient.connect` applies it.
     """
     if commission is None:
         return options
@@ -107,6 +108,11 @@ def apply_commission(
 
     # model is a canonical "origin/model" slug; the SDK wants the bare model id.
     updates["model"] = commission.model.split("/", 1)[1]
+    # A named session skips the CLI's title request: a model call outside the
+    # agent loop that the trajectory could not account for.
+    updates["extra_args"] = {"name": commission.run_id, **base.extra_args}
+    # Each response's final usage arrives only as a partial-message event.
+    updates["include_partial_messages"] = True
     if commission.system_prompt is not None:
         updates["system_prompt"] = commission.system_prompt
     # Per AVP spec §4: the allowlist maps are keyed by descriptor.agent_name;
@@ -123,11 +129,15 @@ def apply_commission(
             "type": "json_schema",
             "schema": commission.output_schema,
         }
-    # Inline MCP servers: merge the Commission's onto any base ones (Commission
-    # id wins on collision). The SDK dials them; they surface on
+    # Inline MCP servers: merge the Commission's onto the base ones the
+    # allow-list keeps (Commission id wins on collision). The SDK dials them; they surface on
     # agent_started.data.avp.mcp_servers.
-    if commission.mcp_servers:
-        updates["mcp_servers"] = {**(base.mcp_servers or {}), **_map_mcp_servers(commission)}
+    base_servers = base.mcp_servers if isinstance(base.mcp_servers, dict) else {}
+    allow_servers = (commission.enabled_builtin_mcp_servers or {}).get(_AGENT_NAME)
+    if allow_servers is not None:
+        base_servers = {k: v for k, v in base_servers.items() if k in allow_servers}
+    if commission.mcp_servers or allow_servers is not None:
+        updates["mcp_servers"] = {**base_servers, **_map_mcp_servers(commission)}
 
     # Inline skills: the SDK `skills` field is a name-based context filter that
     # cannot ingest inline content, so the files must exist on disk where the CLI
@@ -146,9 +156,9 @@ def apply_commission(
         if "project" not in sources:
             sources.append("project")
         updates["setting_sources"] = sources
-    skill_names = _map_skills(commission)
-    if skill_names:
-        updates["skills"] = skill_names
+    skills = _map_skills(commission)
+    if skills is not None:
+        updates["skills"] = skills
 
     return dataclasses.replace(base, **updates) if updates else base
 
@@ -212,20 +222,20 @@ def _map_mcp_servers(commission: Commission) -> dict[str, McpServerConfig]:
     return result
 
 
-def _map_skills(commission: Commission) -> list[str]:
-    """Merge Commission-supplied skill names with `enabled_builtin_skills`.
+def _map_skills(commission: Commission) -> list[str] | Literal["all"] | None:
+    """The SDK `skills` filter for the Commission.
 
-    Each `Skill` carries inline `files` content; the SDK `skills` field
-    accepts only names (it's a context filter, not a content injector). We
-    use the SKILL.md frontmatter `name` (fallback to `skill.id` when the
-    frontmatter doesn't provide one) and union with `enabled_builtin_skills`.
+    The filter hides every skill it does not name, so an absent
+    `enabled_builtin_skills` becomes `"all"` when the Commission brings skills
+    (keeping the built-ins) and stays unset otherwise. A present list names the
+    Commission's skills (SKILL.md frontmatter `name`, else `skill.id`) plus the
+    allowed built-ins, so `[]` with no Commission skills exposes none.
     """
+    allowed = (commission.enabled_builtin_skills or {}).get(_AGENT_NAME)
+    if allowed is None:
+        return "all" if commission.skills else None
     names: list[str] = []
-    for skill in commission.skills or []:
-        name = skill.name or skill.id
-        if name not in names:
-            names.append(name)
-    for name in (commission.enabled_builtin_skills or {}).get(_AGENT_NAME) or []:
+    for name in [*(skill.name or skill.id for skill in commission.skills or []), *allowed]:
         if name not in names:
             names.append(name)
     return names

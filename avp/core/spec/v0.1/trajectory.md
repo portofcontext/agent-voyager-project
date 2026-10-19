@@ -127,7 +127,8 @@ loop:
 - `avp.usage` on `assistant_message` is a structured object carrying per-turn token deltas: `input_tokens` (required), `output_tokens` (required), `cache_read_input_tokens`, `cache_creation_input_tokens`, and `reasoning_output_tokens`. Provider-specific token categories the spec doesn't enumerate (e.g. vision or audio tokens) MAY appear as additional fields on the same object and pass through unmodeled.
 - `avp.cost_usd` on `assistant_message` is the per-turn billable cost (post-cache-discount). Cumulative totals are not on the wire; consumers reduce the stream.
 - `avp.usage.input_tokens` is the total input tokens INCLUDING cache-read tokens.
-- `avp.usage.cache_read_input_tokens` and `avp.usage.cache_creation_input_tokens` are informational and already accounted for inside `input_tokens`; consumers MUST NOT double-count them when summing.
+- `avp.usage.cache_read_input_tokens` and `avp.usage.cache_creation_input_tokens` are informational and already accounted for inside `input_tokens`; consumers MUST NOT double-count them when summing. Their sum therefore MUST NOT exceed `input_tokens`.
+- `avp.cost.source` records where `avp.cost_usd` came from. `computed`: the agent priced the turn's usage from the AVP price table (`prices.json`, keyed by `<provider>/<model>`), as the response model or, when the table lacks it, the request model; a consumer holding the same table recomputes the same figure. `reported`: the provider or runtime reported the cost. `unknown`: the turn could not be priced, and `avp.cost_usd` MUST be `0`, which consumers MUST NOT read as free.
 - Per-turn deltas (`avp.cost_usd`, all token counts on `avp.usage`) are non-negative.
 - Translator agents wrapping cumulative-usage SDKs (notably the Claude Agent SDK, which reports running session totals per message) derive per-turn deltas by subtracting the previous cumulative. Reset handling (e.g. cumulative drops after compaction or sub-agent dispatch) is an implementation detail of the translator; no specific error code is mandated.
 
@@ -240,6 +241,7 @@ An agent is conforming to the Trajectory Spec if and only if all of the followin
 6. The last event it emits MUST be `avp.agent_stopped` (source=`avp://agent`). After emitting `agent_stopped`, the agent MUST NOT emit additional events.
 7. Every `avp.subagent_invoked` MUST be paired with an `avp.subagent_returned` carrying the same `span_id`, emitted before `agent_stopped`. A subagent still in flight when the run ends MUST be closed with `avp.subagent.reason = abandoned`, and the run's `agent_stopped.data["avp.reason"]` MUST NOT then be `converged` (see §5.6).
 8. All emitted events MUST validate against `trajectory.schema.json`.
+9. On SIGINT or SIGTERM during a run, it MUST stop its runtime and close the trajectory before exiting: close any open turn and subagent frames, then emit `avp.agent_stopped` with `avp.reason = interrupted`.
 
 If `Commission.mcp_servers` is non-empty (cross-spec composition with [Commission](./commission.md)), the agent additionally MUST:
 

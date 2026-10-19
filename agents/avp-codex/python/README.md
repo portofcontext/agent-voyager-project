@@ -45,8 +45,8 @@ One Commission starts a fresh Codex thread and one user turn. That turn
 may contain multiple model calls and tool calls. Commission `thread_id` is
 attribution, not a request to resume a persisted Codex conversation.
 
-`model` requires `openai/<model>`; `provider.base_url` redirects the Responses
-endpoint. `system_prompt` becomes base instructions; inline skills append all
+`model` requires `openai/<model>`; `provider.base_url`, or else the launcher's
+`OPENAI_BASE_URL`, redirects the Responses endpoint. `system_prompt` becomes base instructions; inline skills append all
 files to developer instructions. `output_schema` becomes `outputSchema`.
 Commission MCP servers are configured in the native runtime, enumerated before
 `agent_started`, and their tools carry `avp.mcp_server_id`. Credentials remain a

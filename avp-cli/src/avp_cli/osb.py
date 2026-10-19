@@ -49,8 +49,8 @@ PROVIDER_REGISTRY: dict[str, tuple[str, str | None]] = {
     "anthropic": ("api.anthropic.com", "https://api.anthropic.com"),
     "openai": ("api.openai.com", "https://api.openai.com/v1"),
     "openrouter": ("openrouter.ai", "https://openrouter.ai/api/v1"),
-    "google": ("generativelanguage.googleapis.com", None),
-    "gemini": ("generativelanguage.googleapis.com", None),
+    "google": ("generativelanguage.googleapis.com", "https://generativelanguage.googleapis.com"),
+    "gemini": ("generativelanguage.googleapis.com", "https://generativelanguage.googleapis.com"),
     "mistral": ("api.mistral.ai", "https://api.mistral.ai/v1"),
 }
 

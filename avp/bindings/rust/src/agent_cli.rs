@@ -26,7 +26,10 @@
 //! for a crash, after recording `error_occurred` and `agent_stopped`. It exits
 //! non-zero with the error on stderr.
 //!
-//! Async harnesses block on their runtime inside the closures. `--built-in` is
+//! Async harnesses block on their runtime inside the closures. SIGINT and
+//! SIGTERM are the adapter's to handle (trajectory spec §8, rule 9): race the
+//! harness's event loop against them and stop as `interrupted`, as `avp-goose`
+//! does. `--built-in` is
 //! the conformance fixture of the agent's pretend defaults: its `system_prompt`
 //! and `prompt` seed the Commission when it leaves them unset (the Commission
 //! wins). Tool / MCP / subagent built-ins are not simulated. Matches the Python

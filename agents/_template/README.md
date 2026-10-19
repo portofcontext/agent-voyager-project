@@ -49,6 +49,10 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
 - **Ending.** `stop(reason)` on every path. Expected failures (preflight,
   auth, rate limit, refusal) end with `stop` and return normally; a crash
   records `error(...)` and `stop(error)`, then re-raises (non-zero exit).
+  SIGINT / SIGTERM must end with `stop(interrupted)`: the Python and
+  TypeScript stock entrypoints turn them into task cancellation / an
+  `AbortSignal`, so stop the runtime there; a Rust adapter races its event
+  loop against the signals itself (see `avp-goose`'s `interrupt_signal`).
 - **Invalid reports.** Recorder validation errors are adapter bugs: Python
   raises `RecorderError`; Rust returns `io::ErrorKind::InvalidInput` (including
   from `usage`). Propagate them through the crash path. Once stopped, the

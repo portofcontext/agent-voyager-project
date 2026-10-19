@@ -27,7 +27,7 @@ Releases: bump `version` in `package.json` and `container_version` for `pi` in
 | Commission | Pi |
 |---|---|
 | `model` `<origin>/<id>` | Pi catalog model `<origin>` / `<id>`; unknown is `unsupported_model` |
-| `provider.base_url` | the model's endpoint; a `provider.id` other than the origin is `unsupported_provider` |
+| `provider.base_url` | the model's endpoint; without it, a launcher's `<ORIGIN>_HOST` replaces the endpoint's root. A `provider.id` other than the origin is `unsupported_provider` |
 | `system_prompt` | appended to Pi's system prompt, which keeps its tool and skill guidance |
 | `prompt` | the session's single prompt |
 | `skills` | written to a scratch directory and loaded as Pi skills |

@@ -94,13 +94,22 @@ def finish_reasons(response: Any) -> list[str] | None:
     return [response.status] if response.status else None
 
 
-def tool_output(item: Any) -> str:
-    """The tool result as sent back to the model."""
+def tool_output(item: Any) -> str | list[dict[str, Any]]:
+    """The tool result as sent back to the model. The SDK's `input_text` items
+    (an MCP tool's text content) become AVP text blocks."""
     raw = item.raw_item
     out = raw.get("output") if isinstance(raw, dict) else getattr(raw, "output", None)
     if out is None:
         out = item.output
-    return out if isinstance(out, str) else json.dumps(out, default=str)
+    if isinstance(out, str):
+        return out
+    if (
+        isinstance(out, list)
+        and out
+        and all(isinstance(p, dict) and p.get("type") == "input_text" for p in out)
+    ):
+        return [{"type": "text", "text": p.get("text", "")} for p in out]
+    return json.dumps(out, default=str)
 
 
 def call_id(item: Any) -> str | None:
@@ -113,10 +122,22 @@ def error_code(exc: BaseException) -> ErrorCode:
     names = {c.__name__ for c in type(exc).__mro__}
     if "AuthenticationError" in names or "PermissionDeniedError" in names:
         return ErrorCode.auth_error
-    if "RateLimitError" in names:
+    if "RateLimitError" in names or _out_of_credits(exc):
         return ErrorCode.rate_limit
     if "context_length_exceeded" in str(exc) or "ContextWindowExceededError" in names:
         return ErrorCode.context_limit
     if "MaxTurnsExceeded" in names:
         return ErrorCode.unknown
     return ErrorCode.agent_crash
+
+
+def _out_of_credits(exc: BaseException) -> bool:
+    """An exhausted balance or quota, which OpenAI can deliver mid-stream as a
+    plain `APIError` (`insufficient_quota`, "You have no credits remaining")."""
+    code = getattr(exc, "code", None)
+    text = str(exc).lower()
+    return (
+        code == "insufficient_quota"
+        or "no credits remaining" in text
+        or "exceeded your current quota" in text
+    )
