@@ -1,7 +1,7 @@
 """Turn eval runs into what agentvoyagerproject.com renders.
 
 Reduces a run's trajectories into the site's `{by_commission, commissions}`
-payload and uploads it for `avp eval share`, which prints the short `/r/<id>`
+payload and uploads it for `avp eval share`, which prints the short `/eval/<id>`
 link. The site owns the rendering; this module builds the payload and talks to
 the site's share API.
 """
