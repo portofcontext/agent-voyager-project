@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A rate-limited `avp eval share` says to try again in a few minutes instead
+  of printing the site's raw error object.
+
 ## 0.2.1 (2026-10-19)
 
 ### Changed

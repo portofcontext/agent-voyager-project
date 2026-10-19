@@ -317,10 +317,16 @@ def _request(method: str, url: str, *, body: bytes | None = None, token: str | N
             data = resp.read()
             return resp.status, json.loads(data) if data else None
     except urllib.error.HTTPError as err:
+        if err.code == 429:
+            raise ShareError(
+                "too many shares from this network; try again in a few minutes"
+            ) from None
         try:
             detail = json.loads(err.read()).get("error")
         except Exception:
             detail = None
+        if isinstance(detail, dict):  # Vercel's own errors nest a message
+            detail = detail.get("message")
         raise ShareError(detail or f"HTTP {err.code}") from None
     except urllib.error.URLError as err:
         raise ShareError(f"could not reach {url}: {err.reason}") from None
