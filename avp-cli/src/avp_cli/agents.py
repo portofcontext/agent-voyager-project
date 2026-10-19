@@ -174,6 +174,20 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         package_asset="avp-gemini-cli.tar.gz",
         entry="dist/src/main.js",
     ),
+    "deep-agents": AgentSource(
+        name="deep-agents",
+        kind="python",
+        descriptor_name="avp-deep-agents",
+        tag_prefix="agent-deep-agents",
+        dev_manifest="agents/avp-deep-agents/python/avp-conformance.json",
+        # 0.1.0: LangChain Deep Agents 0.7.25 on a workspace filesystem + shell
+        # backend; OpenAI, Anthropic, and Google models; recorded through the reusable
+        # LangChain callback handler.
+        container_version="0.1.0",
+        module="avp_deep_agents.conformance",
+        dist="avp-deep-agents",
+        wheel_dists=("agent-voyager-project", "avp-deep-agents"),
+    ),
 }
 
 # The in-repo library wheels every Python agent release ships next to its own

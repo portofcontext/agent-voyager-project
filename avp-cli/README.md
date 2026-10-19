@@ -208,11 +208,12 @@ avp agent install claude-code
 avp agent install codex          # or openai-agents
 avp agent install pi             # needs Node 22.19+ on the host
 avp agent install gemini-cli     # needs Node 22.19+ on the host
+avp agent install deep-agents
 avp agent list                   # shows installed version + readiness
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
-(claude-code, codex, openai-agents) installs into a managed venv (needs `uv`); a
+(claude-code, codex, openai-agents, deep-agents) installs into a managed venv (needs `uv`); a
 Node agent (pi, gemini-cli) extracts its package archive and runs with the host's `node`. Release downloads go over
 plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
 fork or to avoid API rate limits. The host install serves `avp agent describe`
@@ -238,6 +239,9 @@ avp agent install codex --force \
   --wheel dist/agents/agent_voyager_project-*.whl \
   --wheel dist/agents/avp_codex-*.whl
 avp agent install pi --package dist/agents/avp-pi.tar.gz --force
+avp agent install deep-agents --force \
+  --wheel dist/agents/agent_voyager_project-*.whl \
+  --wheel dist/agents/avp_deep_agents-*.whl
 ```
 
 That's the contributor loop: build, install locally, run an eval against it.

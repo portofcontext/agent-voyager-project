@@ -15,6 +15,9 @@ These changes retain the v0.1 wire schemas.
 - Gemini CLI adapter (TypeScript), installable with `avp agent install gemini-cli`
   and released as `agent-gemini-cli-v<version>`. The CLI's vault broker routes
   `google` credentials with `x-goog-api-key` and sets `GEMINI_API_KEY`.
+- LangChain Deep Agents adapter, installable with `avp agent install deep-agents` and
+  released as `agent-deep-agents-v<version>`, with `AvpCallbackHandler`, a LangChain
+  callback handler that records any LangChain or LangGraph run through the Recorder.
 - Conformance checks accounting on every trajectory (the cache split inside
   `input_tokens`, `unknown` costs of zero, `computed` costs matching the price
   table) and adds cases for invalid provider credentials, the Commission system

@@ -12,6 +12,7 @@ semantics, and PASS/FAIL reporting.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -356,3 +357,29 @@ def test_an_agent_that_finishes_before_the_interrupt_point_fails(tmp_path):
     result = runner.invoke(app, ["check", "--agent", str(manifest), "--case", str(case)])
     assert result.exit_code == 1
     assert "nothing to interrupt" in result.output
+
+
+def test_a_timed_out_agent_is_killed_with_everything_it_launched(tmp_path):
+    """A launcher (`uv run`, `cargo run`) can't forward SIGKILL: killing only
+    it would leave the agent running after the case."""
+    manifest = _setup(tmp_path)
+    pid_file = tmp_path / "agent.pid"
+    launcher = tmp_path / "launcher.sh"
+    launcher.write_text(
+        f'if [ "$1" = run ]; then sleep 300 & echo $! > {pid_file}; wait; '
+        f'else exec {sys.executable} {tmp_path / "stub_agent.py"} "$@"; fi\n'
+    )
+    data = json.loads(manifest.read_text())
+    manifest.write_text(json.dumps({**data, "command": ["/bin/sh", str(launcher)]}))
+    case = _write_case(tmp_path, PASSING_CASE)
+    result = runner.invoke(
+        app, ["check", "--agent", str(manifest), "--case", str(case), "--timeout", "2"]
+    )
+    assert result.exit_code == 1
+    assert "timed out" in result.output
+    pid = int(pid_file.read_text())
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return
+    raise AssertionError(f"the launched agent (pid {pid}) outlived the case")

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avp-deep-agents"
+version = "0.1.0"
+description = "AVP agent over LangChain Deep Agents, plus a LangChain callback handler that records any LangChain or LangGraph run as an AVP trajectory."
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "agent-voyager-project==0.1.1",
+    "deepagents==0.7.25",
+    "langchain-anthropic==1.7.6",
+    "langchain-google-genai==4.4.2",
+    "langchain-mcp-adapters==0.3.2",
+    "langchain-openai==1.7.1",
+]
+
+[tool.uv.sources]
+agent-voyager-project = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avp_deep_agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
