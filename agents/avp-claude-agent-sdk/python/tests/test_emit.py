@@ -859,7 +859,7 @@ def test_unmatched_tool_result_fails_visibly() -> None:
 
 
 def test_client_closes_trajectory_on_recorder_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Cross the SDK iterator -> translator -> Recorder -> error handler seam."""
+    """Cross the SDK iterator -> translator -> Recorder -> error handler path."""
     from claude_agent_sdk import ClaudeSDKClient
 
     from avp_claude_agent_sdk._client import AVPClaudeSDKClient

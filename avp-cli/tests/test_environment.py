@@ -3,7 +3,7 @@ and compile (env, agent recipe) to a cached Dockerfile.
 
 Environments are a CLI-side concept (the spec never learns the word): they
 describe the container world an agent runs in. Nothing here touches Docker;
-the real-build path is covered by the docker-gated seam test."""
+the real-build path is covered by the docker-gated integration test."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Viewer-link payload shaping: single-agent stays flat, multi-agent folds into one.
 
-Plus the trajectory -> RunEvent projection seam: the viz events MUST carry the
+Plus the trajectory -> RunEvent projection boundary: the viz events MUST carry the
 real AVP wire `type` and wire field names, not a re-vocabulary.
 """
 

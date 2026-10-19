@@ -48,8 +48,8 @@ help:
 	@echo "AVP: orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
-	@echo "    make test            pytest across every package, docker seam tests excluded"
-	@echo "    make test-docker     real-sandbox seam tests (free; needs a Docker daemon)"
+	@echo "    make test            pytest across every package, docker integration tests excluded"
+	@echo "    make test-docker     real-sandbox integration tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
 	@echo "    make lint            ruff check"
 	@echo "    make format          ruff format (writes)"
@@ -103,14 +103,14 @@ test:
 	echo ""; echo "All package tests passed."
 
 
-# The real-sandbox seam tests: a managed OpenSandbox server over the local
+# The real-sandbox integration tests: a managed OpenSandbox server over the local
 # Docker daemon, a stock-image sandbox, the run contract + trajectory bind-mount
 # round trip, and egress-deny enforcement. Free (no model), needs Docker.
 # Egress enforcement is REQUIRED here (the strict local gate); in CI the same
 # test skips when the runner's kernel can't support the sidecar's hooks.
 .PHONY: test-docker
 test-docker:
-	@cd avp-cli && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker_seam.py -m docker -v
+	@cd avp-cli && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker.py -m docker -v
 
 
 # Manifest paths, relative to the repo root the harness runs from.
@@ -189,7 +189,7 @@ conformance:
 pi-build:
 	@cd $(PI_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
 
-# Pi's seam tests: its real session loop, tools, and MCP extension on a
+# Pi's integration tests: its real session loop, tools, and MCP extension on a
 # scripted model. Free; needs Node >= 22.19 and python3 (the MCP fixture).
 test-pi: pi-build
 	@cd $(PI_DIR) && node --test 'dist/tests/*.test.js'
@@ -200,7 +200,7 @@ test-pi: pi-build
 gemini-cli-build:
 	@cd $(GEMINI_CLI_DIR) && npm ci --silent --omit=optional --no-audit --no-fund && npm run --silent build
 
-# Gemini CLI's seam tests: its headless session, tools, subagents, and MCP
+# Gemini CLI's integration tests: its headless session, tools, subagents, and MCP
 # client on its scripted content generator. Free; needs Node >= 22.19 and
 # python3 (the MCP fixture).
 test-gemini-cli: gemini-cli-build
@@ -210,7 +210,7 @@ test-gemini-cli: gemini-cli-build
 opencode-build:
 	@cd $(OPENCODE_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
 
-# OpenCode's seam tests: the real `opencode serve` (pinned binary), its tools,
+# OpenCode's integration tests: the real `opencode serve` (pinned binary), its tools,
 # MCP client, and subagents on a scripted model. Free; needs Node >= 22.19 and
 # python3 (the MCP fixture).
 test-opencode: opencode-build

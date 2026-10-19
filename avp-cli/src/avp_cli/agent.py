@@ -155,7 +155,7 @@ def run_agent(
             *([models_mount] if models_mount is not None else []),
         ]
         try:
-            # The runtime seam (avp_cli.runtime): the managed OpenSandbox server by
+            # The runtime boundary (avp_cli.runtime): the managed OpenSandbox server by
             # default, or a libkrun podman machine (AVP_RUNTIME=libkrun) for GPU.
             # Egress is default-deny floored by runtime-base domains, plus the env's
             # `net`, plus the hosts the run reaches: under broker mode just the

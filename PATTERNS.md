@@ -80,7 +80,7 @@ cases judge each call's own result.
   last response.
 
 **Test the paths a model may not take.** A live model decides whether to call
-tools in parallel, fail, or delegate in the background. Each adapter's seam
+tools in parallel, fail, or delegate in the background. Each adapter's boundary
 tests script those paths against its real runtime: parallel calls with results
 out of order, a failing tool, several rounds, and a background subagent where
 the runtime has one.

@@ -1,4 +1,4 @@
-"""A host-side stand-in for the sandbox runtime used by the seam tests.
+"""A host-side stand-in for the sandbox runtime used by the integration tests.
 
 `FakeRuntime.create` mimics a real backend: it records the create kwargs and
 returns a box whose `run` executes the command on the HOST, substituting each
@@ -91,7 +91,7 @@ class FakeRuntime:
 
 
 def install(monkeypatch) -> type[FakeRuntime]:
-    """Patch the runtime seam in avp_cli; returns the (reset) FakeRuntime."""
+    """Patch the runtime boundary in avp_cli; returns the (reset) FakeRuntime."""
     from avp_cli import runtime as runtime_mod
 
     FakeRuntime.created = []

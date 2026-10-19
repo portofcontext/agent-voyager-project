@@ -1,6 +1,6 @@
 """`local_models` — staging local-inference model files for a run.
 
-The seam under test: a commission that asks for a local model must end up with
+The boundary under test: a commission that asks for a local model must end up with
 the GGUF in a host cache and a manifest whose path is the IN-SANDBOX mount path
 (so the agent resolves it inside the container), and the mount must bind that
 cache at the env-root location the agent reads from. Network (HF API + download)

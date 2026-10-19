@@ -1,4 +1,4 @@
-"""Tests for parse_event — the wire-decode seam.
+"""Tests for parse_event — the wire-decode boundary.
 
 Pins:
   - Known event types validate against their Pydantic models

@@ -1,4 +1,4 @@
-//! Seam test for the stock agent command line: argv in, Commission through the
+//! Integration test for the stock agent command line: argv in, Commission through the
 //! agent's `run`, NDJSON trajectory out (and `ping` / `describe`).
 
 use avp::agent_cli::{dispatch, BoxError};

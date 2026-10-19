@@ -1,4 +1,4 @@
-"""A scripted chat model for the seam tests: LangChain's `GenericFakeChatModel`
+"""A scripted chat model for the integration tests: LangChain's `GenericFakeChatModel`
 answering from a script, with tool binding accepted and every request kept.
 
 A script entry is an `AIMessage` (returned), an exception (raised), or a

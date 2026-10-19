@@ -90,7 +90,7 @@ add harness-specific refusals next to it.
 
 ## 5. Test and certify
 
-- Keep the seam test, pointed at a recorded or stubbed SDK stream.
+- Keep the integration test, pointed at a recorded or stubbed SDK stream.
 - Free: `make test` and `make conformance` (your agent's `ping` / `describe`).
 - On a real model: `avp-conformance check --agent <manifest> --suite v0.1`.
   The cases pin a Claude model; run them on your provider's with

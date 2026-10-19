@@ -1,4 +1,4 @@
-"""Seam tests: the stock command line drives `run` end to end over the real
+"""Integration tests: the stock command line drives `run` end to end over the real
 Deep Agents loop (`create_deep_agent`, its filesystem backend, its `task`
 subagent, real MCP sessions), with only the chat model scripted. Every emitted
 line must parse as AVP."""

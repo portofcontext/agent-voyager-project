@@ -4,7 +4,7 @@
  * Gemini CLI owns the loop through `LegacyAgentSession`, the session its
  * headless mode (`gemini -p`) runs on: Gemini client turns, the tool
  * scheduler, MCP, skills, and subagents. The adapter observes three of its
- * seams without replacing any:
+ * hooks without replacing any:
  *
  * - the Gemini client's stream, where each model response ends with one
  *   `Finished` event carrying that response's usage; the thoughts, text, and
@@ -71,7 +71,7 @@ export const AGENT_VERSION: string = JSON.parse(
 /** The model `describe` configures; the descriptor does not depend on it. */
 const DESCRIBE_MODEL = "gemini-2.5-flash";
 
-/** Seams for tests and embedders; every field is optional. */
+/** Hooks for tests and embedders; every field is optional. */
 export interface RunOptions {
   /**
    * A content generator to call in place of the Gemini API, such as Gemini

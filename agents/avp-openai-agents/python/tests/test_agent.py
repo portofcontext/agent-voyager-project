@@ -1,4 +1,4 @@
-"""Seam tests: the stock command line drives `run` end to end over the real
+"""Integration tests: the stock command line drives `run` end to end over the real
 OpenAI Agents SDK loop, with only the model scripted (the SDK's own
 `ScriptedModel`, which synthesizes the Responses stream including
 `response.completed` with usage). Every emitted line must parse as AVP."""
@@ -143,7 +143,7 @@ TEST_MCP = Path(__file__).resolve().parents[4] / "testing" / "mcp" / "avp_test_m
 
 
 def test_mcp_server_tools_round_trip(script, tmp_path: Path) -> None:
-    """The real MCP seam: dial the repo's stdio test server, surface its tools
+    """The real MCP boundary: dial the repo's stdio test server, surface its tools
     with `avp.mcp_server_id`, and dispatch one through the SDK."""
     from agents.testing import ModelStep
 

@@ -1,4 +1,4 @@
-"""CLI to Recorder seam, with official SDK notifications scripted."""
+"""CLI to Recorder boundary, with official SDK notifications scripted."""
 
 from __future__ import annotations
 

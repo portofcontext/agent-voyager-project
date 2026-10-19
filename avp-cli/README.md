@@ -320,7 +320,7 @@ src/avp_cli/
   cli.py            # the `avp` umbrella: init / eval / cm / agent / run / env / sandbox
   paths.py          # the ~/.avp asset root (AVP_HOME): commissions/ + runs/ + agents/
   library.py        # the portable commission library (~/.avp/commissions/<id>.json)
-  config.py         # load an eval JSON config -> internal engine (the config-not-code seam)
+  config.py         # load an eval JSON config -> internal engine (the config-not-code boundary)
   commission.py     # inspect a Commission a library commission yields (show / validate)
   console.py        # rich Console + stdout(results)/stderr(progress) discipline
   brand.py          # the AVP ship logo + palette for the terminal

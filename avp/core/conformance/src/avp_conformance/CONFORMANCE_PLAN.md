@@ -119,7 +119,7 @@ An SDK that doesn't expose both subcommands matching this shape cannot be driven
 - [x] Add `avp-conformance.json` manifest + `conformance.py` entrypoint to `python/agents/avp-claude-agent-sdk/` (ping verified end-to-end; run is a stub).
 - [x] Implement the `ping` subcommand in each entrypoint (Commission → trajectory NDJSON).
 - [x] Implement the `run` subcommand in each entrypoint (Commission → trajectory NDJSON). avp-claude-agent-sdk: `conformance.py` drives `run_avp_agent`. avp-goose: `avp-goose-conformance run` drives `runner::run` into a `FileSink` (new `avp::sink::FileSink`). Both honor the feasible part of `--built-in` (system_prompt / prompt; tool/MCP/subagent injection is a documented gap).
-- [~] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end. Free path (validate + ping) + seam-tested dispatch are green; real-model run is wired and pending a paid `conformance-check` run with `ANTHROPIC_API_KEY`.
+- [~] Confirm `avp-conformance check --agent <manifest> --suite v0.1` drives both end-to-end. Free path (validate + ping) + integration-tested dispatch are green; real-model run is wired and pending a paid `conformance-check` run with `ANTHROPIC_API_KEY`.
 
 ### CI / Make
 - [x] Split conformance into free (`conformance` = validate + per-agent `ping`) and paid (`conformance-check` = per-agent `check --suite v0.1`, gated on `ANTHROPIC_API_KEY`, optional `SANDBOX=--sandbox`); fold `conformance-check` into `smoke`. `make check`'s free floor keeps only the no-model parts.

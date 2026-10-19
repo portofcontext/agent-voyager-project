@@ -1,5 +1,5 @@
 /**
- * Seam tests: Pi's real session loop, tools, and MCP extension on a scripted
+ * Integration tests: Pi's real session loop, tools, and MCP extension on a scripted
  * (`faux`) model, through the adapter, into the Recorder's trajectory.
  */
 import { strict as assert } from "node:assert";
@@ -39,7 +39,7 @@ const FIXTURE = (() => {
 function commission(extra: Partial<Commission> = {}): Commission {
   return {
     schema_version: "0.1",
-    run_id: "pi-seam",
+    run_id: "pi-test",
     model: `anthropic/${MODEL}`,
     prompt: "do the thing",
     ...extra,

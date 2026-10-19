@@ -1,4 +1,4 @@
-"""Seam tests: the adapter driving the SDK's bundled Claude CLI against a local
+"""Integration tests: the adapter driving the SDK's bundled Claude CLI against a local
 Anthropic Messages endpoint, checking what the model is offered against the
 trajectory. No network, no credentials."""
 
@@ -159,7 +159,7 @@ def model(tmp_path, monkeypatch) -> Iterator[_Model]:
 def _run(**fields: Any) -> list[dict[str, Any]]:
     commission = Commission(
         schema_version="0.1",
-        run_id="claude-seam",
+        run_id="claude-test",
         model="anthropic/claude-haiku-4-5",
         prompt="do the thing",
         **fields,

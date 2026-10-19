@@ -79,7 +79,7 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
 
 
 def test_snapshot_is_independent_of_later_library_edits(tmp_path) -> None:
-    # Seam: the library is mutable; a run's snapshot must be a frozen copy, so
+    # Integration: the library is mutable; a run's snapshot must be a frozen copy, so
     # overwriting the library commission after the run does NOT alter the manifest.
     lib = tmp_path / "commissions"
     out = tmp_path / "run"

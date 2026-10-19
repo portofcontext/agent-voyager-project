@@ -75,7 +75,7 @@ export const BUNDLED_SDKS = new Set([
 /**
  * The subagents and skills this OpenCode version ships. A Commission that
  * withholds one is enforced in the server config, written before the server
- * can be asked; the seam tests check these against the server's own lists.
+ * can be asked; the integration tests check these against the server's own lists.
  */
 export const BUILTIN_SUBAGENTS = ["general", "explore"] as const;
 export const BUILTIN_SKILLS = ["customize-opencode"] as const;

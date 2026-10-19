@@ -11,7 +11,7 @@ the agent's container recipe.
 
 ```bash
 make pi-build                      # npm ci + build (binding and adapter)
-make test-pi                       # seam tests on Pi's scripted faux model
+make test-pi                       # integration tests on Pi's scripted faux model
 node dist/src/main.js describe     # Pi's default tools: read, bash, edit, write
 node dist/src/main.js run --commission commission.json --out trajectory.ndjson
 make pi-check                      # v0.1 conformance on a real model (paid)

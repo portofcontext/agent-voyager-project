@@ -1,7 +1,7 @@
 """`avp run` — commission one agent on one task inside a sandbox.
 
 The real run is paid/agentic; here the sandbox stack and the agent run are
-mocked at the cli seams and the tests assert the wiring: the task becomes the
+mocked at the cli boundaries and the tests assert the wiring: the task becomes the
 Commission prompt, the env seeds the workspace the sandbox will mount, and a
 missing container recipe skips cleanly.
 """

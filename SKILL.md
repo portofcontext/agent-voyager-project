@@ -130,7 +130,7 @@ and [integration patterns](https://github.com/portofcontext/agent-voyager-projec
 4. Leave workspace, home, credentials, and session-state provisioning to the
    launcher. Stock entrypoints honor `AVP_WORKSPACE`; library calls inherit
    their caller's context.
-5. Exercise native-event-to-Recorder seams, then run live conformance for the
+5. Test the native-event-to-Recorder path, then run live conformance for the
    adapter with `avp-conformance check --agent <manifest> --suite v0.1`.
    Report capability skips alongside passes: skipped behavior was not tested.
    Consult [conformance coverage](https://github.com/portofcontext/agent-voyager-project/blob/main/avp/core/conformance/src/avp_conformance/COVERAGE.md)

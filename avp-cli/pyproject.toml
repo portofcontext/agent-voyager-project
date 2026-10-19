@@ -58,5 +58,5 @@ path = "hatch_build.py"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "docker: needs a running Docker daemon (the real-sandbox seam tests; `make test-docker`)",
+    "docker: needs a running Docker daemon (the real-sandbox integration tests; `make test-docker`)",
 ]
