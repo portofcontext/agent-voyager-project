@@ -6,6 +6,19 @@
 
 - A rate-limited `avp eval share` says to try again in a few minutes instead
   of printing the site's raw error object.
+- Claude Code and Codex declared their built-in tools by name only, so
+  descriptors and `agent_started` carried no descriptions or input schemas.
+  Claude's capability probe now records the definitions the CLI sends the
+  model (from a local stand-in that refuses the request, so nothing is spent),
+  including its subagent and skill descriptions.
+  Codex ships the definitions its pinned CLI sends each verified model,
+  regenerated with `scripts/capture_tools.py`.
+
+### Added
+
+- `avp-conformance describe` fails when a declared tool has no description or
+  an `inputSchema` that is not an object schema. Freeform tools may omit the
+  schema. The agent template declares both for its `echo` tool.
 
 ## 0.2.1 (2026-10-19)
 

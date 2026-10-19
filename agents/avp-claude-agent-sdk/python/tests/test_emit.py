@@ -40,6 +40,7 @@ from avp_claude_agent_sdk._emit import (
     handle_message,
 )
 from avp_claude_agent_sdk._runstate import RunState, new_run_state
+from avp_claude_agent_sdk._translator import CATALOG_KEY
 
 # ---------------------------------------------------------------------------
 # Fixture builders. `_result()` fills the six required ResultMessage fields
@@ -174,15 +175,20 @@ async def _drive_prelude(
     status: McpStatusResponse | None = None,
     prompt: str = "ping",
     model: str | None = "claude-haiku-4-5-20251001",
+    catalog: dict[str, Any] | None = None,
 ) -> list[Event]:
     """Run the full prelude (`run_requested` + `agent_described` +
     `agent_started`) and return recorded events. `init=None` simulates a
-    failed probe so the descriptor falls back to identity-only."""
+    failed probe so the descriptor falls back to identity-only. `catalog`
+    is the tool definitions the probe captured from the CLI's request."""
     events: list[Event] = []
     state = _make_state(events)
+    state.catalog = catalog or {}
     options = ClaudeAgentOptions(model=model) if model else ClaudeAgentOptions()
     eff_status = status if status is not None else _status()
     init_data = init.data if init is not None else None
+    if init_data is not None and catalog is not None:
+        init_data = {**init_data, CATALOG_KEY: catalog}
     await emit_prelude(
         state, options, commission=None, prompt=prompt, init_data=init_data, status=eff_status
     )
@@ -434,10 +440,10 @@ def test_agent_started_mirrors_descriptor_when_no_commission() -> None:
 
 
 def test_mcp_tool_decls_carry_catalog_description() -> None:
-    """Decl fidelity (spec SHOULD): MCP-surfaced entries take `description`
-    from the per-server catalog `get_mcp_status()` reports; built-ins stay
-    name-only (the SDK exposes no catalog text for them), and an MCP handle
-    absent from the server's catalog stays honest-null too."""
+    """Decl fidelity (spec SHOULD): without a captured request catalog,
+    MCP-surfaced entries take `description` from the per-server catalog
+    `get_mcp_status()` reports; built-ins and an MCP handle absent from the
+    server's catalog stay honest-null."""
     events = asyncio.run(
         _drive_prelude(
             init=_init(tools=["Bash", "mcp__demo__search", "mcp__demo__unlisted"]),
@@ -452,6 +458,101 @@ def test_mcp_tool_decls_carry_catalog_description() -> None:
         assert by_name["Bash"].description is None
         assert by_name["mcp__demo__unlisted"].description is None
         assert by_name["mcp__demo__unlisted"].mcp_server_id == "demo"
+
+
+def test_tool_decls_carry_the_captured_request_catalog() -> None:
+    """Decl fidelity (spec SHOULD): every tool takes its description and
+    input schema from the definitions the CLI sends the model, including the
+    subagent tool `init` names `Task` and the request names `Agent`."""
+    schema = {"type": "object", "properties": {"command": {"type": "string"}}}
+    catalog = {
+        "tools": {
+            "Bash": {"description": "Run a shell command.", "input_schema": schema},
+            "Agent": {"description": "Launch a subagent.", "input_schema": {"type": "object"}},
+            "mcp__demo__search": {
+                "description": "Search (as sent).",
+                "input_schema": {"type": "object"},
+            },
+        }
+    }
+    events = asyncio.run(
+        _drive_prelude(init=_init(tools=["Bash", "Task", "mcp__demo__search"]), catalog=catalog)
+    )
+    for ev_tools in (
+        next(ev for ev in events if ev.type == "avp.agent_started").data.tools,
+        next(ev for ev in events if ev.type == "avp.agent_described").data.descriptor.tools,
+    ):
+        by_name = {t.name: t for t in ev_tools}
+        assert by_name["Bash"].description == "Run a shell command."
+        assert by_name["Bash"].inputSchema == schema
+        assert by_name["Task"].description == "Launch a subagent."
+        assert by_name["mcp__demo__search"].description == "Search (as sent)."
+        assert by_name["mcp__demo__search"].mcp_server_id == "demo"
+
+
+def test_subagents_and_skills_carry_the_listed_descriptions() -> None:
+    """Subagent and skill decls take their descriptions from the `- name:
+    description` listings the CLI sends the model, without the trailing
+    tool summary on subagents."""
+    from avp_claude_agent_sdk._translator import listed_descriptions
+
+    text = (
+        "Available agent types:\n"
+        "- Explore: Read-only search agent. (Tools: All tools except Edit)\n"
+        "- Plan: Plans things.\n"
+        "<system-reminder>\nThe following skills are available:\n\n"
+        "- verify: Check the work.\n</system-reminder>"
+    )
+    catalog = {
+        "subagents": listed_descriptions(text, ["Explore", "Plan", "missing"]),
+        "skills": listed_descriptions(text, ["verify"]),
+    }
+    assert catalog["subagents"] == {"Explore": "Read-only search agent.", "Plan": "Plans things."}
+    events = asyncio.run(
+        _drive_prelude(
+            init=_init(agents=["Explore", "missing"], skills=["verify"]), catalog=catalog
+        )
+    )
+    for data in (
+        next(ev for ev in events if ev.type == "avp.agent_started").data,
+        next(ev for ev in events if ev.type == "avp.agent_described").data.descriptor,
+    ):
+        subagents = {a.name: a.description for a in data.subagents}
+        assert subagents == {"Explore": "Read-only search agent.", "missing": None}
+        assert [(k.name, k.description) for k in data.skills] == [("verify", "Check the work.")]
+
+
+def test_catalog_capture_waits_past_side_calls_and_refuses() -> None:
+    """The probe's stand-in endpoint ignores side calls that carry no tools,
+    records the agent turn's definitions, and refuses every request."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    from avp_claude_agent_sdk._client import _CatalogCapture
+
+    capture = _CatalogCapture()
+    url = capture.env["ANTHROPIC_BASE_URL"] + "/v1/messages"
+
+    def post(body: dict[str, Any]) -> int:
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
+        try:
+            urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            return e.code
+        return 200
+
+    try:
+        assert post({"tools": []}) == 400
+        assert not capture.seen.is_set()
+        tool = {"name": "Read", "description": "Read a file.", "input_schema": {"type": "object"}}
+        assert post({"tools": [tool]}) == 400
+        assert capture.seen.is_set()
+        assert capture.tools == {
+            "Read": {"description": "Read a file.", "input_schema": {"type": "object"}}
+        }
+    finally:
+        capture.close()
 
 
 def test_agent_started_meta_carries_context_usage() -> None:

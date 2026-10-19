@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+from functools import cache
+from importlib.resources import files
 
 from avp.commission import Commission, McpServerStdio
+from avp.descriptor import ToolDecl
 from avp.preflight import preflight
 from avp.trajectory import ErrorCode
 
@@ -27,6 +30,36 @@ BUILTIN_TOOLS = [
 SHELL_TOOLS = {"exec_command", "write_stdin"}
 ENVIRONMENT_TOOLS = SHELL_TOOLS | {"apply_patch", "view_image"}
 RESOURCE_TOOLS = {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}
+
+
+# The model the descriptor describes before a Commission picks one.
+DESCRIBE_MODEL = "gpt-5.5"
+
+
+@cache
+def _catalog() -> dict[str, dict[str, dict]]:
+    """Built-in definitions Codex sends each verified model, captured from the
+    pinned CLI by scripts/capture_tools.py."""
+    return json.loads(files("avp_codex").joinpath("tools.json").read_text())["models"]
+
+
+def tool_decls(names: list[str], model: str = DESCRIBE_MODEL) -> list[ToolDecl]:
+    """Declarations for built-ins, with the description and input schema Codex
+    sends `model` (or the describe model's, for a model not captured)."""
+    catalog = _catalog()
+    sent = catalog.get(model) or catalog[DESCRIBE_MODEL]
+    fallback = catalog[DESCRIBE_MODEL]
+    decls = []
+    for name in names:
+        entry = sent.get(name) or fallback.get(name) or {}
+        decls.append(
+            ToolDecl(
+                name=name,
+                description=entry.get("description"),
+                inputSchema=entry.get("inputSchema"),
+            )
+        )
+    return decls
 
 
 def selected_tools(cm: Commission) -> list[str]:

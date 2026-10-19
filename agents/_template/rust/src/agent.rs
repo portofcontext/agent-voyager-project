@@ -9,7 +9,7 @@ use avp::trajectory::{AgentDescriptor, StopReason, ToolDecl};
 use avp::Commission;
 use serde_json::json;
 
-use crate::commission::{from_commission, AGENT_NAME, BUILTIN_TOOLS};
+use crate::commission::{from_commission, tool_definition, AGENT_NAME, BUILTIN_TOOLS};
 use crate::{harness, translate};
 
 pub const AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -19,7 +19,11 @@ const PROVIDER: &str = "openai";
 fn tool_decls(names: &[String]) -> Vec<ToolDecl> {
     names
         .iter()
-        .map(|n| serde_json::from_value(json!({"name": n})).expect("valid decl"))
+        .map(|n| {
+            let mut decl = tool_definition(n);
+            decl["name"] = json!(n);
+            serde_json::from_value(decl).expect("valid decl")
+        })
         .collect()
 }
 

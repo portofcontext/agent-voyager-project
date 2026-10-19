@@ -14,6 +14,23 @@ pub const AGENT_NAME: &str = "avp-agent-template";
 /// supplies extra tools through the Commission's `mcp_servers`.
 pub const BUILTIN_TOOLS: &[&str] = &["echo"];
 
+/// What the model is told about a built-in: the description and input schema
+/// the harness sends with its model requests. Declare them from the harness
+/// itself (its tool registry, or the request it sends), not paraphrased.
+pub fn tool_definition(name: &str) -> serde_json::Value {
+    match name {
+        "echo" => serde_json::json!({
+            "description": "Echo the given text back.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "Text to echo."}},
+                "required": ["text"],
+            },
+        }),
+        _ => serde_json::json!({}),
+    }
+}
+
 pub struct HarnessConfig {
     pub model: String,
     pub prompt: String,

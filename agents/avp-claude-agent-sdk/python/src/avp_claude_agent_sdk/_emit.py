@@ -142,15 +142,15 @@ async def emit_agent_started(
         prompt=prompt if isinstance(prompt, str) or prompt is None else None,
         system_prompt=resolve_system_prompt(options.system_prompt),
         tools=_apply_allow_list(
-            tools_from_init(init_data, status) if init_data else None,
+            tools_from_init(init_data, status, state.catalog) if init_data else None,
             state.enabled_builtin_tools,
         ),
         mcp_servers=mcp_servers_from_status(status),
         skills=_apply_allow_list(
-            skills_from_init(init_data) if init_data else None, state.skills_filter
+            skills_from_init(init_data, state.catalog) if init_data else None, state.skills_filter
         ),
         subagents=_apply_allow_list(
-            subagents_from_init(init_data) if init_data else None,
+            subagents_from_init(init_data, state.catalog) if init_data else None,
             state.enabled_builtin_subagents,
         ),
         meta=meta,

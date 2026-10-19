@@ -15,7 +15,12 @@ from avp.recorder import Recorder
 from avp.sink import EventSink
 from avp.trajectory import ErrorCode, StopReason
 from avp_agent_template import harness, translate
-from avp_agent_template.commission import AGENT_NAME, BUILTIN_TOOLS, from_commission
+from avp_agent_template.commission import (
+    AGENT_NAME,
+    BUILTIN_TOOLS,
+    TOOL_DEFINITIONS,
+    from_commission,
+)
 
 # The package version, so it can't drift from pyproject.toml (Commission
 # `agent_versions` pins and the release guard both compare against it).
@@ -30,7 +35,7 @@ def describe() -> AgentDescriptor:
         agent_name=AGENT_NAME,
         agent_version=AGENT_VERSION,
         spec_version="0.1",
-        tools=[ToolDecl(name=name) for name in BUILTIN_TOOLS],
+        tools=[ToolDecl(name=name, **TOOL_DEFINITIONS[name]) for name in BUILTIN_TOOLS],
     )
 
 
@@ -50,7 +55,7 @@ async def run(commission: Commission, sink: EventSink) -> None:
         request_model=config.model,
         prompt=config.prompt,
         system_prompt=config.system_prompt,
-        tools=[ToolDecl(name=name) for name in config.tools],
+        tools=[ToolDecl(name=name, **TOOL_DEFINITIONS[name]) for name in config.tools],
     )
     try:
         async for event in harness.stream(config):

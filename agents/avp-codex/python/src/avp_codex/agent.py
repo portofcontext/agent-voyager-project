@@ -27,7 +27,7 @@ def describe() -> AgentDescriptor:
         agent_name=cm.AGENT_NAME,
         agent_version=AGENT_VERSION,
         spec_version="0.1",
-        tools=[ToolDecl(name=n) for n in cm.BUILTIN_TOOLS],
+        tools=cm.tool_decls(cm.BUILTIN_TOOLS),
     )
 
 
@@ -89,7 +89,7 @@ async def run(commission: Commission, sink: EventSink) -> None:
                     f"avp-codex requires codex-cli {cm.CODEX_VERSION}; raw events are experimental"
                 )
             thread = started.thread.id
-            tools = [ToolDecl(name=name) for name in cm.selected_tools(commission)]
+            tools = cm.tool_decls(cm.selected_tools(commission), commission.model.split("/", 1)[1])
             declarations = []
             cursor = None
             statuses = {}

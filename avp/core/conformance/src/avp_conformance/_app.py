@@ -215,6 +215,20 @@ def with_model(tc: TestCase, model: str) -> TestCase:
     return TestCase.model_validate(data)
 
 
+def tool_detail_gaps(descriptor: AgentDescriptor) -> list[str]:
+    """Tools declared without what the model sees (Agent Descriptor §2.3
+    SHOULD): every tool needs a description, and an input schema, when
+    present, must be a JSON Schema object. Freeform tools have no schema."""
+    gaps = []
+    for tool in descriptor.tools or []:
+        if not (tool.description or "").strip():
+            gaps.append(f"{tool.name}: no description")
+        schema = tool.inputSchema
+        if schema is not None and schema.get("type") != "object":
+            gaps.append(f"{tool.name}: inputSchema is not an object schema")
+    return gaps
+
+
 def unmet_requirements(tc: TestCase, descriptor: AgentDescriptor) -> list[str]:
     """The `requires` surfaces the agent's descriptor doesn't declare."""
     return [r for r in tc.requires if not getattr(descriptor, r)]
@@ -409,6 +423,12 @@ def describe(
             for line in str(e).splitlines():
                 typer.echo(f"      {line}", err=True)
             raise typer.Exit(code=1) from None
+
+        if gaps := tool_detail_gaps(descriptor):
+            typer.echo("FAIL  describe  tools lack the details the model is given:", err=True)
+            for gap in gaps:
+                typer.echo(f"      {gap}", err=True)
+            raise typer.Exit(code=1)
 
         n_tools = len(descriptor.tools or [])
         typer.echo(

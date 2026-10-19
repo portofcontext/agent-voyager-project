@@ -173,7 +173,19 @@ def _normalize_mcp_prefix(server_name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", server_name)
 
 
-def tools_from_init(init_data: dict[str, Any], status: McpStatusResponse) -> list[ToolDecl] | None:
+# Where the capability probe puts what it captured from the CLI's model
+# request: `{"tools": {name: {"description", "input_schema"}},
+# "subagents": {name: description}, "skills": {name: description}}`.
+CATALOG_KEY = "avp.catalog"
+# `init` names the subagent tool `Task`; the model request names it `Agent`.
+_SENT_ALIASES = {"Task": "Agent"}
+
+
+def tools_from_init(
+    init_data: dict[str, Any],
+    status: McpStatusResponse,
+    catalog: dict[str, Any] | None = None,
+) -> list[ToolDecl] | None:
     """Full tool catalog from the `init` SystemMessage.
 
     `init.tools` is a flat list of names that includes both CLI
@@ -185,20 +197,19 @@ def tools_from_init(init_data: dict[str, Any], status: McpStatusResponse) -> lis
     in `mcp_servers[]`. Lookups go through a sanitized-prefix → id map
     built from `status.mcpServers`.
 
-    Decl fidelity (spec SHOULD, Agent Descriptor §2.3): MCP-surfaced
-    entries take `description` from the per-server tool catalog that
-    `get_mcp_status()` reports (`McpToolInfo`). The SDK exposes neither
-    `inputSchema` / `outputSchema` for any tool nor catalog text for CLI
-    built-ins, so those stay None (honest-null); the measurable view of
-    built-in catalog weight rides on `agent_started`'s
-    `avp.meta["claude_agent_sdk.context_usage"]` instead.
+    Decl fidelity (spec SHOULD, Agent Descriptor §2.3): every tool takes
+    its `description` and `inputSchema` from `catalog` (default: the one
+    the capability probe captured into `init_data`), the definitions the
+    CLI sends the model. MCP-surfaced entries fall back to the per-server
+    catalog `get_mcp_status()` reports (`McpToolInfo`).
     """
     names = init_data.get("tools") or []
+    sent = _catalog(init_data, catalog).get("tools") or {}
     servers = status.get("mcpServers", [])
     prefix_to_id = {_normalize_mcp_prefix(s["name"]): s["name"] for s in servers}
     # (sanitized server prefix, bare tool name) → the server's tools/list
     # entry, when the CLI reports per-server catalogs.
-    catalog: dict[tuple[str, str], dict[str, Any]] = {
+    listed: dict[tuple[str, str], dict[str, Any]] = {
         (_normalize_mcp_prefix(s["name"]), t["name"]): t
         for s in servers
         for t in (s.get("tools") or [])
@@ -210,32 +221,68 @@ def tools_from_init(init_data: dict[str, Any], status: McpStatusResponse) -> lis
             prefix = parts[1] if len(parts) >= 3 else None
             bare = parts[2] if len(parts) >= 3 else None
             server_id = prefix_to_id.get(prefix) if prefix else None
-            info = catalog.get((prefix, bare)) if prefix and bare else None
+            info = listed.get((prefix, bare)) if prefix and bare else None
             decls.append(
                 ToolDecl.model_validate(
                     {
                         "name": name,
-                        "description": (info or {}).get("description"),
+                        "description": (sent.get(name) or {}).get("description")
+                        or (info or {}).get("description"),
+                        "inputSchema": (sent.get(name) or {}).get("input_schema"),
                         "avp.mcp_server_id": server_id,
                     }
                 )
             )
         else:
-            decls.append(ToolDecl(name=name))
+            entry = sent.get(name) or sent.get(_SENT_ALIASES.get(name, "")) or {}
+            decls.append(
+                ToolDecl.model_validate(
+                    {
+                        "name": name,
+                        "description": entry.get("description"),
+                        "inputSchema": entry.get("input_schema"),
+                    }
+                )
+            )
     return decls or None
 
 
-def subagents_from_init(init_data: dict[str, Any]) -> list[SubagentDecl] | None:
-    """Subagent names from `init.agents`. SDK reports names only, no
-    descriptions; `SubagentDecl.description` stays None."""
+def subagents_from_init(
+    init_data: dict[str, Any], catalog: dict[str, Any] | None = None
+) -> list[SubagentDecl] | None:
+    """Subagent names from `init.agents`, described by the listing the CLI
+    sends the model (captured by the probe into `catalog`)."""
     names = init_data.get("agents") or []
-    return [SubagentDecl(name=n) for n in names] or None
+    sent = _catalog(init_data, catalog).get("subagents") or {}
+    return [SubagentDecl(name=n, description=sent.get(n)) for n in names] or None
 
 
-def skills_from_init(init_data: dict[str, Any]) -> list[SkillDecl] | None:
-    """Skill names from `init.skills`."""
+def skills_from_init(
+    init_data: dict[str, Any], catalog: dict[str, Any] | None = None
+) -> list[SkillDecl] | None:
+    """Skill names from `init.skills`, described by the listing the CLI sends
+    the model (captured by the probe into `catalog`)."""
     names = init_data.get("skills") or []
-    return [SkillDecl(name=n) for n in names] or None
+    sent = _catalog(init_data, catalog).get("skills") or {}
+    return [SkillDecl(name=n, description=sent.get(n)) for n in names] or None
+
+
+def _catalog(init_data: dict[str, Any], catalog: dict[str, Any] | None) -> dict[str, Any]:
+    """The probe's captured catalog: `catalog` when given, else the one riding
+    on `init_data`."""
+    return catalog if catalog is not None else (init_data.get(CATALOG_KEY) or {})
+
+
+def listed_descriptions(text: str, names: list[str]) -> dict[str, str]:
+    """Descriptions for `names` from the `- <name>: <description>` lines the
+    CLI uses to list subagents (in the Agent tool's description) and skills
+    (in a system reminder) for the model."""
+    found: dict[str, str] = {}
+    for name in names:
+        match = re.search(rf"^- {re.escape(name)}: (.+)$", text, re.MULTILINE)
+        if match:
+            found[name] = re.sub(r"\s*\(Tools: [^)]*\)$", "", match.group(1)).strip()
+    return found
 
 
 def request_model_from_init(init_data: dict[str, Any], options: ClaudeAgentOptions) -> str | None:
