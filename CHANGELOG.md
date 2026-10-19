@@ -11,6 +11,9 @@
   verdict, so the page shows what the agent could use and what it was asked.
   Runs recorded before this release are filled in from their trajectories at
   share time. Share links are now `/eval/<id>`; `/r/<id>` links redirect.
+- `avp-conformance describe` fails when a declared tool has no description or
+  an `inputSchema` that is not an object schema. Freeform tools may omit the
+  schema. The agent template declares both for its `echo` tool.
 
 ### Fixed
 
@@ -23,12 +26,6 @@
   including its subagent and skill descriptions.
   Codex ships the definitions its pinned CLI sends each verified model,
   regenerated with `scripts/capture_tools.py`.
-
-### Added
-
-- `avp-conformance describe` fails when a declared tool has no description or
-  an `inputSchema` that is not an object schema. Freeform tools may omit the
-  schema. The agent template declares both for its `echo` tool.
 
 ## 0.2.1 (2026-10-19)
 
