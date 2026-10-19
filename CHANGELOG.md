@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- `avp eval view` browses a finished eval in the terminal: a leaderboard of
+  agents by tasks, then the selected run's orders, vessel (tools, subagents,
+  and skills with their details), and log.
+- Shared evals carry each run's vessel, orders, question, expected answer, and
+  verdict, so the page shows what the agent could use and what it was asked.
+  Runs recorded before this release are filled in from their trajectories at
+  share time. Share links are now `/eval/<id>`; `/r/<id>` links redirect.
+- `avp-conformance describe` fails when a declared tool has no description or
+  an `inputSchema` that is not an object schema. Freeform tools may omit the
+  schema. The agent template declares both for its `echo` tool.
+
 ### Fixed
 
 - A rate-limited `avp eval share` says to try again in a few minutes instead
@@ -13,12 +26,6 @@
   including its subagent and skill descriptions.
   Codex ships the definitions its pinned CLI sends each verified model,
   regenerated with `scripts/capture_tools.py`.
-
-### Added
-
-- `avp-conformance describe` fails when a declared tool has no description or
-  an `inputSchema` that is not an object schema. Freeform tools may omit the
-  schema. The agent template declares both for its `echo` tool.
 
 ## 0.2.1 (2026-10-19)
 

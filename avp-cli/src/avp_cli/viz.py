@@ -1,7 +1,7 @@
 """Turn eval runs into what agentvoyagerproject.com renders.
 
 Reduces a run's trajectories into the site's `{by_commission, commissions}`
-payload and uploads it for `avp eval share`, which prints the short `/r/<id>`
+payload and uploads it for `avp eval share`, which prints the short `/eval/<id>`
 link. The site owns the rendering; this module builds the payload and talks to
 the site's share API.
 """
@@ -17,10 +17,12 @@ from pydantic import BaseModel
 
 from avp.content import TextBlock
 from avp.trajectory import (
+    AgentDescribedEvent,
     AgentStartedEvent,
     AgentStoppedEvent,
     AssistantMessageEvent,
     ErrorOccurredEvent,
+    RunRequestedEvent,
     ToolInvokedEvent,
     ToolReturnedEvent,
     parse_event,
@@ -93,7 +95,13 @@ def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
         return out
     if isinstance(ev, ToolInvokedEvent):
         d = ev.data
-        out = {"seq": seq, "type": ev.type, "step": d.step, "tool_name": d.tool_name}
+        out = {
+            "seq": seq,
+            "type": ev.type,
+            "step": d.step,
+            "tool_name": d.tool_name,
+            "call_id": d.tool_call_id,
+        }
         if d.tool_input:
             out["tool_input"] = _cap_obj(d.tool_input)
         if d.tool_dispatch_target:
@@ -107,6 +115,7 @@ def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
             "type": ev.type,
             "step": d.step,
             "tool_name": d.tool_name,
+            "call_id": d.tool_call_id,
             "duration_ms": d.duration_ms,
             "result_chars": len(result),
         }
@@ -130,6 +139,94 @@ def _run_event(seq: int, ev: BaseModel) -> dict[str, Any] | None:
             "error_message": _cap(ev.data.error_message),
         }
     return None  # prelude (run_requested / agent_described) and custom events: skip
+
+
+def _trim(text: str, n: int) -> str:
+    text = text.strip()
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def _params(schema: Any) -> list[dict[str, Any]]:
+    """A JSON Schema's top-level parameters: name, type, required, description."""
+    if not isinstance(schema, dict):
+        return []
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return []
+    required = set(schema.get("required") or [])
+    out = []
+    for name, spec in props.items():
+        spec = spec if isinstance(spec, dict) else {}
+        param: dict[str, Any] = {"name": name, "required": name in required}
+        kind = spec.get("type")
+        if isinstance(kind, list):
+            kind = " | ".join(str(k) for k in kind)
+        if kind:
+            param["type"] = str(kind)
+        if spec.get("description"):
+            param["description"] = _trim(str(spec["description"]), 240)
+        out.append(param)
+    return out
+
+
+def _decl(d: Any, fallback: Any = None) -> dict[str, Any]:
+    """A tool / subagent / skill declaration: name, description, parameters, and
+    MCP server. Detail missing from the run's snapshot is taken from the agent's
+    descriptor entry of the same name (`fallback`)."""
+    out: dict[str, Any] = {"name": d.name}
+    desc = getattr(d, "description", None) or getattr(fallback, "description", None)
+    if desc:
+        out["description"] = _trim(desc, 1200)
+    params = _params(getattr(d, "inputSchema", None) or getattr(fallback, "inputSchema", None))
+    if params:
+        out["params"] = params
+    server = getattr(d, "mcp_server_id", None)
+    if server:
+        out["mcp_server_id"] = server
+    return out
+
+
+def _brief(events: list[BaseModel | dict[str, Any]]) -> dict[str, Any]:
+    """The run's `vessel` (the agent and everything it could use) and `orders`
+    (what it was asked to do), from the trajectory's opening events.
+
+    `agent_started` is AVP's merged snapshot of what this run could actually
+    use (tools offered after allow-lists, connected MCP servers, skills,
+    subagents) and the prompt as given; `agent_described` names the agent;
+    `run_requested` carries the Commission's rules.
+    """
+    requested = next((e for e in events if isinstance(e, RunRequestedEvent)), None)
+    described = next((e for e in events if isinstance(e, AgentDescribedEvent)), None)
+    started = next((e for e in events if isinstance(e, AgentStartedEvent)), None)
+    commission = requested.data.commission if requested else None
+    descriptor = described.data.descriptor if described else None
+    s = started.data if started else None
+    described_tools = {t.name: t for t in (descriptor.tools or [])} if descriptor else {}
+    vessel: dict[str, Any] = {
+        "agent": descriptor.agent_name if descriptor else None,
+        "version": descriptor.agent_version if descriptor else None,
+        "model": (s.request_model if s else None) or (commission.model if commission else None),
+        "tools": [
+            _decl(t, described_tools.get(t.name)) for t in (s.tools if s and s.tools else [])
+        ],
+        "subagents": [_decl(x) for x in (s.subagents if s and s.subagents else [])],
+        "skills": [_decl(x) for x in (s.skills if s and s.skills else [])],
+        "mcp_servers": [
+            {"id": m.id, "status": m.status} for m in (s.mcp_servers if s and s.mcp_servers else [])
+        ],
+    }
+    orders: dict[str, Any] = {
+        "task": _cap(
+            (s.prompt if s else None) or (commission.prompt if commission else "") or "", 4000
+        ),
+        "system_prompt": _cap(s.system_prompt, 2000) if s and s.system_prompt else None,
+    }
+    if commission is not None and commission.enabled_builtin_tools is not None:
+        orders["allowed_tools"] = commission.enabled_builtin_tools
+    return {
+        "vessel": {k: v for k, v in vessel.items() if v not in (None, [])},
+        "orders": {k: v for k, v in orders.items() if v not in (None, "", {})},
+    }
 
 
 def trajectory_to_run(
@@ -157,25 +254,33 @@ def trajectory_to_run(
         "total_turns": summary.total_turns,
         "total_tokens": summary.total_tokens,
         "elapsed_s": summary.duration_ms / 1000 if summary.duration_ms else None,
+        **_brief(events),
         "events": run_events,
     }
+
+
+def _parse_ndjson(path: Path) -> list[BaseModel | dict[str, Any]]:
+    return [parse_event(json.loads(line)) for line in path.read_text().splitlines() if line.strip()]
 
 
 def run_from_ndjson(path: str | Path, *, score: float | None = None, passed: bool | None = None):
     """Parse an NDJSON trajectory file into a viz `Run`."""
     p = Path(path)
-    events: list[BaseModel | dict[str, Any]] = []
-    for line in p.read_text().splitlines():
-        line = line.strip()
-        if line:
-            events.append(parse_event(json.loads(line)))
-    return trajectory_to_run(events, run_id=p.stem, score=score, passed=passed)
+    return trajectory_to_run(_parse_ndjson(p), run_id=p.stem, score=score, passed=passed)
 
 
 # ── whole-eval payload for agentvoyagerproject.com ──────────────────────────
 
 
-def _run_for_result(result: Any) -> dict[str, Any]:
+def _item_fields(item: Any) -> dict[str, Any]:
+    """The dataset item's question and expected answer, for the share page."""
+    out: dict[str, Any] = {"question": _cap(item.prompt, 4000)}
+    if item.expected is not None:
+        out["expected"] = _cap(item.expected, 2000)
+    return out
+
+
+def _run_for_result(result: Any, item: Any = None) -> dict[str, Any]:
     """Build the site's per-run shape from a RunResult (reading its trajectory)."""
     run_id = f"{result.setup_name}-{result.item_id}"
     if result.trajectory_path and Path(result.trajectory_path).is_file():
@@ -186,6 +291,10 @@ def _run_for_result(result: Any) -> dict[str, Any]:
         )
         run["row_id"] = result.item_id
         run["run_id"] = run_id
+        if item is not None:
+            run.update(_item_fields(item))
+        if result.score and result.score.detail:
+            run["verdict"] = _cap(result.score.detail, 2000)
         return run
     # spawn error / no trajectory: a minimal placeholder run
     return {
@@ -243,9 +352,12 @@ def to_trajectories_payload(board: Any, *, eval_version: str, ev: Any = None) ->
     """
     from datetime import datetime
 
+    items = {str(i.id): i for i in ev.dataset} if ev is not None else {}
     by_commission: dict[str, list[dict[str, Any]]] = {}
     for row in board.rows:
-        by_commission[row.name] = [_run_for_result(r) for r in row.results]
+        by_commission[row.name] = [
+            _run_for_result(r, items.get(str(r.item_id))) for r in row.results
+        ]
     payload: dict[str, Any] = {
         "eval_version": eval_version,
         "snapshot_at": datetime.now(UTC).isoformat(),
@@ -261,6 +373,31 @@ def to_trajectories_payload(board: Any, *, eval_version: str, ev: Any = None) ->
             s.id: _commission_meta(s) for s in setups_for(ev.setups, board.agent_label)
         }
     return payload
+
+
+def enrich_payload(payload: dict[str, Any], run_dir: Path, eval_config: dict | None) -> None:
+    """Fill in what a run recorded before payloads carried it: the vessel,
+    orders, and events with tool call ids (rebuilt from each run's NDJSON
+    trajectory next to the payload), and the question and expected answer
+    (from the run's inline dataset). In place."""
+    items = {
+        str(i.get("id")): i
+        for i in (((eval_config or {}).get("dataset") or {}).get("items") or [])
+        if isinstance(i, dict)
+    }
+    slices = payload["agents"] if isinstance(payload.get("agents"), list) else [payload]
+    for agent in slices:
+        for runs in (agent.get("by_commission") or {}).values():
+            for run in runs:
+                ndjson = run_dir / f"{agent.get('agent')}-{run.get('run_id')}.ndjson"
+                if "vessel" not in run and ndjson.is_file():
+                    fresh = trajectory_to_run(_parse_ndjson(ndjson), run_id=str(run.get("run_id")))
+                    run.update({k: fresh[k] for k in ("vessel", "orders", "events") if k in fresh})
+                item = items.get(str(run.get("row_id")))
+                if item is not None and "question" not in run:
+                    run["question"] = _cap(item.get("prompt", ""), 4000)
+                    if item.get("expected") is not None:
+                        run["expected"] = _cap(item["expected"], 2000)
 
 
 def combine_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
