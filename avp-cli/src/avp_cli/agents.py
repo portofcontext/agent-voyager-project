@@ -95,7 +95,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # feature) for the libkrun GPU runtime; the CPU binary is unchanged.
         # 0.1.3: assistant_message.duration_ms reports real inference wall-time
         # (was ~0 because the coalesced turn opened and drained at flush).
-        container_version="0.1.3",
+        # 0.2.0: on the shared Recorder and goose v1.53.0; per-response usage,
+        # parallel calls, and background subagents recorded faithfully.
+        container_version="0.2.0",
         binary_name="avp-goose-conformance",
     ),
     "claude-code": AgentSource(
@@ -110,7 +112,10 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         # dispatch whose notification lands turns later still closes its frame;
         # a child still in flight at run end closes as `abandoned` and the run
         # stops as `abandoned` rather than reporting `converged`.
-        container_version="0.1.1",
+        # 0.2.0: on the shared Recorder; final per-response usage (cache inside
+        # input, real output counts), no title or probe model calls, and one
+        # turn per response with parallel tool calls.
+        container_version="0.2.0",
         module="avp_claude_agent_sdk.conformance",
         dist="avp-claude-agent-sdk",
         # The conformance entrypoint also imports avp_conformance (load_commission
@@ -210,7 +215,7 @@ AGENT_SOURCES: dict[str, AgentSource] = {
 
 # The in-repo library wheels every Python agent release ships next to its own
 # (the wire types and the conformance harness), versioned in lockstep.
-_LIBRARY_WHEEL_VERSION = "0.1.1"
+_LIBRARY_WHEEL_VERSION = "0.2.0"
 
 # Node agents need at least this runtime (Pi's own `engines` floor); the
 # container recipe installs the pinned NODE_VERSION.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-19)
 
 These changes retain the v0.1 wire schemas.
 

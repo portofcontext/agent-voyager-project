@@ -134,7 +134,13 @@ def test_builtin_claude_recipe_carries_is_sandbox_env() -> None:
 
 
 def test_builtin_python_recipes_install_their_release_wheels() -> None:
-    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
+    from importlib.metadata import version
+
+    from avp_cli.agents import _LIBRARY_WHEEL_VERSION, AGENT_SOURCES, _builtin_recipe
+
+    # Releases build the library wheels from the tagged tree, so the pin must
+    # be the package's own version.
+    assert version("agent-voyager-project") == _LIBRARY_WHEEL_VERSION
 
     for name, module in [
         ("codex", "avp_codex"),
@@ -146,7 +152,7 @@ def test_builtin_python_recipes_install_their_release_wheels() -> None:
         (pip,) = recipe.install  # no runtime besides the wheels
         tag = f"agent-{name}-v{source.container_version}"
         assert f"{tag}/{module}-{source.container_version}-py3-none-any.whl" in pip
-        assert f"{tag}/agent_voyager_project-0.1.1-py3-none-any.whl" in pip
+        assert f"{tag}/agent_voyager_project-{_LIBRARY_WHEEL_VERSION}-py3-none-any.whl" in pip
         assert recipe.command == ("python", "-m", f"{module}.conformance")
         assert recipe.env == ()
 
