@@ -1,0 +1,77 @@
+name: Release pi agent
+
+# Publishes the avp-pi package archive as a GitHub release, which
+# `avp agent install pi` and the sandbox container recipe download. Triggered
+# by pushing a tag `agent-pi-v<version>` (e.g. agent-pi-v0.1.0), or run manually
+# from the Actions tab with an explicit version.
+#
+# One archive serves every platform: the adapter is JavaScript and Pi's
+# dependencies carry their own per-platform prebuilds.
+
+on:
+  push:
+    tags: ["agent-pi-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.1.0 (tag becomes agent-pi-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve the tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=agent-pi-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the tag matches the package version
+        working-directory: agents/avp-pi/typescript
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          test "agent-pi-v$version" = "${{ steps.tag.outputs.tag }}" \
+            || { echo "package.json version $version does not match ${{ steps.tag.outputs.tag }}"; exit 1; }
+
+      - name: Seam tests
+        working-directory: agents/avp-pi/typescript
+        run: npm ci && npm test
+
+      - name: Package the archive
+        run: |
+          agents/avp-pi/typescript/scripts/package.sh dist
+          (cd dist && sha256sum avp-pi.tar.gz > SHA256SUMS)
+
+      - name: Smoke the archive
+        run: |
+          mkdir -p smoke && tar -xzf dist/avp-pi.tar.gz -C smoke
+          node smoke/dist/src/main.js ping --out pong.json
+          node smoke/dist/src/main.js describe > /dev/null
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release create "$TAG" dist/avp-pi.tar.gz dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "pi agent $TAG" \
+            --notes "The avp-pi package archive (Node 22.19 or newer). Install with: avp agent install pi --version ${TAG#agent-pi-v}" \
+            || gh release upload "$TAG" dist/avp-pi.tar.gz dist/SHA256SUMS --repo "${{ github.repository }}" --clobber

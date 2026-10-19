@@ -52,3 +52,5 @@ export * from "./recorder.js";
 export * from "./pricing.js";
 export * from "./sink.js";
 export * from "./ids.js";
+export * from "./preflight.js";
+export * from "./agent-cli.js";
