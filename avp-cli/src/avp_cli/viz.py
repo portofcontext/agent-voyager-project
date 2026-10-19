@@ -1,9 +1,9 @@
 """Turn eval runs into what agentvoyagerproject.com renders.
 
 Reduces a run's trajectories into the site's `{by_commission, commissions}`
-payload and encodes it into the `…/view#z=<gzip+base64url>` link `avp eval view`
-opens. The site owns the constellation rendering; this module just builds the
-payload and the URL.
+payload and uploads it for `avp eval share`, which prints the short `/r/<id>`
+link. The site owns the rendering; this module builds the payload and talks to
+the site's share API.
 """
 
 from __future__ import annotations
@@ -279,15 +279,19 @@ def combine_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-# ── shareable viewer link (whole eval in the URL hash) ──────────────────────
+# ── shared links (`avp eval share`) ──────────────────────────────────────────
 
-SITE = "https://agentvoyagerproject.com"
+SITE = "https://www.agentvoyagerproject.com"
+
+
+class ShareError(Exception):
+    """The site refused or failed a share request."""
 
 
 def encode_payload(payload: dict[str, Any]) -> str:
-    """gzip + base64url-encode a trajectories payload for the URL hash.
+    """gzip + base64url-encode a trajectories payload for upload.
 
-    The site's `/view` decodes this with `DecompressionStream('gzip')` after a
+    The site decodes it with `DecompressionStream('gzip')` after a
     base64url→base64 swap, so: gzip, then urlsafe-base64 (padding kept).
     """
     import base64
@@ -298,6 +302,37 @@ def encode_payload(payload: dict[str, Any]) -> str:
     return base64.urlsafe_b64encode(blob).decode()
 
 
-def view_url(payload: dict[str, Any], *, site: str = SITE) -> str:
-    """The `…/view#z=<gzip+base64url>` link the site renders the eval from."""
-    return f"{site.rstrip('/')}/view#z={encode_payload(payload)}"
+def _request(method: str, url: str, *, body: bytes | None = None, token: str | None = None):
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("user-agent", "avp-cli")
+    if body is not None:
+        req.add_header("content-type", "application/json")
+    if token:
+        req.add_header("authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read()
+            return resp.status, json.loads(data) if data else None
+    except urllib.error.HTTPError as err:
+        try:
+            detail = json.loads(err.read()).get("error")
+        except Exception:
+            detail = None
+        raise ShareError(detail or f"HTTP {err.code}") from None
+    except urllib.error.URLError as err:
+        raise ShareError(f"could not reach {url}: {err.reason}") from None
+
+
+def share(payload: dict[str, Any], *, site: str = SITE) -> dict[str, Any]:
+    """Upload a run; returns `{id, url, delete_token, expires_at}`."""
+    body = json.dumps({"z": encode_payload(payload)}).encode()
+    _, data = _request("POST", f"{site.rstrip('/')}/api/runs", body=body)
+    return data
+
+
+def unshare(share_id: str, delete_token: str, *, site: str = SITE) -> None:
+    """Take a shared run down."""
+    _request("DELETE", f"{site.rstrip('/')}/api/runs/{share_id}", token=delete_token)

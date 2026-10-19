@@ -18,7 +18,7 @@ avp cm create coding-solver \
   --prompt "$(printf 'Solve this task by writing and running code.\n\nTask: {input}\n\nWork in your workspace: write a small Python script, execute it, and verify the result. Then reply with ONLY the final numeric answer — no prose, no code, no formatting.')"
 
 avp eval run avp-cli/examples/coding/coding.eval.json
-avp eval view
+avp eval share
 ```
 
 ### How it was made

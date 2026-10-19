@@ -175,7 +175,15 @@ def _build_scorer(spec: dict[str, Any]) -> Scorer:
             ) from exc
         kwargs: dict[str, Any] = {}
         if "model" in spec:
-            kwargs["grader_model"] = spec["model"]
+            # The judge calls the Anthropic API, so it takes the canonical slug
+            # (`anthropic/claude-haiku-4-5`) like everything else, or a bare id.
+            origin, _, model = str(spec["model"]).rpartition("/")
+            if origin and origin != "anthropic":
+                raise EvalConfigError(
+                    f"llm-judge grades with Anthropic models; got {spec['model']!r} "
+                    "(use e.g. anthropic/claude-haiku-4-5)"
+                )
+            kwargs["grader_model"] = model
         if "template" in spec:
             # Strict context (EVAL-FORMAT.md §3): a custom grader template may
             # only reference the judge's variable set. Catch typos at load,

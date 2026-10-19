@@ -113,6 +113,7 @@ def scaffold(
             library.save(cid, Commission.model_validate(spec), commissions_dir=commissions_dir)
             installed.append(cid)
 
+    dest_dir.mkdir(parents=True, exist_ok=True)
     target = _unique_eval_path(dest_dir, entry.key)
     eval_spec = doc["eval"]
     eval_doc: dict[str, Any] = {"name": eval_spec.get("name", entry.key)}

@@ -52,3 +52,15 @@ def test_welcome_lists_every_registered_command():
         f"commands registered in the parser but absent from the welcome screen: {missing}. "
         "Add them to the relevant section in onboarding.py (or to _UNDOCUMENTED with a reason)."
     )
+
+
+def test_version_flag_prints_the_cli_version(capsys) -> None:
+    import pytest
+
+    from avp_cli import cli
+    from avp_cli.run_manifest import _cli_version
+
+    with pytest.raises(SystemExit) as exit:
+        cli.main(["--version"])
+    assert exit.value.code == 0
+    assert capsys.readouterr().out.strip() == f"avp {_cli_version()}"

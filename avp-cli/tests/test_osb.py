@@ -50,6 +50,7 @@ def test_ensure_server_reuses_healthy_server(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("AVP_HOME", str(tmp_path))
     monkeypatch.setattr(osb, "docker_available", lambda: None)
     monkeypatch.setattr(osb, "_healthy", lambda domain: True)
+    monkeypatch.setattr(osb, "_key_accepted", lambda conn: True)
     spawned = []
     monkeypatch.setattr(osb, "_spawn_server", lambda: spawned.append(1))
 
@@ -110,3 +111,36 @@ def test_stop_server_handles_missing_and_stale_pidfile(tmp_path, monkeypatch) ->
     pid_path.write_text("999999999")  # long-dead pid
     assert osb.stop_server() is False
     assert not pid_path.exists()  # stale pidfile cleaned up
+
+
+def test_a_server_from_another_home_is_reported_not_reused(tmp_path, monkeypatch) -> None:
+    # A server started under a different AVP_HOME answers /health but refuses
+    # this home's key; reusing it made every sandbox create fail with "invalid
+    # credentials". It must be named for what it is instead.
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Other(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            self.send_response(200 if self.path == "/health" else 401)
+            self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Other)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    domain = f"127.0.0.1:{server.server_address[1]}"
+    monkeypatch.setenv("AVP_HOME", str(tmp_path))
+    monkeypatch.setattr(osb, "docker_available", lambda: None)
+    monkeypatch.setattr(
+        osb, "_connection_from_config", lambda cfg: osb.Connection(domain=domain, api_key="mine")
+    )
+    spawned = []
+    monkeypatch.setattr(osb, "_spawn_server", lambda: spawned.append(1))
+    try:
+        with pytest.raises(osb.SandboxUnavailable, match="different AVP_HOME"):
+            osb.ensure_server()
+    finally:
+        server.shutdown()
+    assert spawned == []

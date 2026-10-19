@@ -269,3 +269,21 @@ def test_every_catalog_entry_is_well_formed(entry: catalog.CatalogEntry) -> None
     # every commission value is a valid wire Commission
     for spec in doc["commissions"].values():
         assert isinstance(Commission.model_validate(spec), Commission)
+
+
+def test_scaffold_creates_a_missing_directory(tmp_path) -> None:
+    lib = tmp_path / "commissions"
+    dest = tmp_path / "new" / "evals"
+    result = catalog.scaffold(catalog.get("custom"), dest, commissions_dir=lib)
+    assert result.eval_path.parent == dest and result.eval_path.is_file()
+
+
+def test_llm_judge_takes_the_canonical_model_slug(tmp_path) -> None:
+    pytest.importorskip("anthropic")
+    judge = config._build_scorer({"name": "llm-judge", "model": "anthropic/claude-haiku-4-5"})
+    assert judge.grader_model == "claude-haiku-4-5"
+    assert config._build_scorer(
+        {"name": "llm-judge", "model": "claude-haiku-4-5"}
+    ).grader_model == ("claude-haiku-4-5")
+    with pytest.raises(config.EvalConfigError, match="Anthropic models"):
+        config._build_scorer({"name": "llm-judge", "model": "openai/gpt-5-mini"})

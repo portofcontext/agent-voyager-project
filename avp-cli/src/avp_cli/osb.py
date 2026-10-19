@@ -131,6 +131,7 @@ def ensure_server() -> Connection:
 
     conn = _connection_from_config(_ensure_config())
     if _healthy(conn.domain):
+        _require_key(conn)
         return conn
     _spawn_server()
     deadline = time.monotonic() + _HEALTH_TIMEOUT_S
@@ -314,6 +315,32 @@ def _healthy(domain: str) -> bool:
             return resp.status == 200
     except (urllib.error.URLError, OSError, ValueError):
         return False
+
+
+def _key_accepted(conn: Connection) -> bool:
+    """Whether the server on this port accepts this home's API key. A server
+    started from another AVP_HOME answers /health but refuses our key."""
+    req = urllib.request.Request(
+        f"http://{conn.domain}/v1/sandboxes",
+        headers={"OPEN-SANDBOX-API-KEY": conn.api_key},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3):
+            return True
+    except urllib.error.HTTPError as err:
+        return err.code not in (401, 403)
+    except (urllib.error.URLError, OSError, ValueError):
+        return True  # unreachable is a health problem, reported elsewhere
+
+
+def _require_key(conn: Connection) -> None:
+    if not _key_accepted(conn):
+        raise SandboxUnavailable(
+            f"a sandbox server is already running on {conn.domain} but rejects this "
+            f"AVP_HOME's key ({server_dir() / 'config.toml'}): it was started from a different "
+            "AVP_HOME. Stop it with `avp sandbox stop` under that home (or end the "
+            "process on that port), then retry."
+        )
 
 
 def _sandbox_count(conn: Connection) -> int | None:
