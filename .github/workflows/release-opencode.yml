@@ -1,0 +1,79 @@
+name: Release opencode agent
+
+# Publishes the avp-opencode package archives as a GitHub release, which
+# `avp agent install opencode` and the sandbox container recipe download.
+# Triggered by pushing a tag `agent-opencode-v<version>` (e.g.
+# agent-opencode-v0.1.0), or run manually from the Actions tab with an explicit
+# version.
+#
+# OpenCode is a native binary per platform, so the release carries one archive
+# per platform (avp-opencode-<os>-<arch>.tar.gz), each with the pinned
+# `opencode-<os>-<arch>` package fetched from npm.
+
+on:
+  push:
+    tags: ["agent-opencode-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.1.0 (tag becomes agent-opencode-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve the tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=agent-opencode-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the tag matches the package version
+        working-directory: agents/avp-opencode/typescript
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          test "agent-opencode-v$version" = "${{ steps.tag.outputs.tag }}" \
+            || { echo "package.json version $version does not match ${{ steps.tag.outputs.tag }}"; exit 1; }
+
+      - name: Seam tests
+        working-directory: agents/avp-opencode/typescript
+        run: npm ci && npm test
+
+      - name: Package the archives
+        run: |
+          agents/avp-opencode/typescript/scripts/package.sh dist
+          (cd dist && sha256sum avp-opencode-*.tar.gz > SHA256SUMS)
+
+      - name: Smoke the linux-x64 archive
+        run: |
+          mkdir -p smoke && tar -xzf dist/avp-opencode-linux-x64.tar.gz -C smoke
+          node smoke/dist/src/main.js ping --out pong.json
+          node smoke/dist/src/main.js describe > /dev/null
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release create "$TAG" dist/avp-opencode-*.tar.gz dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "opencode agent $TAG" \
+            --notes "The avp-opencode package archives, one per platform (Node 22.19 or newer). Install with: avp agent install opencode --version ${TAG#agent-opencode-v}" \
+            || gh release upload "$TAG" dist/avp-opencode-*.tar.gz dist/SHA256SUMS --repo "${{ github.repository }}" --clobber

@@ -1,0 +1,6 @@
+{
+  "command": ["node", "dist/src/main.js"],
+  "cwd": ".",
+  "env": {},
+  "description": "avp-opencode (typescript) entrypoint"
+}

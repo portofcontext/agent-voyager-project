@@ -114,7 +114,8 @@ is registered and has a release. Do all of this in the PR that adds the agent:
    (`"python"` wheels, a `"binary"`, or a `"node"` package archive),
    `tag_prefix`, `dev_manifest`, `descriptor_name`, `container_version`, and
    `module` / `dist` / `wheel_dists` (Python), `binary_name` (binary), or
-   `package_asset` / `entry` (Node). Check the container
+   `package_asset` / `entry` (Node; a `{platform}` asset ships one archive
+   per platform, for a native runtime). Check the container
    recipe it gets (`_builtin_recipe`) installs whatever the runtime needs.
 2. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
    (Python), `release-goose.yml` (binary), or `release-pi.yml` (Node) and
@@ -133,5 +134,7 @@ subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
 `agents/avp-pi/typescript/` (a TypeScript runtime on the TypeScript Recorder, MCP
 through the harness's own extension), `agents/avp-gemini-cli/typescript/` (a
 product's own headless session, subagent spend rolled up from its content
-generator), and `agents/avp-deep-agents/python/` (a LangChain callback handler,
-subagent spend rolled up from the child's calls). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.
+generator), `agents/avp-deep-agents/python/` (a LangChain callback handler,
+subagent spend rolled up from the child's calls), and
+`agents/avp-opencode/typescript/` (a runtime behind a local server's event
+stream, per-platform archives). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

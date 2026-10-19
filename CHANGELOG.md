@@ -18,6 +18,9 @@ These changes retain the v0.1 wire schemas.
 - LangChain Deep Agents adapter, installable with `avp agent install deep-agents` and
   released as `agent-deep-agents-v<version>`, with `AvpCallbackHandler`, a LangChain
   callback handler that records any LangChain or LangGraph run through the Recorder.
+- OpenCode adapter (TypeScript, a hermetic `opencode serve` per run), installable
+  with `avp agent install opencode` and released as `agent-opencode-v<version>`
+  with one archive per platform.
 - Conformance checks accounting on every trajectory (the cache split inside
   `input_tokens`, `unknown` costs of zero, `computed` costs matching the price
   table) and adds cases for invalid provider credentials, the Commission system
