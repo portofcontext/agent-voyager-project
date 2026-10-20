@@ -20,6 +20,9 @@
 
 ### Fixed
 
+- The OpenAI Agents and Pydantic AI agents no longer crash listing MCP tools
+  under MCP SDK 2, which renamed a tool's `inputSchema` to `input_schema`.
+  Released as `agent-openai-agents-v0.0.2` and `agent-pydantic-ai-v0.0.2`.
 - A rate-limited `avp eval share` says to try again in a few minutes instead
   of printing the site's raw error object.
 - Claude Code and Codex declared their built-in tools by name only, so

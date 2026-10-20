@@ -70,7 +70,7 @@ async def _dial(
             ToolDecl(
                 name=t.name,
                 description=t.description,
-                inputSchema=t.inputSchema,
+                inputSchema=_input_schema(t),
                 mcp_server_id=entry.id,
             )
             for t in listed
@@ -186,3 +186,9 @@ def _failure_recorder(errored: set[str]) -> Any:
         return f"Error: {exc}"
 
     return on_failure
+
+
+def _input_schema(tool: Any) -> Any:
+    """A listed MCP tool's input schema: `input_schema` in MCP SDK 2,
+    `inputSchema` in 1."""
+    return getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
