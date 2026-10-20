@@ -62,6 +62,7 @@ Adapters in this repository:
 | Pi | [avp-pi](agents/avp-pi/typescript/) |
 | Gemini CLI | [avp-gemini-cli](agents/avp-gemini-cli/typescript/) |
 | LangChain Deep Agents | [avp-deep-agents](agents/avp-deep-agents/python/) |
+| Pydantic AI | [avp-pydantic-ai](agents/avp-pydantic-ai/python/) |
 | OpenCode | [avp-opencode](agents/avp-opencode/typescript/) |
 
 To add another runtime, follow the [adapter guide](agents/_template/README.md). See [integration patterns](PATTERNS.md) for runtime adaptation and launch context.

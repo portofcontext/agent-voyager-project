@@ -4,6 +4,9 @@
 
 ### Added
 
+- Pydantic AI adapter, installable with `avp agent install pydantic-ai` and
+  released as `agent-pydantic-ai-v<version>`. It runs OpenAI, Anthropic, and
+  Google models with tools from the Commission's MCP servers.
 - `avp eval view` browses a finished eval in the terminal: a leaderboard of
   agents by tasks, then the selected run's orders, vessel (tools, subagents,
   and skills with their details), and log.

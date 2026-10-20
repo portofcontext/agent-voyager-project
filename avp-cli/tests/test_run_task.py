@@ -146,6 +146,7 @@ def test_builtin_python_recipes_install_their_release_wheels() -> None:
         ("codex", "avp_codex"),
         ("openai-agents", "avp_openai_agents"),
         ("deep-agents", "avp_deep_agents"),
+        ("pydantic-ai", "avp_pydantic_ai"),
     ]:
         source = AGENT_SOURCES[name]
         recipe = _builtin_recipe(source)

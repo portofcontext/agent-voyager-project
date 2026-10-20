@@ -26,6 +26,7 @@ TEST_PKGS := \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
 	agents/_template/python \
+	agents/avp-pydantic-ai/python \
 	agents/avp-deep-agents/python \
 	agents/avp-codex/python \
 	agents/avp-openai-agents/python \
@@ -60,6 +61,7 @@ help:
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + test-opencode + conformance + bindings-check"
+	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
@@ -80,6 +82,7 @@ help:
 	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
 	@echo "    make release-gemini-cli  release the gemini-cli agent (tag agent-gemini-cli-v<pinned version>)"
 	@echo "    make release-deep-agents release the deep-agents agent (tag agent-deep-agents-v<pinned version>)"
+	@echo "    make release-pydantic-ai release the pydantic-ai agent (tag agent-pydantic-ai-v<pinned version>)"
 	@echo "    make release-opencode    release the opencode agent (tag agent-opencode-v<pinned version>)"
 	@echo "                             agent versions come from container_version in avp_cli.agents"
 	@echo ""
@@ -117,6 +120,7 @@ test-docker:
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
+AVP_PYDANTIC_AI_MANIFEST := agents/avp-pydantic-ai/python/avp-conformance.json
 AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
 AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
@@ -137,17 +141,22 @@ SANDBOX ?=
 
 
 # ── Free: validate case files + liveness-ping + describe each agent (no model) ─
-.PHONY: claude-ping goose-ping claude-describe goose-describe
+.PHONY: claude-ping goose-build goose-ping claude-describe goose-describe
 claude-ping:
 	@$(UV) run avp-conformance ping --agent $(CLAUDE_MANIFEST)
 
-goose-ping:
+# Compile before pinging: the manifest runs `cargo run`, and a cold build
+# would otherwise eat the ping's timeout.
+goose-build:
+	@cd agents/avp-goose/rust && cargo build --quiet --features conformance --bin avp-goose-conformance
+
+goose-ping: goose-build
 	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
 
 claude-describe:
 	@$(UV) run avp-conformance describe --agent $(CLAUDE_MANIFEST)
 
-goose-describe:
+goose-describe: goose-build
 	@$(UV) run avp-conformance describe --agent $(GOOSE_MANIFEST)
 
 
@@ -163,6 +172,9 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
+	@printf "\n\033[1;36m── avp-pydantic-ai ──\033[0m\n"
+	@$(UV) run avp-conformance ping --agent $(AVP_PYDANTIC_AI_MANIFEST)
+	@$(UV) run avp-conformance describe --agent $(AVP_PYDANTIC_AI_MANIFEST)
 	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
@@ -320,6 +332,19 @@ bindings-test:
 check: format-check lint test test-pi test-gemini-cli test-opencode conformance bindings-check
 	@echo ""; echo "✓ All free checks passed."
 
+# One Python agent's share of `make check`: format and lint, its tests, the
+# CLI's registration tests, case validation, and its own ping and describe.
+.PHONY: check-agent
+check-agent:
+	@test -n "$(NAME)" || { echo "usage: make check-agent NAME=avp-<sdk>"; exit 2; }
+	@test -f agents/$(NAME)/python/avp-conformance.json || { echo "error: no Python agent at agents/$(NAME)/python"; exit 2; }
+	@$(MAKE) --no-print-directory format-check
+	@$(MAKE) --no-print-directory test TEST_PKGS="agents/$(NAME)/python avp-cli"
+	@$(UV) run avp-conformance validate
+	@$(UV) run avp-conformance ping --agent agents/$(NAME)/python/avp-conformance.json
+	@$(UV) run avp-conformance describe --agent agents/$(NAME)/python/avp-conformance.json
+	@echo ""; echo "✓ $(NAME) checks passed."
+
 
 # ── Paid targets (real LLM) ───────────────────────────────────────────────────
 
@@ -431,6 +456,14 @@ release-deep-agents: _release-guard
 	$(MAKE) --no-print-directory _cut TAG="agent-deep-agents-v$$version" MSG="deep-agents agent $$version"
 
 
+.PHONY: release-pydantic-ai
+release-pydantic-ai: _release-guard
+	@version=$$(grep -m1 '^version' agents/avp-pydantic-ai/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['pydantic-ai'].container_version)"); \
+	test "$$version" = "$$pin" || { echo "error: avp-pydantic-ai pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
+	$(MAKE) --no-print-directory _cut TAG="agent-pydantic-ai-v$$version" MSG="pydantic-ai agent $$version"
+
+
 .PHONY: release-opencode
 release-opencode: _release-guard
 	@version=$$(node -p 'require("./agents/avp-opencode/typescript/package.json").version'); \
@@ -489,6 +522,8 @@ build-agents:
 	@agents/avp-gemini-cli/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo "→ building deep-agents wheel..."
 	@$(UV) build --package avp-deep-agents --out-dir dist/agents
+	@echo "→ building pydantic-ai wheel..."
+	@$(UV) build --package avp-pydantic-ai --out-dir dist/agents
 	@echo "→ packaging the opencode archives (npm; one per platform)..."
 	@agents/avp-opencode/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo ""
@@ -506,6 +541,8 @@ build-agents:
 	@echo "  uv run avp agent install gemini-cli --package dist/agents/avp-gemini-cli.tar.gz"
 	@echo "  uv run avp agent install deep-agents \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_deep_agents-*.whl"
+	@echo "  uv run avp agent install pydantic-ai \\"
+	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_pydantic_ai-*.whl"
 	@echo "  uv run avp agent install opencode --package dist/agents/avp-opencode-<os>-<arch>.tar.gz"
 
 

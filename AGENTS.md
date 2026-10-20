@@ -72,6 +72,8 @@ Run `make check` on every change. It covers format, lint, Python tests,
 conformance validation and liveness, and generated-binding drift. Rust and
 TypeScript tests run with `make bindings-test`; they do not make model calls.
 `make test-docker` exercises real container launches and requires a Docker daemon.
+While iterating on one Python agent, `make check-agent NAME=avp-<sdk>` runs its
+share of `make check` without building the other agents.
 
 Add tests at the boundary where a change can fail:
 
@@ -111,6 +113,7 @@ that matches `origin/main`:
   The CLI wheel vendors the Python wire types.
 - `make release-goose` / `make release-claude-code` / `make release-codex` /
   `make release-openai-agents` / `make release-pi` / `make release-gemini-cli` /
-  `make release-deep-agents` / `make release-opencode`: derive the agent tag from
+  `make release-deep-agents` / `make release-pydantic-ai` /
+  `make release-opencode`: derive the agent tag from
   its package version, checked against `container_version` in `avp_cli.agents`.
   Update the package version and artifact pin together before publishing.

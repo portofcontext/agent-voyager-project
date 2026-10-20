@@ -1,0 +1,61 @@
+name: Release pydantic-ai agent
+
+# Publishes the pydantic-ai agent's wheels as a GitHub release, which
+# `avp agent install pydantic-ai` then downloads and installs into a managed venv.
+# The unpublished in-repo `avp` wheel ships alongside the agent wheel so the
+# installer installs it by path (PyPI's unrelated `avp` is never pulled);
+# Pydantic AI and its provider SDKs come from PyPI.
+#
+# Triggered by pushing a tag `agent-pydantic-ai-v<version>`, or run manually with an
+# explicit version.
+
+on:
+  push:
+    tags: ["agent-pydantic-ai-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.0.1 (tag becomes agent-pydantic-ai-v<version>)"
+        required: true
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    name: Build wheels + publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the agent + its in-repo dependency wheel
+        run: |
+          uv build --package agent-voyager-project --out-dir dist
+          uv build --package avp-pydantic-ai --out-dir dist
+
+      - name: Roll up checksums
+        run: cd dist && shasum -a 256 *.whl > SHA256SUMS
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="agent-pydantic-ai-v${{ inputs.version }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          gh release create "$TAG" dist/*.whl dist/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "pydantic-ai agent $TAG" \
+            --notes "Wheels for the pydantic-ai agent (+ the avp wire-types wheel). Install with: avp agent install pydantic-ai --version ${TAG#agent-pydantic-ai-v}" \
+            || gh release upload "$TAG" dist/*.whl dist/SHA256SUMS --repo "${{ github.repository }}" --clobber
