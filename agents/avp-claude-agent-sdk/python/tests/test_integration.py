@@ -135,14 +135,17 @@ class _Model:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.server.server_address[1]}"
 
-    def tools(self) -> dict[str, dict[str, Any]]:
-        """The tools of the run's main-session request (the one with our prompt)."""
-        main = [
+    def main(self) -> dict[str, Any]:
+        """The run's main-session request (the one with our prompt)."""
+        return [
             r
             for r in self.requests
             if "tools" in r and "do the thing" in json.dumps(r.get("messages"))
-        ]
-        return {t["name"]: t for t in main[-1]["tools"]}
+        ][-1]
+
+    def tools(self) -> dict[str, dict[str, Any]]:
+        """The tools of the run's main-session request."""
+        return {t["name"]: t for t in self.main()["tools"]}
 
 
 @pytest.fixture
@@ -179,9 +182,12 @@ def _started(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 def test_withheld_subagents_leave_the_agent_tool(model: _Model) -> None:
     events = _run(enabled_builtin_subagents={_AGENT: ["general-purpose"]})
-    agent = model.tools()["Agent"]["description"]
-    assert "- general-purpose:" in agent
-    assert "- Explore:" not in agent and "- Plan:" not in agent
+    # Claude Code lists the subagents it offers as `- name: description` lines:
+    # in the Agent tool's description, or in a system reminder in newer releases.
+    listed = json.dumps(model.main()).replace("\\n", "\n")
+    assert "Agent" in model.tools()
+    assert "- general-purpose:" in listed
+    assert "- Explore:" not in listed and "- Plan:" not in listed
     assert [s["name"] for s in _started(events)["avp.subagents"]] == ["general-purpose"]
     assert events[-1]["data"]["avp.reason"] == "converged"
 

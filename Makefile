@@ -62,6 +62,7 @@ help:
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + test-opencode + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
+	@echo "    make test-fresh      released Python agents' tests on fresh installs (newest deps; AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
@@ -334,6 +335,13 @@ check: format-check lint test test-pi test-gemini-cli test-opencode conformance 
 
 # One Python agent's share of `make check`: format and lint, its tests, the
 # CLI's registration tests, case validation, and its own ping and describe.
+# Each released Python agent's tests on a fresh install of its wheels, with the
+# newest dependencies they allow (no lockfile), the way a sandbox image gets
+# them. Catches upstream drift `make test` can't see. Free; AGENTS= narrows it.
+.PHONY: test-fresh
+test-fresh:
+	@$(UV) run python avp/scripts/test-fresh-installs.py $(AGENTS)
+
 .PHONY: check-agent
 check-agent:
 	@test -n "$(NAME)" || { echo "usage: make check-agent NAME=avp-<sdk>"; exit 2; }

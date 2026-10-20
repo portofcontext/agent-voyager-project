@@ -74,6 +74,8 @@ TypeScript tests run with `make bindings-test`; they do not make model calls.
 `make test-docker` exercises real container launches and requires a Docker daemon.
 While iterating on one Python agent, `make check-agent NAME=avp-<sdk>` runs its
 share of `make check` without building the other agents.
+`make test-fresh` runs the released Python agents' tests on fresh installs of
+their wheels (newest allowed dependencies), as CI does weekly.
 
 Add tests at the boundary where a change can fail:
 

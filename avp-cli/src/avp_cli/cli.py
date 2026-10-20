@@ -116,14 +116,25 @@ def _run_and_report(
     timeout_s: float = 300.0,
     resume: bool = False,
 ) -> int:
-    runnable = []
+    runnable, unready = [], []
     for spec in agent_specs:
         agent = resolve_agent(spec)
-        prepared = _prepare_agent(agent, env_obj, quiet=quiet, runtime_name=sandbox_ctx.runtime)
-        if prepared is not None:
+        try:
+            prepared = _prepare_agent(agent, env_obj, quiet=quiet, runtime_name=sandbox_ctx.runtime)
+        except images.ImageBuildError as exc:
+            console.error_panel(f"sandbox image for '{agent.name}' failed to build", str(exc))
+            return 1
+        if prepared is None:
+            unready.append(agent.name)
+        else:
             runnable.append(prepared)
-    if not runnable:
-        console.warn("no runnable agents; nothing to do.")
+    # A board missing a requested agent reads as complete, so run all or none.
+    if unready:
+        console.error_panel(
+            "not running the eval",
+            f"{', '.join(unready)} can't run here (see above). Fix it or drop it "
+            "from the eval's agents.",
+        )
         return _SKIP
 
     # Snapshot what this run uses BEFORE the matrix, so a crashed run still records
@@ -219,7 +230,8 @@ def _prepare_agent(
 ) -> SandboxedAgent | None:
     """Resolve one agent to its sandbox form: identity (descriptor agent_name)
     + recipe + derived image (built or reused). Returns None (with a warning)
-    when the agent can't run."""
+    when the agent can't run here; raises `images.ImageBuildError` when its
+    image fails to build."""
     agent_name, err = _agent_identity(agent)
     if agent_name is None:
         console.warn(
@@ -243,17 +255,13 @@ def _prepare_agent(
         console.err.print(line, style="dim", markup=False, highlight=False)
 
     on_line = None if quiet else _emit
-    try:
-        built = images.ensure_image(
-            env_obj,
-            recipe,
-            on_line=on_line,
-            builder="podman" if gpu else "docker",
-            builder_env={"CONTAINERS_MACHINE_PROVIDER": "libkrun"} if gpu else None,
-        )
-    except images.ImageBuildError as exc:
-        console.warn(f"skipping agent '{agent.name}': {exc}")
-        return None
+    built = images.ensure_image(
+        env_obj,
+        recipe,
+        on_line=on_line,
+        builder="podman" if gpu else "docker",
+        builder_env={"CONTAINERS_MACHINE_PROVIDER": "libkrun"} if gpu else None,
+    )
     if built == tag and not quiet:
         console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
@@ -1149,7 +1157,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except Exception as exc:
         console.error_panel(f"environment '{args.env}'", str(exc))
         return 1
-    prepared = _prepare_agent(agent, env_obj, quiet=False, runtime_name=sandbox_ctx.runtime)
+    try:
+        prepared = _prepare_agent(agent, env_obj, quiet=False, runtime_name=sandbox_ctx.runtime)
+    except images.ImageBuildError as exc:
+        console.error_panel(f"sandbox image for '{agent.name}' failed to build", str(exc))
+        return 1
     if prepared is None:
         return _SKIP
 

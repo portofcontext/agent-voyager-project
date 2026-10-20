@@ -1,0 +1,33 @@
+name: Fresh installs
+
+# Each released Python agent's tests against a fresh install of its wheels,
+# resolving the newest dependencies they allow, as a sandbox image does. The
+# workspace lockfile hides upstream changes from the other jobs; this runs on
+# PRs and weekly so a dependency release that breaks an agent shows up here
+# before it shows up in a user's eval. No model calls.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: fresh-installs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh:
+    name: Agent tests on fresh installs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Sync the workspace
+        run: uv sync --locked
+      - name: Run each agent's tests on a fresh install
+        run: make test-fresh
