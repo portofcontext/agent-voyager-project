@@ -151,8 +151,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         descriptor_name="avp-openai-agents",
         tag_prefix="agent-openai-agents",
         dev_manifest="agents/avp-openai-agents/python/avp-conformance.json",
-        # 0.0.1: the OpenAI Agents SDK, tools from Commission MCP servers only.
-        container_version="0.0.1",
+        # 0.0.2: the OpenAI Agents SDK, tools from Commission MCP servers only;
+        # MCP tool schemas read under MCP SDK 1 or 2.
+        container_version="0.0.2",
         module="avp_openai_agents.conformance",
         dist="avp-openai-agents",
         wheel_dists=("agent-voyager-project", "avp-openai-agents"),
@@ -201,9 +202,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         descriptor_name="avp-pydantic-ai",
         tag_prefix="agent-pydantic-ai",
         dev_manifest="agents/avp-pydantic-ai/python/avp-conformance.json",
-        # 0.0.1: Pydantic AI 2.58 on OpenAI, Anthropic, and Google models; tools
-        # from Commission MCP servers only.
-        container_version="0.0.1",
+        # 0.0.2: Pydantic AI 2.58 on OpenAI, Anthropic, and Google models; tools
+        # from Commission MCP servers only, schemas read under MCP SDK 1 or 2.
+        container_version="0.0.2",
         module="avp_pydantic_ai.conformance",
         dist="avp-pydantic-ai",
         wheel_dists=("agent-voyager-project", "avp-pydantic-ai"),

@@ -500,7 +500,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-openai-agents"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "agents/avp-openai-agents/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -530,7 +530,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-pydantic-ai"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "agents/avp-pydantic-ai/python" }
 dependencies = [
     { name = "agent-voyager-project" },
