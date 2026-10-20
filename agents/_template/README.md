@@ -135,6 +135,7 @@ subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
 through the harness's own extension), `agents/avp-gemini-cli/typescript/` (a
 product's own headless session, subagent spend rolled up from its content
 generator), `agents/avp-deep-agents/python/` (a LangChain callback handler,
-subagent spend rolled up from the child's calls), and
+subagent spend rolled up from the child's calls), `agents/avp-pydantic-ai/python/` (complete
+responses read from a framework's message history), and
 `agents/avp-opencode/typescript/` (a runtime behind a local server's event
 stream, per-platform archives). Recorder rules: `avp/core/conformance/src/avp_conformance/recorder/v0.1/README.md`.

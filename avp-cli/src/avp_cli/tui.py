@@ -35,6 +35,7 @@ NAMES = {
     "avp-pi": "Pi",
     "avp-gemini-cli": "Gemini CLI",
     "avp-deep-agents": "Deep Agents",
+    "avp-pydantic-ai": "Pydantic AI",
     "avp-opencode": "OpenCode",
 }
 

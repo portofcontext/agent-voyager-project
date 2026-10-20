@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "avp-pydantic-ai"
+version = "0.0.1"
+description = "AVP agent over Pydantic AI: the framework owns the loop, the adapter records the trajectory."
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "agent-voyager-project==0.2.0",
+    "pydantic-ai-slim[anthropic,google,mcp,openai]==2.58.0",
+]
+
+[tool.uv.sources]
+agent-voyager-project = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/avp_pydantic_ai"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

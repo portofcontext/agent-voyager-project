@@ -195,6 +195,19 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dist="avp-deep-agents",
         wheel_dists=("agent-voyager-project", "avp-deep-agents"),
     ),
+    "pydantic-ai": AgentSource(
+        name="pydantic-ai",
+        kind="python",
+        descriptor_name="avp-pydantic-ai",
+        tag_prefix="agent-pydantic-ai",
+        dev_manifest="agents/avp-pydantic-ai/python/avp-conformance.json",
+        # 0.0.1: Pydantic AI 2.58 on OpenAI, Anthropic, and Google models; tools
+        # from Commission MCP servers only.
+        container_version="0.0.1",
+        module="avp_pydantic_ai.conformance",
+        dist="avp-pydantic-ai",
+        wheel_dists=("agent-voyager-project", "avp-pydantic-ai"),
+    ),
     "opencode": AgentSource(
         name="opencode",
         kind="node",
