@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-10-20)
 
 ### Added
 
@@ -18,8 +18,17 @@
   an `inputSchema` that is not an object schema. Freeform tools may omit the
   schema. The agent template declares both for its `echo` tool.
 
+- `make test-fresh` and a weekly CI job run each released Python agent's
+  tests on a fresh install of its wheels, with the newest dependencies they
+  allow, the way a sandbox image installs them. The workspace lockfile hides
+  upstream changes from the other checks.
+
 ### Fixed
 
+- `avp eval run` no longer runs the eval with an agent missing. An agent
+  whose sandbox image fails to build stops the eval with the build error
+  (exit 1), and one that can't run here stops it before any run (exit 2).
+  The partial board read as complete. `avp run` exits 1 on a failed build.
 - The OpenAI Agents and Pydantic AI agents no longer crash listing MCP tools
   under MCP SDK 2, which renamed a tool's `inputSchema` to `input_schema`.
   Released as `agent-openai-agents-v0.0.2` and `agent-pydantic-ai-v0.0.2`.

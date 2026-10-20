@@ -14,7 +14,7 @@ import pytest
 from avp_conformance.manifest import AgentManifest
 
 from avp_cli import agent as agent_mod
-from avp_cli import cli, osb
+from avp_cli import cli, images, osb
 from avp_cli.agent import SandboxedAgent
 from avp_cli.agents import NoContainerRecipe, ResolvedAgent
 
@@ -188,3 +188,60 @@ def test_builtin_opencode_recipe_installs_the_archive_for_the_image_arch() -> No
     tag = f"agent-opencode-v{source.container_version}"
     assert f"{tag}/avp-opencode-linux-$(uname -m | sed" in steps
     assert "ripgrep" in steps
+
+
+def _eval_with(monkeypatch, tmp_path, prepare) -> int:
+    """`_run_and_report` over two agents, `prepare` standing in for each one's
+    sandbox preparation; nothing may run unless every agent is ready."""
+    monkeypatch.setattr(
+        cli,
+        "resolve_agent",
+        lambda spec: ResolvedAgent(spec, AgentManifest(command=["x"], cwd=".", env={}), tmp_path),
+    )
+    monkeypatch.setattr(cli, "_prepare_agent", prepare)
+
+    def no_runs(*args, **kwargs):
+        raise AssertionError("the eval ran with an agent missing")
+
+    monkeypatch.setattr(cli, "run_matrix", no_runs)
+    monkeypatch.setattr(cli.run_manifest, "write", no_runs)
+    return cli._run_and_report(
+        None,
+        run_id="r",
+        agent_specs=["pydantic-ai", "openai-agents"],
+        out=tmp_path,
+        json_path=None,
+        max_items=None,
+        model=None,
+        quiet=True,
+        sandbox_ctx=type("Ctx", (), {"runtime": "opensandbox"})(),
+        env_obj=None,
+    )
+
+
+def test_eval_stops_when_an_agent_image_fails_to_build(avp_home, monkeypatch) -> None:
+    def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
+        if agent.name == "openai-agents":
+            raise images.ImageBuildError("docker build failed: pypi unreachable")
+        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+
+    assert _eval_with(monkeypatch, avp_home, prepare) == 1
+
+
+def test_eval_stops_when_an_agent_cannot_run_here(avp_home, monkeypatch) -> None:
+    def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
+        if agent.name == "openai-agents":
+            return None
+        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+
+    assert _eval_with(monkeypatch, avp_home, prepare) == 2
+
+
+def test_run_fails_when_the_agent_image_fails_to_build(avp_home, monkeypatch) -> None:
+    _stub_stack(monkeypatch, avp_home)
+
+    def failed(agent, env_obj, quiet, runtime_name="opensandbox"):
+        raise images.ImageBuildError("docker build failed")
+
+    monkeypatch.setattr(cli, "_prepare_agent", failed)
+    assert cli.main(["run", "--agent", "goose", "--model", "openai/gpt-5-mini", "x"]) == 1

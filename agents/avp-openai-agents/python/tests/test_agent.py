@@ -279,10 +279,15 @@ def test_ships_no_builtins_and_rejects_allowlisted_names(script, tmp_path: Path)
 
 def test_exhausted_credits_end_the_run_without_crashing(script, tmp_path: Path) -> None:
     """OpenAI delivers an empty balance mid-stream as a plain APIError."""
-    import httpx
     from openai import APIError
 
-    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    # The OpenAI SDK's HTTP client: httpx2 from openai 3.x, httpx before.
+    try:
+        import httpx2 as http
+    except ImportError:
+        import httpx as http
+
+    request = http.Request("POST", "https://api.openai.com/v1/responses")
     script(APIError("You have no credits remaining. Add credits to continue.", request, body=None))
     events = _run(tmp_path, prompt="hi")
     assert _types(events)[-2:] == ["error_occurred", "agent_stopped"]
