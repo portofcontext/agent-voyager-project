@@ -46,21 +46,22 @@ def _run_for(agent: str, tag: str) -> dict | None:
     """The newest release-workflow run for `tag`, waiting a little for a run
     that was just triggered to appear."""
     for _ in range(30):
-        runs = json.loads(
-            _run(
-                "gh",
-                "run",
-                "list",
-                "--workflow",
-                f"release-{agent}.yml",
-                "--branch",
-                tag,
-                "--limit",
-                "1",
-                "--json",
-                "databaseId,status,conclusion,url",
-            ).stdout
+        result = _run(
+            "gh",
+            "run",
+            "list",
+            "--workflow",
+            f"release-{agent}.yml",
+            "--branch",
+            tag,
+            "--limit",
+            "1",
+            "--json",
+            "databaseId,status,conclusion,url",
+            check=False,
         )
+        # A failed lookup (a GitHub API hiccup) is retried like an empty one.
+        runs = json.loads(result.stdout) if result.returncode == 0 and result.stdout.strip() else []
         if runs:
             return runs[0]
         time.sleep(10)
@@ -68,6 +69,7 @@ def _run_for(agent: str, tag: str) -> dict | None:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)  # progress shows up live when logged
     registry = agent_packages.registry()
     args = sys.argv[1:]
     dry_run = "--dry-run" in args
