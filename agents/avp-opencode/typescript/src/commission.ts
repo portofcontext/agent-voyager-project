@@ -1,11 +1,11 @@
 /**
  * Commission -> OpenCode configuration.
  *
- * - `model` `<origin>/<id>` is OpenCode provider `<origin>`, model `<id>`, from
- *   the model catalog the pinned binary bundles. An origin OpenCode doesn't
- *   know, or whose SDK it doesn't bundle (it would install one from npm), is
- *   `unsupported_provider`; a model missing from that provider is
- *   `unsupported_model`. Credentials come from the provider's environment
+ * - `model` `<origin>/<id>` is OpenCode provider `<origin>`, model `<id>`. The
+ *   model is declared in the provider's config, so a model newer than the
+ *   catalog the pinned binary bundles still runs on that provider's SDK. An
+ *   origin OpenCode doesn't know, or whose SDK it doesn't bundle (it would
+ *   install one from npm), is `unsupported_provider`. Credentials come from the provider's environment
  *   variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); Google's also
  *   from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, which launchers set.
  * - `provider.base_url` is the provider's `baseURL`. Without it, a launcher's
@@ -212,7 +212,14 @@ export function opencodeConfig(
     model,
     small_model: model,
     enabled_providers: [plan.route],
-    ...(plan.baseUrl || plan.keyVar ? { provider: { [plan.route]: { options: providerOptions(plan) } } } : {}),
+    provider: {
+      [plan.route]: {
+        // Declared so a model the bundled catalog predates still resolves; a
+        // cataloged model keeps its catalog entry (config merges over it).
+        models: { [plan.routeModel]: {} },
+        ...(plan.baseUrl || plan.keyVar ? { options: providerOptions(plan) } : {}),
+      },
+    },
     ...(plan.mcpServers.length > 0 ? { mcp: Object.fromEntries(plan.mcpServers.map((e) => [e.id, mcpConfig(e)])) } : {}),
     ...(opts.skillsDir ? { skills: { paths: [opts.skillsDir] } } : {}),
     permission,

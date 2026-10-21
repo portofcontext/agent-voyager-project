@@ -217,3 +217,36 @@ def test_describe_declares_no_built_ins() -> None:
     descriptor = describe()
     assert descriptor.agent_name == "avp-pydantic-ai"
     assert not descriptor.tools and not descriptor.subagents and not descriptor.skills
+
+
+def test_raise_sse_event_limit_passes_the_cap_when_the_sdk_has_one(monkeypatch) -> None:
+    import functools
+
+    from fastmcp.client.transports import http
+
+    from avp_pydantic_ai import commission as cm
+
+    seen = {}
+
+    def limited(url, *, http_client=None, max_sse_event_size=1024 * 1024):
+        seen["max"] = max_sse_event_size
+
+    monkeypatch.setattr(http, "streamable_http_client", limited)
+    assert cm.raise_sse_event_limit() is True
+    assert isinstance(http.streamable_http_client, functools.partial)
+    http.streamable_http_client("http://x")
+    assert seen["max"] == cm.MAX_SSE_EVENT_BYTES
+    assert cm.raise_sse_event_limit() is True  # idempotent: not wrapped twice
+
+
+def test_raise_sse_event_limit_is_a_no_op_without_the_setting(monkeypatch) -> None:
+    from fastmcp.client.transports import http
+
+    from avp_pydantic_ai import commission as cm
+
+    def unlimited(url, *, http_client=None):
+        return None
+
+    monkeypatch.setattr(http, "streamable_http_client", unlimited)
+    assert cm.raise_sse_event_limit() is False
+    assert http.streamable_http_client is unlimited

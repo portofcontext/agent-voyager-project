@@ -204,7 +204,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dev_manifest="agents/avp-pydantic-ai/python/avp-conformance.json",
         # 0.0.2: Pydantic AI 2.58 on OpenAI, Anthropic, and Google models; tools
         # from Commission MCP servers only, schemas read under MCP SDK 1 or 2.
-        container_version="0.0.2",
+        # 0.0.3: MCP servers whose tools/list is over 1 MiB (one SSE event)
+        # connect; MCP SDK 2 capped it and FastMCP doesn't expose the setting.
+        container_version="0.0.3",
         module="avp_pydantic_ai.conformance",
         dist="avp-pydantic-ai",
         wheel_dists=("agent-voyager-project", "avp-pydantic-ai"),
@@ -217,7 +219,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         dev_manifest="agents/avp-opencode/typescript/avp-conformance.json",
         # 0.1.0: OpenCode 1.18.34 (`opencode serve` per run) on the TypeScript
         # Recorder. Its grep and glob tools use ripgrep.
-        container_version="0.1.0",
+        # 0.1.1: the Commission's model is declared in the provider config, so a
+        # model newer than the bundled catalog runs on the provider's SDK.
+        container_version="0.1.1",
         package_asset="avp-opencode-{platform}.tar.gz",
         entry="dist/src/main.js",
         container_setup=(

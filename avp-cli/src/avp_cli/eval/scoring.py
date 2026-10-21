@@ -256,7 +256,10 @@ class LLMJudgeScorer:
             },
             strict=True,
         )
-        verdict = self._grade(prompt)
+        try:
+            verdict = self._grade(prompt)
+        except Exception as exc:  # a timeout or API error fails this cell, not the eval
+            return Score(value=0.0, passed=False, detail=f"grader error: {exc}"[:120])
         m = _CORRECT_RE.search(verdict)
         correct = bool(m and m.group(1).lower() == "yes")
         conf = _CONFIDENCE_RE.search(verdict)
