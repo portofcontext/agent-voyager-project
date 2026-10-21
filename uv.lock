@@ -343,7 +343,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-claude-agent-sdk"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "agents/avp-claude-agent-sdk/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -374,7 +374,7 @@ dev = [
 
 [[package]]
 name = "avp-cli"
-version = "0.3.1"
+version = "0.4.0"
 source = { editable = "avp-cli" }
 dependencies = [
     { name = "httpx" },
@@ -469,7 +469,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "avp-deep-agents"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "agents/avp-deep-agents/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -500,7 +500,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-openai-agents"
-version = "0.0.2"
+version = "0.0.3"
 source = { editable = "agents/avp-openai-agents/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -530,10 +530,11 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-pydantic-ai"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "agents/avp-pydantic-ai/python" }
 dependencies = [
     { name = "agent-voyager-project" },
+    { name = "anthropic" },
     { name = "pydantic-ai-slim", extra = ["anthropic", "google", "mcp", "openai"] },
 ]
 
@@ -545,6 +546,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agent-voyager-project", editable = "avp/bindings/python" },
+    { name = "anthropic", specifier = "<2" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "google", "mcp", "openai"], specifier = "==2.58.0" },
 ]
 

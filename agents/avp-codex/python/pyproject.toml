@@ -21,3 +21,10 @@ packages = ["src/avp_codex"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# How this agent installs and runs in a sandbox: release-manifest.py writes it
+# into the release's avp-release.json, with the workspace lock as requirements.txt.
+[tool.avp.release]
+agent = "codex"
+module = "avp_codex.conformance"
+wheels = ["agent-voyager-project", "avp-codex"]

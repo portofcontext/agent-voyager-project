@@ -21,9 +21,9 @@ make gemini-cli-check              # v0.1 conformance on google/gemini-3.1-flash
 scripts/package.sh                 # the release archive, dist/release/avp-gemini-cli.tar.gz
 ```
 
-Releases: bump `version` in `package.json` and `container_version` for
-`gemini-cli` in `avp-cli/src/avp_cli/agents.py` together, then
-`make release-gemini-cli` from a clean `main`.
+Releases: bump `version` in `package.json`, run `make pins`, then
+`make release-gemini-cli` from a clean `main`. How the agent runs in the sandbox
+(the Node version, any extra packages) is the `"avp"` block of `package.json`.
 
 ## Why in-process
 

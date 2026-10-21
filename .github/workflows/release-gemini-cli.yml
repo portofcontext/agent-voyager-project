@@ -20,11 +20,11 @@ on:
         required: true
 
 permissions:
-  contents: write # create the release + upload assets
+  contents: write # agent-release.yml creates the release
 
 jobs:
-  release:
-    name: Build and publish
+  build:
+    name: Build and package
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -33,22 +33,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Resolve the tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=agent-gemini-cli-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check the tag matches the package version
-        working-directory: agents/avp-gemini-cli/typescript
-        run: |
-          version=$(node -p 'require("./package.json").version')
-          test "agent-gemini-cli-v$version" = "${{ steps.tag.outputs.tag }}" \
-            || { echo "package.json version $version does not match ${{ steps.tag.outputs.tag }}"; exit 1; }
 
       # The adapter's build compiles the in-repo TypeScript binding, which needs
       # its own dependencies (CI's bindings job installs them in an earlier step).
@@ -61,25 +45,17 @@ jobs:
         run: npm ci --omit=optional && npm test
 
       - name: Package the archive
-        run: |
-          agents/avp-gemini-cli/typescript/scripts/package.sh dist
-          (cd dist && sha256sum avp-gemini-cli.tar.gz > SHA256SUMS)
+        run: agents/avp-gemini-cli/typescript/scripts/package.sh dist
 
-      - name: Smoke the archive
-        run: |
-          mkdir -p smoke && tar -xzf dist/avp-gemini-cli.tar.gz -C smoke
-          node smoke/dist/src/main.js ping --out pong.json
-          node smoke/dist/src/main.js describe > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-archives
+          path: dist/avp-gemini-cli.tar.gz
+          if-no-files-found: error
 
-      - name: Create or update the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.tag.outputs.tag }}"
-          gh release create "$TAG" dist/avp-gemini-cli.tar.gz dist/SHA256SUMS \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "gemini-cli agent $TAG" \
-            --notes "The avp-gemini-cli package archive (Node 22.19 or newer). Install with: avp agent install gemini-cli --version ${TAG#agent-gemini-cli-v}" \
-            || gh release upload "$TAG" dist/avp-gemini-cli.tar.gz dist/SHA256SUMS --repo "${{ github.repository }}" --clobber
+  release:
+    needs: build
+    uses: ./.github/workflows/agent-release.yml
+    with:
+      agent: gemini-cli
+      tag: ${{ github.event_name == 'workflow_dispatch' && format('agent-gemini-cli-v{0}', inputs.version) || github.ref_name }}
