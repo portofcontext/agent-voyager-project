@@ -1,6 +1,6 @@
 {
   "name": "avp-opencode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AVP adapter for the OpenCode coding agent.",
   "license": "MIT",
   "private": true,

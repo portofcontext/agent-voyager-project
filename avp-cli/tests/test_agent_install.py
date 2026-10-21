@@ -115,7 +115,8 @@ def test_per_platform_node_release_picks_the_host_archive(avp_home, tmp_path, mo
         {"avp-opencode-linux-arm64.tar.gz": archive, "avp-opencode-linux-x64.tar.gz": b"x"},
     )
     result = agent_install.install("opencode")
-    assert result.kind == "node" and result.version == "0.1.0"
+    assert result.kind == "node"
+    assert result.version == agents.AGENT_SOURCES["opencode"].container_version
 
 
 def test_install_all_continues_past_failures(avp_home, tmp_path, monkeypatch) -> None:
