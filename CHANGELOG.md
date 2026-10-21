@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- MCP servers that use OAuth. `avp env secret login <handle> --url <mcp-url>`
+  signs in through the browser and stores the login under a vault handle that
+  a Commission references in `auth`. The broker refreshes the access token
+  near expiry or after a 401, so long evals keep running and the token never
+  enters the sandbox. `avp env secret list` marks OAuth handles and
+  `avp env secret delete` removes them.
+- `avp run --commission <id>` runs a library Commission once, with the task
+  filling its `{input}`, so a single question can use the Commission's MCP
+  servers, skills, and model without writing an eval.
+
 ### Fixed
 
 - Codex runs recorded every model call as taking 0 ms, so evals showed no

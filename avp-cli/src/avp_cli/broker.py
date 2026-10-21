@@ -15,7 +15,9 @@ ever see it.
 
 The broker is per-run: started in `run_agent`, its routes built from the
 Commission + resolved vault handles, torn down in the run's `finally`. Secrets
-live only in the in-memory route table; nothing is written to disk.
+live only in the in-memory route table; nothing is written to disk. An OAuth
+handle routes an `oauth.Token` instead of a fixed string: the broker refreshes
+it near expiry, and once more when the upstream answers 401, then retries.
 
 This is also the real egress boundary for secret-bearing traffic: a request
 that matches no route is refused, so the broker can only ever reach the
@@ -32,6 +34,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 import httpx
+
+from avp_cli import oauth
 
 __all__ = ["Broker", "Route"]
 
@@ -64,13 +68,14 @@ class Route:
     agent's SDK supplies the rest;
     for an MCP server it is the full real url. `header`/`prefix` name the auth
     header to overwrite (e.g. `authorization` + `Bearer `, or `x-api-key` + ``);
-    `secret` is the resolved value, held only here on the host.
+    `secret` is the resolved value, held only here on the host: a string, or a
+    refreshable `oauth.Token` for an OAuth handle.
     """
 
     upstream: str
     header: str
     prefix: str
-    secret: str
+    secret: str | oauth.Token
 
 
 class Broker:
@@ -151,7 +156,9 @@ class Broker:
             url = f"{url}?{query}"
         return url
 
-    def _forward_headers(self, route: Route, headers: dict[str, str]) -> dict[str, str]:
+    def _forward_headers(
+        self, route: Route, headers: dict[str, str], secret: str
+    ) -> dict[str, str]:
         out: dict[str, str] = {}
         for name, value in headers.items():
             low = name.lower()
@@ -163,7 +170,7 @@ class Broker:
                 continue
             out[name] = value
         # Replace broker authentication with the upstream secret.
-        out[route.header] = f"{route.prefix}{route.secret}"
+        out[route.header] = f"{route.prefix}{secret}"
         # Pin Host to the upstream so the upstream's TLS/vhost routing is correct.
         out["Host"] = urlsplit(self._target_url(route, "", "")).netloc
         return out
@@ -202,11 +209,26 @@ def _make_handler(broker: Broker) -> type[BaseHTTPRequestHandler]:
             target = broker._target_url(route, remainder, split.query)
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else None
-            headers = broker._forward_headers(route, dict(self.headers.items()))
             try:
+                self._forward(route, target, body)
+            except oauth.OAuthError as exc:
+                self.send_error(401, f"broker credential error: {exc}")
+            except Exception as exc:  # upstream unreachable / stream error
+                self.send_error(502, f"broker upstream error: {exc}")
+
+        def _forward(self, route: Route, target: str, body: bytes | None) -> None:
+            token = route.secret if isinstance(route.secret, oauth.Token) else None
+            secret = token.access_token() if token else route.secret
+            for attempt in (1, 2):
+                headers = broker._forward_headers(route, dict(self.headers.items()), secret)
                 with broker._client.stream(
                     self.command, target, headers=headers, content=body
                 ) as upstream:
+                    if token and upstream.status_code == 401 and attempt == 1:
+                        # Revoked or expired early: refresh once, then retry.
+                        token.refresh(stale=secret)
+                        secret = token.access_token()
+                        continue
                     self.send_response(upstream.status_code)
                     for name, value in upstream.headers.items():
                         if name.lower() in _DROP_RESPONSE_HEADERS:
@@ -221,8 +243,7 @@ def _make_handler(broker: Broker) -> type[BaseHTTPRequestHandler]:
                             self.wfile.write(b"\r\n")
                             self.wfile.flush()
                     self.wfile.write(b"0\r\n\r\n")
-            except Exception as exc:  # upstream unreachable / stream error
-                self.send_error(502, f"broker upstream error: {exc}")
+                    return
 
         do_GET = _handle
         do_POST = _handle

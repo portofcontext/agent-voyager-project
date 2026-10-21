@@ -56,6 +56,10 @@ _ENV = [
         "avp env secret create <handle>",
         'store a credential a Commission references by {"vault": handle}',
     ),
+    (
+        "avp env secret login <handle> --url <mcp-url>",
+        "sign in to an MCP server with OAuth; the broker refreshes the token",
+    ),
     ("avp env secret list", "stored secret handles (values stay on the host, never the sandbox)"),
     ("avp env secret delete <handle>", "remove a stored secret"),
 ]

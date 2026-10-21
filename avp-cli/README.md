@@ -59,6 +59,13 @@ broker and the agent receives only a random per-run authentication token. MCP
 vault routes use the same token through their request headers. The broker rejects
 missing or invalid tokens. It remains reachable through the host's Docker bridge.
 
+**MCP servers with OAuth.** Run `avp env secret login <handle> --url <mcp-url>`
+once to sign in through your browser, then set `"auth": {"vault": "<handle>"}`
+on the server in the Commission. The login is stored on the host in
+`~/.avp/oauth/` and the broker refreshes the token during runs, so the agent
+never sees it. Servers without dynamic client registration need
+`--client-id` (and `--client-secret`) for a client you registered yourself.
+
 The optional `libkrun` runtime supports offline runs only. Networked runs fail
 closed until filtered egress is supported; use the default `opensandbox` runtime
 when a Commission or environment requires network access.
@@ -166,7 +173,7 @@ already have is left untouched):
 | `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 | `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
-| `avp run "TASK" --agent A [--env E]` | commission an agent to do a task in a sandbox |
+| `avp run "TASK" --agent A [--env E] [--commission ID]` | commission an agent to do a task in a sandbox; `--commission` runs a library Commission with the task as its `{input}` |
 | `avp env create NAME` | create an environment (`--image`/`--apt`/`--pip`/`--path`/`--file`/`--setup`/`--net`/`--cpu`/`--memory`) |
 | `avp env list` | list your environments (`~/.avp/environments`) |
 | `avp env show NAME\|PATH` | what an environment's sandbox world contains |

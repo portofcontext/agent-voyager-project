@@ -8,6 +8,8 @@ Backends, first hit wins:
   1. host env var  `AVP_VAULT_<UPPER_SNAKE(handle)>`  (e.g. handle "openrouter"
      → `AVP_VAULT_OPENROUTER`); also the bare upper-cased handle as a fallback.
   2. `~/.avp/secrets.toml`, a `[secrets]` table keyed by handle.
+  3. an OAuth grant from `avp env secret login` (`avp_cli.oauth`), resolved to
+     a refreshable `oauth.Token` rather than a fixed string.
 
 The resolved value is handed to the credential-injecting broker
 (`avp_cli.broker`), which holds it on the host and injects it into outbound
@@ -20,9 +22,18 @@ from __future__ import annotations
 import re
 import tomllib
 
-from avp_cli import paths
+from avp_cli import oauth, paths
 
-__all__ = ["VaultError", "names", "remove", "resolve", "resolve_ref", "secrets_path", "store"]
+__all__ = [
+    "VaultError",
+    "names",
+    "oauth_names",
+    "remove",
+    "resolve",
+    "resolve_ref",
+    "secrets_path",
+    "store",
+]
 
 # A vault handle matches the SecretRef wire pattern (avp.commission._ID_PATTERN).
 _HANDLE_RE = re.compile(r"^[a-z0-9_-]+$")
@@ -71,6 +82,11 @@ def names() -> list[str]:
     return sorted(_secrets_file())
 
 
+def oauth_names() -> list[str]:
+    """Handles backed by an OAuth login."""
+    return oauth.names()
+
+
 def store(handle: str, value: str) -> None:
     """Store (or replace) a secret under `handle` in the on-disk vault."""
     _validate_handle(handle)
@@ -82,17 +98,19 @@ def store(handle: str, value: str) -> None:
 
 
 def remove(handle: str) -> bool:
-    """Delete a handle from the on-disk vault; True if it was present."""
+    """Delete a handle (a stored secret and any OAuth login); True if either existed."""
+    removed = oauth.remove(handle)
     table = _secrets_file()
     if handle not in table:
-        return False
+        return removed
     del table[handle]
     _write_secrets(table)
     return True
 
 
-def resolve(handle: str) -> str:
-    """Resolve a vault handle to its secret value, or raise `VaultError`."""
+def resolve(handle: str) -> str | oauth.Token:
+    """Resolve a vault handle to its secret value (or a refreshable OAuth
+    token), or raise `VaultError`."""
     import os
 
     env_name = "AVP_VAULT_" + handle.upper().replace("-", "_")
@@ -103,13 +121,22 @@ def resolve(handle: str) -> str:
     file_val = _secrets_file().get(handle)
     if file_val:
         return file_val
+    grant = oauth.load(handle)
+    if grant is not None:
+        token = oauth.Token(handle, grant)
+        try:
+            token.access_token()  # fail before the run if the login has lapsed
+        except oauth.OAuthError as exc:
+            raise VaultError(str(exc)) from exc
+        return token
     raise VaultError(
-        f"vault handle {handle!r} not found. Set ${env_name} or add it under "
-        f"[secrets] in {paths.avp_home() / 'secrets.toml'}."
+        f"vault handle {handle!r} not found. Set ${env_name}, add it under "
+        f"[secrets] in {paths.avp_home() / 'secrets.toml'}, or sign in with "
+        f"`avp env secret login {handle} --url <mcp-url>`."
     )
 
 
-def resolve_ref(ref: object | None) -> str | None:
+def resolve_ref(ref: object | None) -> str | oauth.Token | None:
     """Resolve a `SecretRef`-shaped object (has `.vault`); None passes through."""
     if ref is None:
         return None

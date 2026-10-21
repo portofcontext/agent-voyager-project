@@ -1133,14 +1133,31 @@ def _task_event(ev) -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     """Commission one agent to do one task, optionally inside an environment.
 
-    The task is the Commission prompt; the env (if given) supplies the working
-    context (code via `paths`, fixtures via `files`, a runtime). The workspace
-    persists so you can inspect what the agent changed.
+    The task is the Commission prompt, or fills `{input}` in a library
+    Commission's prompt (`--commission`), the same way an eval item does. The
+    env (if given) supplies the working context (code via `paths`, fixtures via
+    `files`, a runtime). The workspace persists so you can inspect what the
+    agent changed.
     """
     from avp.commission import Commission
     from avp_cli.agent import run_agent
     from avp_cli.eval.engine import extract_final_output
+    from avp_cli.eval.template import render
     from avp_cli.observability import summarize
+
+    base: Commission | None = None
+    if args.commission:
+        try:
+            base = library.load(args.commission)
+        except library.CommissionError as exc:
+            console.error_panel("commission", str(exc))
+            return 1
+        if base.prompt and "{input}" not in base.prompt:
+            console.error_panel(
+                f"commission {args.commission!r} has no {{input}} slot",
+                "add {input} to its prompt where the task should go.",
+            )
+            return 1
 
     agent = resolve_agent(args.agent)
     run_id = state.new_id()
@@ -1165,17 +1182,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if prepared is None:
         return _SKIP
 
-    if not args.model or "/" not in args.model:
+    model = args.model or (base.model if base else None)
+    if not model or "/" not in model:
         console.error_panel(
             "model must be a provider/model slug",
-            f"got {args.model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
+            f"got {model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
             "or openai/gpt-4o (canonical models.dev namespace).",
         )
         return 1
 
-    commission = Commission(
-        schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
-    )
+    if base is None:
+        commission = Commission(
+            schema_version="0.1", run_id=run_id, prompt=args.prompt, model=model
+        )
+    else:
+        prompt = render(base.prompt, {"input": args.prompt}) if base.prompt else args.prompt
+        commission = base.model_copy(update={"run_id": run_id, "prompt": prompt, "model": model})
     if local_models.is_local(commission):
         try:
             local_models.provision(commission.model, notify=console.note)
@@ -1235,12 +1257,17 @@ def _cmd_env_secret(args: argparse.Namespace) -> int:
 
     if args.secret_cmd == "list":
         handles = vault.names()
-        if not handles:
+        oauth_handles = vault.oauth_names()
+        if not handles and not oauth_handles:
             console.note(f"no secrets stored ({_tilde(vault.secrets_path())})")
             return 0
         for handle in handles:
             console.out.print(handle)
+        for handle in oauth_handles:
+            console.out.print(f"{handle} (oauth)")
         return 0
+    if args.secret_cmd == "login":
+        return _cmd_env_secret_login(args)
     if args.secret_cmd == "delete":
         if vault.remove(args.handle):
             console.note(f"removed {args.handle!r}")
@@ -1266,6 +1293,39 @@ def _cmd_env_secret(args: argparse.Namespace) -> int:
         return 1
     console.note(
         f'stored {args.handle!r} — reference it in a Commission as {{"vault": "{args.handle}"}}'
+    )
+    return 0
+
+
+def _cmd_env_secret_login(args: argparse.Namespace) -> int:
+    """Sign in to an HTTP MCP server with OAuth and store the grant by handle.
+    The broker refreshes the token at run time; it never enters the sandbox."""
+    from avp_cli import oauth
+
+    def open_url(url: str) -> None:
+        console.note("opening your browser to sign in. If it doesn't open, visit:")
+        console.out.print(url, soft_wrap=True)
+        if not args.no_browser:
+            import webbrowser
+
+            webbrowser.open(url)
+
+    try:
+        oauth.login(
+            args.handle,
+            args.url,
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            scope=args.scope,
+            port=args.port,
+            open_url=open_url,
+        )
+    except oauth.OAuthError as exc:
+        console.error_panel("sign-in failed", str(exc))
+        return 1
+    console.note(
+        f"signed in as {args.handle!r}. Reference it on the MCP server as "
+        f'"auth": {{"vault": "{args.handle}"}}'
     )
     return 0
 
@@ -1770,7 +1830,14 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--env", default=None, help="Environment to run inside (a name or a path to an env JSON)"
     )
-    run_p.add_argument("--model", default=None, help="Model override (else the agent's default)")
+    run_p.add_argument(
+        "--commission",
+        default=None,
+        metavar="ID",
+        help="A library Commission to run (its MCP servers, skills, tools, model); "
+        "the task fills its {input}",
+    )
+    run_p.add_argument("--model", default=None, help="Model override (else the Commission's model)")
     run_p.add_argument("--runtime", choices=runtime.RUNTIMES, default=None, help=_RUNTIME_HELP)
     run_p.add_argument(
         "--timeout", type=float, default=600.0, help="Max seconds for the run (default: 600)"
@@ -1842,6 +1909,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="The secret value. Omit to be prompted (keeps it out of shell history).",
     )
     p_secset.add_argument("--force", action="store_true", help="Overwrite an existing secret")
+    p_seclogin = secsub.add_parser(
+        "login", help="Sign in to an HTTP MCP server with OAuth and store it by handle"
+    )
+    p_seclogin.add_argument("handle", help='Vault handle (a Commission\'s {"vault": <handle>})')
+    p_seclogin.add_argument("--url", required=True, help="The MCP server URL")
+    p_seclogin.add_argument(
+        "--client-id", help="A pre-registered OAuth client (default: register one dynamically)"
+    )
+    p_seclogin.add_argument("--client-secret", help="The pre-registered client's secret")
+    p_seclogin.add_argument("--scope", help="Scopes to request (default: what the server asks)")
+    p_seclogin.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="Loopback port for the redirect, for clients registered with a fixed one",
+    )
+    p_seclogin.add_argument(
+        "--no-browser", action="store_true", help="Print the sign-in URL without opening it"
+    )
     secsub.add_parser("list", help="List stored handles (never the values)")
     p_secrm = secsub.add_parser("delete", help="Delete a stored secret by handle")
     p_secrm.add_argument("handle", help="Vault handle to delete")

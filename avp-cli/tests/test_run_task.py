@@ -245,3 +245,57 @@ def test_run_fails_when_the_agent_image_fails_to_build(avp_home, monkeypatch) ->
 
     monkeypatch.setattr(cli, "_prepare_agent", failed)
     assert cli.main(["run", "--agent", "goose", "--model", "openai/gpt-5-mini", "x"]) == 1
+
+
+def test_run_with_commission_fills_its_input_and_keeps_its_mcp_servers(
+    avp_home, monkeypatch
+) -> None:
+    from avp.commission import Commission, McpServerHttp, SecretRef
+    from avp_cli import library
+
+    library.save(
+        "pctx",
+        Commission(
+            schema_version="0.1",
+            run_id="pctx",
+            model="anthropic/claude-haiku-4-5",
+            prompt="Answer with the pctx tools: {input}",
+            mcp_servers=[
+                McpServerHttp(
+                    type="http",
+                    id="pctx",
+                    url="https://mcp.pctx.ai/mcp",
+                    auth=SecretRef(vault="pctx"),
+                )
+            ],
+        ),
+    )
+    _stub_stack(monkeypatch, avp_home)
+    captured: dict = {}
+
+    def fake_run_agent(agent, ctx, commission, *, out_path, timeout_s=300.0, on_event=None):
+        captured["commission"] = commission
+        Path(out_path).write_text("")
+        return [], None
+
+    monkeypatch.setattr(agent_mod, "run_agent", fake_run_agent)
+
+    assert cli.main(["run", "--agent", "goose", "--commission", "pctx", "who is on the team?"]) == 0
+    c = captured["commission"]
+    assert c.prompt == "Answer with the pctx tools: who is on the team?"
+    assert c.model == "anthropic/claude-haiku-4-5"  # the Commission's model, no --model needed
+    assert c.mcp_servers[0].auth.vault == "pctx"
+    assert c.run_id != "pctx"  # a fresh run id per run
+
+
+def test_run_rejects_a_commission_without_an_input_slot(avp_home, monkeypatch) -> None:
+    from avp.commission import Commission
+    from avp_cli import library
+
+    library.save(
+        "fixed",
+        Commission(
+            schema_version="0.1", run_id="fixed", model="anthropic/claude-haiku-4-5", prompt="hi"
+        ),
+    )
+    assert cli.main(["run", "--agent", "goose", "--commission", "fixed", "x"]) == 1
