@@ -315,6 +315,23 @@ def _recipe(name: str, args: argparse.Namespace):
     return release_manifest.container_recipe(m, url=release_url(repo, tag))
 
 
+def _final_answer(events: list[dict], stopped: dict) -> str:
+    """The run's answer: `agent_stopped`'s output when the agent reports one,
+    else the text of its last assistant message (goose leaves output unset)."""
+    if stopped.get("avp.output"):
+        return str(stopped["avp.output"])
+    for e in reversed(events):
+        if e.get("type") == "avp.assistant_message":
+            text = [
+                c.get("text", "")
+                for c in e["data"].get("avp.content", [])
+                if c.get("type") == "text"
+            ]
+            if text:
+                return "".join(text)
+    return ""
+
+
 def smoke(name: str, args: argparse.Namespace) -> bool:
     recipe = _recipe(name, args)
     image = ensure_image(Environment(), recipe, on_line=lambda line: print("  " + line))
@@ -376,7 +393,7 @@ def smoke(name: str, args: argparse.Namespace) -> bool:
         e["data"].get("avp.error.message") for e in events if e.get("type") == "avp.error_occurred"
     ]
     reason = stopped[-1].get("avp.reason") if stopped else None
-    output = str(stopped[-1].get("avp.output", "")) if stopped else ""
+    output = _final_answer(events, stopped[-1] if stopped else {})
     ok = result.returncode == 0 and reason == "converged" and REPLY in output
     if ok:
         print(f"✓ {name}: converged on the stub's reply ({len(stub.requests)} model requests)")

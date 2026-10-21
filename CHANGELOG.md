@@ -38,7 +38,7 @@
 - Agents installed by an earlier avp-cli can't run with this one, since their
   installs have no release manifest. `avp agent list` says so; run
   `avp agent install --all` to reinstall them at the new releases
-  (goose 0.2.1, claude-code 0.2.1, codex 0.0.2, openai-agents 0.0.3, pi 0.1.1,
+  (goose 0.2.2, claude-code 0.2.1, codex 0.0.2, openai-agents 0.0.3, pi 0.1.1,
   gemini-cli 0.1.1, deep-agents 0.1.1, pydantic-ai 0.0.4, opencode 0.1.2).
 
 ## 0.3.1 (2026-10-21)
