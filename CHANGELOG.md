@@ -12,6 +12,8 @@
   (`claude-haiku-5-5: not in OpenCode's model catalog`). The adapter now
   declares the Commission's model in the provider config, so it runs on the
   provider's SDK; unknown providers are still refused.
+- A grader timeout or API error in the `llm-judge` scorer ended the whole
+  eval. It now fails that one cell, with the error in the board's failures.
 
 ## 0.3.0 (2026-10-21)
 

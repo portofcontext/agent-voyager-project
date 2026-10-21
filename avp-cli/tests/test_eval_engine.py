@@ -275,6 +275,20 @@ def test_llm_judge_reads_correct_no() -> None:
     assert score.value == 0.0 and not score.passed
 
 
+def test_llm_judge_error_fails_the_cell_not_the_eval() -> None:
+    from avp_cli.eval.scoring import LLMJudgeScorer
+
+    class _Down:
+        def create(self, **_):
+            raise TimeoutError("Request timed out")
+
+    client = type("C", (), {"messages": _Down()})()
+    s = LLMJudgeScorer(client=client)
+    item = Item(id="i", prompt="q", expected="a")
+    score = s.score(item, FinalOutput("a", None, "converged"), _summary())
+    assert not score.passed and score.detail == "grader error: Request timed out"
+
+
 # ── Board aggregation + ranking ────────────────────────────────────────────────
 
 
