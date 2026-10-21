@@ -18,9 +18,9 @@ make pi-check                      # v0.1 conformance on a real model (paid)
 scripts/package.sh                 # the release archive, dist/release/avp-pi.tar.gz
 ```
 
-Releases: bump `version` in `package.json` and `container_version` for `pi` in
-`avp-cli/src/avp_cli/agents.py` together, then `make release-pi` from a clean
-`main`.
+Releases: bump `version` in `package.json`, run `make pins`, then
+`make release-pi` from a clean `main`. How the agent runs in the sandbox
+(the Node version, any extra packages) is the `"avp"` block of `package.json`.
 
 ## Mapping
 

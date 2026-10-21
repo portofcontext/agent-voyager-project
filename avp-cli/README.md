@@ -171,7 +171,7 @@ already have is left untouched):
 | `avp cm delete ID` | remove a commission from your library |
 | `avp agent list` | the agents you can run against: whether each is installed and ready |
 | `avp agent install --all` | install every built-in agent from its avp release |
-| `avp agent install NAME [--manifest PATH \| --as NAME --wheel/--binary/--package ...]` | install one built-in agent, your own agent from its manifest, or a local build under its own name |
+| `avp agent install NAME [--manifest PATH \| --as NAME --from DIR]` | install one built-in agent, your own agent from its manifest, or a local build under its own name |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 | `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
 | `avp run "TASK" --agent A [--env E] [--commission ID]` | commission an agent to do a task in a sandbox; `--commission` runs a library Commission with the task as its `{input}` |
@@ -231,9 +231,13 @@ avp agent install my-agent --manifest ~/work/my-agent/avp-conformance.json
 avp run --agent my-agent "..."
 ```
 
-A binary agent (goose) installs a prebuilt executable; a Python agent
-(claude-code, codex, openai-agents, deep-agents, pydantic-ai) installs into a managed venv (needs `uv`); a
-Node agent (pi, gemini-cli, opencode) extracts its package archive and runs with the host's `node`. Release downloads go over
+Every agent release carries an `avp-release.json` saying how the agent
+installs and runs, and the CLI follows it. A binary agent (goose) installs a
+prebuilt executable; a Python agent (claude-code, codex, openai-agents,
+deep-agents, pydantic-ai) installs into a managed venv (needs `uv`) at the
+hash-checked dependency versions the release was tested with, so a new upstream
+release can't break it; a Node agent (pi, gemini-cli, opencode) extracts its
+package archive and runs with the host's `node`. Release downloads go over
 plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
 fork or to avoid API rate limits. The host install serves `avp agent describe`
 (the free pre-flight view); actual runs install the agent's **Linux build into
@@ -242,24 +246,21 @@ Node + `claude` CLI) live in the image, not on your machine. Set
 `AVP_AGENT_REPO` to install releases from a fork; the host install and the
 sandbox image both come from it.
 
-**Testing your own build of a built-in agent (no release needed).** Build the
-artifacts and install them under a `-dev` name:
+**Testing your own build of a built-in agent (no release needed).** Build it
+into a directory laid out like its release, check it runs, and install it
+under a `-dev` name:
 
 ```bash
-make build-agents     # builds into dist/agents and prints the install commands
-
-avp agent install claude-code --as claude-code-dev \
-  --wheel dist/agents/agent_voyager_project-*.whl \
-  --wheel dist/agents/avp_conformance-*.whl \
-  --wheel dist/agents/avp_claude_agent_sdk-*.whl
-avp agent install pi --as pi-dev --package dist/agents/avp-pi.tar.gz
+make build-agents AGENTS=claude-code    # dist/agents/claude-code/: artifacts + avp-release.json
+make smoke-agents AGENTS=claude-code    # runs it in its sandbox image against a stub model
+avp agent install claude-code --as claude-code-dev --from dist/agents/claude-code
 ```
 
-The artifacts are copied into the sandbox image, so `--agent claude-code-dev`
-runs your build, and boards and run manifests label it as a local build.
-`--binary` (goose) and the opencode archive must be Linux builds, since that's
-what the sandbox runs. A custom agent needs no build step at all: install its
-manifest, or pass a manifest path to `--agent` for a one-off run.
+The directory is copied into the sandbox image, so `--agent claude-code-dev`
+runs your build, and boards and run manifests label it as a local build. The
+goose binary runs in the sandbox only when built on Linux. A custom agent needs
+no build step at all: install its manifest, or pass a manifest path to
+`--agent` for a one-off run.
 
 ## Environments + `avp run`
 
@@ -339,7 +340,8 @@ src/avp_cli/
   images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
   environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding
   agent.py          # run_agent: the run contract executed inside a sandbox
-  agents.py         # built-in agents + resolution of installed agents + container recipes
+  agents.py         # built-in agents (agents.json) + resolution of installed agents
+  release_manifest.py  # avp-release.json: how a release installs + its sandbox image recipe
   agent_install.py  # `avp agent install`: avp releases, custom manifests, local builds
   observability.py  # summarize: reduce a trajectory to per-run facts
   onboarding.py     # the WELCOME / agent-routing text

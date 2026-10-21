@@ -1,6 +1,6 @@
 {
   "name": "avp-opencode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AVP adapter for the OpenCode coding agent.",
   "license": "MIT",
   "private": true,
@@ -26,5 +26,14 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
+  },
+  "avp": {
+    "agent": "opencode",
+    "node": "22.23.3",
+    "asset": "avp-opencode-{platform}.tar.gz",
+    "entry": "dist/src/main.js",
+    "setup": [
+      "apt-get update && apt-get install -y --no-install-recommends ripgrep && rm -rf /var/lib/apt/lists/*"
+    ]
   }
 }

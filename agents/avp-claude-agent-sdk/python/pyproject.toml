@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avp-claude-agent-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "AVP v0.1 agent for the Claude Agent SDK (Claude Code as an SDK). Observer pattern: the SDK owns its loop; this package translates the SDK's lifecycle events into AVP."
 readme = "README.md"
 license = { text = "MIT" }
@@ -33,3 +33,19 @@ testpaths = ["tests"]
 markers = [
     "real_llm: tests that hit a live LLM via the Claude Agent SDK (require ANTHROPIC_API_KEY + claude CLI in PATH; cost real money)",
 ]
+
+# How this agent installs and runs in a sandbox: release-manifest.py writes it
+# into the release's avp-release.json, with the workspace lock as requirements.txt.
+[tool.avp.release]
+agent = "claude-code"
+module = "avp_claude_agent_sdk.conformance"
+wheels = ["agent-voyager-project", "avp-conformance", "avp-claude-agent-sdk"]
+# The conformance entrypoint also imports avp_conformance, so its wheel ships
+# too. The SDK drives the `claude` CLI, pinned here so an image built later
+# gets the CLI this release was tested with. The CLI refuses bypassPermissions
+# as root (the sandbox's user) unless told it is already in a sandbox. It is.
+setup = [
+    "apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates && rm -rf /var/lib/apt/lists/*",
+    "npm install -g @anthropic-ai/claude-code@2.1.303",
+]
+env = { IS_SANDBOX = "1" }

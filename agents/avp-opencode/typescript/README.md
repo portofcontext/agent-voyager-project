@@ -19,9 +19,9 @@ make opencode-check                # v0.1 conformance on a real model (paid; OPE
 scripts/package.sh                 # release archives, dist/release/avp-opencode-<platform>.tar.gz
 ```
 
-Releases: bump `version` in `package.json` and `container_version` for
-`opencode` in `avp-cli/src/avp_cli/agents.py` together, then
-`make release-opencode` from a clean `main`.
+Releases: bump `version` in `package.json`, run `make pins`, then
+`make release-opencode` from a clean `main`. How the agent runs in the sandbox
+(the Node version, any extra packages) is the `"avp"` block of `package.json`.
 
 ## Mapping
 

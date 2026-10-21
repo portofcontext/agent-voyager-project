@@ -699,8 +699,9 @@ def _cmd_agent_list() -> int:
             continue
         reason = preflight(name)
         status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
-        pin = AGENT_SOURCES[name].container_version if name in AGENT_SOURCES else None
-        if record["from"] == "release" and pin and record.get("version") != pin:
+        pin = AGENT_SOURCES[name].version if name in AGENT_SOURCES else None
+        stale = record["from"] == "release" and pin and record.get("version") != pin
+        if stale and (reason is None or "reinstall" not in reason):
             status += f" [yellow]· this CLI pins {pin}: avp agent install {name} --force[/]"
         table.add_row(name, origin_label(record), status)
     console.out.print(table)
@@ -732,9 +733,7 @@ def _cmd_agent_install(args: argparse.Namespace) -> int:
         result = agent_install.install(
             args.name,
             version=args.version,
-            binary=args.binary,
-            wheels=args.wheel or None,
-            package=args.package,
+            from_dir=args.from_dir,
             manifest=args.manifest,
             as_name=args.as_name,
             force=args.force,
@@ -1883,25 +1882,14 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="as_name",
         default=None,
         metavar="NAME",
-        help="Name for a local build of a built-in agent (with --binary, --wheel, or --package)",
+        help="Name for a local build of a built-in agent (with --from)",
     )
     p_ainstall.add_argument(
-        "--binary",
+        "--from",
+        dest="from_dir",
         default=None,
-        metavar="PATH",
-        help="A local Linux build of a binary agent (with --as)",
-    )
-    p_ainstall.add_argument(
-        "--wheel",
-        action="append",
-        metavar="WHL",
-        help="Local wheel(s) of a Python agent (with --as; repeatable)",
-    )
-    p_ainstall.add_argument(
-        "--package",
-        default=None,
-        metavar="TGZ",
-        help="A local package archive of a Node agent (with --as)",
+        metavar="DIR",
+        help="A local build laid out like a release (make build-agents writes dist/agents/<name>)",
     )
     p_ainstall.add_argument(
         "--force", action="store_true", help="Reinstall over an existing install"

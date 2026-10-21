@@ -111,22 +111,24 @@ eval's agent for a one-off run).
 `avp-cli/tests/test_agent_sources.py` fails until every adapter under `agents/`
 is registered and has a release. Do all of this in the PR that adds the agent:
 
-1. Register it in `AGENT_SOURCES` (`avp-cli/src/avp_cli/agents.py`): `kind`
-   (`"python"` wheels, a `"binary"`, or a `"node"` package archive),
-   `tag_prefix`, `dev_manifest`, `descriptor_name`, `container_version`, and
-   `module` / `dist` / `wheel_dists` (Python), `binary_name` (binary), or
-   `package_asset` / `entry` (Node; a `{platform}` asset ships one archive
-   per platform, for a native runtime). Check the container
-   recipe it gets (`_builtin_recipe`) installs whatever the runtime needs.
-2. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
+1. Declare how it installs and runs in a sandbox, in its own package file:
+   `[tool.avp.release]` in `pyproject.toml` (`module`, `wheels`, optional
+   `setup` RUN steps and `env`), `"avp"` in `package.json` (`node`, `asset`,
+   `entry`, optional `setup`; the minimum Node is `engines.node`), or
+   `[package.metadata.avp]` in `Cargo.toml` (`binary`, `asset`). A `{platform}`
+   or `{target}` asset ships one archive per platform. Pin anything the
+   runtime needs (a CLI it drives, say) there, not in the CLI.
+2. Register it in `avp-cli/src/avp_cli/agents.json` (`version`, `descriptor`,
+   `path`); `make pins` keeps the version equal to the package's.
+3. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
    (Python), `release-goose.yml` (binary), or `release-pi.yml` (Node) and
-   change the tag prefix.
-3. Add a `release-<name>` target to the `Makefile`, copying
-   `release-claude-code` / `release-goose` / `release-pi`, and list it with the other release
-   targets in the contributor instructions.
-4. Add the install name to the `avp-cli` README and `SKILL.md`.
-5. Release once merged: bump the package version and `container_version`
-   together, commit, and run `make release-<name>` from a clean `main`.
+   change the agent name. Its build job uploads `dist-*` artifacts and
+   `agent-release.yml` smoke-tests and publishes them.
+4. Check it end to end: `make build-agents AGENTS=<name>` then
+   `make smoke-agents AGENTS=<name>`.
+5. Add the install name to the `avp-cli` README and `SKILL.md`.
+6. Release once merged: `make release-<name>` from a clean `main` (or let
+   `make release-cli` cut it).
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
 subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),

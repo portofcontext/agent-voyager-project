@@ -1,6 +1,6 @@
 {
   "name": "avp-gemini-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AVP adapter for Gemini CLI.",
   "license": "MIT",
   "private": true,
@@ -23,5 +23,11 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
+  },
+  "avp": {
+    "agent": "gemini-cli",
+    "node": "22.23.3",
+    "asset": "avp-gemini-cli.tar.gz",
+    "entry": "dist/src/main.js"
   }
 }

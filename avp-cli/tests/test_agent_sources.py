@@ -7,6 +7,8 @@ adding one.
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,14 +26,22 @@ MANIFESTS = sorted(
 def test_every_in_tree_agent_is_registered() -> None:
     registered = {s.dev_manifest for s in AGENT_SOURCES.values()}
     missing = [m for m in MANIFESTS if m not in registered]
-    assert not missing, f"add these to AGENT_SOURCES (agents/_template/README.md §6): {missing}"
+    assert not missing, f"add these to agents.json (agents/_template/README.md §6): {missing}"
 
 
 @pytest.mark.parametrize("name", sorted(AGENT_SOURCES))
 def test_every_registered_agent_has_a_release(name: str) -> None:
     source = AGENT_SOURCES[name]
     assert (ROOT / source.dev_manifest).is_file()
-    assert source.container_version, "pin the release the container recipe installs"
     workflow = ROOT / ".github" / "workflows" / f"release-{name}.yml"
     assert f'tags: ["{source.tag_prefix}-v*"]' in workflow.read_text()
-    assert f"\nrelease-{name}: _release-guard" in (ROOT / "Makefile").read_text()
+    assert f"agent: {name}" in workflow.read_text()  # publishes via agent-release.yml
+
+
+def test_the_registry_pins_each_agents_package_version() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "avp" / "scripts" / "agent-pins.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

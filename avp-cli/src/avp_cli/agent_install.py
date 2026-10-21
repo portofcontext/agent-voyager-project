@@ -4,32 +4,36 @@ Three ways in, recorded in each install's `installed.json` as `from`:
 
 - **avp release** (`install_release`, `install_all`): a built-in agent from a
   GitHub release of the AVP repo over HTTPS (no `gh`, no auth for a public
-  repo), at the version this CLI pins unless `--version` says otherwise.
-  Binary agents (goose) get an extracted executable; Python agents
-  (claude-code) get a managed `venv/` built from the release's wheels; Node
-  agents (pi, gemini-cli) get their package archive extracted to `app/`. This
+  repo), at the version this CLI pins unless `--version` says otherwise. This
   is the normal path, and `avp agent install --all` installs every one.
 - **manifest** (`install_manifest`): a custom agent, installed by name from its
   own `avp-conformance.json`. Built-in names are reserved, and the manifest
   must carry a `container` block because runs are sandboxed.
-- **local build** (`install_local_binary` / `install_local_python` /
-  `install_local_node`): a built-in agent built from a checkout, installed
-  under its own `--as` name. The artifacts are kept in `artifacts/` and copied
-  into the sandbox image, so runs use them, and boards show the `--as` name.
+- **local build** (`install_local`): a built-in agent built from a checkout
+  (`make build-agents`), installed under its own `--as` name from a directory
+  laid out like a release. The directory is kept in `artifacts/` and copied
+  into the sandbox image, so runs use it, and boards show the `--as` name.
 
-Release and local installs write `avp-conformance.json` (command → the
-installed artifact, `cwd: "."` → the install dir) for the host-side
-`describe`. Release installs fetch over plain HTTPS (the GitHub REST API +
-asset URLs via stdlib urllib); a `GH_TOKEN` / `GITHUB_TOKEN` in the
-environment is used only for private repos or API rate limits. Python agents
-additionally need `uv` (for the venv). The unpublished in-repo wheels (e.g.
-`avp`) ship on the release and are installed by file path, so PyPI's
-unrelated `avp` package is never pulled; third-party deps (claude-agent-sdk)
-still come from PyPI.
+A release and a local build both carry an `avp-release.json`
+(`avp_cli.release_manifest`) that says what the artifacts are, and the install
+follows it: a binary agent gets its executable in `bin/`, a Python agent a
+managed `venv/`, a Node agent its package extracted to `app/`. Each install
+writes `avp-conformance.json` (command → the installed artifact, `cwd: "."` →
+the install dir) for the host-side `describe`.
+
+Release installs fetch over plain HTTPS (the GitHub REST API + asset URLs via
+stdlib urllib); a `GH_TOKEN` / `GITHUB_TOKEN` in the environment is used only
+for private repos or API rate limits. Python agents additionally need `uv`
+(for the venv). Their in-repo wheels (e.g. `avp`) are installed by file path,
+so PyPI's unrelated `avp` package is never pulled, and their third-party deps
+install at the hash-checked versions in the release's `requirements.txt`, the
+same set its sandbox image installs, so an upstream release can't change an
+agent after it ships.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import shutil
@@ -38,11 +42,12 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from avp_cli import paths
+from avp_cli import paths, release_manifest
 from avp_cli.agent import load_manifest
 from avp_cli.agents import (
     AGENT_NAME_RE,
@@ -51,6 +56,7 @@ from avp_cli.agents import (
     installed_record,
     release_repo,
 )
+from avp_cli.release_manifest import ReleaseManifest
 
 
 class InstallError(Exception):
@@ -96,17 +102,14 @@ def install(
     name: str,
     *,
     version: str | None = None,
-    binary: str | Path | None = None,
-    wheels: list[str | Path] | None = None,
-    package: str | Path | None = None,
+    from_dir: str | Path | None = None,
     manifest: str | Path | None = None,
     as_name: str | None = None,
     force: bool = False,
 ) -> InstallResult:
     """Install a built-in agent's release, a custom agent from `manifest`, or a
-    local build of a built-in agent (`binary`/`wheels`/`package` + `as_name`)."""
+    local build of a built-in agent (`from_dir` + `as_name`)."""
     _check_name(name)
-    local = binary is not None or bool(wheels) or package is not None
     if manifest is not None:
         if name in AGENT_SOURCES:
             raise InstallError(
@@ -114,7 +117,7 @@ def install(
                 f"  install your manifest under another name: "
                 f"avp agent install <name> --manifest {manifest}"
             )
-        if local or as_name or version:
+        if from_dir or as_name or version:
             raise InstallError("--manifest installs a custom agent as is; drop the other flags")
         return install_manifest(name, manifest, force=force)
 
@@ -124,44 +127,41 @@ def install(
             f"no built-in agent named '{name}' (built-in: {', '.join(AGENT_SOURCES)}).\n"
             f"  install your own: avp agent install {name} --manifest <path/to/avp-conformance.json>"
         )
-    if not local:
+    if from_dir is None:
         if as_name:
-            raise InstallError("--as names a local build; pass --wheel, --binary, or --package")
+            raise InstallError(
+                "--as names a local build; pass --from <dir> (make build-agents writes one)"
+            )
         return install_release(source, version=version, force=force)
 
+    if version:
+        raise InstallError("--version picks a release; a local build is whatever --from holds")
     if not as_name:
-        flag = "--binary" if binary else "--package" if package else "--wheel"
         raise InstallError(
             "a local build needs its own name, so it can't be mistaken for the release.\n"
-            f"  avp agent install {name} --as {name}-dev {flag} ..."
+            f"  avp agent install {name} --as {name}-dev --from {from_dir}"
         )
     _check_name(as_name)
     if as_name in AGENT_SOURCES:
         raise InstallError(f"'{as_name}' is a built-in agent name; pick another --as name")
-    if binary is not None:
-        if source.kind != "binary":
-            raise InstallError(
-                f"{name} is a {source.kind} agent; --binary applies to binary agents"
-            )
-        return install_local_binary(source, binary, install_name=as_name, force=force)
-    if wheels:
-        if source.kind != "python":
-            raise InstallError(f"{name} is a {source.kind} agent; --wheel applies to python agents")
-        return install_local_python(source, wheels, install_name=as_name, force=force)
-    if source.kind != "node":
-        raise InstallError(f"{name} is a {source.kind} agent; --package applies to node agents")
-    return install_local_node(source, package, install_name=as_name, force=force)
+    return install_local(source, from_dir, install_name=as_name, force=force)
 
 
 def install_all(*, force: bool = False):
     """Install every built-in agent's pinned release, continuing past failures.
 
     Yields `(name, InstallResult | None, error | None)` as each finishes; an
-    agent already installed from a release yields `(name, None, None)` unless
-    `force`. Never touches custom agents or local builds."""
+    agent already installed at the pinned release yields `(name, None, None)`
+    unless `force`, and any other install of it (another version, or one from
+    an older avp-cli) is replaced. Never touches custom agents or local builds."""
     for name, source in AGENT_SOURCES.items():
         record = installed_record(name)
-        if record is not None and not force:
+        current = (
+            record is not None
+            and record.get("version") == source.version
+            and (paths.agents_dir() / name / release_manifest.FILENAME).is_file()
+        )
+        if current and not force:
             yield name, None, None
             continue
         try:
@@ -173,57 +173,109 @@ def install_all(*, force: bool = False):
 def install_release(
     source: AgentSource, *, version: str | None = None, force: bool = False
 ) -> InstallResult:
-    """Download a release's artifacts over HTTPS and install them.
+    """Download a release's manifest and artifacts over HTTPS and install them.
 
     No `gh` and no auth for a public repo: assets are fetched from the GitHub
     REST API + their download URLs via stdlib urllib. A `GH_TOKEN` / `GITHUB_TOKEN`
     in the environment is used if present (private repos, API rate limits).
     """
     repo = release_repo()
-    tag, resolved, assets = _resolve_release(source, version or source.container_version, repo)
+    tag, resolved, assets = _resolve_release(source, version or source.version, repo)
     by_name = {a["name"]: a["browser_download_url"] for a in assets}
-    record = {"from": "release", "agent": source.name, "repo": repo, "tag": tag}
+    if release_manifest.FILENAME not in by_name:
+        raise InstallError(
+            f"release {tag} has no {release_manifest.FILENAME}; it predates this avp-cli.\n"
+            f"  install the release this CLI pins: avp agent install {source.name}"
+        )
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
-        if source.kind == "binary":
-            target = current_target()
-            asset = f"{source.binary_name}-{target}.tar.gz"
+
+        def fetch(asset: str) -> Path:
             url = by_name.get(asset)
             if url is None:
                 have = ", ".join(by_name) or "none"
                 raise InstallError(f"release {tag} has no asset {asset!r} (assets: {have})")
-            archive = tmpdir / asset
-            _download(url, archive)
-            binary = _extract_binary(archive, source.binary_name or "", tmpdir)
-            d = _prepare_dir(source.name, force=force)
-            command = [str(_place_binary(d / "bin", binary, source))]
-            _finalize(d, source, command, version=resolved, kind="binary", record=record)
-            return InstallResult(source.name, resolved, "binary", "release", d)
-        if source.kind == "node":
-            asset = (source.package_asset or "").replace("{platform}", node_platform())
-            url = by_name.get(asset)
-            if url is None:
-                have = ", ".join(by_name) or "none"
-                raise InstallError(f"release {tag} has no asset {asset!r} (assets: {have})")
-            archive = tmpdir / asset
-            _download(url, archive)
-            d = _prepare_dir(source.name, force=force)
-            command = _extract_node(d, archive, source)
-            _finalize(d, source, command, version=resolved, kind="node", record=record)
-            return InstallResult(source.name, resolved, "node", "release", d)
-        wheels = []
-        for name, url in by_name.items():
-            if name.endswith(".whl"):
-                dest = tmpdir / name
+            dest = tmpdir / asset
+            if not dest.exists():
                 _download(url, dest)
-                wheels.append(dest)
-        if not wheels:
-            raise InstallError(f"release {tag} carried no .whl assets")
+            return dest
+
+        m = _load_manifest(fetch(release_manifest.FILENAME), source)
+        if m.version != resolved:
+            raise InstallError(f"release {tag} describes {source.name} {m.version}, not {resolved}")
         d = _prepare_dir(source.name, force=force)
-        command = _build_venv(d, wheels, source)
-        record["wheels"] = sorted(w.name for w in wheels)
-        _finalize(d, source, command, version=resolved, kind="python", record=record)
-        return InstallResult(source.name, resolved, "python", "release", d)
+        try:
+            command = _install_host(d, m, fetch, tmpdir)
+        except InstallError:
+            shutil.rmtree(d, ignore_errors=True)
+            raise
+        shutil.copy2(fetch(release_manifest.FILENAME), d / release_manifest.FILENAME)
+    assert command is not None  # a release's fetch raises rather than skip an asset
+    _write_manifest(d, command, f"{source.name} (avp release {resolved})")
+    _write_record(
+        d,
+        {
+            "name": source.name,
+            "from": "release",
+            "agent": source.name,
+            "repo": repo,
+            "tag": tag,
+            "version": resolved,
+            "kind": m.kind,
+            "command": command,
+        },
+    )
+    return InstallResult(source.name, resolved, m.kind, "release", d)
+
+
+def install_local(
+    source: AgentSource, from_dir: str | Path, *, install_name: str, force: bool = False
+) -> InstallResult:
+    """Install a local build of a built-in agent under `install_name` from a
+    directory laid out like its release (artifacts + `avp-release.json`). The
+    directory is kept in `artifacts/` for the sandbox image; the host install
+    uses this machine's artifact when the directory has one."""
+    src = Path(from_dir).expanduser()
+    if not src.is_dir():
+        raise InstallError(f"not a directory: {from_dir}")
+    m = _load_manifest(src / release_manifest.FILENAME, source)
+    d = _prepare_dir(install_name, force=force)
+    artifacts = d / "artifacts"
+    shutil.copytree(src, artifacts)
+
+    def fetch(asset: str) -> Path | None:
+        path = artifacts / asset
+        return path if path.is_file() else None
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            command = _install_host(d, m, fetch, Path(tmp))
+    except InstallError:
+        shutil.rmtree(d, ignore_errors=True)
+        raise
+    _write_manifest(
+        d,
+        command or ["false"],
+        f"{install_name} (local build of {source.name})",
+    )
+    _write_record(
+        d,
+        {
+            "name": install_name,
+            "from": "local",
+            "agent": source.name,
+            "version": "local",
+            "kind": m.kind,
+            "host": command is not None,
+            "artifacts": {
+                p.relative_to(artifacts).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(artifacts.rglob("*"))
+                if p.is_file()
+            },
+            "command": command,
+        },
+    )
+    return InstallResult(install_name, "local", m.kind, "local", d)
 
 
 def install_manifest(name: str, manifest: str | Path, *, force: bool = False) -> InstallResult:
@@ -246,68 +298,6 @@ def install_manifest(name: str, manifest: str | Path, *, force: bool = False) ->
     d = _prepare_dir(name, force=force)
     _write_record(d, {"name": name, "from": "manifest", "manifest": str(path), "kind": "manifest"})
     return InstallResult(name, "-", "manifest", "manifest", d)
-
-
-def install_local_binary(
-    source: AgentSource, binary: str | Path, *, install_name: str, force: bool = False
-) -> InstallResult:
-    """Install a local Linux build of a binary agent under `install_name`."""
-    binary = Path(binary)
-    if not binary.is_file():
-        raise InstallError(f"binary not found: {binary}")
-    if binary.read_bytes()[:4] != b"\x7fELF":
-        raise InstallError(
-            f"{binary} is not a Linux binary.\n"
-            "  the sandbox runs Linux; build for aarch64-unknown-linux-gnu or "
-            "x86_64-unknown-linux-gnu (make build-agents does this)"
-        )
-    d = _prepare_dir(install_name, force=force)
-    command = [str(_place_binary(d / "artifacts", binary, source))]
-    _finalize_local(d, source, command, kind="binary", install_name=install_name)
-    return InstallResult(install_name, "local", "binary", "local", d)
-
-
-def install_local_python(
-    source: AgentSource,
-    wheels: list[str | Path],
-    *,
-    install_name: str,
-    force: bool = False,
-) -> InstallResult:
-    """Install a local wheel set of a Python agent under `install_name`: a host
-    venv for `describe`, and the wheels kept for the sandbox image."""
-    paths_ = [Path(w) for w in wheels]
-    missing = [w for w in paths_ if not w.is_file()]
-    if missing:
-        raise InstallError("wheel(s) not found: " + ", ".join(str(w) for w in missing))
-    if shutil.which("uv") is None:
-        raise InstallError(
-            "installing a Python agent needs `uv` on PATH (https://docs.astral.sh/uv/)"
-        )
-    d = _prepare_dir(install_name, force=force)
-    artifacts = d / "artifacts"
-    artifacts.mkdir()
-    kept = [Path(shutil.copy2(w, artifacts / w.name)) for w in paths_]
-    command = _build_venv(d, kept, source)
-    _finalize_local(d, source, command, kind="python", install_name=install_name)
-    return InstallResult(install_name, "local", "python", "local", d)
-
-
-def install_local_node(
-    source: AgentSource, package: str | Path, *, install_name: str, force: bool = False
-) -> InstallResult:
-    """Install a local package archive of a Node agent under `install_name`:
-    extracted to `app/` for `describe`, and kept for the sandbox image."""
-    package = Path(package)
-    if not package.is_file():
-        raise InstallError(f"package archive not found: {package}")
-    d = _prepare_dir(install_name, force=force)
-    artifacts = d / "artifacts"
-    artifacts.mkdir()
-    shutil.copy2(package, artifacts / package.name)
-    command = _extract_node(d, package, source)
-    _finalize_local(d, source, command, kind="node", install_name=install_name)
-    return InstallResult(install_name, "local", "node", "local", d)
 
 
 def uninstall(name: str) -> bool:
@@ -346,15 +336,49 @@ def _prepare_dir(name: str, *, force: bool) -> Path:
     return d
 
 
-def _place_binary(dest_dir: Path, binary: Path, source: AgentSource) -> Path:
-    dest = dest_dir / (source.binary_name or binary.name)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(binary, dest)
-    dest.chmod(0o755)
-    return dest
+def _load_manifest(path: Path, source: AgentSource) -> ReleaseManifest:
+    try:
+        m = release_manifest.load(path)
+    except release_manifest.ManifestError as exc:
+        raise InstallError(str(exc)) from exc
+    if m.agent != source.name:
+        raise InstallError(f"{path} describes agent {m.agent!r}, not {source.name!r}")
+    return m
 
 
-def _build_venv(d: Path, wheels: list[Path], source: AgentSource) -> list[str]:
+def _install_host(
+    d: Path, m: ReleaseManifest, fetch: Callable[[str], Path | None], tmpdir: Path
+) -> list[str] | None:
+    """Install the release `m` describes on this host for `describe`; returns
+    the command that runs it, or None when `fetch` has no artifact for this
+    machine (a local build holding only Linux builds, say)."""
+    if m.binary is not None:
+        archive = fetch(m.binary.asset.format(target=current_target()))
+        if archive is None:
+            return None
+        binary = _extract_binary(archive, m.binary.name, tmpdir / "bin")
+        dest = d / "bin" / m.binary.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(binary, dest)
+        dest.chmod(0o755)
+        return [str(dest)]
+    if m.python is not None:
+        files = [fetch(w) for w in m.python.wheels]
+        lock = fetch(m.python.requirements)
+        missing = [n for n, p in zip(m.python.wheels, files, strict=True) if p is None]
+        if lock is None:
+            missing.append(m.python.requirements)
+        if missing:
+            raise InstallError(f"missing {', '.join(missing)}")
+        return _build_venv(d, [p for p in files if p is not None], lock, m.python.module)
+    assert m.node is not None
+    archive = fetch(m.node.asset.format(platform=node_platform()))
+    if archive is None:
+        return None
+    return _extract_node(d, archive, m.node.entry)
+
+
+def _build_venv(d: Path, wheels: list[Path], requirements: Path, module: str) -> list[str]:
     uv = shutil.which("uv")
     if uv is None:
         raise InstallError(
@@ -363,79 +387,36 @@ def _build_venv(d: Path, wheels: list[Path], source: AgentSource) -> list[str]:
     venv = d / "venv"
     _run([uv, "venv", str(venv)], "create the venv")
     py = venv / "bin" / "python"
-    # Install the wheels by FILE PATH (not by dist name). This pins `avp` to our
-    # in-repo wheel so the index is never consulted for it: there is an unrelated
-    # `avp` on PyPI, and resolving by name would let uv pick that (higher-version)
-    # package instead. The agent's third-party deps (claude-agent-sdk) still
-    # resolve from PyPI normally.
+    # Third-party deps first, at the release's locked, hash-checked versions.
+    # Then the wheels by FILE PATH (not by dist name) and without resolving:
+    # there is an unrelated `avp` on PyPI, and resolving by name could pick it.
     _run(
-        [uv, "pip", "install", "--python", str(py), *[str(w) for w in wheels]],
+        [uv, "pip", "install", "--python", str(py), "--require-hashes", "-r", str(requirements)],
+        "install the agent's locked dependencies",
+    )
+    _run(
+        [uv, "pip", "install", "--python", str(py), "--no-deps", *[str(w) for w in wheels]],
         "install the agent wheels",
     )
-    return [str(py), "-m", source.module or ""]
+    return [str(py), "-m", module]
 
 
-def _extract_node(d: Path, package: Path, source: AgentSource) -> list[str]:
+def _extract_node(d: Path, package: Path, entry: str) -> list[str]:
     app = d / "app"
     app.mkdir()
     try:
         with tarfile.open(package) as tar:
             tar.extractall(app, filter="data")
     except (tarfile.TarError, OSError) as exc:
-        shutil.rmtree(d)
         raise InstallError(f"could not extract {package.name}: {exc}") from exc
-    entry = app / (source.entry or "")
-    if not entry.is_file():
-        shutil.rmtree(d)
-        raise InstallError(f"{package.name} did not contain {source.entry!r}")
-    return ["node", str(entry)]
+    if not (app / entry).is_file():
+        raise InstallError(f"{package.name} did not contain {entry!r}")
+    return ["node", str(app / entry)]
 
 
 def _write_record(d: Path, record: dict) -> None:
     record = {**record, "installed_at": datetime.now(UTC).isoformat(timespec="seconds")}
     (d / "installed.json").write_text(json.dumps(record, indent=2) + "\n")
-
-
-def _finalize(
-    d: Path,
-    source: AgentSource,
-    command: list[str],
-    *,
-    version: str,
-    kind: str,
-    record: dict,
-) -> None:
-    """Write the generated host manifest + the release's provenance record."""
-    _write_manifest(d, command, f"{source.name} (avp release {version})")
-    _write_record(
-        d,
-        {"name": source.name, **record, "version": version, "kind": kind, "command": command},
-    )
-
-
-def _finalize_local(
-    d: Path, source: AgentSource, command: list[str], *, kind: str, install_name: str
-) -> None:
-    """Write the host manifest + a local build's record, with its artifacts' hashes."""
-    import hashlib
-
-    _write_manifest(d, command, f"{install_name} (local build of {source.name})")
-    artifacts = {
-        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted((d / "artifacts").iterdir())
-    }
-    _write_record(
-        d,
-        {
-            "name": install_name,
-            "from": "local",
-            "agent": source.name,
-            "version": "local",
-            "kind": kind,
-            "artifacts": artifacts,
-            "command": command,
-        },
-    )
 
 
 def _write_manifest(d: Path, command: list[str], description: str) -> None:
