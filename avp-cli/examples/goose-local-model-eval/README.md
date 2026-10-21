@@ -38,7 +38,7 @@ structured answer is scored.
 
 ## Run it
 
-Prerequisites: Docker running and the goose agent (`avp agent install goose`).
+Prerequisites: Docker running and the built-in agents (`avp agent install --all`).
 No model API key, no judge key: the model is local and scoring is deterministic.
 
 **1. Serve a model on your host.** With llama.cpp (`brew install llama.cpp`):

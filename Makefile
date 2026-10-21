@@ -507,9 +507,9 @@ cli-smoke:
 
 
 # Build both agents' local artifacts into dist/agents, then print the
-# `avp agent install` commands to register them. This is the contributor loop
-# for testing a new agent build before cutting a GitHub release: build here,
-# install locally, run an eval against it. (The goose build needs the Rust
+# `avp agent install --as <name>-dev` commands to register them as local builds.
+# This is the contributor loop for testing a new agent build before cutting a
+# GitHub release: build here, install under a -dev name, run an eval against it. (The goose build needs the Rust
 # toolchain + Goose's system deps; the wheels need uv.)
 .PHONY: build-agents
 build-agents:
@@ -535,23 +535,25 @@ build-agents:
 	@echo "→ packaging the opencode archives (npm; one per platform)..."
 	@agents/avp-opencode/typescript/scripts/package.sh $(CURDIR)/dist/agents
 	@echo ""
-	@echo "✓ built into dist/agents. Install locally (add --force to replace an install):"
-	@echo "  uv run avp agent install goose --binary dist/agents/avp-goose-conformance"
-	@echo "  uv run avp agent install claude-code \\"
+	@echo "✓ built into dist/agents. Install each as a local build (add --force to replace one):"
+	@echo "  uv run avp agent install goose --as goose-dev --binary <a Linux build of avp-goose-conformance>"
+	@echo "  uv run avp agent install claude-code --as claude-code-dev \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl \\"
 	@echo "    --wheel dist/agents/avp_conformance-*.whl \\"
 	@echo "    --wheel dist/agents/avp_claude_agent_sdk-*.whl"
-	@echo "  uv run avp agent install codex \"
+	@echo "  uv run avp agent install codex --as codex-dev \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_codex-*.whl"
-	@echo "  uv run avp agent install openai-agents \"
+	@echo "  uv run avp agent install openai-agents --as openai-agents-dev \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
-	@echo "  uv run avp agent install pi --package dist/agents/avp-pi.tar.gz"
-	@echo "  uv run avp agent install gemini-cli --package dist/agents/avp-gemini-cli.tar.gz"
-	@echo "  uv run avp agent install deep-agents \\"
+	@echo "  uv run avp agent install pi --as pi-dev --package dist/agents/avp-pi.tar.gz"
+	@echo "  uv run avp agent install gemini-cli --as gemini-cli-dev --package dist/agents/avp-gemini-cli.tar.gz"
+	@echo "  uv run avp agent install deep-agents --as deep-agents-dev \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_deep_agents-*.whl"
-	@echo "  uv run avp agent install pydantic-ai \\"
+	@echo "  uv run avp agent install pydantic-ai --as pydantic-ai-dev \\"
 	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_pydantic_ai-*.whl"
-	@echo "  uv run avp agent install opencode --package dist/agents/avp-opencode-<os>-<arch>.tar.gz"
+	@echo "  uv run avp agent install opencode --as opencode-dev --package dist/agents/avp-opencode-linux-<arch>.tar.gz"
+	@echo "Runs use these builds inside the Linux sandbox, so the goose binary and the"
+	@echo "opencode archive must be Linux builds; the wheels and other archives work as is."
 
 
 # Default goal

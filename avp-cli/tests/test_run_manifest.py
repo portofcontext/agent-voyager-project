@@ -64,6 +64,7 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
     assert m["run_id"] == "swift-harbor"
     assert m["run"] == {
         "agents": ["goose", "claude-code"],
+        "agent_sources": [],
         "model_override": "claude-haiku-4-5",
         "max_items": 3,
         "threshold_override": 0.8,

@@ -1,28 +1,28 @@
-"""The agents an eval can run against: the in-tree agents and any manifest.
+"""The agents a run can use: installed agents, plus any manifest path.
 
-Each is just its `avp-conformance.json` manifest, the same one the conformance
-harness drives. An agent can come from one of three places, tried in order by
-`resolve_agent`:
+An agent is installed under `~/.avp/agents/<name>/` by `avp agent install`, and
+its `installed.json` says where its code came from:
 
-1. **An explicit manifest path** (`--agent path/to/avp-conformance.json`) for
-   any third-party agent, no code change.
-2. **An installed agent** under `~/.avp/agents/<name>/` (a prebuilt artifact laid
-   down by `avp agent install`). This is the normal path once published.
-3. **The in-repo dev fallback** (`agents/<name>/<lang>/avp-conformance.json`),
-   used only when running from a source checkout. Its manifest builds the agent
-   from source (`cargo run` / `uv run`), so it's slow and needs the toolchain.
+- **avp release**: one of the built-in agents in `AGENT_SOURCES`, from a GitHub
+  release of the AVP repo (or `AVP_AGENT_REPO`'s fork). Built-in names are
+  reserved for these.
+- **manifest**: a custom agent, installed by name from its own
+  `avp-conformance.json`, which must carry a `container` block.
+- **local build**: a built-in agent built from your checkout, installed under
+  its own name (`--as`). Its artifacts are copied into the sandbox image.
 
-`AGENT_SOURCES` describes, per known agent, how it's distributed (a prebuilt
-binary, a Python wheel set, or a Node package archive) and where its dev-fallback manifest lives; the
-installer (`avp_cli.agent_install`) consumes it. `preflight` reports why an
-agent can't run *on the host* (the `describe` path); actual runs happen inside
-a sandbox, where `container_recipe` supplies the Linux install + run recipe
-(from the manifest's `container` block, or built in here for known agents).
+`resolve_agent` resolves an installed name, or a manifest path for a one-off
+unregistered agent. Nothing falls back to the source checkout or to a release
+the user did not install. `container_recipe` turns the resolved agent into the
+Linux install + run recipe its sandbox image is built from, and `preflight`
+reports why an agent can't run *on the host* (the `describe` path).
 """
 
 from __future__ import annotations
 
-import importlib.util
+import json
+import os
+import platform
 import re
 import shutil
 import subprocess
@@ -43,8 +43,8 @@ class AgentSource:
     extracted to `bin/`), `"python"` (a wheel set installed into a managed
     `venv/`), or `"node"` (a self-contained package archive extracted to `app/`
     and run with the host's `node`). `tag_prefix` is the GitHub release tag stem (`agent-goose` →
-    `agent-goose-v0.0.1`). `dev_manifest` is the in-repo manifest used only from
-    a source checkout.
+    `agent-goose-v0.0.1`). `dev_manifest` is the in-repo manifest the
+    conformance harness drives from a source checkout; the CLI never runs it.
     """
 
     name: str
@@ -236,11 +236,30 @@ _LIBRARY_WHEEL_VERSION = "0.2.0"
 NODE_MIN = (22, 19, 0)
 NODE_VERSION = "22.23.3"
 
-_RELEASE_DL = "https://github.com/portofcontext/agent-voyager-project/releases/download"
+CANONICAL_REPO = "portofcontext/agent-voyager-project"
 
 
-def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecipe:
-    """The container recipe for an in-tree agent, pinned to `container_version`.
+def release_repo() -> str:
+    """The repo built-in agents install from: the canonical one, or a fork."""
+    return os.environ.get("AVP_AGENT_REPO", CANONICAL_REPO)
+
+
+def _release_dl(repo: str) -> str:
+    return f"https://github.com/{repo}/releases/download"
+
+
+def _builtin_recipe(
+    source: AgentSource,
+    *,
+    gpu: bool = False,
+    version: str | None = None,
+    repo: str | None = None,
+    wheels: list[str] | None = None,
+) -> ContainerRecipe:
+    """The container recipe for a built-in agent's release: `version` (default
+    `container_version`, the CLI's pin) from `repo` (default the canonical
+    repo). `wheels` are a Python release's wheel asset names, recorded at
+    install so the image gets exactly the wheels the host install used.
 
     Install steps run at image-build time (full network); `$(uname -m)` picks
     the asset for the image's arch (aarch64 on Apple Silicon, x86_64 on amd64),
@@ -251,7 +270,9 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
     runtime exposes (the libkrun backend's virtio-gpu Venus device). Only the
     binary kind ships a Vulkan variant.
     """
-    tag = f"{source.tag_prefix}-v{source.container_version}"
+    version = version or source.container_version
+    tag = f"{source.tag_prefix}-v{version}"
+    dl = _release_dl(repo or CANONICAL_REPO)
     if source.kind == "binary":
         variant = "vulkan-" if gpu else ""
         asset = f"{source.binary_name}-{variant}$(uname -m)-unknown-linux-gnu.tar.gz"
@@ -264,7 +285,7 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
             install=(
                 "apt-get update && apt-get install -y --no-install-recommends "
                 f"curl ca-certificates libgomp1{gpu_pkgs} && rm -rf /var/lib/apt/lists/*",
-                f"curl -fsSL {_RELEASE_DL}/{tag}/{asset} | tar -xz -C /usr/local/bin "
+                f"curl -fsSL {dl}/{tag}/{asset} | tar -xz -C /usr/local/bin "
                 f"&& chmod +x /usr/local/bin/{source.binary_name}",
             ),
             command=(source.binary_name or source.name,),
@@ -283,7 +304,7 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
                 f"curl -fsSL {node}/node-v{NODE_VERSION}-linux-{arch}.tar.gz "
                 "| tar -xz -C /usr/local --strip-components=1",
                 f"mkdir -p /opt/{source.name} && curl -fsSL "
-                f"{_RELEASE_DL}/{tag}/{asset} | tar -xz -C /opt/{source.name}",
+                f"{dl}/{tag}/{asset} | tar -xz -C /opt/{source.name}",
             ),
             command=("node", f"/opt/{source.name}/{source.entry}"),
         )
@@ -294,14 +315,63 @@ def _builtin_recipe(source: AgentSource, *, gpu: bool = False) -> ContainerRecip
     # loudly in the build log. The agent's own wheel carries its release
     # version; the library wheels carry theirs.
     def wheel(dist: str) -> str:
-        version = source.container_version if dist == source.dist else _LIBRARY_WHEEL_VERSION
-        return f"{_RELEASE_DL}/{tag}/{dist.replace('-', '_')}-{version}-py3-none-any.whl"
+        v = version if dist == source.dist else _LIBRARY_WHEEL_VERSION
+        return f"{dist.replace('-', '_')}-{v}-py3-none-any.whl"
 
-    wheels = " ".join(wheel(d) for d in source.wheel_dists)
+    names = wheels or [wheel(d) for d in source.wheel_dists]
+    urls = " ".join(f"{dl}/{tag}/{name}" for name in names)
     return ContainerRecipe(
-        install=(*source.container_setup, f"pip install --no-cache-dir {wheels}"),
+        install=(*source.container_setup, f"pip install --no-cache-dir {urls}"),
         command=("python", "-m", source.module or ""),
         env=source.container_env,
+    )
+
+
+def _local_recipe(source: AgentSource, artifacts: Path) -> ContainerRecipe:
+    """The container recipe for a local build of a built-in agent: the same
+    runtime setup as its release, with the artifacts in `artifacts` copied into
+    the image instead of downloaded."""
+    names = sorted(p.name for p in artifacts.iterdir())
+    stage = "/opt/avp-artifacts"
+    copy = ((".", stage),)
+    if source.kind == "binary":
+        binary = source.binary_name or source.name
+        return ContainerRecipe(
+            setup=(
+                "apt-get update && apt-get install -y --no-install-recommends "
+                "ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*",
+            ),
+            copy=copy,
+            install=(f"install -m 0755 {stage}/{binary} /usr/local/bin/{binary}",),
+            command=(binary,),
+            context=str(artifacts),
+        )
+    if source.kind == "node":
+        node = f"https://nodejs.org/dist/v{NODE_VERSION}"
+        arch = "$(uname -m | sed -e s/x86_64/x64/ -e s/aarch64/arm64/)"
+        return ContainerRecipe(
+            setup=(
+                "apt-get update && apt-get install -y --no-install-recommends "
+                "curl ca-certificates && rm -rf /var/lib/apt/lists/*",
+                *source.container_setup,
+                f"curl -fsSL {node}/node-v{NODE_VERSION}-linux-{arch}.tar.gz "
+                "| tar -xz -C /usr/local --strip-components=1",
+            ),
+            copy=copy,
+            install=(
+                f"mkdir -p /opt/{source.name} && tar -xzf {stage}/{names[0]} -C /opt/{source.name}",
+            ),
+            command=("node", f"/opt/{source.name}/{source.entry}"),
+            context=str(artifacts),
+        )
+    wheels = " ".join(f"{stage}/{n}" for n in names)
+    return ContainerRecipe(
+        setup=source.container_setup,
+        copy=copy,
+        install=(f"pip install --no-cache-dir {wheels}",),
+        command=("python", "-m", source.module or ""),
+        env=source.container_env,
+        context=str(artifacts),
     )
 
 
@@ -312,11 +382,23 @@ class NoContainerRecipe(Exception):
 def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRecipe:
     """How `agent` gets into and runs inside a sandbox image.
 
-    A manifest's `container` block wins (third-party agents describe
-    themselves); known agents fall back to the built-in pinned recipe. An
-    agent with neither cannot run (runs are always sandboxed). `gpu` requests
-    the built-in GPU recipe variant (a manifest `container` block is used as-is
-    either way; third-party GPU images are the agent's own concern)."""
+    An avp release installs the release its `installed.json` records; a local
+    build copies its own artifacts into the image; a manifest agent (installed
+    or a one-off path) brings its `container` block. A manifest agent without
+    one cannot run, since runs are always sandboxed. `gpu` requests the
+    built-in GPU recipe variant; a `container` block is used as-is either way."""
+    record = agent.record or {}
+    source = AGENT_SOURCES.get(record.get("agent", ""))
+    if agent.origin == "release" and source is not None:
+        return _builtin_recipe(
+            source,
+            gpu=gpu,
+            version=record.get("version"),
+            repo=record.get("repo"),
+            wheels=record.get("wheels"),
+        )
+    if agent.origin == "local" and source is not None:
+        return _local_recipe(source, installed_dir(agent.name) / "artifacts")
     spec = agent.manifest.container
     if spec is not None:
         return ContainerRecipe(
@@ -324,9 +406,6 @@ def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRec
             command=tuple(spec.command),
             env=tuple(spec.env.items()),
         )
-    source = AGENT_SOURCES.get(agent.name)
-    if source is not None and source.container_version:
-        return _builtin_recipe(source, gpu=gpu)
     raise NoContainerRecipe(
         f"agent '{agent.name}' has no container recipe: runs execute in a Linux "
         "sandbox, so its manifest needs a `container` block "
@@ -336,115 +415,177 @@ def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRec
 
 DEFAULT_AGENT = "claude-code"
 
-
-def _repo_root() -> Path:
-    # .../avp-cli/src/avp_cli/agents.py -> repo root
-    return Path(__file__).resolve().parents[3]
+# An installed agent's name: also its directory under ~/.avp/agents.
+AGENT_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 @dataclass(frozen=True)
 class ResolvedAgent:
-    """An agent located and loadable. `name` is the resolution handle (registry
-    alias, or the manifest's directory for a path spec); `agent_name` is the
-    agent's self-declared `descriptor.agent_name`, the ONE public identity that
-    keys Commission `enabled_builtin_*` / `agent_versions` maps, eval per-agent
-    bindings, and board labels. Known agents carry it as registry metadata;
-    for a manifest-path agent it's None until a `describe` resolves it."""
+    """An agent located and loadable. `name` is the resolution handle (the
+    installed name, or the manifest's directory for a path spec); `agent_name`
+    is the agent's self-declared `descriptor.agent_name`, the ONE public
+    identity that keys Commission `enabled_builtin_*` / `agent_versions` maps
+    and eval per-agent bindings. Built-in agents carry it as registry metadata;
+    a manifest agent's is None until a `describe` resolves it.
+
+    `origin` is where the code came from (`release`, `manifest`, `local`, or
+    `unregistered` for a one-off manifest path), `origin_label` says so in
+    words, and `record` is the install's `installed.json`. `label` names the
+    agent on boards when its descriptor name would not tell it apart (a local
+    build shares its base agent's descriptor name)."""
 
     name: str
     manifest: AgentManifest
     manifest_cwd: Path
     agent_name: str | None = None
+    origin: str = "unregistered"
+    origin_label: str = ""
+    record: dict | None = None
+    label: str | None = None
 
 
 def known_agents() -> list[str]:
+    """The built-in agent names (reserved; installed from avp releases)."""
     return list(AGENT_SOURCES)
+
+
+def installed_dir(name: str) -> Path:
+    return paths.agents_dir() / name
+
+
+def installed_record(name: str) -> dict | None:
+    """An installed agent's `installed.json`, or None. Records written before
+    installs had an origin are read as avp releases (a local install under a
+    built-in name has no `--as` name, so it reads as None and asks for one)."""
+    if not AGENT_NAME_RE.match(name):
+        return None
+    p = installed_dir(name) / "installed.json"
+    if not p.is_file():
+        return None
+    try:
+        record = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if "from" not in record:
+        if record.get("source") != "release" or name not in AGENT_SOURCES:
+            return None
+        record = {**record, "from": "release", "agent": name, "repo": CANONICAL_REPO}
+    return record
+
+
+def installed_agents() -> list[str]:
+    """Every installed agent name: built-in releases, local builds, and custom."""
+    root = paths.agents_dir()
+    if not root.is_dir():
+        return []
+    return sorted(p.name for p in root.iterdir() if installed_record(p.name) is not None)
 
 
 def installed_manifest_path(name: str) -> Path:
     """Where an installed agent's generated manifest lives (may not exist)."""
-    return paths.agents_dir() / name / "avp-conformance.json"
+    return installed_dir(name) / "avp-conformance.json"
 
 
 def is_installed(name: str) -> bool:
-    return installed_manifest_path(name).is_file()
+    return installed_record(name) is not None
 
 
-def has_dev_fallback(name: str) -> bool:
-    """True if a known agent's in-repo manifest exists (running from a checkout)."""
-    src = AGENT_SOURCES.get(name)
-    return src is not None and (_repo_root() / src.dev_manifest).is_file()
+def origin_label(record: dict) -> str:
+    """Where an installed agent's code came from, in the words `avp agent list` uses."""
+    kind = record.get("from")
+    if kind == "release":
+        repo = record.get("repo") or CANONICAL_REPO
+        fork = f" (fork: {repo})" if repo != CANONICAL_REPO else ""
+        return f"avp release {record.get('version', '?')}{fork}"
+    if kind == "local":
+        return f"local build of {record.get('agent', '?')}"
+    return f"manifest {_tilde(Path(record.get('manifest', '?')))}"
+
+
+def _tilde(p: Path) -> str:
+    home = Path.home()
+    return f"~/{p.relative_to(home)}" if p.is_relative_to(home) else str(p)
+
+
+def _not_installed(name: str) -> SystemExit:
+    if name in AGENT_SOURCES:
+        return SystemExit(
+            f"agent '{name}' is not installed.\n"
+            f"  install every built-in agent: avp agent install --all\n"
+            f"  or just this one:             avp agent install {name}"
+        )
+    return SystemExit(
+        f"no agent named '{name}' (see `avp agent list`).\n"
+        f"  install your own:  avp agent install {name} --manifest <path/to/avp-conformance.json>\n"
+        f"  or run a manifest: --agent <path/to/avp-conformance.json>"
+    )
 
 
 def resolve_agent(spec: str) -> ResolvedAgent:
-    """Resolve a known agent name or a manifest path to a runnable agent."""
-    if spec in AGENT_SOURCES:
-        return _resolve_known(spec)
-    # Arbitrary third-party agent: spec is a path to its manifest.
-    path = Path(spec)
-    if not path.is_file():
-        raise SystemExit(f"agent manifest not found: {path}")
-    manifest, cwd = load_manifest(path)
-    return ResolvedAgent(name=path.parent.name or spec, manifest=manifest, manifest_cwd=cwd)
-
-
-def _resolve_known(name: str) -> ResolvedAgent:
-    """Installed agent first, then the in-repo dev fallback."""
-    descriptor_name = AGENT_SOURCES[name].descriptor_name or None
-    installed = installed_manifest_path(name)
-    if installed.is_file():
-        manifest, cwd = load_manifest(installed)
+    """Resolve an installed agent name, or a manifest path, to a runnable agent."""
+    if spec.endswith(".json") or "/" in spec:
+        path = Path(spec)
+        if not path.is_file():
+            raise SystemExit(f"agent manifest not found: {path}")
+        manifest, cwd = load_manifest(path)
         return ResolvedAgent(
-            name=name, manifest=manifest, manifest_cwd=cwd, agent_name=descriptor_name
+            name=path.parent.name or spec,
+            manifest=manifest,
+            manifest_cwd=cwd,
+            origin="unregistered",
+            origin_label=f"manifest {_tilde(path.resolve())} (not installed)",
         )
-    dev = _repo_root() / AGENT_SOURCES[name].dev_manifest
-    if dev.is_file():
-        manifest, cwd = load_manifest(dev)
-        return ResolvedAgent(
-            name=name, manifest=manifest, manifest_cwd=cwd, agent_name=descriptor_name
-        )
-    raise SystemExit(
-        f"agent '{name}' is not installed and no in-repo copy was found.\n"
-        f"  install it:             avp agent install {name}\n"
-        f"  or point at a manifest: --agent <path/to/avp-conformance.json>"
+    record = installed_record(spec)
+    if record is None:
+        raise _not_installed(spec)
+    kind = record["from"]
+    if kind == "manifest":
+        path = Path(record.get("manifest", ""))
+        if not path.is_file():
+            raise SystemExit(
+                f"agent '{spec}' is installed from {path}, which no longer exists.\n"
+                f"  reinstall it: avp agent install {spec} --manifest <path> --force"
+            )
+        manifest, cwd = load_manifest(path)
+        agent_name = None
+    else:
+        manifest, cwd = load_manifest(installed_manifest_path(spec))
+        agent_name = AGENT_SOURCES[record["agent"]].descriptor_name or None
+    return ResolvedAgent(
+        name=spec,
+        manifest=manifest,
+        manifest_cwd=cwd,
+        agent_name=agent_name,
+        origin=kind,
+        origin_label=origin_label(record),
+        record=record,
+        label=spec if kind == "local" else None,
     )
 
 
 def preflight(name: str) -> str | None:
-    """Return why `name` can't run here, or None if its prerequisites are present.
+    """Return why `name` can't run on the host (`describe`), or None.
 
     An installed agent is a self-contained artifact, so its only prerequisites
-    are runtime ones (e.g. the `claude` CLI the Claude agent shells out to). The
-    in-repo dev fallback builds from source, so it additionally needs the build
-    toolchain. The API key is checked separately by the CLI; every agent needs it.
+    are runtime ones (e.g. the `claude` CLI the Claude agent shells out to, or
+    `node` for a Node agent). A local binary build is a Linux executable, so it
+    only describes on a Linux host. Manifest agents are trusted as given; the
+    API key is checked separately by the CLI.
     """
-    if is_installed(name):
-        return _installed_preflight(name)
-    if name == "goose":
-        if shutil.which("cargo") is None:
-            return (
-                "cargo not on PATH (the in-repo Goose agent builds via cargo; "
-                "or run `avp agent install goose` for the prebuilt binary)"
-            )
+    record = installed_record(name)
+    if record is None:
+        return None if (name.endswith(".json") or "/" in name) else "not installed"
+    base = record.get("agent")
+    if record["from"] == "manifest" or base not in AGENT_SOURCES:
         return None
-    if name == "claude-code":
-        if importlib.util.find_spec("claude_agent_sdk") is None:
-            return (
-                "claude-agent-sdk not installed (pip install claude-agent-sdk, "
-                "or run `avp agent install claude-code`)"
-            )
-        if shutil.which("claude") is None:
-            return "the `claude` CLI is not on PATH"
-        return None
-    source = AGENT_SOURCES.get(name)
-    if source is not None and source.kind == "node":
-        if reason := node_problem():
-            return reason
-        built = _repo_root() / Path(source.dev_manifest).parent / (source.entry or "")
-        if not built.is_file():
-            return f"the in-repo {name} agent is not built (make {name}-build, or avp agent install {name})"
-        return None
-    return None  # custom manifest: trust the caller
+    source = AGENT_SOURCES[base]
+    if record["from"] == "local" and source.kind == "binary" and platform.system() != "Linux":
+        return "a local Linux build; it runs in the sandbox but can't describe on this host"
+    if base == "claude-code" and shutil.which("claude") is None:
+        return "the `claude` CLI is not on PATH (the Claude agent shells out to it)"
+    if source.kind == "node":
+        return node_problem()
+    return None
 
 
 def node_problem() -> str | None:
@@ -460,14 +601,4 @@ def node_problem() -> str | None:
     match = re.match(r"v(\d+)\.(\d+)\.(\d+)", out.strip())
     if match is None or tuple(map(int, match.groups())) < NODE_MIN:
         return f"`node` is {out.strip() or 'unknown'}; this agent needs Node {floor} or newer"
-    return None
-
-
-def _installed_preflight(name: str) -> str | None:
-    """Runtime prerequisites for an already-installed agent."""
-    if name == "claude-code" and shutil.which("claude") is None:
-        return "the `claude` CLI is not on PATH (the Claude agent shells out to it)"
-    source = AGENT_SOURCES.get(name)
-    if source is not None and source.kind == "node":
-        return node_problem()
     return None

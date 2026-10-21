@@ -100,13 +100,14 @@ add harness-specific refusals next to it.
 
 ## 6. Ship
 
-**Out of tree** (a third-party agent): nothing in this repo changes. Point the
-`avp` CLI at the manifest (an eval's agent can be a manifest path), and give
-the manifest a `container` block (`install` steps, in-sandbox `command`) so it
-can run in the CLI's sandbox.
+**Out of tree** (a third-party agent): nothing in this repo changes. Give the
+manifest a `container` block (`install` steps, in-sandbox `command`) so it can
+run in the CLI's sandbox, then install it by name with
+`avp agent install <name> --manifest <path>` (or pass the manifest path as an
+eval's agent for a one-off run).
 
-**In tree** (published from this repo): an agent is added when `avp agent
-install <name>` can fetch it, not when conformance passes.
+**In tree** (published from this repo): an agent is added when
+`avp agent install --all` installs it, not when conformance passes.
 `avp-cli/tests/test_agent_sources.py` fails until every adapter under `agents/`
 is registered and has a release. Do all of this in the PR that adds the agent:
 

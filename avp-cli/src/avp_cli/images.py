@@ -9,8 +9,10 @@ that's bind-mounted, so editing your project doesn't invalidate the image.
 
 The recipe is the agent's contribution: the RUN steps that install a Linux
 build of the agent into the image, and the argv that runs it inside the
-sandbox. In-tree agents define theirs in `avp_cli.agents.AGENT_SOURCES`;
-third-party manifests carry a `container` block.
+sandbox. Built-in agents define theirs in `avp_cli.agents`; custom manifests
+carry a `container` block. A local build also copies files from a build
+context (its artifacts), and their content is part of the tag, so rebuilding
+the artifacts rebuilds the image.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from avp_cli.environment import Environment
 
@@ -41,11 +44,17 @@ class ContainerRecipe:
     `env`: agent-required sandbox env vars (e.g. claude-code needs
     `IS_SANDBOX=1` to allow bypassPermissions as the container's root user);
     not part of the image, so it doesn't affect the content hash.
+    `setup`, `copy`, `context`: a local build's runtime setup steps, then
+    `(src, dest)` COPYs from the `context` directory, both ahead of `install`.
+    Setup comes first so rebuilding the artifacts reuses its layers.
     """
 
     install: tuple[str, ...]
     command: tuple[str, ...]
     env: tuple[tuple[str, str], ...] = ()
+    setup: tuple[str, ...] = ()
+    copy: tuple[tuple[str, str], ...] = ()
+    context: str | None = None
 
 
 def dockerfile(env: Environment, recipe: ContainerRecipe) -> str:
@@ -66,14 +75,22 @@ def dockerfile(env: Environment, recipe: ContainerRecipe) -> str:
     pip = env.packages.get("pip", [])
     if pip:
         lines.append("RUN pip install --no-cache-dir " + " ".join(pip))
+    lines.extend(f"RUN {step}" for step in recipe.setup)
+    lines.extend(f"COPY {src} {dest}" for src, dest in recipe.copy)
     lines.extend(f"RUN {step}" for step in recipe.install)
     return "\n".join(lines) + "\n"
 
 
 def image_tag(env: Environment, recipe: ContainerRecipe) -> str:
-    """Deterministic local tag for this (env, agent) shape."""
-    digest = hashlib.sha256(dockerfile(env, recipe).encode()).hexdigest()[:12]
-    return f"avp-env:{digest}"
+    """Deterministic local tag for this (env, agent) shape, including the
+    content of any build context."""
+    h = hashlib.sha256(dockerfile(env, recipe).encode())
+    if recipe.context:
+        root = Path(recipe.context)
+        for f in sorted(p for p in root.rglob("*") if p.is_file()):
+            h.update(str(f.relative_to(root)).encode())
+            h.update(hashlib.sha256(f.read_bytes()).digest())
+    return f"avp-env:{h.hexdigest()[:12]}"
 
 
 def ensure_image(
@@ -91,7 +108,8 @@ def ensure_image(
     `builder` is the OCI tool (`docker`, or `podman` for the libkrun runtime,
     whose image lives in the podman machine's storage); `builder_env` overlays
     env for it (e.g. `CONTAINERS_MACHINE_PROVIDER=libkrun`). Both build the
-    Dockerfile from stdin with an empty context, so no context dir is needed.
+    Dockerfile from stdin, with the recipe's context dir when it copies files
+    and an empty context otherwise.
     """
     exe = shutil.which(builder)
     if exe is None:
@@ -104,7 +122,7 @@ def ensure_image(
 
     df = dockerfile(env, recipe)
     proc = subprocess.Popen(
-        [exe, "build", "-t", tag, "-"],
+        [exe, "build", "-t", tag, *(["-f", "-", recipe.context] if recipe.context else ["-"])],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

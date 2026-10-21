@@ -32,9 +32,9 @@ Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/inst
 
 ```bash
 uv tool install avp-cli
-avp agent install goose
+avp agent install --all
 export ANTHROPIC_API_KEY="<your-api-key>"
-avp init capitals --agent goose
+avp init capitals --agent claude-code
 avp eval run capitals.eval.json
 ```
 
