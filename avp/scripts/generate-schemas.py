@@ -148,7 +148,7 @@ def main() -> int:
             "CloudEvents 1.0 (envelopes), OpenTelemetry span "
             "identification (`trace_id` / `span_id` / `parent_span_id` on "
             "every event's `data`), "
-            "MCP (tool descriptors and supervisor-side tool dispatch), "
+            "MCP (server transports and tool descriptor shapes), "
             "Agent Skills (SKILL.md), "
             "and JSON Schema 2020-12 (this document). Data attribute names "
             "are AVP's own `avp.*` namespace; OpenTelemetry GenAI semantic "

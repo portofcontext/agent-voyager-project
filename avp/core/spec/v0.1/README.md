@@ -20,15 +20,13 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 
 ## 0. Built on
 
-AVP specializes (it does not reinvent) the following industry specs:
+AVP reuses existing specs wherever one already fits:
 
-- **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is implemented by `to_gen_ai_attrs` in the Python binding (`avp.gen_ai`). The GenAI conventions are still experimental upstream; keeping them off the wire means an OTel rename changes the projector, not the AVP schema.
-- **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` carry inline connection material; the agent runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
-- **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries carry inline file content including `SKILL.md`.
-- **JSON Schema Draft 2020-12** for this specification's machine-readable form.
-
-AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace.
+- **CloudEvents 1.0**: the envelope for every trajectory event, so standard event tooling can route and store them.
+- **OpenTelemetry**: span IDs on every event, so a trajectory loads into tracing backends as a span tree.
+- **MCP**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
+- **Agent Skills**: the format of skills shipped in a Commission.
+- **JSON Schema 2020-12**: the machine-readable form of all three AVP specs.
 
 ---
 
@@ -36,7 +34,7 @@ AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory
 
 AVP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
 
-- **Supervisor**: declares a Commission at startup with the prompt, model, and managed assets (`mcp_servers`, `skills`) with inline connection material. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
+- **Supervisor**: declares a Commission at startup with the prompt, model, and managed assets (`mcp_servers`, `skills`, etc.) with inline connection material. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
 - **Agent**: runs inside the Commission. Dials MCP servers and loads skills directly from the Commission. Emits a stream of facts (events), the trajectory, that the supervisor observes.
 
 ```

@@ -42,7 +42,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
   configuration and skill content travel on the Commission. Built-in allowlists
   are subtractive: absent exposes all, `[]` exposes none.
 - Preserve compatibility with CloudEvents 1.0, OTel span identification,
-  MCP 2025-11-25, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
+  MCP, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
   projection is for consumers, not the wire.
 - Agent events use `source: avp://agent`. A trajectory opens `run_requested`,
   `agent_described`, `agent_started` and closes `agent_stopped` with a stop reason.
