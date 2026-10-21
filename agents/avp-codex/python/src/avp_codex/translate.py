@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from openai_codex.models import Notification, UnknownNotification
 
@@ -83,6 +84,10 @@ def usage(native: dict) -> Usage:
 class Responses:
     def __init__(self, recorder: Recorder, model: str):
         self.recorder, self.model = recorder, model
+        # Codex reports a response only once it completes, so the adapter times
+        # it: a model request goes out when the turn starts, when the previous
+        # response completes, or when tool results come back, whichever is last.
+        self.requested = time.monotonic()
         self.response_model = model
         self.pending_calls: set[str] = set()
         self.blocks: list = []
@@ -111,6 +116,7 @@ class Responses:
                 if self.blocks:
                     self.results.append(item)
                 else:
+                    self.requested = time.monotonic()
                     await self.result(item)
             else:
                 blocks = content(item)
@@ -123,12 +129,15 @@ class Responses:
                     if isinstance(block, RefusalBlock):
                         self.refused = True
         elif method == "rawResponse/completed":
+            now = time.monotonic()
             await self.recorder.assistant(
                 self.blocks,
                 usage(params["usage"]),
                 model=self.response_model,
                 request_model=self.model,
+                duration_ms=int((now - self.requested) * 1000),
             )
+            self.requested = now
             self.blocks = []
             self.completed += 1
             for item in self.results:

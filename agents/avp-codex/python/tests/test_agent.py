@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -128,6 +129,9 @@ def script(monkeypatch):
             if not self.events:
                 raise RuntimeError("unexpected EOF")
             event = self.events.pop(0)
+            while isinstance(event, float):  # a pause, in seconds, before the next event
+                await asyncio.sleep(event)
+                event = self.events.pop(0)
             method, params = event["method"], event["params"]
             model = NOTIFICATION_MODELS.get(method)
             payload = model.model_validate(params) if model else UnknownNotification(params)
@@ -506,3 +510,32 @@ def test_started_tools_follow_the_commissioned_model(script, tmp_path):
     view = next(t for t in started["avp.tools"] if t["name"] == "view_image")
     assert view["description"]
     assert set(view["inputSchema"]["properties"]) == {"path"}
+
+
+def test_each_response_is_timed_from_its_request(script, tmp_path):
+    """Codex reports a response only when it completes; the adapter times it
+    from the turn start, then from the tool results the next request carries."""
+    call = {
+        "type": "function_call",
+        "name": "exec_command",
+        "call_id": "call",
+        "arguments": '{"cmd":"echo hi"}',
+    }
+    script.events = [
+        0.15,
+        raw(call),
+        completed(),
+        0.3,  # the tool runs
+        raw({"type": "function_call_output", "call_id": "call", "output": "hi"}),
+        0.05,
+        raw(text_item()),
+        completed(),
+        stopped(),
+    ]
+    code, events = run_cli(tmp_path)
+    assert code == 0
+    first, second = [
+        e["data"]["avp.duration_ms"] for e in events if e["type"] == "avp.assistant_message"
+    ]
+    assert 150 <= first < 300
+    assert 50 <= second < 300, "the second response excludes the tool's run time"

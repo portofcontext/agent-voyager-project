@@ -422,7 +422,7 @@ provides-extras = ["huggingface", "parsebench", "llm-judge", "dev"]
 
 [[package]]
 name = "avp-codex"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "agents/avp-codex/python" }
 dependencies = [
     { name = "agent-voyager-project" },

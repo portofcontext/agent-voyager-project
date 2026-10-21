@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Codex runs recorded every model call as taking 0 ms, so evals showed no
+  time for Codex. The adapter now times each response from the request that
+  produced it. Released as `agent-codex-v0.0.2`.
+
 ## 0.2.2 (2026-10-20)
 
 ### Added

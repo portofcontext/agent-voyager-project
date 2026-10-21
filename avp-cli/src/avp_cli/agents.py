@@ -138,9 +138,9 @@ AGENT_SOURCES: dict[str, AgentSource] = {
         descriptor_name="avp-codex",
         tag_prefix="agent-codex",
         dev_manifest="agents/avp-codex/python/avp-conformance.json",
-        # 0.0.1: the official Codex Python SDK (openai-codex 0.162.1), whose
+        # 0.0.2: the official Codex Python SDK (openai-codex 0.162.1), whose
         # platform wheel bundles the Codex runtime; nothing else to install.
-        container_version="0.0.1",
+        container_version="0.0.2",
         module="avp_codex.conformance",
         dist="avp-codex",
         wheel_dists=("agent-voyager-project", "avp-codex"),
