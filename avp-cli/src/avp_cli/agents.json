@@ -1,5 +1,5 @@
 {
-  "goose": {"version": "0.2.1", "descriptor": "goose", "path": "agents/avp-goose/rust"},
+  "goose": {"version": "0.2.2", "descriptor": "goose", "path": "agents/avp-goose/rust"},
   "claude-code": {"version": "0.2.1", "descriptor": "avp-claude-agent-sdk", "path": "agents/avp-claude-agent-sdk/python"},
   "codex": {"version": "0.0.2", "descriptor": "avp-codex", "path": "agents/avp-codex/python"},
   "openai-agents": {"version": "0.0.3", "descriptor": "avp-openai-agents", "path": "agents/avp-openai-agents/python"},
