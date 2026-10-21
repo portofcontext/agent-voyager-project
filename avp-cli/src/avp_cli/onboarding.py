@@ -15,6 +15,7 @@ from rich.text import Text
 from avp_cli import brand
 
 _START = [
+    ("avp agent install --all", "install every built-in agent (do this first)"),
     ('avp run "task" --agent A --env E', "commission an agent to do a task inside an environment"),
     ("avp init", "create an eval to run: pick a benchmark from the catalog"),
 ]
@@ -37,10 +38,15 @@ _EVAL = [
 ]
 
 _AGENTS = [
-    ("avp agent list", "the agents you can run, and whether each is installed"),
+    ("avp agent list", "the agents you can run, where each came from, and readiness"),
+    ("avp agent install <name>", "install one built-in agent from its avp release"),
     (
-        "avp agent install <name>",
-        "install a prebuilt agent (release, or --binary/--wheel/--package local)",
+        "avp agent install <name> --manifest <path>",
+        "install your own agent from its avp-conformance.json",
+    ),
+    (
+        "avp agent install <agent> --as <name> --wheel ...",
+        "install a local build of a built-in agent under its own name",
     ),
     ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagents"),
     ("avp agent uninstall <name>", "remove an installed agent"),
@@ -55,6 +61,10 @@ _ENV = [
     (
         "avp env secret create <handle>",
         'store a credential a Commission references by {"vault": handle}',
+    ),
+    (
+        "avp env secret login <handle> --url <mcp-url>",
+        "sign in to an MCP server with OAuth; the broker refreshes the token",
     ),
     ("avp env secret list", "stored secret handles (values stay on the host, never the sandbox)"),
     ("avp env secret delete <handle>", "remove a stored secret"),

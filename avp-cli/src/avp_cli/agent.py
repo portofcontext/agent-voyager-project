@@ -67,6 +67,13 @@ class SandboxedAgent:
     image: str
     command: tuple[str, ...]
     env: dict[str, str] = field(default_factory=dict)
+    # Board / run-id label when `name` (the descriptor identity Commissions bind
+    # to) would not tell agents apart, as with a local build of a built-in.
+    label: str = ""
+
+    @property
+    def key(self) -> str:
+        return self.label or self.name
 
 
 @dataclass

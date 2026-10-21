@@ -9,7 +9,8 @@
     avp eval unshare [ID]            take a shared eval's link down
     avp eval delete ID [--all]       delete one recorded run by id (or --all for every run)
     avp run "TASK" --agent A [--env E]   commission an agent to do a task (in a sandbox)
-    avp agent install NAME           install a prebuilt agent (release, or --binary/--wheel/--package local)
+    avp agent install --all          install every built-in agent (start here)
+    avp agent install NAME           install one built-in agent, --manifest for your own, --as for a local build
     avp env create NAME [flags]      create a declarative environment (--image/--pip/--file/--net ...)
     avp env run NAME -- CMD          run a command inside a declarative environment (sandboxed)
     avp sandbox status|stop          inspect or stop the managed sandbox server
@@ -116,7 +117,7 @@ def _run_and_report(
     timeout_s: float = 300.0,
     resume: bool = False,
 ) -> int:
-    runnable, unready = [], []
+    runnable, unready, sources = [], [], []
     for spec in agent_specs:
         agent = resolve_agent(spec)
         try:
@@ -128,6 +129,7 @@ def _run_and_report(
             unready.append(agent.name)
         else:
             runnable.append(prepared)
+            sources.append(_agent_source(prepared.key, agent))
     # A board missing a requested agent reads as complete, so run all or none.
     if unready:
         console.error_panel(
@@ -144,7 +146,8 @@ def _run_and_report(
         run_id=run_id,
         setups=ev.setups,
         eval_config_path=config_path,
-        agents=[a.name for a in runnable],
+        agents=[a.key for a in runnable],
+        agent_sources=sources,
         model_override=model,
         max_items=max_items,
         threshold_override=getattr(ev.scorer, "threshold", None),
@@ -153,7 +156,7 @@ def _run_and_report(
     compare = len(runnable) > 1  # multiple agents -> interleave by task + head-to-head
     n_items = max_items or len(ev.dataset)
     total = n_items * sum(len(setups_for(ev.setups, a.name)) for a in runnable)
-    label = " vs ".join(a.name for a in runnable)
+    label = " vs ".join(a.key for a in runnable)
     # Live voyage when we have an interactive terminal; plain note lines otherwise.
     live_mode = not quiet and console.err.is_terminal
 
@@ -204,9 +207,27 @@ def _run_and_report(
 
     if compare and len(boards) > 1:
         console.out.print(comparison_table(boards))
+    for src in sources:
+        if src["from"] != "release":
+            console.note(f"{src['label']}: {src['origin']}")
 
     _finish_run(ev, boards, out, run_id)
     return 0
+
+
+def _agent_source(key: str, agent) -> dict:
+    """Where one eval agent's code came from, for the run manifest."""
+    record = agent.record or {}
+    return {
+        "label": key,
+        "from": agent.origin,
+        "origin": agent.origin_label,
+        "agent": record.get("agent"),
+        "version": record.get("version"),
+        "repo": record.get("repo"),
+        "manifest": record.get("manifest"),
+        "artifacts": record.get("artifacts"),
+    }
 
 
 def _agent_identity(agent) -> tuple[str | None, str | None]:
@@ -266,6 +287,7 @@ def _prepare_agent(
         console.note(f"sandbox image for {agent.name}: {built}")
     return SandboxedAgent(
         name=agent_name,
+        label=agent.label or "",
         image=built,
         command=recipe.command,
         env={**dict(recipe.env), **agent.manifest.env},
@@ -416,7 +438,9 @@ def _pick_agents() -> list[str]:
     The chosen names are pinned into the config so `avp eval run` needs no
     `--agent`. Falls back to the default agent off a TTY.
     """
-    names = known_agents()
+    from avp_cli.agents import installed_agents
+
+    names = installed_agents() or known_agents()
     if not sys.stdin.isatty():
         return [DEFAULT_AGENT] if DEFAULT_AGENT in names else names[:1]
     # Nothing pre-checked: the user actively chooses, and must pick at least one.
@@ -655,41 +679,55 @@ def _cmd_agent(args: argparse.Namespace) -> int:
 
 
 def _cmd_agent_list() -> int:
-    """List known agents: whether each is installed and ready to run."""
+    """List the built-in agents and every installed agent: where each came from
+    and whether it's ready."""
     from rich.table import Table
 
-    from avp_cli import agent_install
-    from avp_cli.agents import has_dev_fallback
+    from avp_cli.agents import AGENT_SOURCES, installed_agents, installed_record, origin_label
 
     table = Table(title="agents", header_style="bold")
     table.add_column("name", style=f"bold {brand.SAIL}", no_wrap=True)
-    table.add_column("installed")
+    table.add_column("from")
     table.add_column("status")
-    for name in known_agents():
-        info = agent_install.installed_info(name)
-        dev = has_dev_fallback(name)
-        if info:
-            installed = f"v{info.get('version', '?')} ({info.get('source', '?')})"
-        elif dev:
-            installed = "[dim]in-repo (dev)[/dim]"
-        else:
-            installed = "[yellow]not installed[/yellow]"
-        if info or dev:
-            reason = preflight(name)
-            status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
-        else:
-            status = f"[yellow]run: avp agent install {name}[/yellow]"
-        table.add_row(name, installed, status)
+    names = known_agents() + [n for n in installed_agents() if n not in known_agents()]
+    missing = False
+    for name in names:
+        record = installed_record(name)
+        if record is None:
+            missing = True
+            table.add_row(name, "[dim]-[/dim]", "[yellow]not installed[/yellow]")
+            continue
+        reason = preflight(name)
+        status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
+        pin = AGENT_SOURCES[name].container_version if name in AGENT_SOURCES else None
+        if record["from"] == "release" and pin and record.get("version") != pin:
+            status += f" [yellow]· this CLI pins {pin}: avp agent install {name} --force[/]"
+        table.add_row(name, origin_label(record), status)
     console.out.print(table)
-    console.note("avp agent install <name>   ·  install the prebuilt agent")
+    if missing:
+        console.note("avp agent install --all  ·  install every built-in agent")
     console.note("avp agent describe <name>  ·  see its tools, models, skills")
     return 0
 
 
 def _cmd_agent_install(args: argparse.Namespace) -> int:
-    """Install a prebuilt agent from a release, or from local artifacts."""
+    """Install built-in agents from releases, a custom agent, or a local build."""
     from avp_cli import agent_install
+    from avp_cli.agents import installed_record, origin_label
 
+    if args.all:
+        if args.name or args.manifest or args.as_name or args.version:
+            console.error_panel("--all installs every built-in agent", "drop the other arguments")
+            return 1
+        return _cmd_agent_install_all(force=args.force)
+    if args.name is None:
+        console.error_panel(
+            "which agent?",
+            "avp agent install --all       every built-in agent\n"
+            "avp agent install <name>      one built-in agent\n"
+            "avp agent install <name> --manifest <path>   your own agent",
+        )
+        return 1
     try:
         result = agent_install.install(
             args.name,
@@ -697,19 +735,51 @@ def _cmd_agent_install(args: argparse.Namespace) -> int:
             binary=args.binary,
             wheels=args.wheel or None,
             package=args.package,
+            manifest=args.manifest,
+            as_name=args.as_name,
             force=args.force,
         )
     except agent_install.InstallError as exc:
-        console.error_panel(f"couldn't install '{args.name}'", str(exc))
+        console.error_panel(f"couldn't install '{args.as_name or args.name}'", str(exc))
         return 1
+    record = installed_record(result.name) or {}
     console.out.print(
-        f"[green]✓[/] installed [bold {brand.SAIL}]{result.name}[/] "
-        f"(v{result.version}, {result.source} {result.kind}) → {_tilde(result.install_dir)}"
+        f"[green]✓[/] installed [bold {brand.SAIL}]{result.name}[/] ({origin_label(record)})"
     )
+    if result.source == "local":
+        console.note("runs use these artifacts, not the avp release")
     reason = preflight(result.name)
     if reason is not None:
-        console.warn(f"runtime prerequisite still needed: {reason}")
+        console.warn(f"can't describe on this host yet: {reason}")
     console.note(f"avp agent describe {result.name}  ·  verify it boots")
+    return 0
+
+
+def _cmd_agent_install_all(*, force: bool) -> int:
+    from avp_cli import agent_install
+    from avp_cli.agents import installed_record
+
+    failed = []
+    total = 0
+    for name, result, err in agent_install.install_all(force=force):
+        total += 1
+        if err is not None:
+            failed.append(name)
+            first = err.splitlines()[0]
+            console.out.print(f"[bold {brand.SAIL}]{name:<15}[/] [red]failed:[/] {first}")
+        elif result is None:
+            version = (installed_record(name) or {}).get("version", "?")
+            console.out.print(f"[bold {brand.SAIL}]{name:<15}[/] already installed ({version})")
+        else:
+            console.out.print(f"[bold {brand.SAIL}]{name:<15}[/] installed {result.version}")
+    console.out.print()
+    if failed:
+        console.out.print(
+            f"{total - len(failed)} of {total} built-in agents ready · fix the above and "
+            "rerun avp agent install --all"
+        )
+        return 1
+    console.out.print(f"[green]{total} built-in agents ready[/]")
     return 0
 
 
@@ -1133,14 +1203,31 @@ def _task_event(ev) -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     """Commission one agent to do one task, optionally inside an environment.
 
-    The task is the Commission prompt; the env (if given) supplies the working
-    context (code via `paths`, fixtures via `files`, a runtime). The workspace
-    persists so you can inspect what the agent changed.
+    The task is the Commission prompt, or fills `{input}` in a library
+    Commission's prompt (`--commission`), the same way an eval item does. The
+    env (if given) supplies the working context (code via `paths`, fixtures via
+    `files`, a runtime). The workspace persists so you can inspect what the
+    agent changed.
     """
     from avp.commission import Commission
     from avp_cli.agent import run_agent
     from avp_cli.eval.engine import extract_final_output
+    from avp_cli.eval.template import render
     from avp_cli.observability import summarize
+
+    base: Commission | None = None
+    if args.commission:
+        try:
+            base = library.load(args.commission)
+        except library.CommissionError as exc:
+            console.error_panel("commission", str(exc))
+            return 1
+        if base.prompt and "{input}" not in base.prompt:
+            console.error_panel(
+                f"commission {args.commission!r} has no {{input}} slot",
+                "add {input} to its prompt where the task should go.",
+            )
+            return 1
 
     agent = resolve_agent(args.agent)
     run_id = state.new_id()
@@ -1165,17 +1252,22 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if prepared is None:
         return _SKIP
 
-    if not args.model or "/" not in args.model:
+    model = args.model or (base.model if base else None)
+    if not model or "/" not in model:
         console.error_panel(
             "model must be a provider/model slug",
-            f"got {args.model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
+            f"got {model!r}; pass e.g. --model anthropic/claude-opus-4-8 "
             "or openai/gpt-4o (canonical models.dev namespace).",
         )
         return 1
 
-    commission = Commission(
-        schema_version="0.1", run_id=run_id, prompt=args.prompt, model=args.model
-    )
+    if base is None:
+        commission = Commission(
+            schema_version="0.1", run_id=run_id, prompt=args.prompt, model=model
+        )
+    else:
+        prompt = render(base.prompt, {"input": args.prompt}) if base.prompt else args.prompt
+        commission = base.model_copy(update={"run_id": run_id, "prompt": prompt, "model": model})
     if local_models.is_local(commission):
         try:
             local_models.provision(commission.model, notify=console.note)
@@ -1184,7 +1276,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
             return 1
     traj = rundir / "trajectory.ndjson"
     where = f" in {args.env}" if args.env else ""
-    console.note(f"{agent.name} working on the task{where} …")
+    label = f" ({agent.origin_label})" if agent.origin_label else ""
+    console.note(f"{agent.name}{label} working on the task{where} …")
     events, err = run_agent(
         prepared,
         sandbox_ctx,
@@ -1235,12 +1328,17 @@ def _cmd_env_secret(args: argparse.Namespace) -> int:
 
     if args.secret_cmd == "list":
         handles = vault.names()
-        if not handles:
+        oauth_handles = vault.oauth_names()
+        if not handles and not oauth_handles:
             console.note(f"no secrets stored ({_tilde(vault.secrets_path())})")
             return 0
         for handle in handles:
             console.out.print(handle)
+        for handle in oauth_handles:
+            console.out.print(f"{handle} (oauth)")
         return 0
+    if args.secret_cmd == "login":
+        return _cmd_env_secret_login(args)
     if args.secret_cmd == "delete":
         if vault.remove(args.handle):
             console.note(f"removed {args.handle!r}")
@@ -1266,6 +1364,39 @@ def _cmd_env_secret(args: argparse.Namespace) -> int:
         return 1
     console.note(
         f'stored {args.handle!r} — reference it in a Commission as {{"vault": "{args.handle}"}}'
+    )
+    return 0
+
+
+def _cmd_env_secret_login(args: argparse.Namespace) -> int:
+    """Sign in to an HTTP MCP server with OAuth and store the grant by handle.
+    The broker refreshes the token at run time; it never enters the sandbox."""
+    from avp_cli import oauth
+
+    def open_url(url: str) -> None:
+        console.note("opening your browser to sign in. If it doesn't open, visit:")
+        console.out.print(url, soft_wrap=True)
+        if not args.no_browser:
+            import webbrowser
+
+            webbrowser.open(url)
+
+    try:
+        oauth.login(
+            args.handle,
+            args.url,
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            scope=args.scope,
+            port=args.port,
+            open_url=open_url,
+        )
+    except oauth.OAuthError as exc:
+        console.error_panel("sign-in failed", str(exc))
+        return 1
+    console.note(
+        f"signed in as {args.handle!r}. Reference it on the MCP server as "
+        f'"auth": {{"vault": "{args.handle}"}}'
     )
     return 0
 
@@ -1711,13 +1842,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     agent_p = groups.add_parser("agent", help="Install and inspect the agents you can run against")
     asub = agent_p.add_subparsers(dest="agent_cmd", required=True)
-    asub.add_parser("list", help="List known agents, whether each is installed and ready")
+    asub.add_parser("list", help="List installed agents, where each came from, and readiness")
     p_adesc = asub.add_parser(
         "describe", help="Print an agent's AgentDescriptor (its tools, models, skills, MCP)"
     )
-    p_adesc.add_argument(
-        "name", help=f"Agent name ({', '.join(known_agents())}) or a path to a manifest"
-    )
+    p_adesc.add_argument("name", help="An installed agent name, or a path to a manifest")
     p_adesc.add_argument(
         "--json",
         dest="json_out",
@@ -1726,30 +1855,53 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     p_ainstall = asub.add_parser(
-        "install", help="Install a prebuilt agent (from a GitHub release, or local artifacts)"
+        "install",
+        help="Install built-in agents (--all), your own (--manifest), or a local build (--as)",
     )
-    p_ainstall.add_argument("name", help=f"Agent to install ({', '.join(known_agents())})")
     p_ainstall.add_argument(
-        "--version", default=None, help="Release version to install (e.g. 0.0.1). Default: latest."
+        "name",
+        nargs="?",
+        default=None,
+        help=f"A built-in agent ({', '.join(known_agents())}), or a name for your own",
+    )
+    p_ainstall.add_argument(
+        "--all", action="store_true", help="Install every built-in agent at this CLI's versions"
+    )
+    p_ainstall.add_argument(
+        "--version",
+        default=None,
+        help="Release version of a built-in agent (default: the version this CLI pins)",
+    )
+    p_ainstall.add_argument(
+        "--manifest",
+        default=None,
+        metavar="PATH",
+        help="Install your own agent from its avp-conformance.json (needs a `container` block)",
+    )
+    p_ainstall.add_argument(
+        "--as",
+        dest="as_name",
+        default=None,
+        metavar="NAME",
+        help="Name for a local build of a built-in agent (with --binary, --wheel, or --package)",
     )
     p_ainstall.add_argument(
         "--binary",
         default=None,
         metavar="PATH",
-        help="Install a binary agent from this local executable, skipping the release "
-        "(the local-package dev loop).",
+        help="A local Linux build of a binary agent (with --as)",
     )
     p_ainstall.add_argument(
         "--wheel",
         action="append",
         metavar="WHL",
-        help="Install a Python agent from local wheel(s), skipping the release (repeatable).",
+        help="Local wheel(s) of a Python agent (with --as; repeatable)",
     )
     p_ainstall.add_argument(
         "--package",
         default=None,
         metavar="TGZ",
-        help="Install a Node agent from a local package archive, skipping the release.",
+        help="A local package archive of a Node agent (with --as)",
     )
     p_ainstall.add_argument(
         "--force", action="store_true", help="Reinstall over an existing install"
@@ -1765,12 +1917,19 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--agent",
         required=True,
-        help=f"Agent to run ({', '.join(known_agents())}, or a manifest path)",
+        help="An installed agent name (`avp agent list`), or a manifest path",
     )
     run_p.add_argument(
         "--env", default=None, help="Environment to run inside (a name or a path to an env JSON)"
     )
-    run_p.add_argument("--model", default=None, help="Model override (else the agent's default)")
+    run_p.add_argument(
+        "--commission",
+        default=None,
+        metavar="ID",
+        help="A library Commission to run (its MCP servers, skills, tools, model); "
+        "the task fills its {input}",
+    )
+    run_p.add_argument("--model", default=None, help="Model override (else the Commission's model)")
     run_p.add_argument("--runtime", choices=runtime.RUNTIMES, default=None, help=_RUNTIME_HELP)
     run_p.add_argument(
         "--timeout", type=float, default=600.0, help="Max seconds for the run (default: 600)"
@@ -1842,6 +2001,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="The secret value. Omit to be prompted (keeps it out of shell history).",
     )
     p_secset.add_argument("--force", action="store_true", help="Overwrite an existing secret")
+    p_seclogin = secsub.add_parser(
+        "login", help="Sign in to an HTTP MCP server with OAuth and store it by handle"
+    )
+    p_seclogin.add_argument("handle", help='Vault handle (a Commission\'s {"vault": <handle>})')
+    p_seclogin.add_argument("--url", required=True, help="The MCP server URL")
+    p_seclogin.add_argument(
+        "--client-id", help="A pre-registered OAuth client (default: register one dynamically)"
+    )
+    p_seclogin.add_argument("--client-secret", help="The pre-registered client's secret")
+    p_seclogin.add_argument("--scope", help="Scopes to request (default: what the server asks)")
+    p_seclogin.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="Loopback port for the redirect, for clients registered with a fixed one",
+    )
+    p_seclogin.add_argument(
+        "--no-browser", action="store_true", help="Print the sign-in URL without opening it"
+    )
     secsub.add_parser("list", help="List stored handles (never the values)")
     p_secrm = secsub.add_parser("delete", help="Delete a stored secret by handle")
     p_secrm.add_argument("handle", help="Vault handle to delete")

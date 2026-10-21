@@ -7,11 +7,13 @@ adding one.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from avp_cli.agents import AGENT_SOURCES, _repo_root
+from avp_cli.agents import AGENT_SOURCES
 
-ROOT = _repo_root()
+ROOT = Path(__file__).resolve().parents[2]
 MANIFESTS = sorted(
     p.relative_to(ROOT).as_posix()
     for p in ROOT.glob("agents/*/*/avp-conformance.json")

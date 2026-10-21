@@ -22,8 +22,8 @@ A second example, comparing web-search backends (Exa vs Linkup), lives in
 # 1. the eval's grader runs in-process and needs the anthropic SDK
 uv sync --extra llm-judge
 
-# 2. install the agent (self-contained; just needs the `claude` CLI on PATH)
-avp agent install claude-code
+# 2. install the agents (self-contained; claude-code just needs the `claude` CLI on PATH)
+avp agent install --all
 
 # 3. install the commission into your library (~/.avp/commissions)
 cp browsecomp-claude.commission.json ~/.avp/commissions/browsecomp-claude.json

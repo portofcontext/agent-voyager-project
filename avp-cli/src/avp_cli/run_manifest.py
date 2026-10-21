@@ -69,6 +69,7 @@ def write(
     model_override: str | None,
     max_items: int | None,
     threshold_override: float | None = None,
+    agent_sources: list[dict] | None = None,
 ) -> Path:
     """Write `<out_dir>/run.json` and return its path. Overwrites any existing one
     (a re-run into the same dir reflects the latest inputs)."""
@@ -91,6 +92,9 @@ def write(
         "eval_config": eval_config,
         "run": {
             "agents": list(agents),
+            # Where each agent's code came from: an avp release (version, repo),
+            # a manifest (path), or a local build (artifact hashes).
+            "agent_sources": list(agent_sources or []),
             "model_override": model_override,
             "max_items": max_items,
             "threshold_override": threshold_override,

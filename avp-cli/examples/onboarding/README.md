@@ -59,8 +59,8 @@ isn't quizzed on its own snapshot).
 ## Run it
 
 ```bash
-# 1. install the agent(s) under test
-avp agent install goose
+# 1. install the agents under test
+avp agent install --all
 
 # 2. generate the commissions from the strategy artifacts, install into the library
 #    (library id is the filename stem, so drop the `.commission` suffix on copy)

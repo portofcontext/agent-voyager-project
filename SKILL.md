@@ -27,8 +27,8 @@ instructions, not the CLI or an agent runtime.
 
    ```bash
    uv tool install avp-cli
-   avp agent install goose
-   avp init capitals --agent goose
+   avp agent install --all
+   avp init capitals --agent claude-code
    ```
 
 3. This example uses Anthropic. Use `ANTHROPIC_API_KEY` from the environment, or

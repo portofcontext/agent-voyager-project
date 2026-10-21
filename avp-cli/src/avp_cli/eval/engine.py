@@ -226,7 +226,7 @@ def _execute(
     on_event: Callable[[Any], None] | None,
 ) -> RunResult:
     """Run one (agent, commission, item) cell and score it into a RunResult."""
-    run_id = f"{agent.name}-{setup.id}-{item.id}"
+    run_id = f"{agent.key}-{setup.id}-{item.id}"
     commission = setup.to_commission(item, run_id, model_override=model_override)
     traj_path = out / f"{run_id}.ndjson"
     events, err = run_agent(
@@ -312,9 +312,9 @@ def run_matrix(
     total = len(items) * sum(len(setups_for(ev.setups, a.name)) for a in agents)
     n = 0
 
-    # acc[agent.name][commission.id] -> list[RunResult]
+    # acc[agent.key][commission.id] -> list[RunResult]
     acc: dict[str, dict[str, list[RunResult]]] = {
-        a.name: {s.id: [] for s in ev.setups} for a in agents
+        a.key: {s.id: [] for s in ev.setups} for a in agents
     }
     interrupted = False
     try:
@@ -326,8 +326,8 @@ def run_matrix(
                         continue  # commission bound to a different agent
                     n += 1
                     if obs.on_start:
-                        obs.on_start(n, total, agent.name, setup.id, item.id)
-                    run_id = f"{agent.name}-{setup.id}-{item.id}"
+                        obs.on_start(n, total, agent.key, setup.id, item.id)
+                    run_id = f"{agent.key}-{setup.id}-{item.id}"
                     result = None
                     if resume:
                         result = _resume_cell(out / f"{run_id}.ndjson", ev, setup, item)
@@ -343,10 +343,10 @@ def run_matrix(
                             timeout_s=timeout_s,
                             on_event=obs.on_event,
                         )
-                    acc[agent.name][setup.id].append(result)
+                    acc[agent.key][setup.id].append(result)
                     if obs.on_end:
-                        obs.on_end(n, total, agent.name, result)
-                    pairs.append((agent.name, result))
+                        obs.on_end(n, total, agent.key, result)
+                    pairs.append((agent.key, result))
                 # Head-to-head only when this commission actually ran on >1 agent.
                 if compare and obs.on_compare and len(pairs) > 1:
                     obs.on_compare(setup.id, item.id, pairs)
@@ -356,14 +356,14 @@ def run_matrix(
     boards: list[Board] = []
     for agent in agents:
         rows = [
-            _aggregate(s, acc[agent.name][s.id])
+            _aggregate(s, acc[agent.key][s.id])
             for s in setups_for(ev.setups, agent.name)
-            if acc[agent.name][s.id]
+            if acc[agent.key][s.id]
         ]
         boards.append(
             Board(
                 dataset_name=ev.dataset.name,
-                agent_label=agent.name,
+                agent_label=agent.key,
                 out_dir=str(out),
                 rows=rank_rows(rows),
                 interrupted=interrupted,

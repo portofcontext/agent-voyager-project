@@ -1,6 +1,41 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-21)
+
+### Added
+
+- MCP servers that use OAuth. `avp env secret login <handle> --url <mcp-url>`
+  signs in through the browser and stores the login under a vault handle that
+  a Commission references in `auth`. The broker refreshes the access token
+  near expiry or after a 401, so long evals keep running and the token never
+  enters the sandbox. `avp env secret list` marks OAuth handles and
+  `avp env secret delete` removes them.
+- `avp run --commission <id>` runs a library Commission once, with the task
+  filling its `{input}`, so a single question can use the Commission's MCP
+  servers, skills, and model without writing an eval.
+- `avp agent install --all` installs every built-in agent at the versions
+  this CLI pins, skips ones already installed, and reports failures without
+  stopping. It is the install step in every quickstart.
+- `avp agent install <name> --manifest <path>` installs your own agent by
+  name. Built-in names are reserved, and the manifest must have a `container`
+  block.
+- `avp agent list` shows where each agent came from (an avp release, a
+  manifest, or a local build), and eval run manifests record it per agent.
+
+### Changed
+
+- A local build of a built-in agent now installs under its own name
+  (`avp agent install claude-code --as claude-code-dev --wheel ...`), and its
+  artifacts are copied into the sandbox image. Before, `--wheel`, `--binary`,
+  and `--package` installs replaced the built-in name while sandboxed runs
+  still downloaded the release, so evals never ran the local build. Boards
+  label a local build by its own name.
+- The CLI no longer runs agents from a source checkout. `--agent` resolves
+  installed agents and manifest paths only; `make build-agents` prints the
+  `--as <name>-dev` installs.
+- A built-in agent installs at the version this CLI pins instead of the
+  newest release, and the sandbox image uses the installed version.
+  `AVP_AGENT_REPO` now applies to sandbox images as well as host installs.
 
 ### Fixed
 

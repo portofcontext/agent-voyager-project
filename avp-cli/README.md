@@ -29,9 +29,9 @@ bar. They measure different things, and a good benchmark reports both.
 ```bash
 uv tool install avp-cli         # installs the `avp` command (or: pipx install avp-cli)
 
-avp agent install goose
+avp agent install --all            # every built-in agent, at this CLI's versions
 export ANTHROPIC_API_KEY="<your-api-key>"
-avp init capitals --agent goose
+avp init capitals --agent claude-code
 avp eval run capitals.eval.json    # paid model calls; prints the ranked board
 avp eval share           # upload the most recent run, print a short link
 ```
@@ -58,6 +58,13 @@ manifest. With a vault credential, the model-provider secret stays in the host
 broker and the agent receives only a random per-run authentication token. MCP
 vault routes use the same token through their request headers. The broker rejects
 missing or invalid tokens. It remains reachable through the host's Docker bridge.
+
+**MCP servers with OAuth.** Run `avp env secret login <handle> --url <mcp-url>`
+once to sign in through your browser, then set `"auth": {"vault": "<handle>"}`
+on the server in the Commission. The login is stored on the host in
+`~/.avp/oauth/` and the broker refreshes the token during runs, so the agent
+never sees it. Servers without dynamic client registration need
+`--client-id` (and `--client-secret`) for a client you registered yourself.
 
 The optional `libkrun` runtime supports offline runs only. Networked runs fail
 closed until filtered egress is supported; use the default `opensandbox` runtime
@@ -163,10 +170,11 @@ already have is left untouched):
 | `avp cm check ID\|FILE` | check a library commission by id (or a wire Commission JSON file) |
 | `avp cm delete ID` | remove a commission from your library |
 | `avp agent list` | the agents you can run against: whether each is installed and ready |
-| `avp agent install NAME` | install a prebuilt agent (from a release, or local `--binary`/`--wheel`) |
+| `avp agent install --all` | install every built-in agent from its avp release |
+| `avp agent install NAME [--manifest PATH \| --as NAME --wheel/--binary/--package ...]` | install one built-in agent, your own agent from its manifest, or a local build under its own name |
 | `avp agent describe NAME` | one agent's capabilities: tools, models, skills, MCP (`--json` for raw) |
 | `avp agent uninstall NAME` | remove an installed agent from `~/.avp/agents` |
-| `avp run "TASK" --agent A [--env E]` | commission an agent to do a task in a sandbox |
+| `avp run "TASK" --agent A [--env E] [--commission ID]` | commission an agent to do a task in a sandbox; `--commission` runs a library Commission with the task as its `{input}` |
 | `avp env create NAME` | create an environment (`--image`/`--apt`/`--pip`/`--path`/`--file`/`--setup`/`--net`/`--cpu`/`--memory`) |
 | `avp env list` | list your environments (`~/.avp/environments`) |
 | `avp env show NAME\|PATH` | what an environment's sandbox world contains |
@@ -197,22 +205,30 @@ accuracy at a fraction of the cost.
 
 ## Agents: install + local dev
 
-The CLI resolves an agent from one of three places, in order: an explicit
-`--agent path/to/avp-conformance.json`; an **installed** agent under
-`~/.avp/agents/<name>/`; or, when you're in a source checkout, the in-repo
-agent (the dev fallback, which builds from source). Normal use is to install
-the prebuilt agent once:
+A run uses an installed agent, by name. Start with every built-in agent:
 
 ```bash
-avp agent install goose          # latest release, or --version 0.0.1
-avp agent install claude-code
-avp agent install codex          # or openai-agents
-avp agent install pi             # needs Node 22.19+ on the host
-avp agent install gemini-cli     # needs Node 22.19+ on the host
-avp agent install deep-agents
-avp agent install pydantic-ai
-avp agent install opencode       # needs Node 22.19+; the archive for this platform
-avp agent list                   # shows installed version + readiness
+avp agent install --all          # skips ones already installed; --force reinstalls
+avp agent list                   # each agent, where it came from, and readiness
+```
+
+`avp agent list` shows where each agent's code came from:
+
+- **avp release**: a built-in agent (`claude-code`, `codex`, `openai-agents`,
+  `goose`, `pi`, `gemini-cli`, `deep-agents`, `pydantic-ai`, `opencode`) from
+  a GitHub release, at the version this CLI pins. `avp agent install <name>`
+  installs one, and `--version` picks another release. These names are
+  reserved for the built-in agents.
+- **manifest**: your own agent, installed by name from its
+  `avp-conformance.json`. The manifest needs a `container` block
+  (`{"install": ["<Dockerfile RUN step>", ...], "command": ["<argv>", ...]}`),
+  because runs execute in a Linux sandbox.
+- **local build**: a built-in agent built from your checkout, installed under
+  its own name so a board never mistakes it for the release.
+
+```bash
+avp agent install my-agent --manifest ~/work/my-agent/avp-conformance.json
+avp run --agent my-agent "..."
 ```
 
 A binary agent (goose) installs a prebuilt executable; a Python agent
@@ -221,36 +237,29 @@ Node agent (pi, gemini-cli, opencode) extracts its package archive and runs with
 plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
 fork or to avoid API rate limits. The host install serves `avp agent describe`
 (the free pre-flight view); actual runs install the agent's **Linux build into
-the sandbox image** via its container recipe, so run-time dependencies (e.g.
-the claude-code agent's Node + `claude` CLI) live in the image, not on your
-machine. A third-party agent declares its own recipe in its manifest's
-`container` block (`{"install": ["<Dockerfile RUN step>", ...], "command":
-["<argv>", ...]}`).
+the sandbox image**, so run-time dependencies (e.g. the claude-code agent's
+Node + `claude` CLI) live in the image, not on your machine. Set
+`AVP_AGENT_REPO` to install releases from a fork; the host install and the
+sandbox image both come from it.
 
-**Testing your own agent or a new version (no release needed).** Build the
-artifacts and point the CLI at them locally:
+**Testing your own build of a built-in agent (no release needed).** Build the
+artifacts and install them under a `-dev` name:
 
 ```bash
 make build-agents     # builds into dist/agents and prints the install commands
 
-avp agent install goose --binary dist/agents/avp-goose-conformance --force
-avp agent install claude-code --force \
-  --wheel dist/agents/avp-*.whl \
+avp agent install claude-code --as claude-code-dev \
+  --wheel dist/agents/agent_voyager_project-*.whl \
   --wheel dist/agents/avp_conformance-*.whl \
   --wheel dist/agents/avp_claude_agent_sdk-*.whl
-avp agent install codex --force \
-  --wheel dist/agents/agent_voyager_project-*.whl \
-  --wheel dist/agents/avp_codex-*.whl
-avp agent install pi --package dist/agents/avp-pi.tar.gz --force
-avp agent install deep-agents --force \
-  --wheel dist/agents/agent_voyager_project-*.whl \
-  --wheel dist/agents/avp_deep_agents-*.whl
-avp agent install opencode --package dist/agents/avp-opencode-darwin-arm64.tar.gz --force
+avp agent install pi --as pi-dev --package dist/agents/avp-pi.tar.gz
 ```
 
-That's the contributor loop: build, install locally, run an eval against it.
-A third-party agent needs no install at all, just `--agent <its manifest>`.
-Set `AVP_AGENT_REPO` to install releases from a fork.
+The artifacts are copied into the sandbox image, so `--agent claude-code-dev`
+runs your build, and boards and run manifests label it as a local build.
+`--binary` (goose) and the opencode archive must be Linux builds, since that's
+what the sandbox runs. A custom agent needs no build step at all: install its
+manifest, or pass a manifest path to `--agent` for a one-off run.
 
 ## Environments + `avp run`
 
@@ -330,8 +339,8 @@ src/avp_cli/
   images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
   environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding
   agent.py          # run_agent: the run contract executed inside a sandbox
-  agents.py         # agent sources + resolution (installed > dev fallback) + container recipes
-  agent_install.py  # `avp agent install`: fetch a release / install local artifacts
+  agents.py         # built-in agents + resolution of installed agents + container recipes
+  agent_install.py  # `avp agent install`: avp releases, custom manifests, local builds
   observability.py  # summarize: reduce a trajectory to per-run facts
   onboarding.py     # the WELCOME / agent-routing text
   state.py          # recent-run history under ~/.avp/runs (eval list / view / clear)

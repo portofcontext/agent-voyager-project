@@ -38,10 +38,11 @@ def environments_dir() -> Path:
 def agents_dir() -> Path:
     """Installed agents: `~/.avp/agents/<name>/`.
 
-    Each subdir holds one installed agent: the generated `avp-conformance.json`
-    manifest the CLI drives, an `installed.json` provenance record, and the
-    artifact itself (`bin/<binary>` for a prebuilt binary agent, `venv/` for a
-    Python agent). `avp agent install` writes these; `resolve_agent` prefers them
-    over the in-repo dev fallback.
+    Each subdir holds one installed agent and its `installed.json` record of
+    where it came from (an avp release, a manifest, or a local build). Release
+    and local installs also hold the generated `avp-conformance.json` the CLI
+    drives on the host and the artifact itself (`bin/<binary>`, `venv/`, or
+    `app/`); a local build keeps its sandbox artifacts in `artifacts/`.
+    `avp agent install` writes these, and `resolve_agent` only runs what's here.
     """
     return avp_home() / "agents"
