@@ -315,7 +315,11 @@ async function session(
 /** Refuse a model OpenCode can't serve from its bundled catalog and SDKs. */
 async function route(client: OpencodeClient, plan: RunPlan): Promise<[ErrorCode, string] | undefined> {
   const provider = (await data(client.provider.list())).all.find((p) => p.id === plan.route);
-  if (!provider) return ["unsupported_provider", `OpenCode has no provider ${JSON.stringify(plan.route)}`];
+  // The config declares the run's model, which makes OpenCode synthesize a
+  // provider it doesn't know; only cataloged providers name their key variables.
+  if (!provider || provider.env.length === 0) {
+    return ["unsupported_provider", `OpenCode has no provider ${JSON.stringify(plan.route)}`];
+  }
   const model = provider.models[plan.routeModel];
   if (!model) return ["unsupported_model", `${plan.route}/${plan.routeModel}: not in OpenCode's model catalog`];
   if (!BUNDLED_SDKS.has(model.api.npm)) {

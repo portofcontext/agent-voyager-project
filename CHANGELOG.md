@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Pydantic AI could not connect to an MCP server whose `tools/list` is larger
+  than 1 MiB, such as a gateway with hundreds of tools: MCP SDK 2 caps one
+  SSE event at 1 MiB and FastMCP doesn't expose the setting. The adapter
+  raises the cap to 64 MiB.
+- OpenCode refused models newer than the catalog its pinned binary bundles
+  (`claude-haiku-5-5: not in OpenCode's model catalog`). The adapter now
+  declares the Commission's model in the provider config, so it runs on the
+  provider's SDK; unknown providers are still refused.
+
 ## 0.3.0 (2026-10-21)
 
 ### Added

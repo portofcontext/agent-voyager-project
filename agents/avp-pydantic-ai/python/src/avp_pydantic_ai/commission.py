@@ -85,6 +85,29 @@ def _skill_text(skill: Skill) -> str:
     return f"## Skill: {skill.name or skill.id}\n\n{body}"
 
 
+# The MCP SDK (2.x) caps one SSE event at 1 MiB, and FastMCP's HTTP transport
+# doesn't expose the setting. A gateway's `tools/list` (hundreds of tool
+# schemas) is one event well past that, so raise the cap, keeping it bounded.
+MAX_SSE_EVENT_BYTES = 64 * 1024 * 1024
+
+
+def raise_sse_event_limit() -> bool:
+    """Make FastMCP's streamable HTTP client accept SSE events up to
+    `MAX_SSE_EVENT_BYTES`. A no-op (False) on an SDK without the limit."""
+    import functools
+    import inspect
+
+    from fastmcp.client.transports import http
+
+    client = http.streamable_http_client
+    if isinstance(client, functools.partial):
+        return True
+    if "max_sse_event_size" not in inspect.signature(client).parameters:
+        return False
+    http.streamable_http_client = functools.partial(client, max_sse_event_size=MAX_SSE_EVENT_BYTES)
+    return True
+
+
 def mcp_toolset(entry: Any) -> Any:
     """An unconnected toolset for one inline Commission entry."""
     from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
@@ -95,6 +118,7 @@ def mcp_toolset(entry: Any) -> Any:
             entry.command[0], entry.command[1:] + (entry.args or []), env=entry.env
         )
     else:
+        raise_sse_event_limit()
         transport = StreamableHttpTransport(entry.url, headers=entry.headers or {})
     return MCPToolset(transport, id=entry.id, tool_error_behavior="failed")
 

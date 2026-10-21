@@ -386,7 +386,6 @@ test("a Commission the agent cannot honor fails fast before agent_started", asyn
     [commission({ enabled_builtin_tools: { "avp-opencode": ["fly"] } }), "commission_collision"],
     [commission({ enabled_builtin_subagents: { other: [] } }), "commission_collision"],
     [commission({ agent_versions: { "avp-opencode": "9.9.9" } }), "unsupported_agent_version"],
-    [commission({ model: "openai/no-such-model" }), "unsupported_model"],
     [commission({ model: "nosuch/model", provider: null }), "unsupported_provider"],
   ] as const) {
     const { events } = await runScripted(c, []);
@@ -394,6 +393,12 @@ test("a Commission the agent cannot honor fails fast before agent_started", asyn
     assert.equal(one(events, "error_occurred").data["avp.error.code"], code);
     assert.equal(one(events, "agent_stopped").data["avp.reason"], "error");
   }
+});
+
+test("a model newer than the bundled catalog runs on its provider's SDK", async () => {
+  const { events } = await runScripted(commission({ model: "openai/gpt-from-the-future" }), [{ text: "DONE" }]);
+  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+  assert.equal(one(events, "agent_stopped").data["avp.output"], "DONE");
 });
 
 test("missing credentials end the run with auth_error after agent_started", async () => {
