@@ -22,10 +22,6 @@ it scaffolds Commissions and runs them over a dataset to rank a board.
 - [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md): the agent's per-build self-description (built-in tools/skills/mcp_servers/subagents, models, capabilities).
 - [Resolver API](avp/core/spec/v0.1/resolver.md): optional JSON-RPC for dereferencing opaque refs.
 
-## Foundations
-
-- [FOUNDATIONS.md](FOUNDATIONS.md): the upstream standards AVP specializes (CloudEvents 1.0 envelope, OTel span ids, OTel GenAI projection, JSON-RPC 2.0, MCP, Agent Skills) and the avp.* attribute namespace.
-
 ## Using the CLI
 
 - [avp-cli/README.md](avp-cli/README.md): the `avp` CLI. `avp init` scaffolds an eval; `avp eval run <config>.eval.json` runs commissions over a dataset and prints a ranked board; `avp cm create` builds a Commission into your library; `avp agent install` installs an agent.

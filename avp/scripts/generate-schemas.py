@@ -94,7 +94,7 @@ def main() -> int:
             "OpenTelemetry span triple (`trace_id`, `span_id`, "
             "`parent_span_id`); OpenTelemetry GenAI semantic conventions "
             "(`gen_ai.*`) are a projection target, not carried on the wire "
-            "(see FOUNDATIONS.md). See avp/core/spec/v0.1/trajectory.md."
+            "(see `avp.gen_ai`). See avp/core/spec/v0.1/trajectory.md."
         ),
     )
     write_json(out_dir / "trajectory.schema.json", trajectory_schema)
@@ -156,7 +156,7 @@ def main() -> int:
             "carried on the wire. AVP-specific "
             "concepts (the no-mid-run-reach-in topology, the "
             "trajectory-as-source-of-truth contract) live under the "
-            "`avp.*` attribute namespace. See FOUNDATIONS.md and the "
+            "`avp.*` attribute namespace. See README.md and the "
             "per-spec entry-point schemas: commission.schema.json, "
             "trajectory.schema.json, agent-descriptor.schema.json."
         ),

@@ -23,12 +23,12 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in
 AVP specializes (it does not reinvent) the following industry specs:
 
 - **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../../../FOUNDATIONS.md).
+- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is implemented by `to_gen_ai_attrs` in the Python binding (`avp.gen_ai`). The GenAI conventions are still experimental upstream; keeping them off the wire means an OTel rename changes the projector, not the AVP schema.
 - **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` carry inline connection material; the agent runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
 - **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries carry inline file content including `SKILL.md`.
 - **JSON Schema Draft 2020-12** for this specification's machine-readable form.
 
-AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace. See [`../../../../FOUNDATIONS.md`](../../../../FOUNDATIONS.md) for the full mapping rationale and ATIF (Harbor) positioning.
+AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace.
 
 ---
 

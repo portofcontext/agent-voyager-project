@@ -23,7 +23,7 @@ T_AGENT_STOPPED = "avp.agent_stopped"
 T_TOOL_INVOKED = "avp.tool_invoked"
 T_TOOL_RETURNED = "avp.tool_returned"
 
-# OTel span identification (FOUNDATIONS.md): trace_id is 32 hex chars, span_id
+# OTel span identification (spec README §0): trace_id is 32 hex chars, span_id
 # is 16. ZERO_SPAN is the root sentinel (no parent).
 _TRACE_RE = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_RE = re.compile(r"^[0-9a-f]{16}$")
@@ -192,7 +192,7 @@ def _wants_cost(fs: FinalState) -> bool:
 
 def _check_structure(events: list[dict]) -> list[str]:
     """Universal span-tree invariants every conforming trajectory MUST satisfy,
-    independent of the case (OTel span identification, FOUNDATIONS.md):
+    independent of the case (OTel span identification, spec README §0):
 
     - one `trace_id` for the whole run;
     - every event's `span_id` / `parent_span_id` is well-formed (16 hex), and

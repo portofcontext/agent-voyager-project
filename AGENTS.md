@@ -12,7 +12,6 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 - [Adapter template](agents/_template/README.md): adding a runtime.
 - [CLI guide](avp-cli/README.md): Commissions, environments, and evaluations.
 - [Skill](SKILL.md): agent and supervisor workflows.
-- [Foundations](FOUNDATIONS.md): upstream standards and the OTel projection.
 
 ## Design boundaries
 

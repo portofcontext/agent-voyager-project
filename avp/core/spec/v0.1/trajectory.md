@@ -31,7 +31,7 @@ The Trajectory Spec explicitly does **not** define:
 - **The Commission shape.** What a supervisor sends *to* the agent at startup → see [`commission.md`](./commission.md).
 - **The Agent Descriptor shape.** What an agent advertises about itself → see [`agent-descriptor.md`](./agent-descriptor.md).
 - **Multi-run orchestration.** Cross-run correlation, scheduling, persistence, replay: supervisor-framework concerns above the wire.
-- **Post-hoc training-data formats.** Trajectory is a live event stream; for SFT/RL logging see ATIF (`FOUNDATIONS.md` § *Adjacent prior art*).
+- **Post-hoc training-data formats.** Trajectory is a live event stream; for SFT/RL training data see [ATIF](https://github.com/harbor-framework/harbor), a post-run document format with logprobs and token IDs. A captured AVP stream can be converted to ATIF; AVP does not specify that conversion.
 - **Interpretive annotation.** Categorical judgments ("SuspiciousWriteDetected", "PolicyViolation") are post-hoc annotation, not runtime events.
 - **Verifiers / pre-tool gates.** Deferred from v0.1; see umbrella README §5.
 
@@ -45,7 +45,7 @@ Every event's `data` payload carries an OpenTelemetry **span triple**: `trace_id
 
 Every event's `data` payload MAY also carry **`avp.meta`**: an optional object (`dict[str, any]`) for agent- or caller-supplied annotations. Its contents are opaque to AVP; conformance validators MUST NOT assert on its values. Omit the key entirely when empty.
 
-All `data` fields beyond the span triple (`trace_id`, `span_id`, `parent_span_id`) MUST be namespaced under a dotted prefix. AVP-defined attributes live under `avp.*`; vendors MAY add their own namespaces (e.g. `acme.*`). Un-namespaced keys are reserved for the span triple only. AVP does not carry OpenTelemetry GenAI semconv (`gen_ai.*`) attribute names on the wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../../../FOUNDATIONS.md).
+All `data` fields beyond the span triple (`trace_id`, `span_id`, `parent_span_id`) MUST be namespaced under a dotted prefix. AVP-defined attributes live under `avp.*`; vendors MAY add their own namespaces (e.g. `acme.*`). Un-namespaced keys are reserved for the span triple only. AVP does not carry OpenTelemetry GenAI semconv (`gen_ai.*`) attribute names on the wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is implemented by `to_gen_ai_attrs` in the Python binding (`avp.gen_ai`).
 
 ### 2.1 Run prelude
 
