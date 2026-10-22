@@ -1,107 +1,213 @@
 #!/usr/bin/env python3
-"""Generate the per-strategy commissions from the strategy artifacts.
-
-Each onboarding strategy is the SAME commission (same model, same passthrough
-prompt) differing only in how AVP knowledge reaches the agent. Rather than paste
-each artifact (the 18KB SKILL.md, the llms-full.txt, ...) into JSON by hand and
-let them drift, this reads the artifacts in `strategies/` and writes one
-`<strategy>/<strategy>.commission.json` per strategy.
-
-    python build_commissions.py            # writes the commission files
-    for f in strategies/*/*.commission.json; do cp "$f" ~/.avp/commissions/; done
-
-The dataset (in onboarding.eval.json) supplies each task as the `{input}`; the
-commission's prompt is just `{input}`, so every strategy faces the identical task
-and the only variable is the onboarding material.
-"""
+"""Prepare ordinary one-cell AVP evaluations; vary only onboarding inputs."""
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
+import random
+import shutil
+import subprocess
+import tempfile
+import zipfile
 from pathlib import Path
 
-HERE = Path(__file__).parent
-REPO_ROOT = HERE.parents[2]  # avp-cli/examples/onboarding -> repo root
-MODEL = "anthropic/claude-haiku-4-5"
+from avp.commission import Commission
 
-# The skill strategy uses the repo's real SKILL.md (the artifact AVP ships); the
-# text strategies inject their artifact as the system prompt.
-SKILL_MD = (REPO_ROOT / "SKILL.md").read_text()
-LLMS_FULL = (HERE / "strategies/llms-txt/llms-full.txt").read_text()
-README_DOCS = (HERE / "strategies/readme-docs/readme-docs.md").read_text()
-AGENTS_MD = (HERE / "strategies/agents-md/AGENTS.md").read_text()
-EXPLORE = (HERE / "strategies/explore-cli/explore-cli.md").read_text()
-
-MCP_SYSTEM = (
-    "You are working with AVP (Agent Voyager Project). You have the avp-knowledge "
-    "MCP server connected: call its list_avp_docs, read_avp_doc, and search_avp "
-    "tools to look up anything you need about AVP before you answer. Prefer looking "
-    "it up over guessing."
-)
-
-
-def base() -> dict:
-    """Fields shared by every strategy: same model, prompt passes the task through."""
-    return {"schema_version": "0.1", "model": MODEL, "prompt": "{input}"}
-
-
-# strategy id -> the commission body (merged onto base()). Order matters only for
-# readability; the eval references them by id.
-# The pure-context-recall strategies run with NO built-in tools
-# (enabled_builtin_tools=[]): the answer is in their context, so they need no
-# tools, and disabling tools keeps the measurement clean (an agent cannot flail
-# or read its own /avp/io trajectory, whose events would otherwise leak wire
-# facts like the `source` value) and cheap (~1 turn). skill/mcp/explore-cli keep
-# tools because their delivery mechanism requires them.
-_NO_TOOLS = {"enabled_builtin_tools": []}
-
-STRATEGIES: dict[str, dict] = {
-    # Control: no AVP material at all.
-    "onboard-cold": {**_NO_TOOLS},
-    # Skill: the real AVP SKILL.md as an inline skill (needs the skill tool).
-    "onboard-skill": {"skills": [{"id": "avp", "files": {"SKILL.md": SKILL_MD}}]},
-    # Text strategies: the artifact injected as the system prompt.
-    "onboard-llms-txt": {"system_prompt": LLMS_FULL, **_NO_TOOLS},
-    "onboard-readme-docs": {"system_prompt": README_DOCS, **_NO_TOOLS},
-    "onboard-agents-md": {"system_prompt": AGENTS_MD, **_NO_TOOLS},
-    # Needs in-sandbox tooling (excluded from the first run; see README):
-    # No enabled_builtin_tools restriction: the agent keeps its full native
-    # toolset (shell etc.) to run `uvx ... avp`. Listing names risks a
-    # commission_collision when a guessed name (e.g. "bash") isn't one the agent
-    # actually offers; absent = expose all, which is what exploration wants.
-    "onboard-explore-cli": {"system_prompt": EXPLORE},
-    "onboard-mcp": {
-        "system_prompt": MCP_SYSTEM,
-        # The server is fetched + run by uvx from this repo's subdirectory (GitHub
-        # egress is in the sandbox's default allowlist). It runs once the example
-        # is on the default branch; for a local server use `uvx --from
-        # strategies/mcp avp-knowledge-mcp`, or publish it and use `uvx avp-knowledge-mcp`.
-        "mcp_servers": [
-            {
-                "type": "stdio",
-                "id": "avp-knowledge",
-                "command": [
-                    "uvx",
-                    "--from",
-                    "git+https://github.com/portofcontext/agent-voyager-project.git#subdirectory=avp-cli/examples/onboarding/strategies/mcp",
-                    "avp-knowledge-mcp",
-                ],
-            }
-        ],
-    },
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
+STRATEGIES = ("repo", "prompt", "cli-docs", "skill", "skill-invoked")
+MODELS = {
+    "claude-code": "anthropic/claude-sonnet-4-6",
+    "codex": "openai/gpt-5.5",
+    "pi": "anthropic/claude-sonnet-4-6",
 }
+CASES = [
+    {"id": "sum", "question": "What is 17 + 25?", "expected": {"answer": 42}},
+    {"id": "product", "question": "What is 9 times 7?", "expected": {"answer": 63}},
+    {"id": "difference", "question": "What is 100 minus 28?", "expected": {"answer": 72}},
+]
 
 
-def main() -> None:
-    for strategy, body in STRATEGIES.items():
-        commission = {**base(), "run_id": strategy, **body}
-        out = (
-            HERE / "strategies" / strategy.removeprefix("onboard-") / f"{strategy}.commission.json"
-        )
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(commission, indent=2) + "\n")
-        print(f"wrote {out.relative_to(HERE)}")
+def write_json(path: Path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, suffix=".tmp", delete=False) as tmp:
+        tmp.write(json.dumps(value, indent=2) + "\n")
+    Path(tmp.name).replace(path)
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def prepare(
+    out: Path,
+    wheel: Path,
+    *,
+    repetitions: int = 1,
+    seed: int = 42,
+    models: dict[str, str] | None = None,
+    agents: dict[str, str] | None = None,
+) -> dict:
+    models = {**MODELS, **(models or {})}
+    if set(models) != set(MODELS):
+        raise ValueError("model overrides must name codex, claude-code, or pi")
+    agents = {**{name: name for name in MODELS}, **(agents or {})}
+    if set(agents) != set(MODELS):
+        raise ValueError("agent overrides must name codex, claude-code, or pi")
+    out.mkdir(parents=True, exist_ok=False)
+    inputs = out / "inputs"
+    inputs.mkdir()
+    shutil.copy2(wheel, inputs / wheel.name)
+    (inputs / "cases.jsonl").write_text("".join(json.dumps(c) + "\n" for c in CASES))
+    subprocess.run(["bash", str(ROOT / "avp/scripts/build-skill.sh"), str(inputs)], check=True)
+    with zipfile.ZipFile(inputs / "avp.skill") as bundle:
+        skill = {n.removeprefix("avp/"): bundle.read(n).decode() for n in bundle.namelist()}
+    materials = {
+        "repo": {},
+        "prompt": {"system_prompt": (HERE / "PROMPT.md").read_text()},
+        "cli-docs": {"system_prompt": (ROOT / "avp-cli/README.md").read_text()},
+        "skill": {"skills": [{"id": "avp", "files": skill}]},
+        "skill-invoked": {
+            "skills": [{"id": "avp", "files": skill}],
+            "system_prompt": "Use the AVP skill to complete the task.",
+        },
+    }
+    task = (HERE / "task.md").read_text().replace("CLI_WHEEL", wheel.name)
+    batch = hashlib.sha256(str(out.resolve()).encode()).hexdigest()[:8]
+    trials = []
+    for agent, model in models.items():
+        for strategy, material in materials.items():
+            cid = f"onboard-{batch}-{agent}-{strategy}"
+            commission = Commission.model_validate(
+                {
+                    "schema_version": "0.1",
+                    "run_id": cid,
+                    "model": model,
+                    "prompt": "{input}",
+                    **material,
+                }
+            )
+            write_json(
+                out / "commissions" / f"{cid}.json",
+                commission.model_dump(mode="json", exclude_none=True),
+            )
+            for repeat in range(repetitions):
+                tid = f"{cid}-{repeat + 1}"
+                config = {
+                    "name": tid,
+                    "agents": [agents[agent]],
+                    "commissions": [cid],
+                    "dataset": {
+                        "source": "inline",
+                        "items": [
+                            {
+                                "id": "setup-and-evaluate",
+                                "prompt": task.replace("MODEL_SLUG", model),
+                                "expected": "DONE",
+                            }
+                        ],
+                    },
+                    "scorer": {"name": "exact-match"},
+                }
+                write_json(out / "evals" / f"{tid}.json", config)
+                trials.append(
+                    {
+                        "id": tid,
+                        "agent": agent,
+                        "model": model,
+                        "strategy": strategy,
+                        "repeat": repeat + 1,
+                        "commission": cid,
+                    }
+                )
+    # Inputs never include the skill or docs for the control arm. All agents
+    # can independently retrieve the public repository using their tools.
+    files = {
+        f"inputs/{p.name}": {"from": str(p.resolve())}
+        for p in inputs.iterdir()
+        if p.name != "avp.skill"
+    }
+    write_json(
+        out / "environment.json",
+        {
+            "packages": {"apt": ["git", "curl"], "pip": ["uv"]},
+            "files": files,
+            # The outer container supplies confinement; nested bwrap requires
+            # user namespaces that OpenSandbox does not expose.
+            "setup": [
+                "printf '%s\\n' 'sandbox_mode = \"danger-full-access\"' > \"$CODEX_HOME/config.toml\""
+            ],
+            "net": [
+                "api.github.com",
+                "release-assets.githubusercontent.com",
+                "nodejs.org",
+                "registry.npmjs.org",
+                "*.npmjs.org",
+                "downloads.astral.sh",
+            ],
+        },
+    )
+    random.Random(seed).shuffle(trials)
+    plan = {
+        "version": 1,
+        "seed": seed,
+        "repetitions": repetitions,
+        "agent_locators": agents,
+        "cli_wheel_sha256": sha256(wheel),
+        "git_revision": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
+        "working_tree_diff_sha256": hashlib.sha256(
+            subprocess.check_output(["git", "diff"], cwd=ROOT)
+        ).hexdigest(),
+        "inputs": {p.name: sha256(p) for p in inputs.iterdir()},
+        "artifacts": {str(p.relative_to(out)): sha256(p) for p in sorted(out.rglob("*.json"))},
+        "harness": {p.name: sha256(p) for p in sorted(HERE.glob("*.py"))},
+        "trials": trials,
+    }
+    write_json(out / "plan.json", plan)
+    return plan
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--wheel", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--repetitions", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        metavar="AGENT=ORIGIN/MODEL",
+        help="Override a selected agent's model; repeat per agent",
+    )
+    parser.add_argument(
+        "--agent",
+        action="append",
+        default=[],
+        metavar="AGENT=LOCATOR",
+        help="Use an installed alias or manifest for an agent; repeat per agent",
+    )
+    args = parser.parse_args()
+    if args.repetitions < 1:
+        parser.error("--repetitions must be positive")
+    try:
+        models = dict(value.split("=", 1) for value in args.model)
+    except ValueError:
+        parser.error("--model must be AGENT=ORIGIN/MODEL")
+    try:
+        agents = dict(value.split("=", 1) for value in args.agent)
+    except ValueError:
+        parser.error("--agent must be AGENT=LOCATOR")
+    plan = prepare(
+        args.out.resolve(),
+        args.wheel.resolve(),
+        repetitions=args.repetitions,
+        seed=args.seed,
+        models=models,
+        agents=agents,
+    )
+    print(f"Prepared {len(plan['trials'])} trials in {args.out}; no model calls made.")

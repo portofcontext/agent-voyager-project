@@ -21,8 +21,11 @@ instructions, not the CLI or an agent runtime.
 
 ## Get a first evaluation running
 
-1. Check for `uv`, the `avp` command, and a running Docker daemon. The CLI supports
-   macOS and Linux; `avp run` and `avp eval run` launch Docker-backed sandboxes.
+1. Check for `uv` and the `avp` command. The CLI supports macOS and Linux.
+   The default runtime needs a running Docker daemon. When the user selects
+   local execution, or the task explicitly supplies an outer sandbox, use
+   `--runtime local` on `avp run` and `avp eval run`. Local execution adds no OS
+   isolation; do not silently select it when Docker fails.
 2. Install missing components, then scaffold the small capitals example:
 
    ```bash
@@ -92,6 +95,9 @@ The run uses a copy of the project and prints its resulting workspace and
 trajectory paths. Inspect those outputs before claiming the task succeeded.
 The launcher owns workspace staging, credentials, native runtime state, and OS
 sandboxing. A Commission's tool allowlists do not replace OS confinement.
+`--runtime local` uses the installed agent command and fresh native state without
+creating another sandbox. Local environments accept `paths`, `files`, and `setup`;
+container image, package, network, and resource settings are rejected.
 
 ## Diagnose a run
 

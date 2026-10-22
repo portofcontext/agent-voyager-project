@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from avp.content import TextBlock
 from avp.trajectory import AgentStoppedEvent, AssistantMessageEvent, ToolInvokedEvent
-from avp_cli.agent import SandboxContext, SandboxedAgent, read_trajectory, run_agent
+from avp_cli.agent import PreparedAgent, RunContext, read_trajectory, run_agent
 from avp_cli.eval.dataset import Dataset, Item
 from avp_cli.eval.scoring import FinalOutput, Score, Scorer
 from avp_cli.eval.setup import Setup
@@ -215,8 +215,8 @@ def _mean(xs: list[float]) -> float:
 
 def _execute(
     ev: Eval,
-    agent: SandboxedAgent,
-    sandbox_ctx: SandboxContext,
+    agent: PreparedAgent,
+    sandbox_ctx: RunContext,
     setup: Setup,
     item: Item,
     *,
@@ -283,8 +283,8 @@ def _resume_cell(traj_path: Path, ev: Eval, setup: Setup, item: Item) -> RunResu
 
 def run_matrix(
     ev: Eval,
-    agents: list[SandboxedAgent],
-    sandbox_ctx: SandboxContext,
+    agents: list[PreparedAgent],
+    sandbox_ctx: RunContext,
     *,
     out_dir: str | Path,
     max_items: int | None = None,
@@ -375,8 +375,8 @@ def run_matrix(
 def run_eval(
     ev: Eval,
     *,
-    agent: SandboxedAgent,
-    sandbox_ctx: SandboxContext,
+    agent: PreparedAgent,
+    sandbox_ctx: RunContext,
     out_dir: str | Path,
     max_items: int | None = None,
     model: str | None = None,

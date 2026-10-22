@@ -154,7 +154,7 @@ function killGroup(proc: ChildProcess, signal: NodeJS.Signals): void {
 function serverEnv(opts: ServerOptions, password: string): Record<string, string> {
   const env: Record<string, string | undefined> = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (key.startsWith("OPENCODE_") || key.startsWith("OTEL_")) delete env[key];
+    if (key.startsWith("OPENCODE_")) delete env[key];
   }
   const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "avp-opencode");
   const home = join(opts.scratch, "home");

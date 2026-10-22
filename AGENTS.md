@@ -61,8 +61,10 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
   Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust`.
 - `avp-cli/`: the supervisor CLI. Evaluations are JSON configurations containing
   `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
-  its own model. `avp eval run` and `avp run` use Docker-backed OpenSandbox containers
-  with default-deny networking. Vault credentials go through the host-side broker.
+  its own model. `avp eval run` and `avp run` default to Docker-backed OpenSandbox
+  containers with default-deny networking. `--runtime local` runs installed agent
+  subprocesses without additional OS isolation. Vault credentials go through the
+  host-side broker (loopback for local execution).
 - `avp/scripts/`: schema/binding generation, prices, and skill packaging.
 - The repository root is the uv workspace. `make help` lists development commands.
 

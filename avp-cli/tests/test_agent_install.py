@@ -296,9 +296,13 @@ def test_manifest_cannot_take_a_built_in_name(avp_home, tmp_path) -> None:
         agent_install.install("claude-code", manifest=_manifest(tmp_path))
 
 
-def test_manifest_needs_a_container_block(avp_home, tmp_path) -> None:
-    with pytest.raises(agent_install.InstallError, match="no `container` block"):
-        agent_install.install("my-agent", manifest=_manifest(tmp_path, container=False))
+def test_manifest_without_container_installs_for_local_execution(avp_home, tmp_path) -> None:
+    agent_install.install("my-agent", manifest=_manifest(tmp_path, container=False))
+    resolved = agents.resolve_agent("my-agent")
+    assert resolved.manifest.command == ["my-agent"]
+    assert agents.preflight("my-agent") is None
+    with pytest.raises(agents.NoContainerRecipe, match="no container recipe"):
+        agents.container_recipe(resolved)
 
 
 def test_manifest_moved_after_install(avp_home, tmp_path) -> None:

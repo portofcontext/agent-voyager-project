@@ -51,13 +51,17 @@ files to developer instructions. `output_schema` becomes `outputSchema`.
 Commission MCP servers are configured in the native runtime, enumerated before
 `agent_started`, and their tools carry `avp.mcp_server_id`. Credentials remain a
 deployment concern, as with the other adapters.
+Native client-side tool search is recorded as a `tool_search` call and result,
+including the discovered tool definitions, before the selected MCP tool runs.
 
 The launcher owns workspace, credentials, native config/state directories, and
 cleanup, following the [shared launch pattern](../../../PATTERNS.md#launch-context).
 The adapter inherits `CODEX_HOME` and other native environment settings; it does
 not create or delete a private home. Discovered host/repository skills are
-disabled; only Commission skills are advertised. Native
-workspace-write sandboxing remains enabled. The adapter requests and verifies
+disabled; only Commission skills are advertised. Native sandbox policy comes
+from the launcher's Codex configuration. A container launcher can disable the
+nested native sandbox in `CODEX_HOME/config.toml` when the container supplies
+confinement. The adapter requests and verifies
 `approvalPolicy: never` before inference because AVP has no mid-run supervisor
 callback. Explicitly commissioned MCP tools use the native `approve` policy.
 

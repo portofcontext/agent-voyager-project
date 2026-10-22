@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from importlib.metadata import version
 
 import pytest
 
@@ -67,6 +68,7 @@ def test_setup_to_commission_carries_the_variant_surface() -> None:
     assert c.output_schema == schema
     assert c.model == "anthropic/claude-haiku-4-5"  # the commission's own model
     assert c.supervisor is not None and c.supervisor.name == "avp-cli"
+    assert c.supervisor.version == version("avp-cli")
     assert "commission:terse" in (c.tags or [])
 
 
@@ -438,20 +440,18 @@ Path(a.out).write_text("\\n".join(e.model_dump_json(by_alias=True, exclude_none=
 
 
 def _sandboxed(name: str, agent_script):
-    from avp_cli.agent import SandboxedAgent
+    from avp_cli.agent import PreparedAgent
 
-    return SandboxedAgent(name=name, image="img:test", command=(sys.executable, str(agent_script)))
+    return PreparedAgent(name=name, image="img:test", command=(sys.executable, str(agent_script)))
 
 
 def _ctx(tmp_path):
     from avp_cli import osb
-    from avp_cli.agent import SandboxContext
+    from avp_cli.agent import RunContext
 
     ws = tmp_path / "ws"
     ws.mkdir(exist_ok=True)
-    return SandboxContext(
-        connection=osb.Connection(domain="127.0.0.1:1", api_key="k"), workspace=ws
-    )
+    return RunContext(connection=osb.Connection(domain="127.0.0.1:1", api_key="k"), workspace=ws)
 
 
 @pytest.fixture
@@ -565,9 +565,9 @@ def _seed_trajectory(path, *, complete: bool, text: str = "all done") -> None:
 
 
 def _poison_agent(tmp_path):
-    from avp_cli.agent import SandboxedAgent
+    from avp_cli.agent import PreparedAgent
 
-    return SandboxedAgent(
+    return PreparedAgent(
         name="poison", image="img:test", command=(sys.executable, "-c", _POISON_AGENT)
     )
 

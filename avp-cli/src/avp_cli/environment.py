@@ -16,6 +16,9 @@ and cached by `avp_cli.images`. `paths` and `files` seed a fresh per-run
 workspace on the host, which is bind-mounted into the sandbox. `setup` runs
 inside the sandbox in the workspace before the agent starts. `net` extends the
 default-deny egress allowlist; `resources` caps cpu/memory.
+
+The local runtime accepts only `paths`, `files`, and `setup`. It seeds the same
+workspace but adds no OS confinement, network policy, or resource limits.
 """
 
 from __future__ import annotations
@@ -113,8 +116,8 @@ class Environment:
 def seed_workspace(env: Environment, workspace: Path, *, base_dir: Path) -> Path:
     """Build the per-run workspace on the host: copied `paths`, then `files`.
 
-    The workspace is bind-mounted into the sandbox; it is the only host surface
-    a run touches. Fresh each run."""
+    Containers bind-mount this directory; local runs receive its path through
+    AVP_WORKSPACE. Local execution can also access other host paths."""
     workspace.mkdir(parents=True, exist_ok=True)
     _copy_paths(env.paths, workspace, base_dir=base_dir)
     seed_files(env.files, workspace, base_dir=base_dir)  # inline files layer on top
