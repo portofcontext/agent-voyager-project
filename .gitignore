@@ -63,3 +63,5 @@ package-lock.json
 !agents/avp-gemini-cli/typescript/package-lock.json
 !agents/avp-opencode/typescript/package-lock.json
 
+# Misc
+.scratch
