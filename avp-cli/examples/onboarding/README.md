@@ -78,7 +78,7 @@ uv run avp agent install codex --as codex-onboarding --from dist/agents/codex
 uv run avp agent install claude-code --as claude-onboarding --from dist/agents/claude-code
 uv run avp agent install pi
 uv run python avp-cli/examples/onboarding/build_commissions.py \
-  --wheel dist/avp_cli-0.4.0-py3-none-any.whl \
+  --wheel dist/avp_cli-0.5.0-py3-none-any.whl \
   --out dist/onboarding --repetitions 1 \
   --agent codex=codex-onboarding --agent claude-code=claude-onboarding
 uv run python avp-cli/examples/onboarding/run.py dist/onboarding \
