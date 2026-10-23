@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `avp run` and `avp eval run` accept `--runtime local` to run installed agents
+  without Docker or additional OS isolation. Runs keep fresh SDK state, saved
+  workspaces and trajectories, process group cleanup, and an explicit runtime
+  in their run manifest. Container-only environment settings are rejected.
+- A reproducible onboarding experiment compares repository, prompt, CLI docs,
+  and skill inputs on the same install-and-evaluate task, with separate trial
+  workspaces and checks of the saved child artifacts.
+
+### Fixed
+
+- Local execution inherits the caller's environment, with explicit launch and
+  manifest overrides, instead of dropping settings through a fixed allowlist.
+- OpenCode preserves caller OpenTelemetry settings in native subprocesses.
+- Claude materializes nested inline skill references before starting the SDK.
+- Codex honors the launcher's native sandbox configuration instead of forcing
+  a nested workspace sandbox inside containers.
+- Codex records native client-side tool search instead of failing before MCP
+  tool execution on models that use deferred discovery.
+- Evaluation Commissions report the installed CLI's supervisor version. Codex
+  runtime version checks use installed SDK metadata, with a drift check against
+  the captured tool definitions.
+
 ## 0.4.0 (2026-10-21)
 
 ### Fixed

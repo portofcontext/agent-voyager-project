@@ -13,6 +13,9 @@ Two backends:
   virtio-gpu Venus, so an in-process local model (goose's `local` provider) runs
   GPU-accelerated. Selected with `AVP_RUNTIME=libkrun`.
 
+The `local` selection runs installed subprocesses in `agent.py` and does not
+create a container or implement this sandbox interface.
+
 The selection is a deliberate boundary for the planned move off OpenSandbox; see the
 coupling map in the design notes. The interface is intentionally minimal so a
 third backend (e.g. OpenShell) drops in behind the same `Box`.
@@ -213,14 +216,17 @@ class LibkrunRuntime:
         return LibkrunBox(name, penv)
 
 
-RUNTIMES = ("opensandbox", "libkrun")
+RUNTIMES = ("opensandbox", "libkrun", "local")
 
 
 def resolve_runtime_name(cli_value: str | None) -> str:
     """The backend name: the explicit CLI `--runtime` wins, else the `AVP_RUNTIME`
     env (a documented fallback for CI and any path without the flag), else the
     default `opensandbox`."""
-    return cli_value or os.environ.get("AVP_RUNTIME") or "opensandbox"
+    name = cli_value or os.environ.get("AVP_RUNTIME") or "opensandbox"
+    if name not in RUNTIMES:
+        raise ValueError(f"unknown runtime {name!r}; choose from {', '.join(RUNTIMES)}")
+    return name
 
 
 def get_runtime(name: str, connection_config: object) -> OpenSandboxRuntime | LibkrunRuntime:
@@ -228,4 +234,6 @@ def get_runtime(name: str, connection_config: object) -> OpenSandboxRuntime | Li
     OpenSandbox backend (the libkrun backend talks to a podman machine)."""
     if name == "libkrun":
         return LibkrunRuntime()
-    return OpenSandboxRuntime(connection_config=connection_config)
+    if name == "opensandbox":
+        return OpenSandboxRuntime(connection_config=connection_config)
+    raise ValueError(f"runtime {name!r} is not a container backend")

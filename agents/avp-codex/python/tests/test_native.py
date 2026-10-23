@@ -33,17 +33,34 @@ def native_context(tmp_path, monkeypatch):
     for name, value in directory_env(tmp_path / "runtime", tmp_path).items():
         Path(value).mkdir(parents=True, exist_ok=True)
         monkeypatch.setenv(name, value)
+    (Path(os.environ["CODEX_HOME"]) / "config.toml").write_text(
+        'sandbox_mode = "danger-full-access"\n'
+    )
 
 
 @pytest.mark.parametrize(
     "operation",
-    ["mcp", "mcp_parallel", "mcp_fail", "shell_error", "shell_poll", "http_retry", "partial_retry"],
+    [
+        "mcp",
+        "mcp_search",
+        "mcp_parallel",
+        "mcp_fail",
+        "shell_error",
+        "shell_poll",
+        "http_retry",
+        "partial_retry",
+    ],
 )
 def test_native_roundtrip(tmp_path, monkeypatch, operation):
     requests = []
     observed = []
 
     class ObservedSDK(agent.AsyncCodexClient):
+        async def thread_start(self, params):
+            started = await super().thread_start(params)
+            assert started.sandbox.model_dump(mode="json")["type"] == "dangerFullAccess"
+            return started
+
         async def next_turn_notification(self, turn_id):
             event = await super().next_turn_notification(turn_id)
             observed.append((event.method, notification_params(event)))
@@ -64,7 +81,19 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
                     self.send_error(503, "scripted transient failure")
                     return
                 index -= 1
-            if index == 1:
+            if operation == "mcp_search" and index == 1:
+                item = {
+                    "type": "tool_search_call",
+                    "id": "tsc_1",
+                    "call_id": "search_1",
+                    "status": "completed",
+                    "execution": "client",
+                    "arguments": {"query": "avptest echo", "limit": 5},
+                }
+            elif index == 1 or (operation == "mcp_search" and index == 2):
+                if operation == "mcp_search":
+                    outputs = [i for i in body["input"] if i["type"] == "tool_search_output"]
+                    assert outputs and "Avptest_Echo" in json.dumps(outputs)
                 item = {
                     "type": "function_call",
                     "id": "fc_1",
@@ -175,6 +204,7 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         code, events = run_cli(
             tmp_path,
             raises=operation == "partial_retry",
+            model="openai/gpt-5.5" if operation == "mcp_search" else "openai/gpt-5-mini",
             provider={"id": "openai", "base_url": f"http://127.0.0.1:{server.server_port}/v1"},
             mcp_servers=[
                 {
@@ -193,7 +223,7 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         assert any("partial response" in e["data"].get("avp.error.message", "") for e in events)
         return
     assert code == 0
-    assert len(requests) == (3 if operation in ("shell_poll", "http_retry") else 2)
+    assert len(requests) == (3 if operation in ("shell_poll", "http_retry", "mcp_search") else 2)
     assert events[-1]["data"]["avp.reason"] == "converged"
     returned = next(
         e["data"]["avp.tool_result"]
@@ -202,13 +232,13 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         and e["data"]["avp.tool_result"]["tool_use_id"] == "call_1"
     )
     assert returned["is_error"] is (operation == "shell_error")
-    if operation in ("mcp", "mcp_parallel", "mcp_fail", "http_retry"):
+    if operation in ("mcp", "mcp_search", "mcp_parallel", "mcp_fail", "http_retry"):
         assert "AVP-MCP-ROUNDTRIP" in json.dumps(returned["content"])
     assert [
         e["data"]["avp.usage"]["input_tokens"]
         for e in events
         if e["type"] == "avp.assistant_message"
-    ] == ([100, 200, 300] if operation == "shell_poll" else [100, 200])
+    ] == ([100, 200, 300] if operation in ("shell_poll", "mcp_search") else [100, 200])
     invoked = [e["data"] for e in events if e["type"] == "avp.tool_invoked"]
     returned_ids = [
         e["data"]["avp.tool_result"]["tool_use_id"]
@@ -220,8 +250,20 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         if operation == "mcp_fail"
         else ["call_1", "call_2"]
         if operation in ("mcp_parallel", "shell_poll")
+        else ["call_1", "search_1"]
+        if operation == "mcp_search"
         else ["call_1"]
     )
+    if operation == "mcp_search":
+        assert [e["avp.tool.name"] for e in invoked] == ["tool_search", "mcp__avptest.Avptest_Echo"]
+        search = next(
+            e["data"]["avp.tool_result"]
+            for e in events
+            if e["type"] == "avp.tool_returned"
+            and e["data"]["avp.tool_result"]["tool_use_id"] == "search_1"
+        )
+        assert search["is_error"] is False
+        assert "Avptest_Echo" in json.dumps(search["structured_content"])
     if operation == "mcp_fail":
         results = {
             e["data"]["avp.tool_result"]["tool_use_id"]: e["data"]["avp.tool_result"]
@@ -262,8 +304,12 @@ def test_native_roundtrip(tmp_path, monkeypatch, operation):
         assert commands
         assert all("name" not in i and "arguments" not in i for i in commands)
     usage_events = [d["tokenUsage"] for m, d in observed if m == "thread/tokenUsage/updated"]
-    assert usage_events[-1]["last"]["inputTokens"] == (300 if operation == "shell_poll" else 200)
-    assert usage_events[-1]["total"]["inputTokens"] == (600 if operation == "shell_poll" else 300)
+    assert usage_events[-1]["last"]["inputTokens"] == (
+        300 if operation in ("shell_poll", "mcp_search") else 200
+    )
+    assert usage_events[-1]["total"]["inputTokens"] == (
+        600 if operation in ("shell_poll", "mcp_search") else 300
+    )
     # No host skill catalog can leak into the model's instructions.
     assert "<skills_instructions>" not in json.dumps(requests[0])
     assert any(item["type"] == "function_call_output" for item in requests[-1]["input"])

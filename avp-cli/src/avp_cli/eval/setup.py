@@ -20,8 +20,9 @@ from dataclasses import dataclass
 from avp.commission import Commission, SupervisorPreamble
 from avp_cli.eval.dataset import Item
 from avp_cli.eval.template import render
+from avp_cli.run_manifest import _cli_version
 
-_SUPERVISOR = SupervisorPreamble(name="avp-cli", version="0.1.0")
+_SUPERVISOR = SupervisorPreamble(name="avp-cli", version=_cli_version())
 
 
 @dataclass(frozen=True)

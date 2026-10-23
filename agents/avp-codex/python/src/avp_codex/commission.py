@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from functools import cache
+from importlib.metadata import version
 from importlib.resources import files
 
 from avp.commission import Commission, McpServerStdio
@@ -13,7 +14,7 @@ from avp.preflight import preflight
 from avp.trajectory import ErrorCode
 
 AGENT_NAME = "avp-codex"
-CODEX_VERSION = "0.162.1"
+CODEX_VERSION = version("openai-codex")
 # Available native surface for the pinned runtime. Model metadata determines
 # whether apply_patch is exposed; shell execution uses the unified exec pair.
 BUILTIN_TOOLS = [

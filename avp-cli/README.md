@@ -30,8 +30,11 @@ bar. They measure different things, and a good benchmark reports both.
 uv tool install avp-cli         # installs the `avp` command (or: pipx install avp-cli)
 
 avp agent install --all            # every built-in agent, at this CLI's versions
-export ANTHROPIC_API_KEY="<your-api-key>"
+avp env secret create anthropic    # prompts for your API key
 avp init capitals --agent claude-code
+for id in capitals-baseline capitals-few-shot; do
+  avp cm create "$id" --from "$id" --force --provider-id anthropic --credential anthropic
+done
 avp eval run capitals.eval.json    # paid model calls; prints the ranked board
 avp eval share           # upload the most recent run, print a short link
 ```
@@ -39,7 +42,7 @@ avp eval share           # upload the most recent run, print a short link
 Contributors working in the repo: `make sync && source .venv/bin/activate`
 (then use `avp …`).
 
-**Docker is the one prerequisite.** Every agent run executes inside an
+**Docker is required for the default runtime.** Agent runs execute inside an
 [OpenSandbox](https://github.com/opensandbox-group/OpenSandbox) container; the
 CLI manages the rest itself (a local control-plane server under
 `~/.avp/opensandbox/`, derived images, egress policy). Have Docker Desktop,
@@ -47,17 +50,76 @@ OrbStack, or colima running and you're set; the first run pulls/builds images
 and is slower, every later run reuses them. `avp sandbox status` shows the
 stack's health.
 
-**Credentials.** Without a vault credential, the CLI forwards only the selected
-provider's API key and endpoint variables (`<PROVIDER>_API_KEY`, `_HOST`, and
-`_BASE_URL`; see [PATTERNS](../PATTERNS.md) for how they differ). The Commission's provider (or its model origin when omitted)
-selects credentials and Goose routing; host or manifest `GOOSE_PROVIDER` values
-do not override that selection. Anthropic runs also accept
-`CLAUDE_CODE_OAUTH_TOKEN` for claude-code subscriptions; Google/Gemini runs accept
-either provider's API-key variable. Other settings must be explicit in the agent
-manifest. With a vault credential, the model-provider secret stays in the host
-broker and the agent receives only a random per-run authentication token. MCP
-vault routes use the same token through their request headers. The broker rejects
-missing or invalid tokens. It remains reachable through the host's Docker bridge.
+To run installed agents directly in the current environment, select `local`:
+
+```bash
+avp eval run capitals.eval.json --runtime local
+```
+
+The local runtime needs no Docker and adds no OS isolation. It inherits any
+outer container or VM boundary and each agent's native restrictions. Use it for
+trusted local work or inside an environment that already provides confinement.
+The CLI gives each agent run fresh home and SDK state directories, saves its
+workspace and trajectory, and terminates its process group on exit or timeout.
+Local processes inherit the caller's environment. The launcher overrides its
+workspace and state directories; manifest settings and explicit Commission
+provider routing take precedence over inherited values.
+Detached processes are not contained. It records the selected runtime in
+`run.json`; resuming with a different runtime is refused.
+
+Run commands also accept `AVP_RUNTIME=local`; an explicit `--runtime` wins.
+There is no automatic fallback when Docker fails. The local environment accepts
+`paths`, `files`, and `setup`. Container `image`, `packages`, `net`, and `resources`
+settings are rejected: install dependencies in the current environment instead.
+Setup commands run in the saved workspace and count toward the run timeout.
+Agent commands bootstrap in their manifest directory; stock entrypoints then
+enter `AVP_WORKSPACE`. Relative stdio MCP commands resolve in that workspace.
+
+The optional `libkrun` runtime supports offline runs only. Networked runs fail
+closed until filtered egress is supported; use the default `opensandbox` runtime
+when a Commission or environment requires network access.
+
+## Model authentication
+
+Store an API key for the provider used by your Commission's model. Each command
+prompts for the key:
+
+| Provider | Create a key | Store it |
+|---|---|---|
+| OpenAI | [OpenAI dashboard](https://platform.openai.com/api-keys) | `avp env secret create openai` |
+| Anthropic | [Claude Console](https://platform.claude.com/settings/keys) | `avp env secret create anthropic` |
+| Google | [AI Studio](https://aistudio.google.com/apikey) | `avp env secret create google` |
+
+`avp env secret list` shows stored names without revealing their values. Keys
+live in `~/.avp/secrets.toml`, a plaintext file readable only by your user.
+
+Reference the stored key when creating a Commission:
+
+```bash
+avp cm create my-task --agent claude-code --provider-id anthropic --credential anthropic
+avp run --agent claude-code --commission my-task "Say hello"
+```
+
+For an existing Commission, add this provider field to its JSON:
+
+```json
+"provider": {"id": "anthropic", "credential": {"vault": "anthropic"}}
+```
+
+Storing a key does not attach it automatically. The [quickstart](#quickstart)
+shows how to attach it to both sample Commissions using the CLI.
+
+Models use `origin/model` slugs. Codex uses OpenAI; Claude Code uses Anthropic.
+Pi and other multi-provider agents use the selected model's provider.
+`avp agent describe <name>` lists the adapter's capabilities. Keys need access
+and quota for that model; runs use provider API billing.
+
+### Credential routing
+
+The host-side broker resolves the stored key and adds it to provider requests.
+The launched agent receives a per-run token; the actual key stays out of
+Commissions and container files. With `--runtime local`, agents can access the
+host filesystem, including the credential store.
 
 **MCP servers with OAuth.** Run `avp env secret login <handle> --url <mcp-url>`
 once to sign in through your browser, then set `"auth": {"vault": "<handle>"}`
@@ -65,10 +127,6 @@ on the server in the Commission. The login is stored on the host in
 `~/.avp/oauth/` and the broker refreshes the token during runs, so the agent
 never sees it. Servers without dynamic client registration need
 `--client-id` (and `--client-secret`) for a client you registered yourself.
-
-The optional `libkrun` runtime supports offline runs only. Networked runs fail
-closed until filtered egress is supported; use the default `opensandbox` runtime
-when a Commission or environment requires network access.
 
 ## Where things live
 
@@ -222,7 +280,7 @@ avp agent list                   # each agent, where it came from, and readiness
 - **manifest**: your own agent, installed by name from its
   `avp-conformance.json`. The manifest needs a `container` block
   (`{"install": ["<Dockerfile RUN step>", ...], "command": ["<argv>", ...]}`),
-  because runs execute in a Linux sandbox.
+  for container runs. `--runtime local` uses the installed host command.
 - **local build**: a built-in agent built from your checkout, installed under
   its own name so a board never mistakes it for the release.
 
@@ -281,7 +339,7 @@ avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # 
 avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
 ```
 
-`avp run` compiles the env + the agent's container recipe into a derived image
+With the default runtime, `avp run` compiles the env + the agent's container recipe into a derived image
 (`avp-env:<content-hash>`, built once, then cached), seeds the workspace on the
 host, boots a sandbox with the workspace bind-mounted, runs `setup`, then
 commissions the agent. The trajectory streams live; the workspace persists
@@ -296,6 +354,8 @@ into the workspace fresh each run), `files` (inline or `@local`), `setup`
 `net`), `net` (extra egress domains), `resources` (`{cpu, memory}`).
 `avp eval run --env <name>` runs a whole eval inside the same environment (one
 workspace shared across cells, one fresh sandbox per cell).
+With `--runtime local`, each cell instead gets fresh local SDK state; the seeded
+workspace is still shared across cells.
 
 ## Outputs
 
@@ -319,7 +379,8 @@ is: run the eval → share it → write.
 `avp eval` drives any conforming AVP agent through the same contract the
 conformance harness uses: `<agent> run --commission <file> --out <ndjson>`,
 declared in the agent's `avp-conformance.json` — executed inside an OpenSandbox
-container built from the env's derived image. For each commission/item it
+container built from the env's derived image by default, or as a local subprocess
+with `--runtime local`. For each commission/item it
 composes a Commission, boots a fresh sandbox (workspace + io dirs
 bind-mounted), runs the agent, reduces the trajectory, extracts the final
 answer, scores it by the named scorer, and ranks a `Board`.
@@ -339,7 +400,7 @@ src/avp_cli/
   osb.py            # the managed OpenSandbox control plane (config, spawn, egress policy)
   images.py         # env + agent recipe -> cached derived image (avp-env:<hash>)
   environment.py    # the env spec (image/packages/paths/files/setup/net/resources) + seeding
-  agent.py          # run_agent: the run contract executed inside a sandbox
+  agent.py          # run_agent: the file contract through container or local launch
   agents.py         # built-in agents (agents.json) + resolution of installed agents
   release_manifest.py  # avp-release.json: how a release installs + its sandbox image recipe
   agent_install.py  # `avp agent install`: avp releases, custom manifests, local builds

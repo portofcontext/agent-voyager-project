@@ -4,7 +4,7 @@ Codex defines its built-in tools in the binary and sends them only on the
 model request. This runs the adapter once per verified model against a local
 stand-in for the Responses API, records the `tools` on the first request,
 refuses it (400), and writes each built-in's description and input schema.
-Run after bumping CODEX_VERSION:
+Run after updating the openai-codex dependency pin:
 
     uv run python agents/avp-codex/python/scripts/capture_tools.py
 """

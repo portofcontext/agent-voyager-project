@@ -7,7 +7,7 @@ its `installed.json` says where its code came from:
   release of the AVP repo (or `AVP_AGENT_REPO`'s fork). Built-in names are
   reserved for these.
 - **manifest**: a custom agent, installed by name from its own
-  `avp-conformance.json`, which must carry a `container` block.
+  `avp-conformance.json`, with a `container` block for container runtimes.
 - **local build**: a built-in agent built from your checkout, installed under
   its own name (`--as`). Its artifacts are copied into the sandbox image.
 
@@ -124,7 +124,7 @@ def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRec
     from, and a local build copies its own into the image, both as the
     release's manifest says. A manifest agent (installed or a one-off path)
     brings its `container` block. A manifest agent without one cannot run,
-    since runs are always sandboxed. `gpu` requests a release's GPU variant; a
+    when a container runtime is selected. `gpu` requests a release's GPU variant; a
     `container` block is used as-is either way."""
     record = agent.record or {}
     if agent.origin in ("release", "local") and record.get("agent") in AGENT_SOURCES:
@@ -143,7 +143,7 @@ def container_recipe(agent: ResolvedAgent, *, gpu: bool = False) -> ContainerRec
             env=tuple(spec.env.items()),
         )
     raise NoContainerRecipe(
-        f"agent '{agent.name}' has no container recipe: runs execute in a Linux "
+        f"agent '{agent.name}' has no container recipe: this runtime executes in a Linux "
         "sandbox, so its manifest needs a `container` block "
         '({"install": ["<RUN step>", ...], "command": ["<argv>", ...]}).'
     )

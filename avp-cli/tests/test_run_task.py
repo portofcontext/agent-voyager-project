@@ -15,7 +15,7 @@ from avp_conformance.manifest import AgentManifest
 
 from avp_cli import agent as agent_mod
 from avp_cli import cli, images, osb
-from avp_cli.agent import SandboxedAgent
+from avp_cli.agent import PreparedAgent
 from avp_cli.agents import NoContainerRecipe, ResolvedAgent
 
 
@@ -35,7 +35,7 @@ def _stub_stack(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli,
         "_prepare_agent",
-        lambda agent, env_obj, quiet, runtime_name="opensandbox": SandboxedAgent(
+        lambda agent, env_obj, quiet, runtime_name="opensandbox": PreparedAgent(
             name=agent.name, image="img:test", command=("agent-bin",)
         ),
     )
@@ -156,7 +156,7 @@ def test_eval_stops_when_an_agent_image_fails_to_build(avp_home, monkeypatch) ->
     def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
         if agent.name == "openai-agents":
             raise images.ImageBuildError("docker build failed: pypi unreachable")
-        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+        return PreparedAgent(name=agent.name, image="img:test", command=("agent-bin",))
 
     assert _eval_with(monkeypatch, avp_home, prepare) == 1
 
@@ -165,7 +165,7 @@ def test_eval_stops_when_an_agent_cannot_run_here(avp_home, monkeypatch) -> None
     def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
         if agent.name == "openai-agents":
             return None
-        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+        return PreparedAgent(name=agent.name, image="img:test", command=("agent-bin",))
 
     assert _eval_with(monkeypatch, avp_home, prepare) == 2
 

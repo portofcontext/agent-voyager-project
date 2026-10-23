@@ -85,7 +85,8 @@ class Broker:
     then `start()`. The sandbox reaches it at `base_url()`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, local: bool = False) -> None:
+        self._local = local
         self.token = secrets.token_urlsafe(32)
         self._routes: dict[str, Route] = {}
         self._server: ThreadingHTTPServer | None = None
@@ -107,7 +108,8 @@ class Broker:
 
     def base_url(self) -> str:
         """The URL the sandboxed agent uses to reach the broker."""
-        return f"http://{SANDBOX_HOST_ALIAS}:{self.port}"
+        host = "127.0.0.1" if self._local else SANDBOX_HOST_ALIAS
+        return f"http://{host}:{self.port}"
 
     def route_url(self, key: str) -> str:
         """The full broker URL for a given route key."""
@@ -117,7 +119,7 @@ class Broker:
         # Docker bridges need host reachability; every routed request requires
         # the per-run token. Port 0 allocates an ephemeral listener.
         handler = _make_handler(self)
-        self._server = ThreadingHTTPServer(("0.0.0.0", 0), handler)
+        self._server = ThreadingHTTPServer(("127.0.0.1" if self._local else "0.0.0.0", 0), handler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 

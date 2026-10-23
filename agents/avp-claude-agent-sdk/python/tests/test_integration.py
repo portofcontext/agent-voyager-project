@@ -206,6 +206,35 @@ def test_no_built_in_skills_hides_them_from_the_model(model: _Model) -> None:
     assert _started(events).get("avp.skills", []) == []
 
 
+def test_inline_skill_nested_reference_reaches_native_read(model: _Model, tmp_path) -> None:
+    reference = tmp_path / ".claude/skills/onboarding/references/setup/guide.md"
+    model.script.append(
+        _sse(
+            "Read the skill reference",
+            {
+                "id": "read_reference",
+                "name": "Read",
+                "input": {"file_path": str(reference)},
+            },
+        )
+    )
+    events = _run(
+        skills=[
+            {
+                "id": "onboarding",
+                "files": {
+                    "SKILL.md": "---\nname: onboarding\ndescription: Install the test tool\n---\nRead references/setup/guide.md.",
+                    "references/setup/guide.md": "NESTED_REFERENCE_ARRIVED",
+                },
+            }
+        ]
+    )
+    assert events[-1]["data"]["avp.reason"] == "converged"
+    returned = [e for e in events if e["type"] == "avp.tool_returned"]
+    assert "NESTED_REFERENCE_ARRIVED" in json.dumps(returned)
+    assert "NESTED_REFERENCE_ARRIVED" in json.dumps(model.requests[-1]["messages"])
+
+
 def test_the_probe_reaches_no_model(model: _Model) -> None:
     """The probe session's own prompt never reaches the endpoint: every request
     the model sees belongs to the run, so the trajectory accounts for all spend."""

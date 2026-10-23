@@ -539,3 +539,13 @@ def test_each_response_is_timed_from_its_request(script, tmp_path):
     ]
     assert 150 <= first < 300
     assert 50 <= second < 300, "the second response excludes the tool's run time"
+
+
+def test_captured_tools_match_the_installed_sdk_version():
+    import json
+    from importlib.metadata import version
+    from importlib.resources import files
+
+    capture = json.loads(files("avp_codex").joinpath("tools.json").read_text())
+    assert CODEX_VERSION == version("openai-codex")
+    assert capture["codex"] == CODEX_VERSION, "Regenerate tools.json after changing the SDK pin"

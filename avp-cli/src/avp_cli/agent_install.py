@@ -8,7 +8,7 @@ Three ways in, recorded in each install's `installed.json` as `from`:
   is the normal path, and `avp agent install --all` installs every one.
 - **manifest** (`install_manifest`): a custom agent, installed by name from its
   own `avp-conformance.json`. Built-in names are reserved, and the manifest
-  must carry a `container` block because runs are sandboxed.
+  needs a `container` block only for container runtimes.
 - **local build** (`install_local`): a built-in agent built from a checkout
   (`make build-agents`), installed under its own `--as` name from a directory
   laid out like a release. The directory is kept in `artifacts/` and copied
@@ -285,16 +285,9 @@ def install_manifest(name: str, manifest: str | Path, *, force: bool = False) ->
     if not path.is_file():
         raise InstallError(f"manifest not found: {manifest}")
     try:
-        loaded, _ = load_manifest(path)
+        load_manifest(path)
     except Exception as exc:
         raise InstallError(f"{manifest} is not a valid avp-conformance.json: {exc}") from exc
-    if loaded.container is None:
-        raise InstallError(
-            f"{manifest} has no `container` block.\n"
-            "  runs happen in a Linux sandbox, so the manifest must say how to install and "
-            'start the agent: {"container": {"install": ["<RUN step>", ...], '
-            '"command": ["<argv>", ...]}}'
-        )
     d = _prepare_dir(name, force=force)
     _write_record(d, {"name": name, "from": "manifest", "manifest": str(path), "kind": "manifest"})
     return InstallResult(name, "-", "manifest", "manifest", d)

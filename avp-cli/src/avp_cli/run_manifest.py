@@ -70,6 +70,7 @@ def write(
     max_items: int | None,
     threshold_override: float | None = None,
     agent_sources: list[dict] | None = None,
+    runtime_name: str = "opensandbox",
 ) -> Path:
     """Write `<out_dir>/run.json` and return its path. Overwrites any existing one
     (a re-run into the same dir reflects the latest inputs)."""
@@ -91,6 +92,7 @@ def write(
         "eval_config_path": str(eval_config_path) if eval_config_path else None,
         "eval_config": eval_config,
         "run": {
+            "runtime": runtime_name,
             "agents": list(agents),
             # Where each agent's code came from: an avp release (version, repo),
             # a manifest (path), or a local build (artifact hashes).

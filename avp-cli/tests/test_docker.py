@@ -15,7 +15,7 @@ import pytest
 
 from avp_cli import environment as env_mod
 from avp_cli import images, osb
-from avp_cli.agent import SandboxContext, SandboxedAgent, run_agent
+from avp_cli.agent import PreparedAgent, RunContext, run_agent
 
 # The Docker probe lives in the `server` fixture (every test here uses it), not
 # in an import-time skipif: collection must stay instant for `-m "not docker"`.
@@ -72,7 +72,7 @@ def server(tmp_path_factory):
 
 def _ctx(server, workspace):
     workspace.mkdir(parents=True, exist_ok=True)
-    return SandboxContext(connection=server, workspace=workspace)
+    return RunContext(connection=server, workspace=workspace)
 
 
 def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
@@ -84,7 +84,7 @@ def test_trajectory_streams_through_the_bind_mount(server, tmp_path) -> None:
 
     from avp.commission import Commission
 
-    agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
+    agent = PreparedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
     commission = Commission(
         schema_version="0.1",
         run_id="docker-test",
@@ -122,7 +122,7 @@ def test_nonzero_exit_reports_stderr_tail(server) -> None:
     ctx = _ctx(server, ws)
     (ws / "agent.sh").write_text("#!/bin/sh\necho boom-diagnostic >&2\nexit 3\n")
 
-    agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
+    agent = PreparedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
     events, err = run_agent(
         agent,
         ctx,
@@ -217,7 +217,7 @@ def test_vault_broker_keeps_secret_out_of_sandbox(server, monkeypatch) -> None:
     ctx = _ctx(server, ws)
     (ws / "agent.sh").write_text(_AGENT_ECHOENV_SH)
 
-    agent = SandboxedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
+    agent = PreparedAgent(name="fake", image=_IMAGE, command=("sh", "/avp/workspace/agent.sh"))
     commission = Commission(
         schema_version="0.1",
         run_id="vault",

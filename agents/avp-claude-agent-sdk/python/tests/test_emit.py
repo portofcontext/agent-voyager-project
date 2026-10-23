@@ -290,7 +290,8 @@ def test_client_normalizes_missing_options() -> None:
     assert isinstance(client._original_options, ClaudeAgentOptions)
 
 
-def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
+@pytest.mark.parametrize("reference", ["ref.md", "references/setup/guide.md"])
+def test_inline_skill_is_materialized_to_disk_and_named(tmp_path, reference) -> None:
     """An inline Commission skill must reach the agent: its files written under
     `<cwd>/.claude/skills/<id>/` (where the CLI discovers project skills) AND its
     name passed in `options.skills`. Regression: the onboarding eval showed
@@ -304,18 +305,33 @@ def test_inline_skill_is_materialized_to_disk_and_named(tmp_path) -> None:
         schema_version="0.1",
         run_id="x",
         model="anthropic/claude-haiku-4-5",
-        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody", "ref.md": "x"}}],
+        skills=[{"id": "avp", "files": {"SKILL.md": "---\nname: avp\n---\nbody", reference: "x"}}],
     )
     options = apply_commission(commission, ClaudeAgentOptions(cwd=str(tmp_path)))
 
     skill_md = tmp_path / ".claude" / "skills" / "avp" / "SKILL.md"
     assert skill_md.read_text() == "---\nname: avp\n---\nbody"
-    assert (tmp_path / ".claude" / "skills" / "avp" / "ref.md").read_text() == "x"
+    assert (tmp_path / ".claude" / "skills" / "avp" / reference).read_text() == "x"
     # No built-in allow-list: every skill, so the filter keeps the built-ins.
     assert options.skills == "all"
     # The materialized skill is a PROJECT skill; it loads only if setting_sources
     # includes "project". Must be added even when the caller isolated with [].
     assert "project" in (options.setting_sources or [])
+
+
+@pytest.mark.parametrize("reference", ["../outside.md", "/outside.md"])
+def test_inline_skill_reference_stays_in_its_directory(tmp_path, reference) -> None:
+    from avp.commission import Commission
+    from avp_claude_agent_sdk._commission import apply_commission
+
+    commission = Commission(
+        schema_version="0.1",
+        run_id="x",
+        model="anthropic/claude-haiku-4-5",
+        skills=[{"id": "avp", "files": {"SKILL.md": "body", reference: "x"}}],
+    )
+    with pytest.raises(ValueError, match="escapes the skill directory"):
+        apply_commission(commission, ClaudeAgentOptions(cwd=str(tmp_path)))
 
 
 @pytest.mark.parametrize(
