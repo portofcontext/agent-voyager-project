@@ -10,7 +10,11 @@
   },
   "scorer": {
     "name": "llm-judge",
-    "model": "claude-opus-4-8"
+    "model": "anthropic/claude-opus-4-8",
+    "provider": {
+      "id": "anthropic",
+      "credential": { "vault": "anthropic" }
+    }
   },
   "commissions": ["browsecomp-claude"]
 }

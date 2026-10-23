@@ -20,12 +20,14 @@ reward efficiency (fewer turns, no tool errors).
 
 from __future__ import annotations
 
+import asyncio
 import json
-import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from avp.commission import Provider
+from avp_cli import oauth, vault
 from avp_cli.eval import template
 from avp_cli.observability import Summary
 
@@ -221,28 +223,65 @@ class LLMJudgeScorer:
     `browsecomp_eval.py` reports). Confidence is parsed into `detail` only; it is
     not aggregated (no calibration metric on the board yet).
 
-    Crosses a new boundary (scorer ↔ grader model) — the one network-calling scorer.
-    Needs the `llm-judge` extra (the `anthropic` SDK) and `ANTHROPIC_API_KEY`.
-    Tests inject a fake `client`; production lazily builds `anthropic.Anthropic()`.
+    Uses Pydantic AI's direct model requests (`llm-judge` extra). Provider
+    credentials are resolved from AVP's vault on the host for each request.
     """
 
-    grader_model: str = "claude-opus-4-8"
+    grader_model: str
+    provider: Provider | None = None
     template: str = BROWSECOMP_GRADER_TEMPLATE
     max_tokens: int = 2048
     name: str = "llm-judge"
-    client: Any = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        origin, sep, model = (self.grader_model or "").partition("/")
+        if not origin or not sep or not model:
+            raise ValueError("model is required as an origin/model slug, e.g. openai/gpt-5-mini")
+        if self.max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
+
+    @property
+    def provider_id(self) -> str:
+        return self.provider.id if self.provider else self.grader_model.split("/", 1)[0]
 
     def _grade(self, prompt: str) -> str:
-        if self.client is None:
-            import anthropic  # provided by the `llm-judge` extra
+        return asyncio.run(self._request(prompt))
 
-            self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        msg = self.client.messages.create(
-            model=self.grader_model,
-            max_tokens=self.max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+    async def _request(self, prompt: str) -> str:
+        from pydantic_ai.direct import model_request
+        from pydantic_ai.messages import ModelRequest, TextPart
+        from pydantic_ai.models import infer_model
+        from pydantic_ai.providers import infer_provider_class
+
+        kwargs: dict[str, Any] = {}
+        secret = vault.resolve_ref(self.provider.credential) if self.provider else None
+        if isinstance(secret, oauth.Token):
+            secret = secret.access_token()
+        if secret is not None:
+            kwargs["api_key"] = secret
+        if self.provider and self.provider.base_url:
+            kwargs["base_url"] = self.provider.base_url
+        origin, model_name = self.grader_model.split("/", 1)
+        # OpenRouter addresses models by their full origin/model slug.
+        if self.provider_id == "openrouter" and origin != "openrouter":
+            model_name = self.grader_model
+        try:
+            provider = infer_provider_class(self.provider_id)(**kwargs)
+            # Each call owns its client and event loop, including concurrent cells.
+            async with provider:
+                model = infer_model(
+                    f"{self.provider_id}:{model_name}", provider_factory=lambda _: provider
+                )
+                response = await model_request(
+                    model,
+                    [ModelRequest.user_text_prompt(prompt)],
+                    model_settings={"max_tokens": self.max_tokens, "timeout": 60},
+                )
+            return "".join(p.content for p in response.parts if isinstance(p, TextPart))
+        except Exception as exc:
+            # Provider errors can echo request details; never save a resolved key.
+            message = str(exc).replace(secret, "[redacted]") if secret else str(exc)
+            raise RuntimeError(message) from None
 
     def score(self, item: Any, output: FinalOutput, summary: Summary) -> Score:
         # Strict render (the template maps a fixed variable set): a custom

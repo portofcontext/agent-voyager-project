@@ -38,7 +38,7 @@ dependencies = [
 [project.optional-dependencies]
 huggingface = ["datasets>=3"]
 parsebench = ["datasets>=3", "rapidfuzz>=3"]
-llm-judge = ["anthropic>=0.40"]
+llm-judge = ["avp-cli[llm-judge]"]
 
 [dependency-groups]
 dev = [

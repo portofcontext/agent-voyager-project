@@ -193,10 +193,44 @@ A commission file (`~/.avp/commissions/terse.json`) is a **raw AVP wire
   - `exact-match` — answer text equals `expected` (normalized).
   - `structural-match` — fraction of `expected` dict keys the JSON answer got right; `threshold` decides pass.
   - `structural-fidelity` — directional HTML fidelity vs a reference (ParseBench-style); needs the `parsebench` extra.
+  - `llm-judge` — grades answers with a separately configured model; needs the `llm-judge` extra.
 - **`dataset.source`** — referenced, never loaded by your code:
   - `inline` — `items: [{id, prompt, expected}]`.
   - `file` — `path` to a `.jsonl`/`.json`; either rows already `{id,prompt,expected}`, or an `input` template + `expected_field` mapping.
   - `huggingface` — `id` + `split`, an `input` template over row fields, `expected_field`, `id_field`; needs the `huggingface` extra.
+
+### LLM judge
+
+Install the judge providers and save your key:
+
+```bash
+uv tool install --upgrade 'avp-cli[llm-judge]'
+avp env secret create openai
+```
+
+In your eval JSON:
+
+```json
+"scorer": {
+  "name": "llm-judge",
+  "model": "openai/gpt-5-mini",
+  "provider": {
+    "id": "openai",
+    "credential": { "vault": "openai" }
+  }
+}
+```
+
+The judge model is independent of the agents' models. OpenAI, Anthropic, Google,
+and OpenRouter are included; other [Pydantic AI providers](https://ai.pydantic.dev/models/overview/)
+may need their SDK extra. Model names are unrestricted `origin/model` slugs.
+For OpenRouter, set `provider.id` to `openrouter` and reference its saved key.
+For a custom Chat Completions endpoint, use `provider.id: "openai-chat"` and
+`provider.base_url`. Credentials are resolved on the host.
+
+Optional `max_tokens` sets the judge's output budget (default 2048).
+Optional `template` defines the rubric using `{question}`, `{response}`, and
+`{correct_answer}`; it must request a `correct: yes` or `correct: no` verdict.
 
 ## `avp init` — the catalog
 

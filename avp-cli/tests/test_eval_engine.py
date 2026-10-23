@@ -225,36 +225,18 @@ def test_fidelity_scores_cell_content_not_markup_chrome() -> None:
 # ── llm-judge scorer (scorer ↔ grader-model boundary) ───────────────────────────
 
 
-class _FakeBlock:
-    type = "text"
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-
-
-class _FakeMessages:
-    """Records the grader prompt and replays a canned grader response."""
-
-    def __init__(self, reply: str, seen: dict) -> None:
-        self._reply, self._seen = reply, seen
-
-    def create(self, *, model, max_tokens, messages):
-        self._seen["model"] = model
-        self._seen["prompt"] = messages[0]["content"]
-        return type("Msg", (), {"content": [_FakeBlock(self._reply)]})()
-
-
-class _FakeClient:
-    def __init__(self, reply: str, seen: dict) -> None:
-        self.messages = _FakeMessages(reply, seen)
-
-
-def test_llm_judge_interpolates_and_reads_correct_yes() -> None:
+def test_llm_judge_interpolates_and_reads_correct_yes(monkeypatch) -> None:
     from avp_cli.eval.scoring import LLMJudgeScorer
 
     seen: dict = {}
     reply = "extracted_final_answer: 1988-96\nreasoning: matches.\ncorrect: yes\nconfidence: 90"
-    s = LLMJudgeScorer(client=_FakeClient(reply, seen))
+    s = LLMJudgeScorer(grader_model="openai/gpt-5-mini")
+
+    def grade(prompt):
+        seen["prompt"] = prompt
+        return reply
+
+    monkeypatch.setattr(s, "_grade", grade)
     item = Item(
         id="i", prompt="Which years did the author work as a probation officer?", expected="1988-96"
     )
@@ -268,24 +250,24 @@ def test_llm_judge_interpolates_and_reads_correct_yes() -> None:
     assert "1988-96" in score.detail and "conf 90" in score.detail
 
 
-def test_llm_judge_reads_correct_no() -> None:
+def test_llm_judge_reads_correct_no(monkeypatch) -> None:
     from avp_cli.eval.scoring import LLMJudgeScorer
 
-    s = LLMJudgeScorer(client=_FakeClient("correct: no\nconfidence: 40", {}))
+    s = LLMJudgeScorer(grader_model="google/gemini-2.5-flash")
+    monkeypatch.setattr(s, "_grade", lambda _: "correct: no\nconfidence: 40")
     item = Item(id="i", prompt="q", expected="right answer")
     score = s.score(item, FinalOutput("Exact Answer: wrong", None, "converged"), _summary())
     assert score.value == 0.0 and not score.passed
 
 
-def test_llm_judge_error_fails_the_cell_not_the_eval() -> None:
+def test_llm_judge_error_fails_the_cell_not_the_eval(monkeypatch) -> None:
     from avp_cli.eval.scoring import LLMJudgeScorer
 
-    class _Down:
-        def create(self, **_):
-            raise TimeoutError("Request timed out")
+    def down(_):
+        raise TimeoutError("Request timed out")
 
-    client = type("C", (), {"messages": _Down()})()
-    s = LLMJudgeScorer(client=client)
+    s = LLMJudgeScorer(grader_model="anthropic/claude-haiku-4-5")
+    monkeypatch.setattr(s, "_grade", down)
     item = Item(id="i", prompt="q", expected="a")
     score = s.score(item, FinalOutput("a", None, "converged"), _summary())
     assert not score.passed and score.detail == "grader error: Request timed out"
