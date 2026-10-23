@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avp-claude-agent-sdk"
-version = "0.2.1"
+version = "0.2.2"
 description = "AVP v0.1 agent for the Claude Agent SDK (Claude Code as an SDK). Observer pattern: the SDK owns its loop; this package translates the SDK's lifecycle events into AVP."
 readme = "README.md"
 license = { text = "MIT" }
