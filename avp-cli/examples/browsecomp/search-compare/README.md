@@ -31,10 +31,10 @@ npm install -g linkup-mcp-server
 sed 's/YOUR_EXA_API_KEY/<exa-key>/'       browsecomp-exa.commission.json    > ~/.avp/commissions/browsecomp-exa.json
 sed 's/YOUR_LINKUP_API_KEY/<linkup-key>/' browsecomp-linkup.commission.json > ~/.avp/commissions/browsecomp-linkup.json
 
-export ANTHROPIC_API_KEY=...
+avp env secret create anthropic
 avp eval run browsecomp-search-compare.eval.json \
-  --max-items 10 --timeout 600 --sandbox on --env web-search-env.json
+  --max-items 10 --timeout 600 --env web-search-env.json
 ```
 
-Add `--model claude-sonnet-4-6` to run both arms on a cheaper model than the
+Add `--model anthropic/claude-sonnet-4-6` to run both arms on a cheaper model than the
 commissions' default.

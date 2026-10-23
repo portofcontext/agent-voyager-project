@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from avp.commission import Provider
+
 _STRICT = ConfigDict(extra="forbid")
 
 EVAL_VERSION = "0.1"
@@ -79,14 +81,21 @@ class HuggingFaceDataset(BaseModel):
 
 
 class ScorerSpec(BaseModel):
-    """A built-in scorer chosen by name. `threshold` applies to
-    structural-match / structural-fidelity; `model` / `template` to llm-judge
-    (the template renders strict over question / response / correct_answer)."""
+    """A deterministic scorer; threshold applies to the structural scorers."""
 
     model_config = _STRICT
-    name: Literal["exact-match", "structural-match", "structural-fidelity", "llm-judge"]
+    name: Literal["exact-match", "structural-match", "structural-fidelity"]
     threshold: float | None = None
-    model: str | None = None
+
+
+class LLMJudgeSpec(BaseModel):
+    """A model judge with Commission-style routing and credential references."""
+
+    model_config = _STRICT
+    name: Literal["llm-judge"]
+    model: str = Field(pattern=r"^[^/]+/.+$")
+    provider: Provider | None = None
+    max_tokens: int | None = Field(default=None, gt=0)
     template: str | None = None
 
 
@@ -107,5 +116,5 @@ class EvalConfig(BaseModel):
     name: str | None = None
     agents: list[str] | None = None
     dataset: InlineDataset | FileDataset | HuggingFaceDataset = Field(discriminator="source")
-    scorer: ScorerSpec
+    scorer: ScorerSpec | LLMJudgeSpec = Field(discriminator="name")
     commissions: list[str] | dict[str, list[str]] = Field(min_length=1)

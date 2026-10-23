@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- LLM judges accept models across providers, saved AVP credentials, and custom
+  endpoints. Judge models are now explicit `origin/model` slugs; output token
+  budgets are configurable. Missing saved credentials fail before agent runs begin.
+
 ## 0.5.0 (2026-10-22)
 
 ### Added

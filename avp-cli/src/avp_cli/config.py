@@ -36,6 +36,7 @@ Dataset sources:
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from pathlib import Path
@@ -43,7 +44,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from avp_cli import library
+from avp.commission import Provider
+from avp_cli import library, vault
 from avp_cli.eval import template
 from avp_cli.eval.dataset import Dataset, Item
 from avp_cli.eval.engine import Eval
@@ -168,23 +170,18 @@ def _build_scorer(spec: dict[str, Any]) -> Scorer:
         return FidelityScorer(threshold=float(spec.get("threshold", 0.8)))
     if name == "llm-judge":
         try:
-            import anthropic  # noqa: F401
+            from pydantic_ai.providers import infer_provider_class
         except ImportError as exc:
             raise EvalConfigError(
-                "scorer 'llm-judge' needs the llm-judge extra: uv sync --extra llm-judge"
+                "scorer 'llm-judge' needs: uv tool install --upgrade 'avp-cli[llm-judge]' "
+                "(from source: uv sync --extra llm-judge)"
             ) from exc
-        kwargs: dict[str, Any] = {}
-        if "model" in spec:
-            # The judge calls the Anthropic API, so it takes the canonical slug
-            # (`anthropic/claude-haiku-4-5`) like everything else, or a bare id.
-            origin, _, model = str(spec["model"]).rpartition("/")
-            if origin and origin != "anthropic":
-                raise EvalConfigError(
-                    f"llm-judge grades with Anthropic models; got {spec['model']!r} "
-                    "(use e.g. anthropic/claude-haiku-4-5)"
-                )
-            kwargs["grader_model"] = model
-        if "template" in spec:
+        kwargs: dict[str, Any] = {"grader_model": spec.get("model")}
+        if spec.get("provider") is not None:
+            kwargs["provider"] = Provider.model_validate(spec["provider"])
+        if spec.get("max_tokens") is not None:
+            kwargs["max_tokens"] = spec["max_tokens"]
+        if spec.get("template") is not None:
             # Strict context (EVAL-FORMAT.md §3): a custom grader template may
             # only reference the judge's variable set. Catch typos at load,
             # not on the first paid grading call.
@@ -196,7 +193,20 @@ def _build_scorer(spec: dict[str, Any]) -> Scorer:
                     "available: correct_answer, question, response"
                 )
             kwargs["template"] = spec["template"]
-        return LLMJudgeScorer(**kwargs)
+        try:
+            scorer = LLMJudgeScorer(**kwargs)
+            provider_class = infer_provider_class(scorer.provider_id)
+            provider_args = {}
+            if scorer.provider is not None:
+                if scorer.provider.base_url:
+                    provider_args["base_url"] = scorer.provider.base_url
+                if scorer.provider.credential:
+                    provider_args["api_key"] = "validation-only"
+                inspect.signature(provider_class).bind(**provider_args)
+                vault.resolve_ref(scorer.provider.credential)
+            return scorer
+        except (ValueError, TypeError, ImportError, vault.VaultError) as exc:
+            raise EvalConfigError(f"llm-judge: {exc}") from exc
     raise EvalConfigError(f"unknown scorer {name!r}; choose from {', '.join(_SCORERS)}")
 
 

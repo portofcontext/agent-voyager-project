@@ -278,12 +278,85 @@ def test_scaffold_creates_a_missing_directory(tmp_path) -> None:
     assert result.eval_path.parent == dest and result.eval_path.is_file()
 
 
-def test_llm_judge_takes_the_canonical_model_slug(tmp_path) -> None:
-    pytest.importorskip("anthropic")
-    judge = config._build_scorer({"name": "llm-judge", "model": "anthropic/claude-haiku-4-5"})
-    assert judge.grader_model == "claude-haiku-4-5"
-    assert config._build_scorer(
-        {"name": "llm-judge", "model": "claude-haiku-4-5"}
-    ).grader_model == ("claude-haiku-4-5")
-    with pytest.raises(config.EvalConfigError, match="Anthropic models"):
-        config._build_scorer({"name": "llm-judge", "model": "openai/gpt-5-mini"})
+@pytest.mark.parametrize(
+    "model",
+    [
+        "anthropic/claude-haiku-4-5",
+        "openai/gpt-5-mini",
+        "google/gemini-2.5-flash",
+        "openrouter/qwen/qwen3-32b",
+    ],
+)
+def test_llm_judge_takes_the_canonical_model_slug(model) -> None:
+    pytest.importorskip("pydantic_ai")
+    judge = config._build_scorer({"name": "llm-judge", "model": model})
+    assert judge.grader_model == model
+
+
+@pytest.mark.parametrize("model", [None, "", "claude-haiku-4-5", "openai/", "/model"])
+def test_llm_judge_requires_explicit_model_slug(model) -> None:
+    pytest.importorskip("pydantic_ai")
+    with pytest.raises(config.EvalConfigError, match="origin/model"):
+        config._build_scorer({"name": "llm-judge", "model": model})
+
+
+def test_llm_judge_missing_credential_fails_before_running(tmp_path, monkeypatch, lib) -> None:
+    pytest.importorskip("pydantic_ai")
+    monkeypatch.setenv("AVP_HOME", str(tmp_path))
+    monkeypatch.delenv("AVP_VAULT_JUDGE_MISSING", raising=False)
+    monkeypatch.delenv("JUDGE_MISSING", raising=False)
+    with pytest.raises(config.EvalConfigError, match=r"judge-missing.*not found"):
+        config.eval_from_dict(
+            _cfg(
+                scorer={
+                    "name": "llm-judge",
+                    "model": "openai/gpt-5-mini",
+                    "provider": {"id": "openai", "credential": {"vault": "judge-missing"}},
+                }
+            ),
+            commissions_dir=lib,
+        )
+
+
+def test_llm_judge_unknown_provider_fails_before_running() -> None:
+    pytest.importorskip("pydantic_ai")
+    with pytest.raises(config.EvalConfigError, match="Unknown provider"):
+        config._build_scorer({"name": "llm-judge", "model": "not-a-provider/model"})
+
+
+def test_llm_judge_rejects_unsupported_provider_options_before_running() -> None:
+    pytest.importorskip("pydantic_ai")
+    with pytest.raises(config.EvalConfigError, match="base_url"):
+        config._build_scorer(
+            {
+                "name": "llm-judge",
+                "model": "anthropic/claude-haiku-4-5",
+                "provider": {"id": "openrouter", "base_url": "https://example.test/v1"},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"model": None},
+        {"model": "bare-model"},
+        {"max_tokens": 0},
+        {"provider": {"id": "openai", "credential": "raw-key"}},
+        {"provider": {"id": "openai", "api_key": "raw-key"}},
+    ],
+)
+def test_llm_judge_schema_rejects_invalid_config(override) -> None:
+    from pathlib import Path
+
+    import jsonschema
+    from pydantic import ValidationError
+
+    from avp_cli.eval.format import EvalConfig
+
+    cfg = _cfg(scorer={"name": "llm-judge", "model": "openai/gpt-5-mini", **override})
+    schema = json.loads((Path(__file__).parents[1] / "eval.schema.json").read_text())
+    with pytest.raises(ValidationError):
+        EvalConfig.model_validate(cfg)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(cfg, schema)
