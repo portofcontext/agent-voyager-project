@@ -1,276 +1,178 @@
-# AVP Agent Descriptor Spec, v0.1
+# Agent Descriptor Spec
 
 **Status:** Draft
-**Stability:** alpha. JSON shape works for the reference agents but is newer than Trajectory / Commission; capabilities vocabulary and field set may still change.
-**Umbrella version:** v0.1 (see [`README.md`](./README.md))
 **Schema:** [`agent-descriptor.schema.json`](./agent-descriptor.schema.json)
-**$id base:** `https://avp.dev/schema/v0.1/`
 
-The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here.
 
----
+## 1. Overview
 
-## 1. Scope
+An Agent Descriptor is a JSON object that answers one question: what is in the agent already? It lists the agent's name and version, its system prompt, and the tools, skills, subagents (other agents it can hand work to during a run), and MCP servers it comes with. These are the agent's **built-in items**: everything that is consistent between runs of this version of the agent, whether it comes from the agent's harness, from the environment the agent runs in, or from code and configuration the agent's implementer added.
 
-The Agent Descriptor Spec defines an agent's **self-description**: the static surface the agent ships with — identity, capabilities, supported models, system prompt, baked-in user prompt (for autonomous agents), MCP servers, tools, skills, subagents. Everything on the descriptor is *what's in the agent*, regardless of whether it came from an SDK preset (`Grep`), a runtime-bundled skill, or hard-coded in the agent's own source. Provenance inside the agent doesn't matter on the wire; the agent's contribution is uniform from the outside.
+This spec defines the Descriptor's fields and the rules an agent follows when it produces one. [Out of scope](#5-out-of-scope) lists what it leaves to implementations.
 
-It is a data-shape spec: it specifies the JSON object's structure, but no wire-level protocol.
+A Descriptor describes one version of an agent, identified by `agent_name` and `agent_version`. Anything a supervisor sets for one run belongs on the [Commission](./commission.md) instead.
 
-An Agent Descriptor can be:
+The [Trajectory](./trajectory.md) spec defines when an agent sends its Descriptor during a run: in `agent_described`, the second event. A Descriptor is also useful before a run. A supervisor that manages several agents can read their Descriptors to get the same summary of each one, and to write Commissions that fit them.
 
-- Printed to stdout by a `<agent> describe` command for pre-flight introspection (Descriptor alone, useful for agent catalogs and discovery surfaces).
-- Carried on the wire as part of [Trajectory](./trajectory.md)'s `agent_described` event so the trajectory is a complete record of the agent that ran (composes with Trajectory).
-- Combined at startup with a [Commission](./commission.md): the supervisor's contribution (additional MCP servers, skills, subagents — by ref) is merged with the descriptor's by id/name; collisions fail-fast (see §2.7).
+## 2. Example
 
-The pre-flight and run-time views SHOULD be consistent: `<agent> describe` SHOULD emit the same payload `agent_described.data["avp.descriptor"]` carries for the same agent build. Two relaxations from a strict MUST. First, pre-flight `describe` MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), since populating them requires dialing the agent's MCP servers and running `tools/list` — work the agent only needs to do at run-time. Second, the run-time view MAY extend `skills[]` and `subagents[]` with Commission-provided and environment-discovered sources; the pre-flight view MUST list only sources intrinsic to the agent build (compiled-in, or shipped with the agent's install). In particular, pre-flight `describe` MUST NOT list sources discovered on the invoking host's filesystem (operator home directories, working-dir conventions): runs execute in the agent's own environment, so a host-discovered source advertises a capability the run cannot load. Every other Descriptor field MUST be identical between the two views.
-
-### 1.1 Non-goals
-
-The Agent Descriptor Spec explicitly does **not** define:
-
-- **Per-invocation overrides.** The Descriptor is *substantially static* — identical bytes across runs of the same build, with one carve-out: MCP-surfaced tool entries in `tools[]` are populated from each server's `tools/list` at startup, so they can vary if the server's catalog changes. The [Commission](./commission.md) carries what varies per invocation: per-call prompt, run_id, thread_id, tags, additional managed assets the supervisor wants to add. Anything that varies between runs belongs on the Commission, not the Descriptor.
-- **The event stream.** Run-time fact emission → see [`trajectory.md`](./trajectory.md).
-- **Discovery / publication mechanism.** v0.1 descriptors are local; `<agent> describe` prints to stdout. No registry, no network discovery protocol. A future spec MAY define one.
-- **Capability negotiation.** A supervisor reads the Descriptor and decides whether to commission the agent. There is no back-and-forth negotiation on the wire.
-- **Versioning of individual built-ins.** v0.1 has no notion of "this tool changed semantics between agent versions"; that's deferred. Bumps to `agent_version` are the granularity supervisors get.
-
----
-
-## 2. The Agent Descriptor shape
-
-An Agent Descriptor is a single JSON document validating against [`agent-descriptor.schema.json`](./agent-descriptor.schema.json):
-
-```jsonc
+```json
 {
-  "agent_name":       "avp-claude-agent-sdk",
-  "agent_version":    "0.1.0",
-  "avp_spec_version": "0.1",
-
-  "default_model":    null,
-  "supported_models": ["claude-*"],
-
-  "system_prompt":    null,
-  "prompt":           null,
-
-  "mcp_servers": null,
-
+  "schema_version": "0.1",
+  "agent_name": "acme-code-agent",
+  "agent_version": "1.2.0",
+  "supported_models": ["anthropic/claude-*", "openai/gpt-5*"],
+  "system_prompt": "You are a careful software engineer...",
   "tools": [
-    { "name": "Read"  },
-    { "name": "Write" },
-    { "name": "Bash"  }
+    {
+      "name": "read_file",
+      "description": "Read a file in the workspace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "path": { "type": "string" } },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "bash",
+      "inputSchema": { "type": "object" }
+    },
+    {
+      "name": "search_issues",
+      "description": "Search the issue tracker.",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "query": { "type": "string" } }
+      },
+      "mcp_server_id": "issues"
+    }
   ],
-
+  "mcp_servers": [
+    { "id": "issues", "name": "Issue tracker", "status": "connected" }
+  ],
+  "skills": [
+    { "name": "code-review", "description": "Checklist for reviewing a change." }
+  ],
   "subagents": [
-    { "name": "general-purpose", "avp.agent_type": "general-purpose" }
-  ],
-
-  "skills": null,
-
-  "capabilities": [
-    "skills:progressive",
-    "thinking",
-    "filesystem-discovery-available"
+    { "name": "researcher", "description": "Explores the codebase and reports back." }
   ]
 }
 ```
 
-An autonomous helpdesk agent with a fixed persona, an internal MCP server, and a baked-in user prompt:
+`read_file` and `bash` run inside the agent. `search_issues` comes from the `issues` MCP server, which its `mcp_server_id` names.
 
-```jsonc
-{
-  "agent_name":       "acme-helpdesk-agent",
-  "agent_version":    "1.4.0",
-  "avp_spec_version": "0.1",
+## 3. Reference
 
-  "system_prompt": "You are a helpdesk agent for ACME Corp. ...",
-  "prompt":        "Pull today's open tickets and triage them.",
+### 3.1 Descriptor
 
-  "mcp_servers": [
-    { "id": "acme_kb", "description": "ACME internal knowledge base" }
-  ],
-  "tools":     null,
-  "skills":    [ { "name": "triage" } ],
-  "subagents": null,
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schema_version` | string | Yes | The AVP version the Descriptor follows. `"0.1"` for this spec. |
+| `agent_name` | string | Yes | The agent's name. |
+| `agent_version` | string | Yes | The agent's version. |
+| `supported_models` | string[] | No | Patterns for the models the agent can run, in the `origin/model` form the [Commission](./commission.md) uses. `*` matches any characters, so `"*/*"` means any model. Absent means the agent does not say. |
+| `system_prompt` | string | No | The system prompt the agent comes with. |
+| `tools` | [Tool](#32-tool)[] | No | The agent's built-in tools, including those that come from its MCP servers. |
+| `mcp_servers` | [MCP server](#33-mcp-server)[] | No | The MCP servers the agent comes with. |
+| `skills` | [Skill](#34-skill)[] | No | The skills the agent comes with. |
+| `subagents` | [Subagent](#35-subagent)[] | No | The subagents the agent comes with. |
 
-  "capabilities": []
-}
-```
+### 3.2 Tool
 
-### 2.1 Required fields
+A Tool is an [MCP `Tool`](https://modelcontextprotocol.io/specification/latest/server/tools#tool) object with one added field:
 
-| Field | Type | Notes |
-|---|---|---|
-| `agent_name` | string | The agent's package / binary name (e.g., `"avp-claude-agent-sdk"`). Stable across versions. |
-| `agent_version` | string | Semver-compatible. Bumped on any wire-affecting change. |
-| `avp_spec_version` | string | The AVP umbrella version the agent conforms to (`"0.1"` for this spec). |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mcp_server_id` | string | No | The `id` of the [MCP server](#33-mcp-server) the tool comes from. Absent for any tool that does not come from an MCP server. |
 
-### 2.2 Optional fields
+### 3.3 MCP server
 
-`null` and absent are equivalent for the optional fields below; agents SHOULD prefer explicit `null` for the list-valued fields when they have no entries (so the wire records the intentional empty surface).
+Unlike an MCP server entry in a [Commission](./commission.md), this entry has no connection details such as a URL, command, or credentials; those stay inside the agent.
 
-| Field | Type | Notes |
-|---|---|---|
-| `default_model` | `string \| null` | The model the agent picks when `Commission.model` is absent. `null` = no default; the Commission MUST specify. |
-| `supported_models` | `string[] \| null` | Glob patterns the agent's `Commission.model` validates against (e.g., `["claude-*"]`). `null` = no constraint. Mismatch at startup → `error_occurred(code: "unsupported_model")`. |
-| `system_prompt` | `string \| null` | A system prompt the agent ships with. Commission's `system_prompt` overrides if both are set; see §2.7. |
-| `prompt` | `string \| null` | A baked-in user prompt for autonomous agents (e.g., cron-style runs with no per-call user message). Commission's `prompt` overrides if both are set; see §2.7. |
-| `mcp_servers` | `Array<McpServer> \| null` | MCP servers the agent dials at startup. The descriptor records only the server's identity — connection material (URLs, auth, command-lines) stays inside the agent process. See §2.6. |
-| `tools` | `Array<Tool> \| null` | The agent's full tool catalog: local tools (code compiled into the agent package, including provider-hosted tools the SDK wires) AND MCP-surfaced tools sourced from each entry in `mcp_servers[]` at startup. MCP-surfaced entries carry `avp.mcp_server_id`; local entries omit it. See §2.3. |
-| `subagents` | `Array<Subagent> \| null` | Subagent delegates the agent ships with. See §2.4. |
-| `skills` | `Array<Skill> \| null` | Skills the agent ships with. See §2.5. |
-| `capabilities` | `string[] \| null` | See §3. |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Identifies the server. A [Tool](#32-tool)'s `mcp_server_id` refers to it. |
+| `name` | string | No | A display name, when it differs from `id`. |
+| `description` | string | No | What the server provides. |
+| `status` | string | No | The result of the agent's attempt to connect, one of the values below. |
 
-### 2.3 Tool
-
-Each entry in `tools[]` is a tool the agent can dispatch — either **locally** (code compiled into the agent package, including provider-hosted tools (Anthropic `web_search`, `code_execution`, etc.) that the agent's SDK wires) or via an **MCP server** (an entry in `mcp_servers[]` that the agent dials at startup). Dispatch is discriminated by the optional `avp.mcp_server_id` field on each entry: local entries omit it; MCP-surfaced entries set it to the `id` of the source server in `mcp_servers[]`.
-
-```jsonc
-// Local tool: no avp.mcp_server_id.
-{
-  "name": "Read",
-  "description": "Read a file from disk.",         // optional
-  "inputSchema": { /* MCP-shaped JSON Schema */ }  // optional
-}
-
-// MCP-surfaced tool: avp.mcp_server_id points at an entry in mcp_servers[].
-{
-  "name": "kb_search",
-  "description": "Search the ACME knowledge base.",
-  "inputSchema": { /* ... */ },
-  "outputSchema": { /* ... */ },                   // optional
-  "avp.mcp_server_id": "acme_kb"
-}
-```
-
-| Field | Type | Notes |
-|---|---|---|
-| `name` | string | Model-facing tool name. Stable across versions. Unique within `tools[]`. |
-| `description` | string | Optional. Human/model description. |
-| `inputSchema` | object | Optional. JSON Schema for the tool's input, in MCP's `inputSchema` shape (camelCase). |
-| `outputSchema` | object | Optional. JSON Schema for the tool's structured output, in MCP's `outputSchema` shape (camelCase). |
-| `avp.mcp_server_id` | string | Optional. When set, the tool is dispatched via the MCP server with that `id` in `mcp_servers[]`. When absent, the tool is dispatched locally in the agent's process. |
-
-Each entry SHOULD carry `description`, `inputSchema`, and `outputSchema` **exactly as surfaced to the model** whenever the agent's runtime exposes them (for MCP-surfaced tools, the verbatim `tools/list` result). The tool catalog is the dominant fixed input-token cost of every turn; a names-only `tools[]` is valid (and is the honest shape when the wrapped runtime doesn't expose its catalog text) but leaves first-turn token usage unattributable to consumers.
-
-The per-invocation discriminator `avp.tool.dispatch_target` (`"local"` / `"mcp_server"`) lives on each `tool_invoked` event and mirrors the presence or absence of `avp.mcp_server_id` on the decl.
-
-### 2.4 Subagent
-
-Each entry in `subagents[]`:
-
-```jsonc
-{
-  "name": "general-purpose",
-  "description": "General-purpose subagent for multi-step research.", // optional
-  "inputSchema": { /* ... */ },                                       // optional
-  "avp.agent_type": "general-purpose"                                 // optional
-}
-```
-
-| Field | Type | Notes |
-|---|---|---|
-| `name` | string | Model-facing subagent name. Unique within `subagents[]`. |
-| `description` | string | Optional. |
-| `inputSchema` | object | Optional. JSON Schema for the subagent's invocation input. |
-| `avp.agent_type` | string | Optional. Agent-specific identifier (e.g., Claude Agent SDK's `agent_type`). |
-
-### 2.5 Skill
-
-Each entry in `skills[]`:
-
-```jsonc
-{
-  "name": "auth-checklist",
-  "description": "Checklist for auth changes.",  // optional
-  "version": "1.0"                               // optional
-}
-```
-
-| Field | Type | Notes |
-|---|---|---|
-| `name` | string | Skill name (matches SKILL.md frontmatter `name`). Unique within `skills[]`. |
-| `description` | string | Optional. |
-| `version` | string | Optional. The skill's own version. |
-
-### 2.6 McpServer
-
-Each entry in `mcp_servers[]`:
-
-```jsonc
-{
-  "id": "acme_kb",
-  "name": "ACME KB",                              // optional
-  "description": "ACME internal knowledge base",  // optional
-  "status": "connected"                           // optional; pre-flight describe MAY omit
-}
-```
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | string | Server identifier. Stable across versions. Unique within `mcp_servers[]`. Tools sourced from this server appear in `tools[]` with `avp.mcp_server_id` matching this `id`. |
-| `name` | string | Optional. Display name when distinct from `id`. |
-| `description` | string | Optional. Human-readable summary. |
-| `status` | string | Optional. Terminal dial state at startup: one of `"connected"`, `"failed"`, `"needs-auth"`, `"pending"`, `"disabled"`. Pre-flight `<agent> describe` MAY omit it (no dial has happened); on-the-wire `agent_described` and `agent_started.data["avp.mcp_servers"]` populate it after startup. Only `"connected"` servers contribute tools to `tools[]`. |
-
-**Connection material is not on the wire.** The agent dials its MCP servers using configuration internal to its build — URLs, auth, command-lines stay in the agent's process. The descriptor records only what the supervisor / auditor needs to see: the server's identity and its terminal dial status. The tools the server surfaces are enumerated in `tools[]` with `avp.mcp_server_id` set to this server's `id`.
-
-### 2.7 Merge with Commission
-
-When a [Commission](./commission.md) is in play at run time, descriptor entries and Commission entries combine at startup. The merged state is what `agent_started.data` records (per [trajectory.md §2.1](./trajectory.md)).
-
-**Prompt-shaped fields (`system_prompt`, `prompt`):** Commission's value overrides the descriptor's if both are set; if only one is set, that one applies.
-
-**List-shaped fields (`mcp_servers`, `skills`, `subagents`):** the effective set for the run is
-
-```
-(descriptor.<field> filtered by Commission.enabled_builtin_<field>[agent_name]) ∪ Commission.<field>
-```
-
-- `Commission.enabled_builtin_*` is **subtractive-only over the descriptor**. It never enables a Commission-supplied asset; those are always active by virtue of being present in the Commission.
-- Descriptor entries are agent-internal. Commission entries carry inline connection material and are always active by virtue of being present.
-- An id/name collision between a descriptor entry and a Commission entry MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn. Specifically: `descriptor.mcp_servers[].id` vs `Commission.mcp_servers[].id`; `descriptor.skills[].name` vs `Commission.skills[].id`.
-- Each `Commission.enabled_builtin_*` map is keyed by `descriptor.agent_name`; the running agent reads only its own key (Commission §4). A present map without the agent's key, or a name under its key that doesn't appear in the corresponding `descriptor.*` field, is the same `commission_collision`.
-
-**Tools:** the effective `agent_started.data["avp.tools"]` for the run is `descriptor.tools` (filtered for entries without `avp.mcp_server_id` against `Commission.enabled_builtin_tools`), unioned with the live `tools/list` output from each MCP server whose dial reached `status: "connected"` — descriptor-internal servers post-`enabled_builtin_mcp_servers` filter, plus all `Commission.mcp_servers`. Disabling a server via `Commission.enabled_builtin_mcp_servers` prevents the dial, so its tools never become available for the run; a Commission-declared server that fails to dial still appears in `mcp_servers[]` with its terminal `status`, but contributes no tools.
-
----
-
-## 3. Capabilities
-
-`capabilities[]` is a flat array of strings. Each string is a **capability flag** that varies between AVP agents and is meaningful to Commission-aware tooling (e.g., "skip this Commission if the agent doesn't support thinking blocks"). The vocabulary is open; AVP defines well-known flags but does not constrain the set.
-
-### 3.1 Well-known capability flags (v0.1)
-
-| Flag | Meaning |
+| `status` | Meaning |
 |---|---|
-| `thinking` | The agent parses and emits provider-side extended-thinking blocks (Anthropic thinking, o-series reasoning) as `reasoning_emitted` events. |
-| `skills:eager` | The agent injects resolved SKILL.md bodies into the model's context at startup. `skill_loaded` fires once per skill, `step=0`. See [`trajectory.md`](./trajectory.md) §6. |
-| `skills:progressive` | The agent's SDK loads skill bodies on demand per turn (progressive disclosure). `skill_loaded` fires when the body actually enters context, with `step=N`. |
-| `filesystem-discovery-available` | The agent's SDK *can* auto-discover skills / subagents from local filesystem paths (e.g., `~/.claude/skills/`, `.claude/agents/`). Informational disclosure; actual behavior is controlled by SDK-level configuration the supervisor sets. |
+| `connected` | The agent connected and listed the server's tools. |
+| `failed` | The connection failed. |
+| `needs-auth` | The server requires authorization the agent does not have. |
+| `disabled` | The server is turned off, so the agent did not connect. |
 
-Implementations MAY publish additional vendor-namespaced flags (e.g., `vendor.acme.fast-mode`). Consumers MUST ignore flags they don't recognize.
+### 3.4 Skill
 
----
+A Skill is the [frontmatter](https://agentskills.io/specification#frontmatter) of the skill's `SKILL.md`, as defined by Agent Skills, with one added field:
 
-## 4. How Agent Descriptor composes with the other specs
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `source` | string | No | A `file:` URI ([RFC 8089](https://www.rfc-editor.org/rfc/rfc8089)) for the directory that contains the skill's `SKILL.md`, as the path appears inside the agent's environment. Absent when the skill is bundled in the agent with no files of its own. |
 
-| Composes with | How |
-|---|---|
-| [Trajectory](./trajectory.md) | The Descriptor payload is the body of `agent_described.data["avp.descriptor"]`. The pre-flight `describe` surface and the run-time `agent_described` event SHOULD be consistent for the same agent build; pre-flight describe MAY omit MCP-surfaced tool entries (those whose `avp.mcp_server_id` is set), which require a startup dial, and run-time `skills[]` / `subagents[]` MAY extend the pre-flight (build-intrinsic) list with Commission-provided and environment-discovered sources. |
-| [Commission](./commission.md) | Commission's `enabled_builtin_*` allow-lists reference Descriptor-declared `name`/`id`s (subtractive-only over the descriptor). Prompt-shaped fields override per §2.7; list-shaped fields merge as `(descriptor filtered by enabled_builtin_*) ∪ Commission` with id-collision = `commission_collision` fail-fast. |
+### 3.5 Subagent
 
-A consumer that adopts only the Agent Descriptor Spec can run an agent's `describe` command and ingest the result for catalog/discovery purposes without ever sending a Commission or reading a trajectory.
+A Subagent uses a subset of the [Descriptor](#31-descriptor)'s fields. It has its own prompt and items, but no `agent_name`, `agent_version`, or `schema_version`: it is part of the agent and ships with it.
 
----
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Identifies the subagent. |
+| `description` | string | No | What the subagent does. |
+| `system_prompt` | string | No | As in [Descriptor](#31-descriptor), for the subagent. |
+| `tools` | [Tool](#32-tool)[] | No | As in [Descriptor](#31-descriptor), for the subagent. |
+| `mcp_servers` | [MCP server](#33-mcp-server)[] | No | As in [Descriptor](#31-descriptor), for the subagent. |
+| `skills` | [Skill](#34-skill)[] | No | As in [Descriptor](#31-descriptor), for the subagent. |
 
-## 5. Conformance
+A subagent does **not** inherit the agent's items: an absent field means the subagent has none of that item. A subagent that shares the agent's tools, MCP servers, or skills lists them again.
 
-An agent (or any Descriptor publisher) is conforming to the Agent Descriptor Spec if and only if:
+## 4. Rules for agents
 
-1. Every Descriptor it emits validates against [`agent-descriptor.schema.json`](./agent-descriptor.schema.json).
-2. `avp_spec_version` equals `"0.1"`.
-3. The Descriptor's **static portion** (every field except MCP-surfaced `tools[]` entries, `mcp_servers[].status`, and run-time additions to `skills[]` / `subagents[]`) MUST be identical across runs of the same build. No environment reads, no filesystem walks, no random ids in the static portion. MCP-surfaced `tools[]` entries (those with `avp.mcp_server_id`) and per-server `status` are populated from each MCP server's startup `tools/list` and may legitimately vary if the server's catalog changes. At run-time, `skills[]` and `subagents[]` MAY gain Commission-provided and environment-discovered entries; pre-flight `describe` MUST list only build-intrinsic sources, never sources discovered on the invoking host's filesystem.
-4. Within each list-valued field, identifiers are unique: `tools[].name`, `subagents[].name`, `skills[].name`, `mcp_servers[].id`.
-5. Every `tools[]` entry with `avp.mcp_server_id` set MUST match an `id` in `mcp_servers[]`. Conversely, an MCP server whose `status` is anything other than `"connected"` MUST NOT have any `tools[]` entries carrying its `id`.
-6. If composed with [Trajectory](./trajectory.md): `agent_described.data["avp.descriptor"]` SHOULD be consistent with what `<agent> describe` prints for the same build. Pre-flight describe MAY omit MCP-surfaced tool entries, and run-time `skills[]` / `subagents[]` MAY carry Commission-provided and environment-discovered entries beyond the pre-flight (build-intrinsic) list; every other field MUST be identical.
-7. If composed with [Commission](./commission.md): descriptor entries and Commission entries merge per §2.7 — prompt-shaped fields are overridden by Commission; list-shaped fields are unioned (descriptor side filtered by `enabled_builtin_*` first). An id/name collision across descriptor and Commission MUST emit `error_occurred(code: "commission_collision")` and `agent_stopped(reason: "error")` before any model turn.
+These rules apply to the agent that produces a Descriptor, and in the same way to the lists inside each [Subagent](#35-subagent). An agent conforms to this spec if every Descriptor it produces matches [§3](#3-reference) and follows every MUST and MUST NOT in this section. The overview and the example add no requirements.
+
+### 4.1 Names and IDs are unique
+
+Within one list, the agent MUST NOT repeat a Tool `name`, an MCP server `id`, a Skill `name`, or a Subagent `name`.
+
+### 4.2 All built-in items, and only those, are listed
+
+The agent MUST list all of its [built-in items](#1-overview), including any a Commission turns off. It MUST NOT list items that come from a single run: items a Commission adds, or items it finds in the run's workspace. The [Trajectory](./trajectory.md) records what the run actually uses when the run starts.
+
+### 4.3 An absent list means none
+
+For `tools`, `mcp_servers`, `skills`, and `subagents`, an absent list, a `null` list, and an empty list all mean the agent has none of that item.
+
+### 4.4 Tools from MCP servers
+
+A Tool that comes from an MCP server MUST have an `mcp_server_id`, and any other Tool MUST NOT. A Tool's `mcp_server_id` MUST match the `id` of an MCP server in the same Descriptor or Subagent.
+
+Whenever the agent has connected to its MCP servers, it MUST set each server's `status` and list exactly the tools each `connected` server offered, and no tools from a server with any other `status`. In a Descriptor produced before it connects, the agent MAY leave out `status` and the servers' tools.
+
+### 4.5 Tools match what the model sees
+
+A Tool's `description`, `inputSchema`, and `outputSchema` SHOULD be exactly what the agent gives the model. If the agent cannot see a tool's input schema, it MUST set `inputSchema` to `{ "type": "object" }`.
+
+### 4.6 The Descriptor is the same for every run of a version
+
+For one `agent_name` and `agent_version`, every Descriptor the agent produces MUST have the same fields and list entries, and SHOULD keep the entries in the same order. Two things are exceptions, because they come from the MCP servers and the agent cannot control them:
+
+- Tools that have an `mcp_server_id`.
+- MCP server `status`.
+
+These MAY differ between Descriptors, for example when a remote server adds a tool or goes offline. [§4.4](#44-tools-from-mcp-servers) says how the agent lists them.
+
+### 4.7 Rules in the Commission spec
+
+How a Commission replaces `system_prompt` or turns off built-in items is defined in the [Commission](./commission.md) spec.
+
+## 5. Out of scope
+
+This spec does not define:
+
+- **Getting a Descriptor before a run.** How a supervisor asks an agent for its Descriptor, for example a command or an HTTP endpoint.
+- **Sending a Descriptor.** The transport, file format, or message that carries it.
+- **Publishing and discovery.** Registries or catalogs that list agents and their Descriptors.
+- **Negotiation.** A supervisor reads a Descriptor and decides what to do; there is no exchange with the agent about it.
+- **Checking a model against `supported_models`.** A supervisor can use the list to choose an agent for a Commission's model; what happens on a mismatch is up to the supervisor.
+- **Versions of individual items.** AVP has no version field for a tool, skill, subagent, or MCP server; a change to one shows up as a new `agent_version`.
