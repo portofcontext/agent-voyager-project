@@ -7,7 +7,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ## 1. Overview
 
-An Agent Descriptor is a JSON object that answers one question: what is in the agent already? It lists the agent's name and version, its system prompt, and the tools, skills, subagents (other agents it can hand work to during a run), and MCP servers it comes with. These are the agent's **built-in items**: everything that is consistent between runs of this version of the agent, whether it comes from the agent's harness, from the environment the agent runs in, or from code and configuration the agent's implementer added.
+An Agent Descriptor is a JSON object that answers one question: **what is in the agent already?** It lists the agent's name and version, its system prompt, and the tools, skills, subagents (other agents it can hand work to during a run), and MCP servers it comes with. These are the agent's **built-in items**: everything that is consistent between runs of this version of the agent, whether it comes from the agent's harness, from the environment the agent runs in, or from code and configuration the agent's implementer added.
 
 This spec defines the Descriptor's fields and the rules an agent follows when it produces one. [Out of scope](#5-out-of-scope) lists what it leaves to implementations.
 
@@ -19,7 +19,7 @@ The [Trajectory](./trajectory.md) spec defines when an agent sends its Descripto
 
 ```json
 {
-  "schema_version": "0.1",
+  "avp_version": "0.1",
   "agent_name": "acme-code-agent",
   "agent_version": "1.2.0",
   "supported_models": ["anthropic/claude-*", "openai/gpt-5*"],
@@ -68,8 +68,8 @@ The [Trajectory](./trajectory.md) spec defines when an agent sends its Descripto
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `schema_version` | string | Yes | The AVP version the Descriptor follows. `"0.1"` for this spec. |
-| `agent_name` | string | Yes | The agent's name. |
+| `avp_version` | string | Yes | The AVP version the Descriptor follows. `"0.1"` for this spec. |
+| `agent_name` | string | Yes | The agent's name. Matches `^[a-z0-9_-]+$`. |
 | `agent_version` | string | Yes | The agent's version. |
 | `supported_models` | string[] | No | Patterns for the models the agent can run, in the `origin/model` form the [Commission](./commission.md) uses. `*` matches any characters, so `"*/*"` means any model. Absent means the agent does not say. |
 | `system_prompt` | string | No | The system prompt the agent comes with. |
@@ -114,7 +114,7 @@ A Skill is the [frontmatter](https://agentskills.io/specification#frontmatter) o
 
 ### 3.5 Subagent
 
-A Subagent uses a subset of the [Descriptor](#31-descriptor)'s fields. It has its own prompt and items, but no `agent_name`, `agent_version`, or `schema_version`: it is part of the agent and ships with it.
+A Subagent uses a subset of the [Descriptor](#31-descriptor)'s fields. It has its own prompt and items, but no `agent_name`, `agent_version`, or `avp_version`: it is part of the agent and ships with it.
 
 | Field | Type | Required | Description |
 |---|---|---|---|

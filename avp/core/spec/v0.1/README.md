@@ -48,6 +48,7 @@ AVP reuses existing specs wherever one already fits:
 - **[OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/)**: span IDs on every event, so a Trajectory loads into tracing backends as a span tree.
 - **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
 - **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
+- **[models.dev](https://models.dev)**: the `origin/model` names for models, and the prices AVP uses to compute each response's cost.
 - **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of all three AVP specs.
 
 ## Out of scope
@@ -63,7 +64,7 @@ AVP defines the shape of the Commission, the Agent Descriptor, and Trajectory ev
 
 ## Versioning
 
-The three specs share one version, v0.1. The Commission and the Agent Descriptor both declare it in `schema_version`.
+The three specs share one version, v0.1. The Commission and the Agent Descriptor both declare it in `avp_version`.
 
 While v0.1 is a draft, it may change in incompatible ways. After it is final:
 
