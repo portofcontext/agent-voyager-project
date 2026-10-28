@@ -44,12 +44,14 @@ This document is an overview. The requirements are in the three specs above.
 
 AVP reuses existing specs wherever one already fits:
 
-- **[CloudEvents 1.0](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md)**: the envelope for every Trajectory event, so standard event tooling can route and store them.
-- **[OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/)**: span IDs on every event, so a Trajectory loads into tracing backends as a span tree.
 - **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
 - **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
 - **[models.dev](https://models.dev)**: the `origin/model` names for models, and the prices AVP uses to compute each response's cost.
 - **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of all three AVP specs.
+
+Trajectory events are not [CloudEvents](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md), and no spec relies on CloudEvents. Each event converts to one, with `run_id` as the `subject`, so a supervisor can forward a Trajectory to event infrastructure that routes CloudEvents.
+
+Trajectory events hold no [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/) span IDs either. A Trajectory converts to OpenTelemetry spans: the run, each model response, and each tool call or subagent become spans, linked through the events' IDs.
 
 ## Out of scope
 

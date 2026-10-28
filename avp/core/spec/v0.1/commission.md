@@ -13,7 +13,7 @@ A supervisor (the system that starts the run, such as a CLI or an evaluation too
 
 This spec defines the Commission's fields, the rules a supervisor follows when it writes one, and the rules an agent follows when it runs one. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
 
-The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before any Commission. For one run, a Commission can add items, replace the system prompt, and limit which built-in items are used; the Descriptor itself stays the same. The [Trajectory](./trajectory.md) spec records a copy of the Commission in `run_requested`, the first event, and records what the run actually uses in `agent_started`.
+The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before any Commission. For one run, a Commission can add items, replace the system prompt, and limit which built-in items are used; the Descriptor itself stays the same. The [Trajectory](./trajectory.md) spec records a copy of the Commission in [`run_requested`](./trajectory.md#33-run_requested), the first event, and records what the run actually uses in [`agent_started`](./trajectory.md#35-agent_started).
 
 ## 2. Example
 
@@ -74,7 +74,7 @@ The `acme-code-agent` key refers to the agent in the [Descriptor example](./agen
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `avp_version` | string | Yes | The AVP version the Commission follows. `"0.1"` for this spec. |
-| `run_id` | string | Yes | The run's ID, chosen by the supervisor. The [Trajectory](./trajectory.md) uses it as every event's `subject`. |
+| `run_id` | string | Yes | The run's ID, chosen by the supervisor. Every [Trajectory event](./trajectory.md#31-event) carries it as `run_id`. |
 | `model` | string | Yes | The model to run, in the form `origin/model` used by [models.dev](https://models.dev), for example `"anthropic/claude-sonnet-4-6"`. `origin` is the model's maker, not necessarily the service that runs it; see [Provider](#33-provider). Matches `^[^/]+/.+$`. |
 | `prompt` | string | Yes | The first user message of the run. |
 | `supervisor` | [Supervisor](#32-supervisor) | No | The supervisor that wrote the Commission. |
@@ -194,7 +194,7 @@ These rules apply to the agent that runs a Commission. An agent conforms to this
 
 ### 5.1 The agent checks the Commission before the run starts
 
-Before its first model call, the agent MUST refuse the Commission in each case below marked MUST, and SHOULD refuse it in each case marked SHOULD. To refuse, it emits `error_occurred` with the code `invalid_commission` and a message that says which case applies, then stops with reason `error`, as the [Trajectory](./trajectory.md) spec defines.
+Before its first model call, the agent MUST refuse the Commission in each case below marked MUST, and SHOULD refuse it in each case marked SHOULD. To refuse, it ends the run with an [`error_occurred`](./trajectory.md#311-error_occurred) event with the code `invalid_commission` and a message that says which case applies. The run never starts, so there is no `agent_started` or `agent_stopped`.
 
 | Case | Level |
 |---|---|
@@ -216,13 +216,13 @@ A tool from a built-in MCP server the run may not use is not available either.
 
 ### 5.3 Turned-off items are hidden and blocked
 
-The agent SHOULD NOT offer a built-in item the run may not use to the model. If the model calls one anyway, the agent MUST NOT run it, and MUST record the call as failed, as the [Trajectory](./trajectory.md) spec defines.
+The agent SHOULD NOT offer a built-in item the run may not use to the model. If the model calls one anyway, the agent MUST NOT run it, and MUST record the call as failed: its [`tool_returned`](./trajectory.md#38-tool_returned) event has `is_error` set to `true`.
 
 ### 5.4 Added items are used, or the run stops
 
 Before its first model call, the agent MUST connect to every MCP server and load every skill in the Commission. [Agent settings](#37-agent-settings) do not apply to them.
 
-If an MCP server in the Commission does not reach `connected` status, the agent MUST NOT start the run. It emits `error_occurred` with the code `mcp_connect_failed` and a message that names the server, then stops with reason `error`, as the [Trajectory](./trajectory.md) spec defines.
+If an MCP server in the Commission does not reach `connected` status, the agent MUST NOT start the run. It ends the run with an [`error_occurred`](./trajectory.md#311-error_occurred) event with the code `mcp_connect_failed` and a message that names the server, and sends no `agent_started` or `agent_stopped`.
 
 ### 5.5 `system_prompt` replaces the agent's own
 
