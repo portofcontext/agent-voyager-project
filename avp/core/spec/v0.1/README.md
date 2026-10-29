@@ -40,6 +40,25 @@ All definitions are also bundled in [`avp.schema.json`](./avp.schema.json), with
 
 This document is an overview. The requirements are in the three specs above.
 
+## Secrets
+
+A Commission never holds a secret value, because the Trajectory copies it. Each secret is a [Secret reference](./commission.md#34-secret-reference) that says where the value is:
+
+| Reference | The value is in | Allowed in |
+|---|---|---|
+| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Provider's `credential`, an HTTP MCP server's `auth` |
+| `{ "env": "TEST_DB_PASSWORD" }` | A variable in the agent's environment | Those two, and a stdio MCP server's `env` |
+
+Prefer `proxy`: the agent can use the secret but never read it, so it can't leak it. Use `env` for secrets a proxy can't add, such as a database password.
+
+In the [Commission example](./commission.md#2-example), run with OpenSandbox's [Credential Vault](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/guides/credential-vault.md) as the proxy:
+
+1. Before the run, the proxy gets `anthropic-key` and `docs-token`, and the agent's environment gets `TEST_DB_PASSWORD`.
+2. The agent calls Anthropic with a stand-in key, and the docs server with no token. The proxy adds the real ones.
+3. The agent starts the database server with `DB_PASSWORD` set to its own `TEST_DB_PASSWORD`.
+
+**Step 1 is outside AVP**: which proxy, where the values come from, and how the environment is set up are up to whatever launches the agent. AVP defines only the references and the agent's [rules for using them](./commission.md#59-secrets-come-from-the-proxy-or-the-environment).
+
 ## Built on
 
 AVP reuses existing specs wherever one already fits:
@@ -59,7 +78,7 @@ AVP defines the shape of the Commission, the Agent Descriptor, and Trajectory ev
 
 - **Transport.** How the Commission reaches the agent and how events come back: a file, a pipe, HTTP, a message queue, or an in-process call.
 - **Workspace.** Which folder the agent works in, what files are in it before the run, and how it is cleaned up afterward.
-- **Credentials.** How API keys and secrets reach the agent and its MCP servers.
+- **Credentials.** Setting up the credential proxy and putting variables in the agent's environment. [Secrets](#secrets) covers what AVP does define.
 - **MCP server hosting.** Where the servers named in a Commission run.
 - **Placement and isolation.** Where the agent runs (subprocess, container, VM) and how it is sandboxed.
 - **Orchestration and storage.** Running many agents, and keeping Trajectories after a run.

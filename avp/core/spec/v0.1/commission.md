@@ -9,7 +9,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 A Commission is a JSON object that answers one question: **what should this run do?** It holds the task the agent works on and the settings for one run: the prompt, the model, and optionally a system prompt, the MCP servers and skills to add, and which of the agent's [built-in items](./agent-descriptor.md#1-overview) the run may use.
 
-A supervisor (the system that starts the run, such as a CLI or an evaluation tool) writes the Commission and sends it to the agent at the start of the run. It sends nothing after that: everything the agent needs from the supervisor is in the Commission. Credentials are never in it; it names them, and the supervisor supplies them outside the Commission.
+A supervisor (the system that starts the run, such as a CLI or an evaluation tool) writes the Commission and sends it to the agent at the start of the run. It sends nothing after that: everything the agent needs from the supervisor is in the Commission. Credentials are never in it. It names each one instead: either a credential that a proxy outside the agent holds and adds to the agent's requests, or a variable in the agent's environment.
 
 This spec defines the Commission's fields, the rules a supervisor follows when it writes one, and the rules an agent follows when it runs one. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
 
@@ -27,7 +27,7 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
   "model": "anthropic/claude-sonnet-4-6",
   "provider": {
     "id": "anthropic",
-    "credential": { "vault": "anthropic-key" }
+    "credential": { "proxy": "anthropic-key" }
   },
   "mcp_servers": [
     {
@@ -35,14 +35,14 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
       "name": "Team docs",
       "type": "http",
       "url": "https://mcp.example.com/docs",
-      "auth": { "vault": "docs-token" }
+      "auth": { "proxy": "docs-token" }
     },
     {
       "id": "db",
       "name": "Test database",
       "type": "stdio",
       "command": ["npx", "-y", "@example/db-mcp", "--read-only"],
-      "env": { "DB_PASSWORD": { "vault": "test-db-password" } }
+      "env": { "DB_PASSWORD": { "env": "TEST_DB_PASSWORD" } }
     }
   ],
   "skills": [
@@ -65,7 +65,7 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
 }
 ```
 
-The `acme-code-agent` key refers to the agent in the [Descriptor example](./agent-descriptor.md#2-example). With these lists, the run can use `read_file` but not `bash` or the `researcher` subagent. The entry has no `enabled_mcp_servers` list, so the `issues` server and its `search_issues` tool stay available: an [absent list limits nothing](#52-agent-settings-limit-the-built-in-items).
+The `acme-code-agent` key refers to the agent in the [Descriptor example](./agent-descriptor.md#2-example). With these lists, the run can use `read_file` but not `bash` or the `researcher` subagent. The entry has no `enabled_mcp_servers` list, so the `issues` server and its `search_issues` tool stay available: an [absent list limits nothing](#52-agent-settings-limit-the-built-in-items). The `db` server's `DB_PASSWORD` gets the value of the agent's own `TEST_DB_PASSWORD` variable; the README's [Secrets](./README.md#secrets) section walks through how each secret in this example reaches its service.
 
 ## 3. Reference
 
@@ -107,11 +107,14 @@ A Provider is the service that runs the model, for example OpenRouter running `"
 
 ### 3.4 Secret reference
 
-A Secret reference names a secret without containing it.
+A Secret reference names a secret without containing it. It has exactly one of the fields below.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `vault` | string | Yes | The name the supervisor looks the secret up by, for example `"anthropic-key"`. Matches `^[a-z0-9_-]+$`. |
+| `proxy` | string | One of | The name of a credential that a proxy outside the agent holds, for example a credential in an [OpenSandbox Credential Vault](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/guides/credential-vault.md). The proxy adds it to the agent's matching requests, so the agent never receives its value. Matches `^[a-z0-9_-]+$`. |
+| `env` | string | One of | The name of a variable in the agent's environment that holds the secret, for example `"TEST_DB_PASSWORD"`. Matches `^[A-Za-z_][A-Za-z0-9_]*$`. |
+
+A proxy can only add a secret to a request that leaves the agent, so `proxy` is allowed only in a Provider's `credential` and an HTTP server's `auth`. `env` is allowed in all three places that take a Secret reference.
 
 ### 3.5 MCP server
 
@@ -141,7 +144,7 @@ A server the agent starts as a local program and talks to over its standard inpu
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | string[] | Yes | The program and its arguments, for example `["npx", "-y", "@example/db-mcp"]`. At least one item. |
-| `env` | map<string, string \| [Secret reference](#34-secret-reference)> | No | Environment variables to set for the program. Each key is a variable name. |
+| `env` | map<string, string \| [Secret reference](#34-secret-reference)> | No | Environment variables to set for the program. Each key is a variable name. A value is a string, or a Secret reference with `env`, which takes the value from a variable in the agent's own environment: with `"DB_PASSWORD": { "env": "TEST_DB_PASSWORD" }`, the program's `DB_PASSWORD` is set to the value of the agent's `TEST_DB_PASSWORD`. |
 
 ### 3.6 Skill
 
@@ -187,6 +190,10 @@ The `origin` in `model` MUST be the model's maker, even when a different service
 ### 4.5 Agent settings name real built-in items
 
 Before it sends a Commission, the supervisor SHOULD check each entry in `agents` against that agent's Descriptor: `version` matches its `agent_version`, and every name in an `enabled_*` list is in the matching Descriptor list.
+
+### 4.6 Secrets stay out of the agent's reach
+
+The supervisor SHOULD use `proxy` wherever a proxy can add the secret, and `env` only where none can, such as a database with no proxy that logs in for the client. An agent that holds a secret can leak it, for example after a prompt injection or through code it runs; a secret held by a proxy outside the agent can only be used, never read. OpenSandbox's [Credential Vault](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/guides/credential-vault.md) is one such proxy.
 
 ## 5. Rules for agents
 
@@ -240,14 +247,18 @@ When a Commission has `output_schema`, the agent's final output MUST match it.
 
 The agent MUST NOT write a secret value it receives into any Trajectory event.
 
+### 5.9 Secrets come from the proxy or the environment
+
+For a `proxy` reference, the agent MUST send the requests that need the credential to the URL in the Commission, unchanged, so the proxy can add it. The agent MUST NOT need the credential's value. When its runtime requires a value, for example an SDK that won't start without an API key, the agent MAY use any stand-in; the proxy replaces it.
+
+For an `env` reference, the agent MUST use the value of the named variable in its own environment wherever the secret goes: as the Provider's API key, as an HTTP server's bearer token, or as a stdio server's variable.
+
 ## 6. Out of scope
 
 - **Sending a Commission:** how it reaches the agent, for example as a file, over stdin, or over HTTP.
 - **Changing a run after it starts:** the supervisor sends nothing after the Commission.
 - **Choosing an agent:** finding one, or one that can run a given model.
-- **Storing secrets\*:** where a supervisor keeps them and how it resolves a [Secret reference](#34-secret-reference).
+- **Providing secrets:** setting up the proxy and its credentials, and setting the variables in the agent's environment.
 - **The run's environment:** the workspace, files, sandbox, and network access.
 - **`thread_id`, `tags`, and `meta`:** AVP gives them no meaning beyond their descriptions in the [Commission](#31-commission) reference.
 - **Tool name clashes:** two MCP servers that offer tools with the same name. The agent's MCP client handles them as it normally does.
-
-\* *TODO*: this spec does not yet say how an agent receives the value behind a Secret reference. Because a Commission never carries a secret value, that part has to be defined here before this spec is final.
