@@ -47,7 +47,7 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
   ],
   "skills": [
     {
-      "id": "release-notes",
+      "name": "release-notes",
       "files": {
         "SKILL.md": "---\nname: release-notes\ndescription: How to write a release note for a fix.\n---\n..."
       }
@@ -103,7 +103,7 @@ A Provider is the service that runs the model, for example OpenRouter running `"
 |---|---|---|---|
 | `id` | string | No | The service, for example `"anthropic"`, `"openai"`, or `"openrouter"`. It decides which API the agent calls and how it authenticates. Matches `^[a-z0-9_-]+$`. Absent means the model's `origin`. |
 | `base_url` | string | No | The URL of the service's API. Absent means the service's usual URL. |
-| `credential` | [Secret reference](#34-secret-reference) | No | The API key for the service. |
+| `credential` | [Secret reference](#34-secret-reference) | No | The API key for the service. Absent means the Commission names none, and the agent uses whatever credential its environment has for the service. |
 
 ### 3.4 Secret reference
 
@@ -144,15 +144,15 @@ A server the agent starts as a local program and talks to over its standard inpu
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | string[] | Yes | The program and its arguments, for example `["npx", "-y", "@example/db-mcp"]`. At least one item. |
-| `env` | map<string, string \| [Secret reference](#34-secret-reference)> | No | Environment variables to set for the program. Each key is a variable name. A value is a string, or a Secret reference with `env`, which takes the value from a variable in the agent's own environment: with `"DB_PASSWORD": { "env": "TEST_DB_PASSWORD" }`, the program's `DB_PASSWORD` is set to the value of the agent's `TEST_DB_PASSWORD`. |
+| `env` | map<string, string \| [Secret reference](#34-secret-reference)> | No | Environment variables to set for the program, on top of those the agent's MCP client gives it. Each key is a variable name. A value is a string, or a Secret reference with `env`, which takes the value from a variable in the agent's own environment: with `"DB_PASSWORD": { "env": "TEST_DB_PASSWORD" }`, the program's `DB_PASSWORD` is set to the value of the agent's `TEST_DB_PASSWORD`. |
 
 ### 3.6 Skill
 
-A Skill carries a skill directory, as defined by [Agent Skills](https://agentskills.io/specification), inside the Commission. The skill's `name` and `description` are in the frontmatter of its `SKILL.md`.
+A Skill carries a skill directory, as defined by [Agent Skills](https://agentskills.io/specification), inside the Commission. The skill's `name` and `description` are in the frontmatter of its `SKILL.md`. The Skill's `name` field stands in for the skill's directory name, which Agent Skills requires to equal the frontmatter `name`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | string | Yes | Identifies the skill in the Commission. Matches `^[a-z0-9_-]+$`. |
+| `name` | string | Yes | The skill's name. Equals the `name` in the frontmatter of its `SKILL.md`, and follows the [Agent Skills naming rules](https://agentskills.io/specification#name-field). |
 | `files` | map<string, string> | Yes | The skill's files. Each key is a path relative to the skill directory, and each value is the file's UTF-8 content. Includes `"SKILL.md"`. |
 
 ### 3.7 Agent settings
@@ -177,7 +177,7 @@ The supervisor MUST give every Commission it sends a `run_id` it has not used be
 
 ### 4.2 IDs are unique
 
-Within one Commission, the supervisor MUST NOT repeat an MCP server `id` or a Skill `id`.
+Within one Commission, the supervisor MUST NOT repeat an MCP server `id` or a skill `name`.
 
 ### 4.3 Secrets are only in Secret references
 
@@ -208,6 +208,7 @@ Before its first model call, the agent MUST refuse the Commission in each case b
 | `agents` is present and has no entry for the agent's `agent_name`. | MUST |
 | The agent's entry has a `version` that differs from the agent's `agent_version`. | MUST |
 | An `enabled_*` list in the agent's entry names an item that is not in the matching list of the agent's Descriptor. For `enabled_tools`, only tools without an `mcp_server_id` count. | MUST |
+| A skill's `name` differs from the `name` in the frontmatter of its `SKILL.md`. | MUST |
 | The Commission adds an MCP server whose `id` matches the `id` of an MCP server in the agent's Descriptor, or a skill whose name matches the `name` of a skill there. | SHOULD |
 | The agent cannot run `model`. | SHOULD |
 | The agent cannot use `provider`. | MUST |
