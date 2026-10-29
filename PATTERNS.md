@@ -132,6 +132,11 @@ the provider's origin, and `<PROVIDER>_BASE_URL`, that root plus the API's
 version path (`OPENAI_BASE_URL=http://broker/llm/openai/v1`). Adapters route
 every model call through them, translating to the SDK's own setting when it
 reads neither; `avp-conformance check` meters the traffic to verify it.
-Fresh state directories are not a security sandbox. Host launchers preserve uv
+The CLI's `--runtime local` runs the installed manifest command without creating
+an OS sandbox. It uses fresh home and SDK state, a saved workspace, and process
+group cleanup. It forwards selected provider credentials or uses a loopback
+vault broker. Any outer container or VM restrictions still apply. Container-only
+environment settings are rejected, and the runtime is recorded in `run.json`.
+Fresh state directories are not a security sandbox. Host conformance launchers preserve uv
 and Rust build caches so bootstrapping does not require reinstalling toolchains.
 SDK-specific Commission mapping and tool/skill restrictions remain in adapters.

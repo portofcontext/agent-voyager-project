@@ -4,13 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avp-pydantic-ai"
-version = "0.0.3"
+version = "0.0.4"
 description = "AVP agent over Pydantic AI: the framework owns the loop, the adapter records the trajectory."
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "agent-voyager-project==0.2.0",
     "pydantic-ai-slim[anthropic,google,mcp,openai]==2.58.0",
+    # Pydantic AI 2.58 can't build requests on the Anthropic SDK 2 (it fails
+    # with "Cannot instantiate typing.Union" before anything is sent).
+    "anthropic<2",
 ]
 
 [tool.uv.sources]
@@ -24,3 +27,10 @@ packages = ["src/avp_pydantic_ai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# How this agent installs and runs in a sandbox: release-manifest.py writes it
+# into the release's avp-release.json, with the workspace lock as requirements.txt.
+[tool.avp.release]
+agent = "pydantic-ai"
+module = "avp_pydantic_ai.conformance"
+wheels = ["agent-voyager-project", "avp-pydantic-ai"]

@@ -63,6 +63,7 @@ def test_write_snapshots_full_bodies_agent_binding_and_config(tmp_path) -> None:
     assert m is not None
     assert m["run_id"] == "swift-harbor"
     assert m["run"] == {
+        "runtime": "opensandbox",
         "agents": ["goose", "claude-code"],
         "agent_sources": [],
         "model_override": "claude-haiku-4-5",

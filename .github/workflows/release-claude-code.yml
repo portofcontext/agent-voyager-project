@@ -1,13 +1,12 @@
 name: Release claude-code agent
 
-# Publishes the claude-code agent's wheels as a GitHub release, which
-# `avp agent install claude-code` then downloads and installs into a managed
-# venv. We ship the unpublished in-repo `avp` wheel alongside the agent wheel so
-# the installer resolves it via --find-links (PyPI's unrelated `avp` is never
-# pulled); the agent's third-party deps (claude-agent-sdk) still come from PyPI.
+# Builds the claude-code agent's wheels, with the in-repo wheels it imports (they
+# are not on PyPI). agent-release.yml then locks its dependencies to the
+# workspace lock, runs it in a sandbox image against a stub model, and
+# publishes the GitHub release that `avp agent install claude-code` installs.
 #
-# Triggered by pushing a tag `agent-claude-code-v<version>` (e.g.
-# agent-claude-code-v0.0.1), or run manually with an explicit version.
+# Triggered by pushing a tag `agent-claude-code-v<version>`, or run manually with an
+# explicit version.
 
 on:
   push:
@@ -19,48 +18,35 @@ on:
         required: true
 
 permissions:
-  contents: write # create the release + upload assets
+  contents: write # agent-release.yml creates the release
 
 jobs:
-  release:
-    name: Build wheels + publish release
+  build:
+    name: Build wheels
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Build the agent + its in-repo dependency wheels
-        # agent-voyager-project (the wire types, imported as `avp`) and
-        # avp-conformance (load_commission/load_built_in the conformance
-        # entrypoint imports) ship alongside the agent wheel; the installer
-        # installs all three by path so the bundled versions are exact.
+      - name: Build the agent and its in-repo dependency wheels
         run: |
-          uv build --package agent-voyager-project --out-dir dist
-          uv build --package avp-conformance --out-dir dist
-          uv build --package avp-claude-agent-sdk --out-dir dist
+          uv build --wheel --package agent-voyager-project --out-dir dist
+          uv build --wheel --package avp-conformance --out-dir dist
+          uv build --wheel --package avp-claude-agent-sdk --out-dir dist
 
-      - name: Roll up checksums
-        run: cd dist && shasum -a 256 *.whl > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-wheels
+          path: dist/*.whl
+          if-no-files-found: error
 
-      - name: Create or update the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="agent-claude-code-v${{ inputs.version }}"
-          else
-            TAG="${{ github.ref_name }}"
-          fi
-          gh release create "$TAG" dist/*.whl dist/SHA256SUMS \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "claude-code agent $TAG" \
-            --notes "Wheels for the claude-code agent (+ the avp wire-types wheel). Install with: avp agent install claude-code --version ${TAG#agent-claude-code-v}" \
-            || gh release upload "$TAG" dist/*.whl dist/SHA256SUMS --repo "${{ github.repository }}" --clobber
+  release:
+    needs: build
+    uses: ./.github/workflows/agent-release.yml
+    with:
+      agent: claude-code
+      tag: ${{ github.event_name == 'workflow_dispatch' && format('agent-claude-code-v{0}', inputs.version) || github.ref_name }}

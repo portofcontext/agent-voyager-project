@@ -576,3 +576,22 @@ test("a launcher's GEMINI_API_KEY authenticates Google", async () => {
   assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
   assert.ok(keys.length > 0 && keys.every((k) => k === "launcher-key"), `keys sent: ${JSON.stringify(keys)}`);
 });
+
+test("caller OpenTelemetry settings reach native tool subprocesses", async () => {
+  const previous = process.env.OTEL_SERVICE_NAME;
+  process.env.OTEL_SERVICE_NAME = "avp-caller-service";
+  try {
+    const { events, cwd } = await runScripted(commission(), (workspace) => [
+      { call: { id: "call_env", name: "bash", args: {
+        command: `printenv OTEL_SERVICE_NAME > '${join(workspace, "otel.txt")}'`,
+        description: "Read the caller's service name",
+      } } },
+      { text: "DONE" },
+    ]);
+    assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+    assert.equal(readFileSync(join(cwd, "otel.txt"), "utf8").trim(), "avp-caller-service");
+  } finally {
+    if (previous === undefined) delete process.env.OTEL_SERVICE_NAME;
+    else process.env.OTEL_SERVICE_NAME = previous;
+  }
+});

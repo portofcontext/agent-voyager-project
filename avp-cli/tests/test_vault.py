@@ -240,7 +240,7 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
         monkeypatch.setenv(name, name)
     monkeypatch.setenv("OPENAI_UNRELATED_SECRET", "must-not-pass")
     c = _commission(provider=Provider(id=provider) if provider else None)
-    a = agent.SandboxedAgent("fake", "x", (), env={"GOOSE_PROVIDER": "mistral"})
+    a = agent.PreparedAgent("fake", "x", (), env={"GOOSE_PROVIDER": "mistral"})
     env = agent._sandbox_env(a, c, None)
     expected = {
         None: {"OPENAI_API_KEY"},
@@ -255,7 +255,7 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
 
 def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:
     monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
-    a = agent.SandboxedAgent(
+    a = agent.PreparedAgent(
         "fake",
         "x",
         (),
@@ -444,7 +444,7 @@ def test_written_commission_authenticates_mcp_without_upstream_secret(
     )
     brk = agent._start_broker(c)
     try:
-        written = agent._commission_for_sandbox(c, brk)
+        written = agent._commission_for_agent(c, brk)
         data = json.loads(written)
         server = data["mcp_servers"][0]
         assert server["url"] == brk.route_url("mcp/net")  # rewritten to broker

@@ -69,7 +69,6 @@ async def run(commission: Commission, sink: EventSink) -> None:
                 "modelProvider": "avp",
                 "cwd": cwd,
                 "approvalPolicy": "never",
-                "sandbox": "workspace-write",
                 "experimentalRawEvents": True,
                 "config": {"skills.config": disabled},
                 "allowProviderModelFallback": False,

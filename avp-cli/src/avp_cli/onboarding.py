@@ -45,7 +45,7 @@ _AGENTS = [
         "install your own agent from its avp-conformance.json",
     ),
     (
-        "avp agent install <agent> --as <name> --wheel ...",
+        "avp agent install <agent> --as <name> --from <dir>",
         "install a local build of a built-in agent under its own name",
     ),
     ("avp agent describe <name>", "one agent's capabilities: tools, models, skills, subagents"),

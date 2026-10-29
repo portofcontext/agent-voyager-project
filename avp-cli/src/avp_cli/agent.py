@@ -1,16 +1,14 @@
-"""Run a real AVP agent against one Commission, inside a sandbox.
+"""Run an AVP agent against one Commission with the selected launcher.
 
 Every conforming AVP agent honors the same run contract the conformance
 harness uses:
 
     <command> run --commission <path> --out <ndjson>
 
-Here that command executes inside an OpenSandbox container built from the
-environment's derived image (see `avp_cli.images`): the per-run host workspace
-and an io dir are bind-mounted in, the Commission goes in as a file, and the
-NDJSON trajectory lands back on the host where it is tailed live and parsed.
-The host machine is not part of the agent's world; everything the agent sees
-is declared (image, mounts, env vars, egress policy).
+By default the command executes inside a container built from the environment's
+derived image. The local runtime executes the installed command directly, with
+fresh SDK state and no additional OS isolation. Both launchers supply a workspace
+and Commission file, then tail and parse the resulting NDJSON trajectory.
 
 `describe_agent` stays a host-side subprocess: it is the free pre-flight view
 (no model turn, no tools), driven from the agent's manifest like the
@@ -24,7 +22,9 @@ import json
 import os
 import shlex
 import shutil
+import signal
 import subprocess
+import tempfile
 import time
 import uuid
 from collections.abc import Callable
@@ -59,17 +59,21 @@ _DEFAULT_RESOURCES = {"cpu": "2", "memory": "4Gi"}
 
 
 @dataclass(frozen=True)
-class SandboxedAgent:
-    """An agent resolved to its in-sandbox form: the derived image that has it
-    installed, the argv that runs it there, and its manifest env."""
+class PreparedAgent:
+    """Launcher inputs: command, environment, and optional container image.
+
+    Local commands bootstrap in the manifest directory, then stock entrypoints
+    enter AVP_WORKSPACE. Container commands use their image's installed paths.
+    """
 
     name: str
-    image: str
+    image: str | None
     command: tuple[str, ...]
     env: dict[str, str] = field(default_factory=dict)
     # Board / run-id label when `name` (the descriptor identity Commissions bind
     # to) would not tell agents apart, as with a local build of a built-in.
     label: str = ""
+    cwd: Path | None = None
 
     @property
     def key(self) -> str:
@@ -77,17 +81,15 @@ class SandboxedAgent:
 
 
 @dataclass
-class SandboxContext:
-    """The run-level sandbox facts shared by every cell of an eval (or the one
-    cell of `avp run`): server connection, the seeded host workspace, and the
-    environment's setup / egress / resource asks."""
+class RunContext:
+    """The workspace and execution settings shared by an evaluation's cells."""
 
-    connection: osb.Connection
+    connection: osb.Connection | None
     workspace: Path
     setup: list[str] = field(default_factory=list)
     net: list[str] = field(default_factory=list)
     resources: dict[str, str] = field(default_factory=dict)
-    runtime: str = "opensandbox"  # the sandbox backend (see avp_cli.runtime)
+    runtime: str = "opensandbox"
 
 
 def load_manifest(path: str | Path) -> tuple[AgentManifest, Path]:
@@ -98,16 +100,143 @@ def load_manifest(path: str | Path) -> tuple[AgentManifest, Path]:
     return manifest, cwd
 
 
+def _run_local(
+    agent: PreparedAgent,
+    ctx: RunContext,
+    commission: Commission,
+    out_path: str | Path,
+    timeout_s: float,
+    on_event: Callable | None,
+) -> tuple[list | None, str | None]:
+    """Run the file contract locally. Fresh state is not OS confinement.
+
+    Keep the workspace, trajectory (including partial output), and stdout/stderr.
+    Remove the per-cell SDK state and terminate the process group on every exit.
+    """
+    if ctx.net or ctx.resources:
+        return None, "local runtime cannot enforce network or resource limits"
+    out = Path(out_path).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.unlink(missing_ok=True)
+    workspace = ctx.workspace.resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+    brk = None
+    try:
+        brk = _start_broker(commission, local=True)
+        with tempfile.TemporaryDirectory(prefix="avp-local-") as tmp:
+            root = Path(tmp).resolve()
+            defaults = directory_env(root, workspace)
+            env = _provider_env(
+                agent,
+                commission,
+                brk,
+                inherited={**os.environ, **defaults, "AVP_HOME": str(root / "home/.avp")},
+            )
+            for name in defaults:
+                Path(env[name]).mkdir(parents=True, exist_ok=True)
+            if local_models.is_local(commission):
+                cache = local_models.provision(commission.model).resolve()
+                registry = json.loads((cache / "registry.json").read_text())
+                for model in registry["models"]:
+                    model["local_path"] = str(cache / model["filename"])
+                staged = Path(env["AVP_ENV_ROOT"]) / "data/models"
+                staged.mkdir(parents=True, exist_ok=True)
+                (staged / "registry.json").write_text(json.dumps(registry))
+            cm = root / "commission.json"
+            cm.write_text(_commission_for_agent(commission, brk))
+            deadline = time.monotonic() + timeout_s
+            with (
+                out.with_suffix(".stdout.log").open("wb") as stdout,
+                out.with_suffix(".stderr.log").open("wb") as stderr,
+            ):
+                for command in ctx.setup:
+                    err = _local_command(
+                        ["/bin/sh", "-c", command],
+                        workspace,
+                        env,
+                        deadline,
+                        stdout,
+                        stderr,
+                        out,
+                        None,
+                    )
+                    if err:
+                        return None, f"setup failed: {err}"
+                argv = [*agent.command, "run", "--commission", str(cm), "--out", str(out)]
+                err = _local_command(
+                    argv,
+                    agent.cwd or workspace,
+                    env,
+                    deadline,
+                    stdout,
+                    stderr,
+                    out,
+                    on_event,
+                )
+            if err:
+                return None, err
+            if not out.exists():
+                return None, "agent exited 0 but wrote no trajectory"
+            return read_trajectory(out), None
+    except (OSError, ValueError, vault.VaultError, local_models.LocalModelError) as exc:
+        return None, f"local run failed: {exc}"
+    finally:
+        if brk is not None:
+            brk.stop()
+
+
+def _local_command(argv, cwd, env, deadline, stdout, stderr, out, on_event) -> str | None:
+    """Launch in a process group so ordinary tool children share its lifetime."""
+    if time.monotonic() >= deadline:
+        return "timed out before command started"
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
+    pos, buf = 0, ""
+    try:
+        while proc.poll() is None:
+            if on_event:
+                pos, buf = _drain(out, pos, buf, on_event)
+            if time.monotonic() >= deadline:
+                return "timed out waiting for local agent"
+            time.sleep(_TAIL_INTERVAL)
+        if on_event:
+            _drain(out, pos, buf, on_event)
+        if proc.returncode:
+            return f"exit {proc.returncode}; see {out.with_suffix('.stderr.log')}"
+        return None
+    finally:
+        # Also stop children left behind after a successful parent exit. This
+        # is lifecycle cleanup, not containment of processes that detach.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGTERM)
+        # Give tool children a chance to exit too, even when poll() already
+        # reaped the group leader. macOS can report EPERM for a group containing
+        # only orphaned zombies until launchd has reaped them.
+        time.sleep(0.1)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=0.5)
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+
+
 def run_agent(
-    agent: SandboxedAgent,
-    ctx: SandboxContext,
+    agent: PreparedAgent,
+    ctx: RunContext,
     commission: Commission,
     *,
     out_path: str | Path,
     timeout_s: float = 300.0,
     on_event: Callable[[BaseModel | dict[str, Any]], None] | None = None,
 ) -> tuple[list[BaseModel | dict[str, Any]] | None, str | None]:
-    """Run the agent for one Commission in a fresh sandbox. Returns (events, error).
+    """Run one Commission using the selected runtime. Returns (events, error).
 
     On success `error` is None and `events` is the parsed NDJSON trajectory
     (custom event types pass through as dicts). On failure `events` is None and
@@ -119,9 +248,11 @@ def run_agent(
     live progress. The returned list is always re-parsed from the finished
     file, so it stays authoritative regardless of what the live tail saw.
 
-    The sandbox is always killed before returning; the workspace mount is the
-    only place agent writes survive.
+    Containers are killed before returning. Local execution cleans up its
+    process group and temporary SDK state; it cannot confine filesystem writes.
     """
+    if ctx.runtime == "local":
+        return _run_local(agent, ctx, commission, out_path, timeout_s, on_event)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     # io lives under ~/.avp: the server's allowed_host_paths confines bind
@@ -146,7 +277,7 @@ def run_agent(
         return None, f"vault broker startup failed: {exc}"
 
     try:
-        (io_dir / "commission.json").write_text(_commission_for_sandbox(commission, brk))
+        (io_dir / "commission.json").write_text(_commission_for_agent(commission, brk))
         if brk is not None:
             (io_dir / "broker-preflight.sh").write_text(_BROKER_PREFLIGHT_SH)
         # Local-inference commissions need their model staged into the env root
@@ -170,7 +301,9 @@ def run_agent(
             # otherwise the provider + MCP hosts the Commission names. A run can
             # never be commissioned to call a URL the sandbox blocks.
             env = _sandbox_env(agent, commission, brk)
-            box = runtime.get_runtime(ctx.runtime, ctx.connection.config()).create(
+            box = runtime.get_runtime(
+                ctx.runtime, ctx.connection.config() if ctx.connection else None
+            ).create(
                 image=agent.image,
                 env=env,
                 mounts=mounts,
@@ -225,7 +358,7 @@ def _provider_credentialed(commission: Commission) -> bool:
     return p is not None and p.credential is not None
 
 
-def _start_broker(commission: Commission) -> broker.Broker | None:
+def _start_broker(commission: Commission, *, local: bool = False) -> broker.Broker | None:
     """Start a vault broker iff the Commission references any secret. Resolves
     handles host-side (may raise VaultError); secrets live only in the broker."""
     routes: list[tuple[str, broker.Route]] = []
@@ -262,7 +395,7 @@ def _start_broker(commission: Commission) -> broker.Broker | None:
             )
     if not routes:
         return None
-    brk = broker.Broker()
+    brk = broker.Broker(local=local)
     for key, route in routes:
         brk.add_route(key, route)
     brk.start()
@@ -314,9 +447,22 @@ def _endpoint_env(provider_id: str, host: str) -> dict[str, str]:
 
 
 def _sandbox_env(
-    agent: SandboxedAgent, commission: Commission, brk: broker.Broker | None
+    agent: PreparedAgent, commission: Commission, brk: broker.Broker | None
 ) -> dict[str, str]:
-    """Build the agent environment using the Commission's provider selection."""
+    return {
+        **directory_env(Path("/avp"), Path(_WORKSPACE_MNT)),
+        **_provider_env(agent, commission, brk),
+    }
+
+
+def _provider_env(
+    agent: PreparedAgent,
+    commission: Commission,
+    brk: broker.Broker | None,
+    *,
+    inherited: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Apply explicit manifest/provider settings to the launcher's environment."""
     provider = commission.provider or Provider(id=commission.model.split("/", 1)[0])
     prefix = provider.id.upper().replace("-", "_")
     api_key = f"{prefix}_API_KEY"
@@ -331,11 +477,13 @@ def _sandbox_env(
     if provider.credential is not None:
         if brk is None:
             raise ValueError("vault credential requires a running broker")
-        env = {k: v for k, v in agent.env.items() if k not in provider_vars}
+        env = {**(inherited or {}), **agent.env}
+        for key in provider_vars:
+            env.pop(key, None)
         env.update(dict.fromkeys((api_key, *_KEY_ALIASES.get(provider.id, ())), brk.token))
         env.update(_endpoint_env(provider.id, brk.route_url(f"llm/{provider.id}")))
     else:
-        env = {k: os.environ[k] for k in provider_vars if k in os.environ}
+        env = {**(inherited or {}), **{k: os.environ[k] for k in provider_vars if k in os.environ}}
         env.update(agent.env)
         if commission.provider is not None and base:
             base = base.rstrip("/")
@@ -343,10 +491,10 @@ def _sandbox_env(
 
     # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
     env["GOOSE_PROVIDER"] = provider.id
-    return {**directory_env(Path("/avp"), Path(_WORKSPACE_MNT)), **env}
+    return env
 
 
-def _commission_for_sandbox(commission: Commission, brk: broker.Broker | None) -> str:
+def _commission_for_agent(commission: Commission, brk: broker.Broker | None) -> str:
     """The commission.json the agent reads.
 
     Provider routing and MCP auth are supervisor concerns the CLI delivers via

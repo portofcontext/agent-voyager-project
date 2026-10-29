@@ -181,7 +181,13 @@ def _materialize_skills(commission: Commission, base_dir: Path) -> None:
         dest = base_dir / ".claude" / "skills" / skill.id
         dest.mkdir(parents=True, exist_ok=True)
         for filename, content in skill.files.items():
-            (dest / filename).write_text(content)
+            path = (dest / filename).resolve()
+            if not path.is_relative_to(dest.resolve()):
+                raise ValueError(
+                    f"skill {skill.id}: file path {filename!r} escapes the skill directory"
+                )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
 
 
 def apply_prompt(

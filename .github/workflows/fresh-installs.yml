@@ -1,10 +1,10 @@
 name: Fresh installs
 
 # Each released Python agent's tests against a fresh install of its wheels,
-# resolving the newest dependencies they allow, as a sandbox image does. The
-# workspace lockfile hides upstream changes from the other jobs; this runs on
-# PRs and weekly so a dependency release that breaks an agent shows up here
-# before it shows up in a user's eval. No model calls.
+# resolving the newest dependencies they allow instead of the workspace lock.
+# Releases install the lock's versions, so this doesn't gate them; it runs on
+# PRs and weekly as early warning that refreshing the lock (`uv lock
+# --upgrade`) would break an agent. No model calls.
 
 on:
   pull_request:

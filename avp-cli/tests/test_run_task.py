@@ -15,7 +15,7 @@ from avp_conformance.manifest import AgentManifest
 
 from avp_cli import agent as agent_mod
 from avp_cli import cli, images, osb
-from avp_cli.agent import SandboxedAgent
+from avp_cli.agent import PreparedAgent
 from avp_cli.agents import NoContainerRecipe, ResolvedAgent
 
 
@@ -35,7 +35,7 @@ def _stub_stack(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli,
         "_prepare_agent",
-        lambda agent, env_obj, quiet, runtime_name="opensandbox": SandboxedAgent(
+        lambda agent, env_obj, quiet, runtime_name="opensandbox": PreparedAgent(
             name=agent.name, image="img:test", command=("agent-bin",)
         ),
     )
@@ -123,73 +123,6 @@ def test_run_fails_fast_without_docker(avp_home, monkeypatch) -> None:
     assert cli.main(["run", "--agent", "goose", "x"]) == 2
 
 
-def test_builtin_claude_recipe_carries_is_sandbox_env() -> None:
-    # The claude CLI refuses bypassPermissions as the container's root user
-    # unless IS_SANDBOX=1; the recipe is where that knowledge lives.
-    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
-
-    recipe = _builtin_recipe(AGENT_SOURCES["claude-code"])
-    assert ("IS_SANDBOX", "1") in recipe.env
-    assert _builtin_recipe(AGENT_SOURCES["goose"]).env == ()
-
-
-def test_builtin_python_recipes_install_their_release_wheels() -> None:
-    from importlib.metadata import version
-
-    from avp_cli.agents import _LIBRARY_WHEEL_VERSION, AGENT_SOURCES, _builtin_recipe
-
-    # Releases build the library wheels from the tagged tree, so the pin must
-    # be the package's own version.
-    assert version("agent-voyager-project") == _LIBRARY_WHEEL_VERSION
-
-    for name, module in [
-        ("codex", "avp_codex"),
-        ("openai-agents", "avp_openai_agents"),
-        ("deep-agents", "avp_deep_agents"),
-        ("pydantic-ai", "avp_pydantic_ai"),
-    ]:
-        source = AGENT_SOURCES[name]
-        recipe = _builtin_recipe(source)
-        (pip,) = recipe.install  # no runtime besides the wheels
-        tag = f"agent-{name}-v{source.container_version}"
-        assert f"{tag}/{module}-{source.container_version}-py3-none-any.whl" in pip
-        assert f"{tag}/agent_voyager_project-{_LIBRARY_WHEEL_VERSION}-py3-none-any.whl" in pip
-        assert recipe.command == ("python", "-m", f"{module}.conformance")
-        assert recipe.env == ()
-
-
-def test_builtin_pi_recipe_installs_node_and_the_release_archive() -> None:
-    from avp_cli.agents import AGENT_SOURCES, NODE_VERSION, _builtin_recipe
-
-    source = AGENT_SOURCES["pi"]
-    recipe = _builtin_recipe(source)
-    steps = "\n".join(recipe.install)
-    assert f"node-v{NODE_VERSION}-linux-" in steps
-    assert f"agent-pi-v{source.container_version}/avp-pi.tar.gz" in steps
-    assert recipe.command == ("node", "/opt/pi/dist/src/main.js")
-
-
-def test_builtin_gemini_cli_recipe_installs_node_and_the_release_archive() -> None:
-    from avp_cli.agents import AGENT_SOURCES, NODE_VERSION, _builtin_recipe
-
-    source = AGENT_SOURCES["gemini-cli"]
-    recipe = _builtin_recipe(source)
-    steps = "\n".join(recipe.install)
-    assert f"node-v{NODE_VERSION}-linux-" in steps
-    assert f"agent-gemini-cli-v{source.container_version}/avp-gemini-cli.tar.gz" in steps
-    assert recipe.command == ("node", "/opt/gemini-cli/dist/src/main.js")
-
-
-def test_builtin_opencode_recipe_installs_the_archive_for_the_image_arch() -> None:
-    from avp_cli.agents import AGENT_SOURCES, _builtin_recipe
-
-    source = AGENT_SOURCES["opencode"]
-    steps = "\n".join(_builtin_recipe(source).install)
-    tag = f"agent-opencode-v{source.container_version}"
-    assert f"{tag}/avp-opencode-linux-$(uname -m | sed" in steps
-    assert "ripgrep" in steps
-
-
 def _eval_with(monkeypatch, tmp_path, prepare) -> int:
     """`_run_and_report` over two agents, `prepare` standing in for each one's
     sandbox preparation; nothing may run unless every agent is ready."""
@@ -223,7 +156,7 @@ def test_eval_stops_when_an_agent_image_fails_to_build(avp_home, monkeypatch) ->
     def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
         if agent.name == "openai-agents":
             raise images.ImageBuildError("docker build failed: pypi unreachable")
-        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+        return PreparedAgent(name=agent.name, image="img:test", command=("agent-bin",))
 
     assert _eval_with(monkeypatch, avp_home, prepare) == 1
 
@@ -232,7 +165,7 @@ def test_eval_stops_when_an_agent_cannot_run_here(avp_home, monkeypatch) -> None
     def prepare(agent, env_obj, quiet, runtime_name="opensandbox"):
         if agent.name == "openai-agents":
             return None
-        return SandboxedAgent(name=agent.name, image="img:test", command=("agent-bin",))
+        return PreparedAgent(name=agent.name, image="img:test", command=("agent-bin",))
 
     assert _eval_with(monkeypatch, avp_home, prepare) == 2
 

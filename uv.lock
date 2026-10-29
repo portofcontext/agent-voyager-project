@@ -343,7 +343,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-claude-agent-sdk"
-version = "0.2.0"
+version = "0.2.2"
 source = { editable = "agents/avp-claude-agent-sdk/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -374,7 +374,7 @@ dev = [
 
 [[package]]
 name = "avp-cli"
-version = "0.3.1"
+version = "0.5.0"
 source = { editable = "avp-cli" }
 dependencies = [
     { name = "httpx" },
@@ -396,6 +396,7 @@ huggingface = [
 ]
 llm-judge = [
     { name = "anthropic" },
+    { name = "pydantic-ai-slim", extra = ["anthropic", "google", "openai", "openrouter"] },
 ]
 parsebench = [
     { name = "datasets" },
@@ -404,13 +405,14 @@ parsebench = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'llm-judge'", specifier = ">=0.40" },
+    { name = "anthropic", marker = "extra == 'llm-judge'", specifier = "<2" },
     { name = "datasets", marker = "extra == 'huggingface'", specifier = ">=3" },
     { name = "datasets", marker = "extra == 'parsebench'", specifier = ">=3" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "opensandbox", specifier = "==0.1.9" },
     { name = "opensandbox-server", specifier = "==0.1.14" },
     { name = "pydantic", specifier = ">=2.6,<3" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "google", "openai", "openrouter"], marker = "extra == 'llm-judge'", specifier = ">=2.58,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "questionary", specifier = ">=2" },
     { name = "rapidfuzz", marker = "extra == 'parsebench'", specifier = ">=3" },
@@ -422,7 +424,7 @@ provides-extras = ["huggingface", "parsebench", "llm-judge", "dev"]
 
 [[package]]
 name = "avp-codex"
-version = "0.0.2"
+version = "0.0.3"
 source = { editable = "agents/avp-codex/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -469,7 +471,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "avp-deep-agents"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "agents/avp-deep-agents/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -500,7 +502,7 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-openai-agents"
-version = "0.0.2"
+version = "0.0.3"
 source = { editable = "agents/avp-openai-agents/python" }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -530,10 +532,11 @@ dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "avp-pydantic-ai"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "agents/avp-pydantic-ai/python" }
 dependencies = [
     { name = "agent-voyager-project" },
+    { name = "anthropic" },
     { name = "pydantic-ai-slim", extra = ["anthropic", "google", "mcp", "openai"] },
 ]
 
@@ -545,6 +548,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agent-voyager-project", editable = "avp/bindings/python" },
+    { name = "anthropic", specifier = "<2" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "google", "mcp", "openai"], specifier = "==2.58.0" },
 ]
 
@@ -572,7 +576,7 @@ huggingface = [
     { name = "datasets" },
 ]
 llm-judge = [
-    { name = "anthropic" },
+    { name = "avp-cli", extra = ["llm-judge"] },
 ]
 parsebench = [
     { name = "datasets" },
@@ -589,10 +593,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agent-voyager-project", editable = "avp/bindings/python" },
-    { name = "anthropic", marker = "extra == 'llm-judge'", specifier = ">=0.40" },
     { name = "avp-agent-template", editable = "agents/_template/python" },
     { name = "avp-claude-agent-sdk", editable = "agents/avp-claude-agent-sdk/python" },
     { name = "avp-cli", editable = "avp-cli" },
+    { name = "avp-cli", extras = ["llm-judge"], marker = "extra == 'llm-judge'", editable = "avp-cli" },
     { name = "avp-codex", editable = "agents/avp-codex/python" },
     { name = "avp-conformance", editable = "avp/core/conformance" },
     { name = "avp-deep-agents", editable = "agents/avp-deep-agents/python" },
@@ -3115,6 +3119,9 @@ mcp = [
 openai = [
     { name = "openai" },
     { name = "tiktoken" },
+]
+openrouter = [
+    { name = "openai" },
 ]
 
 [[package]]

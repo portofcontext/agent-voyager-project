@@ -7,6 +7,12 @@
 
 AVP is an open standard for running and observing AI agents. A supervisor sends a JSON **Commission** with the task, model, and resources. The agent streams back a **Trajectory** of model calls, tool calls, usage, cost, and outcome.
 
+![AVP evaluation viewer comparing agents by correctness, cost, and time, with a selected run's tools and trajectory](assets/avp-eval-view.png)
+
+## Can agents onboard themselves to AVP?
+
+We used AVP to test Codex, Claude Code, and Pi installing AVP and running a nested evaluation. We compared skills, CLI docs, a short prompt, and a repository URL. [Case study: results, costs, and limitations](avp-cli/examples/onboarding/README.md#observed-local-results).
+
 ```text
 Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
@@ -14,40 +20,73 @@ Supervisor ◀── Trajectory ─── Agent
 
 AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [spec overview](avp/core/spec/v0.1/README.md) for how they fit together.
 
-## Start with the AVP skill
+## Install
 
-Install the official skill for your coding agent (requires Node.js 22 or newer):
-
-```bash
-npx skills add portofcontext/agent-voyager-project --skill avp
-```
-
-Then ask: **“Use the AVP skill to set up and run my first agent evaluation.”**
-The skill guides setup, Commission configuration, evaluations, and debugging.
-See [SKILL.md](SKILL.md) for its instructions, or follow the CLI quickstart below.
-
-## CLI quickstart
-
-Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and a running Docker daemon. The CLI runs agents in containers and manages the sandbox setup.
+Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and a running [Docker daemon](https://docs.docker.com/get-started/get-docker/).
 
 ```bash
 uv tool install avp-cli
 avp agent install --all
-export ANTHROPIC_API_KEY="<your-api-key>"
+```
+
+Or install individual agents: `avp agent install codex`, `avp agent install claude-code`, or `avp agent install pi`.
+
+## Model authentication
+
+Store a key for each provider you use. Each command prompts for the key:
+
+| Provider | Get a key | Store it |
+|---|---|---|
+| OpenAI (Codex) | [OpenAI dashboard](https://platform.openai.com/api-keys) | `avp env secret create openai` |
+| Anthropic (Claude Code) | [Claude Console](https://platform.claude.com/settings/keys) | `avp env secret create anthropic` |
+| Google (Gemini) | [AI Studio](https://aistudio.google.com/apikey) | `avp env secret create google` |
+
+Commissions reference the stored key by name. Pi and other multi-provider agents
+use the selected model's provider. See [authentication](avp-cli/README.md#model-authentication).
+
+## Start with your coding agent
+
+Paste into your coding agent:
+
+```text
+Read https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli/examples/onboarding/PROMPT.md and follow it to set up AVP.
+
+Run a sample evaluation and show me the results.
+```
+
+## CLI quickstart
+
+With an Anthropic key stored above, configure and run the bundled sample:
+
+```bash
 avp init capitals --agent claude-code
+for id in capitals-baseline capitals-few-shot; do
+  avp cm create "$id" --from "$id" --force --provider-id anthropic --credential anthropic
+done
 avp eval run capitals.eval.json
 ```
 
 This example makes paid model calls and ranks Commission variants by accuracy, pass rate, cost, and turns. The first run builds the agent's container image.
 
+For execution without Docker, select [`--runtime local`](avp-cli/README.md#quickstart), which adds no OS isolation.
+
 To give an agent a task in your own project:
 
 ```bash
 avp env create myproj --image python:3.12-slim --path ./my-project
-avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
+avp cm create my-task --agent claude-code --provider-id anthropic --credential anthropic
+avp run --agent claude-code --commission my-task --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
 Each run uses a copy of your project and prints the resulting workspace path. See the [CLI guide](avp-cli/README.md) for comparing agents, configuring models, credentials, and sandboxing.
+
+## Optional skill
+
+Install the [AVP skill](SKILL.md) with Node.js 22+:
+
+```bash
+npx skills add portofcontext/agent-voyager-project --skill avp
+```
 
 ## Integrate an agent
 

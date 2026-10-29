@@ -1,0 +1,78 @@
+name: Publish agent release
+
+# The second half of every agent release workflow (release-<agent>.yml). The
+# caller builds the agent's artifacts and uploads them as workflow artifacts
+# named `dist-*`; this job writes the release manifest (and a Python agent's
+# locked requirements.txt), runs the artifacts end to end in a sandbox image
+# against a stub model, and publishes the GitHub release only if that passes.
+# So a release that exists is one that ran. `make release-cli` relies on that.
+
+on:
+  workflow_call:
+    inputs:
+      agent:
+        description: "The built-in agent's name (a key of avp-cli's agents.json)"
+        required: true
+        type: string
+      tag:
+        description: "The release tag, agent-<agent>-v<version>"
+        required: true
+        type: string
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  publish:
+    name: Smoke-test and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync the workspace
+        run: uv sync --locked
+
+      - name: Check the tag is the version the CLI pins
+        env:
+          AGENT: ${{ inputs.agent }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          uv run --no-sync python avp/scripts/agent-pins.py --check
+          version=$(uv run --no-sync python -c "import json, os; print(json.load(open('avp-cli/src/avp_cli/agents.json'))[os.environ['AGENT']]['version'])")
+          test "agent-$AGENT-v$version" = "$TAG" \
+            || { echo "$TAG is not the version avp-cli pins for $AGENT ($version)"; exit 1; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write the release manifest
+        run: uv run --no-sync python avp/scripts/release-manifest.py "${{ inputs.agent }}" dist
+
+      - name: Run it in a sandbox image against a stub model
+        run: uv run --no-sync python avp/scripts/smoke-agent.py "${{ inputs.agent }}" --from dist
+
+      - name: Roll up checksums
+        run: cd dist && rm -f SHA256SUMS ./*.sha256 && sha256sum -- * > SHA256SUMS
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENT: ${{ inputs.agent }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$AGENT agent $TAG" \
+            --notes "Install with: avp agent install $AGENT --version ${TAG#"agent-$AGENT-v"}" \
+            || gh release upload "$TAG" dist/* --repo "${{ github.repository }}" --clobber

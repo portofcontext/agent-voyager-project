@@ -1,10 +1,27 @@
 [package]
 name = "avp-goose"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 description = "AVP connector for Block's Goose coding agent (in-process trajectory emitter)."
 license = "MIT"
 repository = "https://github.com/portofcontext/agent-voyager-project"
+
+# How this agent installs and runs in a sandbox: release-manifest.py writes it
+# into the release's avp-release.json. The `local-inference` build links
+# llama.cpp with OpenMP (libgomp.so.1), which the slim base image lacks. The
+# Linux `vulkan` variant (for the libkrun GPU runtime) also needs the Vulkan
+# loader and Mesa's Venus ICD to reach a virtio-gpu device.
+[package.metadata.avp]
+agent = "goose"
+binary = "avp-goose-conformance"
+asset = "avp-goose-conformance-{target}.tar.gz"
+gpu_asset = "avp-goose-conformance-vulkan-{target}.tar.gz"
+setup = [
+    "apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*",
+]
+gpu_setup = [
+    "apt-get update && apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers && rm -rf /var/lib/apt/lists/*",
+]
 
 [dependencies]
 avp = { path = "../../../avp/bindings/rust" }

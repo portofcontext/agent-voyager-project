@@ -19,9 +19,9 @@ The walkthrough with the reasons: `agents/_template/README.md`.
 - [ ] **Suite on a real model**: `avp-conformance check --agent <manifest>
       --suite v0.1 --model <origin>/<model>` (SKIP = a surface you don't
       declare; one case: `--case <path>`; keep trajectories: `--dump-dir <dir>`).
-- [ ] **Ship**: out of tree, a manifest `container` block; in tree,
-      `AGENT_SOURCES` + release workflow + `make release-<name>` (template
-      README §6).
+- [ ] **Ship**: out of tree, a manifest `container` block; in tree, release
+      metadata in the package file + `agents.json` + release workflow +
+      `make smoke-agents` (template README §6).
 
 Manifest model: `manifest.py`. Case model (incl. `requires`) and `--built-in`
 fixture: `case.py`. Recorder rules: `recorder/v0.1/README.md`.

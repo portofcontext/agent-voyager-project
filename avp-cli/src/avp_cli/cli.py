@@ -22,9 +22,9 @@
 
 An eval is a JSON config file authored in place (no code); commissions are
 portable artifacts in ~/.avp/commissions referenced by id. The CLI is the engine.
-Every run executes inside an OpenSandbox container (Docker is the one
-prerequisite; the CLI manages the rest); provider credentials forward from the
-host environment into the sandbox. When the sandbox stack can't run, exit is 2.
+The default runtime executes in an OpenSandbox container. The local runtime
+launches installed agents without additional OS isolation. Provider credentials
+are selected by the launcher. When the sandbox stack cannot run, exit is 2.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ from avp_cli import (
     viz,
 )
 from avp_cli import commission as commission_mod
-from avp_cli.agent import SandboxContext, SandboxedAgent
+from avp_cli.agent import PreparedAgent, RunContext
 from avp_cli.agents import (
     DEFAULT_AGENT,
     NoContainerRecipe,
@@ -111,7 +111,7 @@ def _run_and_report(
     max_items: int | None,
     model: str | None,
     quiet: bool,
-    sandbox_ctx: SandboxContext,
+    sandbox_ctx: RunContext,
     env_obj,
     config_path: str | None = None,
     timeout_s: float = 300.0,
@@ -151,6 +151,7 @@ def _run_and_report(
         model_override=model,
         max_items=max_items,
         threshold_override=getattr(ev.scorer, "threshold", None),
+        runtime_name=sandbox_ctx.runtime,
     )
 
     compare = len(runnable) > 1  # multiple agents -> interleave by task + head-to-head
@@ -248,7 +249,7 @@ def _agent_identity(agent) -> tuple[str | None, str | None]:
 
 def _prepare_agent(
     agent, env_obj, *, quiet: bool, runtime_name: str = "opensandbox"
-) -> SandboxedAgent | None:
+) -> PreparedAgent | None:
     """Resolve one agent to its sandbox form: identity (descriptor agent_name)
     + recipe + derived image (built or reused). Returns None (with a warning)
     when the agent can't run here; raises `images.ImageBuildError` when its
@@ -261,6 +262,19 @@ def _prepare_agent(
             "on descriptor.agent_name, so a describable agent is required."
         )
         return None
+    if runtime_name == "local":
+        problem = preflight(agent.name) if agent.record is not None else None
+        if problem:
+            console.warn(f"agent '{agent.name}' cannot run locally: {problem}")
+            return None
+        return PreparedAgent(
+            name=agent_name,
+            label=agent.label or "",
+            image=None,
+            command=tuple(agent.manifest.command),
+            env=agent.manifest.env,
+            cwd=agent.manifest_cwd,
+        )
     # The libkrun backend gets the GPU recipe variant (goose's `vulkan` build +
     # Venus ICD) and is built with podman into the libkrun machine's own image
     # store; the default backend uses the CPU recipe built with docker.
@@ -285,7 +299,7 @@ def _prepare_agent(
     )
     if built == tag and not quiet:
         console.note(f"sandbox image for {agent.name}: {built}")
-    return SandboxedAgent(
+    return PreparedAgent(
         name=agent_name,
         label=agent.label or "",
         image=built,
@@ -298,25 +312,35 @@ def _prepare_sandbox(
     env_spec: str | None, workspace_root: Path, *, runtime_name: str = "opensandbox"
 ):
     """Parse the env (or the default), bring up the sandbox backend, and seed the
-    run workspace. Returns (env_obj, SandboxContext); raises EnvError /
+    run workspace. Returns (env_obj, RunContext); raises EnvError /
     SandboxUnavailable / OSError / JSONDecodeError."""
     from avp_cli import environment as env_mod
 
     if env_spec:
         p = _resolve_env_file(env_spec)
-        env_obj = env_mod.Environment.parse(json.loads(p.read_text()))
+        block = json.loads(p.read_text())
+        env_obj = env_mod.Environment.parse(block)
         base_dir = p.parent
     else:
         env_obj = env_mod.Environment.parse({})
+        block = {}
         base_dir = Path.cwd()
+    if runtime_name == "local":
+        unsupported = [k for k in ("image", "packages", "net", "resources") if block.get(k)]
+        if unsupported:
+            raise env_mod.EnvError(
+                f"local runtime does not support environment fields: {', '.join(unsupported)}. "
+                "Use paths, files, and setup; install dependencies in the current environment."
+            )
+        console.note("runtime: local (no additional OS isolation)")
     # The libkrun backend runs on a podman machine, not the Docker-based
     # OpenSandbox server, so skip standing it up; the connection is unused there.
-    if runtime_name == "libkrun":
-        conn = osb.Connection(domain="127.0.0.1:0", api_key="unused-by-libkrun")
+    if runtime_name in ("libkrun", "local"):
+        conn = None
     else:
         conn = osb.ensure_server()
     workspace = env_mod.seed_workspace(env_obj, workspace_root / "workspace", base_dir=base_dir)
-    return env_obj, SandboxContext(
+    return env_obj, RunContext(
         connection=conn,
         workspace=workspace,
         setup=env_obj.setup,
@@ -699,8 +723,9 @@ def _cmd_agent_list() -> int:
             continue
         reason = preflight(name)
         status = "[green]ready[/]" if reason is None else f"[yellow]{reason}[/yellow]"
-        pin = AGENT_SOURCES[name].container_version if name in AGENT_SOURCES else None
-        if record["from"] == "release" and pin and record.get("version") != pin:
+        pin = AGENT_SOURCES[name].version if name in AGENT_SOURCES else None
+        stale = record["from"] == "release" and pin and record.get("version") != pin
+        if stale and (reason is None or "reinstall" not in reason):
             status += f" [yellow]· this CLI pins {pin}: avp agent install {name} --force[/]"
         table.add_row(name, origin_label(record), status)
     console.out.print(table)
@@ -732,9 +757,7 @@ def _cmd_agent_install(args: argparse.Namespace) -> int:
         result = agent_install.install(
             args.name,
             version=args.version,
-            binary=args.binary,
-            wheels=args.wheel or None,
-            package=args.package,
+            from_dir=args.from_dir,
             manifest=args.manifest,
             as_name=args.as_name,
             force=args.force,
@@ -1082,7 +1105,7 @@ def _resolve_resume_dir(args: argparse.Namespace) -> Path | None:
     return None
 
 
-def _resume_drift(out: Path, ev: Eval) -> str | None:
+def _resume_drift(out: Path, ev: Eval, runtime_name: str = "opensandbox") -> str | None:
     """Why resuming `out` with the current eval would be unsafe, or None if it's
     consistent. Splicing a different config into an old run dir would build one
     board from two different evals; the run manifest is the source of truth for
@@ -1090,6 +1113,12 @@ def _resume_drift(out: Path, ev: Eval) -> str | None:
     mani = run_manifest.read(out)
     if not mani:
         return None  # older run without a manifest: trust the caller
+    previous_runtime = mani.get("run", {}).get("runtime", "opensandbox")
+    if previous_runtime != runtime_name:
+        return (
+            f"this run used runtime {previous_runtime!r}, but {runtime_name!r} was selected. "
+            "Resume with the original runtime, or start a fresh run."
+        )
     was = set(mani.get("commissions", {}))
     now = {s.id for s in ev.setups}
     if was and was != now:
@@ -1112,6 +1141,11 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     if args.eval_cmd == "delete":
         return _cmd_eval_delete(args)
     try:
+        runtime_name = runtime.resolve_runtime_name(args.runtime)
+    except ValueError as exc:
+        console.error_panel("runtime", str(exc))
+        return 1
+    try:
         ev = config.load_eval(args.path)
     except config.EvalConfigError as exc:
         console.error_panel("bad eval config", str(exc))
@@ -1127,7 +1161,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         out = _resolve_resume_dir(args)
         if out is None:
             return 1
-        drift = _resume_drift(out, ev)
+        drift = _resume_drift(out, ev, runtime_name)
         if drift is not None:
             console.error_panel("can't resume: config changed", drift)
             return 1
@@ -1141,7 +1175,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         env_obj, sandbox_ctx = _prepare_sandbox(
             args.env,
             _workspace_root(out, run_id),
-            runtime_name=runtime.resolve_runtime_name(args.runtime),
+            runtime_name=runtime_name,
         )
     except osb.SandboxUnavailable as exc:
         console.error_panel("sandbox unavailable", str(exc))
@@ -1275,6 +1309,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
             console.error_panel("local model", str(exc))
             return 1
     traj = rundir / "trajectory.ndjson"
+    from avp_cli.eval.setup import Setup
+
+    run_manifest.write(
+        rundir,
+        run_id=run_id,
+        setups=[Setup(args.commission or "task", commission)],
+        eval_config_path=None,
+        agents=[prepared.key],
+        agent_sources=[_agent_source(prepared.key, agent)],
+        model_override=args.model,
+        max_items=None,
+        runtime_name=sandbox_ctx.runtime,
+    )
     where = f" in {args.env}" if args.env else ""
     label = f" ({agent.origin_label})" if agent.origin_label else ""
     console.note(f"{agent.name}{label} working on the task{where} …")
@@ -1629,11 +1676,9 @@ def _cmd_sandbox(args: argparse.Namespace) -> int:
 
 
 _RUNTIME_HELP = (
-    "Sandbox backend. 'opensandbox' (default): the Docker-based managed server with "
-    "DNS-filtered egress isolation. 'libkrun': a podman microVM (no Docker, lighter) "
-    "that exposes the host GPU to the sandbox via virtio-gpu, so a local model "
-    "(provider 'local') runs GPU-accelerated in-process. Use libkrun when you want fast, "
-    "private, $0 local inference and have a krunkit machine; opensandbox otherwise. "
+    "Execution runtime. 'opensandbox' (default): Docker with filtered egress. "
+    "'libkrun': a podman microVM for offline GPU inference. "
+    "'local': installed agent subprocesses with no additional OS isolation or Docker. "
     "Falls back to $AVP_RUNTIME."
 )
 
@@ -1883,25 +1928,14 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="as_name",
         default=None,
         metavar="NAME",
-        help="Name for a local build of a built-in agent (with --binary, --wheel, or --package)",
+        help="Name for a local build of a built-in agent (with --from)",
     )
     p_ainstall.add_argument(
-        "--binary",
+        "--from",
+        dest="from_dir",
         default=None,
-        metavar="PATH",
-        help="A local Linux build of a binary agent (with --as)",
-    )
-    p_ainstall.add_argument(
-        "--wheel",
-        action="append",
-        metavar="WHL",
-        help="Local wheel(s) of a Python agent (with --as; repeatable)",
-    )
-    p_ainstall.add_argument(
-        "--package",
-        default=None,
-        metavar="TGZ",
-        help="A local package archive of a Node agent (with --as)",
+        metavar="DIR",
+        help="A local build laid out like a release (make build-agents writes dist/agents/<name>)",
     )
     p_ainstall.add_argument(
         "--force", action="store_true", help="Reinstall over an existing install"

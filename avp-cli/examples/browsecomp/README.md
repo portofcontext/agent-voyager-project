@@ -19,7 +19,7 @@ A second example, comparing web-search backends (Exa vs Linkup), lives in
 ## Setup
 
 ```bash
-# 1. the eval's grader runs in-process and needs the anthropic SDK
+# 1. install the judge's model providers
 uv sync --extra llm-judge
 
 # 2. install the agents (self-contained; claude-code just needs the `claude` CLI on PATH)
@@ -44,7 +44,7 @@ Run from this directory (the dataset `path` is resolved against the CWD).
 Both the agent runs and the grader calls are paid, so start with a tiny slice:
 
 ```bash
-export ANTHROPIC_API_KEY=...
+avp env secret create anthropic
 avp eval run browsecomp.eval.json --max-items 3
 ```
 

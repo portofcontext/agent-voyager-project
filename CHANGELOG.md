@@ -1,5 +1,80 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- LLM judges accept models across providers, saved AVP credentials, and custom
+  endpoints. Judge models are now explicit `origin/model` slugs; output token
+  budgets are configurable. Missing saved credentials fail before agent runs begin.
+
+## 0.5.0 (2026-10-22)
+
+### Added
+
+- `avp run` and `avp eval run` accept `--runtime local` to run installed agents
+  without Docker or additional OS isolation. Runs keep fresh SDK state, saved
+  workspaces and trajectories, process group cleanup, and an explicit runtime
+  in their run manifest. Container-only environment settings are rejected.
+- A reproducible onboarding experiment compares repository, prompt, CLI docs,
+  and skill inputs on the same install-and-evaluate task, with separate trial
+  workspaces and checks of the saved child artifacts.
+
+### Fixed
+
+- Local execution inherits the caller's environment, with explicit launch and
+  manifest overrides, instead of dropping settings through a fixed allowlist.
+- OpenCode preserves caller OpenTelemetry settings in native subprocesses.
+- Claude materializes nested inline skill references before starting the SDK.
+- Codex honors the launcher's native sandbox configuration instead of forcing
+  a nested workspace sandbox inside containers.
+- Codex records native client-side tool search instead of failing before MCP
+  tool execution on models that use deferred discovery.
+- Evaluation Commissions report the installed CLI's supervisor version. Codex
+  runtime version checks use installed SDK metadata, with a drift check against
+  the captured tool definitions.
+
+## 0.4.0 (2026-10-21)
+
+### Fixed
+
+- Pydantic AI 0.0.3 crashed on its first model call (`Cannot instantiate
+  typing.Union`) once the Anthropic SDK 2.0 came out, because a sandbox image
+  resolved the newest dependencies the agent allowed. Python agent releases
+  now ship a hash-checked `requirements.txt` exported from the workspace lock,
+  and both the host install and the sandbox image install exactly those
+  versions, so an upstream release can't change an agent after it ships.
+  Pydantic AI also caps `anthropic<2`.
+- The codex agent couldn't be installed: avp-cli 0.3.0 pinned
+  `agent-codex-v0.0.2`, which was never released. `make release-cli` now cuts
+  and waits on any agent release the CLI pins before tagging the CLI.
+
+### Changed
+
+- Every agent release carries an `avp-release.json` describing how the agent
+  installs and runs: its artifacts, setup steps, environment, and pins such as
+  the Node runtime or the Claude Code CLI version. Each agent declares these in
+  its own package file, and the CLI follows the manifest instead of holding
+  per-agent install code. The CLI's only per-agent data is which release to
+  install, in `agents.json`, kept equal to each package version by `make pins`.
+- An agent release is published only after its artifacts run in a sandbox
+  image against a stub model, so a release that installs but can't run never
+  ships. `make build-agents` and `make smoke-agents` run the same check
+  locally.
+- Local builds install from a directory laid out like a release:
+  `avp agent install <name> --as <name>-dev --from dist/agents/<name>`. This
+  replaces `--binary`, `--wheel`, and `--package`.
+- `avp agent install --all` replaces any built-in install that isn't at the
+  release this CLI pins.
+
+### Upgrading
+
+- Agents installed by an earlier avp-cli can't run with this one, since their
+  installs have no release manifest. `avp agent list` says so; run
+  `avp agent install --all` to reinstall them at the new releases
+  (goose 0.2.2, claude-code 0.2.1, codex 0.0.2, openai-agents 0.0.3, pi 0.1.1,
+  gemini-cli 0.1.1, deep-agents 0.1.1, pydantic-ai 0.0.4, opencode 0.1.2).
+
 ## 0.3.1 (2026-10-21)
 
 ### Fixed

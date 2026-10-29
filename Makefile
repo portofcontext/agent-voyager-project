@@ -62,7 +62,7 @@ help:
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + test-opencode + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
-	@echo "    make test-fresh      released Python agents' tests on fresh installs (newest deps; AGENTS=<names>)"
+	@echo "    make test-fresh      Python agents' tests on unlocked, newest deps (AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
@@ -75,21 +75,15 @@ help:
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
 	@echo "  Releases (cut from main; push a tag, CI builds + publishes):"
-	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>)"
-	@echo "    make release-goose       release the goose agent (tag agent-goose-v<pinned version>)"
-	@echo "    make release-claude-code release the claude-code agent (tag agent-claude-code-v<pinned version>)"
-	@echo "    make release-codex       release the codex agent (tag agent-codex-v<pinned version>)"
-	@echo "    make release-openai-agents release the openai-agents agent (tag agent-openai-agents-v<pinned version>)"
-	@echo "    make release-pi          release the pi agent (tag agent-pi-v<pinned version>)"
-	@echo "    make release-gemini-cli  release the gemini-cli agent (tag agent-gemini-cli-v<pinned version>)"
-	@echo "    make release-deep-agents release the deep-agents agent (tag agent-deep-agents-v<pinned version>)"
-	@echo "    make release-pydantic-ai release the pydantic-ai agent (tag agent-pydantic-ai-v<pinned version>)"
-	@echo "    make release-opencode    release the opencode agent (tag agent-opencode-v<pinned version>)"
-	@echo "                             agent versions come from container_version in avp_cli.agents"
+	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>), after"
+	@echo "                             cutting and waiting on any agent release it pins that doesn't exist"
+	@echo "    make release-<agent>     release one agent (tag agent-<agent>-v<version in agents.json>)"
+	@echo "    make pins                pin avp-cli to each agent's package version (agents.json)"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make sync            uv sync the Python workspace (repo root)"
-	@echo "    make build-agents    build the in-tree agents' artifacts into dist/agents for local install"
+	@echo "    make build-agents    build each in-tree agent into dist/agents/<name>, laid out like its release"
+	@echo "    make smoke-agents    run dist/agents builds in sandbox images against a stub model (AGENTS=<names>)"
 	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete; PAID=1 adds the vault-broker finale)"
 
 
@@ -336,8 +330,8 @@ check: format-check lint test test-pi test-gemini-cli test-opencode conformance 
 # One Python agent's share of `make check`: format and lint, its tests, the
 # CLI's registration tests, case validation, and its own ping and describe.
 # Each released Python agent's tests on a fresh install of its wheels, with the
-# newest dependencies they allow (no lockfile), the way a sandbox image gets
-# them. Catches upstream drift `make test` can't see. Free; AGENTS= narrows it.
+# newest dependencies they allow instead of the lock releases install. Early
+# warning that `uv lock --upgrade` would break an agent. Free; AGENTS= narrows it.
 .PHONY: test-fresh
 test-fresh:
 	@$(UV) run python avp/scripts/test-fresh-installs.py $(AGENTS)
@@ -369,9 +363,13 @@ test-live:
 # Trusted Publishing, agents via GitHub releases). These targets just cut the
 # right tag from a clean main, deriving the version from the single source of
 # truth so the tag can never drift from what the code expects:
-#   - avp-cli  -> version in avp-cli/pyproject.toml        (tag pypi-v<version>)
-#   - agents   -> container_version in avp_cli.agents      (tag agent-<name>-v<version>)
-# To bump an agent, edit its container_version, commit, then `make release-<name>`.
+#   - avp-cli  -> version in avp-cli/pyproject.toml           (tag pypi-v<version>)
+#   - agents   -> the agent's package version, which `make pins` copies into
+#                 avp-cli's agents.json                        (tag agent-<name>-v<version>)
+# An agent release publishes only after it runs in a sandbox image against a
+# stub model (.github/workflows/agent-release.yml). To bump an agent, change
+# its package version, `make pins`, commit, merge, then `make release-cli`
+# (or `make release-<name>` for the agent alone).
 
 
 # Guard shared by every release target: on main, clean tree, in sync with origin.
@@ -384,6 +382,7 @@ _release-guard:
 	@git fetch -q origin main \
 		&& test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" \
 		|| { echo "error: local main is not in sync with origin/main; push or pull first"; exit 1; }
+	@$(UV) run python avp/scripts/agent-pins.py --check
 
 
 # Tag + push a release. $(1) = tag, $(2) = annotation. Refuses to clobber an
@@ -397,87 +396,25 @@ define cut_release
 endef
 
 
+# The CLI installs the agent releases agents.json pins, so they must all be
+# published first: release-agents.py cuts any that aren't and waits for them.
 .PHONY: release-cli
 release-cli: _release-guard
+	@$(UV) run python avp/scripts/release-agents.py
 	@version=$$(grep -m1 '^version' avp-cli/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
 	echo "→ verifying the wheel builds (avp-cli $$version)..."; \
 	$(UV) build --wheel --package avp-cli --out-dir dist/release >/dev/null; \
 	$(MAKE) --no-print-directory _cut TAG="pypi-v$$version" MSG="avp-cli $$version"
 
 
-# Agent releases derive the tag from the agent's OWN package version (the same
-# number its descriptor reports as agent_version and Commission.agent_versions
-# pins match), guarded against the CLI's container_version pin so the two can't
-# drift: bump the package version AND the pin together, commit, release.
-.PHONY: release-goose
-release-goose: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-goose/rust/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['goose'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-goose Cargo.toml version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-goose-v$$version" MSG="goose agent $$version"
+# One agent's release, at the version agents.json pins (= its package version).
+release-%: _release-guard
+	@$(UV) run python avp/scripts/release-agents.py $*
 
 
-.PHONY: release-claude-code
-release-claude-code: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-claude-agent-sdk/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['claude-code'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-claude-agent-sdk pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-claude-code-v$$version" MSG="claude-code agent $$version"
-
-
-.PHONY: release-codex
-release-codex: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-codex/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['codex'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-codex pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-codex-v$$version" MSG="codex agent $$version"
-
-
-.PHONY: release-openai-agents
-release-openai-agents: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-openai-agents/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['openai-agents'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-openai-agents pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-openai-agents-v$$version" MSG="openai-agents agent $$version"
-
-
-.PHONY: release-pi
-release-pi: _release-guard
-	@version=$$(node -p 'require("./agents/avp-pi/typescript/package.json").version'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['pi'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-pi package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-pi-v$$version" MSG="pi agent $$version"
-
-.PHONY: release-gemini-cli
-release-gemini-cli: _release-guard
-	@version=$$(node -p 'require("./agents/avp-gemini-cli/typescript/package.json").version'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['gemini-cli'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-gemini-cli package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-gemini-cli-v$$version" MSG="gemini-cli agent $$version"
-
-
-.PHONY: release-deep-agents
-release-deep-agents: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-deep-agents/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['deep-agents'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-deep-agents pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-deep-agents-v$$version" MSG="deep-agents agent $$version"
-
-
-.PHONY: release-pydantic-ai
-release-pydantic-ai: _release-guard
-	@version=$$(grep -m1 '^version' agents/avp-pydantic-ai/python/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['pydantic-ai'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-pydantic-ai pyproject version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-pydantic-ai-v$$version" MSG="pydantic-ai agent $$version"
-
-
-.PHONY: release-opencode
-release-opencode: _release-guard
-	@version=$$(node -p 'require("./agents/avp-opencode/typescript/package.json").version'); \
-	pin=$$($(UV) run python -c "from avp_cli.agents import AGENT_SOURCES; print(AGENT_SOURCES['opencode'].container_version)"); \
-	test "$$version" = "$$pin" || { echo "error: avp-opencode package.json version ($$version) != container_version pin in avp_cli.agents ($$pin); bump them together"; exit 1; }; \
-	$(MAKE) --no-print-directory _cut TAG="agent-opencode-v$$version" MSG="opencode agent $$version"
+.PHONY: pins
+pins:
+	@$(UV) run python avp/scripts/agent-pins.py
 
 
 # Internal: cut the tag named by TAG. Kept separate so the release-* targets can
@@ -506,54 +443,36 @@ cli-smoke:
 	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) $(UV) run bash scripts/cli-smoke.sh
 
 
-# Build both agents' local artifacts into dist/agents, then print the
-# `avp agent install --as <name>-dev` commands to register them as local builds.
-# This is the contributor loop for testing a new agent build before cutting a
-# GitHub release: build here, install under a -dev name, run an eval against it. (The goose build needs the Rust
-# toolchain + Goose's system deps; the wheels need uv.)
+# Build the in-tree agents (AGENTS=<names>, default all) into dist/agents/<name>,
+# each laid out like its release (artifacts + avp-release.json). This is the
+# contributor loop for testing an agent before cutting a release: build here,
+# `make smoke-agents`, install under a -dev name, run an eval against it. (The
+# goose build needs the Rust toolchain + Goose's system deps, and runs in the
+# sandbox only when built on Linux; the wheels need uv; Node agents need npm.)
+AGENT_NAMES = $(shell python3 -c "import json; print(' '.join(json.load(open('avp-cli/src/avp_cli/agents.json'))))")
+
 .PHONY: build-agents
 build-agents:
-	@rm -rf dist/agents && mkdir -p dist/agents
-	@echo "→ building goose binary (cargo, --features conformance)..."
-	@cd agents/avp-goose/rust && cargo build --release --features conformance --bin avp-goose-conformance
-	@cp agents/avp-goose/rust/target/release/avp-goose-conformance dist/agents/
-	@echo "→ building claude-code wheels (agent-voyager-project + avp-conformance + agent)..."
-	@$(UV) build --package agent-voyager-project --out-dir dist/agents
-	@$(UV) build --package avp-conformance --out-dir dist/agents
-	@$(UV) build --package avp-claude-agent-sdk --out-dir dist/agents
-	@echo "→ building codex + openai-agents wheels..."
-	@$(UV) build --package avp-codex --out-dir dist/agents
-	@$(UV) build --package avp-openai-agents --out-dir dist/agents
-	@echo "→ packaging the pi archive (npm; Node >= 22.19)..."
-	@agents/avp-pi/typescript/scripts/package.sh $(CURDIR)/dist/agents
-	@echo "→ packaging the gemini-cli archive (npm; Node >= 22.19)..."
-	@agents/avp-gemini-cli/typescript/scripts/package.sh $(CURDIR)/dist/agents
-	@echo "→ building deep-agents wheel..."
-	@$(UV) build --package avp-deep-agents --out-dir dist/agents
-	@echo "→ building pydantic-ai wheel..."
-	@$(UV) build --package avp-pydantic-ai --out-dir dist/agents
-	@echo "→ packaging the opencode archives (npm; one per platform)..."
-	@agents/avp-opencode/typescript/scripts/package.sh $(CURDIR)/dist/agents
+	@for agent in $(or $(AGENTS),$(AGENT_NAMES)); do \
+		echo "→ building $$agent into dist/agents/$$agent"; \
+		$(UV) run python avp/scripts/build-agent.py $$agent dist/agents/$$agent || exit 1; \
+	done
 	@echo ""
-	@echo "✓ built into dist/agents. Install each as a local build (add --force to replace one):"
-	@echo "  uv run avp agent install goose --as goose-dev --binary <a Linux build of avp-goose-conformance>"
-	@echo "  uv run avp agent install claude-code --as claude-code-dev \\"
-	@echo "    --wheel dist/agents/agent_voyager_project-*.whl \\"
-	@echo "    --wheel dist/agents/avp_conformance-*.whl \\"
-	@echo "    --wheel dist/agents/avp_claude_agent_sdk-*.whl"
-	@echo "  uv run avp agent install codex --as codex-dev \\"
-	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_codex-*.whl"
-	@echo "  uv run avp agent install openai-agents --as openai-agents-dev \\"
-	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_openai_agents-*.whl"
-	@echo "  uv run avp agent install pi --as pi-dev --package dist/agents/avp-pi.tar.gz"
-	@echo "  uv run avp agent install gemini-cli --as gemini-cli-dev --package dist/agents/avp-gemini-cli.tar.gz"
-	@echo "  uv run avp agent install deep-agents --as deep-agents-dev \\"
-	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_deep_agents-*.whl"
-	@echo "  uv run avp agent install pydantic-ai --as pydantic-ai-dev \\"
-	@echo "    --wheel dist/agents/agent_voyager_project-*.whl --wheel dist/agents/avp_pydantic_ai-*.whl"
-	@echo "  uv run avp agent install opencode --as opencode-dev --package dist/agents/avp-opencode-linux-<arch>.tar.gz"
-	@echo "Runs use these builds inside the Linux sandbox, so the goose binary and the"
-	@echo "opencode archive must be Linux builds; the wheels and other archives work as is."
+	@echo "✓ built into dist/agents. Install one as a local build (add --force to replace it):"
+	@echo "  uv run avp agent install <name> --as <name>-dev --from dist/agents/<name>"
+
+
+# Run each dist/agents build (AGENTS=<names>, default every built one) in its
+# sandbox image against a stub model, as the release workflows do before
+# publishing. Needs Docker; no API key.
+.PHONY: smoke-agents
+smoke-agents:
+	@agents="$(or $(AGENTS),$$(cd dist/agents 2>/dev/null && ls -d */ | tr -d /))"; \
+	test -n "$$agents" || { echo "error: nothing in dist/agents; run make build-agents"; exit 1; }; \
+	failed=""; for agent in $$agents; do \
+		$(UV) run python avp/scripts/smoke-agent.py $$agent --from dist/agents/$$agent || failed="$$failed $$agent"; \
+	done; \
+	test -z "$$failed" || { echo "smoke failed:$$failed"; exit 1; }
 
 
 # Default goal

@@ -60,8 +60,10 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
   Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust`.
 - `avp-cli/`: the supervisor CLI. Evaluations are JSON configurations containing
   `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
-  its own model. `avp eval run` and `avp run` use Docker-backed OpenSandbox containers
-  with default-deny networking. Vault credentials go through the host-side broker.
+  its own model. `avp eval run` and `avp run` default to Docker-backed OpenSandbox
+  containers with default-deny networking. `--runtime local` runs installed agent
+  subprocesses without additional OS isolation. Vault credentials go through the
+  host-side broker (loopback for local execution).
 - `avp/scripts/`: schema/binding generation, prices, and skill packaging.
 - The repository root is the uv workspace. `make help` lists development commands.
 
@@ -73,8 +75,10 @@ TypeScript tests run with `make bindings-test`; they do not make model calls.
 `make test-docker` exercises real container launches and requires a Docker daemon.
 While iterating on one Python agent, `make check-agent NAME=avp-<sdk>` runs its
 share of `make check` without building the other agents.
-`make test-fresh` runs the released Python agents' tests on fresh installs of
-their wheels (newest allowed dependencies), as CI does weekly.
+`make test-fresh` runs the Python agents' tests on unlocked installs of their
+wheels (newest allowed dependencies), as CI does weekly: early warning before a
+`uv lock --upgrade`. `make build-agents` then `make smoke-agents` runs each agent
+in its sandbox image against a stub model, as a release does before publishing.
 
 Add tests at the boundary where a change can fail:
 
@@ -111,10 +115,13 @@ Release tags trigger CI publication. Use the Makefile targets from a clean `main
 that matches `origin/main`:
 
 - `make release-cli`: derives `pypi-v<version>` from `avp-cli/pyproject.toml`.
-  The CLI wheel vendors the Python wire types.
-- `make release-goose` / `make release-claude-code` / `make release-codex` /
-  `make release-openai-agents` / `make release-pi` / `make release-gemini-cli` /
-  `make release-deep-agents` / `make release-pydantic-ai` /
-  `make release-opencode`: derive the agent tag from
-  its package version, checked against `container_version` in `avp_cli.agents`.
-  Update the package version and artifact pin together before publishing.
+  The CLI wheel vendors the Python wire types. It first cuts any agent release
+  the CLI pins that doesn't exist yet and waits for it to publish.
+- `make release-<agent>`: one agent's release, tagged with its package version.
+- An agent's version lives only in its package file. `make pins` copies it into
+  `avp-cli/src/avp_cli/agents.json` (a test fails when they differ). How the
+  agent installs and runs (its locked requirements, a Node or CLI version) lives
+  in the same package file and ships in the release's `avp-release.json`; keep
+  version strings out of the CLI's code.
+- An agent release publishes only after its artifacts run in a sandbox image
+  against a stub model (`.github/workflows/agent-release.yml`).

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "avp-cli"
-version = "0.3.1"
+version = "0.5.0"
 description = "The local AVP CLI (`avp`). Build, run, and iterate on Commissions: scaffold a Commission, compare setups (Commission variants) over a dataset against a real agent, and rank a board by accuracy / pass-rate / cost / turns."
 readme = "README.md"
 license = { text = "MIT" }
@@ -31,11 +31,14 @@ dependencies = [
 [project.optional-dependencies]
 # Capabilities a benchmark config can require: `huggingface` to load HF datasets,
 # `parsebench` for the ParseBench fidelity scorer (rapidfuzz), `llm-judge` for the
-# grader-model scorer (anthropic). The CLI checks for these at run time and tells
+# grader-model scorer (Pydantic AI). The CLI checks for these at run time and tells
 # the user which extra to install.
 huggingface = ["datasets>=3"]
 parsebench = ["datasets>=3", "rapidfuzz>=3"]
-llm-judge = ["anthropic>=0.40"]
+llm-judge = [
+    "pydantic-ai-slim[anthropic,google,openai,openrouter]>=2.58,<3",
+    "anthropic<2",
+]
 dev = ["pytest>=7", "ruff>=0.6"]
 
 [project.scripts]

@@ -1,10 +1,9 @@
 name: Release pydantic-ai agent
 
-# Publishes the pydantic-ai agent's wheels as a GitHub release, which
-# `avp agent install pydantic-ai` then downloads and installs into a managed venv.
-# The unpublished in-repo `avp` wheel ships alongside the agent wheel so the
-# installer installs it by path (PyPI's unrelated `avp` is never pulled);
-# Pydantic AI and its provider SDKs come from PyPI.
+# Builds the pydantic-ai agent's wheels, with the in-repo wheels it imports (they
+# are not on PyPI). agent-release.yml then locks its dependencies to the
+# workspace lock, runs it in a sandbox image against a stub model, and
+# publishes the GitHub release that `avp agent install pydantic-ai` installs.
 #
 # Triggered by pushing a tag `agent-pydantic-ai-v<version>`, or run manually with an
 # explicit version.
@@ -19,43 +18,34 @@ on:
         required: true
 
 permissions:
-  contents: write # create the release + upload assets
+  contents: write # agent-release.yml creates the release
 
 jobs:
-  release:
-    name: Build wheels + publish release
+  build:
+    name: Build wheels
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Build the agent + its in-repo dependency wheel
+      - name: Build the agent and its in-repo dependency wheels
         run: |
-          uv build --package agent-voyager-project --out-dir dist
-          uv build --package avp-pydantic-ai --out-dir dist
+          uv build --wheel --package agent-voyager-project --out-dir dist
+          uv build --wheel --package avp-pydantic-ai --out-dir dist
 
-      - name: Roll up checksums
-        run: cd dist && shasum -a 256 *.whl > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-wheels
+          path: dist/*.whl
+          if-no-files-found: error
 
-      - name: Create or update the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="agent-pydantic-ai-v${{ inputs.version }}"
-          else
-            TAG="${{ github.ref_name }}"
-          fi
-          gh release create "$TAG" dist/*.whl dist/SHA256SUMS \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "pydantic-ai agent $TAG" \
-            --notes "Wheels for the pydantic-ai agent (+ the avp wire-types wheel). Install with: avp agent install pydantic-ai --version ${TAG#agent-pydantic-ai-v}" \
-            || gh release upload "$TAG" dist/*.whl dist/SHA256SUMS --repo "${{ github.repository }}" --clobber
+  release:
+    needs: build
+    uses: ./.github/workflows/agent-release.yml
+    with:
+      agent: pydantic-ai
+      tag: ${{ github.event_name == 'workflow_dispatch' && format('agent-pydantic-ai-v{0}', inputs.version) || github.ref_name }}

@@ -1,11 +1,11 @@
 """Run each released Python agent's tests against a fresh install.
 
-`make test` runs agents in the workspace, whose lockfile pins every
-dependency. A sandbox image instead pip-installs the agent's wheels, which
-resolves the newest versions the agent allows. This installs the same wheels
-into a clean environment without the lockfile, adds the agent's dev
-dependencies, and runs its tests there, so a dependency that moved upstream
-(say, an SDK renaming a field) fails here before it fails in a user's sandbox.
+Releases install an agent's dependencies at the workspace lock's versions (its
+requirements.txt), so an upstream release can't break an agent that shipped.
+This installs the agent's wheels into a clean environment without the lock,
+resolving the newest versions the agent allows, adds its dev dependencies,
+and runs its tests there. A failure is early warning that refreshing the lock
+(`uv lock --upgrade`) would break the agent, say an SDK renaming a field.
 
 Usage: uv run python avp/scripts/test-fresh-installs.py [agent ...]
 """
@@ -18,9 +18,9 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from avp_cli.agents import AGENT_SOURCES
+import agent_packages
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = agent_packages.ROOT
 # The Python the sandbox images install agents into.
 PYTHON = "3.12"
 
@@ -30,10 +30,10 @@ def _run(cmd: list[str], **kwargs: object) -> None:
 
 
 def check(name: str, work: Path) -> bool:
-    source = AGENT_SOURCES[name]
-    package = ROOT / Path(source.dev_manifest).parent
+    pkg = agent_packages.read(name)
+    package = pkg.path
     wheels = work / "wheels"
-    for dist in source.wheel_dists:
+    for dist in pkg.meta["wheels"]:
         _run(
             ["uv", "build", "-q", "--package", dist, "--wheel", "--out-dir", str(wheels)], cwd=ROOT
         )
@@ -67,7 +67,9 @@ def check(name: str, work: Path) -> bool:
 
 
 def main(names: list[str]) -> int:
-    names = names or [n for n, s in AGENT_SOURCES.items() if s.kind == "python"]
+    names = names or [
+        n for n in agent_packages.registry() if agent_packages.read(n).kind == "python"
+    ]
     failed = []
     for name in names:
         with tempfile.TemporaryDirectory() as tmp:

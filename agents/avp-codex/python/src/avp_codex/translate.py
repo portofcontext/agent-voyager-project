@@ -68,6 +68,12 @@ def content(item: dict) -> list:
         if not isinstance(args, dict):
             raise ValueError("Codex function arguments must be an object")
         return [ToolUseBlock(id=item["call_id"], name=tool_name(item), input=args, codex=item)]
+    if kind == "tool_search_call" and item.get("execution") == "client":
+        return [
+            ToolUseBlock(
+                id=item["call_id"], name="tool_search", input=item["arguments"], codex=item
+            )
+        ]
     raise ValueError(f"unsupported Codex response item: {kind}")
 
 
@@ -112,7 +118,11 @@ class Responses:
                 self.statuses[item["id"]] = item
         elif method == "rawResponseItem/completed":
             item = params["item"]
-            if item["type"] in ("function_call_output", "custom_tool_call_output"):
+            if item["type"] in (
+                "function_call_output",
+                "custom_tool_call_output",
+                "tool_search_output",
+            ):
                 if self.blocks:
                     self.results.append(item)
                 else:
@@ -150,7 +160,13 @@ class Responses:
             "exitCode", 0
         ) not in (None, 0)
         structured = None
-        if status.get("type") == "mcpToolCall" and status.get("result") is not None:
+        if item["type"] == "tool_search_output":
+            if item.get("execution") != "client":
+                raise ValueError("Codex server-executed tool search is not supported")
+            structured = {"tools": item["tools"]}
+            output = json.dumps(structured)
+            failed = item.get("status") != "completed"
+        elif status.get("type") == "mcpToolCall" and status.get("result") is not None:
             result = status["result"]
             output = result["content"]
             failed = failed or bool(result.get("isError"))

@@ -1,6 +1,6 @@
 {
   "name": "avp-pi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AVP adapter for the Pi coding agent.",
   "license": "MIT",
   "private": true,
@@ -25,5 +25,11 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
+  },
+  "avp": {
+    "agent": "pi",
+    "node": "22.23.3",
+    "asset": "avp-pi.tar.gz",
+    "entry": "dist/src/main.js"
   }
 }
