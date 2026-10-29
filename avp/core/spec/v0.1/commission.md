@@ -65,7 +65,7 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
 }
 ```
 
-The `acme-code-agent` key refers to the agent in the [Descriptor example](./agent-descriptor.md#2-example). With these lists, the run can use `read_file` but not `bash` or the `researcher` subagent. The entry has no `enabled_mcp_servers` list, so the `issues` server and its `search_issues` tool stay available ([§5.2](#52-agent-settings-limit-the-built-in-items)).
+The `acme-code-agent` key refers to the agent in the [Descriptor example](./agent-descriptor.md#2-example). With these lists, the run can use `read_file` but not `bash` or the `researcher` subagent. The entry has no `enabled_mcp_servers` list, so the `issues` server and its `search_issues` tool stay available: an [absent list limits nothing](#52-agent-settings-limit-the-built-in-items).
 
 ## 3. Reference
 
@@ -78,7 +78,7 @@ The `acme-code-agent` key refers to the agent in the [Descriptor example](./agen
 | `model` | string | Yes | The model to run, in the form `origin/model` used by [models.dev](https://models.dev), for example `"anthropic/claude-sonnet-4-6"`. `origin` is the model's maker, not necessarily the service that runs it; see [Provider](#33-provider). Matches `^[^/]+/.+$`. |
 | `prompt` | string | Yes | The first user message of the run. |
 | `supervisor` | [Supervisor](#32-supervisor) | No | The supervisor that wrote the Commission. |
-| `system_prompt` | string | No | The system prompt for the run. [§5.5](#55-system_prompt-replaces-the-agents-own) says how it replaces the agent's own. |
+| `system_prompt` | string | No | The system prompt for the run. It [replaces the agent's own](#55-system_prompt-replaces-the-agents-own). |
 | `provider` | [Provider](#33-provider) | No | The service the agent gets the model from. Absent means the agent's own default. |
 | `mcp_servers` | [MCP server](#35-mcp-server)[] | No | MCP servers to add for the run. |
 | `skills` | [Skill](#36-skill)[] | No | Skills to add for the run. |
@@ -154,7 +154,7 @@ A Skill carries a skill directory, as defined by [Agent Skills](https://agentski
 
 ### 3.7 Agent settings
 
-Agent settings apply to the agent whose `agent_name` is their key in [`agents`](#31-commission). Each list names built-in items from that agent's [Descriptor](./agent-descriptor.md#31-descriptor). [§5.2](#52-agent-settings-limit-the-built-in-items) says what an absent or empty list means.
+Agent settings apply to the agent whose `agent_name` is their key in [`agents`](#31-commission). Each list names built-in items from that agent's [Descriptor](./agent-descriptor.md#31-descriptor). [Agent settings limit the built-in items](#52-agent-settings-limit-the-built-in-items) says what an absent or empty list means.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -166,7 +166,7 @@ Agent settings apply to the agent whose `agent_name` is their key in [`agents`](
 
 ## 4. Rules for supervisors
 
-These rules apply to the supervisor that writes a Commission. A supervisor conforms to this spec if every Commission it writes matches [§3](#3-reference) and follows every MUST and MUST NOT in this section. The overview and the example add no requirements.
+These rules apply to the supervisor that writes a Commission. A supervisor conforms to this spec if every Commission it writes matches the [reference](#3-reference) and follows every MUST and MUST NOT in this section. The overview and the example add no requirements.
 
 ### 4.1 Each run has its own `run_id`
 
@@ -230,7 +230,7 @@ When a Commission has `system_prompt`, the agent MUST use it instead of its own 
 
 ### 5.6 The run uses the model and provider it was given
 
-The agent MUST send its own model calls to `model`, through `provider` when the Commission has one, and MUST NOT use a different model or service for them. This rule does not cover the models that subagents or the agent's runtime choose for their own calls. If the agent cannot use `provider`, it refuses the Commission ([§5.1](#51-the-agent-checks-the-commission-before-the-run-starts)).
+The agent MUST send its own model calls to `model`, through `provider` when the Commission has one, and MUST NOT use a different model or service for them. This rule does not cover the models that subagents or the agent's runtime choose for their own calls. If the agent cannot use `provider`, it [refuses the Commission](#51-the-agent-checks-the-commission-before-the-run-starts).
 
 ### 5.7 Final output matches `output_schema`
 
@@ -247,7 +247,7 @@ The agent MUST NOT write a secret value it receives into any Trajectory event.
 - **Choosing an agent:** finding one, or one that can run a given model.
 - **Storing secrets\*:** where a supervisor keeps them and how it resolves a [Secret reference](#34-secret-reference).
 - **The run's environment:** the workspace, files, sandbox, and network access.
-- **`thread_id`, `tags`, and `meta`:** AVP gives them no meaning beyond their descriptions in [§3.1](#31-commission).
+- **`thread_id`, `tags`, and `meta`:** AVP gives them no meaning beyond their descriptions in the [Commission](#31-commission) reference.
 - **Tool name clashes:** two MCP servers that offer tools with the same name. The agent's MCP client handles them as it normally does.
 
 \* *TODO*: this spec does not yet say how an agent receives the value behind a Secret reference. Because a Commission never carries a secret value, that part has to be defined here before this spec is final.

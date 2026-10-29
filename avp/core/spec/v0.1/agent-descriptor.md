@@ -129,7 +129,7 @@ A subagent does **not** inherit the agent's items: an absent field means the sub
 
 ## 4. Rules for agents
 
-These rules apply to the agent that produces a Descriptor, and in the same way to the lists inside each [Subagent](#35-subagent). An agent conforms to this spec if every Descriptor it produces matches [§3](#3-reference) and follows every MUST and MUST NOT in this section. The overview and the example add no requirements.
+These rules apply to the agent that produces a Descriptor, and in the same way to the lists inside each [Subagent](#35-subagent). An agent conforms to this spec if every Descriptor it produces matches the [reference](#3-reference) and follows every MUST and MUST NOT in this section. The overview and the example add no requirements.
 
 ### 4.1 Names and IDs are unique
 
@@ -160,7 +160,7 @@ For one `agent_name` and `agent_version`, every Descriptor the agent produces MU
 - Tools that have an `mcp_server_id`.
 - MCP server `status`.
 
-These MAY differ between Descriptors, for example when a remote server adds a tool or goes offline. [§4.4](#44-tools-from-mcp-servers) says how the agent lists them.
+These MAY differ between Descriptors, for example when a remote server adds a tool or goes offline. [Tools from MCP servers](#44-tools-from-mcp-servers) says how the agent lists them.
 
 ### 4.7 Rules in the Commission spec
 
