@@ -7,7 +7,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ## 1. Overview
 
-A Trajectory is the record of one run. It answers one question: **what did the agent do?** It is a list of events in the order the agent sent them. The agent sends each event as it happens, so a reader can follow a run live or read the whole record afterward.
+A Trajectory is the record of one run. It answers one question: **what did the agent do?** It is a list of events in the order the agent sent them. The agent sends each event as it happens, so the supervisor can follow a run live or read the whole record afterward.
 
 The events record:
 
@@ -16,11 +16,11 @@ The events record:
 - Each tool call and its result, and each run of a [subagent](./agent-descriptor.md#35-subagent).
 - Errors, and how the run ended.
 
-The agent is the only producer of a Trajectory. A run doesn't need a Commission, so a developer who starts the agent from their own code can use the Trajectory just for observability, without a supervisor. Its readers are the supervisor that sent the Commission, if there is one, and any other tool that needs a record of the run, such as a scorer, a dashboard, or a pipeline that turns runs into training data. From the events, a reader can rebuild the conversation the model saw, add up the run's cost, and see what each tool call and subagent did.
+The agent produces a Trajectory, and the supervisor reads it. Here the supervisor is any tool that reads the record of a run: the one that sent the Commission, a scorer, a dashboard, or a pipeline that turns runs into training data. A run doesn't need a Commission, so a developer who starts the agent from their own code can use the Trajectory just for observability. From the events, the supervisor can rebuild the conversation the model saw, add up the run's cost, and see what each tool call and subagent did.
 
 Each event is a JSON object. Events link to each other through IDs: for example, a tool call's `tool_call_id` matches the `tool_use` block in the model response that asked for it.
 
-This spec defines the events, their fields, and the rules for the agents that produce them and the readers that use them. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
+This spec defines the events, their fields, and the rules for the agents that produce them and the supervisors that read them. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
 
 ## 2. Example
 
@@ -505,7 +505,7 @@ When the run has a Commission, `run_requested`'s `commission` MUST be the Commis
 
 The agent MUST send one `assistant_message` for each model response that produced content, and no others. A message its runtime repeats or wraps, with no new model call behind it, is not a response. A response with no content is not sent.
 
-`content` MUST hold every block the model produced, in order. A reader can then rebuild the conversation sent to the model from each `assistant_message`'s `content` and each `tool_returned`'s `tool_result`.
+`content` MUST hold every block the model produced, in order. The supervisor can then rebuild the conversation sent to the model from each `assistant_message`'s `content` and each `tool_returned`'s `tool_result`.
 
 ### 4.4 Usage is per response
 
@@ -530,7 +530,7 @@ If the run ends while a subagent is still running, the agent MUST send its `suba
 The agent SHOULD report the subagent's own model responses and tool calls as events, as they happen:
 
 - Each `assistant_message`, `tool_invoked`, `tool_returned`, `subagent_invoked`, `subagent_returned`, and `error_occurred` the agent reports for a subagent MUST have `subagent_invocation_id` set to that subagent's `invocation_id`.
-- When the agent reports the subagent's model responses, it MUST NOT set `subagent_usage`, so readers don't count them twice. When it doesn't, it SHOULD set `subagent_usage`.
+- When the agent reports the subagent's model responses, it MUST NOT set `subagent_usage`, so the supervisor doesn't count them twice. When it doesn't, it SHOULD set `subagent_usage`.
 
 ### 4.7 Errors and stops
 
@@ -538,33 +538,33 @@ When the run fails, the agent MUST send an `error_occurred` that says why, then 
 
 When someone stops the run from outside, for example with SIGINT or SIGTERM, the agent MUST stop its runtime and end the Trajectory before it exits. After `agent_started`, it closes any running subagent as [abandoned](#46-subagents) and sends `agent_stopped` with `reason` set to `interrupted`. Before `agent_started`, it sends `error_occurred` with the code `agent_crash`.
 
-## 5. Rules for readers
+## 5. Rules for supervisors
 
-These rules apply to any tool that reads a Trajectory. A reader conforms to this spec if it follows every MUST and MUST NOT in this section.
+These rules apply to the supervisor that reads a Trajectory. A supervisor conforms to this spec if it follows every MUST and MUST NOT in this section.
 
 ### 5.1 Unknown values are read safely
 
-A reader MUST treat an error code it doesn't know as `unknown`, and MUST skip an event whose `type` it doesn't know. Later versions of AVP can then add codes and event types without breaking readers.
+The supervisor MUST treat an error code it doesn't know as `unknown`, and MUST skip an event whose `type` it doesn't know. Later versions of AVP can then add codes and event types without breaking supervisors.
 
 ### 5.2 Totals come from the events
 
-The agent sends no totals, so a reader adds them up:
+The agent sends no totals, so the supervisor adds them up:
 
-- **Tokens and cost:** the sum of `usage` over every `assistant_message`, the subagents' included, plus the `subagent_usage` of each `subagent_returned` that has one. `cache_read_input_tokens` and `cache_creation_input_tokens` are already in `input_tokens`, and `reasoning_output_tokens` is already in `output_tokens`; a reader MUST NOT add them again.
-- **Unknown cost:** when any response has `cost_source` set to `unknown`, the run's cost is at least the sum, not exactly it. A reader MUST NOT report such a response as free.
+- **Tokens and cost:** the sum of `usage` over every `assistant_message`, the subagents' included, plus the `subagent_usage` of each `subagent_returned` that has one. `cache_read_input_tokens` and `cache_creation_input_tokens` are already in `input_tokens`, and `reasoning_output_tokens` is already in `output_tokens`; the supervisor MUST NOT add them again.
+- **Unknown cost:** when any response has `cost_source` set to `unknown`, the run's cost is at least the sum, not exactly it. The supervisor MUST NOT report such a response as free.
 - **Duration:** `agent_stopped`'s `time` minus `agent_started`'s `time`.
 
 ### 5.3 A Trajectory without its last event is incomplete
 
-A Trajectory is complete when it ends with `agent_stopped`, or with `error_occurred` before `agent_started`. If it ends any other way, the agent stopped without closing it, for example because it was killed. A reader MUST NOT treat an incomplete Trajectory as a run that converged.
+A Trajectory is complete when it ends with `agent_stopped`, or with `error_occurred` before `agent_started`. If it ends any other way, the agent stopped without closing it, for example because it was killed. The supervisor MUST NOT treat an incomplete Trajectory as a run that converged.
 
 ## 6. Out of scope
 
 This spec does not define:
 
-- **Sending a Trajectory:** how events reach a reader, for example as a file of JSON lines, over stdout, or over a network connection.
+- **Sending a Trajectory:** how events reach the supervisor, for example as a file of JSON lines, over stdout, or over a network connection.
 - **Storing Trajectories:** where they are kept, for how long, and how runs are found later.
 - **Runs together:** scheduling runs, or comparing and linking them; each Trajectory is one run.
 - **How a subagent is started:** the agent decides when and how to run one; the Trajectory records what happened.
 - **Converting a Trajectory:** to [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/) spans, [CloudEvents](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md), or training-data formats such as [ATIF](https://github.com/harbor-framework/harbor).
-- **Judging a run:** scores, policy checks, and other conclusions a reader draws from the events.
+- **Judging a run:** scores, policy checks, and other conclusions the supervisor draws from the events.

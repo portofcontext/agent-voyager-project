@@ -34,7 +34,7 @@ The agent may also come with its own tools, skills, and subagents (other agents 
 |---|---|---|---|
 | [Commission](./commission.md) | The task the supervisor sends: prompt, model, MCP servers, skills, and which built-in items to switch off. | Written by a person or a tool. The supervisor fills in per-run details such as the run ID and sends it to the agent to start a run. The first Trajectory event records a copy. | [`commission.schema.json`](./commission.schema.json) |
 | [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. The second Trajectory event records a copy. | [`agent-descriptor.schema.json`](./agent-descriptor.schema.json) |
-| [Trajectory](./trajectory.md) | The events an agent emits during a run, their order, and how to rebuild the conversation from them. | The supervisor or any later reader uses it to follow a run, total its cost, score it, or rebuild the conversation. | [`trajectory.schema.json`](./trajectory.schema.json) |
+| [Trajectory](./trajectory.md) | The events an agent emits during a run, their order, and how to rebuild the conversation from them. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. | [`trajectory.schema.json`](./trajectory.schema.json) |
 
 All definitions are also bundled in [`avp.schema.json`](./avp.schema.json), with `$id` base `https://www.agentvoyagerproject.com/schema/v0.1/`. Worked examples are in [`examples/`](./examples/).
 
