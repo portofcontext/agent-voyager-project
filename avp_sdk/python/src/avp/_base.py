@@ -1,8 +1,9 @@
 """Settings shared by the wire models of all three specs."""
 
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import (
     AfterValidator,
@@ -15,6 +16,9 @@ from pydantic import (
     StringConstraints,
     WithJsonSchema,
 )
+
+if TYPE_CHECKING:
+    from avp.trajectory import Event
 
 AVP_VERSION = "0.1"
 
@@ -78,3 +82,7 @@ Timestamp = Annotated[
     WithJsonSchema({"type": "string", "format": "date-time", "pattern": _RFC3339}),
 ]
 """An RFC 3339 timestamp, read into a timezone-aware `datetime`."""
+
+
+EventSink = Callable[["Event"], Awaitable[None]]
+"""Takes one Trajectory event at a time: a file, a queue, a network stream."""

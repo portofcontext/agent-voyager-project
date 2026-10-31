@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import JsonValue, ValidationError
 
-from avp.agent_cli.sink import EventSink
+from avp._base import EventSink
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import (

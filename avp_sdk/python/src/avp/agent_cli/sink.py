@@ -1,13 +1,10 @@
 """Writing events as NDJSON."""
 
 import sys
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from avp._base import EventSink
 from avp.trajectory import Event
-
-EventSink = Callable[[Event], Awaitable[None]]
-"""Takes one Trajectory event at a time."""
 
 
 def ndjson_sink(out: Path | None) -> EventSink:
