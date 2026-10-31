@@ -75,5 +75,6 @@ lock then produces its release `requirements.txt`.
 ### 6. Before `spec-v0.1-cleanup` merges to `main`
 
 - [ ] Root docs cut down: `AGENTS.md`, `README.md`, `SKILL.md`, `PATTERNS.md`, `MAINTAINERS.md`
+  - `AGENTS.md` still describes the old wire: CloudEvents and OTel compatibility, `source: avp://agent`, `avp.*` attributes, `schema_version`, `origin/model` slugs, and `avp/bindings` as the source of truth
 - [ ] `make check` passes
 - [ ] `tmp-*` files removed
