@@ -62,7 +62,7 @@ kept; don't port it.
 |---|---|---|---|
 | Recorder | Turns an agent's native events into a valid Trajectory: event order, usage per response, tool and subagent pairing, closing the run | 10 agents | Open |
 | Recorder vectors | Shared test data the Recorder in each SDK must pass | Python, Rust, TypeScript tests | Open |
-| `agent_cli` + `sink` | The `run --commission <path> --out <ndjson>` command line and NDJSON writing every agent uses | 11 agents | Open |
+| `agent_cli` + `sink` | The `run --commission <path> --out <ndjson>` command line and NDJSON writing every agent uses | 11 agents, avp-cli, conformance | Keep as `avp.agent_cli`, outside the spec: a provisional file transport until the spec defines one. Drops `--built-in` and `AVP_WORKSPACE`; sends the first events and refuses a Commission that isn't valid or fails `check_commission` |
 | `preflight` | The refusal checks in the Commission spec's rules for agents | 6 agents | Keep, rewritten: `check_commission(commission, descriptor)` covers every case but the model ones |
 | `launch` | Workspace and directory setup for launching an agent | 1 agent's test, avp-cli | Drop: the spec leaves workspaces out of scope, so it belongs in avp-cli |
 | `history` | Rebuilds the conversation from a Trajectory | None | Drop: no users, and it mixes subagent messages into the main conversation. See "Converting message histories" in `tmp-future-ideas.md` |
@@ -75,5 +75,7 @@ kept; don't port it.
 - Agent base classes, agent loops, and driver protocols: each agent's runtime
   owns its loop.
 - Transport between supervisor and agent, multi-run orchestration, and
-  persistence.
+  persistence. The one exception is `avp.agent_cli`, a provisional file
+  transport outside the spec, kept so agents can be run and tested until the
+  spec defines transport.
 - The conformance harness and cases: `avp conformance` in avp-cli.

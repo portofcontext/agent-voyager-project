@@ -43,6 +43,22 @@ blocks for now, and Open Responses items after the
   - Blocks one format has and another lacks, such as `server_tool_result` or
     `thinking` signatures.
 
+## Transport
+
+Define how a Commission reaches the agent and how its events come back. The
+specs leave this out today, and the SDKs carry a provisional file transport
+outside the spec (`avp.agent_cli`: `ping`, `describe`, and `run --commission --out`
+with NDJSON) so agents can be run, demoed, and checked by `avp conformance`.
+
+- Why: every supervisor that starts agents needs the same contract, and today
+  that contract lives only in the SDK and avp-cli.
+- To work out:
+  - Which transports to define: a subprocess with files or stdio, HTTP, or
+    both.
+  - Whether the spec defines the command line itself, or only what a
+    transport must carry.
+  - Interruption: how a supervisor asks a running agent to stop.
+
 ## Connection details on Descriptor MCP servers
 
 Add the server's connection details to the Descriptor's MCP server entry
