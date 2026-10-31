@@ -1,4 +1,4 @@
-"""Wire types for the [Commission spec](../../../../spec/v0.1/commission.md).
+"""Wire types for the Commission spec (`spec/v0.1/commission.md`).
 
 Each class matches one table in the spec's reference section.
 """
@@ -40,8 +40,8 @@ SecretRef = ProxySecret | EnvSecret
 """A Secret reference: names a secret without containing it."""
 
 
-class Model(WireModel):
-    """A model as one service offers it, named with models.dev provider and model IDs."""
+class ModelRef(WireModel):
+    """A Model without its `credential`, as the Trajectory reports it."""
 
     provider: Annotated[str, StringConstraints(pattern=r"^[a-z0-9._-]+$")]
     """The service that runs the model, for example `"anthropic"`,
@@ -52,6 +52,11 @@ class Model(WireModel):
     `"claude-sonnet-4-6"`."""
     base_url: str | None = None
     """The URL of the service's API. Absent means the service's default."""
+
+
+class Model(ModelRef):
+    """A model as one service offers it, named with models.dev provider and model IDs."""
+
     credential: SecretRef | None = None
     """The API key for the service. Absent means the agent uses whatever
     credential its environment has for the service."""

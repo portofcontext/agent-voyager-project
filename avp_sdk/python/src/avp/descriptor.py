@@ -1,4 +1,4 @@
-"""Wire types for the [Agent Descriptor spec](../../../../spec/v0.1/agent-descriptor.md).
+"""Wire types for the Agent Descriptor spec (`spec/v0.1/agent-descriptor.md`).
 
 Each class matches one table in the spec's reference section.
 """
