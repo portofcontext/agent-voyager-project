@@ -78,7 +78,7 @@ its JSON, then run `avp cm check my-task`.
   Check the CLI guide for optional dependencies before using external datasets
   or scorers.
 
-Read the [Commission spec](avp/core/spec/v0.1/commission.md) for field semantics
+Read the [Commission spec](spec/v0.1/commission.md) for field semantics
 and the [CLI guide](https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli/README.md)
 for eval configuration, provider routing, and credentials.
 
@@ -113,7 +113,7 @@ container image, package, network, and resource settings are rejected.
 5. Sum per-response `assistant_message` usage and cost. Never add cumulative
    runtime/thread totals again. A model turn is not a conversational user turn.
 
-The [Trajectory spec](avp/core/spec/v0.1/trajectory.md) defines event payloads,
+The [Trajectory spec](spec/v0.1/trajectory.md) defines event payloads,
 ordering, span relationships, and accounting. All agent events use the
 CloudEvents envelope and `source: avp://agent`.
 
@@ -142,7 +142,7 @@ and [integration patterns](https://github.com/portofcontext/agent-voyager-projec
    Consult [conformance coverage](https://github.com/portofcontext/agent-voyager-project/blob/main/avp/core/conformance/src/avp_conformance/COVERAGE.md)
    before claiming support. Follow the checkout's required verification commands.
 
-Use the [Agent Descriptor spec](avp/core/spec/v0.1/agent-descriptor.md) for
-capability declarations and the [spec index](avp/core/spec/v0.1/README.md) for
+Use the [Agent Descriptor spec](spec/v0.1/agent-descriptor.md) for
+capability declarations and the [spec index](spec/v0.1/README.md) for
 schemas and examples. If a requested behavior is outside v0.1, identify that
 boundary explicitly; do not invent wire fields or supervisor callbacks.

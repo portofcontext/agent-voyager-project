@@ -7,7 +7,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 ## References
 
 - [README](README.md): installation and quickstart.
-- [Specs](avp/core/spec/v0.1/): normative wire contracts.
+- [Specs](spec/v0.1/): normative wire contracts.
 - [Integration patterns](PATTERNS.md): runtime adaptation and launch context.
 - [Adapter template](agents/_template/README.md): adding a runtime.
 - [CLI guide](avp-cli/README.md): Commissions, environments, and evaluations.
@@ -52,7 +52,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 
 ## Repository layout
 
-- `avp/core/spec/v0.1/`: normative specs and generated JSON Schemas.
+- `spec/v0.1/`: normative specs.
 - `avp/core/conformance/`: separate harness, cases, and shared Recorder vectors.
 - `avp/bindings/{python,rust,typescript}/`: wire bindings and shared helpers.
   Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.

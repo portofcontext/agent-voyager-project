@@ -12,12 +12,12 @@ Open Responses covers only model-call items (messages, tool calls,
 reasoning), so the rest of the Trajectory stays AVP's own.
 
 - Why: AVP keeps its own block set
-  ([Content blocks](avp/core/spec/v0.1/trajectory.md#313-content-blocks)) for
+  ([Content blocks](spec/v0.1/trajectory.md#313-content-blocks)) for
   a problem Open Responses solves under neutral governance.
 - To work out:
   - The mapping from each AVP block to an Open Responses item, and which
     blocks have no equivalent.
-  - Citations: AVP's [Citation](avp/core/spec/v0.1/trajectory.md#3131-citation)
+  - Citations: AVP's [Citation](spec/v0.1/trajectory.md#3131-citation)
     maps to a `url_citation` annotation (`source_url` to `url`,
     `source_title` to `title`, `start_index` and `end_index` unchanged). Open
     Responses has no `cited_text`, `source_id`, or file and document
@@ -26,7 +26,7 @@ reasoning), so the rest of the Trajectory stays AVP's own.
 ## Connection details on Descriptor MCP servers
 
 Add the server's connection details to the Descriptor's MCP server entry
-(the Descriptor's [MCP server](avp/core/spec/v0.1/agent-descriptor.md#33-mcp-server)): the URL for an HTTP server, or the command
+(the Descriptor's [MCP server](spec/v0.1/agent-descriptor.md#33-mcp-server)): the URL for an HTTP server, or the command
 and arguments for a stdio server. Never credentials.
 
 - Why: a reviewer could see exactly which server the agent talked to, not just
@@ -44,7 +44,7 @@ and arguments for a stdio server. Never credentials.
 ## References or `inherit` instead of repeated items
 
 Today a subagent that shares the agent's tools, MCP servers, or skills lists
-them again in full (the Descriptor's [Subagent](avp/core/spec/v0.1/agent-descriptor.md#35-subagent)). Consider a way to point
+them again in full (the Descriptor's [Subagent](spec/v0.1/agent-descriptor.md#35-subagent)). Consider a way to point
 at the agent's items instead.
 
 - Options:
@@ -121,14 +121,14 @@ spec says only that keys are relative paths.
   agent runs in a sandbox the launcher controls.
 - To work out:
   - Add it as an `invalid_commission` case in the Commission's
-    [checks before the run](avp/core/spec/v0.1/commission.md#51-the-agent-checks-the-commission-before-the-run-starts),
+    [checks before the run](spec/v0.1/commission.md#51-the-agent-checks-the-commission-before-the-run-starts),
     or as a schema pattern on the keys.
   - Symlinks inside the skill directory.
 
 ## Mapping pages for outside formats
 
 Add pages that convert a Trajectory to outside formats, under
-`avp/core/spec/v0.1/mappings/`. They are separate from the specs, so changes in
+`spec/v0.1/mappings/`. They are separate from the specs, so changes in
 those formats (the GenAI conventions are still experimental) don't need a new
 AVP version.
 
