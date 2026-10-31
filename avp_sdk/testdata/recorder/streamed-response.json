@@ -1,0 +1,325 @@
+{
+  "name": "streamed-response",
+  "description": "Chunks with the same key merge into one assistant_message timed at the last chunk, with usage reported after the content. A new key starts the next response.",
+  "prices": {
+    "anthropic/claude-test-1": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75
+    },
+    "anthropic/claude-test-1-20260101": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  },
+  "calls": [
+    {
+      "t": 0,
+      "call": "begin",
+      "received": {
+        "avp_version": "0.1",
+        "run_id": "run-1",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "prompt": "Do the task."
+      },
+      "descriptor": {
+        "avp_version": "0.1",
+        "agent_name": "case-agent",
+        "agent_version": "1.0.0"
+      }
+    },
+    {
+      "t": 1,
+      "call": "start",
+      "started": {
+        "prompt": "Do the task.",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "tools": [
+          {
+            "name": "read_file",
+            "inputSchema": {
+              "type": "object"
+            }
+          },
+          {
+            "name": "search",
+            "inputSchema": {
+              "type": "object"
+            },
+            "mcp_server_id": "docs"
+          },
+          {
+            "name": "Task",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        ],
+        "mcp_servers": [
+          {
+            "id": "docs",
+            "name": "Docs",
+            "status": "connected"
+          }
+        ],
+        "subagents": [
+          {
+            "name": "researcher",
+            "description": "Finds things."
+          }
+        ]
+      }
+    },
+    {
+      "t": 10,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hel"
+        }
+      ],
+      "key": "msg-1"
+    },
+    {
+      "t": 12,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "lo."
+        },
+        {
+          "type": "tool_use",
+          "id": "call-1",
+          "name": "read_file",
+          "input": {}
+        }
+      ],
+      "key": "msg-1",
+      "response_model": "claude-test-1-20260101"
+    },
+    {
+      "t": 15,
+      "call": "usage",
+      "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+      },
+      "key": "msg-1"
+    },
+    {
+      "t": 20,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "Next."
+        }
+      ],
+      "key": "msg-2",
+      "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+      }
+    },
+    {
+      "t": 25,
+      "call": "tool_returned",
+      "call_id": "call-1",
+      "content": "ok"
+    },
+    {
+      "t": 30,
+      "call": "close_response"
+    },
+    {
+      "t": 31,
+      "call": "stop",
+      "reason": "converged"
+    }
+  ],
+  "events": [
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "run_requested",
+      "data": {
+        "commission": {
+          "avp_version": "0.1",
+          "run_id": "run-1",
+          "model": {
+            "provider": "anthropic",
+            "id": "claude-test-1"
+          },
+          "prompt": "Do the task."
+        }
+      },
+      "t": 0
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "agent_described",
+      "data": {
+        "descriptor": {
+          "avp_version": "0.1",
+          "agent_name": "case-agent",
+          "agent_version": "1.0.0"
+        }
+      },
+      "t": 0
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "agent_started",
+      "data": {
+        "prompt": "Do the task.",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "tools": [
+          {
+            "name": "read_file",
+            "inputSchema": {
+              "type": "object"
+            }
+          },
+          {
+            "name": "search",
+            "inputSchema": {
+              "type": "object"
+            },
+            "mcp_server_id": "docs"
+          },
+          {
+            "name": "Task",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        ],
+        "mcp_servers": [
+          {
+            "id": "docs",
+            "name": "Docs",
+            "status": "connected"
+          }
+        ],
+        "subagents": [
+          {
+            "name": "researcher",
+            "description": "Finds things."
+          }
+        ]
+      },
+      "t": 1
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "assistant_message",
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Hel"
+          },
+          {
+            "type": "text",
+            "text": "lo."
+          },
+          {
+            "type": "tool_use",
+            "id": "call-1",
+            "name": "read_file",
+            "input": {}
+          }
+        ],
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "response_model": "claude-test-1-20260101",
+        "duration_ms": 2,
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 100,
+          "cost_usd": 0.0015,
+          "cost_source": "computed"
+        }
+      },
+      "t": 12
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "tool_invoked",
+      "data": {
+        "tool_call_id": "call-1",
+        "tool_name": "read_file",
+        "tool_input": {}
+      },
+      "t": 12
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "assistant_message",
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Next."
+          }
+        ],
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "duration_ms": 0,
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 100,
+          "cost_usd": 0.0045,
+          "cost_source": "computed"
+        }
+      },
+      "t": 20
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "tool_returned",
+      "data": {
+        "tool_call_id": "call-1",
+        "tool_name": "read_file",
+        "duration_ms": 13,
+        "tool_result": {
+          "type": "tool_result",
+          "tool_use_id": "call-1",
+          "content": "ok"
+        }
+      },
+      "t": 25
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-1",
+      "type": "agent_stopped",
+      "data": {
+        "reason": "converged"
+      },
+      "t": 31
+    }
+  ]
+}

@@ -96,7 +96,7 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `commission` | [Commission](./commission.md#31-commission) | No | The Commission the agent received. Absent when the run has [no Commission](#1-overview). |
+| `commission` | [Commission](./commission.md#31-commission), or any | No | The Commission as the agent received it. When what it received doesn't match the [Commission spec](./commission.md), the JSON value it received, or the text when it isn't JSON. Absent when the run has [no Commission](#1-overview). |
 
 ```json
 {
@@ -207,7 +207,7 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
 | `model` | object | Yes | The model the agent asked for this response, as in [`agent_started`](#35-agent_started). |
 | `response_model` | string | No | The model ID the service says produced the response, at the same `provider`, when it differs from `model.id` (for example a dated version). |
 | `finish_reasons` | string[] | No | Why the model stopped, exactly as the service reported it. |
-| `duration_ms` | integer | Yes | How long the response took, in milliseconds, ending at the event's `time`. |
+| `duration_ms` | integer | Yes | How long the response took, in milliseconds, ending at the event's `time`. 0 or more. |
 | `usage` | [Usage](#361-usage) | Yes | The response's token counts and cost. |
 | `subagent_invocation_id` | string | No | When a subagent made the response, the `invocation_id` of its [`subagent_invoked`](#39-subagent_invoked). Absent for the main agent's responses. |
 
@@ -277,7 +277,7 @@ The [Event](#31-event) example is a `tool_invoked` event.
 |---|---|---|---|
 | `tool_call_id` | string | Yes | As in the matching [`tool_invoked`](#37-tool_invoked). |
 | `tool_name` | string | Yes | As in the matching `tool_invoked`. |
-| `duration_ms` | integer | Yes | How long the tool took, in milliseconds, ending at the event's `time`. |
+| `duration_ms` | integer | Yes | How long the tool took, in milliseconds, ending at the event's `time`. 0 or more. |
 | `tool_result` | `tool_result` [content block](#313-content-blocks) | Yes | The result, as the model receives it. |
 | `subagent_invocation_id` | string | No | As in the matching `tool_invoked`. |
 
@@ -334,7 +334,7 @@ The examples in this section and the next come from a run whose Commission allow
 | `subagent_name` | string | Yes | As in the matching [`subagent_invoked`](#39-subagent_invoked). |
 | `invocation_id` | string | Yes | As in the matching `subagent_invoked`. |
 | `subagent_invocation_id` | string | No | As in the matching `subagent_invoked`. |
-| `duration_ms` | integer | Yes | How long the subagent ran, in milliseconds, ending at the event's `time`. |
+| `duration_ms` | integer | Yes | How long the subagent ran, in milliseconds, ending at the event's `time`. 0 or more. |
 | `subagent_reason` | string | Yes | Why the subagent stopped, one of the [stop reasons](#3121-stop-reasons). |
 | `subagent_result_text` | string | Yes | The subagent's final text, or the error message when `subagent_reason` is `error`. |
 | `subagent_usage` | [Subagent usage](#3101-subagent-usage) | No | The subagent's totals, when the agent can't record its responses as events of their own. |
@@ -363,7 +363,7 @@ Subagent usage has the fields of [Usage](#361-usage), all optional, totaled over
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `responses` | integer | No | How many model responses the subagent made. |
+| `responses` | integer | No | How many model responses the subagent made. 0 or more. |
 
 ### 3.11 `error_occurred`
 
@@ -450,7 +450,7 @@ The same values say why a subagent stopped, in [`subagent_returned`](#310-subage
 | `server_tool_result` | `tool_use_id` (string, required), `name` (string, required), `content` (any, required), `is_error` (boolean, optional) | The result of a `server_tool_use` call, in the same `assistant_message`. |
 | `refusal` | `refusal` (string, required) | The model's text when it declined. |
 
-A block can also hold fields the model service added that AVP doesn't list, such as Gemini's `thought_signature`, so the agent can pass them back to the service.
+A block, a [Citation](#3131-citation), or a [Source](#3132-source) can also hold fields the model service added that AVP doesn't list, such as Gemini's `thought_signature` or Anthropic's citation `document_index`, so the agent can pass them back to the service.
 
 #### 3.13.1 Citation
 
@@ -460,8 +460,8 @@ A source the model cited for a text block.
 |---|---|---|---|
 | `type` | string | Yes | The kind of citation, as the model service names it, such as `url_citation`. |
 | `cited_text` | string | No | The text cited. |
-| `start_index` | integer | No | Where the cited part of the block's `text` starts. |
-| `end_index` | integer | No | Where it ends. |
+| `start_index` | integer | No | Where the cited part of the block's `text` starts. 0 or more. |
+| `end_index` | integer | No | Where it ends. 0 or more. |
 | `source_id` | string | No | The service's ID for the source. |
 | `source_url` | string | No | The source's URL. |
 | `source_title` | string | No | The source's title. |
@@ -495,7 +495,7 @@ The agent MUST NOT give two events in a Trajectory the same `id`.
 
 ### 4.2 The first events record the run's inputs
 
-When the run has a Commission, `run_requested`'s `commission` MUST be the Commission exactly as the agent received it. When it has none, `commission` MUST be absent.
+When the run has a Commission, `run_requested`'s `commission` MUST be the Commission exactly as the agent received it, including one the agent then refuses. When it has none, `commission` MUST be absent.
 
 `agent_described`'s `descriptor` MUST be the agent's [Agent Descriptor](./agent-descriptor.md).
 

@@ -77,7 +77,7 @@ AVP defines the shape of the Commission, the Agent Descriptor, and Trajectory ev
 - **Transport.** How the Commission reaches the agent and how events come back: a file, a pipe, HTTP, a message queue, or an in-process call.
 - **Workspace.** Which folder the agent works in, what files are in it before the run, and how it is cleaned up afterward.
 - **Credentials.** Setting up the credential proxy and putting variables in the agent's environment. [Secrets](#secrets) covers what AVP does define.
-- **MCP server hosting.** Where the servers named in a Commission run.
+- **MCP server hosting.** Where the servers named in a Commission run. For a stdio server, the supervisor makes its `command` runnable where the agent runs: the program is installed, and any network it needs is reachable.
 - **Placement and isolation.** Where the agent runs (subprocess, container, VM) and how it is sandboxed.
 - **Orchestration and storage.** Running many agents, and keeping Trajectories after a run.
 

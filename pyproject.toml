@@ -60,6 +60,9 @@ members = [
     "agents/avp-codex/python",
     "agents/avp-openai-agents/python",
 ]
+# The new SDK is its own project with its own uv.lock. Members keep the old
+# avp/bindings/python until each one migrates.
+exclude = ["avp_sdk/python"]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
 # dependency, resolve it from the workspace rather than PyPI. Critical:

@@ -23,6 +23,42 @@ reasoning), so the rest of the Trajectory stays AVP's own.
     Responses has no `cited_text`, `source_id`, or file and document
     citations; decide whether AVP extends the annotation with them.
 
+## Converting message histories
+
+Add SDK functions that convert between AVP's conversation and the message
+history formats agents and model services use, such as Anthropic Messages,
+OpenAI Chat Completions, and OpenAI Responses. AVP's format is its own content
+blocks for now, and Open Responses items after the
+[Open Responses migration](#open-responses-migration).
+
+- Why: every agent converts its runtime's messages into AVP content blocks,
+  and every supervisor that replays or exports a run converts them back. Shared
+  converters would make each format map the same way in every agent and SDK.
+- To work out:
+  - Which formats to support first, and in which directions: into AVP for
+    agents, out of AVP for supervisors.
+  - Rebuilding the conversation from a Trajectory: one conversation per
+    `subagent_invocation_id`, not one mixed list. The old `avp.history` didn't
+    separate them.
+  - Blocks one format has and another lacks, such as `server_tool_result` or
+    `thinking` signatures.
+
+## Transport
+
+Define how a Commission reaches the agent and how its events come back. The
+specs leave this out today, and the SDKs carry a provisional file transport
+outside the spec (`avp.agent_cli`: `ping`, `describe`, and `run --commission --out`
+with NDJSON) so agents can be run, demoed, and checked by `avp conformance`.
+
+- Why: every supervisor that starts agents needs the same contract, and today
+  that contract lives only in the SDK and avp-cli.
+- To work out:
+  - Which transports to define: a subprocess with files or stdio, HTTP, or
+    both.
+  - Whether the spec defines the command line itself, or only what a
+    transport must carry.
+  - Interruption: how a supervisor asks a running agent to stop.
+
 ## Connection details on Descriptor MCP servers
 
 Add the server's connection details to the Descriptor's MCP server entry
@@ -127,35 +163,23 @@ spec says only that keys are relative paths.
 
 ## Mapping pages for outside formats
 
-Add pages that convert a Trajectory to outside formats, under
-`spec/v0.1/mappings/`. They are separate from the specs, so changes in
-those formats (the GenAI conventions are still experimental) don't need a new
-AVP version.
+Add pages under `spec/v0.1/mappings/` that describe how a Trajectory converts
+to CloudEvents and to OpenTelemetry spans. The SDK already does both
+(`avp.utils.cloudevents`, `avp.utils.otel`); the pages would let other
+implementations convert the same way without reading the SDK. They stay
+separate from the specs, so changes in those formats don't need a new AVP
+version.
 
-- `cloudevents.md` (C35): AVP event to CloudEvent, for supervisors that
-  forward Trajectories to brokers. `type` gets a prefix (`avp.tool_invoked`,
-  or a reverse-DNS name), the forwarder sets `source`, `subject` comes from
-  `run_id`, and `id`, `time`, and `data` carry over. The bindings implement it
-  as a converter, for example `avp.cloudevents.to_cloudevent(event, source=...)`
-  in Python with Rust and TS ports.
-- `opentelemetry.md` (C34): AVP events to OpenTelemetry spans with GenAI
-  attributes.
-  - Spans: the run from `agent_started` to `agent_stopped` (GenAI agent span);
-    each `assistant_message`, starting at `time` minus `duration_ms` (model
-    call span); each tool call from `tool_invoked` to `tool_returned`; each
-    subagent from `subagent_invoked` to `subagent_returned`.
-  - Parents: a response under the run, or under its subagent; a call under the
-    response whose `content` has its `tool_use`.
-  - IDs: the trace ID from `run_id`; span IDs by hashing `run_id` with
-    `tool_call_id` or `subagent_invocation_id`, so a conversion always gives
-    the same IDs.
-  - Joining an outside trace (the supervisor's, or spans the agent's framework
-    emits): the converter takes a parent span, and the launcher passes a W3C
-    `traceparent` to the agent process (for example the `TRACEPARENT`
-    environment variable). Add an optional `traceparent` on `run_requested`
-    only if a supervisor needs it in the Trajectory.
-  - `gen_ai.py` already maps fields to attributes; still missing are the span
-    building above and an exporter.
+- To work out:
+  - Whether the SDK's mapping becomes the pages' content, or the pages come
+    first and the SDKs follow them.
+  - The GenAI conventions moved to
+    [semantic-conventions-genai](https://github.com/open-telemetry/semantic-conventions-genai),
+    are in Development, and have no release yet. Decide which revision to
+    follow until they have one.
+  - `gen_ai.input.messages` and `gen_ai.output.messages` need AVP blocks
+    converted to OpenTelemetry message parts. See
+    [Converting message histories](#converting-message-histories).
 
 ## Non-text data across AVP
 
@@ -265,3 +289,15 @@ falls short:
     file.
   - Bedrock's region and Vertex's project and location fit in `base_url`, but
     the Bedrock and Vertex SDKs take them as separate settings.
+
+## Items found in the workspace
+
+Decide whether `agent_started` lists items the agent finds in the workspace,
+such as skills or MCP servers in project settings. The Trajectory spec's rule
+on the first events lists only the built-in items the Commission doesn't turn
+off and the items it adds.
+
+- Why: a runtime that loads project skills uses items no Descriptor or
+  Commission names, so the supervisor can't see them.
+- To work out: whether agent settings can turn them off, and whether the
+  SDK's run plan should take them as an input.
