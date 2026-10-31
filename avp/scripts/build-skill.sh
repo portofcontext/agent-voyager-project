@@ -11,7 +11,7 @@ import sys
 import zipfile
 
 root, out = map(Path, sys.argv[1:])
-files = [root / name for name in ("SKILL.md", "LICENSE", "FOUNDATIONS.md")]
+files = [root / name for name in ("SKILL.md", "LICENSE")]
 files += sorted(
     p for p in (root / "avp/core/spec/v0.1").rglob("*")
     if p.is_file() and p.suffix in {".md", ".json", ".ndjson"}

@@ -18,7 +18,7 @@ Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
-AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [foundations](FOUNDATIONS.md) for how they fit together.
+AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [spec overview](avp/core/spec/v0.1/README.md) for how they fit together.
 
 ## Install
 

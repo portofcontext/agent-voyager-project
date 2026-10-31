@@ -1,163 +1,93 @@
 # AVP v0.1 Specifications
 
 **Status:** Draft
-**Umbrella version:** v0.1
-**$id base:** `https://avp.dev/schema/v0.1/`
 
-This directory is the **normative specification** for v0.1 of the Agent Voyager Project (AVP). AVP is a collection of three specs that compose into a coherent wire format for the agent-execution case:
+AVP (Agent Voyager Project) is a set of specs for starting an AI agent on a task and recording what it did. A supervisor, such as a CLI, an evaluation tool, or a hosted platform, sends the agent a Commission describing the task. The agent does the work with its own harness (e.g. Claude Agent SDK or Goose) and reports each step as a Trajectory: a list of events covering every model response, tool call, and result.
 
-| Sub-spec | Kind | What it defines | File |
-|---|---|---|---|
-| **AVP Trajectory** | Data-shape spec | The event stream: CloudEvents envelope, OTel span/GenAI attrs, event-type catalog, ordering/pairing invariants, the agent loop algorithm | [`trajectory.md`](./trajectory.md) |
-| **AVP Commission** | Data-shape spec | The run-config object: prompt, model, inline managed assets, `enabled_builtin_*` allowlist semantics | [`commission.md`](./commission.md) |
-| **AVP Agent Descriptor** | Data-shape spec | What an agent advertises pre-flight: built-in tool/subagent/skill catalogs, capabilities, supported models | [`agent-descriptor.md`](./agent-descriptor.md) |
+Every agent that follows AVP accepts the same Commission and produces the same Trajectory format. That lets you run different agents on the same task and compare them, rebuild the conversation from a past run, or review a run afterward in a consistent format.
 
-The three data-shape specs are independent; each can be adopted on its own.
-
-The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in every spec are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174).
-
----
-
-## 0. Built on
-
-AVP specializes (it does not reinvent) the following industry specs:
-
-- **CloudEvents 1.0** for the event envelope (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`, `data`).
-- **OpenTelemetry span identification** (`trace_id`, `span_id`, `parent_span_id`) on every event so trajectories reconstruct as a span tree. OpenTelemetry GenAI semantic conventions (`gen_ai.*` attribute names) are NOT carried on the AVP wire; an AVP → OTel-attribute projection for consumers translating into OTel-native backends is documented in [`FOUNDATIONS.md`](../../../../FOUNDATIONS.md).
-- **MCP 2025-11-25** for supervisor-side tool dispatch. Commission entries in `mcp_servers[]` carry inline connection material; the agent runs MCP's `initialize` + `tools/list` and dispatches `tools/call` against the live server. AVP doesn't redefine the MCP wire; it just references the asset and observes the dispatch.
-- **Agent Skills** (agentskills.io) for `SKILL.md` content. Commission `skills[]` entries carry inline file content including `SKILL.md`.
-- **JSON Schema Draft 2020-12** for this specification's machine-readable form.
-
-AVP-specific concepts (the **no-mid-run-reach-in topology** and the **trajectory-as-source-of-truth contract**) live under the `avp.*` attribute namespace. See [`../../../../FOUNDATIONS.md`](../../../../FOUNDATIONS.md) for the full mapping rationale and ATIF (Harbor) positioning.
-
----
-
-## 1. The boundary
-
-AVP defines exactly one boundary, between two roles, with **two unidirectional flows** crossing it:
-
-- **Supervisor**: declares a Commission at startup with the prompt, model, and managed assets (`mcp_servers`, `skills`) with inline connection material. Once the Commission is sent, the supervisor observes the trajectory; it does not push anything else to the agent.
-- **Agent**: runs inside the Commission. Dials MCP servers and loads skills directly from the Commission. Emits a stream of facts (events), the trajectory, that the supervisor observes.
+## Run overview
 
 ```
-   supervisor  ──────── Commission ─────────▶  agent
-                                                 │
-                                                 │  dials MCP servers, loads
-                                                 │  skills from inline
-                                                 │  Commission content
-                                                 │
-                                                 │  runs the run, emits events
-                                                 ▼
-   supervisor  ◀──────── trajectory ─────────  agent
+supervisor                             agent
+    │                                    │
+    │─────────── Commission ────────────▶│
+    │◀────────── run_requested ──────────│
+    │◀───────── agent_described ─────────│
+    │                                    │  connects to MCP servers,
+    │                                    │  loads skills
+    │◀────────── agent_started ──────────│
+    │◀──────── assistant_message ────────│  model responds
+    │◀────────── tool_invoked ───────────│  handles a tool call
+    │◀────────── tool_returned ──────────│
+    │                ...                 │
+    │◀────────── agent_stopped ──────────│  run ends
 ```
 
-This is the v0.1 architectural choice: **the supervisor configures, the agent runs, the trajectory is the truth.** No mid-run supervisor → agent push channel. The agent's bounded context is fully specified in the Commission before any model turn runs.
+The supervisor sends one Commission at the start and nothing after it. The agent emits Trajectory events as they happen, from the start of the run to its end, so the supervisor can follow a run live or read it afterward. The diagram shows a sample; the Trajectory spec defines every event type and the required order.
 
-What an agent provides on its own (built-in tools, baked-in skills, in-process subagent definitions) is invisible to AVP and the Commission. It surfaces only on the agent's Descriptor (`agent_described.data["avp.descriptor"]`), which the supervisor and any auditor can read on the trajectory's second event.
+The agent may also come with its own tools, skills, and subagents (other agents it can hand work to). These are listed in its Agent Descriptor, which the Trajectory carries as its second event. A Commission can switch any of these built-in items off; the MCP servers and skills it brings are added alongside them.
 
----
+## The three specs
 
-## 2. Message classes
-
-| Class | Direction | Cardinality | Sub-spec |
+| Spec | Defines | How it's used | Schema |
 |---|---|---|---|
-| `Commission` | supervisor → agent | exactly one, at startup | [Commission](./commission.md) |
-| `Event` | agent → supervisor | streamed throughout the run | [Trajectory](./trajectory.md) |
+| [Commission](./commission.md) | The task the supervisor sends: prompt, model, MCP servers, skills, and which built-in items to switch off. | Written by a person or a tool. The supervisor fills in per-run details such as the run ID and sends it to the agent to start a run. The first Trajectory event records a copy. | [`commission.schema.json`](./commission.schema.json) |
+| [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. The second Trajectory event records a copy. | [`agent-descriptor.schema.json`](./agent-descriptor.schema.json) |
+| [Trajectory](./trajectory.md) | The events an agent emits during a run, their order, and how to rebuild the conversation from them. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. | [`trajectory.schema.json`](./trajectory.schema.json) |
 
-v0.1 has no supervisor → agent push channel.
+All definitions are also bundled in [`avp.schema.json`](./avp.schema.json), with `$id` base `https://www.agentvoyagerproject.com/schema/v0.1/`. Working examples are in [`examples/`](./examples/).
 
----
+This document is an overview. The requirements are in the three specs above.
 
-## 3. Transport
+## Secrets
 
-AVP is transport-agnostic for the Commission / event pipe. The three data-shape specs (Commission, Trajectory, Agent Descriptor) describe JSON document shapes; how those bytes move between supervisor and agent is a deployment concern. Subprocess pipes, HTTP, Server-Sent Events, a message bus, an in-process callback: any of these can carry a Commission in and trajectory events out, as long as the JSON on the wire matches the spec schemas.
+A Commission never holds a secret value, because the Trajectory copies it. Each secret is a [Secret reference](./commission.md#34-secret-reference) that says where the value is:
 
-### 3.1 Reference binding: stdio
-
-The reference implementations in this repo use stdio as their concrete transport binding. It's the simplest credible thing to ship (containerized agents, CLI tools, per-run subprocess invocations) and every supervisor that can spawn a process can speak it. Implementers using stdio SHOULD follow these rules so trajectories captured this way are interchangeable:
-
-- The supervisor launches the agent as a subprocess.
-- The supervisor writes a single `Commission` JSON document to the agent's stdin, terminated by `\n`.
-- The agent reads exactly one `Commission` from stdin before emitting any events.
-- After reading `Commission`, stdin is unused.
-- The agent emits `Event` documents to stdout as NDJSON, one JSON object per line, no pretty-printing, terminated by `\n`. The agent flushes stdout after each line.
-
-Implementers using any other transport (HTTP+SSE, gRPC streaming, Kafka, in-process) are not constrained by AVP beyond preserving the JSON shapes the specs define.
-
----
-
-## 4. Custom event types and vendor extensions
-
-Any `type` value not in the `avp.*` namespace is a custom event. Implementations MAY emit custom events. Consumers MUST:
-
-- Validate them against the CloudEvents 1.0 envelope shape: `specversion`, `id`, `source`, `type`, `time`, `data` MUST be present.
-- Pass them through without error if they do not recognize the `type`.
-
-Implementers SHOULD use reverse-DNS `type` values (e.g. `com.example.deploy_completed`) to avoid future conflicts. The `avp.*` namespace is reserved.
-
-For **non-spec fields within a known event type**: place them inside `data` under a vendor-namespaced key (e.g., `vendor.priority`, `acme.region`). The reference parser allows extra keys to round-trip through `data` verbatim, so vendor extensions don't require a separate envelope.
-
----
-
-## 5. Verifiers (deferred)
-
-v0.1 does not specify verifiers. The deterministic-checks-at-trigger-points concept was carried in early drafts and is removed here so v0.1 stays narrowly focused on observation and tool dispatch. A future revision may reintroduce verifiers (or a slimmer "pre-tool gate" surface) once the wire-level shape has settled. Until then, supervisors that want gating wire it externally by running the agent inside a constrained workspace, by exposing only safe MCP servers in the Commission, or by reviewing the trajectory after the fact.
-
----
-
-## 6. Deployment scope
-
-AVP defines the **wire format**, not the deployment topology. The following are explicitly **out of scope**, and implementations choose:
-
-- **Workspace provisioning.** What directory the agent runs in, how files (reference data, source trees) get there, and how it's cleaned up after (git checkout, container volume mount, tmpdir, NFS share, etc).
-- **Secret injection.** How API keys and credentials reach the agent process (env vars, secrets manager, mounted files). Note: MCP server auth headers in `Commission.mcp_servers[].headers` are supervisor-injected at Commission construction time; how the supervisor obtains those credentials is a deployment concern.
-- **MCP server hosting.** Where supervisor-declared MCP servers run, how they're discovered, how they're scaled.
-- **Agent placement.** Local subprocess, Docker container, remote VM, serverless function, browser sandbox.
-- **OS-level sandboxing.** seccomp, AppArmor, cgroups, network policies, filesystem capabilities.
-- **Authentication of the supervisor↔agent channel** beyond what the chosen transport inherits from its environment.
-
-The agent's **workspace** is conventionally the agent's current working directory (CWD). Tool inputs containing relative paths resolve there. The supervisor's deployment layer, whatever it is, is responsible for ensuring referenced files exist in that workspace before the run starts.
-
-### 6.1 Pattern: pre-turn world refresh
-
-A common temptation is "I want to update the agent's view of the world between turns": re-read a config file, re-fetch a dashboard, inject the current build status. This is sometimes called *re-observation*. **AVP does not provide a hook for this**, by design. Mid-run reach-in by the supervisor breaks the bounded-context guarantee that makes trajectories meaningful.
-
-The supported pattern is to expose the world refresh as an **MCP-server tool**. The agent calls it; the supervisor's MCP server computes the current value; the agent records the MCP dispatch on the wire as `tool_invoked` / `tool_returned`. The agent decides when to refresh and which information to pull, the trajectory shows exactly what context informed each turn, and the runtime retains control of its loop.
-
-This section names the lines so readers don't trip on them. A complete production deployment will involve more than this spec covers; that's by design.
-
----
-
-## 7. Versioning
-
-- The specs share a single umbrella version (v0.1). They MAY decouple in a future major version.
-- `Commission.schema_version` MUST equal `"0.1"`.
-- `AgentDescriptor.spec_version` MUST equal `"0.1"`. The `agent_described` event carries it on `data["avp.descriptor"].spec_version` and is the canonical AVP-version claim on the trajectory; `agent_started` does NOT re-carry it.
-- Future minor versions MAY add new event types, fields, or enum values. They MUST NOT remove or repurpose existing ones.
-- Future major versions MAY introduce breaking changes. Vendor-namespaced keys (`vendor.*`, `com.example.*`) inside `data` round-trip verbatim today (per §4), insulating extensions from spec drift.
-
-An agent that receives a `Commission` with an unsupported `schema_version` MUST emit `avp.error_occurred` with `data["avp.error.code"]: "unknown"` and a descriptive message, then emit `avp.agent_stopped` with `data["avp.reason"]: "error"`.
-
----
-
-## 8. Schema files
-
-| File | Sub-spec | Purpose |
+| Reference | The value is in | Allowed in |
 |---|---|---|
-| `trajectory.schema.json` | Trajectory | Entry-point schema for one event in the canonical trajectory |
-| `commission.schema.json` | Commission | Entry-point schema for the supervisor → agent Commission |
-| `agent-descriptor.schema.json` | Agent Descriptor | Entry-point schema for an agent's published Descriptor |
-| `avp.schema.json` | (bundled) | Convenience bundle; all type definitions in `$defs`, top-level `oneOf` over the three above |
+| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Model's `credential`, an HTTP MCP server's `headers` |
+| `{ "env": "TEST_DB_PASSWORD" }` | A variable in the agent's environment | Those two, and a stdio MCP server's `env` |
 
-JSON Schema Draft 2020-12. Tested with `python-jsonschema` ≥ 4.18 and `ajv` (with `ajv-formats`). The entry-point schemas `$ref` into `avp.schema.json#/$defs/...`. Validators MUST resolve `$ref` against the `$id` URIs (or use a local `$id` to file mapping when validating offline).
+Prefer `proxy`: the agent can use the secret but never read it, so it can't leak it. Use `env` for secrets a proxy can't add, such as a database password.
 
-Future versions live in sibling directories; published schemas are immutable.
+In the [Commission example](./commission.md#2-example), run with OpenSandbox's [Credential Vault](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/guides/credential-vault.md) as the proxy:
 
----
+1. Before the run, the proxy gets `anthropic-key` and `docs-token`, and the agent's environment gets `TEST_DB_PASSWORD`.
+2. The agent calls Anthropic with a stand-in key, and the docs server with no token. The proxy adds the real ones.
+3. The agent starts the database server with `DB_PASSWORD` set to its own `TEST_DB_PASSWORD`.
 
-## 9. Examples
+**Step 1 is outside AVP**: the supervisor decides which proxy to use, where the values come from, and how the environment is set up. AVP defines only the references and the agent's [rules for using them](./commission.md#59-secrets-come-from-the-proxy-or-the-environment).
 
-[`examples/`](./examples/) contains conforming fixtures referenced by individual specs:
+## Built on
 
-- `commission.json`: a worked Commission
-- `run.ndjson`: a worked trajectory
+AVP reuses existing specs wherever one already fits:
+
+- **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
+- **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
+- **[models.dev](https://models.dev)**: the provider and model IDs that name a model, and the prices AVP uses to compute each response's cost.
+- **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of all three AVP specs.
+
+Trajectory events are not [CloudEvents](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md), and no spec relies on CloudEvents. Each event converts to one, with `run_id` as the `subject`, so a supervisor can forward a Trajectory to event infrastructure that routes CloudEvents.
+
+Trajectory events hold no [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/) span IDs either. A Trajectory converts to OpenTelemetry spans: the run, each model response, and each tool call or subagent become spans, linked through the events' IDs.
+
+## Out of scope
+
+AVP defines the shape of the Commission, the Agent Descriptor, and Trajectory events. Everything else about running an agent is up to the deployment:
+
+- **Transport.** How the Commission reaches the agent and how events come back: a file, a pipe, HTTP, a message queue, or an in-process call.
+- **Workspace.** Which folder the agent works in, what files are in it before the run, and how it is cleaned up afterward.
+- **Credentials.** Setting up the credential proxy and putting variables in the agent's environment. [Secrets](#secrets) covers what AVP does define.
+- **MCP server hosting.** Where the servers named in a Commission run.
+- **Placement and isolation.** Where the agent runs (subprocess, container, VM) and how it is sandboxed.
+- **Orchestration and storage.** Running many agents, and keeping Trajectories after a run.
+
+## Versioning
+
+The three specs share one version, v0.1. The Commission and the Agent Descriptor both declare it in `avp_version`.
+
+While v0.1 is a draft, it may change in incompatible ways. After it is final:
+
+- A minor version will only add event types, fields, or enum values. It will not remove or change existing ones.
+- A major version may make breaking changes. It is published in a new sibling directory, and earlier published schemas stay unchanged.
