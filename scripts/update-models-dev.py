@@ -9,12 +9,12 @@ environment, since the root workspace still installs the old `avp`:
 
 from pathlib import Path
 
-from avp.models_dev import fetch_prices, save_prices
+from avp.utils.pricing import fetch_prices, save_prices
 
 AVP_SDK = Path(__file__).resolve().parent.parent / "avp_sdk"
 
 # Add the Rust and TypeScript SDKs' copies here when they exist.
-SNAPSHOTS = [AVP_SDK / "python" / "src" / "avp" / "data" / "models_dev.json"]
+SNAPSHOTS = [AVP_SDK / "python" / "src" / "avp" / "utils" / "data" / "models_dev.json"]
 
 if __name__ == "__main__":
     prices = fetch_prices()

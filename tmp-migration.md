@@ -37,7 +37,7 @@ agent-voyager-project/
 - [ ] JSON Schemas generated into `spec/v0.1/`, with spec examples as tests
 - [ ] Rust and TypeScript bindings regenerated
 - [ ] Recorder, with vectors written first in `avp_sdk/testdata/recorder-vectors/`
-- [x] Pricing for the Model object (`avp.models_dev`, snapshot in `avp/data/models_dev.json`)
+- [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/models_dev.json`)
 - [ ] Publishing the SDK refreshes the snapshot first (`make models-dev`, `scripts/update-models-dev.py`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
 - [ ] Remove `avp/bindings/` and `avp/scripts/`

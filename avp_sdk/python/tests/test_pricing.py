@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from avp import models_dev
 from avp.commission import ModelRef
-from avp.models_dev import ModelPrice, Prices, compute_cost, find_price, load_prices, save_prices
+from avp.utils import pricing
+from avp.utils.pricing import ModelPrice, Prices, compute_cost, find_price, load_prices, save_prices
 
 
 def prices(fetched: datetime, **models: ModelPrice) -> Prices:
@@ -21,7 +21,7 @@ SONNET = ModelRef(provider="anthropic", id="claude_sonnet")
 
 
 def test_bundled_snapshot_ships_with_the_package():
-    bundled = models_dev.bundled_prices()
+    bundled = pricing.bundled_prices()
     assert bundled.models["anthropic/claude-sonnet-4-5"].output > 0
 
 
@@ -81,7 +81,7 @@ def fetches(monkeypatch):
         calls.append(1)
         return TABLE
 
-    monkeypatch.setattr(models_dev, "fetch_prices", fake_fetch)
+    monkeypatch.setattr(pricing, "fetch_prices", fake_fetch)
     return calls
 
 
@@ -108,7 +108,7 @@ def test_load_prices_without_path_uses_the_newer_of_cache_and_bundled(
     tmp_path, monkeypatch, fetches
 ):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    bundled = models_dev.bundled_prices()
+    bundled = pricing.bundled_prices()
     assert load_prices() == bundled
     old = TABLE.model_copy(update={"fetched": bundled.fetched - timedelta(days=1)})
     save_prices(old)
