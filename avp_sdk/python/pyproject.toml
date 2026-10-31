@@ -1,6 +1,6 @@
 [project]
 name = "agent-voyager-project"
-version = "0.3.0"
+version = "0.1.0"
 description = "Python SDK for the Agent Voyager Project (AVP) v0.1 specs."
 readme = "README.md"
 license = "MIT"

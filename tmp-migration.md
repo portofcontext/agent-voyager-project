@@ -32,6 +32,7 @@ agent-voyager-project/
 
 ### 2. Core SDK (`avp_sdk/`)
 
+- [x] `avp_sdk/python` is its own uv project with its own `uv.lock`; workspace members keep the old `avp/bindings/python` until they migrate
 - [ ] Python wire models from the spec reference tables
 - [ ] JSON Schemas generated into `spec/v0.1/`, with spec examples as tests
 - [ ] Rust and TypeScript bindings regenerated
@@ -59,7 +60,18 @@ agent-voyager-project/
 - [ ] `avp-pi`
 - [ ] `avp-pydantic-ai`
 
-### 5. Before `spec-v0.1-cleanup` merges to `main`
+### 5. Split the uv workspace into separate projects
+
+The SDK, avp-cli, and each agent are released separately, so each gets its own
+`pyproject.toml`, `uv.lock`, and `.venv`, using the SDK by path. An agent's own
+lock then produces its release `requirements.txt`.
+
+- [x] `avp_sdk/python`
+- [ ] `avp-cli`
+- [ ] Each Python agent, in its agent PR
+- [ ] Remove the root workspace, and run each project's checks from the Makefile
+
+### 6. Before `spec-v0.1-cleanup` merges to `main`
 
 - [ ] Root docs cut down: `AGENTS.md`, `README.md`, `SKILL.md`, `PATTERNS.md`, `MAINTAINERS.md`
 - [ ] `make check` passes
