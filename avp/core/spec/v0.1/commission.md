@@ -35,7 +35,7 @@ The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before an
       "name": "Team docs",
       "type": "http",
       "url": "https://mcp.example.com/docs",
-      "auth": { "proxy": "docs-token" }
+      "headers": { "Authorization": { "proxy": "docs-token" } }
     },
     {
       "id": "db",
@@ -114,7 +114,7 @@ A Secret reference names a secret without containing it. It has exactly one of t
 | `proxy` | string | One of | The name of a credential that a proxy outside the agent holds, for example a credential in an [OpenSandbox Credential Vault](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/guides/credential-vault.md). The proxy adds it to the agent's matching requests, so the agent never receives its value. Matches `^[a-z0-9_-]+$`. |
 | `env` | string | One of | The name of a variable in the agent's environment that holds the secret, for example `"TEST_DB_PASSWORD"`. Matches `^[A-Za-z_][A-Za-z0-9_]*$`. |
 
-A proxy can only add a secret to a request that leaves the agent, so `proxy` is allowed only in a Provider's `credential` and an HTTP server's `auth`. `env` is allowed in all three places that take a Secret reference.
+A proxy can only add a secret to a request that leaves the agent, so `proxy` is allowed only in a Provider's `credential` and an HTTP server's `headers`. `env` is allowed in all three places that take a Secret reference.
 
 ### 3.5 MCP server
 
@@ -134,8 +134,7 @@ A server the agent connects to over MCP's Streamable HTTP transport.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `url` | string | Yes | The server's URL. |
-| `headers` | map<string, string> | No | HTTP headers to send with each request. Each key is a header name. |
-| `auth` | [Secret reference](#34-secret-reference) | No | The server's credential, sent as a bearer token in the `Authorization` header. |
+| `headers` | map<string, string \| [Secret reference](#34-secret-reference)> | No | HTTP headers to send with each request. Each key is a header name. A value is a string, or a Secret reference whose secret is the header's entire value: with `"Authorization": { "env": "DOCS_AUTH" }`, `DOCS_AUTH` holds `Bearer <token>`, not the token alone. |
 
 #### 3.5.2 stdio
 
@@ -177,11 +176,11 @@ The supervisor MUST give every Commission it sends a `run_id` it has not used be
 
 ### 4.2 IDs are unique
 
-Within one Commission, the supervisor MUST NOT repeat an MCP server `id` or a skill `name`.
+Within one Commission, the supervisor MUST NOT repeat an MCP server `id` or a skill `name`. Within one HTTP server's `headers`, it MUST NOT repeat a header name, ignoring case.
 
 ### 4.3 Secrets are only in Secret references
 
-The supervisor MUST NOT write a secret value anywhere in a Commission, including `headers`, `url`, `env`, and `meta`. It MUST name each secret with a [Secret reference](#34-secret-reference) instead.
+The supervisor MUST NOT write a secret value anywhere in a Commission, including `url`, `meta`, and the string values in `headers` and `env`. It MUST name each secret with a [Secret reference](#34-secret-reference) instead.
 
 ### 4.4 `model` names the model's maker
 
@@ -250,9 +249,9 @@ The agent MUST NOT write a secret value it receives into any Trajectory event.
 
 ### 5.9 Secrets come from the proxy or the environment
 
-For a `proxy` reference, the agent MUST send the requests that need the credential to the URL in the Commission, unchanged, so the proxy can add it. The agent MUST NOT need the credential's value. When its runtime requires a value, for example an SDK that won't start without an API key, the agent MAY use any stand-in; the proxy replaces it.
+For a `proxy` reference, the agent MUST send the requests that need the credential to the URL in the Commission, unchanged, so the proxy can add it. The agent MUST NOT need the credential's value. For a header, the agent MAY leave the header out. When its runtime requires a value, for example an SDK that won't start without an API key, the agent MAY use any stand-in; the proxy replaces it.
 
-For an `env` reference, the agent MUST use the value of the named variable in its own environment wherever the secret goes: as the Provider's API key, as an HTTP server's bearer token, or as a stdio server's variable.
+For an `env` reference, the agent MUST use the value of the named variable in its own environment wherever the secret goes: as the Provider's API key, as an HTTP server's header value, or as a stdio server's variable.
 
 ## 6. Out of scope
 

@@ -32,7 +32,7 @@ and arguments for a stdio server. Never credentials.
 - Why: a reviewer could see exactly which server the agent talked to, not just
   an `id`. It would also bring the Descriptor's entry closer to the
   Commission's `McpServerHttp` / `McpServerStdio`, possibly one shape for both
-  with `auth` absent.
+  with secret header values left out.
 - To work out:
   - Headers and `env` values often hold secrets in an agent's own config.
     Either leave them out entirely or define which keys are safe.

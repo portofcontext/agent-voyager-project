@@ -46,7 +46,7 @@ A Commission never holds a secret value, because the Trajectory copies it. Each 
 
 | Reference | The value is in | Allowed in |
 |---|---|---|
-| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Provider's `credential`, an HTTP MCP server's `auth` |
+| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Provider's `credential`, an HTTP MCP server's `headers` |
 | `{ "env": "TEST_DB_PASSWORD" }` | A variable in the agent's environment | Those two, and a stdio MCP server's `env` |
 
 Prefer `proxy`: the agent can use the secret but never read it, so it can't leak it. Use `env` for secrets a proxy can't add, such as a database password.
