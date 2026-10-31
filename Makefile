@@ -282,7 +282,7 @@ format-check:
 
 .PHONY: schemas
 schemas:
-	@$(UV) run python avp/scripts/generate-schemas.py
+	@$(UV) run --project avp_sdk/python python scripts/generate-schemas.py
 
 
 .PHONY: sync-prices

@@ -1,0 +1,2896 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.agentvoyagerproject.com/schema/v0.1/trajectory.schema.json",
+  "$defs": {
+    "AgentDescribed": {
+      "additionalProperties": false,
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/AgentDescriptor",
+          "description": "The agent's Descriptor."
+        }
+      },
+      "required": [
+        "descriptor"
+      ],
+      "title": "AgentDescribed",
+      "type": "object"
+    },
+    "AgentDescribedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "agent_described",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentDescribed"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "AgentDescribedEvent",
+      "type": "object"
+    },
+    "AgentDescriptor": {
+      "additionalProperties": false,
+      "description": "What an agent comes with before any Commission.",
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the Descriptor follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "agent_name": {
+          "description": "The agent's name.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "agent_version": {
+          "description": "The agent's version.",
+          "title": "Agent Version",
+          "type": "string"
+        },
+        "supported_models": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ModelPattern"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The models the agent can run. Absent means the agent does not say.",
+          "title": "Supported Models"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The system prompt the agent comes with.",
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's built-in tools, including those that come from its MCP servers.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The MCP servers the agent comes with.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The skills the agent comes with.",
+          "title": "Skills"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagents the agent comes with.",
+          "title": "Subagents"
+        }
+      },
+      "required": [
+        "avp_version",
+        "agent_name",
+        "agent_version"
+      ],
+      "title": "AgentDescriptor",
+      "type": "object"
+    },
+    "AgentSettings": {
+      "additionalProperties": false,
+      "description": "Settings for the agent whose `agent_name` is their key in `agents`.",
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `agent_version` the Commission was written for.",
+          "title": "Version"
+        },
+        "enabled_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in tools the run may use, by name. Covers only tools without an\n`mcp_server_id`.",
+          "title": "Enabled Tools"
+        },
+        "enabled_subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in subagents the run may use, by name.",
+          "title": "Enabled Subagents"
+        },
+        "enabled_skills": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in skills the run may use, by name.",
+          "title": "Enabled Skills"
+        },
+        "enabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in MCP servers the run may use, by `id`.",
+          "title": "Enabled Mcp Servers"
+        }
+      },
+      "title": "AgentSettings",
+      "type": "object"
+    },
+    "AgentStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "description": "The prompt the run starts with.",
+          "title": "Prompt",
+          "type": "string"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The system prompt the run uses.",
+          "title": "System Prompt"
+        },
+        "model": {
+          "$ref": "#/$defs/ModelRef",
+          "description": "The model the run uses."
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tools the run uses.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The MCP servers the run uses.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The skills the run uses.",
+          "title": "Skills"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagents the run uses.",
+          "title": "Subagents"
+        }
+      },
+      "required": [
+        "prompt",
+        "model"
+      ],
+      "title": "AgentStarted",
+      "type": "object"
+    },
+    "AgentStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "agent_started",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentStarted"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "AgentStartedEvent",
+      "type": "object"
+    },
+    "AgentStopped": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "description": "Why the run stopped.",
+          "enum": [
+            "converged",
+            "refused",
+            "error",
+            "interrupted",
+            "abandoned"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null,
+          "description": "The run's result as the agent reports it. Absent when the agent reports none."
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "AgentStopped",
+      "type": "object"
+    },
+    "AgentStoppedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "agent_stopped",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AgentStopped"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "AgentStoppedEvent",
+      "type": "object"
+    },
+    "AssistantMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "description": "What the model produced: text, reasoning, tool calls, and other blocks.",
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image": "#/$defs/ImageBlock",
+                "refusal": "#/$defs/RefusalBlock",
+                "server_tool_result": "#/$defs/ServerToolResultBlock",
+                "server_tool_use": "#/$defs/ServerToolUseBlock",
+                "text": "#/$defs/TextBlock",
+                "thinking": "#/$defs/ThinkingBlock",
+                "tool_result": "#/$defs/ToolResultBlock",
+                "tool_use": "#/$defs/ToolUseBlock"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextBlock"
+              },
+              {
+                "$ref": "#/$defs/ThinkingBlock"
+              },
+              {
+                "$ref": "#/$defs/ImageBlock"
+              },
+              {
+                "$ref": "#/$defs/ToolUseBlock"
+              },
+              {
+                "$ref": "#/$defs/ToolResultBlock"
+              },
+              {
+                "$ref": "#/$defs/ServerToolUseBlock"
+              },
+              {
+                "$ref": "#/$defs/ServerToolResultBlock"
+              },
+              {
+                "$ref": "#/$defs/RefusalBlock"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "model": {
+          "$ref": "#/$defs/ModelRef",
+          "description": "The model the agent asked for this response."
+        },
+        "response_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The model ID the service says produced the response, when it differs from `model.id`.",
+          "title": "Response Model"
+        },
+        "finish_reasons": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the model stopped, exactly as the service reported it.",
+          "title": "Finish Reasons"
+        },
+        "duration_ms": {
+          "description": "How long the response took, ending at the event's `time`.",
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage",
+          "description": "The response's token counts and cost."
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When a subagent made the response, the `invocation_id` of its `subagent_invoked`.",
+          "title": "Subagent Invocation Id"
+        }
+      },
+      "required": [
+        "content",
+        "model",
+        "duration_ms",
+        "usage"
+      ],
+      "title": "AssistantMessage",
+      "type": "object"
+    },
+    "AssistantMessageEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "assistant_message",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/AssistantMessage"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "AssistantMessageEvent",
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": true,
+      "description": "A source the model cited for a text block. Keeps fields the service added.",
+      "properties": {
+        "type": {
+          "description": "The kind of citation, as the model service names it, such as `url_citation`.",
+          "title": "Type",
+          "type": "string"
+        },
+        "cited_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The text cited.",
+          "title": "Cited Text"
+        },
+        "start_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the cited part of the block's `text` starts.",
+          "title": "Start Index"
+        },
+        "end_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where it ends.",
+          "title": "End Index"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's ID for the source.",
+          "title": "Source Id"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The source's URL.",
+          "title": "Source Url"
+        },
+        "source_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The source's title.",
+          "title": "Source Title"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "Commission": {
+      "additionalProperties": false,
+      "description": "What one run should do: the task and the settings for the run.",
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the Commission follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, chosen by the supervisor.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/Model",
+          "description": "The model to run, and the service that runs it."
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The system prompt for the run. It replaces the agent's own.",
+          "title": "System Prompt"
+        },
+        "prompt": {
+          "description": "The first user message of the run.",
+          "title": "Prompt",
+          "type": "string"
+        },
+        "supervisor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Supervisor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The supervisor that wrote the Commission."
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "http": "#/$defs/McpServerHttp",
+                    "stdio": "#/$defs/McpServerStdio"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/McpServerHttp"
+                  },
+                  {
+                    "$ref": "#/$defs/McpServerStdio"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP servers to add for the run.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__commission__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Skills to add for the run.",
+          "title": "Skills"
+        },
+        "agents": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[a-z0-9_-]+$": {
+                  "$ref": "#/$defs/AgentSettings"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Settings for specific agents, keyed by `agent_name`.",
+          "title": "Agents"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A JSON Schema for the agent's final output. Its `type` is `\"object\"`.",
+          "title": "Output Schema"
+        },
+        "thread_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An ID that groups related runs, such as the turns of one conversation.",
+          "title": "Thread Id"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Labels for the run.",
+          "title": "Tags"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key-value data for the supervisor's own use.",
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "avp_version",
+        "run_id",
+        "model",
+        "prompt"
+      ],
+      "title": "Commission",
+      "type": "object"
+    },
+    "EnvSecret": {
+      "additionalProperties": false,
+      "description": "A secret in a variable of the agent's environment.",
+      "properties": {
+        "env": {
+          "description": "The name of a variable in the agent's environment that holds the secret,\nfor example `\"TEST_DB_PASSWORD\"`.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "env"
+      ],
+      "title": "EnvSecret",
+      "type": "object"
+    },
+    "ErrorOccurred": {
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "description": "What kind of error. A code this version doesn't know reads as `unknown`.",
+          "enum": [
+            "invalid_commission",
+            "mcp_connect_failed",
+            "auth_error",
+            "rate_limit",
+            "context_limit",
+            "output_invalid",
+            "agent_crash",
+            "unknown"
+          ],
+          "title": "Error Code",
+          "type": "string"
+        },
+        "error_message": {
+          "description": "What went wrong, for a person to read.",
+          "title": "Error Message",
+          "type": "string"
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the error happened in a subagent, the `invocation_id` of its `subagent_invoked`.",
+          "title": "Subagent Invocation Id"
+        }
+      },
+      "required": [
+        "error_code",
+        "error_message"
+      ],
+      "title": "ErrorOccurred",
+      "type": "object"
+    },
+    "ErrorOccurredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "error_occurred",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ErrorOccurred"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "ErrorOccurredEvent",
+      "type": "object"
+    },
+    "ImageBlock": {
+      "additionalProperties": true,
+      "description": "An image.",
+      "properties": {
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        }
+      },
+      "required": [
+        "type",
+        "source"
+      ],
+      "title": "ImageBlock",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "McpServer": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent comes with. Connection details stay inside the agent.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server. A Tool's `mcp_server_id` refers to it.",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "connected",
+                "failed",
+                "needs-auth",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The result of the agent's attempt to connect.",
+          "title": "Status"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "McpServer",
+      "type": "object"
+    },
+    "McpServerHttp": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent connects to over Streamable HTTP.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "The server's URL.",
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ProxySecret"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "HTTP headers to send with each request. A Secret reference's secret is\nthe header's entire value.",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "url"
+      ],
+      "title": "McpServerHttp",
+      "type": "object"
+    },
+    "McpServerStdio": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent starts as a local program and talks to over stdio.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        },
+        "command": {
+          "description": "The program and its arguments, for example `[\"npx\", \"-y\", \"@example/db-mcp\"]`.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Environment variables to set for the program, on top of those the\nagent's MCP client gives it.",
+          "title": "Env"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "command"
+      ],
+      "title": "McpServerStdio",
+      "type": "object"
+    },
+    "Model": {
+      "additionalProperties": false,
+      "description": "A model as one service offers it, named with models.dev provider and model IDs.",
+      "properties": {
+        "provider": {
+          "description": "The service that runs the model, for example `\"anthropic\"`,\n`\"amazon-bedrock\"`, or `\"openrouter\"`. It decides which API the agent calls\nand how it authenticates.",
+          "pattern": "^[a-z0-9._-]+$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "The model's ID at that service, as the agent sends it, for example\n`\"claude-sonnet-4-6\"`.",
+          "title": "Id",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The URL of the service's API. Absent means the service's default.",
+          "title": "Base Url"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProxySecret"
+            },
+            {
+              "$ref": "#/$defs/EnvSecret"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The API key for the service. Absent means the agent uses whatever\ncredential its environment has for the service.",
+          "title": "Credential"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "ModelPattern": {
+      "additionalProperties": false,
+      "description": "Matches the `provider` and `id` of a Commission's Model. `*` matches any characters.",
+      "properties": {
+        "provider": {
+          "description": "A pattern for the model's `provider`, for example `\"anthropic\"`.",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "A pattern for the model's `id`, for example `\"claude-*\"`.",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "ModelPattern",
+      "type": "object"
+    },
+    "ModelRef": {
+      "additionalProperties": false,
+      "description": "A Model without its `credential`, as the Trajectory reports it.",
+      "properties": {
+        "provider": {
+          "description": "The service that runs the model, for example `\"anthropic\"`,\n`\"amazon-bedrock\"`, or `\"openrouter\"`. It decides which API the agent calls\nand how it authenticates.",
+          "pattern": "^[a-z0-9._-]+$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "The model's ID at that service, as the agent sends it, for example\n`\"claude-sonnet-4-6\"`.",
+          "title": "Id",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The URL of the service's API. Absent means the service's default.",
+          "title": "Base Url"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "ModelRef",
+      "type": "object"
+    },
+    "ProxySecret": {
+      "additionalProperties": false,
+      "description": "A secret that a proxy outside the agent holds and adds to its requests.",
+      "properties": {
+        "proxy": {
+          "description": "The name of a credential that a proxy outside the agent holds. The proxy\nadds it to the agent's matching requests, so the agent never receives its\nvalue.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Proxy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proxy"
+      ],
+      "title": "ProxySecret",
+      "type": "object"
+    },
+    "RefusalBlock": {
+      "additionalProperties": true,
+      "description": "The model's text when it declined.",
+      "properties": {
+        "type": {
+          "const": "refusal",
+          "title": "Type",
+          "type": "string"
+        },
+        "refusal": {
+          "title": "Refusal",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "refusal"
+      ],
+      "title": "RefusalBlock",
+      "type": "object"
+    },
+    "RunRequested": {
+      "additionalProperties": false,
+      "properties": {
+        "commission": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Commission"
+            },
+            {
+              "$ref": "#/$defs/JsonValue"
+            }
+          ],
+          "default": null,
+          "description": "The Commission as the agent received it. When it doesn't match the\nCommission spec, the JSON value received, or the text when it isn't JSON.\nAbsent when the run has no Commission.",
+          "title": "Commission"
+        }
+      },
+      "title": "RunRequested",
+      "type": "object"
+    },
+    "RunRequestedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "run_requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RunRequested"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "RunRequestedEvent",
+      "type": "object"
+    },
+    "ServerToolResultBlock": {
+      "additionalProperties": true,
+      "description": "The result of a `server_tool_use` call.",
+      "properties": {
+        "type": {
+          "const": "server_tool_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "tool_use_id": {
+          "title": "Tool Use Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "is_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Error"
+        }
+      },
+      "required": [
+        "type",
+        "tool_use_id",
+        "name",
+        "content"
+      ],
+      "title": "ServerToolResultBlock",
+      "type": "object"
+    },
+    "ServerToolUseBlock": {
+      "additionalProperties": true,
+      "description": "A call to a tool the model service runs itself, such as web search.",
+      "properties": {
+        "type": {
+          "const": "server_tool_use",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "name",
+        "input"
+      ],
+      "title": "ServerToolUseBlock",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": true,
+      "description": "Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added.",
+      "properties": {
+        "type": {
+          "const": "base64",
+          "title": "Type",
+          "type": "string"
+        },
+        "media_type": {
+          "description": "The image's media type, such as `image/png`.",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "data": {
+          "description": "The image, base64-encoded.",
+          "title": "Data",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "media_type",
+        "data"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "Subagent": {
+      "additionalProperties": false,
+      "description": "A subagent that ships with the agent. It does not inherit the agent's items.",
+      "properties": {
+        "name": {
+          "description": "Identifies the subagent.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the subagent does.",
+          "title": "Description"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's system prompt.",
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's tools.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's MCP servers.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's skills.",
+          "title": "Skills"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Subagent",
+      "type": "object"
+    },
+    "SubagentInvoked": {
+      "additionalProperties": false,
+      "properties": {
+        "subagent_name": {
+          "description": "The subagent's `name`, as in `agent_started`'s `subagents`.",
+          "title": "Subagent Name",
+          "type": "string"
+        },
+        "invocation_id": {
+          "description": "Identifies this run of the subagent. When a tool call started it, the call's `tool_call_id`.",
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When another subagent started this one, the `invocation_id` of its `subagent_invoked`.",
+          "title": "Subagent Invocation Id"
+        },
+        "subagent_input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "The input the subagent was given.",
+          "title": "Subagent Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "subagent_name",
+        "invocation_id",
+        "subagent_input"
+      ],
+      "title": "SubagentInvoked",
+      "type": "object"
+    },
+    "SubagentInvokedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "subagent_invoked",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SubagentInvoked"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "SubagentInvokedEvent",
+      "type": "object"
+    },
+    "SubagentReturned": {
+      "additionalProperties": false,
+      "properties": {
+        "subagent_name": {
+          "description": "As in the matching `subagent_invoked`.",
+          "title": "Subagent Name",
+          "type": "string"
+        },
+        "invocation_id": {
+          "description": "As in the matching `subagent_invoked`.",
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "As in the matching `subagent_invoked`.",
+          "title": "Subagent Invocation Id"
+        },
+        "duration_ms": {
+          "description": "How long the subagent ran, ending at the event's `time`.",
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "subagent_reason": {
+          "description": "Why the subagent stopped.",
+          "enum": [
+            "converged",
+            "refused",
+            "error",
+            "interrupted",
+            "abandoned"
+          ],
+          "title": "Subagent Reason",
+          "type": "string"
+        },
+        "subagent_result_text": {
+          "description": "The subagent's final text, or the error message when `subagent_reason` is `error`.",
+          "title": "Subagent Result Text",
+          "type": "string"
+        },
+        "subagent_usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubagentUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's totals, when the agent can't record its responses as events of their own."
+        }
+      },
+      "required": [
+        "subagent_name",
+        "invocation_id",
+        "duration_ms",
+        "subagent_reason",
+        "subagent_result_text"
+      ],
+      "title": "SubagentReturned",
+      "type": "object"
+    },
+    "SubagentReturnedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "subagent_returned",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SubagentReturned"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "SubagentReturnedEvent",
+      "type": "object"
+    },
+    "SubagentUsage": {
+      "additionalProperties": false,
+      "description": "A subagent's totals. A field is absent when the agent couldn't measure it.",
+      "properties": {
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Input Tokens"
+        },
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Creation Input Tokens"
+        },
+        "reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Output Tokens"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "cost_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "computed",
+                "reported",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Source"
+        },
+        "responses": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How many model responses the subagent made.",
+          "title": "Responses"
+        }
+      },
+      "title": "SubagentUsage",
+      "type": "object"
+    },
+    "Supervisor": {
+      "additionalProperties": false,
+      "description": "The supervisor that wrote the Commission.",
+      "properties": {
+        "name": {
+          "description": "The supervisor's name, for example `\"avp-cli\"`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The supervisor's version.",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Supervisor",
+      "type": "object"
+    },
+    "TextBlock": {
+      "additionalProperties": true,
+      "description": "Text from the model.",
+      "properties": {
+        "type": {
+          "const": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "citations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Citation"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citations"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "title": "TextBlock",
+      "type": "object"
+    },
+    "ThinkingBlock": {
+      "additionalProperties": true,
+      "description": "The model's reasoning.",
+      "properties": {
+        "type": {
+          "const": "thinking",
+          "title": "Type",
+          "type": "string"
+        },
+        "thinking": {
+          "description": "The reasoning, or the service's encrypted reasoning when `redacted` is true.",
+          "title": "Thinking",
+          "type": "string"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's token for passing the reasoning back to it.",
+          "title": "Signature"
+        },
+        "redacted": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Redacted"
+        }
+      },
+      "required": [
+        "type",
+        "thinking"
+      ],
+      "title": "ThinkingBlock",
+      "type": "object"
+    },
+    "Tool": {
+      "additionalProperties": true,
+      "description": "An MCP `Tool` object, with one added field. Other MCP fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The tool's name, as the model calls it.",
+          "title": "Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name.",
+          "title": "Title"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the tool does, as the model sees it.",
+          "title": "Description"
+        },
+        "inputSchema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "A JSON Schema for the tool's input, as the model sees it.",
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "Inputschema",
+          "type": "object"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A JSON Schema for the tool's structured output.",
+          "title": "Outputschema"
+        },
+        "mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `id` of the MCP server the tool comes from. Absent for any tool that\ndoes not come from an MCP server.",
+          "title": "Mcp Server Id"
+        }
+      },
+      "required": [
+        "name",
+        "inputSchema"
+      ],
+      "title": "Tool",
+      "type": "object"
+    },
+    "ToolInvoked": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_call_id": {
+          "description": "Identifies the call: the `id` of its `tool_use` content block.",
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "description": "The name the agent called the tool by.",
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "tool_input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "The arguments, as in the `tool_use` block's `input`.",
+          "title": "Tool Input",
+          "type": "object"
+        },
+        "mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `id` of the MCP server that runs the tool.",
+          "title": "Mcp Server Id"
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When a subagent made the call, the `invocation_id` of its `subagent_invoked`.",
+          "title": "Subagent Invocation Id"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "tool_name",
+        "tool_input"
+      ],
+      "title": "ToolInvoked",
+      "type": "object"
+    },
+    "ToolInvokedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "tool_invoked",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolInvoked"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "ToolInvokedEvent",
+      "type": "object"
+    },
+    "ToolResultBlock": {
+      "additionalProperties": true,
+      "description": "The result of a `tool_use` call, matched by `tool_use_id`.",
+      "properties": {
+        "type": {
+          "const": "tool_result",
+          "title": "Type",
+          "type": "string"
+        },
+        "tool_use_id": {
+          "title": "Tool Use Id",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "image": "#/$defs/ImageBlock",
+                    "text": "#/$defs/TextBlock"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TextBlock"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageBlock"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Content"
+        },
+        "structured_content": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A result meant for programs, such as MCP's `structuredContent`.",
+          "title": "Structured Content"
+        },
+        "is_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Error"
+        }
+      },
+      "required": [
+        "type",
+        "tool_use_id",
+        "content"
+      ],
+      "title": "ToolResultBlock",
+      "type": "object"
+    },
+    "ToolReturned": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_call_id": {
+          "description": "As in the matching `tool_invoked`.",
+          "title": "Tool Call Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "description": "As in the matching `tool_invoked`.",
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long the tool took, ending at the event's `time`.",
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "tool_result": {
+          "$ref": "#/$defs/ToolResultBlock",
+          "description": "The result, as the model receives it."
+        },
+        "subagent_invocation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "As in the matching `tool_invoked`.",
+          "title": "Subagent Invocation Id"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "tool_name",
+        "duration_ms",
+        "tool_result"
+      ],
+      "title": "ToolReturned",
+      "type": "object"
+    },
+    "ToolReturnedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the event follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifies the event.",
+          "title": "Id",
+          "type": "string"
+        },
+        "time": {
+          "description": "When the event happened, as an RFC 3339 timestamp.",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$",
+          "title": "Time",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, the same on every event of the run.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's own annotations. AVP gives them no meaning.",
+          "title": "Meta"
+        },
+        "type": {
+          "const": "tool_returned",
+          "title": "Type",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ToolReturned"
+        }
+      },
+      "required": [
+        "avp_version",
+        "id",
+        "time",
+        "run_id",
+        "type",
+        "data"
+      ],
+      "title": "ToolReturnedEvent",
+      "type": "object"
+    },
+    "ToolUseBlock": {
+      "additionalProperties": true,
+      "description": "A call to a tool the agent runs.",
+      "properties": {
+        "type": {
+          "const": "tool_use",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Input",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "name",
+        "input"
+      ],
+      "title": "ToolUseBlock",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "description": "Token counts and cost for one model response.",
+      "properties": {
+        "input_tokens": {
+          "description": "All input tokens, including those read from and written to the cache.",
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "description": "All output tokens, including reasoning tokens.",
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The input tokens read from the cache. Included in `input_tokens`.",
+          "title": "Cache Read Input Tokens"
+        },
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The input tokens written to the cache. Included in `input_tokens`.",
+          "title": "Cache Creation Input Tokens"
+        },
+        "reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The output tokens the model spent on reasoning. Included in `output_tokens`.",
+          "title": "Reasoning Output Tokens"
+        },
+        "cost_usd": {
+          "description": "The cost in US dollars, after any cache discount.",
+          "minimum": 0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "cost_source": {
+          "description": "Where `cost_usd` comes from.",
+          "enum": [
+            "computed",
+            "reported",
+            "unknown"
+          ],
+          "title": "Cost Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cost_usd",
+        "cost_source"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "avp__commission__Skill": {
+      "additionalProperties": false,
+      "description": "A skill directory, as defined by Agent Skills, carried in the Commission.",
+      "properties": {
+        "name": {
+          "description": "The skill's name. Equals the `name` in the frontmatter of its `SKILL.md`.",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The skill's files: each key is a path relative to the skill directory,\nand each value is the file's UTF-8 content. Includes `\"SKILL.md\"`.",
+          "required": [
+            "SKILL.md"
+          ],
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "files"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "avp__descriptor__Skill": {
+      "additionalProperties": true,
+      "description": "The frontmatter of a skill's `SKILL.md`, as defined by Agent Skills, with\none added field. Other frontmatter fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The skill's name.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "description": "What the skill does and when to use it.",
+          "title": "Description",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "pattern": "^file:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A `file:` URI for the directory that contains the skill's `SKILL.md`, as\nthe path appears inside the agent's environment.",
+          "title": "Source"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Skill",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "agent_described": "#/$defs/AgentDescribedEvent",
+      "agent_started": "#/$defs/AgentStartedEvent",
+      "agent_stopped": "#/$defs/AgentStoppedEvent",
+      "assistant_message": "#/$defs/AssistantMessageEvent",
+      "error_occurred": "#/$defs/ErrorOccurredEvent",
+      "run_requested": "#/$defs/RunRequestedEvent",
+      "subagent_invoked": "#/$defs/SubagentInvokedEvent",
+      "subagent_returned": "#/$defs/SubagentReturnedEvent",
+      "tool_invoked": "#/$defs/ToolInvokedEvent",
+      "tool_returned": "#/$defs/ToolReturnedEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RunRequestedEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentDescribedEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/AssistantMessageEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolInvokedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolReturnedEvent"
+    },
+    {
+      "$ref": "#/$defs/SubagentInvokedEvent"
+    },
+    {
+      "$ref": "#/$defs/SubagentReturnedEvent"
+    },
+    {
+      "$ref": "#/$defs/ErrorOccurredEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentStoppedEvent"
+    }
+  ],
+  "title": "AVP v0.1 Trajectory Event",
+  "description": "One CloudEvents 1.0 event of the trajectory an agent emits. See trajectory.md."
+}
