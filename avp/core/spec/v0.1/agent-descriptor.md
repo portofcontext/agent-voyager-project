@@ -22,7 +22,11 @@ The [Trajectory](./trajectory.md) spec defines when an agent sends its Descripto
   "avp_version": "0.1",
   "agent_name": "acme-code-agent",
   "agent_version": "1.2.0",
-  "supported_models": ["anthropic/claude-*", "amazon-bedrock/*anthropic.claude-*", "openai/gpt-5*"],
+  "supported_models": [
+    { "provider": "anthropic", "id": "claude-*" },
+    { "provider": "amazon-bedrock", "id": "*anthropic.claude-*" },
+    { "provider": "openai", "id": "gpt-5*" }
+  ],
   "system_prompt": "You are a careful software engineer...",
   "tools": [
     {
@@ -71,7 +75,7 @@ The [Trajectory](./trajectory.md) spec defines when an agent sends its Descripto
 | `avp_version` | string | Yes | The AVP version the Descriptor follows. `"0.1"` for this spec. |
 | `agent_name` | string | Yes | The agent's name. Matches `^[a-z0-9_-]+$`. |
 | `agent_version` | string | Yes | The agent's version. |
-| `supported_models` | string[] | No | Patterns for the models the agent can run, matched against `<provider>/<id>` of a Commission's [Model](./commission.md#33-model). `*` matches any characters, so `"*"` means any model. Absent means the agent does not say. |
+| `supported_models` | [Model pattern](#36-model-pattern)[] | No | The models the agent can run. A model is supported when it matches any pattern. Absent means the agent does not say. |
 | `system_prompt` | string | No | The system prompt the agent comes with. |
 | `tools` | [Tool](#32-tool)[] | No | The agent's built-in tools, including those that come from its MCP servers. |
 | `mcp_servers` | [MCP server](#33-mcp-server)[] | No | The MCP servers the agent comes with. |
@@ -126,6 +130,15 @@ A Subagent uses a subset of the [Descriptor](#31-descriptor)'s fields. It has it
 | `skills` | [Skill](#34-skill)[] | No | As in [Descriptor](#31-descriptor), for the subagent. |
 
 A subagent does **not** inherit the agent's items: an absent field means the subagent has none of that item. A subagent that shares the agent's tools, MCP servers, or skills lists them again.
+
+### 3.6 Model pattern
+
+A Model pattern matches the `provider` and `id` of a Commission's [Model](./commission.md#33-model). In both fields, `*` matches any characters, so `{ "provider": "*", "id": "*" }` matches any model.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | string | Yes | A pattern for the model's `provider`, for example `"anthropic"`. |
+| `id` | string | Yes | A pattern for the model's `id`, for example `"claude-*"`. |
 
 ## 4. Rules for agents
 

@@ -143,7 +143,7 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
 |---|---|---|---|
 | `prompt` | string | Yes | The prompt the run starts with. |
 | `system_prompt` | string | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
-| `model` | object | Yes | The model the run uses: the `provider` and `id` of a Commission's [Model](./commission.md#33-model), without `base_url` and `credential`. |
+| `model` | [Model](./commission.md#33-model) | Yes | The model the run uses, without `credential`. |
 | `tools` | [Tool](./agent-descriptor.md#32-tool)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
 | `mcp_servers` | [MCP server](./agent-descriptor.md#33-mcp-server)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
 | `skills` | [Skill](./agent-descriptor.md#34-skill)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
