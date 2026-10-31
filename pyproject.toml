@@ -50,7 +50,7 @@ dev = [
 [tool.uv.workspace]
 # Paths are relative to this pyproject.toml (repo root).
 members = [
-    "avp/bindings/python",
+    "avp_sdk/python",
     "avp/core/conformance",
     "avp-cli",
     "agents/avp-claude-agent-sdk/python",
