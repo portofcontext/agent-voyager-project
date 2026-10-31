@@ -57,7 +57,7 @@ In the [Commission example](./commission.md#2-example), run with OpenSandbox's [
 2. The agent calls Anthropic with a stand-in key, and the docs server with no token. The proxy adds the real ones.
 3. The agent starts the database server with `DB_PASSWORD` set to its own `TEST_DB_PASSWORD`.
 
-**Step 1 is outside AVP**: which proxy, where the values come from, and how the environment is set up are up to whatever launches the agent. AVP defines only the references and the agent's [rules for using them](./commission.md#59-secrets-come-from-the-proxy-or-the-environment).
+**Step 1 is outside AVP**: the supervisor decides which proxy to use, where the values come from, and how the environment is set up. AVP defines only the references and the agent's [rules for using them](./commission.md#59-secrets-come-from-the-proxy-or-the-environment).
 
 ## Built on
 
