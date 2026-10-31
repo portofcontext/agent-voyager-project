@@ -1,6 +1,6 @@
 """Model prices from [models.dev](https://models.dev), for `cost_source: "computed"`.
 
-The package ships a snapshot in `avp/utils/data/models_dev.json`, refreshed each time
+The package ships a snapshot in `avp/utils/data/avp_prices.json`, refreshed each time
 the package is published, so prices work offline with no setup. A caller that
 wants newer prices passes `max_age` to `load_prices`, which fetches models.dev
 when the prices are older than that and keeps them in a cache file. A caller
@@ -52,15 +52,15 @@ class Prices(BaseModel):
 @cache
 def bundled_prices() -> Prices:
     """The snapshot shipped in the package, as of its last publish."""
-    data = resources.files("avp.utils").joinpath("data", "models_dev.json").read_text()
+    data = resources.files("avp.utils").joinpath("data", "avp_prices.json").read_text()
     return Prices.model_validate_json(data)
 
 
 def default_cache_path() -> Path:
-    """`$XDG_CACHE_HOME/avp/models_dev.json`, or `~/.cache/avp/models_dev.json`
+    """`$XDG_CACHE_HOME/avp/avp_prices.json`, or `~/.cache/avp/avp_prices.json`
     when `XDG_CACHE_HOME` isn't set."""
     root = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
-    return Path(root) / "avp" / "models_dev.json"
+    return Path(root) / "avp" / "avp_prices.json"
 
 
 def fetch_prices() -> Prices:
