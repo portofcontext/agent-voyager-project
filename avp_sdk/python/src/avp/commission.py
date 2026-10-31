@@ -3,13 +3,11 @@
 Each class matches one table in the spec's reference section.
 """
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints, field_validator
+from pydantic import Field, JsonValue, StringConstraints, field_validator
 
-from avp._base import WireModel
-
-AgentName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_-]+$")]
+from avp._base import AgentName, WireModel
 
 
 class Supervisor(WireModel):
@@ -148,11 +146,11 @@ class Commission(WireModel):
     """Skills to add for the run."""
     agents: dict[AgentName, AgentSettings] | None = None
     """Settings for specific agents, keyed by `agent_name`."""
-    output_schema: dict[str, Any] | None = None
+    output_schema: dict[str, JsonValue] | None = None
     """A JSON Schema for the agent's final output."""
     thread_id: str | None = None
     """An ID that groups related runs, such as the turns of one conversation."""
     tags: list[str] | None = None
     """Labels for the run."""
-    meta: dict[str, Any] | None = None
+    meta: dict[str, JsonValue] | None = None
     """Key-value data for the supervisor's own use."""
