@@ -137,14 +137,13 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
 
 ### 3.5 `agent_started`
 
-`agent_started` uses a subset of the [Descriptor](./agent-descriptor.md#31-descriptor)'s fields, plus `prompt`, `model`, and `provider_id`. Their values are what the run uses: the agent's Descriptor combined with the [Commission](./commission.md), which [limits the built-in items](./commission.md#52-agent-settings-limit-the-built-in-items), [adds its own](./commission.md#54-added-items-are-used-or-the-run-stops), and [replaces the system prompt](./commission.md#55-system_prompt-replaces-the-agents-own). Without a Commission, they hold what the agent was started with.
+`agent_started` uses a subset of the [Descriptor](./agent-descriptor.md#31-descriptor)'s fields, plus `prompt` and `model`. Their values are what the run uses: the agent's Descriptor combined with the [Commission](./commission.md), which [limits the built-in items](./commission.md#52-agent-settings-limit-the-built-in-items), [adds its own](./commission.md#54-added-items-are-used-or-the-run-stops), and [replaces the system prompt](./commission.md#55-system_prompt-replaces-the-agents-own). Without a Commission, they hold what the agent was started with.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `prompt` | string | Yes | The prompt the run starts with. |
 | `system_prompt` | string | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
-| `model` | string | Yes | The model the run uses, in the `origin/model` form the [Commission](./commission.md#31-commission) uses. |
-| `provider_id` | string | No | The service that runs the model: the `id` of the Commission's [Provider](./commission.md#33-provider). Absent means the model's `origin`. |
+| `model` | object | Yes | The model the run uses: the `provider` and `id` of a Commission's [Model](./commission.md#33-model), without `base_url` and `credential`. |
 | `tools` | [Tool](./agent-descriptor.md#32-tool)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
 | `mcp_servers` | [MCP server](./agent-descriptor.md#33-mcp-server)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
 | `skills` | [Skill](./agent-descriptor.md#34-skill)[] | No | As in [Descriptor](./agent-descriptor.md#31-descriptor), for the run. |
@@ -160,8 +159,7 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
   "data": {
     "prompt": "Fix the login timeout bug described in issue #212.",
     "system_prompt": "You are a careful software engineer. Do not push changes.",
-    "model": "anthropic/claude-sonnet-4-6",
-    "provider_id": "anthropic",
+    "model": { "provider": "anthropic", "id": "claude-sonnet-4-6" },
     "tools": [
       {
         "name": "read_file",
@@ -207,9 +205,8 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `content` | [Content block](#313-content-blocks)[] | Yes | What the model produced: text, reasoning, tool calls, and other blocks. |
-| `model` | string | Yes | The model the agent asked for this response, in `origin/model` form. |
-| `response_model` | string | No | The model the service says produced the response, in `origin/model` form, when it is more specific than `model` (for example a dated version). |
-| `provider_id` | string | No | As in [`agent_started`](#35-agent_started), for this response. |
+| `model` | object | Yes | The model the agent asked for this response, as in [`agent_started`](#35-agent_started). |
+| `response_model` | string | No | The model ID the service says produced the response, at the same `provider`, when it differs from `model.id` (for example a dated version). |
 | `finish_reasons` | string[] | No | Why the model stopped, exactly as the service reported it. |
 | `duration_ms` | integer | Yes | How long the response took, in milliseconds, ending at the event's `time`. |
 | `usage` | [Usage](#361-usage) | Yes | The response's token counts and cost. |
@@ -227,9 +224,8 @@ The [rules for agents](#4-rules-for-agents) say when the agent sends each event.
       { "type": "text", "text": "I'll start by reading issue #212." },
       { "type": "tool_use", "id": "toolu_01", "name": "search_issues", "input": { "query": "#212" } }
     ],
-    "model": "anthropic/claude-sonnet-4-6",
-    "response_model": "anthropic/claude-sonnet-4-6-20260214",
-    "provider_id": "anthropic",
+    "model": { "provider": "anthropic", "id": "claude-sonnet-4-6" },
+    "response_model": "claude-sonnet-4-6-20260214",
     "finish_reasons": ["tool_use"],
     "duration_ms": 2140,
     "usage": {
@@ -260,7 +256,7 @@ Token counts and cost for one model response.
 
 | `cost_source` | Meaning |
 |---|---|
-| `computed` | The agent computed the cost from the token counts and the [models.dev](https://models.dev) prices for the model. |
+| `computed` | The agent computed the cost from the token counts and the [models.dev](https://models.dev) prices for the model at its provider. |
 | `reported` | The service or the agent's runtime reported the cost. |
 | `unknown` | The cost could not be found. |
 
@@ -516,7 +512,7 @@ The agent MUST send one `assistant_message` for each model response that produce
 
 Each `assistant_message`'s `usage` MUST count only that response. The agent MUST NOT send totals for the run. When its runtime reports running totals, the agent subtracts the previous total to get each response's counts.
 
-All token counts and `cost_usd` are 0 or more. `cache_read_input_tokens` plus `cache_creation_input_tokens` MUST NOT exceed `input_tokens`. When `cost_source` is `computed`, the agent prices the response as `response_model`, or as `model` when models.dev doesn't list `response_model`, so a supervisor with the same prices gets the same cost. When `cost_source` is `unknown`, `cost_usd` MUST be `0`.
+All token counts and `cost_usd` are 0 or more. `cache_read_input_tokens` plus `cache_creation_input_tokens` MUST NOT exceed `input_tokens`. When the service or the agent's runtime reports a response's cost, the agent MUST use it, with `cost_source` `reported`. Otherwise it prices the response from the models.dev entry for `model.provider` and `response_model`, or `model.id` when models.dev doesn't list `response_model`, with `cost_source` `computed`, so a supervisor with the same prices gets the same cost. When models.dev lists neither, `cost_source` is `unknown` and `cost_usd` MUST be `0`.
 
 ### 4.5 Every tool call has a result
 

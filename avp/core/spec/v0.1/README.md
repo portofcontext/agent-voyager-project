@@ -46,7 +46,7 @@ A Commission never holds a secret value, because the Trajectory copies it. Each 
 
 | Reference | The value is in | Allowed in |
 |---|---|---|
-| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Provider's `credential`, an HTTP MCP server's `headers` |
+| `{ "proxy": "anthropic-key" }` | A proxy outside the agent, which adds it to requests as they leave | A Model's `credential`, an HTTP MCP server's `headers` |
 | `{ "env": "TEST_DB_PASSWORD" }` | A variable in the agent's environment | Those two, and a stdio MCP server's `env` |
 
 Prefer `proxy`: the agent can use the secret but never read it, so it can't leak it. Use `env` for secrets a proxy can't add, such as a database password.
@@ -65,7 +65,7 @@ AVP reuses existing specs wherever one already fits:
 
 - **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
 - **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
-- **[models.dev](https://models.dev)**: the `origin/model` names for models, and the prices AVP uses to compute each response's cost.
+- **[models.dev](https://models.dev)**: the provider and model IDs that name a model, and the prices AVP uses to compute each response's cost.
 - **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of all three AVP specs.
 
 Trajectory events are not [CloudEvents](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md), and no spec relies on CloudEvents. Each event converts to one, with `run_id` as the `subject`, so a supervisor can forward a Trajectory to event infrastructure that routes CloudEvents.

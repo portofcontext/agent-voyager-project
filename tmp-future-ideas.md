@@ -222,3 +222,19 @@ doesn't say.
   - Per-subagent settings in the agent's entry.
 - To work out: which runtimes can filter a subagent's tools separately from
   the parent's.
+
+## Equivalent models across services
+
+Help supervisors find the same model at other services when writing a
+Commission. models.dev links each service's entry to the maker's model with
+`canonical_model_id`, so `anthropic/claude-sonnet-5-5` maps to
+`claude-sonnet-5-5` at `anthropic`, `anthropic/claude-sonnet-5.5` at
+`openrouter`, and `claude-sonnet-5-5@default` at `google-vertex`.
+
+- Why: comparing a model across services, or switching services, means looking
+  up a different `id` for each one.
+- To work out:
+  - Some services list one model under several IDs (Bedrock's `us.`, `eu.`,
+    and `global.` profiles), so a lookup can return more than one.
+  - About 15% of models.dev entries have no `canonical_model_id`.
+  - Whether this belongs in the CLI or a shared library rather than the spec.
