@@ -40,8 +40,8 @@ ErrorCode = Literal[
 # Content blocks
 
 
-class Citation(WireModel):
-    """A source the model cited for a text block."""
+class Citation(OpenWireModel):
+    """A source the model cited for a text block. Keeps fields the service added."""
 
     type: str
     """The kind of citation, as the model service names it, such as `url_citation`."""
@@ -59,8 +59,8 @@ class Citation(WireModel):
     """The source's title."""
 
 
-class Source(WireModel):
-    """Where an image's data is. In v0.1 the data is always inline."""
+class Source(OpenWireModel):
+    """Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added."""
 
     type: Literal["base64"]
     media_type: str
@@ -194,8 +194,10 @@ class SubagentUsage(WireModel):
 
 
 class RunRequested(WireModel):
-    commission: Commission | None = None
-    """The Commission the agent received. Absent when the run has no Commission."""
+    commission: Commission | JsonValue = Field(default=None, union_mode="left_to_right")
+    """The Commission as the agent received it. When it doesn't match the
+    Commission spec, the JSON value received, or the text when it isn't JSON.
+    Absent when the run has no Commission."""
 
 
 class AgentDescribed(WireModel):
