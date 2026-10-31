@@ -259,5 +259,6 @@ For an `env` reference, the agent MUST use the value of the named variable in it
 - **Choosing an agent:** finding one, or one that can run a given model.
 - **Providing secrets:** setting up the proxy and its credentials, and setting the variables in the agent's environment.
 - **The run's environment:** the workspace, files, sandbox, and network access.
+- **Programs for stdio MCP servers:** installing the program a stdio server's `command` runs, and the directory and network it runs with. If it can't start, the server doesn't connect and [the run stops](#54-added-items-are-used-or-the-run-stops).
 - **`thread_id`, `tags`, and `meta`:** AVP gives them no meaning beyond their descriptions in the [Commission](#31-commission) reference.
 - **Tool name clashes:** two MCP servers that offer tools with the same name. The agent's MCP client handles them as it normally does.
