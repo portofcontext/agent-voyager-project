@@ -26,10 +26,10 @@ TypeScript.
 | Part | What it does | Python |
 |---|---|---|
 | Wire types | The Commission, the Agent Descriptor, and Trajectory events, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Pricing | `cost_usd` and `cost_source` for a response, from models.dev prices | `avp.utils.pricing` |
 | Agent command line | The command line every agent answers, described below | `avp.agent_cli` |
-| Recorder | Open, see below | |
 
 Supervisor tools, built in Python first and in the other SDKs when a supervisor
 needs them:
@@ -67,24 +67,31 @@ transport.
 
 Paths default to stdout where `--out` is optional.
 
-`run` sends `run_requested` and `agent_described` itself, and refuses a
-Commission that doesn't match the spec or fails the Commission checks. Only
-then does it hand over to the agent, which sends everything from
-`agent_started` on.
+`run` hands the Commission, as received, and an event sink to the agent. The
+agent writes every event, through the Recorder or by hand.
 
 Exit codes: `0` when the Trajectory is complete, a refusal included; `130` when
 SIGINT or SIGTERM interrupted the run; anything else is a crash.
 
-## Open: the Recorder
+## The Recorder
 
-The old SDK's Recorder turned an agent's native events into a valid Trajectory:
-event order, usage per response, tool and subagent pairing, and closing the
-run. Ten agents used it, with shared test data that each SDK's Recorder had to
-pass. To decide:
+Every agent must turn its runtime's events into a Trajectory that follows the
+Trajectory spec's rules for agents. Those rules are the same for every agent
+and easy to get wrong, so the Recorder implements them once. The agent reports
+what its runtime did; the Recorder decides which events to write and in what
+order:
 
-- What it covers, and its interface.
-- Whether the shared test data comes back, written before the Recorder, in
-  `avp_sdk/testdata/recorder-vectors/`.
+- `run_requested`, `agent_described`, and refusing a Commission that doesn't
+  match the spec or fails the Commission checks.
+- One `assistant_message` per model response, merging a streamed response and
+  pricing it.
+- A `tool_invoked` for each `tool_use` block, paired with its `tool_returned`.
+- Subagents closed as `abandoned` when the run stops while they still run.
+- One `agent_stopped`, or an `error_occurred` when the run ends before it starts.
+
+Using it is optional: an agent can write its events by hand. Whether an agent
+conforms is for `avp conformance` to judge, not the Recorder. Each SDK's
+Recorder passes the shared test cases in [`testdata/recorder/`](testdata/recorder/).
 
 ## Out of scope
 

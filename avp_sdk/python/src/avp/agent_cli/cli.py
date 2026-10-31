@@ -7,7 +7,7 @@ import sys
 from collections.abc import Awaitable
 from pathlib import Path
 
-from avp.agent_cli.run import DescribeFn, RunFn, get_descriptor, read_commission, run_commission
+from avp.agent_cli.run import DescribeFn, RunFn, get_descriptor, read_commission
 from avp.agent_cli.sink import ndjson_sink
 
 
@@ -65,7 +65,7 @@ def main(
     sink = ndjson_sink(None if args.out == "-" else Path(args.out))
     try:
         received = read_commission(args.commission)
-        asyncio.run(_interruptible(run_commission(received, sink, run, describe)))
+        asyncio.run(_interruptible(run(received, sink)))
     except asyncio.CancelledError:
         return 130
     return 0
