@@ -1,4 +1,4 @@
-"""The shared Recorder cases in `avp_sdk/testdata/recorder/`, which every SDK's
+"""The shared Recorder cases in `avp-sdk/testdata/recorder/`, which every SDK's
 Recorder passes. See the README there for the format."""
 
 import asyncio

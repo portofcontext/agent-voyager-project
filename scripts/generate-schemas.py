@@ -1,9 +1,9 @@
 """Generate the AVP v0.1 JSON Schemas from the Python SDK's wire models.
 
-The models in `avp_sdk/python` are the source of truth. Run from the repo root
+The models in `avp-sdk/python` are the source of truth. Run from the repo root
 in the SDK's environment, since the root workspace still installs the old `avp`:
 
-    uv run --project avp_sdk/python python scripts/generate-schemas.py
+    uv run --project avp-sdk/python python scripts/generate-schemas.py
 
 Writes to `spec/v0.1/`, next to the specs they describe:
 

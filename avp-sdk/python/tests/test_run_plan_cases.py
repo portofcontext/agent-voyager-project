@@ -1,4 +1,4 @@
-"""The shared run plan cases in `avp_sdk/testdata/run_plan/`, which every SDK
+"""The shared run plan cases in `avp-sdk/testdata/run_plan/`, which every SDK
 passes. Each case gives a Commission and a Descriptor and expects the plan."""
 
 import json

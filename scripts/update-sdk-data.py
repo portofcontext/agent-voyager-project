@@ -5,7 +5,7 @@ Fetches models.dev once with the Python SDK and writes the same files into each
 SDK, since each package must carry its own copy. Run from the repo root in the
 SDK's environment, since the root workspace still installs the old `avp`:
 
-    uv run --project avp_sdk/python python scripts/update-sdk-data.py
+    uv run --project avp-sdk/python python scripts/update-sdk-data.py
 """
 
 from pathlib import Path
@@ -14,7 +14,7 @@ from avp.utils._models_dev import fetch_catalog
 from avp.utils.base_urls import fetch_base_urls, save_base_urls
 from avp.utils.pricing import fetch_prices, save_prices
 
-AVP_SDK = Path(__file__).resolve().parent.parent / "avp_sdk"
+AVP_SDK = Path(__file__).resolve().parent.parent / "avp-sdk"
 
 # Each SDK's data directory. Add the Rust and TypeScript SDKs' when they exist.
 DATA_DIRS = [AVP_SDK / "python" / "src" / "avp" / "utils" / "data"]
