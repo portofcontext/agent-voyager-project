@@ -1,7 +1,15 @@
 # AVP SDKs
 
-The AVP SDKs (Python, Rust, TypeScript) give agents and supervisors the same
-behavior in every language.
+The AVP SDKs (Python, Rust, TypeScript) have two goals:
+
+- **Define the wire:** types for the Commission, the Agent Descriptor, and
+  Trajectory events, matching the specs' schemas.
+- **Share the common work:** code that every agent runner or supervisor would
+  otherwise write itself, such as checking a Commission, writing a Trajectory,
+  and pricing a response.
+
+Each SDK behaves the same way, so an agent or supervisor gets the same results
+in any of the three languages.
 
 ## Source of truth
 
