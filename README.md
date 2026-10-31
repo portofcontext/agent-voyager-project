@@ -18,7 +18,7 @@ Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
-AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [spec overview](avp/core/spec/v0.1/README.md) for how they fit together.
+AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [spec overview](spec/v0.1/README.md) for how they fit together.
 
 ## Install
 
@@ -110,9 +110,9 @@ To add another runtime, follow the [adapter guide](agents/_template/README.md). 
 
 Each spec can be adopted independently:
 
-- [Commission](avp/core/spec/v0.1/commission.md): the run configuration.
-- [Trajectory](avp/core/spec/v0.1/trajectory.md): the execution event stream.
-- [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md): the agent's capabilities.
+- [Commission](spec/v0.1/commission.md): the run configuration.
+- [Trajectory](spec/v0.1/trajectory.md): the execution event stream.
+- [Agent Descriptor](spec/v0.1/agent-descriptor.md): the agent's capabilities.
 
 Typed bindings: [Python](avp/bindings/python/) · [Rust](avp/bindings/rust/) · [TypeScript](avp/bindings/typescript/). Validate integrations with the [conformance suite](avp/core/conformance/).
 
