@@ -239,9 +239,9 @@ When a Commission has `system_prompt`, the agent MUST use it instead of its own 
 
 The agent MUST send its own model calls to `model`, through `provider` when the Commission has one, and MUST NOT use a different model or service for them. This rule does not cover the models that subagents or the agent's runtime choose for their own calls. If the agent cannot use `provider`, it [refuses the Commission](#51-the-agent-checks-the-commission-before-the-run-starts).
 
-### 5.7 Final output matches `output_schema`
+### 5.7 The agent checks its final output against `output_schema`
 
-When a Commission has `output_schema`, the agent's final output MUST match it.
+When a Commission has `output_schema` and the model gives its final answer, the agent MUST check the final output against it. How the agent gets output that matches, for example with retries or an output tool, is up to the agent. If the output doesn't match, the agent MUST send an [`error_occurred`](./trajectory.md#311-error_occurred) with the code `output_invalid`, then `agent_stopped` with `reason` set to `error` and the output in `output`. So with `output_schema`, the `output` of an `agent_stopped` with `reason` `converged` always matches it.
 
 ### 5.8 Secrets stay out of the Trajectory
 

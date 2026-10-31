@@ -403,6 +403,7 @@ The example below comes from a run like the [Commission example](./commission.md
 | `auth_error` | The model service rejected the agent's credentials. |
 | `rate_limit` | The model service refused a request because of a rate or usage limit. |
 | `context_limit` | A request was longer than the model's context window. |
+| `output_invalid` | The final output didn't match the Commission's `output_schema`, as the Commission spec's [rule on final output](./commission.md#57-the-agent-checks-its-final-output-against-output_schema) describes. The output is in `agent_stopped`'s `output`. |
 | `agent_crash` | The agent failed, or the model service failed. Also used when someone stops the run from outside before `agent_started`. |
 | `unknown` | Any other error. |
 
@@ -411,7 +412,7 @@ The example below comes from a run like the [Commission example](./commission.md
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `reason` | string | Yes | Why the run stopped, one of the [stop reasons](#3121-stop-reasons). |
-| `output` | any | No | The run's result as the agent reports it: a string, or an object when the run has structured output. Absent when the agent reports none. |
+| `output` | any | No | The run's result as the agent reports it: a string, or an object when the run has structured output. With `reason` `error`, it can be output that didn't match `output_schema`. Absent when the agent reports none. |
 
 ```json
 {
