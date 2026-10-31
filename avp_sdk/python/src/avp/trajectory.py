@@ -37,6 +37,9 @@ ErrorCode = Literal[
 ]
 """What kind of error an `error_occurred` reports."""
 
+CostSource = Literal["computed", "reported", "unknown"]
+"""Where a response's `cost_usd` comes from."""
+
 # Content blocks
 
 
@@ -175,7 +178,7 @@ class Usage(WireModel):
     """The output tokens the model spent on reasoning. Included in `output_tokens`."""
     cost_usd: Annotated[float, Field(ge=0)]
     """The cost in US dollars, after any cache discount."""
-    cost_source: Literal["computed", "reported", "unknown"]
+    cost_source: CostSource
     """Where `cost_usd` comes from."""
 
 
@@ -188,7 +191,7 @@ class SubagentUsage(WireModel):
     cache_creation_input_tokens: NonNegativeInt | None = None
     reasoning_output_tokens: NonNegativeInt | None = None
     cost_usd: Annotated[float, Field(ge=0)] | None = None
-    cost_source: Literal["computed", "reported", "unknown"] | None = None
+    cost_source: CostSource | None = None
     responses: NonNegativeInt | None = None
     """How many model responses the subagent made."""
 

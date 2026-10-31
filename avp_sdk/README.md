@@ -40,22 +40,17 @@ schemas.
 ### models.dev data
 
 [models.dev](https://models.dev) is what a Commission's `model` names, so every
-SDK reads it the same way to:
+SDK prices a response for `cost_source: "computed"` the same way.
 
-- find a provider's default `base_url` when the Model has none
-- price a response for `cost_source: "computed"`
-
-Open: the live API or a bundled snapshot.
-
-| | Live API (`https://models.dev/api.json`) | Bundled snapshot |
-|---|---|---|
-| Size | About 6 MB per fetch | About 0.8 MB trimmed to URLs and prices (95 KB gzipped) |
-| Sandboxed agents | Fails: sandboxes deny network by default | Works offline |
-| Same cost on rerun | No: prices change between runs | Yes, for the same snapshot |
-| Freshness | Current | As of the last sync |
-
-One option is a shared snapshot file that every SDK embeds, refreshed by a
-script, which a caller can replace with a newer file.
+- Each SDK ships a snapshot of the prices, refreshed when the package is
+  published, so pricing works offline with no setup.
+- A caller can ask for newer prices with a maximum age. The SDK then fetches
+  models.dev when the prices are older and keeps them in a cache file. Without
+  it, the SDK never calls models.dev.
+- A caller can pass its own file instead, for the same costs on every rerun.
+- No `base_url` lookup: models.dev has none for the main providers (`anthropic`,
+  `openai`, `google`, `amazon-bedrock`), and an absent `base_url` already means
+  the service's default.
 
 ## Decided case by case
 
