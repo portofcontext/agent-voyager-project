@@ -5,10 +5,9 @@ has its own class, named after the event type: `ToolInvoked` is the `data` of a
 `ToolInvokedEvent`.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
-    AwareDatetime,
     Field,
     JsonValue,
     TypeAdapter,
@@ -16,15 +15,12 @@ from pydantic import (
     field_validator,
 )
 
-from avp._base import OpenWireModel, WireModel
+from avp._base import OpenWireModel, Timestamp, WireModel
 from avp.commission import Commission, ModelRef
 from avp.descriptor import AgentDescriptor, McpServer, Skill, Subagent, Tool
 
 NonNegativeInt = Annotated[int, Field(ge=0)]
 
-
-Timestamp = Annotated[AwareDatetime, Field(strict=True)]
-"""An RFC 3339 timestamp with a time zone. JSON input must be a string, not a number."""
 
 StopReason = Literal["converged", "refused", "error", "interrupted", "abandoned"]
 """Why a run or a subagent stopped."""
@@ -80,7 +76,7 @@ class Source(WireModel):
 class TextBlock(OpenWireModel):
     """Text from the model."""
 
-    type: Literal["text"] = "text"
+    type: Literal["text"]
     text: str
     citations: list[Citation] | None = None
 
@@ -88,7 +84,7 @@ class TextBlock(OpenWireModel):
 class ThinkingBlock(OpenWireModel):
     """The model's reasoning."""
 
-    type: Literal["thinking"] = "thinking"
+    type: Literal["thinking"]
     thinking: str
     """The reasoning, or the service's encrypted reasoning when `redacted` is true."""
     signature: str | None = None
@@ -99,14 +95,14 @@ class ThinkingBlock(OpenWireModel):
 class ImageBlock(OpenWireModel):
     """An image."""
 
-    type: Literal["image"] = "image"
+    type: Literal["image"]
     source: Source
 
 
 class ToolUseBlock(OpenWireModel):
     """A call to a tool the agent runs."""
 
-    type: Literal["tool_use"] = "tool_use"
+    type: Literal["tool_use"]
     id: str
     name: str
     input: dict[str, JsonValue]
@@ -115,7 +111,7 @@ class ToolUseBlock(OpenWireModel):
 class ToolResultBlock(OpenWireModel):
     """The result of a `tool_use` call, matched by `tool_use_id`."""
 
-    type: Literal["tool_result"] = "tool_result"
+    type: Literal["tool_result"]
     tool_use_id: str
     content: str | list[Annotated[TextBlock | ImageBlock, Field(discriminator="type")]]
     structured_content: dict[str, JsonValue] | None = None
@@ -126,7 +122,7 @@ class ToolResultBlock(OpenWireModel):
 class ServerToolUseBlock(OpenWireModel):
     """A call to a tool the model service runs itself, such as web search."""
 
-    type: Literal["server_tool_use"] = "server_tool_use"
+    type: Literal["server_tool_use"]
     id: str
     name: str
     input: dict[str, JsonValue]
@@ -135,7 +131,7 @@ class ServerToolUseBlock(OpenWireModel):
 class ServerToolResultBlock(OpenWireModel):
     """The result of a `server_tool_use` call."""
 
-    type: Literal["server_tool_result"] = "server_tool_result"
+    type: Literal["server_tool_result"]
     tool_use_id: str
     name: str
     content: JsonValue
@@ -145,7 +141,7 @@ class ServerToolResultBlock(OpenWireModel):
 class RefusalBlock(OpenWireModel):
     """The model's text when it declined."""
 
-    type: Literal["refusal"] = "refusal"
+    type: Literal["refusal"]
     refusal: str
 
 
@@ -336,52 +332,52 @@ class _Event(WireModel):
 
 
 class RunRequestedEvent(_Event):
-    type: Literal["run_requested"] = "run_requested"
+    type: Literal["run_requested"]
     data: RunRequested
 
 
 class AgentDescribedEvent(_Event):
-    type: Literal["agent_described"] = "agent_described"
+    type: Literal["agent_described"]
     data: AgentDescribed
 
 
 class AgentStartedEvent(_Event):
-    type: Literal["agent_started"] = "agent_started"
+    type: Literal["agent_started"]
     data: AgentStarted
 
 
 class AssistantMessageEvent(_Event):
-    type: Literal["assistant_message"] = "assistant_message"
+    type: Literal["assistant_message"]
     data: AssistantMessage
 
 
 class ToolInvokedEvent(_Event):
-    type: Literal["tool_invoked"] = "tool_invoked"
+    type: Literal["tool_invoked"]
     data: ToolInvoked
 
 
 class ToolReturnedEvent(_Event):
-    type: Literal["tool_returned"] = "tool_returned"
+    type: Literal["tool_returned"]
     data: ToolReturned
 
 
 class SubagentInvokedEvent(_Event):
-    type: Literal["subagent_invoked"] = "subagent_invoked"
+    type: Literal["subagent_invoked"]
     data: SubagentInvoked
 
 
 class SubagentReturnedEvent(_Event):
-    type: Literal["subagent_returned"] = "subagent_returned"
+    type: Literal["subagent_returned"]
     data: SubagentReturned
 
 
 class ErrorOccurredEvent(_Event):
-    type: Literal["error_occurred"] = "error_occurred"
+    type: Literal["error_occurred"]
     data: ErrorOccurred
 
 
 class AgentStoppedEvent(_Event):
-    type: Literal["agent_stopped"] = "agent_stopped"
+    type: Literal["agent_stopped"]
     data: AgentStopped
 
 
@@ -403,11 +399,14 @@ Event = Annotated[
 _event = TypeAdapter[Event](Event)
 
 
-def parse_event(line: str | bytes) -> Event | None:
-    """Parse one NDJSON line. Returns None for an event type this version doesn't
-    know, which a supervisor MUST skip."""
+def parse_trajectory_event(event: dict[str, Any] | str | bytes | bytearray) -> Event | None:
+    """Validate one event, given as a dict or as JSON text. Returns None for an
+    event type this version doesn't know, which a supervisor MUST skip. Raises
+    ValidationError for an event of a known type that doesn't match the spec."""
     try:
-        return _event.validate_json(line)
+        if isinstance(event, dict):
+            return _event.validate_python(event)
+        return _event.validate_json(event)
     except ValidationError as error:
         if any(e["type"] == "union_tag_invalid" for e in error.errors()):
             return None

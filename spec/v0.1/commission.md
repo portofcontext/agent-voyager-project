@@ -81,7 +81,7 @@ The `acme-code-agent` key refers to the agent in the [Descriptor example](./agen
 | `mcp_servers` | [MCP server](#35-mcp-server)[] | No | MCP servers to add for the run. |
 | `skills` | [Skill](#36-skill)[] | No | Skills to add for the run. |
 | `agents` | map<string, [Agent settings](#37-agent-settings)> | No | Settings for specific agents. Each key is an agent's `agent_name` from its [Descriptor](./agent-descriptor.md#31-descriptor). |
-| `output_schema` | [JSON Schema](https://json-schema.org/draft/2020-12) | No | The shape of the agent's final output. |
+| `output_schema` | [JSON Schema](https://json-schema.org/draft/2020-12) | No | The shape of the agent's final output. Its `type` is `"object"`, as MCP requires of a tool's `inputSchema`, so an agent can use it as the input schema of an output tool. |
 | `thread_id` | string | No | An ID that groups related runs, such as the turns of one conversation. |
 | `tags` | string[] | No | Labels for the run. |
 | `meta` | map<string, any> | No | Key-value data for the supervisor's own use. |

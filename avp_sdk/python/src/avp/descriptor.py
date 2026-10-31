@@ -3,11 +3,11 @@
 Each class matches one table in the spec's reference section.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, JsonValue
+from pydantic import Field, StringConstraints
 
-from avp._base import AgentName, OpenWireModel, WireModel
+from avp._base import AgentName, ObjectSchema, OpenWireModel, WireModel
 
 
 class ModelPattern(WireModel):
@@ -28,9 +28,9 @@ class Tool(OpenWireModel):
     """A display name."""
     description: str | None = None
     """What the tool does, as the model sees it."""
-    input_schema: dict[str, JsonValue] = Field(alias="inputSchema")
+    input_schema: ObjectSchema = Field(alias="inputSchema")
     """A JSON Schema for the tool's input, as the model sees it."""
-    output_schema: dict[str, JsonValue] | None = Field(default=None, alias="outputSchema")
+    output_schema: ObjectSchema | None = Field(default=None, alias="outputSchema")
     """A JSON Schema for the tool's structured output."""
     mcp_server_id: str | None = None
     """The `id` of the MCP server the tool comes from. Absent for any tool that
@@ -58,7 +58,7 @@ class Skill(OpenWireModel):
     """The skill's name."""
     description: str
     """What the skill does and when to use it."""
-    source: str | None = None
+    source: Annotated[str, StringConstraints(pattern=r"^file:")] | None = None
     """A `file:` URI for the directory that contains the skill's `SKILL.md`, as
     the path appears inside the agent's environment."""
 

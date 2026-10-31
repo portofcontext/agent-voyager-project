@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, StringConstraints, field_validator
 
-from avp._base import AgentName, WireModel
+from avp._base import AgentName, ObjectSchema, WireModel
 
 
 class Supervisor(WireModel):
@@ -151,8 +151,8 @@ class Commission(WireModel):
     """Skills to add for the run."""
     agents: dict[AgentName, AgentSettings] | None = None
     """Settings for specific agents, keyed by `agent_name`."""
-    output_schema: dict[str, JsonValue] | None = None
-    """A JSON Schema for the agent's final output."""
+    output_schema: ObjectSchema | None = None
+    """A JSON Schema for the agent's final output. Its `type` is `"object"`."""
     thread_id: str | None = None
     """An ID that groups related runs, such as the turns of one conversation."""
     tags: list[str] | None = None
