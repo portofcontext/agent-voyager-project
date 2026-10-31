@@ -238,3 +238,30 @@ Commission. models.dev links each service's entry to the maker's model with
     and `global.` profiles), so a lookup can return more than one.
   - About 15% of models.dev entries have no `canonical_model_id`.
   - Whether this belongs in the CLI or a shared library rather than the spec.
+
+## Model credentials beyond a single key
+
+A Model's `credential` is one Secret reference: one static secret, from a proxy
+or an environment variable. Running Claude at four services shows where that
+falls short:
+
+| Service | How it authenticates | Fits one Secret reference |
+|---|---|---|
+| Anthropic | A static API key in `x-api-key` | Yes |
+| OpenRouter | A static key in `Authorization: Bearer` | Yes |
+| Bedrock, API key | `AWS_BEARER_TOKEN_BEDROCK` as a bearer token. Short-term keys expire within 12 hours; long-term keys belong to an IAM user | Yes, if the key outlasts the run |
+| Bedrock, IAM | Each request is signed (SigV4) with an access key ID, a secret key, an optional session token, and a region | No: two or three secrets, and a proxy must re-sign the request rather than add a header |
+| Bedrock, role or SSO | Credentials come from the machine's role, SSO, or a profile | Nothing to name |
+| Vertex | A Google OAuth access token in `Authorization: Bearer`, valid for about an hour, minted from a service account key file or the machine's default credentials | No: a token expires during a long run, and the key is a file, not a value |
+
+- Why: the usual ways to run Claude on Bedrock and Vertex can only be expressed
+  by leaving `credential` absent, so the Commission can't say which credential
+  a run uses there.
+- To work out:
+  - `{ "proxy": ... }` names a credential only the proxy's setup uses; the
+    agent never reads it. Signed or minted credentials need a proxy that
+    signs or mints, not one that adds a header.
+  - `{ "env": ... }` names one variable, not the several AWS values or a key
+    file.
+  - Bedrock's region and Vertex's project and location fit in `base_url`, but
+    the Bedrock and Vertex SDKs take them as separate settings.
