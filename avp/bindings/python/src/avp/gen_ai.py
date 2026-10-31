@@ -12,8 +12,14 @@ layer.
 
 The projection is one-way (AVP wire → OTel attrs), one event at a time.
 AVP-specific fields without an OTel equivalent (`avp.cost_usd`,
-`avp.refusal.category`, ...) are intentionally NOT projected. See
-`FOUNDATIONS.md` for the mapping table and rationale.
+`avp.refusal.category`, `avp.tool.dispatch_target`, ...) are
+intentionally NOT projected.
+`to_gen_ai_attrs` below is the mapping; read it rather than a copy.
+
+Why `gen_ai.*` stays off the wire: the OTel GenAI conventions are still
+under the `gen_ai_latest_experimental` stability flag. Owning `avp.*` on
+the wire means an upstream rename changes this projector, not the AVP
+schema, and consumers can target different semconv revisions.
 
 ## Un-projected OTel GenAI attributes
 
@@ -76,7 +82,7 @@ def to_gen_ai_attrs(event: Event) -> dict[str, Any]:
     Keys are the OTel GenAI registry names; values are passed through
     from the AVP payload unchanged (no unit conversion). Returns `{}`
     for events with no GenAI projection (`run_requested`, `agent_stopped`,
-    `mcp_*`, `error_occurred`, `UnknownEvent`).
+    `error_occurred`, `UnknownEvent`).
     """
     if isinstance(event, AgentStartedEvent):
         d = event.data

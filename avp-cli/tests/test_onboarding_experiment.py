@@ -54,7 +54,7 @@ def test_generated_trials_load_and_only_onboarding_material_varies(experiment, t
     assert "inputs/avp.skill" not in env["files"]  # no skill leaked into the control
     skill_cm = next((out / "commissions").glob("*-claude-code-skill.json"))
     skill = json.loads(skill_cm.read_text())["skills"][0]["files"]
-    assert "SKILL.md" in skill and "avp/core/spec/v0.1/commission.md" in skill
+    assert "SKILL.md" in skill and "spec/v0.1/commission.md" in skill
 
 
 SCRIPT = """

@@ -7,8 +7,7 @@ on:
     branches: [main]
     paths:
       - "SKILL.md"
-      - "avp/core/spec/v0.1/**"
-      - "FOUNDATIONS.md"
+      - "spec/v0.1/**"
       - "LICENSE"
       - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
@@ -16,8 +15,7 @@ on:
   pull_request:
     paths:
       - "SKILL.md"
-      - "avp/core/spec/v0.1/**"
-      - "FOUNDATIONS.md"
+      - "spec/v0.1/**"
       - "LICENSE"
       - "avp/scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"

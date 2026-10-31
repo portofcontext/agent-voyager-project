@@ -7,12 +7,11 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 ## References
 
 - [README](README.md): installation and quickstart.
-- [Specs](avp/core/spec/v0.1/): normative wire contracts.
+- [Specs](spec/v0.1/): normative wire contracts.
 - [Integration patterns](PATTERNS.md): runtime adaptation and launch context.
 - [Adapter template](agents/_template/README.md): adding a runtime.
 - [CLI guide](avp-cli/README.md): Commissions, environments, and evaluations.
 - [Skill](SKILL.md): agent and supervisor workflows.
-- [Foundations](FOUNDATIONS.md): upstream standards and the OTel projection.
 
 ## Design boundaries
 
@@ -43,7 +42,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
   configuration and skill content travel on the Commission. Built-in allowlists
   are subtractive: absent exposes all, `[]` exposes none.
 - Preserve compatibility with CloudEvents 1.0, OTel span identification,
-  MCP 2025-11-25, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
+  MCP, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
   projection is for consumers, not the wire.
 - Agent events use `source: avp://agent`. A trajectory opens `run_requested`,
   `agent_described`, `agent_started` and closes `agent_stopped` with a stop reason.
@@ -53,7 +52,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 
 ## Repository layout
 
-- `avp/core/spec/v0.1/`: normative specs and generated JSON Schemas.
+- `spec/v0.1/`: normative specs.
 - `avp/core/conformance/`: separate harness, cases, and shared Recorder vectors.
 - `avp/bindings/{python,rust,typescript}/`: wire bindings and shared helpers.
   Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.
