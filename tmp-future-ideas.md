@@ -289,3 +289,15 @@ falls short:
     file.
   - Bedrock's region and Vertex's project and location fit in `base_url`, but
     the Bedrock and Vertex SDKs take them as separate settings.
+
+## Items found in the workspace
+
+Decide whether `agent_started` lists items the agent finds in the workspace,
+such as skills or MCP servers in project settings. The Trajectory spec's rule
+on the first events lists only the built-in items the Commission doesn't turn
+off and the items it adds.
+
+- Why: a runtime that loads project skills uses items no Descriptor or
+  Commission names, so the supervisor can't see them.
+- To work out: whether agent settings can turn them off, and whether the
+  SDK's run plan should take them as an input.

@@ -28,6 +28,7 @@ TypeScript.
 | Wire types | The Commission, the Agent Descriptor, and Trajectory events, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
+| Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
 | Pricing | `cost_usd` and `cost_source` for a response, from models.dev prices | `avp.utils.pricing` |
 | Agent command line | The command line every agent answers, described below | `avp.agent_cli` |
 
@@ -45,6 +46,23 @@ Each SDK ships a snapshot of the models.dev prices, refreshed before each
 publish (`make prices`), so pricing works offline. A caller can pass a
 maximum age to fetch newer prices into a cache file, or its own file for the
 same costs on every rerun. Without either, the SDK never calls models.dev.
+
+### Run plan
+
+Every agent combines its Descriptor with the Commission before the run starts:
+the agent settings limit its built-in items (an absent list allows all, `[]`
+allows none), the Commission adds its own MCP servers and skills, and its
+`system_prompt` replaces the agent's. Each legacy agent wrote this itself, in
+its own way. The run plan does it once and returns:
+
+- `started`: what the run uses, as `agent_started` data. The agent configures
+  its runtime from it, adds each MCP server's status and tools after
+  connecting, and sends it as `agent_started`.
+- `turned_off`: the built-in items the run may not use, which the agent hides
+  from the model and refuses to run.
+
+Turning the plan into the runtime's own settings stays agent code. Each SDK
+passes the shared cases in [`testdata/run_plan/`](testdata/run_plan/).
 
 ## The agent command line
 

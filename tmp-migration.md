@@ -13,7 +13,7 @@ agent-voyager-project/
 │   ├── python/                    ⬜
 │   ├── rust/                      ⬜
 │   ├── typescript/                ⬜
-│   └── testdata/recorder/ ✅ (Python passes; Rust and TypeScript to come)
+│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python passes; Rust and TypeScript to come)
 ├── avp-cli/                       ⬜ cleanup TBD
 │   └── src/avp_cli/conformance/   ⬜ harness and cases/v0.1/
 ├── agents/                        ⬜ one PR per agent
@@ -37,6 +37,7 @@ agent-voyager-project/
 - [ ] JSON Schemas generated into `spec/v0.1/`, with spec examples as tests
 - [ ] Rust and TypeScript bindings regenerated
 - [x] Recorder (`avp.recorder`), with shared cases in `avp_sdk/testdata/recorder/`
+- [x] Run plan (`avp.utils.run_plan`): what a run uses (`agent_started`) and what it turns off, with shared cases in `avp_sdk/testdata/run_plan/`
 - [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/avp_prices.json`)
 - [ ] Publishing the SDK refreshes the snapshot first (`make prices`, `scripts/update-prices.py`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`

@@ -7,29 +7,9 @@ whether it can call `model.provider` or `model.base_url`, and whether the
 service offers `model.id`.
 """
 
-import re
-
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-
-_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(\r?\n|\Z)", re.DOTALL)
-_NAME = re.compile(r"^name:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
-
-
-def _frontmatter_name(skill_md: str) -> str | None:
-    """The `name` in a `SKILL.md`'s frontmatter, or None when it has none.
-
-    Reads only the top-level `name:` line rather than parsing the YAML."""
-    frontmatter = _FRONTMATTER.match(skill_md)
-    if frontmatter is None:
-        return None
-    name = _NAME.search(frontmatter.group(1))
-    if name is None:
-        return None
-    value = name.group(1)
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value.split(" #", 1)[0].rstrip()
+from avp.utils._skill_md import frontmatter_value
 
 
 def check_agent_entry(commission: Commission, descriptor: AgentDescriptor) -> str | None:
@@ -78,7 +58,7 @@ def check_skill_names(commission: Commission, descriptor: AgentDescriptor) -> st
     """MUST refuse: a skill's `name` differs from the `name` in the frontmatter
     of its `SKILL.md`."""
     for skill in commission.skills or []:
-        name = _frontmatter_name(skill.files["SKILL.md"])
+        name = frontmatter_value(skill.files["SKILL.md"], "name")
         if name != skill.name:
             found = "has no name" if name is None else f"names {name!r}"
             return f"skill {skill.name!r}: the frontmatter of its SKILL.md {found}"
