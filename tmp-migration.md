@@ -33,13 +33,15 @@ agent-voyager-project/
 ### 2. Core SDK (`avp_sdk/`)
 
 - [x] `avp_sdk/python` is its own uv project with its own `uv.lock`; workspace members keep the old `avp/bindings/python` until they migrate
-- [ ] Python wire models from the spec reference tables
-- [ ] JSON Schemas generated into `spec/v0.1/`, with spec examples as tests
+- [x] Python wire models from the spec reference tables
+- [x] JSON Schemas generated into `spec/v0.1/` (`make schemas`)
+- [ ] The spec documents' JSON examples as tests, against the models and the schemas
 - [ ] Rust and TypeScript bindings regenerated
 - [x] Recorder (`avp.recorder`), with shared cases in `avp_sdk/testdata/recorder/`
 - [x] Run plan (`avp.utils.run_plan`): what a run uses (`agent_started`) and what it turns off, with shared cases in `avp_sdk/testdata/run_plan/`
 - [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/avp_prices.json`)
-- [ ] Publishing the SDK refreshes the snapshot first (`make prices`, `scripts/update-prices.py`)
+- [x] Default base URLs (`avp.utils.base_urls`, snapshot in `avp/utils/data/avp_base_urls.json`), to replace avp-cli's `PROVIDER_REGISTRY` and the conformance meter's `UPSTREAMS`
+- [ ] Publishing the SDK refreshes the snapshots first (`make sdk-data`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
 - [ ] Remove `avp/bindings/` and `avp/scripts/`
 

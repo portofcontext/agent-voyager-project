@@ -47,13 +47,19 @@ needs them:
 |---|---|---|
 | OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
 | CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
+| Default base URLs | A provider's default `base_url`, for a Model without one: for sandbox egress, a credential proxy, or metering | `avp.utils.base_urls` |
 
 ### Pricing
 
 Each SDK ships a snapshot of the models.dev prices, refreshed before each
-publish (`make prices`), so pricing works offline. A caller can pass a
+publish (`make sdk-data`), so pricing works offline. A caller can pass a
 maximum age to fetch newer prices into a cache file, or its own file for the
 same costs on every rerun. Without either, the SDK never calls models.dev.
+
+Default base URLs work the same way, in the same refresh. models.dev gives most
+providers' `api` URL but not the ones whose clients have a URL built in, such
+as `anthropic` and `openai`; a short list of gap fillers in the SDK covers
+those, and models.dev wins where both have one.
 
 ### Run plan
 

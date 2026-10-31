@@ -7,20 +7,19 @@ when the prices are older than that and keeps them in a cache file. A caller
 that wants the same costs on every rerun passes a file of its own.
 """
 
-import json
-import os
-import urllib.request
 from datetime import UTC, datetime, timedelta
 from functools import cache
-from importlib import resources
 from pathlib import Path
+from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from avp.commission import ModelRef
 from avp.trajectory import CostSource
+from avp.utils import _models_dev
+from avp.utils._models_dev import Snapshot
 
-MODELS_DEV_API = "https://models.dev/api.json"
+FILE = "avp_prices.json"
 
 
 class ModelPrice(BaseModel):
@@ -36,15 +35,9 @@ class ModelPrice(BaseModel):
     """Absent when the provider doesn't charge for cache writes separately."""
 
 
-class Prices(BaseModel):
+class Prices(Snapshot):
     """Every priced model on models.dev, as the cache file stores it."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    source: str = MODELS_DEV_API
-    """Where the prices came from."""
-    fetched: AwareDatetime
-    """When they were fetched."""
     models: dict[str, ModelPrice]
     """Keyed by `"<provider>/<model id>"`, as models.dev names them."""
 
@@ -52,25 +45,20 @@ class Prices(BaseModel):
 @cache
 def bundled_prices() -> Prices:
     """The snapshot shipped in the package, as of its last publish."""
-    data = resources.files("avp.utils").joinpath("data", "avp_prices.json").read_text()
-    return Prices.model_validate_json(data)
+    return _models_dev.bundled(Prices, FILE)
 
 
 def default_cache_path() -> Path:
     """`$XDG_CACHE_HOME/avp/avp_prices.json`, or `~/.cache/avp/avp_prices.json`
     when `XDG_CACHE_HOME` isn't set."""
-    root = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
-    return Path(root) / "avp" / "avp_prices.json"
+    return _models_dev.cache_path(FILE)
 
 
-def fetch_prices() -> Prices:
-    """Download models.dev and keep every model it prices. Needs network."""
-    # models.dev answers 403 to urllib's default User-Agent.
-    request = urllib.request.Request(MODELS_DEV_API, headers={"User-Agent": "avp-python-sdk"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        catalog = json.load(response)
+def fetch_prices(catalog: dict[str, Any] | None = None) -> Prices:
+    """Download models.dev and keep every model it prices. Needs network, unless
+    `catalog` is models.dev's catalog already downloaded."""
     models: dict[str, ModelPrice] = {}
-    for provider_id, provider in catalog.items():
+    for provider_id, provider in (catalog or _models_dev.fetch_catalog()).items():
         for model_id, model in provider.get("models", {}).items():
             cost = model.get("cost") or {}
             if cost.get("input") is None or cost.get("output") is None:
@@ -86,13 +74,7 @@ def fetch_prices() -> Prices:
 
 def save_prices(prices: Prices, path: Path | None = None) -> Path:
     """Write `prices` to `path` (default: `default_cache_path()`) and return the path."""
-    path = path or default_cache_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Write a temporary file and rename it, so a reader never sees half a file.
-    partial = path.with_name(f".{path.name}.partial")
-    partial.write_text(prices.model_dump_json(indent=1, exclude_none=True) + "\n")
-    partial.replace(path)
-    return path
+    return _models_dev.save(prices, path or default_cache_path())
 
 
 def load_prices(path: Path | None = None, *, max_age: timedelta | None = None) -> Prices:
@@ -108,18 +90,14 @@ def load_prices(path: Path | None = None, *, max_age: timedelta | None = None) -
     models.dev, for a caller in a sandbox or one that refreshes the file itself
     with `fetch_prices` and `save_prices`.
     """
-    file = path or default_cache_path()
-    prices = Prices.model_validate_json(file.read_text()) if file.exists() else None
-    if path is None:
-        bundled = bundled_prices()
-        if prices is None or bundled.fetched > prices.fetched:
-            prices = bundled
-    if max_age is not None and (prices is None or datetime.now(UTC) - prices.fetched > max_age):
-        prices = fetch_prices()
-        save_prices(prices, file)
-    if prices is None:
-        raise FileNotFoundError(file)
-    return prices
+    return _models_dev.load(
+        Prices,
+        path,
+        default_path=default_cache_path(),
+        bundled=bundled_prices,
+        fetch=lambda: fetch_prices(),
+        max_age=max_age,
+    )
 
 
 def find_price(
