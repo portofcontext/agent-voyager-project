@@ -23,6 +23,26 @@ reasoning), so the rest of the Trajectory stays AVP's own.
     Responses has no `cited_text`, `source_id`, or file and document
     citations; decide whether AVP extends the annotation with them.
 
+## Converting message histories
+
+Add SDK functions that convert between AVP's conversation and the message
+history formats agents and model services use, such as Anthropic Messages,
+OpenAI Chat Completions, and OpenAI Responses. AVP's format is its own content
+blocks for now, and Open Responses items after the
+[Open Responses migration](#open-responses-migration).
+
+- Why: every agent converts its runtime's messages into AVP content blocks,
+  and every supervisor that replays or exports a run converts them back. Shared
+  converters would make each format map the same way in every agent and SDK.
+- To work out:
+  - Which formats to support first, and in which directions: into AVP for
+    agents, out of AVP for supervisors.
+  - Rebuilding the conversation from a Trajectory: one conversation per
+    `subagent_invocation_id`, not one mixed list. The old `avp.history` didn't
+    separate them.
+  - Blocks one format has and another lacks, such as `server_tool_result` or
+    `thinking` signatures.
+
 ## Connection details on Descriptor MCP servers
 
 Add the server's connection details to the Descriptor's MCP server entry
