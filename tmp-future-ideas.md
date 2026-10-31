@@ -147,35 +147,23 @@ spec says only that keys are relative paths.
 
 ## Mapping pages for outside formats
 
-Add pages that convert a Trajectory to outside formats, under
-`spec/v0.1/mappings/`. They are separate from the specs, so changes in
-those formats (the GenAI conventions are still experimental) don't need a new
-AVP version.
+Add pages under `spec/v0.1/mappings/` that describe how a Trajectory converts
+to CloudEvents and to OpenTelemetry spans. The SDK already does both
+(`avp.utils.cloudevents`, `avp.utils.otel`); the pages would let other
+implementations convert the same way without reading the SDK. They stay
+separate from the specs, so changes in those formats don't need a new AVP
+version.
 
-- `cloudevents.md` (C35): AVP event to CloudEvent, for supervisors that
-  forward Trajectories to brokers. `type` gets a prefix (`avp.tool_invoked`,
-  or a reverse-DNS name), the forwarder sets `source`, `subject` comes from
-  `run_id`, and `id`, `time`, and `data` carry over. The bindings implement it
-  as a converter, for example `avp.cloudevents.to_cloudevent(event, source=...)`
-  in Python with Rust and TS ports.
-- `opentelemetry.md` (C34): AVP events to OpenTelemetry spans with GenAI
-  attributes.
-  - Spans: the run from `agent_started` to `agent_stopped` (GenAI agent span);
-    each `assistant_message`, starting at `time` minus `duration_ms` (model
-    call span); each tool call from `tool_invoked` to `tool_returned`; each
-    subagent from `subagent_invoked` to `subagent_returned`.
-  - Parents: a response under the run, or under its subagent; a call under the
-    response whose `content` has its `tool_use`.
-  - IDs: the trace ID from `run_id`; span IDs by hashing `run_id` with
-    `tool_call_id` or `subagent_invocation_id`, so a conversion always gives
-    the same IDs.
-  - Joining an outside trace (the supervisor's, or spans the agent's framework
-    emits): the converter takes a parent span, and the launcher passes a W3C
-    `traceparent` to the agent process (for example the `TRACEPARENT`
-    environment variable). Add an optional `traceparent` on `run_requested`
-    only if a supervisor needs it in the Trajectory.
-  - `gen_ai.py` already maps fields to attributes; still missing are the span
-    building above and an exporter.
+- To work out:
+  - Whether the SDK's mapping becomes the pages' content, or the pages come
+    first and the SDKs follow them.
+  - The GenAI conventions moved to
+    [semantic-conventions-genai](https://github.com/open-telemetry/semantic-conventions-genai),
+    are in Development, and have no release yet. Decide which revision to
+    follow until they have one.
+  - `gen_ai.input.messages` and `gen_ai.output.messages` need AVP blocks
+    converted to OpenTelemetry message parts. See
+    [Converting message histories](#converting-message-histories).
 
 ## Non-text data across AVP
 

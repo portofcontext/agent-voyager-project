@@ -66,7 +66,8 @@ kept; don't port it.
 | `preflight` | The refusal checks in the Commission spec's rules for agents | 6 agents | Keep, rewritten: `check_commission(commission, descriptor)` covers every case but the model ones |
 | `launch` | Workspace and directory setup for launching an agent | 1 agent's test, avp-cli | Drop: the spec leaves workspaces out of scope, so it belongs in avp-cli |
 | `history` | Rebuilds the conversation from a Trajectory | None | Drop: no users, and it mixes subagent messages into the main conversation. See "Converting message histories" in `tmp-future-ideas.md` |
-| `gen_ai` | Converts a Trajectory to OpenTelemetry GenAI attributes | None | Open |
+| `gen_ai` | Converts a Trajectory to OpenTelemetry GenAI attributes | None | Keep, rewritten as `avp.utils.otel`: spans with GenAI attributes, as the spec README promises |
+| CloudEvents | Converts a Trajectory event to a CloudEvent | New | Add as `avp.utils.cloudevents`, as the spec README promises |
 | `envelope` | Strict base config and shared event fields | avp-cli | Drop |
 
 ## Out of scope
