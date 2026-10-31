@@ -36,7 +36,7 @@ The agent may also come with its own tools, skills, and subagents (other agents 
 | [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. The second Trajectory event records a copy. | [`agent-descriptor.schema.json`](./agent-descriptor.schema.json) |
 | [Trajectory](./trajectory.md) | The events an agent emits during a run, their order, and how to rebuild the conversation from them. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. | [`trajectory.schema.json`](./trajectory.schema.json) |
 
-All definitions are also bundled in [`avp.schema.json`](./avp.schema.json), with `$id` base `https://www.agentvoyagerproject.com/schema/v0.1/`. Worked examples are in [`examples/`](./examples/).
+All definitions are also bundled in [`avp.schema.json`](./avp.schema.json), with `$id` base `https://www.agentvoyagerproject.com/schema/v0.1/`. Working examples are in [`examples/`](./examples/).
 
 This document is an overview. The requirements are in the three specs above.
 
