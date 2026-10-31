@@ -56,7 +56,7 @@ help:
 	@echo "    make format          ruff format (writes)"
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
-	@echo "    make models-dev      refresh the SDKs' models.dev price snapshot"
+	@echo "    make prices          refresh the SDKs' bundled models.dev prices"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
@@ -286,9 +286,9 @@ schemas:
 	@$(UV) run --project avp_sdk/python python scripts/generate-schemas.py
 
 
-.PHONY: models-dev
-models-dev:
-	@$(UV) run --project avp_sdk/python python scripts/update-models-dev.py
+.PHONY: prices
+prices:
+	@$(UV) run --project avp_sdk/python python scripts/update-prices.py
 
 
 .PHONY: sync-prices

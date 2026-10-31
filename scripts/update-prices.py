@@ -4,7 +4,7 @@ Fetches once with the Python SDK and writes the same file into each SDK, since
 each package must carry its own copy. Run from the repo root in the SDK's
 environment, since the root workspace still installs the old `avp`:
 
-    uv run --project avp_sdk/python python scripts/update-models-dev.py
+    uv run --project avp_sdk/python python scripts/update-prices.py
 """
 
 from pathlib import Path

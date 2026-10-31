@@ -38,7 +38,7 @@ agent-voyager-project/
 - [ ] Rust and TypeScript bindings regenerated
 - [ ] Recorder, with vectors written first in `avp_sdk/testdata/recorder-vectors/`
 - [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/models_dev.json`)
-- [ ] Publishing the SDK refreshes the snapshot first (`make models-dev`, `scripts/update-models-dev.py`)
+- [ ] Publishing the SDK refreshes the snapshot first (`make prices`, `scripts/update-prices.py`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
 - [ ] Remove `avp/bindings/` and `avp/scripts/`
 
