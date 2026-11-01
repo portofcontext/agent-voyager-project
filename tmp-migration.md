@@ -162,3 +162,34 @@ lock then produces its release `requirements.txt`.
 - [ ] `make check` passes
 - [ ] `avp-cli-legacy/` removed
 - [ ] `tmp-*` files removed
+
+### 7. Beta release: `0.1.0b1`
+
+The Python SDK and each migrated agent go to PyPI as `0.1.0b1`, a beta of
+`0.1.0`, so `0.1.0` stays free for the final release. `pip install` skips
+betas unless the version is pinned or `--pre` is given.
+
+Clear the old releases first:
+
+- [ ] Delete the old GitHub releases and their tags (`agent-<name>-v*` and
+  `pypi-v*`). The legacy CLI (`avp-cli` 0.5.0 and earlier on PyPI) downloads
+  agent releases from them, so deleting them breaks it.
+- [ ] Yank `avp-cli` 0.1.0 to 0.5.0 on PyPI. PyPI never reuses a version, so the
+  new CLI's first release is above 0.5.0, such as `0.6.0b1`.
+- [ ] Remove the old release workflows: `release-<agent>.yml`,
+  `agent-release.yml`, and `release-pypi.yml`.
+
+Then publish:
+
+- [ ] One release workflow per package, run by its tag (such as
+  `sdk-python-v0.1.0b1` or `avp-pydantic-ai-v0.1.0b1`), publishing to PyPI with
+  trusted publishing
+- [ ] SDK: `make sdk-data`, version `0.1.0b1`, published as
+  `agent-voyager-project` (`avp-sdk` on PyPI is an unrelated project)
+- [ ] Each migrated agent: version `0.1.0b1`, depending on
+  `agent-voyager-project>=0.1.0b1,<0.2`, since its `[tool.uv.sources]` path
+  applies only in the repository
+- [ ] Before publishing, install the built wheels in a clean image and run
+  `ping` and `describe`
+- [ ] `avp agent install` can install the project's own agents from the
+  published versions, without a checkout
