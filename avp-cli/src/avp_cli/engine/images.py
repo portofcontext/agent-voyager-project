@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from docker.errors import APIError, ImageNotFound
+from docker.errors import APIError, NotFound
 
 from avp_cli.console import Failed, err
 from avp_cli.engine import client
@@ -15,7 +15,12 @@ def build(dockerfile: Path, context: Path, tag: str) -> str:
     engine's name for it, such as podman's `localhost/avp/pd:latest`."""
     engine = client()
     for chunk in engine.api.build(
-        path=str(context), dockerfile=str(dockerfile.resolve()), tag=tag, rm=True, decode=True
+        path=str(context),
+        dockerfile=str(dockerfile.resolve()),
+        tag=tag,
+        rm=True,
+        forcerm=True,
+        decode=True,
     ):
         if "error" in chunk:
             raise Failed(
@@ -46,7 +51,8 @@ def entrypoint(image: str) -> list[str]:
 def remove(image: str) -> None:
     try:
         client().images.remove(image)
-    except ImageNotFound:
+    except NotFound:
+        # Docker raises ImageNotFound, a NotFound; podman a plain NotFound.
         pass
     except APIError as exc:
         if exc.status_code != 409:
