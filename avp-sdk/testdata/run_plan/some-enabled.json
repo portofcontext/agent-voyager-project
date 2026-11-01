@@ -1,0 +1,155 @@
+{
+  "name": "some-enabled",
+  "description": "A present list allows only the items it names; an absent list allows every item of its kind. Another agent's settings don't apply.",
+  "commission": {
+    "avp_version": "0.1",
+    "run_id": "run-1",
+    "prompt": "Do the task.",
+    "model": {
+      "provider": "anthropic",
+      "id": "claude-test-1",
+      "credential": {
+        "env": "ANTHROPIC_API_KEY"
+      }
+    },
+    "agents": {
+      "case-agent": {
+        "enabled_tools": [
+          "read_file"
+        ],
+        "enabled_mcp_servers": [
+          "docs"
+        ],
+        "enabled_subagents": [
+          "researcher"
+        ]
+      },
+      "other-agent": {
+        "enabled_skills": []
+      }
+    }
+  },
+  "descriptor": {
+    "avp_version": "0.1",
+    "agent_name": "case-agent",
+    "agent_version": "1.0.0",
+    "system_prompt": "You are the agent's own prompt.",
+    "tools": [
+      {
+        "name": "read_file",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "bash",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "docs_search",
+        "inputSchema": {
+          "type": "object"
+        },
+        "mcp_server_id": "docs"
+      },
+      {
+        "name": "db_query",
+        "inputSchema": {
+          "type": "object"
+        },
+        "mcp_server_id": "db"
+      }
+    ],
+    "mcp_servers": [
+      {
+        "id": "docs",
+        "name": "Docs"
+      },
+      {
+        "id": "db",
+        "name": "Database"
+      }
+    ],
+    "skills": [
+      {
+        "name": "review",
+        "description": "How to review a change."
+      },
+      {
+        "name": "release",
+        "description": "How to release."
+      }
+    ],
+    "subagents": [
+      {
+        "name": "researcher",
+        "description": "Finds things."
+      },
+      {
+        "name": "writer"
+      }
+    ]
+  },
+  "plan": {
+    "started": {
+      "prompt": "Do the task.",
+      "system_prompt": "You are the agent's own prompt.",
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-test-1"
+      },
+      "tools": [
+        {
+          "name": "read_file",
+          "inputSchema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "docs_search",
+          "inputSchema": {
+            "type": "object"
+          },
+          "mcp_server_id": "docs"
+        }
+      ],
+      "mcp_servers": [
+        {
+          "id": "docs",
+          "name": "Docs"
+        }
+      ],
+      "skills": [
+        {
+          "name": "review",
+          "description": "How to review a change."
+        },
+        {
+          "name": "release",
+          "description": "How to release."
+        }
+      ],
+      "subagents": [
+        {
+          "name": "researcher",
+          "description": "Finds things."
+        }
+      ]
+    },
+    "turned_off": {
+      "tools": [
+        "bash",
+        "db_query"
+      ],
+      "subagents": [
+        "writer"
+      ],
+      "skills": [],
+      "mcp_servers": [
+        "db"
+      ]
+    }
+  }
+}

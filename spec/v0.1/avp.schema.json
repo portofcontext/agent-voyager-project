@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.agentvoyagerproject.com/schema/v0.1/avp.schema.json",
+  "title": "AVP v0.1",
+  "description": "Any AVP v0.1 wire object: a Commission, a trajectory Event, or an Agent Descriptor.",
+  "oneOf": [
+    {
+      "$ref": "commission.schema.json"
+    },
+    {
+      "$ref": "trajectory.schema.json"
+    },
+    {
+      "$ref": "agent-descriptor.schema.json"
+    }
+  ]
+}

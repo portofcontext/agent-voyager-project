@@ -1,0 +1,433 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.agentvoyagerproject.com/schema/v0.1/agent-descriptor.schema.json",
+  "$defs": {
+    "JsonValue": {},
+    "McpServer": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent comes with. Connection details stay inside the agent.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server. A Tool's `mcp_server_id` refers to it.",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "connected",
+                "failed",
+                "needs-auth",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The result of the agent's attempt to connect.",
+          "title": "Status"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "McpServer",
+      "type": "object"
+    },
+    "ModelPattern": {
+      "additionalProperties": false,
+      "description": "Matches the `provider` and `id` of a Commission's Model. `*` matches any characters.",
+      "properties": {
+        "provider": {
+          "description": "A pattern for the model's `provider`, for example `\"anthropic\"`.",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "A pattern for the model's `id`, for example `\"claude-*\"`.",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "ModelPattern",
+      "type": "object"
+    },
+    "Skill": {
+      "additionalProperties": true,
+      "description": "The frontmatter of a skill's `SKILL.md`, as defined by Agent Skills, with\none added field. Other frontmatter fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The skill's name.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "description": "What the skill does and when to use it.",
+          "title": "Description",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "pattern": "^file:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A `file:` URI for the directory that contains the skill's `SKILL.md`, as\nthe path appears inside the agent's environment.",
+          "title": "Source"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "Subagent": {
+      "additionalProperties": false,
+      "description": "A subagent that ships with the agent. It does not inherit the agent's items.",
+      "properties": {
+        "name": {
+          "description": "Identifies the subagent.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the subagent does.",
+          "title": "Description"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's system prompt.",
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's tools.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's MCP servers.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's skills.",
+          "title": "Skills"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Subagent",
+      "type": "object"
+    },
+    "Tool": {
+      "additionalProperties": true,
+      "description": "An MCP `Tool` object, with one added field. Other MCP fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The tool's name, as the model calls it.",
+          "title": "Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name.",
+          "title": "Title"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the tool does, as the model sees it.",
+          "title": "Description"
+        },
+        "inputSchema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "A JSON Schema for the tool's input, as the model sees it.",
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "Inputschema",
+          "type": "object"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A JSON Schema for the tool's structured output.",
+          "title": "Outputschema"
+        },
+        "mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `id` of the MCP server the tool comes from. Absent for any tool that\ndoes not come from an MCP server.",
+          "title": "Mcp Server Id"
+        }
+      },
+      "required": [
+        "name",
+        "inputSchema"
+      ],
+      "title": "Tool",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An agent's description of itself and its built-ins. See agent-descriptor.md.",
+  "properties": {
+    "avp_version": {
+      "const": "0.1",
+      "description": "The AVP version the Descriptor follows.",
+      "title": "Avp Version",
+      "type": "string"
+    },
+    "agent_name": {
+      "description": "The agent's name.",
+      "pattern": "^[a-z0-9_-]+$",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "agent_version": {
+      "description": "The agent's version.",
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "supported_models": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ModelPattern"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The models the agent can run. Absent means the agent does not say.",
+      "title": "Supported Models"
+    },
+    "system_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The system prompt the agent comes with.",
+      "title": "System Prompt"
+    },
+    "tools": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Tool"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The agent's built-in tools, including those that come from its MCP servers.",
+      "title": "Tools"
+    },
+    "mcp_servers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/McpServer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The MCP servers the agent comes with.",
+      "title": "Mcp Servers"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The skills the agent comes with.",
+      "title": "Skills"
+    },
+    "subagents": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Subagent"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The subagents the agent comes with.",
+      "title": "Subagents"
+    }
+  },
+  "required": [
+    "avp_version",
+    "agent_name",
+    "agent_version"
+  ],
+  "title": "AVP v0.1 Agent Descriptor",
+  "type": "object"
+}
