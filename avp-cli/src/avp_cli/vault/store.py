@@ -2,7 +2,7 @@
 Keychain, Windows Credential Manager, or the Secret Service on Linux. Each is
 stored under the service `avp` and its name. The store can't list its entries,
 so each secret's name, description, and when it was last set, never its value, are also kept in
-`~/.avp/secrets.json`."""
+`~/.avp/vault.json`."""
 
 import re
 from datetime import UTC, datetime
@@ -38,7 +38,7 @@ def check_name(name: str) -> None:
 
 def secrets() -> list[Secret]:
     try:
-        return SECRETS.validate_json(paths.secrets().read_text())
+        return SECRETS.validate_json(paths.vault().read_text())
     except FileNotFoundError:
         return []
 
@@ -81,8 +81,8 @@ def delete(name: str) -> None:
 
 
 def _save(secrets: list[Secret]) -> None:
-    paths.secrets().parent.mkdir(parents=True, exist_ok=True)
-    paths.secrets().write_bytes(
+    paths.vault().parent.mkdir(parents=True, exist_ok=True)
+    paths.vault().write_bytes(
         SECRETS.dump_json(sorted(secrets, key=lambda s: s.name), indent=2) + b"\n"
     )
 

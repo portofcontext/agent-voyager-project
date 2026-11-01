@@ -18,10 +18,10 @@ def runs() -> Path:
     return home() / "runs"
 
 
-def secrets() -> Path:
+def vault() -> Path:
     """The names and descriptions of the secrets in the system's credential store,
     not their values."""
-    return home() / "secrets.json"
+    return home() / "vault.json"
 
 
 def opensandbox() -> Path:

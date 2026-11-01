@@ -78,7 +78,7 @@ avp
 │
 ├── vault               Secrets in the system's credential store (the macOS Keychain, Windows
 │   │                   Credential Manager, or the Secret Service on Linux), for a Commission's
-│   │                   {"proxy": NAME}. Names, descriptions, and set times, never values, are kept in ~/.avp/secrets.json.
+│   │                   {"proxy": NAME}. Names, descriptions, and set times, never values, are kept in ~/.avp/vault.json.
 │   ├── ✅ set     Store a secret under a name a Commission can refer to; prompted when VALUE is omitted.
 │   │     avp vault set anthropic [VALUE] [--description "Team key"]
 │   ├── ⬜ login   Sign in to an MCP server with OAuth and store the token.
