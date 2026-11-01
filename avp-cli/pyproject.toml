@@ -1,0 +1,42 @@
+[project]
+name = "avp-cli"
+version = "0.1.0"
+description = "The avp command line: run, evaluate, and check AVP agents in sandboxes."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "agent-voyager-project",
+    "httpx>=0.28",
+    "opensandbox>=1.2",
+    "opensandbox-server>=1.2",
+    "pydantic>=2.11,<3",
+    "questionary>=2",
+    "rich>=14",
+    "typer>=0.20",
+]
+
+[project.scripts]
+avp = "avp_cli.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/portofcontext/agent-voyager-project"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
+
+[tool.uv.sources]
+agent-voyager-project = { path = "../avp-sdk/python", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "avp_cli"
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
