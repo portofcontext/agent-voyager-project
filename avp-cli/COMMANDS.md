@@ -7,6 +7,12 @@ The design for the new `avp` CLI, before any code. The old CLI is in
 
 - Every agent runs in a sandbox, and OpenSandbox is the only sandbox for now.
   Docker, podman, or the local machine can be added later.
+- OpenSandbox needs a container engine with the Docker API: Docker, OrbStack,
+  colima, or podman through its Docker socket. The CLI uses that API (found
+  through `DOCKER_HOST` or the default socket) to build images, and never runs
+  the `docker` or `podman` commands.
+- Credentials go through OpenSandbox's Credential Vault. The CLI looks up each
+  secret and writes it to the sandbox's vault; it runs no proxy of its own.
 - An agent is an AVP agent release plus the environment it runs in. `agent`
   manages agents; `sandbox` manages only the OpenSandbox service they run on.
 - `--agent` takes your agent (`pi-py`) or a release (`avp-pi`, `avp-pi@0.4.1`),
@@ -20,9 +26,8 @@ The design for the new `avp` CLI, before any code. The old CLI is in
 avp
 ├── run                 Run one agent on one Commission and write its Trajectory.
 │     avp run --commission task.json --agent pi-py [--out traj.ndjson] [--timeout 30m]
-│     avp run "fix the failing test" --agent pi-py --model anthropic/claude-sonnet-4-5
-│         [--save-commission task.json]
-│     The prompt form builds a Commission from the prompt, model, and agent, then runs it.
+│     Later: avp run "fix the failing test" --agent pi-py --model anthropic/claude-sonnet-4-5,
+│     which builds the Commission itself.
 │
 ├── eval                Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.
@@ -85,6 +90,57 @@ avp
           avp sandbox status
 ```
 
+## How an agent is created and run
+
+One agent is one image. OpenSandbox runs images but doesn't build them, so
+the CLI builds the image itself and OpenSandbox starts a fresh sandbox from it
+for each run. Everything that changes per run (the Commission, the workspace,
+the credentials) reaches the sandbox at run time, never through the image.
+
+### Create
+
+```mermaid
+flowchart TD
+    A["avp agent create pi-py --from avp-pi --pip pytest"] --> B["Resolve the release:<br/>the version pinned in agents.json,<br/>its avp-release.json from GitHub"]
+    B --> C["Write a Dockerfile:<br/>base image, apt and pip packages,<br/>the release's install steps"]
+    C --> D["docker build<br/>avp-agent:&lt;content hash&gt;"]
+    D --> E["Start a sandbox from the image<br/>and run the agent's describe command"]
+    E --> F["Save the agent: its settings,<br/>image tag, and Agent Descriptor"]
+```
+
+### Run
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as avp (host)
+    participant Secrets as Secret store (host)
+    participant OSB as OpenSandbox server
+    participant Sidecar as Egress sidecar
+    participant Agent as Agent (sandbox)
+    participant Model as Model provider
+
+    User->>CLI: avp run --commission task.json --agent pi-py
+    CLI->>CLI: Validate the Commission and apply the Commission checks<br/>against the saved Descriptor
+    CLI->>CLI: Write commission.json to a new run directory
+    CLI->>OSB: Create a sandbox from the agent's image:<br/>mount the run directory and the workspace,<br/>deny egress except the Commission's hosts,<br/>turn on the credential proxy
+    OSB->>Sidecar: Start the sandbox's egress sidecar
+    CLI->>Secrets: Look up "anthropic-key"
+    CLI->>OSB: Write the credential to the sandbox's vault,<br/>bound to api.anthropic.com
+    CLI->>Agent: Run: agent run --commission /io/commission.json<br/>--out /io/trajectory.ndjson
+    Agent->>Sidecar: HTTPS to api.anthropic.com with a stand-in key
+    Sidecar->>Model: The same request with the real key
+    Model-->>Agent: Response, back through the sidecar
+    Agent-->>CLI: Events appended to /io/trajectory.ndjson,<br/>read by the CLI through the mount as they arrive
+    Agent-->>CLI: Exit code
+    CLI->>OSB: Delete the sandbox
+    CLI->>User: Final answer, stop reason, cost,<br/>and where the Trajectory is
+```
+
+The command inside the sandbox is the agent command line from the SDK
+(`avp.agent_cli`): `run --commission <path> --out <path>`. The release says
+which program answers it.
+
 ## Open
 
 1. Agent definitions as files (an `avp-agent.json` that can be committed next
@@ -94,3 +150,12 @@ avp
 4. Removing the eval TUI and `eval share`/`unshare`: `eval show --json` covers
    reading results from scripts.
 5. Keeping MCP OAuth (`secret login`).
+6. Credential names: the default name a Commission uses for a model's key (the
+   provider ID?), and whether a key already in the shell's environment counts.
+7. What `run` prints, and where the Trajectory goes without `--out`
+   (`~/.avp/runs/<run_id>/`?).
+8. OpenSandbox's Credential Vault as the proxy for `proxy` credentials, as
+   drawn above, in place of the legacy broker. It needs OpenSandbox 1.2.0 (we
+   pin 0.1.9 and server 0.1.14), the egress sidecar in `dns+nft` mode, and a
+   deny-by-default network policy. To check: how the sandbox trusts the
+   sidecar's HTTPS interception, and OAuth, which the vault doesn't refresh.
