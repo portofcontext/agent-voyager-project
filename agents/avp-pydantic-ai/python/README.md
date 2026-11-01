@@ -7,7 +7,7 @@ history, reports it to the binding's `Recorder`, and exposes the stock
 entrypoint (`ping` / `describe` / `run`).
 
 ```bash
-uv run --no-sync python -m avp_pydantic_ai.cli run --commission c.json --out t.ndjson
+uv run avp-pydantic-ai-cli run --commission c.json --out t.ndjson
 uv run avp-conformance ping --agent agents/avp-pydantic-ai/python/avp-conformance.json
 ```
 

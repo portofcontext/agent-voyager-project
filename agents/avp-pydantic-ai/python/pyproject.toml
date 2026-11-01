@@ -9,6 +9,9 @@ dependencies = [
     "pydantic-ai-slim[anthropic,google,mcp,openai]==2.64.0",
 ]
 
+[project.scripts]
+avp-pydantic-ai-cli = "avp_pydantic_ai.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
 

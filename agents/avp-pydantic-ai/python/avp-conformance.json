@@ -1,5 +1,5 @@
 {
-  "command": ["uv", "run", "--no-sync", "python", "-m", "avp_pydantic_ai.cli"],
+  "command": ["uv", "run", "--no-sync", "avp-pydantic-ai-cli"],
   "cwd": ".",
   "env": {},
   "description": "avp-pydantic-ai entrypoint"
