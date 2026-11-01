@@ -35,7 +35,10 @@ avp
 │     The agent's environment has only the variables --env and --env-file give. It can
 │     reach only the model's host (model.base_url, or avp's default for the provider),
 │     the Commission's HTTP MCP servers, and the hosts --allow-host adds. --volume
-│     (-v) mounts a host path, read-write unless it ends in :ro. ⬜ --out, --timeout.
+│     (-v) mounts a host path, read-write unless it ends in :ro. A {"proxy": NAME}
+│     model.credential comes from `avp vault`; the sandbox's Credential Vault adds it to
+│     requests to the model's host, so the agent never sees it.
+│     ⬜ --out, --timeout, proxy credentials in MCP server headers.
 │
 ├── ⬜ eval              Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.
@@ -135,11 +138,8 @@ then `RUN pip install pytest`.
    provider ID?), and whether a key already in the shell's environment counts.
 6. What `run` prints, and where the Trajectory goes without `--out`
    (`~/.avp/runs/<run_id>/`?).
-7. OpenSandbox's Credential Vault as the proxy for `proxy` credentials, as
-   drawn above, in place of the legacy broker. It needs the egress sidecar in
-   `dns+nft` mode and a deny-by-default network policy. The server installs
-   its interception certificate in the sandbox's system trust store; to check:
-   whether Python agents need `SSL_CERT_FILE`, since httpx trusts certifi's
-   bundle, and OAuth, which the vault doesn't refresh.
+7. OAuth tokens in the Credential Vault: avp refreshes an expired token before
+   a run, but the vault doesn't refresh it during one, so a run longer than
+   the token lasts can lose access.
 8. Installing the project's own agents by name and version, without a
    checkout, once the SDK and agents are published.

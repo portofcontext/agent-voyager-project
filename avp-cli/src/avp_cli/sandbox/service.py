@@ -56,7 +56,7 @@ mode = "direct"
 
 [egress]
 image = "{EGRESS_IMAGE}"
-mode = "dns"
+mode = "dns+nft"
 """
 
 

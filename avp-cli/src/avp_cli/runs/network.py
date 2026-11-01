@@ -28,8 +28,7 @@ def allowed_hosts(commission: Commission, allow_host: list[str]) -> dict[str, li
             if reason not in reasons:
                 reasons.append(reason)
 
-    model = commission.model
-    base_url = model.base_url or default_base_url(bundled_endpoints(), model.provider)
+    base_url = model_url(commission)
     add(urlparse(base_url).hostname if base_url else None, MODEL)
     for server in commission.mcp_servers or []:
         if isinstance(server, McpServerHttp):
@@ -37,6 +36,12 @@ def allowed_hosts(commission: Commission, allow_host: list[str]) -> dict[str, li
     for host in allow_host:
         add(host, ALLOW_HOST)
     return hosts
+
+
+def model_url(commission: Commission) -> str | None:
+    """`model.base_url`, or else the SDK's bundled default for the provider."""
+    model = commission.model
+    return model.base_url or default_base_url(bundled_endpoints(), model.provider)
 
 
 def describe(hosts: dict[str, list[str]]) -> str:

@@ -64,6 +64,18 @@ def login(name: str, url: str, scopes: list[str], description: str | None = None
     return store.find(name)
 
 
+def value(name: str) -> str:
+    """What a request carries for the secret: its value, or for a sign-in its
+    access token, refreshed first when it has expired."""
+    secret = store.find(name)
+    if secret.oauth is None:
+        return store.get(name)
+    if expired(secret):
+        err.print(f"Refreshing {name}, which has expired", highlight=False)
+        refresh(name)
+    return Grant.model_validate_json(store.get(name)).tokens.access_token
+
+
 def expired(secret: store.Secret) -> bool:
     """Whether the sign-in's token has expired or is about to."""
     if secret.oauth is None or secret.oauth.expires_at is None:

@@ -11,7 +11,7 @@ from avp.trajectory import AgentStoppedEvent, ErrorOccurredEvent, parse_trajecto
 from avp_cli.agents import command, store
 from avp_cli.console import Failed, err, out
 from avp_cli.engine import images
-from avp_cli.runs import directory, environment, network, volumes
+from avp_cli.runs import credentials, directory, environment, network, volumes
 from avp_cli.sandbox import sandboxes
 
 STDERR_LINES = 5
@@ -47,7 +47,8 @@ def run(
     """Run one agent on one Commission and write its Trajectory. The agent's
     environment has only the variables given with --env and --env-file. It can
     reach only the model's host, the Commission's HTTP MCP servers, and the hosts
-    given with --allow-host."""
+    given with --allow-host. A {"proxy": NAME} credential comes from `avp vault`,
+    and the sandbox's Credential Vault adds it to the agent's requests."""
     text = commission.read_text()
     try:
         parsed = Commission.model_validate_json(text)
@@ -58,6 +59,7 @@ def run(
     hosts = network.allowed_hosts(parsed, allow_host or [])
     mounts = volumes.parse(volume or [])
     installed = store.load(agent)
+    vault = credentials.vault(parsed)
     run_directory = directory.create(parsed.run_id, text)
     trajectory = run_directory / directory.TRAJECTORY
     if not any(network.MODEL in reasons for reasons in hosts.values()):
@@ -69,7 +71,7 @@ def run(
     # err.print(f"Allowed hosts: {network.describe(hosts)}", highlight=False)
     if mounts:
         err.print(f"Volumes: {volumes.describe(mounts)}", highlight=False)
-    with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts) as box:
+    with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts, vault) as box:
         result = command.run(
             box,
             images.entrypoint(installed.image),
