@@ -40,7 +40,7 @@ agent-voyager-project/
 - [x] Recorder (`avp.recorder`), with shared cases in `avp-sdk/testdata/recorder/`
 - [x] Run plan (`avp.utils.run_plan`): what a run uses (`agent_started`) and what it turns off, with shared cases in `avp-sdk/testdata/run_plan/`
 - [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/avp_prices.json`)
-- [x] Default base URLs (`avp.utils.base_urls`, snapshot in `avp/utils/data/avp_base_urls.json`), to replace avp-cli's `PROVIDER_REGISTRY` and the conformance meter's `UPSTREAMS`
+- [x] Endpoints, each provider's default base URL and auth header (`avp.utils.endpoints`, snapshot in `avp/utils/data/avp_endpoints.json`), to replace avp-cli's `PROVIDER_REGISTRY` and the conformance meter's `UPSTREAMS`
 - [ ] Publishing the SDK refreshes the snapshots first (`make sdk-data`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
 - [ ] Remove `avp/bindings/` and `avp/scripts/`

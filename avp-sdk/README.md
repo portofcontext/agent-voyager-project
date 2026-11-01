@@ -47,7 +47,7 @@ needs them:
 |---|---|---|
 | OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
 | CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
-| Default base URLs | A provider's default `base_url`, for a Model without one: for sandbox egress, a credential proxy, or metering | `avp.utils.base_urls` |
+| Endpoints | A provider's default `base_url`, for a Model without one, and the header its API key goes in: for sandbox egress, a credential proxy, or metering | `avp.utils.endpoints` |
 
 ### Pricing
 
@@ -56,10 +56,18 @@ publish (`make sdk-data`), so pricing works offline. A caller can pass a
 maximum age to fetch newer prices into a cache file, or its own file for the
 same costs on every rerun. Without either, the SDK never calls models.dev.
 
-Default base URLs work the same way, in the same refresh. models.dev gives most
+Endpoints work the same way, in the same refresh. models.dev gives most
 providers' `api` URL but not the ones whose clients have a URL built in, such
 as `anthropic` and `openai`; a short list of gap fillers in the SDK covers
 those, and models.dev wins where both have one.
+
+Each endpoint also says where the provider's API key goes, so a supervisor can
+set up a credential proxy for a Model's `proxy` credential: `authorization`
+with `Bearer `, or a header such as Anthropic's `x-api-key`. It comes from the
+AI SDK package models.dev names for the provider, so new providers on a known
+package need no change. A provider has no auth when its key isn't a fixed
+header value, such as `google-vertex` with short-lived OAuth tokens, or when
+its package isn't known; a proxy can't add that key.
 
 ### Run plan
 

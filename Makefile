@@ -56,7 +56,7 @@ help:
 	@echo "    make format          ruff format (writes)"
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
-	@echo "    make sdk-data        refresh the SDKs' bundled models.dev prices and base URLs"
+	@echo "    make sdk-data        refresh the SDKs' bundled models.dev prices and endpoints"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
