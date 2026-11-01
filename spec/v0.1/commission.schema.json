@@ -309,7 +309,7 @@
             }
           ],
           "default": null,
-          "description": "The API key for the service. Absent means the agent uses whatever\ncredential its environment has for the service. With `proxy`, the proxy\nholds the key alone and adds it to requests the way `provider`'s API\nexpects, for example as Anthropic's `x-api-key` header or as\n`Authorization: Bearer <key>`.",
+          "description": "The API key for the service. Absent means the agent uses whatever\ncredential its environment has for the service. A `proxy` credential is the\nkey alone; the proxy adds it as `provider`'s API expects.",
           "title": "Credential"
         }
       },
