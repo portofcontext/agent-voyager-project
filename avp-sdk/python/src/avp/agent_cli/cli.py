@@ -1,11 +1,13 @@
 """The command line."""
 
-import argparse
 import asyncio
 import signal
 import sys
 from collections.abc import Awaitable
 from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from avp.agent_cli.run import DescribeFn, RunFn, get_descriptor, read_commission
 from avp.agent_cli.sink import ndjson_sink
@@ -38,34 +40,39 @@ def main(
     """Run the command and return its exit code: 0 when the Trajectory is
     complete (a refusal included), 130 when SIGINT or SIGTERM cancelled `run`.
     `ping` never calls `run` or `describe`, so keep heavy imports inside them."""
-    parser = argparse.ArgumentParser(
-        prog=prog, description="An AVP agent. Not part of the AVP spec."
+    app = typer.Typer(
+        help="An AVP agent. Not part of the AVP spec.",
+        add_completion=False,
+        no_args_is_help=True,
+        pretty_exceptions_enable=False,
     )
-    commands = parser.add_subparsers(dest="command", required=True)
-    ping_parser = commands.add_parser(
-        "ping", help='Write {"type": "pong"} without loading the agent, to check it runs.'
-    )
-    ping_parser.add_argument("--out", type=Path, help="Where to write it (default: stdout).")
-    describe_parser = commands.add_parser("describe", help="Write the agent's Descriptor.")
-    describe_parser.add_argument("--out", type=Path, help="Where to write it (default: stdout).")
-    run_parser = commands.add_parser("run", help="Run a Commission.")
-    run_parser.add_argument("--commission", required=True, help="A path, or inline JSON.")
-    run_parser.add_argument("--out", required=True, help="Where to write the NDJSON, or -.")
-    args = parser.parse_args(argv)
+    out_option = typer.Option(help="Where to write it (default: stdout).")
 
-    if args.command == "ping":
-        _write(args.out, '{"type": "pong"}\n')
-        return 0
+    @app.command("ping")
+    def ping_command(out: Annotated[Path | None, out_option] = None) -> None:
+        """Write {"type": "pong"} without loading the agent, to check it runs."""
+        _write(out, '{"type": "pong"}\n')
 
-    if args.command == "describe":
+    @app.command("describe")
+    def describe_command(out: Annotated[Path | None, out_option] = None) -> None:
+        """Write the agent's Descriptor."""
         descriptor = asyncio.run(get_descriptor(describe))
-        _write(args.out, descriptor.model_dump_json(exclude_none=True, indent=2) + "\n")
-        return 0
+        _write(out, descriptor.model_dump_json(exclude_none=True, indent=2) + "\n")
 
-    sink = ndjson_sink(None if args.out == "-" else Path(args.out))
+    @app.command("run")
+    def run_command(
+        commission: Annotated[str, typer.Option(help="A path, or inline JSON.")],
+        out: Annotated[str, typer.Option(help="Where to write the NDJSON, or -.")],
+    ) -> None:
+        """Run a Commission."""
+        sink = ndjson_sink(None if out == "-" else Path(out))
+        try:
+            asyncio.run(_interruptible(run(read_commission(commission), sink)))
+        except asyncio.CancelledError:
+            raise typer.Exit(130) from None
+
     try:
-        received = read_commission(args.commission)
-        asyncio.run(_interruptible(run(received, sink)))
-    except asyncio.CancelledError:
-        return 130
+        app(args=argv, prog_name=prog)
+    except SystemExit as ended:
+        return ended.code if isinstance(ended.code, int) else 0
     return 0
