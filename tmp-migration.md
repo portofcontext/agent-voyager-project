@@ -117,6 +117,37 @@ TypeScript (`avp-sdk/typescript`):
 - [ ] One case per agent rule, reported by rule
 - [ ] Remove `avp/core/conformance/`
 
+#### avp-cli CI
+
+avp-cli talks to the container engine only through the Docker API, and has
+only been tested on podman 6.0.1 on macOS. The sandbox tests
+(`avp-cli/tests/test_agent.py`) install, ping, describe, and uninstall a test
+agent, and skip when no engine answers.
+
+- [ ] A workflow that runs avp-cli's ruff, ty, and tests on each PR
+- [ ] Its sandbox tests on Linux with Docker (the GitHub runner's own)
+- [ ] Its sandbox tests on Linux with rootless podman through its Docker
+  socket, to settle whether rootless podman allows the egress sidecar's
+  network policy
+- [ ] Docker Desktop and OrbStack, checked by hand before a release, since
+  GitHub's macOS runners can't run them
+- [ ] `avp sandbox status` names the engine correctly on each of them
+
+#### Open: the hosts an agent needs
+
+`avp run` denies all network except the model's host, the Commission's HTTP MCP
+servers, and `--allow-host`. It can't allow the hosts an agent needs on its
+own: its built-in remote MCP servers (which `describe` may also connect to) and
+anything else it calls, such as telemetry. The Descriptor's MCP server entries
+leave out connection details on purpose, so avp sees only each server's `id`.
+
+The agent needs a way to report those hosts, so avp can allow them, minus the
+built-in servers a Commission turns off with `enabled_mcp_servers`. Either:
+
+- [ ] A host field in the Agent Descriptor spec, or
+- [ ] A non-spec standard, as the agent command line is, such as a field in
+  `ping`'s reply or a label on the agent's image
+
 ### 4. Agents (`agents/`)
 
 One PR per agent. TypeScript and Rust agents wait for their SDKs.
