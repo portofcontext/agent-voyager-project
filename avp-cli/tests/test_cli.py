@@ -15,6 +15,7 @@ COMMANDS = [
     ["conformance", "list"],
     ["agent", "create"],
     ["agent", "list"],
+    ["agent", "ping"],
     ["agent", "describe"],
     ["agent", "rebuild"],
     ["agent", "delete"],

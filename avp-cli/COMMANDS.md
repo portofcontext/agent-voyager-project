@@ -56,6 +56,8 @@ avp
 │   ├── list     List your agents with their release, version, and image status, or with
 │   │            --available the AVP releases you can create from.
 │   │     avp agent list [--available]
+│   ├── ping     Check that the agent starts in its sandbox, without loading it.
+│   │     avp agent ping pi-py
 │   ├── describe Show the agent's Agent Descriptor, as its describe command returns it.
 │   │     avp agent describe pi-py [--json]
 │   ├── rebuild  Rebuild an agent's image after a release or working-copy change.

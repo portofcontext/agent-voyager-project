@@ -154,6 +154,12 @@ def agent_list(
     raise NotImplementedError
 
 
+@agent_app.command("ping")
+def agent_ping(name: Annotated[str, typer.Argument(help="The agent.")]) -> None:
+    """Check that the agent starts in its sandbox, without loading it."""
+    raise NotImplementedError
+
+
 @agent_app.command("describe")
 def agent_describe(
     name: Annotated[str, typer.Argument(help="The agent.")],
