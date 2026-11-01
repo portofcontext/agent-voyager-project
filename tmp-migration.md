@@ -127,7 +127,14 @@ TypeScript (`avp-sdk/typescript`):
 - [ ] `avp-openai-agents`
 - [ ] `avp-opencode`
 - [ ] `avp-pi`
-- [ ] `avp-pydantic-ai`
+- [ ] `avp-pydantic-ai`: on the new SDK, with its command line installed as
+  `avp-pydantic-ai-cli`
+  - [ ] Once avp-cli decides how agent images are built (with the command line
+    as the entrypoint), remove what the old tools still read: its
+    `avp-conformance.json`, its `Makefile` lines (`AVP_PYDANTIC_AI_MANIFEST`,
+    `make conformance`, `TEST_PKGS`), its entry in the legacy CLI's
+    `agents.json`, `[tool.avp.release]`, and the README's `avp-conformance`
+    example
 
 ### 5. Split the uv workspace into separate projects
 
