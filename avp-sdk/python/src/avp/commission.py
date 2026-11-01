@@ -59,7 +59,8 @@ class Model(ModelRef):
 
     credential: SecretRef | None = None
     """The API key for the service. Absent means the agent uses whatever
-    credential its environment has for the service."""
+    credential its environment has for the service. A `proxy` credential is the
+    key alone; the proxy adds it as `provider`'s API expects."""
 
 
 class _McpServerBase(WireModel):

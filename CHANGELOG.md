@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- The SDK's `avp.utils.base_urls` is now `avp.utils.endpoints`. Each provider's
+  entry adds where its API key goes (header and prefix), from the AI SDK package
+  models.dev names for it, so a supervisor can set up a credential proxy.
+- The Commission spec says a Model's `proxy` credential is the key alone, which
+  the proxy adds the way the provider's API expects.
+
 ### Fixed
 
 - LLM judges accept models across providers, saved AVP credentials, and custom

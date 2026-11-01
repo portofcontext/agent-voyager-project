@@ -102,7 +102,7 @@ A Model names a model as one service offers it, using the provider and model IDs
 | `provider` | string | Yes | The service that runs the model, for example `"anthropic"`, `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls and how it authenticates. Matches `^[a-z0-9._-]+$`. |
 | `id` | string | Yes | The model's ID at that service, as the agent sends it, for example `"claude-sonnet-4-6"` or `"anthropic/claude-sonnet-4.6"` at OpenRouter. |
 | `base_url` | string | No | The URL of the service's API, for example a region's endpoint or a self-hosted server. Absent means the service's default: models.dev's `api` for the provider, or the URL the agent's client for that service uses. |
-| `credential` | [Secret reference](#34-secret-reference) | No | The API key for the service. Absent means the Commission names none, and the agent uses whatever credential its environment has for the service. |
+| `credential` | [Secret reference](#34-secret-reference) | No | The API key for the service. Absent means the Commission names none, and the agent uses whatever credential its environment has for the service. With `proxy`, the proxy holds the key alone and adds it to requests the way `provider`'s API expects, for example as Anthropic's `x-api-key` header or as `Authorization: Bearer <key>`. |
 
 ### 3.4 Secret reference
 

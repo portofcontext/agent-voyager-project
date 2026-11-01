@@ -1,0 +1,1567 @@
+{
+ "source": "https://models.dev/api.json",
+ "fetched": "2026-11-01T21:26:44.722544Z",
+ "providers": {
+  "302ai": {
+   "base_url": "https://api.302.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "abacus": {
+   "base_url": "https://routellm.abacus.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "abliteration-ai": {
+   "base_url": "https://api.abliteration.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "above": {
+   "base_url": "https://api.above.dev/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "agentrouter": {
+   "base_url": "https://agentrouter.org/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "agnes": {
+   "base_url": "https://apihub.agnes-ai.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ai-router": {
+   "base_url": "https://api.ai-router.dev/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ai21": {
+   "base_url": "https://api.ai21.com/studio/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "aiand": {
+   "base_url": "https://api.aiand.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "aimlapi": {
+   "base_url": "https://api.aimlapi.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ainetcafe": {
+   "base_url": "https://microquickjs.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "aixy": {
+   "base_url": "https://api.aixy-gateway.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "aki-io": {
+   "base_url": "https://aki.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba": {
+   "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba-cn": {
+   "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba-coding-plan": {
+   "base_url": "https://coding-intl.dashscope.aliyuncs.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba-coding-plan-cn": {
+   "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba-token-plan": {
+   "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "alibaba-token-plan-cn": {
+   "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "amazon-bedrock": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ambient": {
+   "base_url": "https://api.ambient.xyz/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "amd": {
+   "base_url": "https://developer.amd.com.cn/radeon/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "anthropic": {
+   "base_url": "https://api.anthropic.com/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "anyapi": {
+   "base_url": "https://api.anyapi.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "arcee": {
+   "base_url": "https://api.arcee.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "atomic-chat": {
+   "base_url": "http://127.0.0.1:1337/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "auriko": {
+   "base_url": "https://api.auriko.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "azure": {
+   "auth": {
+    "header": "api-key",
+    "prefix": ""
+   }
+  },
+  "azure-cognitive-services": {
+   "auth": {
+    "header": "api-key",
+    "prefix": ""
+   }
+  },
+  "bailing": {
+   "base_url": "https://api.tbox.cn/api/llm/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "baseten": {
+   "base_url": "https://inference.baseten.co/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "bee": {
+   "base_url": "https://api.bee.heossi.com/bee",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "berget": {
+   "base_url": "https://api.berget.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "blueclaw": {
+   "base_url": "https://openai.blueclaw.network/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "bothub": {
+   "base_url": "https://openai.bothub.ru/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "boundless": {
+   "base_url": "https://api.inference.boundless.network/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cerebras": {
+   "base_url": "https://api.cerebras.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "chutes": {
+   "base_url": "https://llm.chutes.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "clarifai": {
+   "base_url": "https://api.clarifai.com/v2/ext/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "claudinio": {
+   "base_url": "https://api.claudin.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cline-pass": {
+   "base_url": "https://api.cline.bot/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cloudferro-sherlock": {
+   "base_url": "https://api-sherlock.cloudferro.com/openai/v1/",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cloudflare-workers-ai": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cohere": {
+   "base_url": "https://api.cohere.com/v2",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "commandcode": {
+   "base_url": "https://api.commandcode.ai/provider/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "coralbricks": {
+   "base_url": "https://inference.coralbricks.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "cortecs": {
+   "base_url": "https://api.cortecs.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "crossmodel": {
+   "base_url": "https://api.crossmodel.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "crusoe": {
+   "base_url": "https://api.inference.crusoecloud.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "daoxe": {
+   "base_url": "https://daoxe.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "databricks": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "deepinfra": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "deepseek": {
+   "base_url": "https://api.deepseek.com",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "digitalocean": {
+   "base_url": "https://inference.do-ai.run/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "dinference": {
+   "base_url": "https://api.dinference.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "drun": {
+   "base_url": "https://chat.d.run/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ebcloud": {
+   "base_url": "https://maas-api.ebcloud.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "echo": {
+   "base_url": "https://echo.tracerml.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "edenai": {
+   "base_url": "https://api.edenai.run/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "empiriolabs": {
+   "base_url": "https://api.empiriolabs.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "engy": {
+   "base_url": "https://api.engy.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "evroc": {
+   "base_url": "https://models.think.evroc.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "fastrouter": {
+   "base_url": "https://go.fastrouter.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "fireworks-ai": {
+   "base_url": "https://api.fireworks.ai/inference/v1/",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "freemodel": {
+   "base_url": "https://cc.freemodel.dev/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "friendli": {
+   "base_url": "https://api.friendli.ai/serverless/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "frogbot": {
+   "base_url": "https://app.frogbot.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "github-copilot": {
+   "base_url": "https://api.githubcopilot.com",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "gmicloud": {
+   "base_url": "https://api.gmi-serving.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "google": {
+   "base_url": "https://generativelanguage.googleapis.com/v1beta",
+   "auth": {
+    "header": "x-goog-api-key",
+    "prefix": ""
+   }
+  },
+  "greenpt": {
+   "base_url": "https://api.greenpt.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "groq": {
+   "base_url": "https://api.groq.com/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "helicone": {
+   "base_url": "https://ai-gateway.helicone.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "hetzner": {
+   "base_url": "https://inference.hetzner.com/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "hopper": {
+   "base_url": "https://api.withhopper.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "hpc-ai": {
+   "base_url": "https://api.hpc-ai.com/inference/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "huggingface": {
+   "base_url": "https://router.huggingface.co/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "hyper": {
+   "base_url": "https://hyper.charm.land/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "impossibl": {
+   "base_url": "https://api.impossibl.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inception": {
+   "base_url": "https://api.inceptionlabs.ai/v1/",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inceptron": {
+   "base_url": "https://api.inceptron.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inco": {
+   "base_url": "https://api.inco.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "infer": {
+   "base_url": "https://infer.flow7.org/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inference": {
+   "base_url": "https://inference.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "inferx": {
+   "base_url": "https://model.inferx.net/endpoints/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "infomaniak": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "io-net": {
+   "base_url": "https://api.intelligence.io.solutions/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "iteracompute": {
+   "base_url": "https://api.iteracompute.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "jalapeno": {
+   "base_url": "https://api.jalapeno-cloud.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "jiekou": {
+   "base_url": "https://api.jiekou.ai/openai",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kenari": {
+   "base_url": "https://kenari.id/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kilo": {
+   "base_url": "https://api.kilo.ai/api/gateway",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kimi-code-plan-cn": {
+   "base_url": "https://api.kimi.com/coding/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kimi-code-plan-global": {
+   "base_url": "https://api.kimi.ai/coding/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "klokintegration": {
+   "base_url": "https://api-gw.klok.ipaas.se/proxy/kloker-key/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kosmik": {
+   "base_url": "https://api.koscompute.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "kuae-cloud-coding-plan": {
+   "base_url": "https://coding-plan-endpoint.kuaecloud.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lilac": {
+   "base_url": "https://api.getlilac.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "liquid": {
+   "base_url": "https://router.inference.ai.exchange/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "llmgateway": {
+   "base_url": "https://api.llmgateway.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "llmgateway-providers": {
+   "base_url": "https://api.llmgateway.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "llmtech": {
+   "base_url": "https://api.llmtech.eu/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "llmtr": {
+   "base_url": "https://llmtr.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lmstudio": {
+   "base_url": "http://127.0.0.1:1234/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "longcat": {
+   "base_url": "https://api.longcat.chat/openai",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lowrouter": {
+   "base_url": "https://api.lowrouter.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lucidquery": {
+   "base_url": "https://api.lucidquery.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "lynkr": {
+   "base_url": "http://127.0.0.1:8081/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "meganova": {
+   "base_url": "https://api.meganova.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "melious": {
+   "base_url": "https://api.melious.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "merge-gateway": {
+   "base_url": "https://api-gateway.merge.dev/v1/ai-sdk"
+  },
+  "meta": {
+   "base_url": "https://api.meta.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "minimax": {
+   "base_url": "https://api.minimax.io/anthropic/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "minimax-cn": {
+   "base_url": "https://api.minimax.cn/anthropic/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "minimax-cn-coding-plan": {
+   "base_url": "https://api.minimax.cn/anthropic/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "minimax-coding-plan": {
+   "base_url": "https://api.minimax.io/anthropic/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "mistral": {
+   "base_url": "https://api.mistral.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "mixlayer": {
+   "base_url": "https://models.mixlayer.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "moark": {
+   "base_url": "https://moark.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "modal": {
+   "base_url": "https://inference.us-west.modal.direct/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "model-oracle-ai": {
+   "base_url": "https://api.modeloracle.com/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "modelis": {
+   "base_url": "https://modelishub.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "modelscope": {
+   "base_url": "https://api-inference.modelscope.cn/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "modular": {
+   "base_url": "https://api.modular.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "moonshotai": {
+   "base_url": "https://api.moonshot.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "moonshotai-cn": {
+   "base_url": "https://api.moonshot.cn/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "morph": {
+   "base_url": "https://api.morphllm.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "munito": {
+   "base_url": "https://api.munito.ai/inference/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "munito-eu": {
+   "base_url": "https://api.eu.munito.ai/inference/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nan": {
+   "base_url": "https://api.nan.builders/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nano-gpt": {
+   "base_url": "https://nano-gpt.com/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nearai": {
+   "base_url": "https://cloud-api.near.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nebius": {
+   "base_url": "https://api.tokenfactory.nebius.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "neon": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "neosmith": {
+   "base_url": "https://router.neosmith.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "neuralwatt": {
+   "base_url": "https://api.neuralwatt.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nova": {
+   "base_url": "https://api.nova.amazon.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "novita-ai": {
+   "base_url": "https://api.novita.ai/openai",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "nvidia": {
+   "base_url": "https://integrate.api.nvidia.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "oci": {
+   "base_url": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ofox": {
+   "base_url": "https://api.ofox.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ollama-cloud": {
+   "base_url": "https://ollama.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "openai": {
+   "base_url": "https://api.openai.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "opencode": {
+   "base_url": "https://opencode.ai/inference/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "opencode-go": {
+   "base_url": "https://opencode.ai/inference/go/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "openreason": {
+   "base_url": "https://api.openreason.app/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "openrouter": {
+   "base_url": "https://openrouter.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "opper": {
+   "base_url": "https://api.opper.ai/v3/compat",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "orcarouter": {
+   "base_url": "https://api.orcarouter.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "ovhcloud": {
+   "base_url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "pareto": {
+   "base_url": "https://api.paretoinference.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "pendra": {
+   "base_url": "https://api.pendra.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "perplexity": {
+   "base_url": "https://api.perplexity.ai",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "perplexity-agent": {
+   "base_url": "https://api.perplexity.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "pioneer": {
+   "base_url": "https://api.fastino.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "poe": {
+   "base_url": "https://api.poe.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "poolside": {
+   "base_url": "https://inference.poolside.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "prime": {
+   "base_url": "https://api.pinference.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "privatemode-ai": {
+   "base_url": "http://localhost:8080/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "qihang-ai": {
+   "base_url": "https://api.qhaigc.net/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "qiniu-ai": {
+   "base_url": "https://api.qnaigc.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "reflection": {
+   "base_url": "https://api.reflection.ai/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "regolo-ai": {
+   "base_url": "https://api.regolo.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "requesty": {
+   "base_url": "https://router.requesty.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "routing-run": {
+   "base_url": "https://api.routing.run/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "runinfra": {
+   "base_url": "https://api.runinfra.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sakana": {
+   "base_url": "https://api.sakana.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sambanova": {
+   "base_url": "https://api.sambanova.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sarvam": {
+   "base_url": "https://api.sarvam.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "scaleway": {
+   "base_url": "https://api.scaleway.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "scnet-token-plan": {
+   "base_url": "https://api.scnet.cn/api/llm/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "scx-ai": {
+   "base_url": "https://api.scx.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "sensenova": {
+   "base_url": "https://token.sensenova.cn/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "siliconflow": {
+   "base_url": "https://api.siliconflow.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "siliconflow-cn": {
+   "base_url": "https://api.siliconflow.cn/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "snowflake-cortex": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "stackit": {
+   "base_url": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "standardcompute": {
+   "base_url": "https://api.stdcmpt.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "stepfun": {
+   "base_url": "https://api.stepfun.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "stepfun-ai": {
+   "base_url": "https://api.stepfun.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "stepfun-ai-step-plan": {
+   "base_url": "https://api.stepfun.ai/step_plan/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "stepfun-step-plan": {
+   "base_url": "https://api.stepfun.com/step_plan/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "subconscious": {
+   "base_url": "https://api.subconscious.dev/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "submodel": {
+   "base_url": "https://llm.submodel.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "synthetic": {
+   "base_url": "https://api.synthetic.new/openai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tempr": {
+   "base_url": "https://api.temprhq.io/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tencent-coding-plan": {
+   "base_url": "https://api.lkeap.cloud.tencent.com/coding/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tencent-token-plan": {
+   "base_url": "https://api.lkeap.cloud.tencent.com/plan/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tencent-tokenhub": {
+   "base_url": "https://tokenhub.tencentmaas.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tensorx": {
+   "base_url": "https://api.tensorx.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "the-grid-ai": {
+   "base_url": "https://api.thegrid.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "thinkingmachines": {
+   "base_url": "https://tinker.thinkingmachines.dev/services/tinker-prod/anthropic/api/v1",
+   "auth": {
+    "header": "x-api-key",
+    "prefix": ""
+   }
+  },
+  "tinfoil": {
+   "base_url": "https://inference.tinfoil.sh/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "togetherai": {
+   "base_url": "https://api.together.xyz/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tokengo": {
+   "base_url": "https://api.tokengo.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "tokenrouter": {
+   "base_url": "https://api.tokenrouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "trustedrouter": {
+   "base_url": "https://api.trustedrouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "umans-ai": {
+   "base_url": "https://api.code.umans.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "umans-ai-coding-plan": {
+   "base_url": "https://api.code.umans.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "unorouter": {
+   "base_url": "https://api.unorouter.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "upstage": {
+   "base_url": "https://api.upstage.ai/v1/solar",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "vancine": {
+   "base_url": "https://vancine.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "vercel": {
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "vispark": {
+   "base_url": "https://api.lab.vispark.in/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "vivgrid": {
+   "base_url": "https://api.vivgrid.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "volcengine": {
+   "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "volcengine-coding-plan": {
+   "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "vultr": {
+   "base_url": "https://api.vultrinference.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "wafer.ai": {
+   "base_url": "https://pass.wafer.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "wallaby": {
+   "base_url": "https://api.wallabytoken.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "wally": {
+   "base_url": "https://inference.runanywhere.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "wandb": {
+   "base_url": "https://api.inference.wandb.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xai": {
+   "base_url": "https://api.x.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xiaomi": {
+   "base_url": "https://api.xiaomimimo.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xiaomi-token-plan-ams": {
+   "base_url": "https://token-plan-ams.xiaomimimo.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xiaomi-token-plan-cn": {
+   "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xiaomi-token-plan-sgp": {
+   "base_url": "https://token-plan-sgp.xiaomimimo.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "xpersona": {
+   "base_url": "https://www.xpersona.co/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zai": {
+   "base_url": "https://api.z.ai/api/paas/v4",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zai-coding-plan": {
+   "base_url": "https://api.z.ai/api/coding/paas/v4",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zeldoc": {
+   "base_url": "https://api.zeldoc.ai/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zenifra": {
+   "base_url": "https://ai.zenifra.com/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zenmux": {
+   "base_url": "https://zenmux.ai/api/v1",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zhipuai": {
+   "base_url": "https://open.bigmodel.cn/api/paas/v4",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  },
+  "zhipuai-coding-plan": {
+   "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+   "auth": {
+    "header": "authorization",
+    "prefix": "Bearer "
+   }
+  }
+ }
+}
