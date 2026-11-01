@@ -23,6 +23,7 @@ COMMANDS = [
     ["commission", "check"],
     ["vault", "set"],
     ["vault", "login"],
+    ["vault", "refresh"],
     ["vault", "list"],
     ["vault", "delete"],
     ["sandbox", "start"],

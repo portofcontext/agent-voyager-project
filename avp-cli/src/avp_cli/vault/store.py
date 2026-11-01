@@ -1,8 +1,9 @@
 """Secrets in the system's credential store, through `keyring`: the macOS
 Keychain, Windows Credential Manager, or the Secret Service on Linux. Each is
 stored under the service `avp` and its name. The store can't list its entries,
-so each secret's name, description, and when it was last set, never its value, are also kept in
-`~/.avp/vault.json`."""
+so each secret's name, description, when it was last set, and for an OAuth
+sign-in where the token comes from and when it expires, never its value, are
+also kept in `~/.avp/vault.json`."""
 
 import re
 from datetime import UTC, datetime
@@ -19,11 +20,25 @@ NAME = re.compile(r"[a-z0-9_-]+")
 """The pattern of a Commission's `{"proxy": NAME}`."""
 
 
+class OAuth(BaseModel):
+    """Where an OAuth sign-in's token comes from, and when it expires."""
+
+    url: str
+    """The MCP server signed in to."""
+    token_endpoint: str
+    resource: str | None = None
+    """The RFC 8707 resource a token is requested for, when the server names one."""
+    scopes: list[str] = []
+    expires_at: datetime | None = None
+    """None when the server didn't say."""
+
+
 class Secret(BaseModel):
     name: str
     updated: datetime
     """When the secret was last set."""
     description: str | None = None
+    oauth: OAuth | None = None
 
 
 SECRETS = TypeAdapter(list[Secret])
@@ -43,7 +58,25 @@ def secrets() -> list[Secret]:
         return []
 
 
-def set_(name: str, value: str, description: str | None = None) -> None:
+def find(name: str) -> Secret:
+    for secret in secrets():
+        if secret.name == name:
+            return secret
+    raise Failed(f"no secret named {name!r}. `avp vault list` shows yours")
+
+
+def get(name: str) -> str:
+    """The secret's value. Fails when the store doesn't hold it."""
+    try:
+        value = keyring.get_password(SERVICE, name)
+    except KeyringError as error:
+        raise _unavailable(error) from None
+    if value is None:
+        raise Failed(f"the credential store doesn't hold {name!r}. Set it again, or delete it")
+    return value
+
+
+def set_(name: str, value: str, description: str | None = None, oauth: OAuth | None = None) -> None:
     """Without a description, a secret set again keeps the one it had."""
     try:
         keyring.set_password(SERVICE, name, value)
@@ -53,7 +86,9 @@ def set_(name: str, value: str, description: str | None = None) -> None:
     previous = others.pop(name, None)
     if description is None and previous:
         description = previous.description
-    secret = Secret(name=name, updated=datetime.now(UTC), description=description or None)
+    secret = Secret(
+        name=name, updated=datetime.now(UTC), description=description or None, oauth=oauth
+    )
     _save([*others.values(), secret])
 
 
@@ -68,16 +103,14 @@ def stored(name: str) -> bool:
 
 def delete(name: str) -> None:
     """Fails when there is no secret named `name`."""
-    remaining = [secret for secret in secrets() if secret.name != name]
-    if len(remaining) == len(secrets()):
-        raise Failed(f"no secret named {name!r}. `avp vault list` shows yours")
+    find(name)
     try:
         keyring.delete_password(SERVICE, name)
     except PasswordDeleteError:
         pass  # Already removed from the store outside avp.
     except KeyringError as error:
         raise _unavailable(error) from None
-    _save(remaining)
+    _save([secret for secret in secrets() if secret.name != name])
 
 
 def _save(secrets: list[Secret]) -> None:

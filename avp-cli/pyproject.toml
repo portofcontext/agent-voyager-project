@@ -9,6 +9,7 @@ dependencies = [
     "agent-voyager-project",
     "httpx>=0.28",
     "keyring>=25",
+    "mcp>=2.3",
     "opensandbox>=1.2",
     "opensandbox-server>=1.2",
     "pydantic>=2.11,<3",

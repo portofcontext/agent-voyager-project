@@ -78,12 +78,15 @@ avp
 │
 ├── vault               Secrets in the system's credential store (the macOS Keychain, Windows
 │   │                   Credential Manager, or the Secret Service on Linux), for a Commission's
-│   │                   {"proxy": NAME}. Names, descriptions, and set times, never values, are kept in ~/.avp/vault.json.
+│   │                   {"proxy": NAME}. Names, descriptions, set times, and sign-in expiry, never values, are kept in ~/.avp/vault.json.
 │   ├── ✅ set     Store a secret under a name a Commission can refer to; prompted when VALUE is omitted.
 │   │     avp vault set anthropic [VALUE] [--description "Team key"]
-│   ├── ⬜ login   Sign in to an MCP server with OAuth and store the token.
+│   ├── ✅ login   Sign in to an MCP server with OAuth in the browser, and store the access token,
+│   │              the refresh token, and when the access token expires. Signing in again replaces them.
 │   │     avp vault login linear --url https://mcp.linear.app/mcp [--scope read]
-│   ├── ✅ list    List secrets' names, descriptions, and when each was last set. --check reads each one to confirm it is still in the store.
+│   ├── ✅ refresh Get a new access token for a sign-in with its refresh token.
+│   │     avp vault refresh linear
+│   ├── ✅ list    List secrets' names, descriptions, when each was last set, and when a sign-in expires. --check reads each one to confirm it is still in the store.
 │   │     avp vault list [--check]
 │   └── ✅ delete  Delete a secret.
 │         avp vault delete anthropic
@@ -128,16 +131,15 @@ then `RUN pip install pytest`.
 3. Removing `init` and the catalog templates, for an example eval file in the docs.
 4. Removing the eval TUI and `eval share`/`unshare`: `eval show --json` covers
    reading results from scripts.
-5. Keeping MCP OAuth (`vault login`).
-6. Credential names: the default name a Commission uses for a model's key (the
+5. Credential names: the default name a Commission uses for a model's key (the
    provider ID?), and whether a key already in the shell's environment counts.
-7. What `run` prints, and where the Trajectory goes without `--out`
+6. What `run` prints, and where the Trajectory goes without `--out`
    (`~/.avp/runs/<run_id>/`?).
-8. OpenSandbox's Credential Vault as the proxy for `proxy` credentials, as
+7. OpenSandbox's Credential Vault as the proxy for `proxy` credentials, as
    drawn above, in place of the legacy broker. It needs the egress sidecar in
    `dns+nft` mode and a deny-by-default network policy. The server installs
    its interception certificate in the sandbox's system trust store; to check:
    whether Python agents need `SSL_CERT_FILE`, since httpx trusts certifi's
    bundle, and OAuth, which the vault doesn't refresh.
-9. Installing the project's own agents by name and version, without a
+8. Installing the project's own agents by name and version, without a
    checkout, once the SDK and agents are published.

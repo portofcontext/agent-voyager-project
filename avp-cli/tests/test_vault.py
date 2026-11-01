@@ -1,43 +1,11 @@
 """`avp vault set`, `list`, and `delete`, against an in-memory credential store."""
 
-from collections.abc import Iterator
-from pathlib import Path
-
-import keyring
 import pytest
-from keyring.backend import KeyringBackend
-from keyring.errors import PasswordDeleteError
+from conftest import Memory
 from typer.testing import CliRunner
 
 from avp_cli.cli import app
 from avp_cli.vault import store
-
-
-class Memory(KeyringBackend):
-    priority = 1
-
-    def __init__(self) -> None:
-        self.values: dict[tuple[str, str], str] = {}
-
-    def get_password(self, service: str, username: str) -> str | None:
-        return self.values.get((service, username))
-
-    def set_password(self, service: str, username: str, password: str) -> None:
-        self.values[(service, username)] = password
-
-    def delete_password(self, service: str, username: str) -> None:
-        if self.values.pop((service, username), None) is None:
-            raise PasswordDeleteError(username)
-
-
-@pytest.fixture
-def memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Memory]:
-    monkeypatch.setenv("AVP_HOME", str(tmp_path))
-    backend = Memory()
-    previous = keyring.get_keyring()
-    keyring.set_keyring(backend)
-    yield backend
-    keyring.set_keyring(previous)
 
 
 def described(secrets: list[store.Secret]) -> list[tuple[str, str | None]]:
@@ -52,7 +20,7 @@ def test_set_list_delete(memory: Memory) -> None:
     assert memory.values == {("avp", "openai"): "sk-1", ("avp", "anthropic"): "sk-2"}
 
     listed = runner.invoke(app, ["vault", "list"]).stdout.splitlines()
-    assert listed[0].split() == ["Name", "Description", "Updated"]
+    assert listed[0].split() == ["Name", "Description", "Updated", "Expires"]
     assert listed[2].split()[:3] == ["openai", "Personal", "key"]
     assert "sk-" not in "".join(listed)
 
