@@ -18,6 +18,12 @@ def runs() -> Path:
     return home() / "runs"
 
 
+def secrets() -> Path:
+    """The names and descriptions of the secrets in the system's credential store,
+    not their values."""
+    return home() / "secrets.json"
+
+
 def opensandbox() -> Path:
     """The OpenSandbox service's config, database, log, and pid file."""
     return home() / "opensandbox"

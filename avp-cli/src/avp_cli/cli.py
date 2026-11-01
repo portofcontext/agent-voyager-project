@@ -10,6 +10,7 @@ from avp_cli.agents import cli as agent_cli
 from avp_cli.console import Failed, err
 from avp_cli.runs import cli as run_cli
 from avp_cli.sandbox import cli as sandbox_cli
+from avp_cli.vault import cli as vault_cli
 
 app = typer.Typer(no_args_is_help=True, help="Run, evaluate, and check AVP agents in sandboxes.")
 eval_app = typer.Typer(
@@ -20,16 +21,13 @@ conformance_app = typer.Typer(
     no_args_is_help=True, help="Check that an agent follows the spec's rules for agents."
 )
 commission_app = typer.Typer(no_args_is_help=True, help="Commission files.")
-secret_app = typer.Typer(
-    no_args_is_help=True, help="Credentials written to each sandbox's Credential Vault."
-)
 
 app.command()(run_cli.run)
 app.add_typer(eval_app, name="eval")
 app.add_typer(conformance_app, name="conformance")
 app.add_typer(agent_cli.app, name="agent")
 app.add_typer(commission_app, name="commission")
-app.add_typer(secret_app, name="secret")
+app.add_typer(vault_cli.app, name="vault")
 app.add_typer(sandbox_cli.app, name="sandbox")
 
 AgentOption = Annotated[str, typer.Option("--agent", help="An installed agent.")]
@@ -118,37 +116,6 @@ def commission_check(
     agent: Annotated[str | None, typer.Option(help="Also apply the checks for this agent.")] = None,
 ) -> None:
     """Validate a Commission and apply the Commission checks for an agent."""
-    raise NotImplementedError
-
-
-@secret_app.command("set")
-def secret_set(
-    name: Annotated[str, typer.Argument(help="The name a Commission refers to.")],
-    value: Annotated[str | None, typer.Argument(help="The value; prompted when omitted.")] = None,
-) -> None:
-    """Store a secret under a name a Commission can refer to."""
-    raise NotImplementedError
-
-
-@secret_app.command("login")
-def secret_login(
-    name: Annotated[str, typer.Argument(help="The name a Commission refers to.")],
-    url: Annotated[str, typer.Option(help="The MCP server's URL.")],
-    scope: Annotated[list[str] | None, typer.Option(help="An OAuth scope to request.")] = None,
-) -> None:
-    """Sign in to an MCP server with OAuth and store the token."""
-    raise NotImplementedError
-
-
-@secret_app.command("list")
-def secret_list() -> None:
-    """List secret names and where each comes from."""
-    raise NotImplementedError
-
-
-@secret_app.command("delete")
-def secret_delete(name: Annotated[str, typer.Argument(help="The secret.")]) -> None:
-    """Delete a secret."""
     raise NotImplementedError
 
 

@@ -76,15 +76,17 @@ avp
 │   └── check   Validate a Commission and apply the Commission checks for an agent.
 │         avp commission check task.json [--agent pd]
 │
-├── ⬜ secret            Credentials that the broker passes to agents and MCP servers.
-│   ├── set     Store a secret under a name a Commission can refer to.
-│   │     avp secret set anthropic [VALUE]
-│   ├── login   Sign in to an MCP server with OAuth and store the token.
-│   │     avp secret login linear --url https://mcp.linear.app/mcp [--scope read]
-│   ├── list    List secret names and where each comes from (environment, file, OAuth).
-│   │     avp secret list
-│   └── delete  Delete a secret.
-│         avp secret delete anthropic
+├── vault               Secrets in the system's credential store (the macOS Keychain, Windows
+│   │                   Credential Manager, or the Secret Service on Linux), for a Commission's
+│   │                   {"proxy": NAME}. Names, descriptions, and set times, never values, are kept in ~/.avp/secrets.json.
+│   ├── ✅ set     Store a secret under a name a Commission can refer to; prompted when VALUE is omitted.
+│   │     avp vault set anthropic [VALUE] [--description "Team key"]
+│   ├── ⬜ login   Sign in to an MCP server with OAuth and store the token.
+│   │     avp vault login linear --url https://mcp.linear.app/mcp [--scope read]
+│   ├── ✅ list    List secrets' names, descriptions, and when each was last set. --check reads each one to confirm it is still in the store.
+│   │     avp vault list [--check]
+│   └── ✅ delete  Delete a secret.
+│         avp vault delete anthropic
 │
 └── sandbox             The OpenSandbox service every agent runs on.
     ├── ✅ start   Start the service. Agent commands also start it when needed.
@@ -126,7 +128,7 @@ then `RUN pip install pytest`.
 3. Removing `init` and the catalog templates, for an example eval file in the docs.
 4. Removing the eval TUI and `eval share`/`unshare`: `eval show --json` covers
    reading results from scripts.
-5. Keeping MCP OAuth (`secret login`).
+5. Keeping MCP OAuth (`vault login`).
 6. Credential names: the default name a Commission uses for a model's key (the
    provider ID?), and whether a key already in the shell's environment counts.
 7. What `run` prints, and where the Trajectory goes without `--out`
