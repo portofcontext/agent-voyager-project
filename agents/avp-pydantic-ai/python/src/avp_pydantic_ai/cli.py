@@ -1,17 +1,11 @@
 """The agent's command line (`ping`, `describe`, `run`), which avp-cli and
-`avp conformance` call. The agent loads only for `describe` and `run`, so
-`ping` stays fast."""
+`avp conformance` call. Pydantic AI loads only for `run`, so `ping` and
+`describe` stay fast."""
 
 from pydantic import JsonValue
 
 from avp.agent_cli import EventSink, main
-from avp.descriptor import AgentDescriptor
-
-
-def describe() -> AgentDescriptor:
-    from avp_pydantic_ai import agent
-
-    return agent.describe()
+from avp_pydantic_ai.descriptor import describe
 
 
 async def run(received: JsonValue, sink: EventSink) -> None:
