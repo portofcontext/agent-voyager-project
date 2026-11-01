@@ -13,6 +13,11 @@ def agents() -> Path:
     return home() / "agents"
 
 
+def runs() -> Path:
+    """One directory per run: its Commission and Trajectory."""
+    return home() / "runs"
+
+
 def opensandbox() -> Path:
     """The OpenSandbox service's config, database, log, and pid file."""
     return home() / "opensandbox"

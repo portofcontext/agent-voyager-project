@@ -8,6 +8,7 @@ import typer
 
 from avp_cli.agents import cli as agent_cli
 from avp_cli.console import Failed, err
+from avp_cli.runs import cli as run_cli
 from avp_cli.sandbox import cli as sandbox_cli
 
 app = typer.Typer(no_args_is_help=True, help="Run, evaluate, and check AVP agents in sandboxes.")
@@ -23,6 +24,7 @@ secret_app = typer.Typer(
     no_args_is_help=True, help="Credentials written to each sandbox's Credential Vault."
 )
 
+app.command()(run_cli.run)
 app.add_typer(eval_app, name="eval")
 app.add_typer(conformance_app, name="conformance")
 app.add_typer(agent_cli.app, name="agent")
@@ -32,19 +34,6 @@ app.add_typer(sandbox_cli.app, name="sandbox")
 
 AgentOption = Annotated[str, typer.Option("--agent", help="An installed agent.")]
 JsonOption = Annotated[bool, typer.Option("--json", help="Print JSON.")]
-
-
-@app.command()
-def run(
-    commission: Annotated[Path, typer.Option(help="The Commission file.")],
-    agent: AgentOption,
-    out: Annotated[Path | None, typer.Option(help="Where to write the Trajectory.")] = None,
-    timeout: Annotated[
-        str | None, typer.Option(help="Stop the run after this long, e.g. 30m.")
-    ] = None,
-) -> None:
-    """Run one agent on one Commission and write its Trajectory."""
-    raise NotImplementedError
 
 
 @eval_app.command("run")

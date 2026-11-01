@@ -27,9 +27,11 @@ NotImplementedError. The old CLI is in
 ```text
 avp
 ├── run                 Run one agent on one Commission and write its Trajectory.
-│     avp run --commission task.json --agent pd [--out traj.ndjson] [--timeout 30m]
-│     Later: avp run "fix the failing test" --agent pd --model anthropic/claude-sonnet-4-5,
-│     which builds the Commission itself.
+│     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
+│         [--allow-host pypi.org] [--out traj.ndjson] [--timeout 30m]
+│     The agent's environment has only the variables --env and --env-file give. It can
+│     reach only the model's host (model.base_url, or avp's default for the provider),
+│     the Commission's HTTP MCP servers, and the hosts --allow-host adds.
 │
 ├── eval                Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.
@@ -126,7 +128,7 @@ sequenceDiagram
     User->>CLI: avp run --commission task.json --agent pd
     CLI->>CLI: Validate the Commission<br/>(the agent applies the Commission checks itself)
     CLI->>CLI: Write commission.json to a new run directory
-    CLI->>OSB: Create a sandbox from the agent's image:<br/>mount the run directory and the workspace,<br/>deny egress except the Commission's hosts,<br/>turn on the credential proxy
+    CLI->>OSB: Create a sandbox from the agent's image:<br/>mount the run directory and the workspace,<br/>deny egress except the model's host,<br/>the HTTP MCP servers, and --allow-host,<br/>turn on the credential proxy
     OSB->>Sidecar: Start the sandbox's egress sidecar
     CLI->>Secrets: Look up "anthropic-key"
     CLI->>OSB: Write the credential to the sandbox's vault,<br/>bound to api.anthropic.com

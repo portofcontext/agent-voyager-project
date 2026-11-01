@@ -36,7 +36,17 @@ def describe(box: SandboxSync, entrypoint: list[str]) -> AgentDescriptor:
     try:
         return AgentDescriptor.model_validate_json(output)
     except ValidationError as exc:
-        raise Failed(f"`describe` didn't print an Agent Descriptor: {exc}") from None
+        raise Failed(f"`describe` didn't print a valid Agent Descriptor: {exc}") from None
+
+
+def run(
+    box: SandboxSync, entrypoint: list[str], commission: str, out: str, env: dict[str, str]
+) -> sandboxes.Result:
+    """Run the agent on the Commission at `commission`, writing the Trajectory
+    to `out`, both paths in the sandbox, with `env` added to its environment.
+    A refusal or a failed run still exits 0; another exit code means the agent
+    crashed."""
+    return sandboxes.run(box, [*entrypoint, "run", "--commission", commission, "--out", out], env)
 
 
 def _call(box: SandboxSync, entrypoint: list[str], *args: str) -> str:

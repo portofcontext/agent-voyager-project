@@ -45,11 +45,25 @@ def avp(*args: str) -> str:
     return result.output
 
 
-def test_install_describe_uninstall(avp_home: Path) -> None:
+def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     avp("agent", "install", "sh-agent", str(AGENT / "Dockerfile"))
     assert "sh-agent" in avp("agent", "list")
     assert json.loads(avp("agent", "describe", "sh-agent"))["agent_name"] == "sh-agent"
     assert "pong" in avp("agent", "ping", "sh-agent")
+
+    commission = {
+        "avp_version": "0.1",
+        "run_id": "sh-run",
+        "prompt": "hi",
+        "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
+    }
+    (tmp_path / "c.json").write_text(json.dumps(commission))
+    output = avp("run", "--commission", str(tmp_path / "c.json"), "--agent", "sh-agent")
+    assert "invalid_commission: sh-agent refuses every Commission" in output
+    [run_directory] = (avp_home / "runs").iterdir()
+    events = [json.loads(line) for line in (run_directory / "trajectory.ndjson").open()]
+    assert events[0]["data"]["commission"] == commission
+
     avp("agent", "uninstall", "sh-agent")
     assert "sh-agent" not in avp("agent", "list")
 

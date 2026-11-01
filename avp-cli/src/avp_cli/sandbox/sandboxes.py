@@ -8,15 +8,19 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 
 from opensandbox.exceptions import SandboxException
-from opensandbox.models.sandboxes import NetworkPolicy
+from opensandbox.models.execd import RunCommandOpts
+from opensandbox.models.sandboxes import Host, NetworkPolicy, NetworkRule, Volume
 from opensandbox.sync.sandbox import SandboxSync
 
 from avp_cli.console import Failed
 from avp_cli.sandbox import service
 
 LIFETIME = timedelta(minutes=10)
+IO = "/io"
+"""Where a run directory is mounted in the sandbox."""
 
 
 @dataclass(frozen=True)
@@ -27,13 +31,26 @@ class Result:
 
 
 @contextmanager
-def sandbox(image: str) -> Generator[SandboxSync]:
-    """A sandbox from the image, with no network, deleted on exit."""
+def sandbox(
+    image: str, run_directory: Path | None = None, allowed_hosts: list[str] | None = None
+) -> Generator[SandboxSync]:
+    """A sandbox from the image, deleted on exit. It can reach only
+    `allowed_hosts`: domains, `*.` wildcards, IP addresses, or CIDR ranges. A
+    run directory is mounted at `IO`."""
+    volumes = (
+        [Volume(name="io", host=Host(path=str(run_directory)), mount_path=IO)]
+        if run_directory
+        else None
+    )
     try:
         box = SandboxSync.create(
             image,
             timeout=LIFETIME,
-            network_policy=NetworkPolicy(default_action="deny", egress=[]),
+            network_policy=NetworkPolicy(
+                default_action="deny",
+                egress=[NetworkRule(action="allow", target=h) for h in allowed_hosts or []],
+            ),
+            volumes=volumes,
             connection_config=service.connection(),
         )
     except SandboxException as exc:
@@ -45,8 +62,8 @@ def sandbox(image: str) -> Generator[SandboxSync]:
         box.close()
 
 
-def run(box: SandboxSync, command: list[str]) -> Result:
-    execution = box.commands.run(command)
+def run(box: SandboxSync, command: list[str], env: dict[str, str] | None = None) -> Result:
+    execution = box.commands.run(command, opts=RunCommandOpts(envs=env))
     return Result(
         exit_code=execution.exit_code,
         stdout="".join(m.text for m in execution.logs.stdout),
