@@ -32,16 +32,17 @@ class Result:
 
 @contextmanager
 def sandbox(
-    image: str, run_directory: Path | None = None, allowed_hosts: list[str] | None = None
+    image: str,
+    run_directory: Path | None = None,
+    allowed_hosts: list[str] | None = None,
+    volumes: list[Volume] | None = None,
 ) -> Generator[SandboxSync]:
     """A sandbox from the image, deleted on exit. It can reach only
     `allowed_hosts`: domains, `*.` wildcards, IP addresses, or CIDR ranges. A
-    run directory is mounted at `IO`."""
-    volumes = (
-        [Volume(name="io", host=Host(path=str(run_directory)), mount_path=IO)]
-        if run_directory
-        else None
-    )
+    run directory is mounted at `IO`, and each of `volumes` where it says."""
+    if run_directory:
+        io = Volume(name="io", host=Host(path=str(run_directory)), mount_path=IO)
+        volumes = [io, *(volumes or [])]
     try:
         box = SandboxSync.create(
             image,

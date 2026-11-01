@@ -1,6 +1,7 @@
 """The local OpenSandbox server: avp writes its config, starts it in the
 background, and reuses it across commands until `avp sandbox stop`."""
 
+import json
 import os
 import secrets
 import signal
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from pathlib import Path
 
 import httpx
 from opensandbox.config import ConnectionConfigSync
@@ -25,7 +27,6 @@ START_TIMEOUT_S = 30
 
 
 def config_text(api_key: str) -> str:
-    home = paths.home()
     return f"""\
 # Written by avp each time it starts the service.
 [server]
@@ -39,7 +40,7 @@ type = "docker"
 execd_image = "{EXECD_IMAGE}"
 
 [storage]
-allowed_host_paths = ["{home}"]
+allowed_host_paths = {allowed_host_paths()}
 
 [store]
 type = "sqlite"
@@ -57,6 +58,15 @@ mode = "direct"
 image = "{EGRESS_IMAGE}"
 mode = "dns"
 """
+
+
+def allowed_host_paths() -> str:
+    """Any host path, as a TOML list: the server listens only on 127.0.0.1 and
+    takes only avp's key, so what is mounted is what avp's commands ask for.
+    OpenSandbox matches `prefix + "/"`, so `/` itself would match nothing; each
+    directory in `/` is listed instead."""
+    root = Path("/")
+    return json.dumps(sorted(str(p) for p in root.iterdir() if p.is_dir()))
 
 
 def connection() -> ConnectionConfigSync:

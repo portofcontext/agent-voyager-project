@@ -28,10 +28,11 @@ NotImplementedError. The old CLI is in
 avp
 ├── run                 Run one agent on one Commission and write its Trajectory.
 │     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
-│         [--allow-host pypi.org] [--out traj.ndjson] [--timeout 30m]
+│         [--allow-host pypi.org] [-v ./testing/mcp:/mcp:ro] [--out traj.ndjson] [--timeout 30m]
 │     The agent's environment has only the variables --env and --env-file give. It can
 │     reach only the model's host (model.base_url, or avp's default for the provider),
-│     the Commission's HTTP MCP servers, and the hosts --allow-host adds.
+│     the Commission's HTTP MCP servers, and the hosts --allow-host adds. --volume
+│     (-v) mounts a host path, read-write unless it ends in :ro.
 │
 ├── eval                Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.

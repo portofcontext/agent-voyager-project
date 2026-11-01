@@ -11,7 +11,7 @@ from avp.trajectory import AgentStoppedEvent, ErrorOccurredEvent, parse_trajecto
 from avp_cli.agents import command, store
 from avp_cli.console import Failed, err, out
 from avp_cli.engine import images
-from avp_cli.runs import directory, environment, network
+from avp_cli.runs import directory, environment, network, volumes
 from avp_cli.sandbox import sandboxes
 
 STDERR_LINES = 5
@@ -35,6 +35,14 @@ def run(
             " servers': a domain, *.domain, IP address, or CIDR range."
         ),
     ] = None,
+    volume: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--volume",
+            "-v",
+            help="HOST:SANDBOX to mount a host path in the sandbox, or HOST:SANDBOX:ro read-only.",
+        ),
+    ] = None,
 ) -> None:
     """Run one agent on one Commission and write its Trajectory. The agent's
     environment has only the variables given with --env and --env-file. It can
@@ -48,6 +56,7 @@ def run(
     variables = environment.variables(env or [], env_file or [])
     environment.check(parsed, variables)
     hosts = network.allowed_hosts(parsed, allow_host or [])
+    mounts = volumes.parse(volume or [])
     installed = store.load(agent)
     run_directory = directory.create(parsed.run_id, text)
     trajectory = run_directory / directory.TRAJECTORY
@@ -58,7 +67,9 @@ def run(
             highlight=False,
         )
     err.print(f"Allowed hosts: {network.describe(hosts)}", highlight=False)
-    with sandboxes.sandbox(installed.image, run_directory, list(hosts)) as box:
+    if mounts:
+        err.print(f"Volumes: {volumes.describe(mounts)}", highlight=False)
+    with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts) as box:
         result = command.run(
             box,
             images.entrypoint(installed.image),
