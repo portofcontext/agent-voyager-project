@@ -52,7 +52,7 @@ dev = [
 members = [
     "avp/bindings/python",
     "avp/core/conformance",
-    "avp-cli",
+    "avp-cli-legacy",
     "agents/avp-claude-agent-sdk/python",
     "agents/_template/python",
     "agents/avp-pydantic-ai/python",

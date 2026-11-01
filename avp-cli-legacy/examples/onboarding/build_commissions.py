@@ -67,7 +67,7 @@ def prepare(
     materials = {
         "repo": {},
         "prompt": {"system_prompt": (HERE / "PROMPT.md").read_text()},
-        "cli-docs": {"system_prompt": (ROOT / "avp-cli/README.md").read_text()},
+        "cli-docs": {"system_prompt": (ROOT / "avp-cli-legacy/README.md").read_text()},
         "skill": {"skills": [{"id": "avp", "files": skill}]},
         "skill-invoked": {
             "skills": [{"id": "avp", "files": skill}],

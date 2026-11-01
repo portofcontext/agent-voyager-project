@@ -14,8 +14,9 @@ agent-voyager-project/
 │   ├── rust/                      ⬜
 │   ├── typescript/                ⬜
 │   └── testdata/recorder/, testdata/run_plan/ ✅ (Python passes; Rust and TypeScript to come)
-├── avp-cli/                       ⬜ cleanup TBD
+├── avp-cli/                       ⬜ rewritten from scratch
 │   └── src/avp_cli/conformance/   ⬜ harness and cases/v0.1/
+├── avp-cli-legacy/                ⬜ the old CLI, for reference only; removed before merge
 ├── agents/                        ⬜ one PR per agent
 ├── testing/mcp/                   ✅ unchanged
 ├── scripts/                       ⬜ avp/scripts merged with scripts/
@@ -145,4 +146,5 @@ lock then produces its release `requirements.txt`.
 - [ ] Root docs cut down: `AGENTS.md`, `README.md`, `SKILL.md`, `PATTERNS.md`, `MAINTAINERS.md`
   - `AGENTS.md` still describes the old wire: CloudEvents and OTel compatibility, `source: avp://agent`, `avp.*` attributes, `schema_version`, `origin/model` slugs, and `avp/bindings` as the source of truth
 - [ ] `make check` passes
+- [ ] `avp-cli-legacy/` removed
 - [ ] `tmp-*` files removed

@@ -11,7 +11,7 @@ AVP is an open standard for running and observing AI agents. A supervisor sends 
 
 ## Can agents onboard themselves to AVP?
 
-We used AVP to test Codex, Claude Code, and Pi installing AVP and running a nested evaluation. We compared skills, CLI docs, a short prompt, and a repository URL. [Case study: results, costs, and limitations](avp-cli/examples/onboarding/README.md#observed-local-results).
+We used AVP to test Codex, Claude Code, and Pi installing AVP and running a nested evaluation. We compared skills, CLI docs, a short prompt, and a repository URL. [Case study: results, costs, and limitations](avp-cli-legacy/examples/onboarding/README.md#observed-local-results).
 
 ```text
 Supervisor ─── Commission ──▶ Agent
@@ -42,14 +42,14 @@ Store a key for each provider you use. Each command prompts for the key:
 | Google (Gemini) | [AI Studio](https://aistudio.google.com/apikey) | `avp env secret create google` |
 
 Commissions reference the stored key by name. Pi and other multi-provider agents
-use the selected model's provider. See [authentication](avp-cli/README.md#model-authentication).
+use the selected model's provider. See [authentication](avp-cli-legacy/README.md#model-authentication).
 
 ## Start with your coding agent
 
 Paste into your coding agent:
 
 ```text
-Read https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli/examples/onboarding/PROMPT.md and follow it to set up AVP.
+Read https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli-legacy/examples/onboarding/PROMPT.md and follow it to set up AVP.
 
 Run a sample evaluation and show me the results.
 ```
@@ -68,7 +68,7 @@ avp eval run capitals.eval.json
 
 This example makes paid model calls and ranks Commission variants by accuracy, pass rate, cost, and turns. The first run builds the agent's container image.
 
-For execution without Docker, select [`--runtime local`](avp-cli/README.md#quickstart), which adds no OS isolation.
+For execution without Docker, select [`--runtime local`](avp-cli-legacy/README.md#quickstart), which adds no OS isolation.
 
 To give an agent a task in your own project:
 
@@ -78,7 +78,7 @@ avp cm create my-task --agent claude-code --provider-id anthropic --credential a
 avp run --agent claude-code --commission my-task --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
-Each run uses a copy of your project and prints the resulting workspace path. See the [CLI guide](avp-cli/README.md) for comparing agents, configuring models, credentials, and sandboxing.
+Each run uses a copy of your project and prints the resulting workspace path. See the [CLI guide](avp-cli-legacy/README.md) for comparing agents, configuring models, credentials, and sandboxing.
 
 ## Optional skill
 

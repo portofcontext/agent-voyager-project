@@ -10,7 +10,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 - [Specs](spec/v0.1/): normative wire contracts.
 - [Integration patterns](PATTERNS.md): runtime adaptation and launch context.
 - [Adapter template](agents/_template/README.md): adding a runtime.
-- [CLI guide](avp-cli/README.md): Commissions, environments, and evaluations.
+- [CLI guide](avp-cli-legacy/README.md): Commissions, environments, and evaluations.
 - [Skill](SKILL.md): agent and supervisor workflows.
 
 ## Design boundaries
@@ -58,7 +58,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
   Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.
 - `agents/<name>/<lang>/`: runtime adapters, descriptors, and conformance manifests.
   Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust`.
-- `avp-cli/`: the supervisor CLI. Evaluations are JSON configurations containing
+- `avp-cli-legacy/`: the supervisor CLI. Evaluations are JSON configurations containing
   `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
   its own model. `avp eval run` and `avp run` default to Docker-backed OpenSandbox
   containers with default-deny networking. `--runtime local` runs installed agent
@@ -114,12 +114,12 @@ changes, or put test counts in documentation. Avoid em dashes in prose.
 Release tags trigger CI publication. Use the Makefile targets from a clean `main`
 that matches `origin/main`:
 
-- `make release-cli`: derives `pypi-v<version>` from `avp-cli/pyproject.toml`.
+- `make release-cli`: derives `pypi-v<version>` from `avp-cli-legacy/pyproject.toml`.
   The CLI wheel vendors the Python wire types. It first cuts any agent release
   the CLI pins that doesn't exist yet and waits for it to publish.
 - `make release-<agent>`: one agent's release, tagged with its package version.
 - An agent's version lives only in its package file. `make pins` copies it into
-  `avp-cli/src/avp_cli/agents.json` (a test fails when they differ). How the
+  `avp-cli-legacy/src/avp_cli/agents.json` (a test fails when they differ). How the
   agent installs and runs (its locked requirements, a Node or CLI version) lives
   in the same package file and ships in the release's `avp-release.json`; keep
   version strings out of the CLI's code.
