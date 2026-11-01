@@ -1,55 +1,148 @@
-"""Pydantic AI messages -> AVP wire shapes.
+"""Pydantic AI messages -> AVP shapes.
 
-One `ModelResponse` (one model call) is one AVP turn. Only translation lives
-here; ordering, spans, steps, tool pairing, and cost are the Recorder's job.
+One `ModelResponse` (one model call) is one AVP response. Only translation
+lives here; event order, tool pairing, and cost are the Recorder's job.
 """
 
-from __future__ import annotations
-
+import base64
 import json
+from collections.abc import Sequence
 from typing import Any
 
-from avp.content import AVPContentBlock, TextBlock, ThinkingBlock, ToolUseBlock
-from avp.trajectory import ErrorCode, Usage
+from pydantic_ai import (
+    FilePart,
+    ModelHTTPError,
+    ModelRequestPart,
+    ModelResponse,
+    ModelResponsePart,
+    NativeToolCallPart,
+    NativeToolReturnPart,
+    RequestUsage,
+    TextPart,
+    ThinkingPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+    UserError,
+)
+from pydantic_ai.messages import (
+    BaseToolCallPart,
+    Citation,
+    ContentCitationAnchor,
+    DocumentCitationSource,
+    WebCitationSource,
+)
+from pydantic_core import to_jsonable_python
+
+from avp.recorder import UsageReport
+from avp.trajectory import Citation as AVPCitation
+from avp.trajectory import (
+    ContentBlock,
+    ErrorCode,
+    ImageBlock,
+    ServerToolResultBlock,
+    ServerToolUseBlock,
+    Source,
+    TextBlock,
+    ThinkingBlock,
+    ToolUseBlock,
+)
 
 
-def content(parts: list[Any]) -> list[AVPContentBlock]:
-    """A response's parts. Tool calls (output tools included) become
-    `tool_use` blocks keyed by `tool_call_id`."""
-    from pydantic_ai import TextPart, ThinkingPart, ToolCallPart
-
-    blocks: list[AVPContentBlock] = []
+def content(parts: Sequence[ModelResponsePart]) -> list[ContentBlock]:
+    """A response's parts as content blocks. Tool calls the agent runs (output
+    tools included) become `tool_use` blocks; tools the model service runs
+    become `server_tool_use` and `server_tool_result`."""
+    blocks: list[ContentBlock] = []
     for part in parts:
         if isinstance(part, TextPart):
-            blocks.append(TextBlock(text=part.content))
-        elif isinstance(part, ToolCallPart):
             blocks.append(
-                ToolUseBlock(id=part.tool_call_id, name=part.tool_name, input=_args(part))
+                TextBlock(type="text", text=part.content, citations=_citations(part.citations))
             )
         elif isinstance(part, ThinkingPart):
             blocks.append(
                 ThinkingBlock(
+                    type="thinking",
                     thinking=part.content,
                     signature=part.signature,
                     redacted=True if not part.content and part.signature else None,
                 )
             )
+        elif isinstance(part, ToolCallPart):
+            blocks.append(
+                ToolUseBlock(
+                    type="tool_use", id=part.tool_call_id, name=part.tool_name, input=_args(part)
+                )
+            )
+        elif isinstance(part, NativeToolCallPart):
+            blocks.append(
+                ServerToolUseBlock(
+                    type="server_tool_use",
+                    id=part.tool_call_id,
+                    name=part.tool_name,
+                    input=_args(part),
+                )
+            )
+        elif isinstance(part, NativeToolReturnPart):
+            blocks.append(
+                ServerToolResultBlock(
+                    type="server_tool_result",
+                    tool_use_id=part.tool_call_id,
+                    name=part.tool_name,
+                    content=to_jsonable_python(part.content, fallback=str),
+                    is_error=True if part.outcome != "success" else None,
+                )
+            )
+        elif isinstance(part, FilePart) and part.content.media_type.startswith("image/"):
+            source = Source(
+                type="base64",
+                media_type=part.content.media_type,
+                data=base64.b64encode(part.content.data).decode(),
+            )
+            blocks.append(ImageBlock(type="image", source=source))
+        # Left out, because AVP has no block for them:
+        # - CompactionPart: the service's summary of earlier context.
+        # - SpeechPart: audio the model spoke, with its transcript.
+        # - FilePart that isn't an image, such as a generated PDF.
     return blocks
 
 
-def _args(part: Any) -> dict[str, Any]:
+def _citations(citations: list[Citation] | None) -> list[AVPCitation] | None:
+    """One AVP citation per source of each Pydantic AI citation."""
+    result = []
+    for citation in citations or []:
+        anchor = citation.anchor if isinstance(citation.anchor, ContentCitationAnchor) else None
+        for source in citation.sources:
+            result.append(
+                AVPCitation(
+                    type=source.kind,
+                    cited_text=source.excerpts[0] if source.excerpts else None,
+                    start_index=anchor.start if anchor else None,
+                    end_index=anchor.end if anchor else None,
+                    source_id=source.document_id
+                    if isinstance(source, DocumentCitationSource)
+                    else None,
+                    source_url=source.url if isinstance(source, WebCitationSource) else None,
+                    source_title=source.title,
+                )
+            )
+    return result or None
+
+
+def _args(part: BaseToolCallPart) -> dict[str, Any]:
     try:
         return part.args_as_dict()
     except (ValueError, AssertionError):
         return {"_raw": part.args}
 
 
-def usage(native: Any) -> Usage | None:
-    """Per-request usage. Pydantic AI's `input_tokens` already includes cache
-    reads and writes, as AVP's does."""
-    if native is None or not (native.input_tokens or native.output_tokens):
+def usage(native: RequestUsage) -> UsageReport | None:
+    """One response's usage. Pydantic AI's `input_tokens` already includes
+    cache reads and writes, as AVP's does."""
+    if not (native.input_tokens or native.output_tokens):
         return None
-    return Usage(
+    return UsageReport(
         input_tokens=native.input_tokens,
         output_tokens=native.output_tokens,
         cache_read_input_tokens=native.cache_read_tokens or None,
@@ -58,23 +151,18 @@ def usage(native: Any) -> Usage | None:
     )
 
 
-def finish_reasons(response: Any) -> list[str] | None:
+def finish_reasons(response: ModelResponse) -> list[str] | None:
     return [response.finish_reason] if response.finish_reason else None
 
 
-def tool_results(parts: list[Any]) -> list[tuple[str, str, bool]]:
-    """`(call_id, output, is_error)` for each tool result in a request: a
-    return (a `failed` outcome is an error) or a retry prompt answering a call."""
-    from pydantic_ai import RetryPromptPart, ToolReturnPart
-
-    results = []
-    for part in parts:
-        if isinstance(part, ToolReturnPart):
-            failed = part.outcome not in (None, "success")
-            results.append((part.tool_call_id, _text(part.content), failed))
-        elif isinstance(part, RetryPromptPart) and part.tool_name is not None:
-            results.append((part.tool_call_id, _text(part.content), True))
-    return results
+def tool_results(parts: Sequence[ModelRequestPart]) -> list[tuple[str, str, bool]]:
+    """`(call_id, output, is_error)` for each tool result in a request. Any
+    outcome but `success`, such as `failed` or `retried`, is an error."""
+    return [
+        (part.tool_call_id, _text(part.content), part.outcome not in (None, "success"))
+        for part in parts
+        if isinstance(part, ToolReturnPart)
+    ]
 
 
 def _text(value: Any) -> str:
@@ -88,23 +176,23 @@ def _text(value: Any) -> str:
         return str(value)
 
 
-def error_code(exc: BaseException) -> ErrorCode:
+def error_code(exc: Exception) -> ErrorCode:
     """Provider errors by status and message, so the provider SDKs stay lazy."""
-    from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded, UserError
-
     text = str(exc).lower()
     if isinstance(exc, ModelHTTPError):
         if exc.status_code in (401, 403):
-            return ErrorCode.auth_error
+            return "auth_error"
         if exc.status_code == 429 or _out_of_credits(text):
-            return ErrorCode.rate_limit
+            return "rate_limit"
         if ("context" in text and ("length" in text or "window" in text)) or "too long" in text:
-            return ErrorCode.context_limit
+            return "context_limit"
     if isinstance(exc, UserError) and "api_key" in text.replace(" ", "_"):
-        return ErrorCode.auth_error
+        return "auth_error"
+    if isinstance(exc, UnexpectedModelBehavior) and "output retries" in text:
+        return "output_invalid"
     if isinstance(exc, (UnexpectedModelBehavior, UsageLimitExceeded)):
-        return ErrorCode.unknown
-    return ErrorCode.agent_crash
+        return "unknown"
+    return "agent_crash"
 
 
 def _out_of_credits(text: str) -> bool:
