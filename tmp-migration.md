@@ -119,16 +119,30 @@ TypeScript (`avp-sdk/typescript`):
 
 ### 4. Agents (`agents/`)
 
-- [ ] `_template`
-- [ ] `avp-claude-agent-sdk`
-- [ ] `avp-codex`
-- [ ] `avp-deep-agents`
-- [ ] `avp-gemini-cli`
-- [ ] `avp-goose`
-- [ ] `avp-openai-agents`
-- [ ] `avp-opencode`
-- [ ] `avp-pi`
-- [ ] `avp-pydantic-ai`
+One PR per agent. TypeScript and Rust agents wait for their SDKs.
+
+| Agent | Language | New SDK | `<agent>-cli` command | Live run | Old files removed |
+|---|---|---|---|---|---|
+| `avp-pydantic-ai` | Python | ✅ | ✅ | ✅ Anthropic | ⬜ |
+| `_template` | Python, Rust | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-claude-agent-sdk` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-codex` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-deep-agents` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-openai-agents` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-gemini-cli` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-opencode` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-pi` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-goose` | Rust | ⬜ | ⬜ | ⬜ | ⬜ |
+
+- **New SDK:** its own project on `avp-sdk`; `ping`, `describe`, and `run` work.
+- **`<agent>-cli` command:** the command line is installed as a command, to be
+  the image's entrypoint.
+- **Live run:** one real model call through the command line.
+- **Old files removed:** once avp-cli decides how agent images are built, remove
+  what the old tools still read: `avp-conformance.json`, its `Makefile` lines
+  (manifest variable, `make conformance`, `TEST_PKGS`), its entry in the legacy
+  CLI's `agents.json`, `[tool.avp.release]`, and any `avp-conformance` example in
+  its README.
 
 ### 5. Split the uv workspace into separate projects
 
