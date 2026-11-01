@@ -8,10 +8,14 @@ version = "0.1.0"
 source = { editable = "../avp-sdk/python" }
 dependencies = [
     { name = "pydantic" },
+    { name = "typer" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.11,<3" }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.11,<3" },
+    { name = "typer", specifier = ">=0.20" },
+]
 
 [package.metadata.requires-dev]
 dev = [
