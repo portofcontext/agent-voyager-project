@@ -12,7 +12,7 @@ aren't known yet; see "Open: the hosts an agent needs" in tmp-migration.md.
 from urllib.parse import urlparse
 
 from avp.commission import Commission, McpServerHttp
-from avp.utils.base_urls import bundled_base_urls, default_base_url
+from avp.utils.endpoints import bundled_endpoints, default_base_url
 
 MODEL = "model"
 ALLOW_HOST = "--allow-host"
@@ -29,7 +29,7 @@ def allowed_hosts(commission: Commission, allow_host: list[str]) -> dict[str, li
                 reasons.append(reason)
 
     model = commission.model
-    base_url = model.base_url or default_base_url(bundled_base_urls(), model.provider)
+    base_url = model.base_url or default_base_url(bundled_endpoints(), model.provider)
     add(urlparse(base_url).hostname if base_url else None, MODEL)
     for server in commission.mcp_servers or []:
         if isinstance(server, McpServerHttp):
