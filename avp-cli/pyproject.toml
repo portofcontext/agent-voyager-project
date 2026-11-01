@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-avp = "avp_cli.cli:app"
+avp = "avp_cli.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/portofcontext/agent-voyager-project"

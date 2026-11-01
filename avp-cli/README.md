@@ -15,3 +15,6 @@ uv run ruff format --check
 uv run ty check
 uv run pytest
 ```
+
+`tests/test_agent.py` builds images and starts sandboxes. It is skipped when no
+container engine answers.

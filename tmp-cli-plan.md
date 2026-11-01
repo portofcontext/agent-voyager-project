@@ -1,13 +1,15 @@
 # CLI plan 1: shared modules, then install and ping/describe
 
-Goal: `avp agent create` builds an agent's image, and `ping` and `describe`
+Goal: `avp agent install` builds an agent's image, and `ping` and `describe`
 run in an OpenSandbox sandbox from it. No model calls, credentials, or network
 yet; those are the next plan.
 
 ## Shared modules
 
-Each concern lives in one module, so `run`, `eval`, and `conformance` never
-repeat it.
+Each concern lives in one place, so `run`, `eval`, and `conformance` never
+repeat it. Built so far: `paths.py`, `console.py`, `engine/images.py`,
+`sandbox/service.py` and `sandboxes.py`, and `agents/` (`cli.py`, `store.py`,
+and `command.py`, which is the `launch.py` below).
 
 | Module | Job | Plan 1 |
 |---|---|---|
@@ -22,6 +24,10 @@ repeat it.
 
 ## Plan 1 steps
 
+Done: steps 1 to 6, with `create` named `install` and taking a Dockerfile, and the agent command
+line's output read from the command's stdout rather than a mounted run
+directory, which comes with `run`.
+
 1. `paths.py` and `console.py`.
 2. `engine.py`, with a test that builds and removes a tiny image. It is skipped
    when no engine answers.
@@ -31,10 +37,11 @@ repeat it.
    Wire up `avp sandbox start | stop | status`.
 4. `launch.py`: run `<command> ping --out /io/ping.json` and
    `<command> describe --out /io/descriptor.json` in a sandbox, then read and
-   validate the files (`{"type": "pong"}`, then the SDK's `AgentDescriptor`).
+   validate the files (`{"type": "pong", "avp_version": "0.1"}`, then the SDK's `AgentDescriptor`).
 5. `agents.py`: `agent create NAME --from <working copy>` writes the Dockerfile
    from the agent's manifest, builds the image, then pings and describes the
-   agent and saves the definition with the image name and Descriptor. Wire up
+   agent and saves the definition with the image name. The Descriptor is never
+   saved; `describe` asks the agent each time. Wire up
    `avp agent create | list | describe | delete`.
 6. An end-to-end test: create a small fixture agent, describe it, delete it.
    Skipped when no engine answers.
@@ -44,11 +51,8 @@ repeat it.
 1. **A test agent.** Decided: migrate `avp-pydantic-ai` to the new SDK first.
    `ping` and `describe` need no model call, and it is the real agent plan 2
    uses for a model call through the Credential Vault.
-2. **The agent manifest.** A working copy must say how it installs and what
-   command answers `ping`/`describe`/`run`. Today that is split between
-   `avp-conformance.json` (the command) and `avp-release.json` (the install).
-   Proposal: one `avp-agent.json` with a base image, install steps, and the
-   command.
+2. **The agent manifest.** Decided: none. An agent is a Dockerfile whose
+   ENTRYPOINT is its command line.
 3. **Where `ping` lives.** Decided: `avp agent ping NAME`, possibly removed
    after testing.
 4. **Agent definitions** as files or `~/.avp` state (open item 1 in
@@ -60,4 +64,5 @@ repeat it.
 - Plan 2: `run` with a real model call through the Credential Vault, plus
   `credentials.py`, `commission.py`, and the HTTPS trust check.
 - Plan 3: `conformance check` on top of `launch.py`.
-- Releases: resolve `--from avp-pi@0.4.1` from published releases.
+- Releases: install the project's own agents by name and version once they are
+  published.
