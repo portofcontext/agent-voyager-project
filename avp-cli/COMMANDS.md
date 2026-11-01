@@ -36,9 +36,9 @@ avp
 │     reach only the model's host (model.base_url, or avp's default for the provider),
 │     the Commission's HTTP MCP servers, and the hosts --allow-host adds. --volume
 │     (-v) mounts a host path, read-write unless it ends in :ro. A {"proxy": NAME}
-│     model.credential comes from `avp vault`; the sandbox's Credential Vault adds it to
-│     requests to the model's host, so the agent never sees it.
-│     ⬜ --out, --timeout, proxy credentials in MCP server headers.
+│     credential comes from `avp vault`, and the sandbox's Credential Vault adds it, so the
+│     agent never sees it: model.credential to requests to the model's host, and an HTTP
+│     MCP server's headers to requests to the server's host. ⬜ --out, --timeout.
 │
 ├── ⬜ eval              Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.
