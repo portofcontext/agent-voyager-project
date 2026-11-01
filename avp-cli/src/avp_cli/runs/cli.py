@@ -66,7 +66,7 @@ def run(
             " model.base_url, or allow its host with --allow-host",
             highlight=False,
         )
-    err.print(f"Allowed hosts: {network.describe(hosts)}", highlight=False)
+    # err.print(f"Allowed hosts: {network.describe(hosts)}", highlight=False)
     if mounts:
         err.print(f"Volumes: {volumes.describe(mounts)}", highlight=False)
     with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts) as box:

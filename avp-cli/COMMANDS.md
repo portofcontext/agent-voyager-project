@@ -24,17 +24,20 @@ NotImplementedError. The old CLI is in
 
 ## Commands
 
+✅ built, ⬜ not yet. A run keeps its Commission, Trajectory, and the agent's
+stderr in `~/.avp/runs/<time>-<run_id>/`.
+
 ```text
 avp
-├── run                 Run one agent on one Commission and write its Trajectory.
+├── ✅ run               Run one agent on one Commission and write its Trajectory.
 │     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
 │         [--allow-host pypi.org] [-v ./testing/mcp:/mcp:ro] [--out traj.ndjson] [--timeout 30m]
 │     The agent's environment has only the variables --env and --env-file give. It can
 │     reach only the model's host (model.base_url, or avp's default for the provider),
 │     the Commission's HTTP MCP servers, and the hosts --allow-host adds. --volume
-│     (-v) mounts a host path, read-write unless it ends in :ro.
+│     (-v) mounts a host path, read-write unless it ends in :ro. ⬜ --out, --timeout.
 │
-├── eval                Run datasets against agents and Commissions, and score the results.
+├── ⬜ eval              Run datasets against agents and Commissions, and score the results.
 │   ├── run     Run an eval file and print the scoreboard.
 │   │     avp eval run capitals.eval.json [--agent pd --agent my-agent] [--model openai/gpt-5-mini]
 │   │         [--max-items 20] [--threshold 0.8] [--resume RUN_ID] [--json]
@@ -45,7 +48,7 @@ avp
 │   └── delete  Delete past runs and their trajectories.
 │         avp eval delete RUN_ID | --all
 │
-├── conformance         Check that an agent follows the spec's rules for agents.
+├── ⬜ conformance       Check that an agent follows the spec's rules for agents.
 │   ├── check   Run the cases against an agent and report pass, fail, or skip by rule.
 │   │     avp conformance check --agent pd [--model anthropic/claude-haiku-4-5]
 │   │         [--rule trajectory.4.4] [--case tool-round-trip] [--keep-trajectories ./out] [--json]
@@ -53,27 +56,27 @@ avp
 │         avp conformance list [--rule trajectory.4.4]
 │
 ├── agent               Agents: an image whose ENTRYPOINT is an AVP agent command line.
-│   ├── install    Build the agent's image, check it answers ping and describe in a
-│   │              sandbox, and save it. Installing over an agent replaces it.
+│   ├── ✅ install    Build the agent's image, check it answers ping and describe in a
+│   │                 sandbox, and save it. Installing over an agent replaces it.
 │   │     avp agent install pd agents/avp-pydantic-ai/python/Dockerfile [--context .]
-│   ├── list       List your agents.
+│   ├── ✅ list       List your agents.
 │   │     avp agent list
-│   ├── ping       Check that the agent starts in a sandbox, without loading it.
+│   ├── ✅ ping       Check that the agent starts in a sandbox, without loading it.
 │   │     avp agent ping pd
-│   ├── describe   Print the agent's Agent Descriptor, from its describe in a sandbox.
+│   ├── ✅ describe   Print the agent's Agent Descriptor, from its describe in a sandbox.
 │   │     avp agent describe pd
-│   ├── uninstall  Remove an agent and its image.
+│   ├── ✅ uninstall  Remove an agent and its image.
 │   │     avp agent uninstall pd
-│   └── exec       Run a command in a fresh sandbox of the agent, without the agent.
+│   └── ⬜ exec       Run a command in a fresh sandbox of the agent, without the agent.
 │         avp agent exec pd -- pytest -q
 │
-├── commission          Commission files.
+├── ⬜ commission        Commission files.
 │   ├── new     Write a Commission for an agent, with its built-in items listed.
 │   │     avp commission new --agent pd --model openai/gpt-5-mini [--prompt "..."] > task.json
 │   └── check   Validate a Commission and apply the Commission checks for an agent.
 │         avp commission check task.json [--agent pd]
 │
-├── secret              Credentials that the broker passes to agents and MCP servers.
+├── ⬜ secret            Credentials that the broker passes to agents and MCP servers.
 │   ├── set     Store a secret under a name a Commission can refer to.
 │   │     avp secret set anthropic [VALUE]
 │   ├── login   Sign in to an MCP server with OAuth and store the token.
@@ -84,11 +87,11 @@ avp
 │         avp secret delete anthropic
 │
 └── sandbox             The OpenSandbox service every agent runs on.
-    ├── start   Start the service. Agent commands also start it when needed.
+    ├── ✅ start   Start the service. Agent commands also start it when needed.
     │     avp sandbox start
-    ├── stop    Stop the service and any sandboxes still running.
+    ├── ✅ stop    Stop the service. ⬜ Stopping sandboxes still running.
     │     avp sandbox stop
-    └── status  Show the container engine and where avp found it, and whether the service is running.
+    └── ✅ status  Show the container engine and where avp found it, and whether the service is running.
           avp sandbox status
 ```
 
@@ -114,38 +117,6 @@ flowchart TD
 To add tools to an AVP agent, build on its image: `FROM localhost/avp/pd`,
 then `RUN pip install pytest`.
 
-### Run
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant CLI as avp (host)
-    participant Secrets as Secret store (host)
-    participant OSB as OpenSandbox server
-    participant Sidecar as Egress sidecar
-    participant Agent as Agent (sandbox)
-    participant Model as Model provider
-
-    User->>CLI: avp run --commission task.json --agent pd
-    CLI->>CLI: Validate the Commission<br/>(the agent applies the Commission checks itself)
-    CLI->>CLI: Write commission.json to a new run directory
-    CLI->>OSB: Create a sandbox from the agent's image:<br/>mount the run directory and the workspace,<br/>deny egress except the model's host,<br/>the HTTP MCP servers, and --allow-host,<br/>turn on the credential proxy
-    OSB->>Sidecar: Start the sandbox's egress sidecar
-    CLI->>Secrets: Look up "anthropic-key"
-    CLI->>OSB: Write the credential to the sandbox's vault,<br/>bound to api.anthropic.com
-    CLI->>Agent: Run: ENTRYPOINT run --commission /io/commission.json<br/>--out /io/trajectory.ndjson
-    Agent->>Sidecar: HTTPS to api.anthropic.com with a stand-in key
-    Sidecar->>Model: The same request with the real key
-    Model-->>Agent: Response, back through the sidecar
-    Agent-->>CLI: Events appended to /io/trajectory.ndjson,<br/>read by the CLI through the mount as they arrive
-    Agent-->>CLI: Exit code
-    CLI->>OSB: Delete the sandbox
-    CLI->>User: Final answer, stop reason, cost,<br/>and where the Trajectory is
-```
-
-The command inside the sandbox is the image's ENTRYPOINT, read through the
-Docker API, with the agent command line's arguments after it. The SDKs provide
-that command line (`avp.agent_cli` in Python).
 
 ## Open
 
