@@ -78,12 +78,3 @@ def describe(name: NameArgument) -> None:
     with sandboxes.sandbox(agent.image) as box:
         descriptor = command.describe(box, images.entrypoint(agent.image))
     out.print_json(descriptor.model_dump_json(exclude_none=True))
-
-
-@app.command("exec")
-def exec_(
-    name: NameArgument,
-    argv: Annotated[list[str], typer.Argument(help="The command, after --.")],
-) -> None:
-    """Run a command in a fresh sandbox of the agent, without the agent."""
-    raise NotImplementedError

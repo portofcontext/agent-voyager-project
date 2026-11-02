@@ -71,10 +71,8 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │     avp agent ping pd
 │   ├── ✅ describe   Print the agent's Agent Descriptor, from its describe in a sandbox.
 │   │     avp agent describe pd
-│   ├── ✅ uninstall  Remove an agent and its image.
-│   │     avp agent uninstall pd
-│   └── ⬜ exec       Run a command in a fresh sandbox of the agent, without the agent.
-│         avp agent exec pd -- pytest -q
+│   └── ✅ uninstall  Remove an agent and its image.
+│         avp agent uninstall pd
 │
 ├── ⬜ commission        Commission files.
 │   ├── new     Write a Commission for an agent, with its built-in items listed.

@@ -18,7 +18,6 @@ COMMANDS = [
     ["agent", "ping"],
     ["agent", "describe"],
     ["agent", "uninstall"],
-    ["agent", "exec"],
     ["commission", "new"],
     ["commission", "check"],
     ["vault", "set"],
