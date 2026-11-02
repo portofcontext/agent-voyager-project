@@ -11,9 +11,9 @@ agent-voyager-project/
 ├── spec/v0.1/                     ✅ specs moved; schemas regenerate in step 2
 ├── avp-sdk/
 │   ├── python/                    ⬜
-│   ├── rust/                      ⬜
+│   ├── rust/                      ✅ implementation; human review pending
 │   ├── typescript/                ⬜
-│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python passes; Rust and TypeScript to come)
+│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python and Rust pass; TypeScript to come)
 ├── avp-cli/                       ⬜ cleanup TBD
 │   └── src/avp_cli/conformance/   ⬜ harness and cases/v0.1/
 ├── agents/                        ⬜ one PR per agent
@@ -39,7 +39,7 @@ agent-voyager-project/
 - [ ] Rust and TypeScript SDKs, checklists below
 - [x] Recorder (`avp.recorder`), with shared cases in `avp-sdk/testdata/recorder/`
 - [x] Run plan (`avp.utils.run_plan`): what a run uses (`agent_started`) and what it turns off, with shared cases in `avp-sdk/testdata/run_plan/`
-- [x] Pricing for the Model object (`avp.utils.pricing`, snapshot in `avp/utils/data/avp_prices.json`)
+- [x] Pricing for the Model object (`avp.utils.pricing`, shared snapshot in `avp-sdk/data/avp_prices.json`)
 - [x] Endpoints, each provider's default base URL and auth header (`avp.utils.endpoints`, snapshot in `avp/utils/data/avp_endpoints.json`), to replace avp-cli's `PROVIDER_REGISTRY` and the conformance meter's `UPSTREAMS`
 - [ ] Publishing the SDK refreshes the snapshots first (`make sdk-data`)
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
@@ -70,21 +70,21 @@ The reviewer checks that:
 
 Rust (`avp-sdk/rust`):
 
-- [ ] Its own crate, with its tests run from the Makefile
+- [x] Its own crate, with its tests run from the Makefile
   - [ ] Reviewed by a person
-- [ ] Wire types generated from `spec/v0.1/*.schema.json`, with a make target that regenerates them and a drift check in `make check`
+- [x] Wire types generated from `spec/v0.1/*.schema.json`, with a make target that regenerates them and a drift check in `make check`
   - [ ] Reviewed by a person
-- [ ] Recorder, passing every case in `avp-sdk/testdata/recorder/`
+- [x] Recorder, passing every case in `avp-sdk/testdata/recorder/`
   - [ ] Reviewed by a person
-- [ ] Commission checks, with the same refusal messages as Python (the Recorder cases pin them)
+- [x] Commission checks, with the same refusal messages as Python (the Recorder cases pin them)
   - [ ] Reviewed by a person
-- [ ] Run plan, passing every case in `avp-sdk/testdata/run_plan/`
+- [x] Run plan, passing every case in `avp-sdk/testdata/run_plan/`
   - [ ] Reviewed by a person
-- [ ] Pricing, shipping `avp_prices.json` and loading it like Python (bundled or cache, optional `max_age`)
+- [x] Pricing, shipping `avp_prices.json` and loading it like Python (bundled or cache, optional `max_age`)
   - [ ] Reviewed by a person
-- [ ] Agent command line: `ping`, `describe`, `run`, with the same exit codes
+- [x] Agent command line: `ping`, `describe`, `run`, with the same exit codes
   - [ ] Reviewed by a person
-- [ ] Its data directory added to `DATA_DIRS` in `scripts/update-sdk-data.py`
+- [x] Shared pricing snapshot linked into its data directory and bundled in its package
   - [ ] Reviewed by a person
 - [ ] Supervisor tools, only when a Rust supervisor needs them: OpenTelemetry, CloudEvents, default base URLs
   - [ ] Reviewed by a person
@@ -105,7 +105,7 @@ TypeScript (`avp-sdk/typescript`):
   - [ ] Reviewed by a person
 - [ ] Agent command line: `ping`, `describe`, `run`, with the same exit codes
   - [ ] Reviewed by a person
-- [ ] Its data directory added to `DATA_DIRS` in `scripts/update-sdk-data.py`
+- [ ] Shared pricing snapshot linked into its data directory and bundled in its package
   - [ ] Reviewed by a person
 - [ ] Supervisor tools, only when a TypeScript supervisor needs them: OpenTelemetry, CloudEvents, default base URLs
   - [ ] Reviewed by a person

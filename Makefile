@@ -57,6 +57,7 @@ help:
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
 	@echo "    make sdk-data        refresh the SDKs' bundled models.dev prices and endpoints"
+	@echo "    make sdk-data-check  check that SDK packages contain the shared price snapshot"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
@@ -290,6 +291,10 @@ schemas:
 sdk-data:
 	@$(UV) run --project avp-sdk/python python scripts/update-sdk-data.py
 
+.PHONY: sdk-data-check
+sdk-data-check:
+	@$(UV) run --project avp-sdk/python python scripts/test-sdk-packaging.py
+
 
 .PHONY: sync-prices
 sync-prices:
@@ -329,8 +334,26 @@ bindings-test:
 	@cd avp/bindings/typescript && npm test --silent
 
 
+.PHONY: sdk-rust-generate sdk-rust-bindings-check sdk-rust-test sdk-rust-check
+sdk-rust-generate:
+	@cargo run --locked --quiet --manifest-path avp-sdk/rust/codegen/Cargo.toml
+
+sdk-rust-bindings-check:
+	@cargo run --locked --quiet --manifest-path avp-sdk/rust/codegen/Cargo.toml -- --check
+
+sdk-rust-test:
+	@cargo test --locked --manifest-path avp-sdk/rust/Cargo.toml --all-targets
+
+sdk-rust-check: sdk-rust-bindings-check
+	@cargo fmt --manifest-path avp-sdk/rust/Cargo.toml -- --check
+	@cargo fmt --manifest-path avp-sdk/rust/codegen/Cargo.toml -- --check
+	@cargo clippy --locked --manifest-path avp-sdk/rust/Cargo.toml --all-targets -- -D warnings
+	@cargo clippy --locked --manifest-path avp-sdk/rust/codegen/Cargo.toml -- -D warnings
+	@$(MAKE) --no-print-directory sdk-rust-test
+
+
 .PHONY: check
-check: format-check lint test test-pi test-gemini-cli test-opencode conformance bindings-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-rust-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

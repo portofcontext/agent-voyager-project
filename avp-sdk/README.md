@@ -56,6 +56,13 @@ publish (`make sdk-data`), so pricing works offline. A caller can pass a
 maximum age to fetch newer prices into a cache file, or its own file for the
 same costs on every rerun. Without either, the SDK never calls models.dev.
 
+The repository stores prices once in [`data/avp_prices.json`](data/avp_prices.json).
+Relative links in the Python and Rust data directories point to that file.
+Package builds expand the links into regular files, so each published package
+contains its snapshot without depending on the repository or another SDK.
+`make sdk-data-check` verifies the snapshot in the Python wheel, source
+distribution, and Rust crate.
+
 Endpoints work the same way, in the same refresh. models.dev gives most
 providers' `api` URL but not the ones whose clients have a URL built in, such
 as `anthropic` and `openai`; a short list of gap fillers in the SDK covers

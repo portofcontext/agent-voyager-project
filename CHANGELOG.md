@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- A Rust SDK in `avp-sdk/rust` for the rebuilt v0.1 specs: generated wire
+  types, Commission checks, run plans, Recorder, pricing snapshots, and the
+  agent command line. Its tests use the shared SDK cases and exercise the
+  file transport in a subprocess.
+
 ### Changed
 
+- SDK prices are stored once in `avp-sdk/data/avp_prices.json`. Python and Rust
+  package builds bundle that shared snapshot through relative file links.
 - The SDK's `avp.utils.base_urls` is now `avp.utils.endpoints`. Each provider's
   entry adds where its API key goes (header and prefix), from the AI SDK package
   models.dev names for it, so a supervisor can set up a credential proxy.
