@@ -76,6 +76,11 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     events = [json.loads(line) for line in (run_directory / "trajectory.ndjson").open()]
     assert events[0]["data"]["commission"] == commission
 
+    # sh-agent refuses every Commission, which is what this case expects.
+    checked = avp("conformance", "check", "--agent", "sh-agent", "--json")
+    [outcome] = json.loads(checked[checked.index("[") :])
+    assert (outcome["case"], outcome["status"]) == ("agents-without-entry", "pass"), outcome
+
     avp("agent", "uninstall", "sh-agent")
     assert "sh-agent" not in avp("agent", "list")
 

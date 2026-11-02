@@ -21,9 +21,13 @@ NotImplementedError. The old CLI is in
   run on. `--agent` takes an installed agent's name.
 - Commands use the AVP terms: `describe` returns the Agent Descriptor.
 - Built with Typer.
+- `conformance` and `eval` share one engine. Each item writes a Commission for
+  an agent, the engine runs it in a sandbox, and the item scores the run.
+  Conformance cases are items defined in avp; an eval file's items are defined
+  by users. See Conformance.
 - Each command takes `--verbose`, which prints more about what avp does to
   stderr and never a secret's value. ⬜ Only the `vault`, `sandbox`, `agent`,
-  and `run` commands have it so far.
+  `run`, and `conformance check` commands have it so far.
 
 ## Commands
 
@@ -55,12 +59,13 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   └── delete  Delete past runs and their trajectories.
 │         avp eval delete RUN_ID | --all
 │
-├── ⬜ conformance       Check that an agent follows the spec's rules for agents. See Conformance.
-│   ├── check   Run the cases against an agent and report pass, fail, or skip by rule.
-│   │     avp conformance check --agent pd [--rule trajectory.4.4] [--keep-trajectories ./out]
-│   │         [--json]
-│   └── list    List the rules and whether each has a case.
-│         avp conformance list [--rule trajectory.4.4]
+├── conformance         Check that an agent follows the spec's rules for agents. See Conformance.
+│   ├── ✅ check   Run the cases against an agent and report pass, fail, or skip by rule. Each
+│   │              case's run is kept in ~/.avp/runs/, as with `avp run`. Exits 1 when a MUST case fails.
+│   │     avp conformance check --agent pd [--rule commission.5.1] [--case agents-without-entry]
+│   │         [--model anthropic/claude-haiku-4-5] [--json]
+│   └── ✅ list    List the rules and the cases for each.
+│         avp conformance list [--rule commission.5.1]
 │
 ├── agent               Agents: an image whose ENTRYPOINT is an AVP agent command line.
 │   ├── ✅ install    Build the agent's image, check it answers ping and describe in a
@@ -118,32 +123,40 @@ the credentials) reaches the sandbox at run time, never through the image.
 
 ## Conformance
 
-⬜ `avp conformance check` shows whether an agent follows the spec's rules for
-agents, with one case per rule and no real model calls.
+`avp conformance check` shows whether an agent follows the spec's rules for
+agents, with no real model calls. The cases are in
+`src/avp_cli/conformance/cases.py`. ⬜ Only `commission.5.1` has a case so far.
 
-- **One case per rule.** A rule's ID is its spec and section number:
+- **Cases by rule.** A rule's ID is its spec and section number:
   `commission.5.3` is "Turned-off items are hidden and blocked", and
-  `trajectory.4.5` is "Every tool call has a result". The cases cover the rules
-  for agents: section 5 of the Commission spec, and section 4 of the Trajectory
-  and Agent Descriptor specs. Rules for supervisors are avp's own, and avp's
-  tests cover them. `conformance list` shows any rule still without a case.
+  `trajectory.4.5` is "Every tool call has a result". A rule can have several
+  cases, since a section can hold several requirements. The cases cover the
+  rules for agents: section 5 of the Commission spec, and section 4 of the
+  Trajectory and Agent Descriptor specs. Rules for supervisors are avp's own,
+  and avp's tests cover them. `conformance list` shows any rule still without
+  a case.
 - **Pass, fail, or skip.** A case is skipped, with the reason, when the agent's
   Descriptor says it lacks what the rule needs, such as subagents. The report
   lists passes and skips together.
-- **No real model calls.** Each case scripts the model's responses, so it
-  creates its scenario every time: for `commission.5.3`, the model calls a
-  built-in tool the Commission turned off, and the case checks that the agent
-  blocks the call and records a tool result for it. A check costs nothing and
-  needs no provider key, so it can run in CI.
-- **⬜ The scripted model.** A conforming agent accepts a configuration that
-  replaces its model with the case's script, and implements that itself, since
-  only the agent knows how its runtime calls a model. Not decided yet:
-  - how the script reaches the agent: a launch option, such as an
-    environment variable or an option to `run`, fits the design boundary that
-    launch context stays outside the wire specs;
-  - the script's format: each response's content, tool calls, and usage, in
-    order;
-  - whether the spec defines it, or only the conformance cases do.
+- **The agent as shipped.** A case writes its Commission from the agent's real
+  Descriptor and never patches the agent. A `conform` entrypoint that patches
+  an agent to force a scenario is a future idea, for a scenario no Commission
+  or mock can create.
+- **No real model calls.** ⬜ A case that needs a model scripts its responses
+  in [aimock](https://github.com/CopilotKit/aimock), which avp starts in its
+  own OpenSandbox sandbox, with the image pinned by digest. The case's
+  `model.base_url` points at it, so the agent needs no launch option and the
+  spec defines nothing for it. aimock serves each provider's API, streaming
+  included, and also serves the MCP servers a case adds. A check costs nothing
+  and needs no provider key, so it can run in CI.
+- **⬜ One engine with `eval`.** A conformance case is an eval item defined in
+  avp: it writes a Commission from the agent's Descriptor, the engine runs it,
+  and the case scores the run. Pass is a score of 1, fail is 0, and skip is a
+  result that eval scorers don't use. Conformance adds a rule and a level
+  (MUST or SHOULD) to each item and groups its report by rule. The engine
+  settings differ: conformance uses a stand-in credential, no network beyond
+  its mocks, and prints its report; an eval uses `avp vault` credentials and
+  saves its results.
 
 ## TUI
 

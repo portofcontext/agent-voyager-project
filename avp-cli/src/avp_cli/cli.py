@@ -10,6 +10,7 @@ from rich.markup import escape
 
 from avp_cli import console
 from avp_cli.agents import cli as agent_cli
+from avp_cli.conformance import cli as conformance_cli
 from avp_cli.runs import cli as run_cli
 from avp_cli.sandbox import cli as sandbox_cli
 from avp_cli.vault import cli as vault_cli
@@ -19,14 +20,11 @@ eval_app = typer.Typer(
     no_args_is_help=True,
     help="Run datasets against agents and Commissions, and score the results.",
 )
-conformance_app = typer.Typer(
-    no_args_is_help=True, help="Check that an agent follows the spec's rules for agents."
-)
 commission_app = typer.Typer(no_args_is_help=True, help="Commission files.")
 
 app.command()(run_cli.run)
 app.add_typer(eval_app, name="eval")
-app.add_typer(conformance_app, name="conformance")
+app.add_typer(conformance_cli.app, name="conformance")
 app.add_typer(agent_cli.app, name="agent")
 app.add_typer(commission_app, name="commission")
 app.add_typer(vault_cli.app, name="vault")
@@ -72,33 +70,6 @@ def eval_delete(
     all: Annotated[bool, typer.Option("--all", help="Delete every run.")] = False,
 ) -> None:
     """Delete past runs and their trajectories."""
-    raise NotImplementedError
-
-
-@conformance_app.command("check")
-def conformance_check(
-    agent: AgentOption,
-    model: Annotated[str | None, typer.Option(help="Run the cases with this model.")] = None,
-    rule: Annotated[
-        list[str] | None, typer.Option(help="Run only the cases for this rule.")
-    ] = None,
-    case: Annotated[list[str] | None, typer.Option(help="Run only this case.")] = None,
-    keep_trajectories: Annotated[
-        Path | None, typer.Option(help="Save each case's Trajectory in this directory.")
-    ] = None,
-    json: JsonOption = False,
-) -> None:
-    """Run the cases against an agent and report pass, fail, or skip by rule."""
-    raise NotImplementedError
-
-
-@conformance_app.command("list")
-def conformance_list(
-    rule: Annotated[
-        list[str] | None, typer.Option(help="List only the cases for this rule.")
-    ] = None,
-) -> None:
-    """List the cases and the rule each one covers."""
     raise NotImplementedError
 
 
