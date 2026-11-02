@@ -8,8 +8,8 @@ from typing import Annotated
 import typer
 from rich.markup import escape
 
+from avp_cli import console
 from avp_cli.agents import cli as agent_cli
-from avp_cli.console import Failed, err
 from avp_cli.runs import cli as run_cli
 from avp_cli.sandbox import cli as sandbox_cli
 from avp_cli.vault import cli as vault_cli
@@ -129,6 +129,8 @@ def main() -> None:
     sdk.propagate = False
     try:
         app()
-    except Failed as failure:
-        err.print(f"[red]error:[/red] {escape(str(failure))}", highlight=False)
+    except console.Failed as failure:
+        console.err.print(f"[red]error:[/red] {escape(str(failure))}", highlight=False)
+        if cause := failure.__cause__ or failure.__context__:
+            console.detail(f"Caused by {type(cause).__name__}: {cause}")
         raise SystemExit(1) from None

@@ -1,10 +1,15 @@
 """`avp vault set`, `list`, and `delete`, against an in-memory credential store."""
 
+import sys
+
+import keyring
 import pytest
 from conftest import Memory
+from keyring.errors import KeyringError
 from typer.testing import CliRunner
 
-from avp_cli.cli import app
+from avp_cli import paths
+from avp_cli.cli import app, main
 from avp_cli.vault import store
 
 
@@ -68,3 +73,28 @@ def test_delete_after_removal_outside_avp(memory: Memory) -> None:
 def test_name_must_match_a_proxy_reference() -> None:
     with pytest.raises(store.Failed, match="can't be a secret name"):
         store.check_name("OpenAI")
+
+
+def test_verbose_names_the_store_and_never_a_value(memory: Memory) -> None:
+    runner = CliRunner()
+    quiet = runner.invoke(app, ["vault", "set", "openai", "sk-1"])
+    assert "Credential store" not in quiet.stderr
+
+    loud = runner.invoke(app, ["vault", "set", "openai", "sk-1", "--verbose"])
+    assert loud.exit_code == 0, loud.output
+    assert "Credential store: conftest Memory" in loud.stderr
+    assert f"Names and descriptions: {paths.vault()}" in loud.stderr
+    assert "sk-1" not in loud.output
+
+
+def test_verbose_failure_shows_its_cause(
+    memory: Memory, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def locked(*_: object) -> None:
+        raise KeyringError("the keychain is locked")
+
+    monkeypatch.setattr(keyring, "set_password", locked)
+    monkeypatch.setattr(sys, "argv", ["avp", "vault", "set", "openai", "sk-1", "--verbose"])
+    with pytest.raises(SystemExit):
+        main()
+    assert "Caused by KeyringError: the keychain is locked" in capsys.readouterr().err

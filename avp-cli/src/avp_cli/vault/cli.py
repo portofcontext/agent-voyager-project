@@ -6,7 +6,8 @@ from typing import Annotated
 import typer
 from rich.table import Table
 
-from avp_cli.console import Failed, err, out
+from avp_cli import console, paths
+from avp_cli.console import Failed, VerboseOption, detail, err, out
 from avp_cli.vault import oauth, store
 
 app = typer.Typer(
@@ -30,8 +31,11 @@ def set_(
         typer.Argument(help="The value; prompted for, without echo, when omitted."),
     ] = None,
     description: DescriptionOption = None,
+    verbose: VerboseOption = False,
 ) -> None:
     """Store a secret under a name a Commission can refer to. Setting a secret again replaces it."""
+    console.verbose = verbose
+    _where()
     store.check_name(name)
     if value is None:
         value = typer.prompt(f"Value for {name}", hide_input=True)
@@ -45,20 +49,30 @@ def login(
     url: Annotated[str, typer.Option(help="The MCP server's URL.")],
     scope: Annotated[list[str] | None, typer.Option(help="An OAuth scope to request.")] = None,
     description: DescriptionOption = None,
+    verbose: VerboseOption = False,
 ) -> None:
     """Sign in to an MCP server with OAuth in the browser, and store the access
     token, the refresh token, and when the access token expires. Signing in
     again replaces them."""
+    console.verbose = verbose
+    _where()
     store.check_name(name)
     secret = oauth.login(name, url, scope or [], description)
-    err.print(f"Signed in to {url} as {name}. {_expiry(secret)}")
+    err.print(f"\nSigned in to {url} as {name}. {_expiry(secret)}")
 
 
 @app.command()
-def refresh(name: NameArgument) -> None:
+def refresh(name: NameArgument, verbose: VerboseOption = False) -> None:
     """Get a new access token for an OAuth sign-in with its refresh token."""
+    console.verbose = verbose
+    _where()
     secret = oauth.refresh(name)
     err.print(f"Refreshed {name}. {_expiry(secret)}")
+
+
+def _where() -> None:
+    detail(f"Credential store: {store.backend()}")
+    detail(f"Names and descriptions: {paths.vault()}")
 
 
 def _time(when: datetime) -> str:
@@ -82,9 +96,13 @@ def list_(
             "On macOS, the Keychain may ask to allow each read.",
         ),
     ] = False,
+    verbose: VerboseOption = False,
 ) -> None:
     """List secrets' names, descriptions, when each was last set, and when an
-    OAuth sign-in's token expires."""
+    OAuth sign-in's token expires. With --verbose, also where each sign-in's
+    token comes from."""
+    console.verbose = verbose
+    _where()
     table = Table("Name", "Description", "Updated", "Expires", box=None)
     if check:
         table.add_column("In store")
@@ -103,6 +121,11 @@ def list_(
             row.append("[green]✓[/green]" if stored else "[red]✗[/red]")
         table.add_row(*row)
     out.print(table)
+    for secret in store.secrets():
+        if secret.oauth:
+            detail(f"{secret.name}: signed in to {secret.oauth.url}")
+            detail(f"{secret.name}: token endpoint {secret.oauth.token_endpoint}")
+            detail(f"{secret.name}: scopes requested {' '.join(secret.oauth.scopes) or 'none'}")
     if missing:
         raise Failed(f"not in the store: {', '.join(missing)}. Set them again, or delete them")
 
@@ -116,7 +139,11 @@ def _expires(secret: store.Secret) -> str:
 
 
 @app.command()
-def delete(name: Annotated[str, typer.Argument(help="The secret.")]) -> None:
+def delete(
+    name: Annotated[str, typer.Argument(help="The secret.")], verbose: VerboseOption = False
+) -> None:
     """Delete a secret."""
+    console.verbose = verbose
+    _where()
     store.delete(name)
     err.print(f"Deleted {name}")

@@ -147,6 +147,22 @@ def test_login_stores_the_tokens_and_when_they_expire(server: Server, memory: Me
     assert not oauth.expired(secret)
 
 
+def test_verbose_login_shows_what_it_found(server: Server) -> None:
+    url = f"{server.base}/mcp"
+    result = CliRunner().invoke(app, ["vault", "login", "test", "--url", url, "--verbose"])
+    assert result.exit_code == 0, result.output
+    assert f"Token endpoint: {server.base}/token" in result.stderr
+    assert f"Registration endpoint: {server.base}/register" in result.stderr
+    assert "Client ID: client-1" in result.stderr
+    assert "Scopes granted: read" in result.stderr
+    assert "access-1" not in result.output
+    assert "refresh-1" not in result.output
+
+    listed = CliRunner().invoke(app, ["vault", "list", "--verbose"])
+    assert f"test: token endpoint {server.base}/token" in listed.stderr
+    assert "test: scopes requested none" in listed.stderr
+
+
 def test_refresh_keeps_the_refresh_token(server: Server, memory: Memory) -> None:
     oauth.login("test", f"{server.base}/mcp", [])
     result = CliRunner().invoke(app, ["vault", "refresh", "test"])

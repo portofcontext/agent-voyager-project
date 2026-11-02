@@ -26,7 +26,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
 from pydantic import BaseModel
 
-from avp_cli.console import Failed, err
+from avp_cli.console import Failed, detail, err
 from avp_cli.vault import store
 
 SIGN_IN_TIMEOUT_S = 300
@@ -97,12 +97,14 @@ def refresh(name: str) -> store.Secret:
     data = {"grant_type": "refresh_token", "refresh_token": grant.tokens.refresh_token}
     if oauth.resource:
         data["resource"] = oauth.resource
+    method = grant.client.token_endpoint_auth_method or "none"
+    detail(f"Token endpoint: {oauth.token_endpoint}, client authentication: {method}")
     auth = None
-    if grant.client.token_endpoint_auth_method == "client_secret_basic":
+    if method == "client_secret_basic":
         auth = (grant.client.client_id or "", grant.client.client_secret or "")
     else:
         data["client_id"] = grant.client.client_id or ""
-        if grant.client.token_endpoint_auth_method == "client_secret_post":
+        if method == "client_secret_post":
             data["client_secret"] = grant.client.client_secret or ""
     try:
         response = httpx.post(oauth.token_endpoint, data=data, auth=auth, timeout=30)
@@ -113,9 +115,15 @@ def refresh(name: str) -> store.Secret:
             f"{oauth.url} refused to refresh {name!r} ({response.status_code}). {sign_in_again}"
         )
     tokens = OAuthToken.model_validate_json(response.content)
+    detail(
+        "The server sent a new refresh token"
+        if tokens.refresh_token
+        else "The refresh token stays the same"
+    )
     # A refresh response may leave out the refresh token and scope when they don't change.
     tokens.refresh_token = tokens.refresh_token or grant.tokens.refresh_token
     tokens.scope = tokens.scope or grant.tokens.scope
+    detail(f"Scopes: {tokens.scope or 'not given'}")
     oauth = oauth.model_copy(update={"expires_at": _expires_at(tokens)})
     store.set_(name, Grant(tokens=tokens, client=grant.client).model_dump_json(), oauth=oauth)
     return store.find(name)
@@ -124,6 +132,7 @@ def refresh(name: str) -> store.Secret:
 async def _login(url: str, scopes: list[str]) -> tuple[Grant, store.OAuth]:
     storage = _Storage()
     with _Callback() as callback:
+        detail(f"Waiting for the sign-in at {callback.uri}")
         provider = OAuthClientProvider(
             server_url=url,
             client_metadata=OAuthClientMetadata(
@@ -143,11 +152,12 @@ async def _login(url: str, scopes: list[str]) -> tuple[Grant, store.OAuth]:
         ):
             await session.initialize()
     context = provider.context
-    if storage.tokens is None or storage.client is None or context.oauth_metadata is None:
+    metadata = context.oauth_metadata
+    if storage.tokens is None or storage.client is None or metadata is None:
         raise Failed(f"{url} didn't ask to sign in, so there is nothing to store")
     oauth = store.OAuth(
         url=url,
-        token_endpoint=str(context.oauth_metadata.token_endpoint),
+        token_endpoint=str(metadata.token_endpoint),
         resource=(
             context.get_resource_url()
             if context.should_include_resource_param(context.protocol_version)
@@ -156,6 +166,13 @@ async def _login(url: str, scopes: list[str]) -> tuple[Grant, store.OAuth]:
         scopes=scopes,
         expires_at=_expires_at(storage.tokens),
     )
+    detail(f"Authorization server: {metadata.issuer}")
+    detail(f"Token endpoint: {oauth.token_endpoint}")
+    if metadata.registration_endpoint:
+        detail(f"Registration endpoint: {metadata.registration_endpoint}")
+    detail(f"Client ID: {storage.client.client_id}")
+    detail(f"Resource: {oauth.resource or 'none'}")
+    detail(f"Scopes granted: {storage.tokens.scope or 'not given'}")
     return Grant(tokens=storage.tokens, client=storage.client), oauth
 
 

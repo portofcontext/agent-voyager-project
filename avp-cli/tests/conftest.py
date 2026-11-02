@@ -1,4 +1,5 @@
-"""An in-memory credential store in place of the system's, and a scratch AVP home."""
+"""An in-memory credential store in place of the system's, a scratch AVP home,
+and --verbose off."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -7,6 +8,8 @@ import keyring
 import pytest
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
+
+from avp_cli import console
 
 
 class Memory(KeyringBackend):
@@ -34,3 +37,9 @@ def memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Memory]:
     keyring.set_keyring(backend)
     yield backend
     keyring.set_keyring(previous)
+
+
+@pytest.fixture(autouse=True)
+def quiet(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A command's --verbose sets a module flag; each test starts without it."""
+    monkeypatch.setattr(console, "verbose", False)

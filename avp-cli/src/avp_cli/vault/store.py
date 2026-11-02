@@ -92,6 +92,11 @@ def set_(name: str, value: str, description: str | None = None, oauth: OAuth | N
     _save([*others.values(), secret])
 
 
+def backend() -> str:
+    """The credential store keyring uses, such as `macOS Keyring`."""
+    return keyring.get_keyring().name
+
+
 def stored(name: str) -> bool:
     """Whether the store still holds `name`, which it can lose outside avp. Reads
     the value."""

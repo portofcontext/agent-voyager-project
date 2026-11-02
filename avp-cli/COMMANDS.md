@@ -21,6 +21,8 @@ NotImplementedError. The old CLI is in
   run on. `--agent` takes an installed agent's name.
 - Commands use the AVP terms: `describe` returns the Agent Descriptor.
 - Built with Typer.
+- Each command takes `--verbose`, which prints more about what avp does to
+  stderr and never a secret's value. ⬜ Only the `vault` commands have it so far.
 
 ## Commands
 
