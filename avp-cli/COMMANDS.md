@@ -22,8 +22,8 @@ NotImplementedError. The old CLI is in
 - Commands use the AVP terms: `describe` returns the Agent Descriptor.
 - Built with Typer.
 - Each command takes `--verbose`, which prints more about what avp does to
-  stderr and never a secret's value. ⬜ Only the `vault`, `sandbox`, and `agent`
-  commands have it so far.
+  stderr and never a secret's value. ⬜ Only the `vault`, `sandbox`, `agent`,
+  and `run` commands have it so far.
 
 ## Commands
 

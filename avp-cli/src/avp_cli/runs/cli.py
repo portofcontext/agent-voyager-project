@@ -1,5 +1,6 @@
 """`avp run`: one agent on one Commission."""
 
+import shlex
 from pathlib import Path
 from typing import Annotated
 
@@ -8,8 +9,9 @@ from pydantic import ValidationError
 
 from avp.commission import Commission
 from avp.trajectory import AgentStoppedEvent, ErrorOccurredEvent, parse_trajectory_event
+from avp_cli import console
 from avp_cli.agents import command, store
-from avp_cli.console import Failed, err, out
+from avp_cli.console import Failed, VerboseOption, detail, err, out
 from avp_cli.engine import images
 from avp_cli.runs import credentials, directory, environment, network, volumes
 from avp_cli.sandbox import sandboxes
@@ -43,12 +45,14 @@ def run(
             help="HOST:SANDBOX to mount a host path in the sandbox, or HOST:SANDBOX:ro read-only.",
         ),
     ] = None,
+    verbose: VerboseOption = False,
 ) -> None:
     """Run one agent on one Commission and write its Trajectory. The agent's
     environment has only the variables given with --env and --env-file. It can
     reach only the model's host, the Commission's HTTP MCP servers, and the hosts
     given with --allow-host. A {"proxy": NAME} credential comes from `avp vault`,
     and the sandbox's Credential Vault adds it to the agent's requests."""
+    console.set_verbose(verbose)
     text = commission.read_text()
     try:
         parsed = Commission.model_validate_json(text)
@@ -59,22 +63,24 @@ def run(
     hosts = network.allowed_hosts(parsed, allow_host or [])
     mounts = volumes.parse(volume or [])
     installed = store.load(agent)
+    entrypoint = images.entrypoint(installed.image)
+    detail(f"Image: {installed.image}, entrypoint {shlex.join(entrypoint)}")
     vault = credentials.vault(parsed)
     run_directory = directory.create(parsed.run_id, text)
+    detail(f"Run directory: {run_directory}")
     trajectory = run_directory / directory.TRAJECTORY
     if not any(network.MODEL in reasons for reasons in hosts.values()):
-        err.print(
-            f"warning: avp knows no host for {parsed.model.provider!r} models; set"
-            " model.base_url, or allow its host with --allow-host",
-            highlight=False,
+        detail(
+            f"Warning: avp knows no host for {parsed.model.provider!r} models; set"
+            " model.base_url, or allow its host with --allow-host"
         )
-    # err.print(f"Allowed hosts: {network.describe(hosts)}", highlight=False)
+    detail(f"Allowed hosts: {network.describe(hosts)}")
     if mounts:
-        err.print(f"Volumes: {volumes.describe(mounts)}", highlight=False)
+        detail(f"Volumes: {volumes.describe(mounts)}")
     with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts, vault) as box:
         result = command.run(
             box,
-            images.entrypoint(installed.image),
+            entrypoint,
             f"{sandboxes.IO}/{directory.COMMISSION}",
             f"{sandboxes.IO}/{directory.TRAJECTORY}",
             variables,
@@ -84,7 +90,7 @@ def run(
     # Shown even when the agent crashed, since its events up to then are there.
     if trajectory.is_file():
         report(trajectory)
-        out.print(f"Trajectory: {trajectory}", highlight=False)
+        out.print(f"Trajectory: {trajectory}", highlight=False, soft_wrap=True)
     if result.exit_code != 0:
         tail = "\n".join(result.stderr.strip().splitlines()[-STDERR_LINES:])
         raise Failed(

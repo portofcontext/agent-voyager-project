@@ -71,7 +71,7 @@ def value(name: str) -> str:
     if secret.oauth is None:
         return store.get(name)
     if expired(secret):
-        err.print(f"Refreshing {name}, which has expired", highlight=False)
+        detail(f"Refreshing {name}, which has expired")
         refresh(name)
     return Grant.model_validate_json(store.get(name)).tokens.access_token
 

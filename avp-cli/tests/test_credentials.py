@@ -9,6 +9,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from opensandbox.models.sandboxes import CredentialAuth, CredentialMatch, CustomHeaderEntry
 
 from avp.commission import Commission
+from avp_cli import console
 from avp_cli.console import Failed
 from avp_cli.runs import credentials
 from avp_cli.vault import oauth, store
@@ -114,6 +115,29 @@ def test_sign_in_is_a_bearer_token_in_authorization_only(memory: Memory) -> None
         CustomHeaderEntry(name="Authorization", credential="linear"),
         CustomHeaderEntry(name="X-Token", credential="linear-2"),
     ]
+
+
+def test_verbose_names_each_header_and_secret_never_a_value(
+    memory: Memory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store.set_("ant", "sk-ant")
+    sign_in("linear", "access-1")
+    model = {**MODEL, "credential": {"proxy": "ant"}}
+    headers = {"Authorization": {"proxy": "linear"}, "X-Token": {"proxy": "linear"}}
+    console.set_verbose(True)
+    credentials.vault(commission(model, mcp_servers=[server(headers)]))
+    printed = capsys.readouterr().err
+    assert "Credential Vault: 2 bindings, 3 credentials." in printed
+    assert (
+        "Binding model, for model.credential: https://api.anthropic.com,"
+        " any method and path\n  x-api-key: secret ant\n"
+    ) in printed
+    assert "Binding mcp-web, for MCP server 'web': https://mcp.example.com," in printed
+    assert """  Authorization: "Bearer " + secret linear's access token, which expires""" in printed
+    assert "  X-Token: secret linear's access token, which expires" in printed
+    assert "(credential linear-2)" in printed
+    assert "sk-ant" not in printed
+    assert "access-1" not in printed
 
 
 def test_model_and_mcp_server_at_one_host_fail(memory: Memory) -> None:

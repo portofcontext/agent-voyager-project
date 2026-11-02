@@ -25,7 +25,7 @@ from opensandbox.models.sandboxes import (
 
 from avp.commission import Commission, McpServerHttp, ProxySecret
 from avp.utils.endpoints import bundled_endpoints, provider_auth
-from avp_cli.console import Failed
+from avp_cli.console import Failed, detail
 from avp_cli.runs import network
 from avp_cli.sandbox.sandboxes import Vault
 from avp_cli.vault import oauth, store
@@ -61,8 +61,12 @@ class _Builder:
 
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
+        self.forms: dict[str, tuple[str, bool]] = {}
+        """Each credential's secret in `avp vault`, and whether its value has `Bearer ` added."""
         self.read: dict[str, str] = {}
         self.bindings: list[CredentialBinding] = []
+        self.wheres: list[str] = []
+        """What each binding is for, such as `model.credential`."""
         self.hosts: dict[str, str] = {}
 
     def add(self, name: str, where: str, header: str | None = None) -> str:
@@ -76,13 +80,15 @@ class _Builder:
         if name not in self.read:
             self.read[name] = oauth.value(name)
         value = self.read[name]
-        if header and header.lower() == "authorization" and store.find(name).oauth:
+        bearer = bool(header and header.lower() == "authorization" and store.find(name).oauth)
+        if bearer:
             value = f"Bearer {value}"
         vault_name, n = name, 1
         while self.values.get(vault_name, value) != value:
             n += 1
             vault_name = f"{name}-{n}"
         self.values[vault_name] = value
+        self.forms[vault_name] = (name, bearer)
         return vault_name
 
     def bind(self, where: str, name: str, match: CredentialMatch, auth: CredentialAuth) -> None:
@@ -94,15 +100,65 @@ class _Builder:
                 )
             self.hosts[host] = where
         self.bindings.append(CredentialBinding(name=name, match=match, auth=auth))
+        self.wheres.append(where)
 
     def vault(self) -> Vault | None:
         if not self.bindings:
             return None
+        self._describe()
         credentials = [
             Credential(name=name, source={"type": "inline", "value": value})
             for name, value in self.values.items()
         ]
         return Vault(credentials=credentials, bindings=self.bindings)
+
+    def _describe(self) -> None:
+        """With --verbose: each binding's matching rule, and the header it sets
+        from each secret. Never a value."""
+        detail(
+            f"Credential Vault: {len(self.bindings)} bindings, {len(self.values)} credentials."
+            " On a matching request, each header replaces what the agent sent"
+        )
+        for where, binding in zip(self.wheres, self.bindings, strict=True):
+            match, auth = binding.match, binding.auth
+            assert isinstance(match, CredentialMatch) and isinstance(auth, CredentialAuth)
+            detail(f"Binding {binding.name}, for {where}: {_describe_match(match)}")
+            if auth.type == "bearer":
+                headers = [("Authorization", auth.credential or "", True)]
+            elif auth.type == "apiKey":
+                headers = [(auth.name or "", auth.credential or "", False)]
+            else:
+                headers = [(h.name, h.credential, False) for h in auth.headers or []]
+            for header, credential, prefixed in headers:
+                detail(f"  {header}: {self._describe_value(credential, prefixed)}")
+
+    def _describe_value(self, credential: str, prefixed: bool) -> str:
+        """Such as `"Bearer " + secret linear's access token, which expires 17:45`."""
+        name, bearer = self.forms[credential]
+        signed_in = store.find(name).oauth
+        what = f"secret {name}'s access token" if signed_in else f"secret {name}"
+        if bearer or prefixed:
+            what = f'"Bearer " + {what}'
+        if signed_in and signed_in.expires_at:
+            what += f", which expires {signed_in.expires_at.astimezone():%Y-%m-%d %H:%M}"
+        if credential != name:
+            what += f" (credential {credential})"
+        return what
+
+
+def _describe_match(match: CredentialMatch) -> str:
+    """Such as `https://api.anthropic.com, any method and path`. The scheme sets
+    the port."""
+    urls = ", ".join(f"{scheme}://{host}" for scheme in match.schemes or [] for host in match.hosts)
+    limits = [
+        f"{label} {', '.join(values)}"
+        for label, values in (
+            ("methods", match.methods),
+            ("paths", match.paths),
+        )
+        if values
+    ]
+    return ", ".join([urls, *limits]) if limits else f"{urls}, any method and path"
 
 
 def _match(url: str) -> CredentialMatch:

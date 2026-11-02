@@ -66,8 +66,12 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
         "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
     }
     (tmp_path / "c.json").write_text(json.dumps(commission))
-    output = avp("run", "--commission", str(tmp_path / "c.json"), "--agent", "sh-agent")
+    output = avp(
+        "run", "--commission", str(tmp_path / "c.json"), "--agent", "sh-agent", "--verbose"
+    )
     assert "invalid_commission: sh-agent refuses every Commission" in output
+    assert "Allowed hosts: api.anthropic.com (model)" in output
+    assert "Running /agent.sh run --commission /io/commission.json" in output
     [run_directory] = (avp_home / "runs").iterdir()
     events = [json.loads(line) for line in (run_directory / "trajectory.ndjson").open()]
     assert events[0]["data"]["commission"] == commission
