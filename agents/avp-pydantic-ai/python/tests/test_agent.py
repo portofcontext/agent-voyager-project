@@ -199,6 +199,19 @@ def test_rate_limit_ends_the_run(script, tmp_path: Path) -> None:
     assert events[-1]["data"]["reason"] == "error"
 
 
+def test_crash_is_reported_not_raised(script, tmp_path: Path, capsys) -> None:
+    """The Trajectory reports the crash, so the command still exits 0; the
+    traceback goes to stderr."""
+    script(RuntimeError("model service unreachable"))
+    events = _run(tmp_path)
+    assert events[-2]["data"] == {
+        "error_code": "agent_crash",
+        "error_message": "model service unreachable",
+    }
+    assert events[-1]["data"]["reason"] == "error"
+    assert "RuntimeError: model service unreachable" in capsys.readouterr().err
+
+
 def test_content_filter_is_a_refusal(script, tmp_path: Path) -> None:
     script(_reply(TextPart("I can't help with that."), finish="content_filter"))
     events = _run(tmp_path, prompt="something bad")

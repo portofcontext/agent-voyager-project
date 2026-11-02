@@ -51,16 +51,16 @@ dev = [
 members = [
     "avp/bindings/python",
     "avp/core/conformance",
-    "avp-cli",
+    "avp-cli-legacy",
     "agents/avp-claude-agent-sdk/python",
     "agents/_template/python",
     "agents/avp-deep-agents/python",
     "agents/avp-codex/python",
     "agents/avp-openai-agents/python",
 ]
-# The new SDK is its own project with its own uv.lock. Members keep the old
-# avp/bindings/python until each one migrates.
-exclude = ["avp-sdk/python", "agents/avp-pydantic-ai/python"]
+# The new SDK, CLI, and migrated agents are their own projects with their own
+# uv.lock. Members keep the old avp/bindings/python until each one migrates.
+exclude = ["avp-sdk/python", "avp-cli", "agents/avp-pydantic-ai/python"]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
 # dependency, resolve it from the workspace rather than PyPI. Critical:

@@ -1,0 +1,10 @@
+# For agent images built from the repo root (`avp agent install pd
+# agents/avp-pydantic-ai/python/Dockerfile --context .`), which install the SDK
+# by path until it is on PyPI. Send only the SDK and the agents being built.
+*
+!avp-sdk/python
+!agents/avp-pydantic-ai/python
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache

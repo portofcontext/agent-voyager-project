@@ -11,7 +11,7 @@ The crypto is verbatim from openai/simple-evals `browsecomp_eval.py`.
 
 Run from this directory so the JSONL lands next to the eval config:
 
-    cd avp-cli/examples/browsecomp
+    cd avp-cli-legacy/examples/browsecomp
     uv run python decrypt_browsecomp.py   # reads ~/Downloads/browse_comp_test_set.csv
 """
 

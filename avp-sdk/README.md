@@ -101,7 +101,7 @@ transport.
 
 | Command | Writes |
 |---|---|
-| `ping` | `{"type": "pong"}`, without loading the agent: a check that it is installed and runs |
+| `ping` | `{"type": "pong", "avp_version": "0.1"}`, without loading the agent: a check that it is installed and runs, and which AVP version it speaks. Fields may be added to it; existing ones never change. |
 | `describe` | The agent's Descriptor as JSON |
 | `run` | The Trajectory as NDJSON, one event per line, to a file or to stdout with `-` |
 

@@ -1,6 +1,7 @@
 """The command line."""
 
 import asyncio
+import json
 import signal
 import sys
 from collections.abc import Awaitable
@@ -9,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from avp._base import AVP_VERSION
 from avp.agent_cli.run import DescribeFn, RunFn, get_descriptor, read_commission
 from avp.agent_cli.sink import ndjson_sink
 
@@ -50,8 +52,9 @@ def main(
 
     @app.command("ping")
     def ping_command(out: Annotated[Path | None, out_option] = None) -> None:
-        """Write {"type": "pong"} without loading the agent, to check it runs."""
-        _write(out, '{"type": "pong"}\n')
+        """Write {"type": "pong", "avp_version": ...} without loading the agent,
+        to check it runs and which AVP version it speaks."""
+        _write(out, json.dumps({"type": "pong", "avp_version": AVP_VERSION}) + "\n")
 
     @app.command("describe")
     def describe_command(out: Annotated[Path | None, out_option] = None) -> None:

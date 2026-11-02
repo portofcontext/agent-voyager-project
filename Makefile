@@ -5,7 +5,7 @@
 #
 # Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
 # under avp/; agents under agents/<name>/<lang>/; the local CLI `avp` under
-# avp-cli/. The uv (Python) workspace is rooted at the repo root (root
+# avp-cli-legacy/. The uv (Python) workspace is rooted at the repo root (root
 # pyproject.toml + ruff.toml + uv.lock), so `uv` runs from here and spans every
 # Python member.
 #
@@ -30,7 +30,7 @@ TEST_PKGS := \
 	agents/avp-deep-agents/python \
 	agents/avp-codex/python \
 	agents/avp-openai-agents/python \
-	avp-cli
+	avp-cli-legacy
 
 
 
@@ -109,7 +109,7 @@ test:
 # test skips when the runner's kernel can't support the sidecar's hooks.
 .PHONY: test-docker
 test-docker:
-	@cd avp-cli && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker.py -m docker -v
+	@cd avp-cli-legacy && AVP_REQUIRE_EGRESS_ENFORCEMENT=1 uv run python -m pytest tests/test_docker.py -m docker -v
 
 
 # Manifest paths, relative to the repo root the harness runs from.
@@ -347,7 +347,7 @@ check-agent:
 	@test -n "$(NAME)" || { echo "usage: make check-agent NAME=avp-<sdk>"; exit 2; }
 	@test -f agents/$(NAME)/python/avp-conformance.json || { echo "error: no Python agent at agents/$(NAME)/python"; exit 2; }
 	@$(MAKE) --no-print-directory format-check
-	@$(MAKE) --no-print-directory test TEST_PKGS="agents/$(NAME)/python avp-cli"
+	@$(MAKE) --no-print-directory test TEST_PKGS="agents/$(NAME)/python avp-cli-legacy"
 	@$(UV) run avp-conformance validate
 	@$(UV) run avp-conformance ping --agent agents/$(NAME)/python/avp-conformance.json
 	@$(UV) run avp-conformance describe --agent agents/$(NAME)/python/avp-conformance.json
@@ -369,7 +369,7 @@ test-live:
 # Trusted Publishing, agents via GitHub releases). These targets just cut the
 # right tag from a clean main, deriving the version from the single source of
 # truth so the tag can never drift from what the code expects:
-#   - avp-cli  -> version in avp-cli/pyproject.toml           (tag pypi-v<version>)
+#   - avp-cli  -> version in avp-cli-legacy/pyproject.toml           (tag pypi-v<version>)
 #   - agents   -> the agent's package version, which `make pins` copies into
 #                 avp-cli's agents.json                        (tag agent-<name>-v<version>)
 # An agent release publishes only after it runs in a sandbox image against a
@@ -407,7 +407,7 @@ endef
 .PHONY: release-cli
 release-cli: _release-guard
 	@$(UV) run python avp/scripts/release-agents.py
-	@version=$$(grep -m1 '^version' avp-cli/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
+	@version=$$(grep -m1 '^version' avp-cli-legacy/pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/'); \
 	echo "→ verifying the wheel builds (avp-cli $$version)..."; \
 	$(UV) build --wheel --package avp-cli --out-dir dist/release >/dev/null; \
 	$(MAKE) --no-print-directory _cut TAG="pypi-v$$version" MSG="avp-cli $$version"
@@ -455,7 +455,7 @@ cli-smoke:
 # `make smoke-agents`, install under a -dev name, run an eval against it. (The
 # goose build needs the Rust toolchain + Goose's system deps, and runs in the
 # sandbox only when built on Linux; the wheels need uv; Node agents need npm.)
-AGENT_NAMES = $(shell python3 -c "import json; print(' '.join(json.load(open('avp-cli/src/avp_cli/agents.json'))))")
+AGENT_NAMES = $(shell python3 -c "import json; print(' '.join(json.load(open('avp-cli-legacy/src/avp_cli/agents.json'))))")
 
 .PHONY: build-agents
 build-agents:

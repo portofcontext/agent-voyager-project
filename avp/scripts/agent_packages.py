@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY = ROOT / "avp-cli" / "src" / "avp_cli" / "agents.json"
+REGISTRY = ROOT / "avp-cli-legacy" / "src" / "avp_cli" / "agents.json"
 
 
 @dataclass(frozen=True)
