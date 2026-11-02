@@ -111,21 +111,9 @@ One agent is one image. OpenSandbox runs images but doesn't build them, so
 the CLI builds the image itself and OpenSandbox starts a fresh sandbox from it
 for each command, deleted when the command ends. Each sandbox starts idle, and
 the CLI runs the image's ENTRYPOINT in it through OpenSandbox's exec daemon,
-so it can fill the vault first and gets the command's exit code and output. Everything that changes per run (the Commission, the workspace,
+so it can fill the vault first and gets the command's exit code and output.
+Everything that changes per run (the Commission, the workspace,
 the credentials) reaches the sandbox at run time, never through the image.
-
-### Install
-
-```mermaid
-flowchart TD
-    A["avp agent install pd ./Dockerfile"] --> B["Build the Dockerfile through the Docker API<br/>as localhost/avp/pd"]
-    B --> C["Read the image's ENTRYPOINT;<br/>refuse none or the shell form"]
-    C --> D["Start a sandbox with no network;<br/>run ENTRYPOINT ping and check its avp_version,<br/>then ENTRYPOINT describe"]
-    D --> E["Delete the sandbox; save the agent's name and image.<br/>The Descriptor is never saved; describe asks the agent."]
-```
-
-To add tools to an AVP agent, build on its image: `FROM localhost/avp/pd`,
-then `RUN pip install pytest`.
 
 ## TUI
 

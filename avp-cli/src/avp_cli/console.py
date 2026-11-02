@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.text import Text
 
 out = Console()
 err = Console(stderr=True)
@@ -44,6 +45,16 @@ def detail(text: str) -> None:
     """Print a line to stderr with --verbose only. Never a secret's value."""
     if verbose:
         err.print(text, style="dim", markup=False, highlight=False, soft_wrap=True)
+
+
+def line(*parts: str | tuple[str, str]) -> Text:
+    """One line from text and (text, style) parts, such as a spinner's, cut to
+    the terminal's width. Not markup, so `ENTRYPOINT ["/agent.sh"]` shows as
+    written."""
+    text = Text.assemble(*parts)
+    text.no_wrap = True
+    text.overflow = "ellipsis"
+    return text
 
 
 class Failed(Exception):

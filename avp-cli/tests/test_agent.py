@@ -69,7 +69,7 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     output = avp(
         "run", "--commission", str(tmp_path / "c.json"), "--agent", "sh-agent", "--verbose"
     )
-    assert "invalid_commission: sh-agent refuses every Commission" in output
+    assert '"error_message": "sh-agent refuses every Commission"' in output
     assert "Allowed hosts: api.anthropic.com (model)" in output
     assert "Running /agent.sh run --commission /io/commission.json" in output
     [run_directory] = (avp_home / "runs").iterdir()

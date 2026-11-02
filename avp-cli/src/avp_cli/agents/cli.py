@@ -11,7 +11,7 @@ from rich.text import Text
 
 from avp_cli import console, paths
 from avp_cli.agents import command, store
-from avp_cli.console import VerboseOption, detail, err, out
+from avp_cli.console import VerboseOption, detail, err, line, out
 from avp_cli.engine import images
 from avp_cli.sandbox import sandboxes
 
@@ -41,10 +41,10 @@ def install(
     store.check_name(name)
     building = ("Building ", (name, "bold"), " image")
     began = time.monotonic()
-    with err.status(_line(*building)) as status:
+    with err.status(line(*building)) as status:
 
         def show(*parts: str | tuple[str, str]) -> None:
-            status.update(_line(*parts))
+            status.update(line(*parts))
 
         def step(step: images.Step) -> None:
             cached = (" (cached)", "dim") if step.cached else ""
@@ -122,13 +122,3 @@ def _entrypoint(image: str) -> list[str]:
     entrypoint = images.entrypoint(image)
     detail(f"Image: {image}, entrypoint {shlex.join(entrypoint)}")
     return entrypoint
-
-
-def _line(*parts: str | tuple[str, str]) -> Text:
-    """One line of the spinner from text and (text, style) parts, cut to the
-    terminal's width. Not markup, so a step such as `ENTRYPOINT ["/agent.sh"]`
-    shows as written."""
-    line = Text.assemble(*parts)
-    line.no_wrap = True
-    line.overflow = "ellipsis"
-    return line

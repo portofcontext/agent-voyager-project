@@ -1,6 +1,9 @@
 """`avp run`: one agent on one Commission."""
 
 import shlex
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -8,15 +11,16 @@ import typer
 from pydantic import ValidationError
 
 from avp.commission import Commission
-from avp.trajectory import AgentStoppedEvent, ErrorOccurredEvent, parse_trajectory_event
 from avp_cli import console
 from avp_cli.agents import command, store
-from avp_cli.console import Failed, VerboseOption, detail, err, out
+from avp_cli.console import Failed, VerboseOption, detail, err, line, out
 from avp_cli.engine import images
-from avp_cli.runs import credentials, directory, environment, network, volumes
+from avp_cli.runs import credentials, directory, environment, events, network, volumes
 from avp_cli.sandbox import sandboxes
 
 STDERR_LINES = 5
+POLL_S = 0.1
+"""How often avp looks for new events."""
 
 
 def run(
@@ -77,20 +81,30 @@ def run(
     detail(f"Allowed hosts: {network.describe(hosts)}")
     if mounts:
         detail(f"Volumes: {volumes.describe(mounts)}")
-    with sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts, vault) as box:
-        result = command.run(
-            box,
-            entrypoint,
-            f"{sandboxes.IO}/{directory.COMMISSION}",
-            f"{sandboxes.IO}/{directory.TRAJECTORY}",
-            variables,
+    with (
+        err.status(line("Starting a sandbox for ", (agent, "bold"))) as status,
+        sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts, vault) as box,
+    ):
+        follower = events.Follower(trajectory)
+        result = _following(
+            follower,
+            lambda: command.run(
+                box,
+                entrypoint,
+                f"{sandboxes.IO}/{directory.COMMISSION}",
+                f"{sandboxes.IO}/{directory.TRAJECTORY}",
+                variables,
+            ),
+            lambda seconds: status.update(
+                line("Running ", (agent, "bold"), " - ", (events.elapsed(seconds), "dim"))
+            ),
         )
+    follower.finish()
     if result.stderr:
         (run_directory / directory.STDERR).write_text(result.stderr)
     # Shown even when the agent crashed, since its events up to then are there.
     if trajectory.is_file():
-        report(trajectory)
-        out.print(f"Trajectory: {trajectory}", highlight=False, soft_wrap=True)
+        out.print(f"\nTrajectory: {trajectory}", highlight=False, soft_wrap=True)
     if result.exit_code != 0:
         tail = "\n".join(result.stderr.strip().splitlines()[-STDERR_LINES:])
         raise Failed(
@@ -103,18 +117,30 @@ def run(
         )
 
 
-def report(trajectory: Path) -> None:
-    """Each event's type, with the details of errors and the stop."""
-    for line in trajectory.read_text().splitlines():
-        event = parse_trajectory_event(line)
-        if event is None:
-            continue
-        if isinstance(event, ErrorOccurredEvent):
-            err.print(
-                f"{event.type}: {event.data.error_code}: {event.data.error_message}",
-                highlight=False,
-            )
-        elif isinstance(event, AgentStoppedEvent):
-            err.print(f"{event.type}: {event.data.reason}", highlight=False)
-        else:
-            err.print(event.type, style="dim")
+def _following(
+    follower: events.Follower,
+    run: Callable[[], sandboxes.Result],
+    tick: Callable[[float], None],
+) -> sandboxes.Result:
+    """Run the agent in a thread and print its events as they arrive, calling
+    `tick` with the seconds it has run each time avp looks. On
+    Ctrl-C, the sandbox is deleted, which ends the agent's command; the thread
+    is a daemon, so it doesn't hold avp open."""
+    outcome: list[sandboxes.Result | BaseException] = []
+
+    def target() -> None:
+        try:
+            outcome.append(run())
+        except BaseException as error:
+            outcome.append(error)
+
+    thread = threading.Thread(target=target, daemon=True)
+    began = time.monotonic()
+    thread.start()
+    while thread.is_alive():
+        follower.poll()
+        tick(time.monotonic() - began)
+        thread.join(POLL_S)
+    if isinstance(outcome[0], BaseException):
+        raise outcome[0]
+    return outcome[0]
