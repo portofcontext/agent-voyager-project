@@ -40,6 +40,9 @@ def memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Memory]:
 
 
 @pytest.fixture(autouse=True)
-def quiet(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A command's --verbose sets a module flag; each test starts without it."""
-    monkeypatch.setattr(console, "verbose", False)
+def quiet() -> Iterator[None]:
+    """A command's --verbose stays set in the process; each test starts and ends
+    without it."""
+    console.set_verbose(False)
+    yield
+    console.set_verbose(False)

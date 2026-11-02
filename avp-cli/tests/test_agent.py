@@ -53,7 +53,11 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     avp("agent", "install", "sh-agent", str(AGENT / "Dockerfile"))
     assert "sh-agent" in avp("agent", "list")
     assert json.loads(avp("agent", "describe", "sh-agent"))["agent_name"] == "sh-agent"
-    assert "pong" in avp("agent", "ping", "sh-agent")
+    pinged = avp("agent", "ping", "sh-agent", "--verbose")
+    assert "pong" in pinged
+    assert "entrypoint /agent.sh" in pinged
+    assert "Running /agent.sh ping" in pinged
+    assert pinged.count("Creating sandbox") == 1
 
     commission = {
         "avp_version": "0.1",
@@ -85,3 +89,23 @@ def test_entrypoint_must_be_exec_form(tmp_path: Path, entrypoint: str, message: 
             images.entrypoint(image)
     finally:
         images.remove(image)
+
+
+def test_failed_build_shows_the_end_of_its_output(tmp_path: Path) -> None:
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM docker.io/library/alpine:3.20\nRUN echo the-last-words && false\n")
+    with pytest.raises(Failed, match=r"(?s)The build's output ends:.*the-last-words"):
+        images.build(dockerfile, tmp_path, tag="localhost/avp/test-failed-build")
+
+
+def test_build_reports_each_step_and_the_ones_it_reuses() -> None:
+    steps: list[images.Step] = []
+    tag = "localhost/avp/test-steps"
+    try:
+        images.build(AGENT / "Dockerfile", AGENT, tag=tag)
+        images.build(AGENT / "Dockerfile", AGENT, tag=tag, step=steps.append)
+    finally:
+        images.remove(tag)
+    assert steps[0] == images.Step("1/3", "FROM docker.io/library/alpine:3.20")
+    assert images.Step("2/3", "COPY agent.sh /agent.sh", cached=True) in steps
+    assert steps[-1].number == "3/3"

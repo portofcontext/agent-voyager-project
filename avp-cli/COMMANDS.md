@@ -22,7 +22,7 @@ NotImplementedError. The old CLI is in
 - Commands use the AVP terms: `describe` returns the Agent Descriptor.
 - Built with Typer.
 - Each command takes `--verbose`, which prints more about what avp does to
-  stderr and never a secret's value. ⬜ Only the `vault` and `sandbox`
+  stderr and never a secret's value. ⬜ Only the `vault`, `sandbox`, and `agent`
   commands have it so far.
 
 ## Commands
@@ -63,7 +63,8 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │
 ├── agent               Agents: an image whose ENTRYPOINT is an AVP agent command line.
 │   ├── ✅ install    Build the agent's image, check it answers ping and describe in a
-│   │                 sandbox, and save it. Installing over an agent replaces it.
+│   │                 sandbox, and save it. Installing over an agent replaces it. Shows
+│   │                 each build step and check as it runs; --verbose prints the build.
 │   │     avp agent install pd agents/avp-pydantic-ai/python/Dockerfile [--context .]
 │   ├── ✅ list       List your agents.
 │   │     avp agent list

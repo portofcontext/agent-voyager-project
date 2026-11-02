@@ -4,6 +4,7 @@ OpenSandbox starts each sandbox idle and runs commands in it through its exec
 daemon, so avp fills the sandbox's vault before the agent starts and gets each
 command's exit code and output."""
 
+import shlex
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -23,7 +24,7 @@ from opensandbox.models.sandboxes import (
 )
 from opensandbox.sync.sandbox import SandboxSync
 
-from avp_cli.console import Failed
+from avp_cli.console import Failed, detail
 from avp_cli.sandbox import service
 
 LIFETIME = timedelta(minutes=10)
@@ -94,7 +95,12 @@ def sandbox(
 
 
 def run(box: SandboxSync, command: list[str], env: dict[str, str] | None = None) -> Result:
+    """Run the command and wait for it. Details name `env`'s variables, not their values."""
+    detail(f"Running {shlex.join(command)}")
+    if env:
+        detail(f"With the variables {', '.join(sorted(env))}")
     execution = box.commands.run(command, opts=RunCommandOpts(envs=env))
+    detail(f"Exited with {execution.exit_code}")
     return Result(
         exit_code=execution.exit_code,
         stdout="".join(m.text for m in execution.logs.stdout),

@@ -12,7 +12,7 @@ app = typer.Typer(no_args_is_help=True, help="The OpenSandbox service every agen
 @app.command()
 def start(verbose: VerboseOption = False) -> None:
     """Start the service. Agent commands also start it when needed."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     service.start()
     _details()
     out.print(f"OpenSandbox is running at 127.0.0.1:{service.PORT}")
@@ -21,14 +21,14 @@ def start(verbose: VerboseOption = False) -> None:
 @app.command()
 def stop(verbose: VerboseOption = False) -> None:
     """Stop the service."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     out.print("Stopped OpenSandbox" if service.stop() else "OpenSandbox wasn't running")
 
 
 @app.command()
 def status(verbose: VerboseOption = False) -> None:
     """Show the container engine, and whether the service is running."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     try:
         out.print(f"Engine: {engine.name()} at {engine.where()}", highlight=False)
     except Failed as failure:

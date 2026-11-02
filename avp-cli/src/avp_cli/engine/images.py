@@ -1,19 +1,42 @@
 """Agent images: build one from a Dockerfile, read its entrypoint, remove it."""
 
+import re
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from docker.errors import APIError, NotFound
 
-from avp_cli.console import Failed, err
+from avp_cli.console import Failed, detail
 from avp_cli.engine import client
 
 SHELLS = (["/bin/sh", "-c"], ["sh", "-c"])
+BUILD_TAIL = 20
+"""Build output lines a failed build shows without --verbose."""
+STEP = re.compile(r"(?:STEP|Step) (\d+/\d+) ?: ?(.*)")
+"""A build step's first line: podman's `STEP 3/7: RUN ...`, Docker's `Step 3/7 : RUN ...`."""
 
 
-def build(dockerfile: Path, context: Path, tag: str) -> str:
-    """Build the image, printing the build's output as it arrives. Returns the
-    engine's name for it, such as podman's `localhost/avp/pd:latest`."""
+@dataclass(frozen=True)
+class Step:
+    number: str
+    """Such as `3/7`."""
+    instruction: str
+    """The instruction's first line, such as `RUN uv sync`."""
+    cached: bool = False
+
+
+def build(
+    dockerfile: Path, context: Path, tag: str, step: Callable[[Step], None] | None = None
+) -> str:
+    """Build the image. `step` is called with each step as it starts, and
+    again with `cached` set when the engine reuses it. The build's output prints as it arrives with --verbose, and its end
+    with a failure. Returns the engine's name for the image, such as podman's
+    `localhost/avp/pd:latest`."""
     engine = client()
+    tail: deque[str] = deque(maxlen=BUILD_TAIL)
+    current: Step | None = None
     for chunk in engine.api.build(
         path=str(context),
         dockerfile=str(dockerfile.resolve()),
@@ -23,12 +46,23 @@ def build(dockerfile: Path, context: Path, tag: str) -> str:
         decode=True,
     ):
         if "error" in chunk:
+            output = "".join(f"\n  {line}" for line in tail)
             raise Failed(
                 f"the image build failed: {chunk['error'].strip()}\n"
                 f"The build context was {context.resolve()}; --context sets another."
+                + (f"\nThe build's output ends:{output}" if output else "")
             )
         if text := chunk.get("stream", "").rstrip():
-            err.print(text, style="dim", markup=False, highlight=False)
+            tail.extend(text.splitlines())
+            detail(text)
+            if step is None:
+                continue
+            for line in text.splitlines():
+                if match := STEP.match(line):
+                    current = Step(match[1], match[2])
+                    step(current)
+                elif current and "Using cache" in line:
+                    step(Step(current.number, current.instruction, cached=True))
     return engine.images.get(tag).tags[0]
 
 

@@ -34,7 +34,7 @@ def set_(
     verbose: VerboseOption = False,
 ) -> None:
     """Store a secret under a name a Commission can refer to. Setting a secret again replaces it."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     _where()
     store.check_name(name)
     if value is None:
@@ -54,7 +54,7 @@ def login(
     """Sign in to an MCP server with OAuth in the browser, and store the access
     token, the refresh token, and when the access token expires. Signing in
     again replaces them."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     _where()
     store.check_name(name)
     secret = oauth.login(name, url, scope or [], description)
@@ -64,7 +64,7 @@ def login(
 @app.command()
 def refresh(name: NameArgument, verbose: VerboseOption = False) -> None:
     """Get a new access token for an OAuth sign-in with its refresh token."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     _where()
     secret = oauth.refresh(name)
     err.print(f"Refreshed {name}. {_expiry(secret)}")
@@ -101,7 +101,7 @@ def list_(
     """List secrets' names, descriptions, when each was last set, and when an
     OAuth sign-in's token expires. With --verbose, also where each sign-in's
     token comes from."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     _where()
     table = Table("Name", "Description", "Updated", "Expires", box=None)
     if check:
@@ -143,7 +143,7 @@ def delete(
     name: Annotated[str, typer.Argument(help="The secret.")], verbose: VerboseOption = False
 ) -> None:
     """Delete a secret."""
-    console.verbose = verbose
+    console.set_verbose(verbose)
     _where()
     store.delete(name)
     err.print(f"Deleted {name}")
