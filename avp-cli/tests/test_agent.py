@@ -25,15 +25,19 @@ def engine_answers() -> bool:
     return True
 
 
+TEST_PORT = 18799
+
 pytestmark = pytest.mark.skipif(not engine_answers(), reason="no container engine answers")
 
 
 @pytest.fixture(scope="module")
 def avp_home(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
-    if service.running():
-        pytest.skip("an OpenSandbox service is already running on avp's port")
     home = tmp_path_factory.mktemp("avp")
     with pytest.MonkeyPatch.context() as patch:
+        # Its own port, so it never meets the service on avp's.
+        patch.setattr(service, "PORT", TEST_PORT)
+        if service.running():
+            pytest.skip(f"an OpenSandbox service is already running on {TEST_PORT}")
         patch.setenv("AVP_HOME", str(home))
         yield home
         service.stop()
