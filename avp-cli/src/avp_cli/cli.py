@@ -1,10 +1,12 @@
 """The `avp` command tree, as COMMANDS.md describes it. Commands not built yet
 raise NotImplementedError."""
 
+import logging
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.markup import escape
 
 from avp_cli.agents import cli as agent_cli
 from avp_cli.console import Failed, err
@@ -120,8 +122,13 @@ def commission_check(
 
 
 def main() -> None:
+    # The OpenSandbox SDK logs retries that then succeed, and failures that avp
+    # reports itself.
+    sdk = logging.getLogger("opensandbox")
+    sdk.addHandler(logging.NullHandler())
+    sdk.propagate = False
     try:
         app()
     except Failed as failure:
-        err.print(f"[red]error:[/red] {failure}", highlight=False)
+        err.print(f"[red]error:[/red] {escape(str(failure))}", highlight=False)
         raise SystemExit(1) from None
