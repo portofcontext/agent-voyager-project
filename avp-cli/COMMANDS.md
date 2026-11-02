@@ -22,7 +22,8 @@ NotImplementedError. The old CLI is in
 - Commands use the AVP terms: `describe` returns the Agent Descriptor.
 - Built with Typer.
 - Each command takes `--verbose`, which prints more about what avp does to
-  stderr and never a secret's value. ⬜ Only the `vault` commands have it so far.
+  stderr and never a secret's value. ⬜ Only the `vault` and `sandbox`
+  commands have it so far.
 
 ## Commands
 
@@ -30,7 +31,7 @@ NotImplementedError. The old CLI is in
 stderr in `~/.avp/runs/<time>-<run_id>/`.
 
 ```text
-avp
+avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --help, prints help.
 ├── ✅ run               Run one agent on one Commission and write its Trajectory.
 │     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
 │         [--allow-host pypi.org] [-v ./testing/mcp:/mcp:ro] [--out traj.ndjson] [--timeout 30m]
@@ -127,6 +128,34 @@ flowchart TD
 To add tools to an AVP agent, build on its image: `FROM localhost/avp/pd`,
 then `RUN pip install pytest`.
 
+## TUI
+
+⬜ `avp` with no arguments opens the TUI when stdin and stdout are a terminal.
+In a pipe or CI it prints help, as `avp --help` always does. It is the CLI's
+home screen, so it has no command name of its own; `dashboard` would suggest
+read-only metrics, and `tui` names how it's built.
+
+The TUI is a place to see what exists and act on it:
+
+- **Explore:** Commissions, agents (with each one's Agent Descriptor), runs and
+  their Trajectories, evals and their scoreboards, vault entries (names only),
+  and the sandbox service's status. Each item links to related items: a run to
+  its agent and Commission, an eval to its runs.
+- **Act:** do from the TUI what the other commands do, such as writing a new
+  Commission, starting a run or an eval, and installing or uninstalling an
+  agent. The TUI calls the same code as those commands and adds no behavior of
+  its own.
+- **Step through a Trajectory:** move event by event through a run, from
+  `run_requested` to `agent_stopped`: each model response with its usage and
+  cost, each tool call next to its result, and subagents nested under the call
+  that started them. Follow a run live while it streams.
+- **Step through an eval:** start from the scoreboard, open an item to compare
+  agents' runs side by side, and step into any run's Trajectory.
+- **AVP themed:** the look and wording follow the voyager theme.
+
+A named command such as `avp bridge <run_id>`, opening the TUI on one item,
+can come later if deep links are needed.
+
 
 ## Open
 
@@ -134,8 +163,8 @@ then `RUN pip install pytest`.
    a Dockerfile instead, to be committed with it.
 2. Removing the saved-Commission library: `run --commission` takes a path.
 3. Removing `init` and the catalog templates, for an example eval file in the docs.
-4. Removing the eval TUI and `eval share`/`unshare`: `eval show --json` covers
-   reading results from scripts.
+4. Removing `eval view` and `eval share`/`unshare`: the [TUI](#tui) replaces
+   `eval view`, and `eval show --json` covers reading results from scripts.
 5. Credential names: the default name a Commission uses for a model's key (the
    provider ID?), and whether a key already in the shell's environment counts.
 6. What `run` prints, and where the Trajectory goes without `--out`

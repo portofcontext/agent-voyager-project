@@ -15,7 +15,7 @@ import httpx
 from opensandbox.config import ConnectionConfigSync
 
 from avp_cli import engine, paths
-from avp_cli.console import Failed
+from avp_cli.console import Failed, detail
 
 PORT = 18764
 """Not OpenSandbox's 8080, which other tools often hold, nor the legacy CLI's 18763."""
@@ -83,9 +83,27 @@ def running() -> bool:
         return False
 
 
+def config() -> dict | None:
+    """The config the service was last started with, or None before the first start."""
+    try:
+        return tomllib.loads((paths.opensandbox() / "config.toml").read_text())
+    except FileNotFoundError:
+        return None
+
+
+def pid() -> int | None:
+    """The process avp last started, or None when avp hasn't started one."""
+    try:
+        return int((paths.opensandbox() / "server.pid").read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
 def start() -> None:
     if running():
+        detail("OpenSandbox was already running")
         return
+    detail(f"Engine: {engine.where()}")
     engine.client()
     directory = paths.opensandbox()
     directory.mkdir(parents=True, exist_ok=True)
@@ -101,9 +119,11 @@ def start() -> None:
             start_new_session=True,
         )
     (directory / "server.pid").write_text(str(server.pid))
-    deadline = time.monotonic() + START_TIMEOUT_S
+    began = time.monotonic()
+    deadline = began + START_TIMEOUT_S
     while time.monotonic() < deadline:
         if running():
+            detail(f"Started process {server.pid} in {time.monotonic() - began:.1f}s")
             return
         if server.poll() is not None:
             break
@@ -117,16 +137,16 @@ def stop() -> bool:
     if not pid_file.is_file():
         return False
     try:
-        os.kill(int(pid_file.read_text()), signal.SIGTERM)
+        process = int(pid_file.read_text())
+        os.kill(process, signal.SIGTERM)
     except (ValueError, ProcessLookupError):
         return False
     finally:
         pid_file.unlink()
+    detail(f"Stopped process {process}")
     return True
 
 
 def _connection() -> ConnectionConfigSync:
-    config = tomllib.loads((paths.opensandbox() / "config.toml").read_text())
-    return ConnectionConfigSync(
-        domain=f"127.0.0.1:{PORT}", api_key=config["server"]["api_key"], protocol="http"
-    )
+    api_key = (config() or {})["server"]["api_key"]
+    return ConnectionConfigSync(domain=f"127.0.0.1:{PORT}", api_key=api_key, protocol="http")
