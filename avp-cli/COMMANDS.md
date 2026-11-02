@@ -32,6 +32,7 @@ stderr in `~/.avp/runs/<time>-<run_id>/`.
 
 ```text
 avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --help, prints help.
+│     avp [--eval RUN_ID | --run RUN_ID]
 ├── ✅ run               Run one agent on one Commission and write its Trajectory.
 │     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
 │         [--allow-host pypi.org] [-v ./testing/mcp:/mcp:ro] [--out traj.ndjson] [--timeout 30m]
@@ -54,11 +55,11 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   └── delete  Delete past runs and their trajectories.
 │         avp eval delete RUN_ID | --all
 │
-├── ⬜ conformance       Check that an agent follows the spec's rules for agents.
+├── ⬜ conformance       Check that an agent follows the spec's rules for agents. See Conformance.
 │   ├── check   Run the cases against an agent and report pass, fail, or skip by rule.
-│   │     avp conformance check --agent pd [--model anthropic/claude-haiku-4-5]
-│   │         [--rule trajectory.4.4] [--case tool-round-trip] [--keep-trajectories ./out] [--json]
-│   └── list    List the cases and the rule each one covers.
+│   │     avp conformance check --agent pd [--rule trajectory.4.4] [--keep-trajectories ./out]
+│   │         [--json]
+│   └── list    List the rules and whether each has a case.
 │         avp conformance list [--rule trajectory.4.4]
 │
 ├── agent               Agents: an image whose ENTRYPOINT is an AVP agent command line.
@@ -115,6 +116,35 @@ so it can fill the vault first and gets the command's exit code and output.
 Everything that changes per run (the Commission, the workspace,
 the credentials) reaches the sandbox at run time, never through the image.
 
+## Conformance
+
+⬜ `avp conformance check` shows whether an agent follows the spec's rules for
+agents, with one case per rule and no real model calls.
+
+- **One case per rule.** A rule's ID is its spec and section number:
+  `commission.5.3` is "Turned-off items are hidden and blocked", and
+  `trajectory.4.5` is "Every tool call has a result". The cases cover the rules
+  for agents: section 5 of the Commission spec, and section 4 of the Trajectory
+  and Agent Descriptor specs. Rules for supervisors are avp's own, and avp's
+  tests cover them. `conformance list` shows any rule still without a case.
+- **Pass, fail, or skip.** A case is skipped, with the reason, when the agent's
+  Descriptor says it lacks what the rule needs, such as subagents. The report
+  lists passes and skips together.
+- **No real model calls.** Each case scripts the model's responses, so it
+  creates its scenario every time: for `commission.5.3`, the model calls a
+  built-in tool the Commission turned off, and the case checks that the agent
+  blocks the call and records a tool result for it. A check costs nothing and
+  needs no provider key, so it can run in CI.
+- **⬜ The scripted model.** A conforming agent accepts a configuration that
+  replaces its model with the case's script, and implements that itself, since
+  only the agent knows how its runtime calls a model. Not decided yet:
+  - how the script reaches the agent: a launch option, such as an
+    environment variable or an option to `run`, fits the design boundary that
+    launch context stays outside the wire specs;
+  - the script's format: each response's content, tool calls, and usage, in
+    order;
+  - whether the spec defines it, or only the conformance cases do.
+
 ## TUI
 
 ⬜ `avp` with no arguments opens the TUI when stdin and stdout are a terminal.
@@ -140,8 +170,9 @@ The TUI is a place to see what exists and act on it:
   agents' runs side by side, and step into any run's Trajectory.
 - **AVP themed:** the look and wording follow the voyager theme.
 
-A named command such as `avp bridge <run_id>`, opening the TUI on one item,
-can come later if deep links are needed.
+Options on `avp` open the TUI on one item: `avp --eval RUN_ID` on an eval's
+scoreboard, and `avp --run RUN_ID` on a run's Trajectory. The TUI replaces
+`eval view`, and `eval show --json` covers reading results from scripts.
 
 
 ## Open
@@ -150,14 +181,12 @@ can come later if deep links are needed.
    a Dockerfile instead, to be committed with it.
 2. Removing the saved-Commission library: `run --commission` takes a path.
 3. Removing `init` and the catalog templates, for an example eval file in the docs.
-4. Removing `eval view` and `eval share`/`unshare`: the [TUI](#tui) replaces
-   `eval view`, and `eval show --json` covers reading results from scripts.
-5. Credential names: the default name a Commission uses for a model's key (the
+4. Credential names: the default name a Commission uses for a model's key (the
    provider ID?), and whether a key already in the shell's environment counts.
-6. What `run` prints, and where the Trajectory goes without `--out`
+5. What `run` prints, and where the Trajectory goes without `--out`
    (`~/.avp/runs/<run_id>/`?).
-7. OAuth tokens in the Credential Vault: avp refreshes an expired token before
+6. OAuth tokens in the Credential Vault: avp refreshes an expired token before
    a run, but the vault doesn't refresh it during one, so a run longer than
    the token lasts can lose access.
-8. Installing the project's own agents by name and version, without a
+7. Installing the project's own agents by name and version, without a
    checkout, once the SDK and agents are published.
