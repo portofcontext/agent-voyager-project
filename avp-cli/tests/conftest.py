@@ -10,6 +10,7 @@ from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
 
 from avp_cli import console
+from avp_cli.eval import scoring
 
 
 class Memory(KeyringBackend):
@@ -46,3 +47,17 @@ def quiet() -> Iterator[None]:
     console.set_verbose(False)
     yield
     console.set_verbose(False)
+
+
+@pytest.fixture(autouse=True)
+def fixed_scorer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fixed`, a built-in scorer for eval tests: every run gets `value`."""
+
+    class Fixed(scoring.ScorerConfig):
+        name = "fixed"
+        value: float = 1
+
+        def score(self, run: scoring.Run) -> scoring.Score:
+            return scoring.Score(value=self.value, passed=self.value == 1)
+
+    monkeypatch.setitem(scoring.SCORERS, "fixed", Fixed)

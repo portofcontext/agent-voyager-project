@@ -120,6 +120,21 @@ def _name(source: CommissionSource, position: int) -> str:
     return f"inline-{position}"
 
 
+class ScorerSpec(BaseModel):
+    """The eval file's `scorer`: `name` picks the scorer, and its other
+    fields configure it. They're checked against the scorer's own fields when
+    the eval is rendered."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+
+    @property
+    def config(self) -> JsonObject:
+        """The fields other than `name`, placeholders and all."""
+        return dict(self.__pydantic_extra__ or {})
+
+
 class Eval(BaseModel):
     """One eval file. Unknown fields are errors, since they are more often
     typos than intent."""
@@ -131,8 +146,8 @@ class Eval(BaseModel):
     name: Name
     """Names the eval in `avp eval list` and its scoreboard."""
     agents: Annotated[list[Name], BeforeValidator(_one_or_more), Field(min_length=1)] | None = None
-    """Installed agents to run, by name: one, or a list. `--agent` replaces
-    it; one of the two is required."""
+    """Installed agents to run, by name: one, or a list. Optional, since the
+    agents can be given when the eval runs instead."""
     commission: Annotated[list[CommissionField], BeforeValidator(_one_or_more), Field(min_length=1)]
     """The Commission to run, or a list of them to compare, each given as a
     saved Commission's name, a path to its file, or inline. Every Commission
@@ -140,8 +155,8 @@ class Eval(BaseModel):
     settings."""
     dataset: Annotated[list[Item], Field(min_length=1), AfterValidator(_unique)]
     """The items each Commission runs on."""
-    scorer: JsonValue
-    """How each run is scored. ⬜ Its shape comes with the scorers."""
+    scorer: ScorerSpec
+    """How each run is scored."""
 
     @model_validator(mode="after")
     def _names(self) -> "Eval":

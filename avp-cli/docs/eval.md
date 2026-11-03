@@ -54,7 +54,8 @@ on by its place in the list. Two Commissions can't have the same name, and a
 file's name must be a valid name.
 
 A Commission file can leave out `run_id` and `supervisor`. avp sets them for
-each run and replaces any value the file gives.
+each run and replaces any value the file gives. A run's `run_id` is
+`<commission>-<agent>-<item>`, such as `inline-1-pd-paris`.
 
 ## Items
 
@@ -107,12 +108,17 @@ happened yet.
 
 ## Checking
 
-avp fills every Commission for every item and validates the result before any
-run starts, and reports every error it finds with where it is:
+Before any run starts, avp fills every Commission for every item and
+validates the result, checks the scorer's fields, and checks that every
+placeholder in the scorer can be filled: an `item` field must be in every
+item, and a `run` field must be one of the [input's](#input). It reports every
+error it finds with where it is:
 
 ```text
 item paris, commission.inline-1.prompt: item has no field 'country'
 item tokyo, commission.inline-1.model.id: Input should be a valid string
+item tokyo, scorer.expected: item has no field 'answer'
+scorer.expected: run has no field 'outptu'
 ```
 
 ## Scorers
@@ -131,7 +137,10 @@ scorer takes the same [input](#input) and returns the same [score](#score).
 | ⬜ `llm-judge` | Asking a model whether the output is correct. |
 
 Placeholders in a scorer's fields are filled for each run, from `item` and
-`run`.
+`run`. A field that takes a number or a boolean, such as `threshold`, can't
+hold a placeholder, since avp checks its type before any run. A placeholder
+that can't be filled for a run, such as `{run.output}` when the output is an
+object, fails the scorer for that run.
 
 ### Input
 
@@ -142,7 +151,7 @@ Placeholders in a scorer's fields are filled for each run, from `item` and
 | `run.commission` | name | The Commission's name. |
 | `run.exit_code` | integer | The agent command's exit code. |
 | `run.trajectory` | list of Trajectory events | The run's valid events, in order. |
-| `run.invalid_trajectory` | list of objects | The Trajectory's lines that aren't valid events, left out of `run.trajectory`: each `{"line": 2, "error": "isn't JSON"}`, with `line` counted from 1. Events of a type avp doesn't know are skipped, not listed. |
+| `run.invalid_trajectory` | list of objects | The Trajectory's lines that aren't valid events, left out of `run.trajectory`: each `{"line": 2, "error": "isn't JSON", "event": "{\"type\": "}`, with `line` counted from 1 and `event` the line parsed as JSON, or its text when it isn't JSON. Events of a type avp doesn't know are skipped, not listed. |
 | `run.output` | any | `agent_stopped`'s `output`, or `null`. |
 | `run.reason` | string or `null` | `agent_stopped`'s `reason`, or `null` when there is no `agent_stopped`. |
 | `run.item` | object | The item, as in the dataset. |

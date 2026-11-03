@@ -22,6 +22,10 @@ from avp_cli.eval.template import TemplateError, render
 class EvalError(Exception):
     """An eval that can't run, with every reason found."""
 
+    def __init__(self, *problems: str) -> None:
+        super().__init__("\n".join(problems))
+        self.problems = list(problems)
+
 
 def load(path: Path) -> Eval:
     try:
@@ -61,27 +65,3 @@ def build(template: JsonObject, item: Item, run_id: str, where: str = "") -> Com
     commission["run_id"] = run_id
     commission["supervisor"] = {"name": "avp-cli", "version": version("avp-cli")}
     return Commission.model_validate(commission)
-
-
-def check(eval: Eval, base: Path) -> list[str]:
-    """Builds and validates every Commission for every item, and returns
-    every problem found."""
-    problems = []
-    for name, source in eval.commissions.items():
-        where = f"commission.{name}"
-        try:
-            template = read(source, base)
-        except EvalError as error:
-            problems.append(f"{where}: {error}")
-            continue
-        for item in eval.dataset:
-            try:
-                build(template, item, f"{name}-{item.id}", where)
-            except TemplateError as error:
-                problems.append(f"item {item.id}, {error}")
-            except ValidationError as error:
-                problems.extend(
-                    f"item {item.id}, {'.'.join([where, *map(str, e['loc'])])}: {e['msg']}"
-                    for e in error.errors()
-                )
-    return problems

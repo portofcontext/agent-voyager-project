@@ -1,4 +1,5 @@
-"""From an eval file and its Commission files to each run's Commission."""
+"""From an eval file and its Commission files to each run's Commission.
+The `fixed` scorer comes from conftest.py."""
 
 import json
 from pathlib import Path
@@ -6,8 +7,9 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from avp_cli.eval.commission import EvalError, build, check, load, read
-from avp_cli.eval.schemas import Item, NamedCommission
+from avp_cli.eval.commission import EvalError, build, load, read
+from avp_cli.eval.config import EvalConfig
+from avp_cli.eval.schemas import Eval, Item, NamedCommission
 from avp_cli.eval.template import TemplateError
 
 TEMPLATE: dict[str, JsonValue] = {
@@ -33,11 +35,21 @@ def write(directory: Path, commission: object, dataset: list = ITEMS) -> Path:
                 "name": "capitals",
                 "commission": "commissions/capitals.json",
                 "dataset": dataset,
-                "scorer": {},
+                "agents": "pd",
+                "scorer": {"name": "fixed"},
             }
         )
     )
     return path
+
+
+def check(ev: Eval, base: Path) -> list[str]:
+    """Every problem `EvalConfig.from_eval` finds."""
+    try:
+        EvalConfig.from_eval(ev, base)
+    except EvalError as error:
+        return error.problems
+    return []
 
 
 def test_an_item_fills_the_commission_from_its_file(tmp_path: Path) -> None:

@@ -13,7 +13,7 @@ VALID = {
     "agents": ["pd"],
     "commission": ["baseline.json", "commissions/terse.json"],
     "dataset": [{"id": "paris", "text": "Paris is in France."}],
-    "scorer": {},
+    "scorer": {"name": "match", "expected": "{item.text}"},
 }
 
 
@@ -113,6 +113,17 @@ def test_items_keep_their_fields() -> None:
 def test_invalid_eval(change: dict) -> None:
     with pytest.raises(ValidationError):
         Eval.model_validate({**VALID, **change})
+
+
+def test_the_scorer_keeps_its_fields_as_config() -> None:
+    scorer = Eval.model_validate(VALID).scorer
+    assert scorer.name == "match"
+    assert scorer.config == {"expected": "{item.text}"}
+
+
+def test_a_scorer_needs_a_name() -> None:
+    with pytest.raises(ValidationError):
+        Eval.model_validate({**VALID, "scorer": {"expected": "x"}})
 
 
 @pytest.mark.parametrize("missing", ["eval_version", "name", "commission", "dataset", "scorer"])

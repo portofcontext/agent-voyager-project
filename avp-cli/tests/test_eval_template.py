@@ -5,7 +5,7 @@ import re
 import pytest
 from pydantic import JsonValue
 
-from avp_cli.eval.template import TemplateError, render
+from avp_cli.eval.template import Reference, TemplateError, references, render
 
 ITEM: dict[str, JsonValue] = {
     "id": "paris",
@@ -104,3 +104,23 @@ def test_render_fails(template: JsonValue, message: str) -> None:
 def test_run_where_it_is_available() -> None:
     scope: dict[str, JsonValue] = {**SCOPE, "run": {"response": "Paris"}}
     assert render("{run.response} vs {item.city}", scope) == "Paris vs Paris"
+
+
+def test_references_lists_every_placeholder_and_where() -> None:
+    value: JsonValue = {
+        "prompt": "{item.city} and {run.output}",
+        "schema": {"$item": "answer"},
+        "args": ["x", "{item.id}"],
+        "n": 1,
+    }
+    assert references(value, "scorer") == [
+        Reference("item", "city", False, "scorer.prompt"),
+        Reference("run", "output", False, "scorer.prompt"),
+        Reference("item", "answer", True, "scorer.schema"),
+        Reference("item", "id", False, "scorer.args[1]"),
+    ]
+
+
+def test_references_rejects_a_malformed_whole_value() -> None:
+    with pytest.raises(TemplateError, match=r"^x: \$run must be the only key"):
+        references({"x": {"$run": "output", "y": 1}})

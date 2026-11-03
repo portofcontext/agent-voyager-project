@@ -124,12 +124,18 @@ the credentials) reaches the sandbox at run time, never through the image.
 ## Eval
 
 The eval file and its placeholders are in [the eval file guide](docs/eval.md).
-⬜ avp reads an eval file and builds and checks each run's Commission; running
-and scoring come next.
+⬜ avp reads an eval file, checks it, and builds each run's Commission. The
+scoring framework is in place with no built-in scorer yet; running comes
+next.
 
-- **Scorers.** ⬜ Inside avp, a scorer is a callable, plain or async, that
-  takes the scorer's input and returns a score, both as the guide defines
-  them. `match`, `command`, `llm-judge`, and conformance cases are all such
+- **Eval to EvalConfig.** `EvalConfig.from_eval` reads an eval file's Commissions,
+  checks everything, and turns `scorer` into its callable. The `EvalConfig`
+  yields each Commission × agent × item with that run's Commission built.
+  Conformance will build an `EvalConfig` directly, with a case's check as
+  the scorer.
+- **Scorers.** Inside avp, a scorer is a callable, plain or async, that takes
+  the scorer's input and returns a score, both as the guide defines them.
+  ⬜ `match`, `command`, `llm-judge`, and conformance cases are all such
   callables. Users add their own scorer with `command`, which gets the same
   input as JSON, so there is no Python plugin interface.
 
