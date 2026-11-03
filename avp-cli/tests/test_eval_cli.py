@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp_cli import console, paths
+from avp_cli import console, paths, prompts
 from avp_cli.agents import store
 from avp_cli.cli import app
 from avp_cli.engine import images
@@ -199,3 +199,62 @@ def test_the_scoreboard_shows_cost_turns_time_and_agents(tmp_path: Path) -> None
     assert "2 runs, $0.0000 in all" in output
     assert "pass inline-1 / pd / paris  100%" in output
     assert "fail inline-1 / pd / tokyo  0%" in output
+
+
+def test_delete_asks_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    asked: list[str] = []
+
+    class Answer:
+        def __init__(self, question: str, default: bool) -> None:
+            asked.append(question)
+
+        def ask(self) -> bool:
+            return answer
+
+    monkeypatch.setattr(prompts, "interactive", lambda: True)
+    monkeypatch.setattr(prompts.questionary, "confirm", Answer)
+    answer = False
+    code, output = avp("eval", "delete", eval_directory.name)
+    assert (code, output) == (1, "Nothing deleted\n")
+    assert eval_directory.is_dir()
+    answer = True
+    code, output = avp("eval", "delete", eval_directory.name)
+    assert code == 0, output
+    assert not eval_directory.exists()
+    assert asked == [f"Delete {eval_directory.name}, with their runs' directories?"] * 2
+
+
+def test_delete_needs_yes_without_a_terminal(tmp_path: Path) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    result = CliRunner().invoke(app, ["eval", "delete", eval_directory.name])
+    assert result.exit_code == 1
+    assert "give --yes" in str(result.exception)
+    assert eval_directory.is_dir()
+
+
+@pytest.mark.parametrize("flag", ["--yes", "-y", "--force", "-f"])
+def test_delete_all_with_yes(tmp_path: Path, flag: str) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    code, output = avp("eval", "delete", "--all", flag)
+    assert code == 0, output
+    assert "Deleted all 1 eval runs" in output
+    assert list((tmp_path / "home" / "evals").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["../home"], "no eval '../home'"),
+        ([], "give the eval runs to delete, or --all"),
+        (["x", "--all"], "give the eval runs to delete, or --all"),
+    ],
+)
+def test_delete_refuses(tmp_path: Path, args: list[str], message: str) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    result = CliRunner().invoke(app, ["eval", "delete", *args, "--yes"])
+    assert result.exit_code == 1
+    assert message in str(result.exception)
+    assert len(list((tmp_path / "home" / "evals").iterdir())) == 1

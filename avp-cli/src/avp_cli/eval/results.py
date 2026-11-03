@@ -1,6 +1,7 @@
 """An eval run's directory, `~/.avp/evals/<time>-<name>/`: the eval file as
 given, `results.json`, and each run's directory under `runs/`."""
 
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -141,3 +142,11 @@ def load(id: str | None = None) -> tuple[Path, EvalResults]:
     except FileNotFoundError:
         raise Failed(f"no eval {id!r}; `avp eval list` shows them") from None
     return directory, EvalResults.model_validate_json(text)
+
+
+def delete(id: str) -> None:
+    """Delete an eval run's directory, with its runs' directories. Only an
+    ID `ids` lists, so a path can't reach outside ~/.avp/evals/."""
+    if id not in ids():
+        raise Failed(f"no eval {id!r}; `avp eval list` shows them")
+    shutil.rmtree(paths.evals() / id)

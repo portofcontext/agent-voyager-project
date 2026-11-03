@@ -63,8 +63,9 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   ├── ✅ show Print a past eval's scoreboard and failed runs, as `eval run` prints them
 │   │           at the end, with the same code. --json prints its results for scripts.
 │   │     avp eval show [RUN_ID] [--agent pd] [--json]
-│   ├── ⬜ delete  Delete past runs and their trajectories.
-│   │     avp eval delete RUN_ID | --all
+│   ├── ✅ delete  Delete past eval runs and their runs' directories. Asks first; --yes
+│   │           (or --force) doesn't, and is needed without a terminal.
+│   │     avp eval delete RUN_ID... | --all [--yes]
 │   ├── ⬜ share   Later, not a priority. Upload an eval's results and Trajectories to
 │   │           agentvoyagerproject.com and print a link that lasts 30 days, as the old CLI's
 │   │           `eval share` does. The upload holds every run's prompts, replies, and tool

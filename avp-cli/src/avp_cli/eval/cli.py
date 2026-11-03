@@ -17,6 +17,7 @@ from avp_cli.eval.engine import run_eval
 from avp_cli.eval.report import print_scoreboard, run_line
 from avp_cli.eval.results import RunResult
 from avp_cli.eval.scoring import Result
+from avp_cli.prompts import YesOption, confirm
 from avp_cli.runs import environment, volumes
 from avp_cli.runs.dispatch import Options
 
@@ -175,8 +176,24 @@ def show(
 
 @app.command("delete")
 def delete(
-    id: Annotated[str | None, typer.Argument(help="The eval run to delete.")] = None,
+    ids: Annotated[list[str] | None, typer.Argument(help="The eval runs to delete.")] = None,
     all: Annotated[bool, typer.Option("--all", help="Delete every eval run.")] = False,
+    yes: YesOption = False,
 ) -> None:
-    """Delete past eval runs and their runs' directories."""
-    raise NotImplementedError
+    """Delete past eval runs, with their runs' directories. Asks first."""
+    if all == bool(ids):
+        raise Failed("give the eval runs to delete, or --all")
+    found = results.ids() if all else ids or []
+    if not found:
+        err.print("No eval runs to delete")
+        return
+    for id in found:
+        if id not in results.ids():
+            raise Failed(f"no eval {id!r}; `avp eval list` shows them")
+    what = f"all {len(found)} eval runs" if all else ", ".join(found)
+    if not confirm(f"Delete {what}, with their runs' directories?", yes):
+        err.print("Nothing deleted")
+        raise typer.Exit(1)
+    for id in found:
+        results.delete(id)
+    err.print(f"Deleted {what}", highlight=False)

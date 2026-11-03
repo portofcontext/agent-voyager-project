@@ -63,6 +63,7 @@ each run and replaces any value the file gives. A run's `run_id` is
 avp eval run capitals.eval.json [--agent pd] [--concurrency 4] [--env-file .env]
 avp eval show            # the latest eval's scoreboard again
 avp eval list
+avp eval delete ID       # asks first; --yes doesn't
 ```
 
 avp first runs each agent's `describe` once, and stops if an agent isn't
