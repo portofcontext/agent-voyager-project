@@ -123,7 +123,8 @@ scorer.expected: run has no field 'outptu'
 
 ## Scorers
 
-⬜ avp checks and scores with `match`; running an eval comes next.
+⬜ avp checks and scores with `match` and `command`; running an eval comes
+next.
 
 A scorer takes one finished run, with its item, and returns a score. Every
 scorer takes the same [input](#input) and returns the same [score](#score).
@@ -132,7 +133,7 @@ scorer takes the same [input](#input) and returns the same [score](#score).
 | `name` | Scores by |
 |---|---|
 | `match` | Comparing the run's text output with an expected string. |
-| ⬜ `command` | Running a command of your own. |
+| `command` | Running a command of your own. |
 
 Placeholders in a scorer's fields are filled for each run, from `item` and
 `run`. A field that takes a number or a boolean, such as `threshold`, can't
@@ -212,8 +213,11 @@ checks that the pattern is valid before any run, and again once it's filled.
 
 avp runs the command once for each run, in the eval file's directory, writes
 the [input](#input) to its stdin as JSON, and reads the [score](#score) from its
-stdout as JSON. When the command exits with a non-zero code or prints something
-other than a score, the scorer failed.
+stdout as JSON. A relative program, such as `./score.py`, is relative to the
+eval file's directory too. The scorer failed when the command can't start,
+exits with a non-zero code, or prints something other than a score; the
+message gives the last line of its stderr, and the run's `scorer-error.txt`
+keeps all of its output.
 
 The command runs on your machine, not in a sandbox, with your environment.
 Running an eval file runs its scorer's command, so run only eval files you

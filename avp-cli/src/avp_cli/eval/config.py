@@ -65,7 +65,7 @@ class EvalConfig:
                 problems.append(f"commission.{name}: {error}")
                 continue
             problems += _commission_problems(name, commissions[name], eval.dataset)
-        scorer = _scorer(eval.scorer, eval.dataset, problems)
+        scorer = _scorer(eval.scorer, eval.dataset, base, problems)
         if problems or scorer is None:
             raise EvalError(*problems)
         return cls(eval.name, chosen, commissions, eval.dataset, scorer, eval.scorer.config)
@@ -88,7 +88,9 @@ def _commission_problems(name: str, template: JsonObject, dataset: list[Item]) -
     return problems
 
 
-def _scorer(spec: ScorerSpec, dataset: list[Item], problems: list[str]) -> Scorer | None:
+def _scorer(
+    spec: ScorerSpec, dataset: list[Item], base: Path, problems: list[str]
+) -> Scorer | None:
     """The scorer's callable, after checking its fields and placeholders."""
     config = SCORERS.get(spec.name)
     if config is None:
@@ -108,7 +110,7 @@ def _scorer(spec: ScorerSpec, dataset: list[Item], problems: list[str]) -> Score
         return None
     for reference in found:
         problems += _reference_problems(reference, dataset)
-    return config.scorer()
+    return config.scorer(base)
 
 
 def _reference_problems(reference: Reference, dataset: list[Item]) -> list[str]:

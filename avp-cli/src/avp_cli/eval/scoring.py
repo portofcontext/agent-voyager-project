@@ -128,8 +128,10 @@ class ScorerConfig(BaseModel):
         raise NotImplementedError
 
     @classmethod
-    def scorer(cls) -> Scorer:
-        """The callable: validates the filled fields in `config`, then scores."""
+    def scorer(cls, base: Path) -> Scorer:
+        """The callable: validates the filled fields in `config`, then scores.
+        `base` is the eval file's directory, for a scorer that reads or runs
+        files beside it."""
 
         def score(input: ScorerInput) -> Score | Awaitable[Score]:
             return cls.model_validate(input.config).score(input.run)
