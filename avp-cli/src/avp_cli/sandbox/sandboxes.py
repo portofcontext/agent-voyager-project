@@ -5,6 +5,7 @@ daemon, so avp fills the sandbox's vault before the agent starts and gets each
 command's exit code and output."""
 
 import shlex
+import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -30,6 +31,24 @@ from avp_cli.sandbox import service
 LIFETIME = timedelta(minutes=10)
 IO = "/io"
 """Where a run directory is mounted in the sandbox."""
+
+
+_live: set[SandboxSync] = set()
+_lock = threading.Lock()
+
+
+def kill_all() -> None:
+    """Deletes every sandbox avp has open, from any thread, which ends the
+    commands running in them. For an interrupted eval, whose sandboxes belong
+    to worker threads."""
+    with _lock:
+        boxes = list(_live)
+        _live.clear()
+    for box in boxes:
+        try:
+            box.kill()
+        except SandboxException as exc:
+            detail(f"Couldn't delete a sandbox: {exc}")
 
 
 @dataclass(frozen=True)
@@ -80,6 +99,8 @@ def sandbox(
         if "dns+nft" in str(exc):
             hint = ". The service started before avp needed it; restart it with `avp sandbox stop`"
         raise Failed(f"OpenSandbox couldn't start a sandbox from {image}: {exc}{hint}") from None
+    with _lock:
+        _live.add(box)
     try:
         if vault:
             try:
@@ -90,8 +111,15 @@ def sandbox(
                 raise Failed(f"OpenSandbox couldn't fill the sandbox's vault: {exc}") from None
         yield box
     finally:
-        box.kill()
-        box.close()
+        # Unless kill_all has deleted it already.
+        with _lock:
+            live = box in _live
+            _live.discard(box)
+        try:
+            if live:
+                box.kill()
+        finally:
+            box.close()
 
 
 def run(box: SandboxSync, command: list[str], env: dict[str, str] | None = None) -> Result:

@@ -101,7 +101,18 @@ def run(
             results.save(directory, saved)
             status.update(line("Running ", (ev.name, "bold"), f" - {len(saved.runs)} of {total}"))
 
-        found = asyncio.run(run_eval(config, directory, options, concurrency, progress))
+        try:
+            found = asyncio.run(run_eval(config, directory, options, concurrency, progress))
+        except KeyboardInterrupt:
+            found = None
+    if found is None:
+        err.print(
+            f"Stopped after {len(saved.runs)} of {total} runs; their results are in"
+            f" {directory / results.RESULTS}",
+            highlight=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(130)
     saved.runs = [RunResult.of(r, directory) for r in found]
     saved.finished = datetime.now(UTC)
     results.save(directory, saved)

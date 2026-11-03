@@ -21,6 +21,7 @@ from avp_cli.eval.engine import run_eval
 from avp_cli.eval.scoring import Result, Score
 from avp_cli.runs import directory
 from avp_cli.runs.dispatch import Finished, Options
+from avp_cli.sandbox import sandboxes
 
 ANSWERS = {"paris": "Paris", "tokyo": "Kyoto", "lima": "Lima"}
 
@@ -179,3 +180,35 @@ def test_an_agent_that_is_not_installed_fails_before_any_run(
 def test_concurrency_must_be_at_least_1(tmp_path: Path, fake: Fake) -> None:
     with pytest.raises(ValueError, match="at least 1"):
         asyncio.run(run_eval(config(tmp_path), tmp_path / "eval", concurrency=0))
+
+
+def test_cancelling_deletes_running_sandboxes_without_waiting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ctrl-C cancels the eval: avp deletes the sandboxes still running, and
+    doesn't wait for the threads, which are daemons."""
+    killed = threading.Event()
+    started = threading.Event()
+
+    def stuck(*args: object) -> Finished:
+        started.set()
+        killed.wait(5)
+        time.sleep(5)  # A thread that never notices; avp must not wait for it.
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(engine, "dispatch", stuck)
+    monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))
+    monkeypatch.setattr(images, "entrypoint", lambda image: ["/agent"])
+    monkeypatch.setattr(sandboxes, "kill_all", killed.set)
+
+    async def interrupted() -> None:
+        task = asyncio.create_task(run_eval(config(tmp_path, agents="pd"), tmp_path / "eval"))
+        await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        await task
+
+    began = time.monotonic()
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(interrupted())
+    assert killed.is_set()
+    assert time.monotonic() - began < 2

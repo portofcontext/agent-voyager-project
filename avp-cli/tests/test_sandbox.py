@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from avp_cli import engine, paths
 from avp_cli.cli import app
-from avp_cli.sandbox import service
+from avp_cli.sandbox import sandboxes, service
 
 
 @pytest.fixture
@@ -46,3 +46,36 @@ def test_verbose_stop_names_the_process(home: Path) -> None:
     assert result.exit_code == 0, result.output
     assert f"Stopped process {process.pid}" in result.stderr
     assert process.wait(timeout=5) != 0
+
+
+class Box:
+    def __init__(self) -> None:
+        self.kills = 0
+        self.closed = False
+
+    def kill(self) -> None:
+        self.kills += 1
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_kill_all_deletes_open_sandboxes_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    box = Box()
+    monkeypatch.setattr(sandboxes.SandboxSync, "create", lambda *a, **k: box)
+    monkeypatch.setattr(sandboxes.service, "connection", lambda: None)
+    with sandboxes.sandbox("avp/pd"):
+        sandboxes.kill_all()
+        assert box.kills == 1
+    assert (box.kills, box.closed) == (1, True)
+    sandboxes.kill_all()
+    assert box.kills == 1
+
+
+def test_a_sandbox_is_deleted_on_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    box = Box()
+    monkeypatch.setattr(sandboxes.SandboxSync, "create", lambda *a, **k: box)
+    monkeypatch.setattr(sandboxes.service, "connection", lambda: None)
+    with sandboxes.sandbox("avp/pd"):
+        pass
+    assert (box.kills, box.closed) == (1, True)

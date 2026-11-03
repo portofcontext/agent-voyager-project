@@ -3,6 +3,7 @@ Trajectory, so no sandbox starts."""
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -12,7 +13,9 @@ from avp_cli import console
 from avp_cli.agents import store
 from avp_cli.cli import app
 from avp_cli.engine import images
+from avp_cli.eval import cli as eval_cli
 from avp_cli.eval import engine
+from avp_cli.eval.scoring import Result
 from avp_cli.runs import directory
 from avp_cli.runs.dispatch import Finished, Options
 
@@ -157,3 +160,22 @@ def test_show_without_evals() -> None:
 def test_unbuilt_options_say_so(tmp_path: Path, flag: list[str]) -> None:
     result = CliRunner().invoke(app, ["eval", "run", str(eval_file(tmp_path)), *flag])
     assert "isn't built yet" in str(result.exception)
+
+
+def test_ctrl_c_keeps_the_runs_that_finished(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = eval_cli.run_eval
+
+    async def interrupted(*args: Any) -> list[Result]:
+        """Every run finishes, then Ctrl-C."""
+        await real(*args)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(eval_cli, "run_eval", interrupted)
+    result = CliRunner().invoke(app, ["eval", "run", str(eval_file(tmp_path))])
+    assert result.exit_code == 130
+    assert "Stopped after 2 of 2 runs" in result.output
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    saved = json.loads((eval_directory / "results.json").read_text())
+    assert (len(saved["runs"]), saved["finished"]) == (2, None)

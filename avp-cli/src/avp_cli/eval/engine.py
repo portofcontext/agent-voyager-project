@@ -2,9 +2,12 @@
 `dispatch` as `avp run`, and is then read and scored."""
 
 import asyncio
+import contextlib
+import threading
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import TypeVar
 
 from avp_cli.agents import store
 from avp_cli.console import Failed
@@ -12,6 +15,9 @@ from avp_cli.engine import images
 from avp_cli.eval.config import EvalCase, EvalConfig
 from avp_cli.eval.scoring import Result, Run, Score, read, score
 from avp_cli.runs.dispatch import Options, dispatch
+from avp_cli.sandbox import sandboxes
+
+T = TypeVar("T")
 
 RUNS = "runs"
 """In an eval's directory: one directory per run, named by its `run_id`."""
@@ -28,7 +34,8 @@ async def run_eval(
     under `runs/<run_id>/`, at most `concurrency` at once. `options` apply to
     every run; their `directory` is set for each. `progress` is called as
     each run is scored. Raises Failed before any run when an agent isn't
-    installed."""
+    installed. When cancelled, as by Ctrl-C, it deletes the sandboxes still
+    running, which ends their agents."""
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     options = options or Options()
@@ -40,7 +47,7 @@ async def run_eval(
             agent, entrypoint = agents[case.agent]
             run_directory = directory / RUNS / case.built.run_id
             try:
-                finished = await asyncio.to_thread(
+                finished = await _in_thread(
                     dispatch,
                     agent,
                     entrypoint,
@@ -62,7 +69,39 @@ async def run_eval(
         progress(result)
         return result
 
-    return list(await asyncio.gather(*(one(c) for c in config)))
+    try:
+        return list(await asyncio.gather(*(one(c) for c in config)))
+    except asyncio.CancelledError:
+        sandboxes.kill_all()
+        raise
+
+
+async def _in_thread(function: Callable[..., T], *args: object) -> T:
+    """`function(*args)` in a daemon thread. Unlike `asyncio.to_thread`, an
+    interrupted eval doesn't wait for the thread: its sandbox is deleted, and
+    avp exits without it."""
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[T] = loop.create_future()
+
+    def settle(result: T | None, error: BaseException | None) -> None:
+        if future.done():
+            return
+        if error is not None:
+            future.set_exception(error)
+        else:
+            future.set_result(result)  # ty: ignore[invalid-argument-type]
+
+    def target() -> None:
+        try:
+            result, error = function(*args), None
+        except BaseException as caught:
+            result, error = None, caught
+        # The loop has closed when the eval was interrupted.
+        with contextlib.suppress(RuntimeError):
+            loop.call_soon_threadsafe(settle, result, error)
+
+    threading.Thread(target=target, daemon=True).start()
+    return await future
 
 
 def _load(name: str) -> tuple[store.Agent, list[str]]:
