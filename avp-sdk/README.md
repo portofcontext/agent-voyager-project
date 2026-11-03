@@ -66,14 +66,15 @@ language.
 Package builds embed the linked data as regular files, so each published package
 contains its snapshot without depending on the repository or another SDK.
 `make sdk-data-check` verifies the complete file inventory and shared links,
-then checks every data file in the Python wheel, source distribution, and
-Rust crate.
+then checks every data file in the Python wheel, source distribution, Rust
+crate, and TypeScript npm package.
 
-Endpoints load, cache, and refresh the same way as prices in Python and Rust.
+Endpoints load, cache, and refresh the same way as prices in all three SDKs.
 models.dev gives most providers' `api` URL but not the ones whose clients have
 a URL built in, such as `anthropic` and `openai`; a short list of gap fillers covers
 those, and models.dev wins where both have one. Python exposes
-`avp.utils.endpoints` and Rust `avp::utils::endpoints`. Catalog translation is checked
+`avp.utils.endpoints`, Rust `avp::utils::endpoints`, and TypeScript
+`@agent-voyager-project/sdk/utils/endpoints`. Catalog translation is checked
 against the same cases in [`testdata/endpoints/`](testdata/endpoints/).
 
 Each endpoint also says where the provider's API key goes, so a supervisor can

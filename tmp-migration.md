@@ -12,8 +12,8 @@ agent-voyager-project/
 ├── avp-sdk/
 │   ├── python/                    ⬜
 │   ├── rust/                      ✅ implementation; human review pending
-│   ├── typescript/                ⬜
-│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python and Rust pass; TypeScript to come)
+│   ├── typescript/                ✅ implementation; human review pending
+│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python, Rust, and TypeScript pass)
 ├── avp-cli/                       ⬜ cleanup TBD
 │   └── src/avp_cli/conformance/   ⬜ harness and cases/v0.1/
 ├── agents/                        ⬜ one PR per agent
@@ -91,21 +91,21 @@ Rust (`avp-sdk/rust`):
 
 TypeScript (`avp-sdk/typescript`):
 
-- [ ] Its own npm package, with its tests run from the Makefile
+- [x] Its own npm package, with its tests run from the Makefile
   - [ ] Reviewed by a person
-- [ ] Wire types generated from `spec/v0.1/*.schema.json`, with a make target that regenerates them and a drift check in `make check`
+- [x] Wire types generated from `spec/v0.1/*.schema.json`, with a make target that regenerates them and a drift check in `make check`
   - [ ] Reviewed by a person
-- [ ] Recorder, passing every case in `avp-sdk/testdata/recorder/`
+- [x] Recorder, passing every case in `avp-sdk/testdata/recorder/`
   - [ ] Reviewed by a person
-- [ ] Commission checks, with the same refusal messages as Python (the Recorder cases pin them)
+- [x] Commission checks, with the same refusal messages as Python (the Recorder cases pin them)
   - [ ] Reviewed by a person
-- [ ] Run plan, passing every case in `avp-sdk/testdata/run_plan/`
+- [x] Run plan, passing every case in `avp-sdk/testdata/run_plan/`
   - [ ] Reviewed by a person
-- [ ] Pricing, shipping `avp_prices.json` and loading it like Python (bundled or cache, optional `max_age`)
+- [x] Pricing, shipping `avp_prices.json` and loading it like Python (bundled or cache, optional `max_age`)
   - [ ] Reviewed by a person
-- [ ] Agent command line: `ping`, `describe`, `run`, with the same exit codes
+- [x] Agent command line: `ping`, `describe`, `run`, with the same exit codes
   - [ ] Reviewed by a person
-- [ ] Shared pricing snapshot linked into its data directory and bundled in its package
+- [x] Shared pricing snapshot linked into its data directory and bundled in its package
   - [ ] Reviewed by a person
 - [ ] Supervisor tools, only when a TypeScript supervisor needs them: OpenTelemetry, CloudEvents, default base URLs
   - [ ] Reviewed by a person

@@ -292,7 +292,7 @@ sdk-data:
 	@$(UV) run --project avp-sdk/python python scripts/update-sdk-data.py
 
 .PHONY: sdk-data-check
-sdk-data-check:
+sdk-data-check: sdk-typescript-install
 	@$(UV) run --project avp-sdk/python python scripts/test-sdk-packaging.py
 
 
@@ -358,8 +358,28 @@ sdk-rust-check: sdk-rust-bindings-check
 	@cargo clippy --locked --manifest-path avp-sdk/rust/codegen/Cargo.toml -- -D warnings
 	@$(MAKE) --no-print-directory sdk-rust-test
 
+.PHONY: sdk-typescript-install sdk-typescript-generate sdk-typescript-bindings-check sdk-typescript-test sdk-typescript-check
+sdk-typescript-install:
+	@npm --prefix avp-sdk/typescript ci --ignore-scripts --no-audit --no-fund
+
+sdk-typescript-generate: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run generate
+
+sdk-typescript-bindings-check: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run generate:check
+
+sdk-typescript-test: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript test
+
+sdk-typescript-check: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run format:check
+	@npm --prefix avp-sdk/typescript run generate:check
+	@npm --prefix avp-sdk/typescript run build
+	@npm --prefix avp-sdk/typescript test
+
+
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the
