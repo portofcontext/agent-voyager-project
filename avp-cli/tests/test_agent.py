@@ -81,6 +81,26 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     [outcome] = json.loads(checked[checked.index("[") :])
     assert (outcome["case"], outcome["status"]) == ("agents-without-entry", "pass"), outcome
 
+    # An eval runs each item through the same dispatch, in its own sandbox.
+    eval_file = tmp_path / "hi.eval.json"
+    eval_file.write_text(
+        json.dumps(
+            {
+                "eval_version": "0.1",
+                "name": "hi",
+                "agents": "sh-agent",
+                "commission": {k: v for k, v in commission.items() if k != "run_id"},
+                "dataset": [{"id": "a", "answer": "hello"}],
+                "scorer": {"name": "match", "expected": "{item.answer}"},
+            }
+        )
+    )
+    saved = json.loads(avp("eval", "run", str(eval_file), "--json"))
+    [run] = saved["runs"]
+    assert (run["item"], run["exit_code"], run["score"]["passed"]) == ("a", 0, False)
+    [eval_directory] = (avp_home / "evals").iterdir()
+    assert (eval_directory / run["directory"] / "trajectory.ndjson").is_file()
+
     avp("agent", "uninstall", "sh-agent")
     assert "sh-agent" not in avp("agent", "list")
 

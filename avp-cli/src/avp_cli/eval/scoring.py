@@ -230,15 +230,16 @@ class Summary:
     """The mean `value` of the runs that have a score, or None when none do."""
     pass_rate: float | None
     """The share of scored runs that passed."""
-    scorer_failures: list[Result]
+    scorer_failures: int
     """Runs whose scorer failed, left out of accuracy and pass rate."""
 
 
-def summarize(results: list[Result]) -> Summary:
-    scores = [r.score for r in results if r.score is not None]
+def summarize(scores: list[Score | None]) -> Summary:
+    """`scores` has one entry per run: None where its scorer failed."""
+    scored = [s for s in scores if s is not None]
     return Summary(
-        runs=len(results),
-        accuracy=sum(s.value for s in scores) / len(scores) if scores else None,
-        pass_rate=sum(s.passed for s in scores) / len(scores) if scores else None,
-        scorer_failures=[r for r in results if r.score is None],
+        runs=len(scores),
+        accuracy=sum(s.value for s in scored) / len(scored) if scored else None,
+        pass_rate=sum(s.passed for s in scored) / len(scored) if scored else None,
+        scorer_failures=len(scores) - len(scored),
     )

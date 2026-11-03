@@ -48,23 +48,27 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │     agent never sees it: model.credential to requests to the model's host, and an HTTP
 │     MCP server's headers to requests to the server's host. ⬜ --out, --timeout.
 │
-├── ⬜ eval              Run datasets against agents and Commissions, and score the results.
-│   ├── run     Run an eval file and print the scoreboard.
-│   │     avp eval run capitals.eval.json [--agent pd --agent my-agent] [--model openai/gpt-5-mini]
-│   │         [--max-items 20] [--threshold 0.8] [--resume RUN_ID] [--json]
-│   ├── list    List past eval runs.
+├── eval              Run datasets against agents and Commissions, and score the results.
+│   ├── ✅ run  Run an eval file and print the scoreboard. Each run goes in its own sandbox, as
+│   │           `avp run` runs it, and the eval's runs and results.json go in
+│   │           ~/.avp/evals/<time>-<name>/. --env, --env-file, --allow-host, and -v apply to
+│   │           every run. --threshold exits 1 when accuracy is below it. ⬜ --model, --resume.
+│   │     avp eval run capitals.eval.json [--agent pd --agent my-agent] [--concurrency 1]
+│   │         [--env NAME=VALUE] [--allow-host pypi.org] [-v ./data:/data:ro]
+│   │         [--max-items 20] [--threshold 0.8] [--model openai/gpt-5-mini] [--resume RUN_ID] [--json]
+│   ├── ✅ list List past eval runs, the latest first.
 │   │     avp eval list [--limit 20]
-│   ├── show    Print a past eval's scoreboard and failed runs, as `eval run` prints them
+│   ├── ✅ show Print a past eval's scoreboard and failed runs, as `eval run` prints them
 │   │           at the end, with the same code. --json prints its results for scripts.
 │   │     avp eval show [RUN_ID] [--agent pd] [--json]
-│   ├── delete  Delete past runs and their trajectories.
+│   ├── ⬜ delete  Delete past runs and their trajectories.
 │   │     avp eval delete RUN_ID | --all
-│   ├── share   Later, not a priority. Upload an eval's results and Trajectories to
+│   ├── ⬜ share   Later, not a priority. Upload an eval's results and Trajectories to
 │   │           agentvoyagerproject.com and print a link that lasts 30 days, as the old CLI's
 │   │           `eval share` does. The upload holds every run's prompts, replies, and tool
 │   │           inputs and outputs, so avp says so and asks before uploading.
 │   │     avp eval share [RUN_ID]
-│   └── unshare Later, with share. Take a shared eval's link down before it expires.
+│   └── ⬜ unshare Later, with share. Take a shared eval's link down before it expires.
 │         avp eval unshare RUN_ID
 │
 ├── conformance         Check that an agent follows the spec's rules for agents. See Conformance.
@@ -132,8 +136,8 @@ the credentials) reaches the sandbox at run time, never through the image.
 ## Eval
 
 The eval file and its placeholders are in [the eval file guide](docs/eval.md).
-⬜ avp reads an eval file, checks it, runs it, and scores each run with `match`
-or `command`; the `avp eval run` command comes next.
+`avp eval run` reads an eval file, checks it, runs it, and scores each run
+with `match` or `command`.
 
 - **Eval to EvalConfig.** `EvalConfig.from_eval` reads an eval file's Commissions,
   checks everything, and turns `scorer` into its callable. The `EvalConfig`

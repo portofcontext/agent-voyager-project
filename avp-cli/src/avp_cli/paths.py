@@ -18,6 +18,11 @@ def runs() -> Path:
     return home() / "runs"
 
 
+def evals() -> Path:
+    """One directory per eval run: the eval file, its results, and its runs."""
+    return home() / "evals"
+
+
 def vault() -> Path:
     """The names and descriptions of the secrets in the system's credential store,
     not their values."""

@@ -11,19 +11,16 @@ from rich.markup import escape
 from avp_cli import console
 from avp_cli.agents import cli as agent_cli
 from avp_cli.conformance import cli as conformance_cli
+from avp_cli.eval import cli as eval_cli
 from avp_cli.runs import cli as run_cli
 from avp_cli.sandbox import cli as sandbox_cli
 from avp_cli.vault import cli as vault_cli
 
 app = typer.Typer(no_args_is_help=True, help="Run, evaluate, and check AVP agents in sandboxes.")
-eval_app = typer.Typer(
-    no_args_is_help=True,
-    help="Run datasets against agents and Commissions, and score the results.",
-)
 commission_app = typer.Typer(no_args_is_help=True, help="Commission files.")
 
 app.command()(run_cli.run)
-app.add_typer(eval_app, name="eval")
+app.add_typer(eval_cli.app, name="eval")
 app.add_typer(conformance_cli.app, name="conformance")
 app.add_typer(agent_cli.app, name="agent")
 app.add_typer(commission_app, name="commission")
@@ -32,45 +29,6 @@ app.add_typer(sandbox_cli.app, name="sandbox")
 
 AgentOption = Annotated[str, typer.Option("--agent", help="An installed agent.")]
 JsonOption = Annotated[bool, typer.Option("--json", help="Print JSON.")]
-
-
-@eval_app.command("run")
-def eval_run(
-    path: Annotated[Path, typer.Argument(help="The eval file.")],
-    agent: Annotated[list[str] | None, typer.Option(help="Run only these agents.")] = None,
-    model: Annotated[str | None, typer.Option(help="Use this model for every Commission.")] = None,
-    max_items: Annotated[int | None, typer.Option(help="Run at most this many items.")] = None,
-    threshold: Annotated[float | None, typer.Option(help="Fail below this mean score.")] = None,
-    resume: Annotated[str | None, typer.Option(help="Finish this earlier run.")] = None,
-    json: JsonOption = False,
-) -> None:
-    """Run an eval file and print the scoreboard."""
-    raise NotImplementedError
-
-
-@eval_app.command("list")
-def eval_list(limit: Annotated[int, typer.Option(help="Show this many runs.")] = 20) -> None:
-    """List past eval runs."""
-    raise NotImplementedError
-
-
-@eval_app.command("show")
-def eval_show(
-    run_id: Annotated[str | None, typer.Argument(help="The run; the latest when omitted.")] = None,
-    agent: Annotated[str | None, typer.Option(help="Show only this agent.")] = None,
-    json: JsonOption = False,
-) -> None:
-    """Show one run's scoreboard and per-item results."""
-    raise NotImplementedError
-
-
-@eval_app.command("delete")
-def eval_delete(
-    run_id: Annotated[str | None, typer.Argument(help="The run to delete.")] = None,
-    all: Annotated[bool, typer.Option("--all", help="Delete every run.")] = False,
-) -> None:
-    """Delete past runs and their trajectories."""
-    raise NotImplementedError
 
 
 @commission_app.command("new")

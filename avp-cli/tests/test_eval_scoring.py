@@ -13,7 +13,6 @@ from avp_cli.eval.schemas import Item
 from avp_cli.eval.scoring import (
     SCORER_ERROR,
     InvalidEvent,
-    Result,
     Run,
     Score,
     ScorerError,
@@ -183,18 +182,12 @@ def test_a_placeholder_that_cannot_be_filled_fails_the_scorer(tmp_path: Path) ->
     assert (tmp_path / SCORER_ERROR).exists()
 
 
-def test_the_summary_leaves_scorer_failures_out(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED, STOPPED)
-    results = [
-        Result(run, Score(value=1, passed=True)),
-        Result(run, Score(value=0.5, passed=False)),
-        Result(run, None, ScorerError("KeyError")),
-    ]
-    summary = summarize(results)
+def test_the_summary_leaves_scorer_failures_out() -> None:
+    summary = summarize([Score(value=1, passed=True), Score(value=0.5, passed=False), None])
     assert summary.runs == 3
     assert summary.accuracy == 0.75
     assert summary.pass_rate == 0.5
-    assert summary.scorer_failures == results[2:]
+    assert summary.scorer_failures == 1
 
 
 def test_a_summary_with_no_scores() -> None:

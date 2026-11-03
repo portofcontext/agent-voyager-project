@@ -57,6 +57,30 @@ A Commission file can leave out `run_id` and `supervisor`. avp sets them for
 each run and replaces any value the file gives. A run's `run_id` is
 `<commission>-<agent>-<item>`, such as `inline-1-pd-paris`.
 
+## Running
+
+```sh
+avp eval run capitals.eval.json [--agent pd] [--concurrency 4] [--env-file .env]
+avp eval show            # the latest eval's scoreboard again
+avp eval list
+```
+
+Every Commission runs on every agent for every item, each run in its own
+sandbox as `avp run` runs it, one at a time unless `--concurrency` says more.
+`--env`, `--env-file`, `--allow-host`, and `-v` work as they do for `avp run`
+and apply to every run. A run whose agent never starts, such as one whose
+sandbox won't start, scores 0.
+
+The scoreboard has one row per Commission and agent, with accuracy and pass
+rate, then the runs that didn't pass and why. An eval run keeps its files in
+`~/.avp/evals/<time>-<name>/`:
+
+| Path | Holds |
+|---|---|
+| `eval.json` | The eval file, as given. |
+| `results.json` | Each run's score, written as each run finishes. |
+| `runs/<run_id>/` | The run's Commission, Trajectory, the agent's stderr, and `scorer-error.txt` when its scorer failed. |
+
 ## Items
 
 An item is an object with an `id` and any other fields. The `id` names the
@@ -122,9 +146,6 @@ scorer.expected: run has no field 'outptu'
 ```
 
 ## Scorers
-
-⬜ avp checks and scores with `match` and `command`; running an eval comes
-next.
 
 A scorer takes one finished run, with its item, and returns a score. Every
 scorer takes the same [input](#input) and returns the same [score](#score).
