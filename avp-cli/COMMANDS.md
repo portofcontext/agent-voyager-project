@@ -127,6 +127,12 @@ The eval file and its placeholders are in [the eval file guide](docs/eval.md).
 ⬜ avp reads an eval file and builds and checks each run's Commission; running
 and scoring come next.
 
+- **Scorers.** ⬜ Inside avp, a scorer is a callable, plain or async, that
+  takes the scorer's input and returns a score, both as the guide defines
+  them. `match`, `command`, `llm-judge`, and conformance cases are all such
+  callables. Users add their own scorer with `command`, which gets the same
+  input as JSON, so there is no Python plugin interface.
+
 ## Conformance
 
 `avp conformance check` shows whether an agent follows the spec's rules for
