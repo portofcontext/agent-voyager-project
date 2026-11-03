@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    env, fs,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -11,7 +10,7 @@ use serde_json::Value;
 
 use crate::{Result, commission::ModelRef, trajectory::CostSource};
 
-const API: &str = "https://models.dev/api.json";
+use super::models_dev::{self, Snapshot};
 const FILE: &str = "avp_prices.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -56,14 +55,16 @@ impl TryFrom<RawPrice> for ModelPrice {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Prices {
-    #[serde(default = "source")]
+    #[serde(default = "models_dev::source")]
     pub source: String,
     pub fetched: DateTime<Utc>,
     pub models: BTreeMap<String, ModelPrice>,
 }
 
-fn source() -> String {
-    API.into()
+impl Snapshot for Prices {
+    fn fetched(&self) -> DateTime<Utc> {
+        self.fetched
+    }
 }
 
 pub fn bundled_prices() -> Prices {
@@ -71,29 +72,11 @@ pub fn bundled_prices() -> Prices {
 }
 
 pub fn default_cache_path() -> PathBuf {
-    let root = env::var_os("XDG_CACHE_HOME")
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env::var_os("HOME").expect("HOME is set")).join(".cache"));
-    root.join("avp").join(FILE)
+    models_dev::cache_path(FILE)
 }
 
 pub fn fetch_prices(catalog: Option<&Value>) -> Result<Prices> {
-    let downloaded;
-    let catalog =
-        if let Some(catalog) = catalog.filter(|c| c.as_object().is_none_or(|c| !c.is_empty())) {
-            catalog
-        } else {
-            downloaded = ureq::get(API)
-                .header("User-Agent", "avp-rust-sdk")
-                .config()
-                .timeout_global(Some(Duration::from_secs(30)))
-                .build()
-                .call()?
-                .body_mut()
-                .read_json::<Value>()?;
-            &downloaded
-        };
+    let catalog = models_dev::catalog(catalog)?;
     let mut models = BTreeMap::new();
     for (provider_id, provider) in catalog.as_object().ok_or("catalog must be an object")? {
         if let Some(entries) = provider.get("models").and_then(Value::as_object) {
@@ -114,29 +97,19 @@ pub fn fetch_prices(catalog: Option<&Value>) -> Result<Prices> {
         }
     }
     Ok(Prices {
-        source: source(),
+        source: models_dev::source(),
         fetched: Utc::now(),
         models,
     })
 }
 
 pub fn save_prices(prices: &Prices, path: Option<&Path>) -> Result<PathBuf> {
-    let path = path
-        .map(Path::to_path_buf)
-        .unwrap_or_else(default_cache_path);
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent)?;
-    }
-    let partial = path.with_file_name(format!(
-        ".{}.partial",
-        path.file_name().unwrap().to_string_lossy()
-    ));
-    fs::write(
-        &partial,
-        format!("{}\n", serde_json::to_string_pretty(prices)?),
-    )?;
-    fs::rename(&partial, &path)?;
-    Ok(path)
+    models_dev::save(
+        prices,
+        &path
+            .map(Path::to_path_buf)
+            .unwrap_or_else(default_cache_path),
+    )
 }
 
 pub fn load_prices(path: Option<&Path>, max_age: Option<Duration>) -> Result<Prices> {
@@ -149,36 +122,7 @@ fn load(
     max_age: Option<Duration>,
     fetch: impl FnOnce() -> Result<Prices>,
 ) -> Result<Prices> {
-    let file = path.unwrap_or(default_path);
-    let mut snapshot: Option<Prices> = match fs::read_to_string(file) {
-        Ok(text) => Some(serde_json::from_str(&text)?),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e.into()),
-    };
-    if path.is_none() {
-        let shipped = bundled_prices();
-        if snapshot
-            .as_ref()
-            .is_none_or(|s| shipped.fetched > s.fetched)
-        {
-            snapshot = Some(shipped);
-        }
-    }
-    if max_age.is_some_and(|age| {
-        snapshot.as_ref().is_none_or(|s| {
-            Utc::now()
-                .signed_duration_since(s.fetched)
-                .to_std()
-                .is_ok_and(|elapsed| elapsed > age)
-        })
-    }) {
-        let fresh = fetch()?;
-        save_prices(&fresh, Some(file))?;
-        return Ok(fresh);
-    }
-    snapshot.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, file.display().to_string()).into()
-    })
+    models_dev::load(path, default_path, max_age, bundled_prices, fetch)
 }
 
 pub fn find_price<'a>(
@@ -235,7 +179,7 @@ pub fn compute_cost(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::cell::Cell;
+    use std::{cell::Cell, fs};
 
     fn table() -> Prices {
         serde_json::from_value(json!({"fetched": Utc::now(), "models": {

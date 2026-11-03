@@ -57,7 +57,7 @@ help:
 	@echo "    make format-check    ruff format --check (read-only)"
 	@echo "    make schemas         regenerate JSON schemas from Pydantic models"
 	@echo "    make sdk-data        refresh the SDKs' bundled models.dev prices and endpoints"
-	@echo "    make sdk-data-check  check that SDK packages contain the shared price snapshot"
+	@echo "    make sdk-data-check  check that SDK packages contain all shared provider data"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
@@ -334,6 +334,13 @@ bindings-test:
 	@cd avp/bindings/typescript && npm test --silent
 
 
+.PHONY: sdk-python-check
+sdk-python-check:
+	@cd avp-sdk/python && $(UV) run ruff format --check .
+	@cd avp-sdk/python && $(UV) run ruff check .
+	@cd avp-sdk/python && $(UV) run ty check
+	@cd avp-sdk/python && $(UV) run pytest -q
+
 .PHONY: sdk-rust-generate sdk-rust-bindings-check sdk-rust-test sdk-rust-check
 sdk-rust-generate:
 	@cargo run --locked --quiet --manifest-path avp-sdk/rust/codegen/Cargo.toml
@@ -351,9 +358,8 @@ sdk-rust-check: sdk-rust-bindings-check
 	@cargo clippy --locked --manifest-path avp-sdk/rust/codegen/Cargo.toml -- -D warnings
 	@$(MAKE) --no-print-directory sdk-rust-test
 
-
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-rust-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

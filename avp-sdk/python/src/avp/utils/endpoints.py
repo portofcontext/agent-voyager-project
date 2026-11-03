@@ -6,8 +6,10 @@ Auth comes from the provider's `npm` package via `AUTH_BY_PACKAGE`. Snapshots
 work as in `avp.utils.pricing`.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 from functools import cache
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -18,18 +20,11 @@ from avp.utils._models_dev import Snapshot
 
 FILE = "avp_endpoints.json"
 
-GAP_FILLERS: dict[str, str] = {
-    "anthropic": "https://api.anthropic.com/v1",
-    "cerebras": "https://api.cerebras.ai/v1",
-    "cohere": "https://api.cohere.com/v2",
-    "google": "https://generativelanguage.googleapis.com/v1beta",
-    "groq": "https://api.groq.com/openai/v1",
-    "mistral": "https://api.mistral.ai/v1",
-    "openai": "https://api.openai.com/v1",
-    "perplexity": "https://api.perplexity.ai",
-    "togetherai": "https://api.together.xyz/v1",
-    "xai": "https://api.x.ai/v1",
-}
+_DEFAULTS = json.loads(
+    resources.files("avp.utils").joinpath("data", "avp_endpoint_defaults.json").read_text()
+)
+
+GAP_FILLERS: dict[str, str] = _DEFAULTS["gap_fillers"]
 """Default URLs for providers models.dev gives no `api`."""
 
 
@@ -47,26 +42,11 @@ class Auth(BaseModel):
 BEARER = Auth(header="authorization", prefix="Bearer ")
 
 AUTH_BY_PACKAGE: dict[str, Auth] = {
-    "@ai-sdk/anthropic": Auth(header="x-api-key"),
-    "@ai-sdk/azure": Auth(header="api-key"),
-    "@ai-sdk/google": Auth(header="x-goog-api-key"),
-    # Bedrock API keys only; SigV4 can't go through a proxy.
-    "@ai-sdk/amazon-bedrock": BEARER,
-    "@ai-sdk/cerebras": BEARER,
-    "@ai-sdk/cohere": BEARER,
-    "@ai-sdk/deepinfra": BEARER,
-    "@ai-sdk/gateway": BEARER,
-    "@ai-sdk/groq": BEARER,
-    "@ai-sdk/mistral": BEARER,
-    "@ai-sdk/openai": BEARER,
-    "@ai-sdk/openai-compatible": BEARER,
-    "@ai-sdk/perplexity": BEARER,
-    "@ai-sdk/togetherai": BEARER,
-    "@ai-sdk/xai": BEARER,
-    "@openrouter/ai-sdk-provider": BEARER,
+    package: Auth.model_validate(auth) for package, auth in _DEFAULTS["auth_by_package"].items()
 }
 """Packages whose key is a fixed header value. Others, such as
-`@ai-sdk/google-vertex`, are left out."""
+`@ai-sdk/google-vertex`, are left out. Bedrock supports API keys only here,
+not SigV4."""
 
 
 class Endpoint(BaseModel):

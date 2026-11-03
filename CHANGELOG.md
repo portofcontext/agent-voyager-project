@@ -4,6 +4,8 @@
 
 ### Added
 
+- Rust endpoint helpers match Python's provider URL and API-key
+  authentication lookup, with offline snapshots and optional cache refreshes.
 - A Rust SDK in `avp-sdk/rust` for the rebuilt v0.1 specs: generated wire
   types, Commission checks, run plans, Recorder, pricing snapshots, and the
   agent command line. Its tests use the shared SDK cases and exercise the
@@ -11,8 +13,10 @@
 
 ### Changed
 
-- SDK prices are stored once in `avp-sdk/data/avp_prices.json`. Python and Rust
-  package builds bundle that shared snapshot through relative file links.
+- SDK prices, endpoints, and endpoint refresh rules are stored once in
+  `avp-sdk/data/`. Python and Rust package builds bundle the
+  shared files through relative links. Package checks cover the full data
+  inventory, and Python and Rust use shared endpoint translation cases.
 - The SDK's `avp.utils.base_urls` is now `avp.utils.endpoints`. Each provider's
   entry adds where its API key goes (header and prefix), from the AI SDK package
   models.dev names for it, so a supervisor can set up a credential proxy.

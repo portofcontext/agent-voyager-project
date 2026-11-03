@@ -1,4 +1,4 @@
-"""What pricing and base URLs share: fetching models.dev, and keeping a snapshot
+"""What pricing and endpoints share: fetching models.dev, and keeping a snapshot
 of it in the package and in a cache file."""
 
 import json
