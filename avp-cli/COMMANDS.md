@@ -121,6 +121,12 @@ so it can fill the vault first and gets the command's exit code and output.
 Everything that changes per run (the Commission, the workspace,
 the credentials) reaches the sandbox at run time, never through the image.
 
+## Eval
+
+The eval file and its placeholders are in [the eval file guide](docs/eval.md).
+⬜ avp reads an eval file and builds and checks each run's Commission; running
+and scoring come next.
+
 ## Conformance
 
 `avp conformance check` shows whether an agent follows the spec's rules for

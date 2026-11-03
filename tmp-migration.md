@@ -148,6 +148,16 @@ built-in servers a Commission turns off with `enabled_mcp_servers`. Either:
 - [ ] A non-spec standard, as the agent command line is, such as a field in
   `ping`'s reply or a label on the agent's image
 
+#### Open: `run_id` and `supervisor` in Commission files
+
+A Commission file on disk (`avp run --commission`, an eval's `commissions`)
+still needs a `run_id`, since it validates as the wire Commission. avp should
+add `run_id` and `supervisor` itself, so a file can leave them out.
+
+- [ ] A Commission file type in avp-cli with `run_id` optional, filled in by avp
+  for each run, and `supervisor` set to avp's name and version. The wire
+  Commission an agent receives still requires `run_id`.
+
 ### 4. Agents (`agents/`)
 
 One PR per agent. TypeScript and Rust agents wait for their SDKs.
