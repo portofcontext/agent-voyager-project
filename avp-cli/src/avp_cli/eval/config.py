@@ -18,7 +18,9 @@ from avp_cli.eval.scoring import Run, Scorer
 from avp_cli.eval.template import Reference, TemplateError, check, references
 
 
-class PlannedRun(NamedTuple):
+class EvalCase(NamedTuple):
+    """One run of an eval: a Commission, on an agent, for an item."""
+
     commission: str
     """The Commission's name."""
     agent: str
@@ -40,13 +42,13 @@ class EvalConfig:
     """The scorer's fields, filled from `item` and `run` for each run and
     passed to the scorer as `config`."""
 
-    def __iter__(self) -> Iterator[PlannedRun]:
+    def __iter__(self) -> Iterator[EvalCase]:
         """Every Commission, on every agent, for every item."""
         for name, template in self.commissions.items():
             for agent in self.agents:
                 for item in self.dataset:
                     run_id = f"{name}-{agent}-{item.id}"
-                    yield PlannedRun(name, agent, item, build(template, item, run_id))
+                    yield EvalCase(name, agent, item, build(template, item, run_id))
 
     @classmethod
     def from_eval(cls, eval: Eval, base: Path, agents: list[str] | None = None) -> "EvalConfig":

@@ -54,10 +54,18 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │         [--max-items 20] [--threshold 0.8] [--resume RUN_ID] [--json]
 │   ├── list    List past eval runs.
 │   │     avp eval list [--limit 20]
-│   ├── show    Show one run's scoreboard and per-item results.
+│   ├── show    Print a past eval's scoreboard and failed runs, as `eval run` prints them
+│   │           at the end, with the same code. --json prints its results for scripts.
 │   │     avp eval show [RUN_ID] [--agent pd] [--json]
-│   └── delete  Delete past runs and their trajectories.
-│         avp eval delete RUN_ID | --all
+│   ├── delete  Delete past runs and their trajectories.
+│   │     avp eval delete RUN_ID | --all
+│   ├── share   Later, not a priority. Upload an eval's results and Trajectories to
+│   │           agentvoyagerproject.com and print a link that lasts 30 days, as the old CLI's
+│   │           `eval share` does. The upload holds every run's prompts, replies, and tool
+│   │           inputs and outputs, so avp says so and asks before uploading.
+│   │     avp eval share [RUN_ID]
+│   └── unshare Later, with share. Take a shared eval's link down before it expires.
+│         avp eval unshare RUN_ID
 │
 ├── conformance         Check that an agent follows the spec's rules for agents. See Conformance.
 │   ├── ✅ check   Run the cases against an agent and report pass, fail, or skip by rule. Each
@@ -124,14 +132,20 @@ the credentials) reaches the sandbox at run time, never through the image.
 ## Eval
 
 The eval file and its placeholders are in [the eval file guide](docs/eval.md).
-⬜ avp reads an eval file, checks it, and builds each run's Commission. It scores
-with `match` and `command`; running comes next.
+⬜ avp reads an eval file, checks it, runs it, and scores each run with `match`
+or `command`; the `avp eval run` command comes next.
 
 - **Eval to EvalConfig.** `EvalConfig.from_eval` reads an eval file's Commissions,
   checks everything, and turns `scorer` into its callable. The `EvalConfig`
   yields each Commission × agent × item with that run's Commission built.
   Conformance will build an `EvalConfig` directly, with a case's check as
   the scorer.
+- **One run, as `avp run` does it.** Each of an eval's runs goes through the
+  same function as `avp run`, which sets up the sandbox, runs the agent, and
+  keeps the run's directory. An eval's runs go under
+  `~/.avp/evals/<time>-<name>/runs/<run_id>/`, one at a time unless
+  `--concurrency` says more. A run whose agent never starts, such as one
+  whose sandbox won't start, fails with a score of 0.
 - **Scorers.** Inside avp, a scorer is a callable, plain or async, that takes
   the scorer's input and returns a score, both as the guide defines them.
   `match` and `command` are such callables; ⬜ conformance cases will be
@@ -202,7 +216,8 @@ The TUI is a place to see what exists and act on it:
 
 Options on `avp` open the TUI on one item: `avp --eval RUN_ID` on an eval's
 scoreboard, and `avp --run RUN_ID` on a run's Trajectory. The TUI replaces
-`eval view`, and `eval show --json` covers reading results from scripts.
+`eval view`. `eval show` stays, as plain terminal output for CI logs, SSH
+sessions, and scripts (`--json`), and the TUI is for exploring.
 
 
 ## Open
