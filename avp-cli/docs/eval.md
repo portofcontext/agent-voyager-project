@@ -65,20 +65,25 @@ avp eval show            # the latest eval's scoreboard again
 avp eval list
 ```
 
-Every Commission runs on every agent for every item, each run in its own
-sandbox as `avp run` runs it, one at a time unless `--concurrency` says more.
+avp first runs each agent's `describe` once, and stops if an agent isn't
+installed or doesn't answer. Then every Commission runs on every agent for
+every item, each run in its own sandbox as `avp run` runs it, one at a time unless `--concurrency` says more.
 `--env`, `--env-file`, `--allow-host`, and `-v` work as they do for `avp run`
 and apply to every run. A run whose agent never starts, such as one whose
 sandbox won't start, scores 0.
 
-The scoreboard has one row per Commission and agent, with accuracy and pass
-rate, then the runs that didn't pass and why. An eval run keeps its files in
+Each run prints a line as it finishes: pass or fail, its score, cost, turns,
+and time. The scoreboard then names each agent's Descriptor and image, and has
+one row per Commission and agent: model, accuracy, pass rate, and cost, turns,
+and time per run, with the total cost under it. Then come the runs that didn't
+pass and why. An eval run keeps its files in
 `~/.avp/evals/<time>-<name>/`:
 
 | Path | Holds |
 |---|---|
 | `eval.json` | The eval file, as given. |
-| `results.json` | Each run's score, written as each run finishes. |
+| `results.json` | Each run's score, model, time, and totals, written as each run finishes. |
+| `agents/<name>.json` | The agent's image ID and Descriptor, from its `describe`. The image ID changes when the agent is installed again. |
 | `runs/<run_id>/` | The run's Commission, Trajectory, the agent's stderr, and `scorer-error.txt` when its scorer failed. |
 
 ## Items
@@ -175,6 +180,9 @@ object, fails the scorer for that run.
 | `run.output` | any | `agent_stopped`'s `output`, or `null`. |
 | `run.reason` | string or `null` | `agent_stopped`'s `reason`, or `null` when there is no `agent_stopped`. |
 | `run.item` | object | The item, as in the dataset. |
+| `run.model` | string | The Commission's model, `provider/id`. |
+| `run.seconds` | number or `null` | How long the run took, from creating its sandbox to the agent's exit, or `null` when it didn't start. |
+| `run.totals` | object | Added up from `run.trajectory`, subagents included: `turns` (model responses), `input_tokens`, `output_tokens`, `cost_usd`, and `tool_calls`, the calls by tool name, such as `{"add": 2}`. |
 | `config` | object | For a `command` scorer, its `config` field. For a built-in scorer, its fields other than `name`. Placeholders in it are filled. |
 
 `run` is what avp passes, and `config` is what the eval file passes.

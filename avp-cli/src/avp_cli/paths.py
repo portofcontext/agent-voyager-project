@@ -7,6 +7,7 @@ avp's state lives under `$AVP_HOME`, or `~/.avp`:
     evals/<time>-<name>/                 one eval run
         eval.json                        the eval file, as given
         results.json                     each run's outcome and score
+        agents/<name>.json               an agent's image and Descriptor, from one describe
         runs/<run_id>/                   a run directory
     vault.json                           secrets' names and descriptions, never their values
     opensandbox/
@@ -52,6 +53,8 @@ EVAL = "eval.json"
 RESULTS = "results.json"
 EVAL_RUNS = "runs"
 """One run directory per run, named by its `run_id`."""
+EVAL_AGENTS = "agents"
+"""One `<name>.json` per agent: its image and Descriptor."""
 
 
 def stamped(name: str, started: datetime) -> str:

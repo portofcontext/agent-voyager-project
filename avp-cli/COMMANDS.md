@@ -49,11 +49,12 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │     MCP server's headers to requests to the server's host. ⬜ --out, --timeout.
 │
 ├── eval              Run datasets against agents and Commissions, and score the results.
-│   ├── ✅ run  Run an eval file and print the scoreboard. Each run goes in its own sandbox, as
-│   │           `avp run` runs it, and the eval's runs and results.json go in
-│   │           ~/.avp/evals/<time>-<name>/. --env, --env-file, --allow-host, and -v apply to
-│   │           every run. --threshold exits 1 when accuracy is below it. Ctrl-C deletes the
-│   │           sandboxes still running and keeps the finished runs' results. ⬜ --model, --resume.
+│   ├── ✅ run  Run an eval file and print the scoreboard. Each agent is described once first,
+│   │           and each run goes in its own sandbox, as `avp run` runs it. The eval's runs,
+│   │           results.json, and agents' Descriptors go in ~/.avp/evals/<time>-<name>/.
+│   │           --env, --env-file, --allow-host, and -v apply to every run. --threshold exits 1
+│   │           when accuracy is below it. Ctrl-C deletes the sandboxes still running and keeps
+│   │           the finished runs' results. ⬜ --model, --resume.
 │   │     avp eval run capitals.eval.json [--agent pd --agent my-agent] [--concurrency 1]
 │   │         [--env NAME=VALUE] [--allow-host pypi.org] [-v ./data:/data:ro]
 │   │         [--max-items 20] [--threshold 0.8] [--model openai/gpt-5-mini] [--resume RUN_ID] [--json]

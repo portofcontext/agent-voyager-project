@@ -6,9 +6,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.console import Failed
-from avp_cli.eval.scoring import Result, Score, Summary, summarize
+from avp_cli.eval.scoring import Result, Score, Summary, Totals, summarize
 
 
 class RunResult(BaseModel):
@@ -28,6 +29,12 @@ class RunResult(BaseModel):
     """Why the scorer failed. The full error is in the run's `scorer-error.txt`."""
     directory: str
     """The run's directory, relative to the eval's."""
+    model: str | None = None
+    """The Commission's model, `provider/id`."""
+    seconds: float | None = None
+    """How long the run took, or None when it didn't start."""
+    totals: Totals = Totals()
+    """Turns, tokens, cost, and tool calls, from the Trajectory."""
 
     @classmethod
     def of(cls, result: Result, eval_directory: Path) -> "RunResult":
@@ -42,6 +49,9 @@ class RunResult(BaseModel):
             score=result.score,
             scorer_error=result.error.message if result.error else None,
             directory=str(Path(paths.EVAL_RUNS) / run.id),
+            model=run.model,
+            seconds=run.seconds,
+            totals=run.totals,
         )
 
 
@@ -56,16 +66,44 @@ class EvalResults(BaseModel):
     finished: datetime | None = None
     runs: list[RunResult] = []
 
+    def of(self, commission: str | None = None, agent: str | None = None) -> list[RunResult]:
+        """The runs of `commission` on `agent`, or of all."""
+        return [
+            r
+            for r in self.runs
+            if (commission is None or r.commission == commission)
+            and (agent is None or r.agent == agent)
+        ]
+
     def summary(self, commission: str | None = None, agent: str | None = None) -> Summary:
         """The summary of the runs of `commission` on `agent`, or of all."""
-        return summarize(
-            [
-                r.score
-                for r in self.runs
-                if (commission is None or r.commission == commission)
-                and (agent is None or r.agent == agent)
-            ]
-        )
+        return summarize([r.score for r in self.of(commission, agent)])
+
+
+class AgentRecord(BaseModel):
+    """`agents/<name>.json`: the agent as it was when the eval ran, from one
+    `describe` before the runs."""
+
+    name: str
+    image: str
+    image_id: str
+    """The engine's ID for the image, which changes when the agent is
+    installed again."""
+    descriptor: AgentDescriptor
+
+
+def save_agent(directory: Path, record: AgentRecord) -> None:
+    path = directory / paths.EVAL_AGENTS / f"{record.name}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(record.model_dump_json(indent=2, exclude_none=True) + "\n")
+
+
+def agents(directory: Path) -> dict[str, AgentRecord]:
+    """The eval's agents, by name. Empty for an eval that stopped before
+    describing them."""
+    folder = directory / paths.EVAL_AGENTS
+    found = sorted(folder.glob("*.json")) if folder.is_dir() else []
+    return {p.stem: AgentRecord.model_validate_json(p.read_text()) for p in found}
 
 
 def create(name: str, eval_text: str) -> tuple[Path, EvalResults]:

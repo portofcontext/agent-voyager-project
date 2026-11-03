@@ -11,9 +11,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    ValidationError,
+    computed_field,
+    field_serializer,
+)
 
-from avp.trajectory import AgentStoppedEvent, Event, StopReason, parse_trajectory_event
+from avp.trajectory import (
+    AgentStoppedEvent,
+    AssistantMessageEvent,
+    Event,
+    StopReason,
+    ToolInvokedEvent,
+    parse_trajectory_event,
+)
 from avp_cli import paths
 from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
@@ -28,6 +43,35 @@ class InvalidEvent(BaseModel):
     """Why the line isn't a valid event."""
     event: JsonValue
     """The line parsed as JSON, or its text when it isn't JSON."""
+
+
+class Totals(BaseModel):
+    """What a run used, added up from its Trajectory's events. Subagents'
+    responses and tool calls are included."""
+
+    turns: int = 0
+    """Model responses: `assistant_message` events."""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0
+    """The sum of each response's `usage.cost_usd`."""
+    tool_calls: dict[str, int] = {}
+    """Calls by tool name: `tool_invoked` events."""
+
+    @classmethod
+    def of(cls, events: list[Event]) -> "Totals":
+        totals = cls()
+        for event in events:
+            if isinstance(event, AssistantMessageEvent):
+                usage = event.data.usage
+                totals.turns += 1
+                totals.input_tokens += usage.input_tokens
+                totals.output_tokens += usage.output_tokens
+                totals.cost_usd += usage.cost_usd
+            elif isinstance(event, ToolInvokedEvent):
+                name = event.data.tool_name
+                totals.tool_calls[name] = totals.tool_calls.get(name, 0) + 1
+        return totals
 
 
 class Run(BaseModel):
@@ -53,6 +97,16 @@ class Run(BaseModel):
     """`agent_stopped`'s `reason`, or None when there is no `agent_stopped`."""
     item: Item
     """The dataset item the run's Commission was filled from."""
+    model: str | None = None
+    """The Commission's model, `provider/id`."""
+    seconds: float | None = None
+    """How long the run took, from creating its sandbox to the agent's exit,
+    or None when it didn't start."""
+
+    @computed_field
+    @property
+    def totals(self) -> Totals:
+        return Totals.of(self.trajectory)
 
     @field_serializer("trajectory")
     def _events(self, events: list[Event]) -> list[JsonValue]:
@@ -137,7 +191,15 @@ class ScorerConfig(BaseModel):
 
 
 def read(
-    directory: Path, *, id: str, agent: str, commission: str, item: Item, exit_code: int | None
+    directory: Path,
+    *,
+    id: str,
+    agent: str,
+    commission: str,
+    item: Item,
+    exit_code: int | None,
+    model: str | None = None,
+    seconds: float | None = None,
 ) -> Run:
     """The run in `directory`, from its Trajectory."""
     events, invalid = read_trajectory(directory / paths.TRAJECTORY)
@@ -152,6 +214,8 @@ def read(
         output=stopped[-1].data.output if stopped else None,
         reason=stopped[-1].data.reason if stopped else None,
         item=item,
+        model=model,
+        seconds=seconds,
     )
 
 

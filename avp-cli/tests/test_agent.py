@@ -100,6 +100,9 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     assert (run["item"], run["exit_code"], run["score"]["passed"]) == ("a", 0, False)
     [eval_directory] = (avp_home / "evals").iterdir()
     assert (eval_directory / run["directory"] / "trajectory.ndjson").is_file()
+    agent_record = json.loads((eval_directory / "agents" / "sh-agent.json").read_text())
+    assert agent_record["descriptor"]["agent_name"] == "sh-agent"
+    assert agent_record["image_id"].startswith("sha256:")
 
     avp("agent", "uninstall", "sh-agent")
     assert "sh-agent" not in avp("agent", "list")

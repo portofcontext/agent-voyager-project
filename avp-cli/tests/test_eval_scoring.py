@@ -101,6 +101,9 @@ def test_the_input_is_the_guides_json(tmp_path: Path) -> None:
         "output",
         "reason",
         "item",
+        "model",
+        "seconds",
+        "totals",
     }
     assert dumped["run"]["item"] == {"id": "paris", "answer": "Paris"}
     assert dumped["run"]["trajectory"][2] == STOPPED
@@ -198,3 +201,43 @@ def test_a_summary_with_no_scores() -> None:
 def test_a_json_line_that_is_not_an_object_keeps_its_value(tmp_path: Path) -> None:
     [invalid] = run_in(tmp_path, "[1, 2]").invalid_trajectory
     assert (invalid.error, invalid.event) == ("isn't a JSON object", [1, 2])
+
+
+def message(n: int, cost: float, tokens: tuple[int, int]) -> dict:
+    return event(
+        n,
+        "assistant_message",
+        {
+            "content": [{"type": "text", "text": "x"}],
+            "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
+            "duration_ms": 10,
+            "usage": {
+                "input_tokens": tokens[0],
+                "output_tokens": tokens[1],
+                "cost_usd": cost,
+                "cost_source": "computed",
+            },
+        },
+    )
+
+
+def tool(n: int, name: str) -> dict:
+    return event(n, "tool_invoked", {"tool_call_id": str(n), "tool_name": name, "tool_input": {}})
+
+
+def test_totals_add_up_the_trajectory(tmp_path: Path) -> None:
+    run = run_in(
+        tmp_path,
+        *STARTED,
+        message(3, 0.01, (100, 20)),
+        tool(4, "add"),
+        tool(5, "add"),
+        tool(6, "read"),
+        message(7, 0.002, (150, 5)),
+        STOPPED,
+    )
+    totals = run.totals
+    assert (totals.turns, totals.input_tokens, totals.output_tokens) == (2, 250, 25)
+    assert totals.cost_usd == pytest.approx(0.012)
+    assert totals.tool_calls == {"add": 2, "read": 1}
+    assert ScorerInput(run=run).model_dump(mode="json")["run"]["totals"]["turns"] == 2

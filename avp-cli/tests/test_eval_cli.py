@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from avp.commission import Commission
+from avp.descriptor import AgentDescriptor
 from avp_cli import console, paths
 from avp_cli.agents import store
 from avp_cli.cli import app
@@ -47,6 +48,14 @@ def no_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(engine, "dispatch", fake_dispatch)
     monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))
     monkeypatch.setattr(images, "entrypoint", lambda image: ["/agent"])
+    monkeypatch.setattr(images, "image_id", lambda image: "sha256:0123456789abcdef0123")
+    monkeypatch.setattr(
+        engine,
+        "describe",
+        lambda agent, entrypoint: AgentDescriptor(
+            avp_version="0.1", agent_name="avp-pydantic-ai", agent_version="0.3.0"
+        ),
+    )
 
 
 def eval_file(tmp_path: Path, **change: object) -> Path:
@@ -178,3 +187,15 @@ def test_ctrl_c_keeps_the_runs_that_finished(
     [eval_directory] = (tmp_path / "home" / "evals").iterdir()
     saved = json.loads((eval_directory / "results.json").read_text())
     assert (len(saved["runs"]), saved["finished"]) == (2, None)
+
+
+def test_the_scoreboard_shows_cost_turns_time_and_agents(tmp_path: Path) -> None:
+    code, output = avp("eval", "run", str(eval_file(tmp_path)))
+    assert code == 0, output
+    for column in ["Model", "$/run", "Turns/run", "Time/run"]:
+        assert column in output
+    assert "anthropic/claude-haiku-4-5" in output
+    assert "pd: avp-pydantic-ai 0.3.0, image sha256:0123456789ab" in output
+    assert "2 runs, $0.0000 in all" in output
+    assert "pass inline-1 / pd / paris  100%" in output
+    assert "fail inline-1 / pd / tokyo  0%" in output

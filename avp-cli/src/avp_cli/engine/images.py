@@ -82,6 +82,11 @@ def entrypoint(image: str) -> list[str]:
     return command
 
 
+def image_id(image: str) -> str:
+    """The engine's ID for the image, which changes when it's rebuilt."""
+    return client().images.get(image).id
+
+
 def remove(image: str) -> None:
     try:
         client().images.remove(image)

@@ -14,7 +14,7 @@ from avp_cli.eval import results
 from avp_cli.eval.commission import EvalError, load
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.engine import run_eval
-from avp_cli.eval.report import print_scoreboard
+from avp_cli.eval.report import print_scoreboard, run_line
 from avp_cli.eval.results import RunResult
 from avp_cli.eval.scoring import Result
 from avp_cli.runs import environment, volumes
@@ -99,6 +99,8 @@ def run(
         def progress(result: Result) -> None:
             saved.runs.append(RunResult.of(result, directory))
             results.save(directory, saved)
+            if not json:
+                err.print(run_line(saved.runs[-1]), highlight=False)
             status.update(line("Running ", (ev.name, "bold"), f" - {len(saved.runs)} of {total}"))
 
         try:
