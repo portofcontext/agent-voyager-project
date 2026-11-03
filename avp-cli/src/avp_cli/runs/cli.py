@@ -1,6 +1,5 @@
 """`avp run`: one agent on one Commission."""
 
-import shlex
 import threading
 import time
 from collections.abc import Callable
@@ -12,10 +11,11 @@ from pydantic import ValidationError
 
 from avp.commission import Commission
 from avp_cli import console
-from avp_cli.agents import command, store
-from avp_cli.console import Failed, VerboseOption, detail, err, line, out
+from avp_cli.agents import store
+from avp_cli.console import Failed, VerboseOption, err, line, out
 from avp_cli.engine import images
-from avp_cli.runs import credentials, directory, environment, events, network, volumes
+from avp_cli.runs import directory, environment, events, volumes
+from avp_cli.runs.dispatch import Options, dispatch
 from avp_cli.sandbox import sandboxes
 
 STDERR_LINES = 5
@@ -62,55 +62,38 @@ def run(
         parsed = Commission.model_validate_json(text)
     except ValidationError as exc:
         raise Failed(f"{commission} isn't a valid Commission: {exc}") from None
-    variables = environment.variables(env or [], env_file or [])
-    environment.check(parsed, variables)
-    hosts = network.allowed_hosts(parsed, allow_host or [])
-    mounts = volumes.parse(volume or [])
+    options = Options(
+        env=environment.variables(env or [], env_file or []),
+        allow_hosts=allow_host or [],
+        volumes=volumes.parse(volume or []),
+    )
     installed = store.load(agent)
     entrypoint = images.entrypoint(installed.image)
-    detail(f"Image: {installed.image}, entrypoint {shlex.join(entrypoint)}")
-    vault = credentials.vault(parsed)
-    run_directory = directory.create(parsed.run_id, text)
-    detail(f"Run directory: {run_directory}")
-    trajectory = run_directory / directory.TRAJECTORY
-    if not any(network.MODEL in reasons for reasons in hosts.values()):
-        detail(
-            f"Warning: avp knows no host for {parsed.model.provider!r} models; set"
-            " model.base_url, or allow its host with --allow-host"
-        )
-    detail(f"Allowed hosts: {network.describe(hosts)}")
-    if mounts:
-        detail(f"Volumes: {volumes.describe(mounts)}")
-    with (
-        err.status(line("Starting a sandbox for ", (agent, "bold"))) as status,
-        sandboxes.sandbox(installed.image, run_directory, list(hosts), mounts, vault) as box,
-    ):
-        follower = events.Follower(trajectory)
-        result = _following(
-            follower,
-            lambda: command.run(
-                box,
-                entrypoint,
-                f"{sandboxes.IO}/{directory.COMMISSION}",
-                f"{sandboxes.IO}/{directory.TRAJECTORY}",
-                variables,
-            ),
-            lambda seconds: status.update(
-                line("Running ", (agent, "bold"), " - ", (events.elapsed(seconds), "dim"))
-            ),
-        )
-    follower.finish()
-    if result.stderr:
-        (run_directory / directory.STDERR).write_text(result.stderr)
+    followers: list[events.Follower] = []
+    with err.status(line("Starting a sandbox for ", (agent, "bold"))) as status:
+
+        def watch(trajectory: Path, run: Callable[[], sandboxes.Result]) -> sandboxes.Result:
+            followers.append(events.Follower(trajectory))
+            return _following(
+                followers[0],
+                run,
+                lambda seconds: status.update(
+                    line("Running ", (agent, "bold"), " - ", (events.elapsed(seconds), "dim"))
+                ),
+            )
+
+        finished = dispatch(installed, entrypoint, parsed, options, text, watch)
+    for follower in followers:
+        follower.finish()
     # Shown even when the agent crashed, since its events up to then are there.
-    if trajectory.is_file():
-        out.print(f"\nTrajectory: {trajectory}", highlight=False, soft_wrap=True)
-    if result.exit_code != 0:
-        tail = "\n".join(result.stderr.strip().splitlines()[-STDERR_LINES:])
+    if finished.trajectory.is_file():
+        out.print(f"\nTrajectory: {finished.trajectory}", highlight=False, soft_wrap=True)
+    if finished.exit_code != 0:
+        tail = "\n".join(finished.stderr.strip().splitlines()[-STDERR_LINES:])
         raise Failed(
-            f"the agent exited with {result.exit_code}"
+            f"the agent exited with {finished.exit_code}"
             + (
-                f". Its stderr ends:\n{tail}\nAll of it: {run_directory / directory.STDERR}"
+                f". Its stderr ends:\n{tail}\nAll of it: {finished.directory / directory.STDERR}"
                 if tail
                 else ""
             )
