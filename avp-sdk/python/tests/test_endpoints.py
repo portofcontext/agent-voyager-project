@@ -1,9 +1,12 @@
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from avp.utils import _models_dev, endpoints
 from avp.utils.endpoints import (
+    AUTH_BY_PACKAGE,
     BEARER,
     GAP_FILLERS,
     Auth,
@@ -59,6 +62,23 @@ def test_fetch_keeps_models_dev_first_and_reads_auth_from_the_package(monkeypatc
         "openai": Endpoint(base_url="https://example.test/openai/v1", auth=BEARER),
         "openrouter": Endpoint(base_url="https://openrouter.ai/api/v1", auth=BEARER),
     }
+
+
+@pytest.mark.parametrize(
+    "case",
+    json.loads((Path(__file__).parents[2] / "testdata/endpoints/catalog.json").read_text()),
+    ids=lambda case: case["name"],
+)
+def test_shared_catalog_cases(case):
+    auth = (
+        {key: Auth.model_validate(value) for key, value in case["auth"].items()}
+        if "auth" in case
+        else AUTH_BY_PACKAGE
+    )
+    fetched = fetch_endpoints(
+        catalog=case["catalog"], fill=case.get("fill", GAP_FILLERS), auth=auth
+    )
+    assert fetched.model_dump(exclude_none=True)["providers"] == case["providers"]
 
 
 @pytest.fixture

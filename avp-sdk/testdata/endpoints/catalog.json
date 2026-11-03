@@ -1,0 +1,182 @@
+[
+  {
+    "name": "provider defaults and package auth",
+    "catalog": {
+      "openrouter": {
+        "api": "https://openrouter.ai/api/v1",
+        "npm": "@openrouter/ai-sdk-provider"
+      },
+      "anthropic": {
+        "npm": "@ai-sdk/anthropic"
+      },
+      "openai": {
+        "api": "https://example.test/openai/v1",
+        "npm": "@ai-sdk/openai"
+      },
+      "databricks": {
+        "api": "https://${DATABRICKS_HOST}/ai-gateway/mlflow/v1",
+        "npm": "@ai-sdk/openai-compatible"
+      },
+      "google-vertex": {
+        "npm": "@ai-sdk/google-vertex"
+      },
+      "google": {
+        "npm": "@ai-sdk/google"
+      },
+      "amazon-bedrock": {
+        "npm": "@ai-sdk/amazon-bedrock"
+      },
+      "azure": {
+        "npm": "@ai-sdk/azure"
+      },
+      "mystery": {
+        "api": "https://mystery.test/v1",
+        "npm": "mystery-provider"
+      },
+      "empty": {
+        "api": "",
+        "npm": null
+      },
+      "no-package": {
+        "api": "https://no-package.test/v1"
+      },
+      "constructor": {
+        "api": 42,
+        "npm": "toString"
+      },
+      "__proto__": {
+        "api": "https://prototype.test/v1",
+        "npm": "@ai-sdk/openai"
+      }
+    },
+    "providers": {
+      "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "auth": {
+          "header": "authorization",
+          "prefix": "Bearer "
+        }
+      },
+      "anthropic": {
+        "base_url": "https://api.anthropic.com/v1",
+        "auth": {
+          "header": "x-api-key",
+          "prefix": ""
+        }
+      },
+      "openai": {
+        "base_url": "https://example.test/openai/v1",
+        "auth": {
+          "header": "authorization",
+          "prefix": "Bearer "
+        }
+      },
+      "databricks": {
+        "auth": {
+          "header": "authorization",
+          "prefix": "Bearer "
+        }
+      },
+      "google": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "auth": {
+          "header": "x-goog-api-key",
+          "prefix": ""
+        }
+      },
+      "amazon-bedrock": {
+        "auth": {
+          "header": "authorization",
+          "prefix": "Bearer "
+        }
+      },
+      "azure": {
+        "auth": {
+          "header": "api-key",
+          "prefix": ""
+        }
+      },
+      "mystery": {
+        "base_url": "https://mystery.test/v1"
+      },
+      "no-package": {
+        "base_url": "https://no-package.test/v1"
+      },
+      "__proto__": {
+        "base_url": "https://prototype.test/v1",
+        "auth": {
+          "header": "authorization",
+          "prefix": "Bearer "
+        }
+      }
+    }
+  },
+  {
+    "name": "custom rules and placeholder fallback",
+    "fill": {
+      "anthropic": "https://custom.test/v1",
+      "openai": "https://fallback.test/v1",
+      "unused": "https://unused.test"
+    },
+    "auth": {
+      "custom": {
+        "header": "x-custom",
+        "prefix": "Token "
+      }
+    },
+    "catalog": {
+      "anthropic": {
+        "api": "https://${ACCOUNT}.test",
+        "npm": "custom"
+      },
+      "openai": {
+        "api": "https://catalog.test",
+        "npm": "@ai-sdk/openai"
+      },
+      "unknown": {
+        "npm": "custom"
+      },
+      "none": {}
+    },
+    "providers": {
+      "anthropic": {
+        "base_url": "https://custom.test/v1",
+        "auth": {
+          "header": "x-custom",
+          "prefix": "Token "
+        }
+      },
+      "openai": {
+        "base_url": "https://catalog.test"
+      },
+      "unknown": {
+        "auth": {
+          "header": "x-custom",
+          "prefix": "Token "
+        }
+      }
+    }
+  },
+  {
+    "name": "empty overrides disable defaults",
+    "fill": {},
+    "auth": {},
+    "catalog": {
+      "anthropic": {
+        "npm": "@ai-sdk/anthropic"
+      },
+      "openai": {
+        "api": null
+      },
+      "valid": {
+        "api": "https://valid.test",
+        "npm": "@ai-sdk/openai"
+      }
+    },
+    "providers": {
+      "valid": {
+        "base_url": "https://valid.test"
+      }
+    }
+  }
+]

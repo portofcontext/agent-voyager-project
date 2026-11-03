@@ -38,6 +38,7 @@ TypeScript.
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
 | Pricing | `cost_usd` and `cost_source` for a response, from models.dev prices | `avp.utils.pricing` |
+| Endpoints | A provider's default `base_url` and API-key header, for sandbox egress, credential proxies, and metering | `avp.utils.endpoints` |
 | Agent command line | The command line every agent answers, described below | `avp.agent_cli` |
 
 Supervisor tools, built in Python first and in the other SDKs when a supervisor
@@ -47,19 +48,33 @@ needs them:
 |---|---|---|
 | OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
 | CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
-| Endpoints | A provider's default `base_url`, for a Model without one, and the header its API key goes in: for sandbox egress, a credential proxy, or metering | `avp.utils.endpoints` |
 
-### Pricing
+### Shared provider data
 
 Each SDK ships a snapshot of the models.dev prices, refreshed before each
 publish (`make sdk-data`), so pricing works offline. A caller can pass a
 maximum age to fetch newer prices into a cache file, or its own file for the
 same costs on every rerun. Without either, the SDK never calls models.dev.
 
-Endpoints work the same way, in the same refresh. models.dev gives most
-providers' `api` URL but not the ones whose clients have a URL built in, such
-as `anthropic` and `openai`; a short list of gap fillers in the SDK covers
-those, and models.dev wins where both have one.
+The repository stores prices, endpoints, and endpoint refresh rules once in
+[`data/`](data/). Relative file links in each SDK's data directory point there.
+`make sdk-data` fetches the catalog once, refreshes both snapshots, and links
+all shared JSON files into every SDK. URL fallbacks and package-to-auth rules
+live in `avp_endpoint_defaults.json`, so refreshes use the same rules in every
+language.
+
+Package builds embed the linked data as regular files, so each published package
+contains its snapshot without depending on the repository or another SDK.
+`make sdk-data-check` verifies the complete file inventory and shared links,
+then checks every data file in the Python wheel, source distribution, and
+Rust crate.
+
+Endpoints load, cache, and refresh the same way as prices in Python and Rust.
+models.dev gives most providers' `api` URL but not the ones whose clients have
+a URL built in, such as `anthropic` and `openai`; a short list of gap fillers covers
+those, and models.dev wins where both have one. Python exposes
+`avp.utils.endpoints` and Rust `avp::utils::endpoints`. Catalog translation is checked
+against the same cases in [`testdata/endpoints/`](testdata/endpoints/).
 
 Each endpoint also says where the provider's API key goes, so a supervisor can
 set up a credential proxy for a Model's `proxy` credential: `authorization`
