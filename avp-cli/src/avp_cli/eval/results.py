@@ -10,10 +10,6 @@ from avp_cli import paths
 from avp_cli.console import Failed
 from avp_cli.eval.scoring import Result, Score, Summary, summarize
 
-EVAL = "eval.json"
-"""The eval file, as given."""
-RESULTS = "results.json"
-
 
 class RunResult(BaseModel):
     """One run's outcome, as saved."""
@@ -45,7 +41,7 @@ class RunResult(BaseModel):
             reason=run.reason,
             score=result.score,
             scorer_error=result.error.message if result.error else None,
-            directory=str(Path("runs") / run.id),
+            directory=str(Path(paths.EVAL_RUNS) / run.id),
         )
 
 
@@ -75,30 +71,35 @@ class EvalResults(BaseModel):
 def create(name: str, eval_text: str) -> tuple[Path, EvalResults]:
     """A new eval run's directory, holding the eval file."""
     started = datetime.now(UTC)
-    id = f"{started.strftime('%Y%m%dT%H%M%SZ')}-{name}"
+    id = paths.stamped(name, started)
     directory = paths.evals() / id
     directory.mkdir(parents=True)
-    (directory / EVAL).write_text(eval_text)
+    (directory / paths.EVAL).write_text(eval_text)
     results = EvalResults(id=id, name=name, started=started)
     save(directory, results)
     return directory, results
 
 
 def save(directory: Path, results: EvalResults) -> None:
-    (directory / RESULTS).write_text(results.model_dump_json(indent=2) + "\n")
+    (directory / paths.RESULTS).write_text(results.model_dump_json(indent=2) + "\n")
+
+
+def ids() -> list[str]:
+    """Every eval run's ID, the earliest first."""
+    root = paths.evals()
+    return sorted(p.name for p in root.iterdir()) if root.is_dir() else []
 
 
 def load(id: str | None = None) -> tuple[Path, EvalResults]:
     """An eval run by its ID, or the latest."""
-    root = paths.evals()
     if id is None:
-        found = sorted(p.name for p in root.iterdir()) if root.is_dir() else []
+        found = ids()
         if not found:
             raise Failed("no evals have run yet")
         id = found[-1]
-    directory = root / id
+    directory = paths.evals() / id
     try:
-        text = (directory / RESULTS).read_text()
+        text = (directory / paths.RESULTS).read_text()
     except FileNotFoundError:
         raise Failed(f"no eval {id!r}; `avp eval list` shows them") from None
     return directory, EvalResults.model_validate_json(text)

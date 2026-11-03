@@ -44,7 +44,7 @@ allowed_host_paths = {allowed_host_paths()}
 
 [store]
 type = "sqlite"
-path = "{paths.opensandbox() / "state.db"}"
+path = "{paths.opensandbox_store()}"
 
 [docker]
 network_mode = "bridge"
@@ -86,7 +86,7 @@ def running() -> bool:
 def config() -> dict | None:
     """The config the service was last started with, or None before the first start."""
     try:
-        return tomllib.loads((paths.opensandbox() / "config.toml").read_text())
+        return tomllib.loads(paths.opensandbox_config().read_text())
     except FileNotFoundError:
         return None
 
@@ -94,7 +94,7 @@ def config() -> dict | None:
 def pid() -> int | None:
     """The process avp last started, or None when avp hasn't started one."""
     try:
-        return int((paths.opensandbox() / "server.pid").read_text())
+        return int(paths.opensandbox_pid().read_text())
     except (FileNotFoundError, ValueError):
         return None
 
@@ -105,12 +105,11 @@ def start() -> None:
         return
     detail(f"Engine: {engine.where()}")
     engine.client()
-    directory = paths.opensandbox()
-    directory.mkdir(parents=True, exist_ok=True)
-    config = directory / "config.toml"
+    paths.opensandbox().mkdir(parents=True, exist_ok=True)
+    config = paths.opensandbox_config()
     config.write_text(config_text(secrets.token_hex(32)))
     config.chmod(0o600)
-    with (directory / "server.log").open("ab") as log:
+    with paths.opensandbox_log().open("ab") as log:
         server = subprocess.Popen(
             [sys.executable, "-m", "opensandbox_server.cli", "--config", str(config)],
             stdout=log,
@@ -118,7 +117,7 @@ def start() -> None:
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-    (directory / "server.pid").write_text(str(server.pid))
+    paths.opensandbox_pid().write_text(str(server.pid))
     began = time.monotonic()
     deadline = began + START_TIMEOUT_S
     while time.monotonic() < deadline:
@@ -128,12 +127,12 @@ def start() -> None:
         if server.poll() is not None:
             break
         time.sleep(0.25)
-    raise Failed(f"the OpenSandbox service didn't start. See {directory / 'server.log'}")
+    raise Failed(f"the OpenSandbox service didn't start. See {paths.opensandbox_log()}")
 
 
 def stop() -> bool:
     """Stop the service avp started. False when it wasn't running."""
-    pid_file = paths.opensandbox() / "server.pid"
+    pid_file = paths.opensandbox_pid()
     if not pid_file.is_file():
         return False
     try:

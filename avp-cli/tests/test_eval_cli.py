@@ -9,14 +9,13 @@ import pytest
 from typer.testing import CliRunner
 
 from avp.commission import Commission
-from avp_cli import console
+from avp_cli import console, paths
 from avp_cli.agents import store
 from avp_cli.cli import app
 from avp_cli.engine import images
 from avp_cli.eval import cli as eval_cli
 from avp_cli.eval import engine
 from avp_cli.eval.scoring import Result
-from avp_cli.runs import directory
 from avp_cli.runs.dispatch import Finished, Options
 
 ANSWERS = {"paris": "Paris", "tokyo": "Kyoto"}
@@ -36,7 +35,7 @@ def fake_dispatch(
         "run_id": commission.run_id,
         "data": {"reason": "converged", "output": ANSWERS[item]},
     }
-    (options.directory / directory.TRAJECTORY).write_text(json.dumps(event) + "\n")
+    (options.directory / paths.TRAJECTORY).write_text(json.dumps(event) + "\n")
     return Finished(options.directory, 0, "")
 
 

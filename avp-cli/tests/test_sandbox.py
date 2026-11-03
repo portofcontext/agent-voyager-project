@@ -22,8 +22,8 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_verbose_status_shows_the_config_the_service_started_with(
     home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (home / "config.toml").write_text(service.config_text("api-key-1"))
-    (home / "server.pid").write_text("4242")
+    paths.opensandbox_config().write_text(service.config_text("api-key-1"))
+    paths.opensandbox_pid().write_text("4242")
     monkeypatch.setattr(service, "running", lambda: True)
     monkeypatch.setattr(engine, "name", lambda: "Test Engine 1")
 
@@ -33,7 +33,7 @@ def test_verbose_status_shows_the_config_the_service_started_with(
     result = CliRunner().invoke(app, ["sandbox", "status", "--verbose"])
     assert result.exit_code == 0, result.output
     assert "Process: 4242" in result.stderr
-    assert f"Config: {home / 'config.toml'}" in result.stderr
+    assert f"Config: {paths.opensandbox_config()}" in result.stderr
     assert f"Exec daemon image: {service.EXECD_IMAGE}" in result.stderr
     assert f"Egress image: {service.EGRESS_IMAGE}, mode dns+nft" in result.stderr
     assert "api-key-1" not in result.output
@@ -41,7 +41,7 @@ def test_verbose_status_shows_the_config_the_service_started_with(
 
 def test_verbose_stop_names_the_process(home: Path) -> None:
     process = subprocess.Popen(["sleep", "60"])
-    (home / "server.pid").write_text(str(process.pid))
+    paths.opensandbox_pid().write_text(str(process.pid))
     result = CliRunner().invoke(app, ["sandbox", "stop", "--verbose"])
     assert result.exit_code == 0, result.output
     assert f"Stopped process {process.pid}" in result.stderr

@@ -9,9 +9,9 @@ import pytest
 from pydantic import JsonValue, ValidationError
 
 from avp.trajectory import AgentStoppedEvent
+from avp_cli import paths
 from avp_cli.eval.schemas import Item
 from avp_cli.eval.scoring import (
-    SCORER_ERROR,
     InvalidEvent,
     Run,
     Score,
@@ -50,7 +50,7 @@ STOPPED = event(3, "agent_stopped", {"reason": "converged", "output": "Paris"})
 
 def run_in(directory: Path, *lines: dict | str) -> Run:
     text = "\n".join(e if isinstance(e, str) else json.dumps(e) for e in lines)
-    (directory / "trajectory.ndjson").write_text(text + "\n")
+    (directory / paths.TRAJECTORY).write_text(text + "\n")
     return read(directory, id="r", agent="pd", commission="inline-1", item=ITEM, exit_code=0)
 
 
@@ -150,7 +150,7 @@ def test_a_scorer_that_raises_has_no_score_and_saves_its_traceback(tmp_path: Pat
     assert result.score is None
     assert result.error is not None
     assert result.error.message == "KeyError: 'words'"
-    saved = (tmp_path / SCORER_ERROR).read_text()
+    saved = (tmp_path / paths.SCORER_ERROR).read_text()
     assert saved.startswith("KeyError: 'words'\n\nTraceback")
     assert "in broken" in saved
 
@@ -179,7 +179,7 @@ def test_a_placeholder_that_cannot_be_filled_fails_the_scorer(tmp_path: Path) ->
     assert result.error.message == (
         'scorer.city: run.output isn\'t text; insert it whole with {"$run": "output"}'
     )
-    assert (tmp_path / SCORER_ERROR).exists()
+    assert (tmp_path / paths.SCORER_ERROR).exists()
 
 
 def test_the_summary_leaves_scorer_failures_out() -> None:

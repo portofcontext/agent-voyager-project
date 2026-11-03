@@ -10,11 +10,11 @@ import typer
 from pydantic import ValidationError
 
 from avp.commission import Commission
-from avp_cli import console
+from avp_cli import console, paths
 from avp_cli.agents import store
 from avp_cli.console import Failed, VerboseOption, err, line, out
 from avp_cli.engine import images
-from avp_cli.runs import directory, environment, events, volumes
+from avp_cli.runs import environment, events, volumes
 from avp_cli.runs.dispatch import Options, dispatch
 from avp_cli.sandbox import sandboxes
 
@@ -93,7 +93,7 @@ def run(
         raise Failed(
             f"the agent exited with {finished.exit_code}"
             + (
-                f". Its stderr ends:\n{tail}\nAll of it: {finished.directory / directory.STDERR}"
+                f". Its stderr ends:\n{tail}\nAll of it: {finished.directory / paths.STDERR}"
                 if tail
                 else ""
             )

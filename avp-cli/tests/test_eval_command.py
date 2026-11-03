@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from avp_cli import paths
 from avp_cli.eval.commission import EvalError, load
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.schemas import Item
-from avp_cli.eval.scoring import SCORER_ERROR, Result, Run, Score, score
+from avp_cli.eval.scoring import Result, Run, Score, score
 
 WORDS = """
 import json, sys
@@ -155,7 +156,7 @@ def test_a_command_that_fails(tmp_path: Path, body: str, message: str, detail: s
     assert result.error is not None
     assert message in result.error.message
     assert result.error.message.startswith(sys.executable)
-    saved = (tmp_path / SCORER_ERROR).read_text()
+    saved = (tmp_path / paths.SCORER_ERROR).read_text()
     assert detail in saved
 
 

@@ -27,12 +27,12 @@ def check_name(name: str) -> None:
 
 def save(agent: Agent) -> None:
     paths.agents().mkdir(parents=True, exist_ok=True)
-    (paths.agents() / f"{agent.name}.json").write_text(agent.model_dump_json(indent=2))
+    paths.agent(agent.name).write_text(agent.model_dump_json(indent=2))
 
 
 def load(name: str) -> Agent:
     try:
-        return Agent.model_validate_json((paths.agents() / f"{name}.json").read_text())
+        return Agent.model_validate_json(paths.agent(name).read_text())
     except FileNotFoundError:
         raise Failed(f"no agent named {name!r}. `avp agent list` shows yours") from None
 
@@ -45,4 +45,4 @@ def installed() -> list[Agent]:
 
 
 def delete(name: str) -> None:
-    (paths.agents() / f"{name}.json").unlink(missing_ok=True)
+    paths.agent(name).unlink(missing_ok=True)

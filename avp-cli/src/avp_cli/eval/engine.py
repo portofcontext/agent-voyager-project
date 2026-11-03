@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
+from avp_cli import paths
 from avp_cli.agents import store
 from avp_cli.console import Failed
 from avp_cli.engine import images
@@ -18,9 +19,6 @@ from avp_cli.runs.dispatch import Options, dispatch
 from avp_cli.sandbox import sandboxes
 
 T = TypeVar("T")
-
-RUNS = "runs"
-"""In an eval's directory: one directory per run, named by its `run_id`."""
 
 
 async def run_eval(
@@ -45,7 +43,7 @@ async def run_eval(
     async def one(case: EvalCase) -> Result:
         async with limit:
             agent, entrypoint = agents[case.agent]
-            run_directory = directory / RUNS / case.built.run_id
+            run_directory = directory / paths.EVAL_RUNS / case.built.run_id
             try:
                 finished = await _in_thread(
                     dispatch,

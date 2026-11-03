@@ -10,6 +10,7 @@ import pytest
 from pydantic import JsonValue, ValidationError
 
 from avp.trajectory import StopReason
+from avp_cli import paths
 from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.schemas import Item
@@ -165,7 +166,7 @@ def test_an_eval_scored_with_match(tmp_path: Path) -> None:
     for commission, agent, item, built in config:
         directory = tmp_path / built.run_id
         directory.mkdir()
-        (directory / "trajectory.ndjson").write_text(stopped(outputs[item.id]) + "\n")
+        (directory / paths.TRAJECTORY).write_text(stopped(outputs[item.id]) + "\n")
         run = read(
             directory, id=built.run_id, agent=agent, commission=commission, item=item, exit_code=0
         )

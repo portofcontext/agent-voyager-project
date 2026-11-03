@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from avp.commission import EnvSecret, Model
 from avp.trajectory import Event, parse_trajectory_event
+from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.conformance.cases import Case, Context, Level, Run, Skip
 from avp_cli.console import Failed, detail
@@ -82,13 +83,13 @@ def _run_case(
         result = command.run(
             box,
             entrypoint,
-            f"{sandboxes.IO}/{directory.COMMISSION}",
-            f"{sandboxes.IO}/{directory.TRAJECTORY}",
+            f"{sandboxes.IO}/{paths.COMMISSION}",
+            f"{sandboxes.IO}/{paths.TRAJECTORY}",
             {KEY: STAND_IN},
         )
     if result.stderr:
-        (run_directory / directory.STDERR).write_text(result.stderr)
-    events, types, problems = read(run_directory / directory.TRAJECTORY)
+        (run_directory / paths.STDERR).write_text(result.stderr)
+    events, types, problems = read(run_directory / paths.TRAJECTORY)
     if result.exit_code != 0:
         problems.append(f"the agent exited with {result.exit_code}")
     problems += case.check(Run(events=events, types=types, exit_code=result.exit_code))

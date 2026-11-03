@@ -9,6 +9,7 @@ from pathlib import Path
 from opensandbox.models.sandboxes import Volume
 
 from avp.commission import Commission
+from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.console import detail
 from avp_cli.runs import credentials, directory, environment, network, volumes
@@ -45,7 +46,7 @@ class Finished:
 
     @property
     def trajectory(self) -> Path:
-        return self.directory / directory.TRAJECTORY
+        return self.directory / paths.TRAJECTORY
 
 
 def dispatch(
@@ -84,13 +85,13 @@ def dispatch(
             return command.run(
                 box,
                 entrypoint,
-                f"{sandboxes.IO}/{directory.COMMISSION}",
-                f"{sandboxes.IO}/{directory.TRAJECTORY}",
+                f"{sandboxes.IO}/{paths.COMMISSION}",
+                f"{sandboxes.IO}/{paths.TRAJECTORY}",
                 options.env,
             )
 
-        trajectory = run_directory / directory.TRAJECTORY
+        trajectory = run_directory / paths.TRAJECTORY
         result = watch(trajectory, agent_command) if watch else agent_command()
     if result.stderr:
-        (run_directory / directory.STDERR).write_text(result.stderr)
+        (run_directory / paths.STDERR).write_text(result.stderr)
     return Finished(run_directory, result.exit_code, result.stderr)

@@ -108,7 +108,7 @@ def run(
     if found is None:
         err.print(
             f"Stopped after {len(saved.runs)} of {total} runs; their results are in"
-            f" {directory / results.RESULTS}",
+            f" {directory / paths.RESULTS}",
             highlight=False,
             soft_wrap=True,
         )
@@ -120,7 +120,7 @@ def run(
         out.print_json(saved.model_dump_json())
     else:
         print_scoreboard(out, saved, directory)
-        out.print(f"\nResults: {directory / results.RESULTS}", highlight=False, soft_wrap=True)
+        out.print(f"\nResults: {directory / paths.RESULTS}", highlight=False, soft_wrap=True)
     accuracy = saved.summary().accuracy
     if threshold is not None and (accuracy is None or accuracy < threshold):
         raise typer.Exit(1)
@@ -136,8 +136,7 @@ def _problems(path: Path, error: EvalError) -> str:
 @app.command("list")
 def list_evals(limit: Annotated[int, typer.Option(help="Show this many runs.")] = 20) -> None:
     """List past eval runs, the latest first."""
-    root = paths.evals()
-    ids = sorted((p.name for p in root.iterdir()), reverse=True)[:limit] if root.is_dir() else []
+    ids = results.ids()[::-1][:limit]
     table = Table("ID", "Started", "Runs", "Accuracy", "Pass rate")
     for id in ids:
         try:

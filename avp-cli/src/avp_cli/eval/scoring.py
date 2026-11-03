@@ -14,12 +14,9 @@ from typing import Annotated, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_serializer
 
 from avp.trajectory import AgentStoppedEvent, Event, StopReason, parse_trajectory_event
+from avp_cli import paths
 from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
-from avp_cli.runs.directory import TRAJECTORY
-
-SCORER_ERROR = "scorer-error.txt"
-"""In a run's directory: why its scorer failed, with the traceback or stderr."""
 
 
 class InvalidEvent(BaseModel):
@@ -143,7 +140,7 @@ def read(
     directory: Path, *, id: str, agent: str, commission: str, item: Item, exit_code: int | None
 ) -> Run:
     """The run in `directory`, from its Trajectory."""
-    events, invalid = read_trajectory(directory / TRAJECTORY)
+    events, invalid = read_trajectory(directory / paths.TRAJECTORY)
     stopped = [e for e in events if isinstance(e, AgentStoppedEvent)]
     return Run(
         id=id,
@@ -219,7 +216,7 @@ async def score(scorer: Scorer, config: JsonObject, run: Run, directory: Path | 
         failure = error if isinstance(error, ScorerError) else ScorerError(str(error))
     if directory is not None:
         text = failure.message + (f"\n\n{failure.detail}" if failure.detail else "") + "\n"
-        (directory / SCORER_ERROR).write_text(text)
+        (directory / paths.SCORER_ERROR).write_text(text)
     return Result(run, None, failure)
 
 

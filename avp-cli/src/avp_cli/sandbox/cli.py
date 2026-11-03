@@ -42,10 +42,9 @@ def status(verbose: VerboseOption = False) -> None:
 
 def _details() -> None:
     """The running service's process, files, and the config it started with."""
-    directory = paths.opensandbox()
     detail(f"Process: {service.pid() or 'not started by avp'}")
-    detail(f"Config: {directory / 'config.toml'}")
-    detail(f"Log: {directory / 'server.log'}")
+    detail(f"Config: {paths.opensandbox_config()}")
+    detail(f"Log: {paths.opensandbox_log()}")
     config = service.config() or {}
     egress = config.get("egress", {})
     detail(f"Exec daemon image: {config.get('runtime', {}).get('execd_image', 'not set')}")

@@ -11,6 +11,7 @@ import pytest
 from pydantic import JsonValue
 
 from avp.commission import Commission
+from avp_cli import paths
 from avp_cli.agents import store
 from avp_cli.console import Failed
 from avp_cli.engine import images
@@ -19,7 +20,6 @@ from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.engine import run_eval
 from avp_cli.eval.scoring import Result, Score
-from avp_cli.runs import directory
 from avp_cli.runs.dispatch import Finished, Options
 from avp_cli.sandbox import sandboxes
 
@@ -70,7 +70,7 @@ class Fake:
         with self.lock:
             self.running -= 1
         options.directory.mkdir(parents=True)
-        trajectory = options.directory / directory.TRAJECTORY
+        trajectory = options.directory / paths.TRAJECTORY
         trajectory.write_text(stopped(commission.run_id, ANSWERS[item]) + "\n")
         return Finished(options.directory, 0, "")
 
@@ -119,7 +119,7 @@ def test_every_run_is_run_and_scored_in_order(tmp_path: Path, fake: Fake) -> Non
     ]
     assert seen == [r.run.id for r in results]
     assert [o.directory for o in fake.options] == [
-        tmp_path / "eval" / "runs" / r.run.id for r in results
+        tmp_path / "eval" / paths.EVAL_RUNS / r.run.id for r in results
     ]
     assert results[0].run.output == "Paris"
 
