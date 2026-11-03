@@ -163,6 +163,60 @@ assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
                 "src/utils/data",
             )
 
+    def test_typescript_package(self) -> None:
+        with tempfile.TemporaryDirectory() as out:
+            subprocess.run(
+                ["npm", "pack", "--json", "--pack-destination", out],
+                cwd=ROOT / "avp-sdk" / "typescript",
+                check=True,
+                capture_output=True,
+            )
+            archive = next(Path(out).glob("*.tgz"))
+            self.assert_tar_data(archive, "dist/utils/data")
+            consumer = Path(out) / "consumer"
+            consumer.mkdir()
+            subprocess.run(
+                [
+                    "npm",
+                    "install",
+                    "--offline",
+                    "--ignore-scripts",
+                    "--no-audit",
+                    "--no-fund",
+                    str(archive),
+                ],
+                cwd=consumer,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "node",
+                    "--input-type=module",
+                    "-e",
+                    """
+import assert from 'node:assert/strict';
+import { bundledPrices } from '@agent-voyager-project/sdk/utils/pricing';
+import { bundledEndpoints, defaultBaseUrl, providerAuth } from '@agent-voyager-project/sdk/utils/endpoints';
+import { parseCommission } from '@agent-voyager-project/sdk/commission';
+import { Recorder } from '@agent-voyager-project/sdk/recorder';
+assert.ok(bundledPrices().models['anthropic/claude-sonnet-4-5'].output > 0);
+assert.equal(defaultBaseUrl(bundledEndpoints(), 'anthropic'), 'https://api.anthropic.com/v1');
+assert.deepEqual(providerAuth(bundledEndpoints(), 'anthropic'), {header:'x-api-key',prefix:''});
+const commission = parseCommission({avp_version:'0.1',run_id:'r',prompt:'Hi',model:{provider:'p',id:'m'}});
+const events = [];
+const rec = new Recorder(async event => { events.push(event); });
+await rec.start({prompt:commission.prompt,model:commission.model});
+await rec.response([{type:'text',text:'Hi'}]);
+await rec.stop('converged');
+assert.deepEqual(events.map(event => event.type), ['agent_started','assistant_message','agent_stopped']);
+""",
+                ],
+                cwd=consumer,
+                check=True,
+                capture_output=True,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

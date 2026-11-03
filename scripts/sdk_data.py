@@ -8,6 +8,7 @@ DATA = SDK / "data"
 PACKAGE_DATA = {
     "python": SDK / "python/src/avp/utils/data",
     "rust": SDK / "rust/src/utils/data",
+    "typescript": SDK / "typescript/src/utils/data",
 }
 
 
