@@ -137,10 +137,6 @@ class ScorerConfig(BaseModel):
         return score
 
 
-SCORERS: dict[str, type[ScorerConfig]] = {}
-"""The built-in scorers by `name`."""
-
-
 def read(
     directory: Path, *, id: str, agent: str, commission: str, item: Item, exit_code: int | None
 ) -> Run:

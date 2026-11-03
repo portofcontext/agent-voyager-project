@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.11,<3",
     "python-dotenv>=1.2",
     "questionary>=2",
+    "rapidfuzz>=3",
     "rich>=14",
     "typer>=0.20",
 ]

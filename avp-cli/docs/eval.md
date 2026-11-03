@@ -123,7 +123,7 @@ scorer.expected: run has no field 'outptu'
 
 ## Scorers
 
-⬜ Not built yet.
+⬜ avp checks and scores with `match`; running an eval comes next.
 
 A scorer takes one finished run, with its item, and returns a score. Every
 scorer takes the same [input](#input) and returns the same [score](#score).
@@ -132,9 +132,7 @@ scorer takes the same [input](#input) and returns the same [score](#score).
 | `name` | Scores by |
 |---|---|
 | `match` | Comparing the run's text output with an expected string. |
-| `structured-match` | Comparing the run's structured output with an expected object, key by key. |
-| `command` | Running a command of your own. |
-| ⬜ `llm-judge` | Asking a model whether the output is correct. |
+| ⬜ `command` | Running a command of your own. |
 
 Placeholders in a scorer's fields are filled for each run, from `item` and
 `run`. A field that takes a number or a boolean, such as `threshold`, can't
@@ -179,32 +177,31 @@ stderr saved in the run's directory.
 
 ```json
 "scorer": { "name": "match", "expected": "{item.answer}" }
+"scorer": { "name": "match", "expected": "{item.answer}", "mode": "levenshtein", "threshold": 0.8 }
+"scorer": { "name": "match", "expected": "^\\d{4}-\\d{2}-\\d{2}$", "mode": "regex" }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `expected` | string | Yes | The text `run.output` should be. |
+| `expected` | string | Yes | The text `run.output` should be, or with `regex`, a pattern. |
+| `mode` | `"exact"`, `"levenshtein"`, or `"regex"` | No | How `run.output` is compared with `expected`. Default `"exact"`. |
+| `case_sensitive` | boolean | No | Whether case counts. Default `false`. |
+| `threshold` | number | With `levenshtein` | The similarity a run needs to pass, from 0 to 1. Only `levenshtein` takes it. |
 
-A run scores 1 and passes when `run.output` is a string equal to `expected`
-after trimming and ignoring case, and 0 otherwise. An output that isn't a
-string fails; avp doesn't parse it as JSON.
+`run.output` must be a string, trimmed of whitespace at both ends before it's
+compared. An output that isn't a string, `null` included, scores 0 with the
+reason `output isn't a string (reason: error)`; avp doesn't parse it as JSON.
+Each mode uses these fields:
 
-### `structured-match`
+| `mode` | Fields | Scores |
+|---|---|---|
+| `exact` | `expected`, `case_sensitive` | 1 when the output equals `expected`, trimmed, and 0 otherwise. |
+| `levenshtein` | `expected`, `case_sensitive`, `threshold` | The similarity, 1 minus the Levenshtein distance over the longer string's length, so `Pariss` for `Paris` scores 0.83. It passes at `threshold` or above. |
+| `regex` | `expected`, `case_sensitive` | 1 when the pattern is found anywhere in the output, and 0 otherwise. Anchor it with `^` and `$` to match the whole output. |
 
-```json
-"scorer": { "name": "structured-match", "expected": { "$item": "answer" }, "threshold": 1 }
-```
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `expected` | object | Yes | The keys and values `run.output` should have. |
-| `threshold` | number | No | The `value` a run needs to pass, from 0 to 1. Default 1. |
-
-`run.output` must be an object, normally from the Commission's
-`output_schema`. `value` is the share of `expected`'s keys whose value in
-`run.output` is equal: strings as [`match`](#match) compares them, numbers
-within 0.000001, and nested objects and arrays as a whole, with the same rules
-inside them. Keys that `expected` doesn't have are ignored.
+With `regex`, an item's value is filled into the pattern as written, so its
+`.`, `(`, and other special characters act as regular expression syntax. avp
+checks that the pattern is valid before any run, and again once it's filled.
 
 ### `command`
 
@@ -262,3 +259,10 @@ The eval file's scorer and an item:
 },
 "dataset": [{ "id": "paris", "text": "...", "words": ["Paris", "France"] }]
 ```
+
+### Future scorers
+
+- ⬜ `structured-match`: compares an object output with an expected object,
+  key by key, with partial credit and a `threshold`.
+- ⬜ `llm-judge`: asks a model, through an agent, whether the output is
+  correct.

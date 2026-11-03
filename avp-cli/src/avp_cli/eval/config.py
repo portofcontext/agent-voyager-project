@@ -13,7 +13,8 @@ from pydantic import JsonValue, ValidationError
 from avp.commission import Commission
 from avp_cli.eval.commission import EvalError, build, read
 from avp_cli.eval.schemas import Eval, Item, JsonObject, ScorerSpec
-from avp_cli.eval.scoring import SCORERS, Run, Scorer
+from avp_cli.eval.scorers import SCORERS
+from avp_cli.eval.scoring import Run, Scorer
 from avp_cli.eval.template import Reference, TemplateError, check, references
 
 

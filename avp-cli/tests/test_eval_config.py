@@ -96,7 +96,7 @@ def test_the_scorer_is_the_built_in_callable(tmp_path: Path) -> None:
     [
         (
             {"name": "exact"},
-            ["scorer.name: no scorer named 'exact' (the scorers: fixed)"],
+            ["scorer.name: no scorer named 'exact' (the scorers: fixed, match)"],
         ),
         (
             {"name": "fixed", "value": "high"},
