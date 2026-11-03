@@ -1,30 +1,29 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "avp-codex"
-version = "0.0.3"
-description = "AVP observer using the official OpenAI Codex Python SDK."
-license = { text = "MIT" }
+version = "0.0.4"
+description = "AVP agent over Codex: Codex runs the loop, the adapter writes the Trajectory."
+license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project==0.2.0", "openai-codex==0.162.1"]
+dependencies = ["agent-voyager-project", "openai-codex==0.162.1", "jsonschema>=4"]
 
-[tool.uv.sources]
-agent-voyager-project = { workspace = true }
+[project.scripts]
+avp-codex-cli = "avp_codex.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=9.0.3"]
+dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/avp_codex"]
+[tool.uv.sources]
+agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "avp_codex"
+
+[tool.ty.environment]
+python-version = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-# How this agent installs and runs in a sandbox: release-manifest.py writes it
-# into the release's avp-release.json, with the workspace lock as requirements.txt.
-[tool.avp.release]
-agent = "codex"
-module = "avp_codex.conformance"
-wheels = ["agent-voyager-project", "avp-codex"]

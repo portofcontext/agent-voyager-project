@@ -1,0 +1,10 @@
+# Agent Dockerfiles install the SDK by path from the repository root.
+*
+!avp-sdk/python
+!avp-sdk/data
+!agents/avp-pydantic-ai/python
+!agents/avp-codex/python
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache

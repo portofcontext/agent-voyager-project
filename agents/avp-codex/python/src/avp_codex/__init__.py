@@ -1,1 +1,1 @@
-"""AVP observer using the official OpenAI Codex Python SDK."""
+"""AVP agent over the official Codex Python SDK."""
