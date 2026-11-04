@@ -6,16 +6,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import no_sandbox as fakes
 from typer.testing import CliRunner
 
 from avp.commission import Commission
-from avp.descriptor import AgentDescriptor
 from avp_cli import console, paths, prompts
 from avp_cli.agents import store
 from avp_cli.cli import app
-from avp_cli.engine import images
-from avp_cli.eval import cli as eval_cli
-from avp_cli.eval import engine
+from avp_cli.eval import engine, live
 from avp_cli.eval.scoring import Result
 from avp_cli.runs.dispatch import Finished, Options
 
@@ -41,21 +39,12 @@ def fake_dispatch(
 
 
 @pytest.fixture(autouse=True)
-def no_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def sandbox_free(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No sandbox, a scratch AVP home, and a wide terminal so tables don't wrap."""
     monkeypatch.setenv("AVP_HOME", str(tmp_path / "home"))
     monkeypatch.setattr(console.out, "width", 200)
     monkeypatch.setattr(engine, "dispatch", fake_dispatch)
-    monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))
-    monkeypatch.setattr(images, "entrypoint", lambda image: ["/agent"])
-    monkeypatch.setattr(images, "image_id", lambda image: "sha256:0123456789abcdef0123")
-    monkeypatch.setattr(
-        engine,
-        "describe",
-        lambda agent, entrypoint: AgentDescriptor(
-            avp_version="0.1", agent_name="avp-pydantic-ai", agent_version="0.3.0"
-        ),
-    )
+    fakes(monkeypatch)
 
 
 def eval_file(tmp_path: Path, **change: object) -> Path:
@@ -173,14 +162,14 @@ def test_unbuilt_options_say_so(tmp_path: Path, flag: list[str]) -> None:
 def test_ctrl_c_keeps_the_runs_that_finished(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    real = eval_cli.run_eval
+    real = live.run_eval
 
     async def interrupted(*args: Any) -> list[Result]:
         """Every run finishes, then Ctrl-C."""
         await real(*args)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(eval_cli, "run_eval", interrupted)
+    monkeypatch.setattr(live, "run_eval", interrupted)
     result = CliRunner().invoke(app, ["eval", "run", str(eval_file(tmp_path))])
     assert result.exit_code == 130
     assert "Stopped after 2 of 2 runs" in result.output
@@ -195,7 +184,7 @@ def test_the_scoreboard_shows_cost_turns_time_and_agents(tmp_path: Path) -> None
     for column in ["Model", "$/run", "Turns/run", "Time/run"]:
         assert column in output
     assert "anthropic/claude-haiku-4-5" in output
-    assert "pd: avp-pydantic-ai 0.3.0, image sha256:0123456789ab" in output
+    assert "pd: sh-agent 1.0.0, image sha256:avp/pd" in output
     assert "2 runs, $0.0000 in all" in output
     assert "pass inline-1 / pd / paris  100%" in output
     assert "fail inline-1 / pd / tokyo  0%" in output

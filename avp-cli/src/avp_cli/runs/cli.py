@@ -11,8 +11,9 @@ from pydantic import ValidationError
 
 from avp.commission import Commission
 from avp_cli import console, paths
+from avp_cli._cli_common import AgentOption, VerboseOption
 from avp_cli.agents import store
-from avp_cli.console import Failed, VerboseOption, err, line, out
+from avp_cli.console import Failed, err, line, out
 from avp_cli.engine import images
 from avp_cli.runs import environment, events, volumes
 from avp_cli.runs.dispatch import Options, dispatch
@@ -25,7 +26,7 @@ POLL_S = 0.1
 
 def run(
     commission: Annotated[Path, typer.Option(help="The Commission file.")],
-    agent: Annotated[str, typer.Option(help="An installed agent.")],
+    agent: AgentOption,
     env: Annotated[
         list[str] | None,
         typer.Option(help="NAME=VALUE for the agent's environment, or NAME to copy it from yours."),

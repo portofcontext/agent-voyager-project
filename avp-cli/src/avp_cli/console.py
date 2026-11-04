@@ -1,9 +1,7 @@
 """How avp prints: results to stdout, progress and errors to stderr."""
 
 import logging
-from typing import Annotated
 
-import typer
 from rich.console import Console
 from rich.text import Text
 
@@ -12,10 +10,6 @@ err = Console(stderr=True)
 
 verbose: bool = False
 """Set by a command's --verbose, through `set_verbose`."""
-
-VerboseOption = Annotated[
-    bool, typer.Option("--verbose", help="Print more about what avp does, to stderr.")
-]
 
 
 def set_verbose(on: bool) -> None:

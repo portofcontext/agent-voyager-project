@@ -34,17 +34,6 @@ from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
 
 
-class InvalidEvent(BaseModel):
-    """A Trajectory line that isn't a valid event."""
-
-    line: int
-    """Counted from 1."""
-    error: str
-    """Why the line isn't a valid event."""
-    event: JsonValue
-    """The line parsed as JSON, or its text when it isn't JSON."""
-
-
 class Totals(BaseModel):
     """What a run used, added up from its Trajectory's events. Subagents'
     responses and tool calls are included."""
@@ -87,9 +76,10 @@ class Run(BaseModel):
     """The agent command's exit code, or None when the command didn't exit,
     such as when its sandbox stopped first."""
     trajectory: list[Event]
-    """The valid events, in order. Types avp doesn't know are skipped."""
-    invalid_trajectory: list[InvalidEvent]
-    """The lines that aren't valid events, left out of `trajectory`."""
+    """The valid events, in order."""
+    invalid_trajectory: list[JsonValue]
+    """The lines that aren't valid events of a type the SDK knows, left out of
+    `trajectory`: each parsed as JSON, or its text when it isn't JSON."""
     output: JsonValue = None
     """`agent_stopped`'s `output`, or None when it has none or there is no
     `agent_stopped`."""
@@ -219,42 +209,40 @@ def read(
     )
 
 
-def read_trajectory(path: Path) -> tuple[list[Event], list[InvalidEvent]]:
-    """The valid events, and the lines that aren't valid events. A missing
+def read_trajectory(path: Path) -> tuple[list[Event], list[JsonValue]]:
+    """The valid events, and the lines that aren't valid events of a type the
+    SDK knows: each parsed as JSON, or its text when it isn't JSON. A missing
     file is an empty Trajectory."""
     events: list[Event] = []
-    invalid: list[InvalidEvent] = []
+    invalid: list[JsonValue] = []
     try:
         lines = path.read_text().splitlines()
     except FileNotFoundError:
         return events, invalid
-    for number, line in enumerate(lines, 1):
+    for line in lines:
         if not line.strip():
             continue
         try:
             raw = json.loads(line)
-        except json.JSONDecodeError as error:
-            invalid.append(InvalidEvent(line=number, error=f"isn't JSON: {error}", event=line))
+        except json.JSONDecodeError:
+            invalid.append(line)
             continue
-        if not isinstance(raw, dict):
-            invalid.append(InvalidEvent(line=number, error="isn't a JSON object", event=raw))
-            continue
-        try:
-            event = parse_trajectory_event(raw)
-        except ValidationError as error:
-            first = error.errors()[0]
-            where = ".".join(map(str, first["loc"]))
-            invalid.append(
-                InvalidEvent(
-                    line=number,
-                    error=f"isn't a valid event: {where}: {first['msg']}",
-                    event=raw,
-                )
-            )
-            continue
-        if event is not None:
+        event = _parse(raw)
+        if event is None:
+            invalid.append(raw)
+        else:
             events.append(event)
     return events, invalid
+
+
+def _parse(raw: JsonValue) -> Event | None:
+    """The event, or None when `raw` isn't a valid event of a type the SDK knows."""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return parse_trajectory_event(raw)
+    except ValidationError:
+        return None
 
 
 @dataclass(frozen=True)

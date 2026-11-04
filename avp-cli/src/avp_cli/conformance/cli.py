@@ -7,10 +7,11 @@ import typer
 from rich.table import Table
 
 from avp_cli import console
+from avp_cli._cli_common import AgentOption, JsonOption, VerboseOption
 from avp_cli.conformance import check as checking
 from avp_cli.conformance.cases import CASES, Case
 from avp_cli.conformance.rules import RULES
-from avp_cli.console import Failed, VerboseOption, err, line, out
+from avp_cli.console import Failed, err, line, out
 
 app = typer.Typer(
     no_args_is_help=True, help="Check that an agent follows the spec's rules for agents."
@@ -25,13 +26,13 @@ STYLES = {"pass": "green", "fail": "red", "skip": "yellow"}
 
 @app.command()
 def check(
-    agent: Annotated[str, typer.Option(help="An installed agent.")],
+    agent: AgentOption,
     rule: RuleOption = None,
     case: Annotated[list[str] | None, typer.Option(help="Only this case.")] = None,
     model: Annotated[
         str, typer.Option(help="The model each Commission names, as provider/model.")
     ] = DEFAULT_MODEL,
-    json: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
+    json: JsonOption = False,
     verbose: VerboseOption = False,
 ) -> None:
     """Run the cases against an agent and report pass, fail, or skip by rule.

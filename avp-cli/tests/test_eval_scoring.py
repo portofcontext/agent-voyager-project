@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import event
 from pydantic import JsonValue, ValidationError
 
 from avp.trajectory import AgentStoppedEvent
 from avp_cli import paths
 from avp_cli.eval.schemas import Item
 from avp_cli.eval.scoring import (
-    InvalidEvent,
     Run,
     Score,
     ScorerError,
@@ -24,17 +24,6 @@ from avp_cli.eval.scoring import (
 )
 
 ITEM = Item(id="paris", answer="Paris")
-
-
-def event(n: int, type: str, data: dict) -> dict:
-    return {
-        "avp_version": "0.1",
-        "id": str(n),
-        "type": type,
-        "time": "2026-01-01T00:00:00Z",
-        "run_id": "r",
-        "data": data,
-    }
 
 
 STARTED = [
@@ -68,18 +57,17 @@ def test_an_incomplete_run_has_no_output_or_reason(tmp_path: Path) -> None:
     assert (run.output, run.reason) == (None, None)
 
 
-def test_invalid_lines_are_listed_and_unknown_types_skipped(tmp_path: Path) -> None:
+def test_invalid_lines_and_unknown_types_are_listed(tmp_path: Path) -> None:
     unknown = event(3, "agent_daydreamed", {})
     broken = event(4, "agent_started", {})
     run = run_in(tmp_path, STARTED[0], "not json", unknown, broken, STOPPED)
     assert [e.type for e in run.trajectory] == ["run_requested", "agent_stopped"]
-    [not_json, invalid] = run.invalid_trajectory
-    assert not_json.line == 2
-    assert not_json.error.startswith("isn't JSON")
-    assert not_json.event == "not json"
-    assert invalid.line == 4
-    assert invalid.error.startswith("isn't a valid event: agent_started.data.prompt")
-    assert invalid.event == broken
+    assert run.invalid_trajectory == ["not json", unknown, broken]
+
+
+def test_a_line_that_is_json_but_not_an_object_is_invalid(tmp_path: Path) -> None:
+    run = run_in(tmp_path, "3", '"text"', STOPPED)
+    assert run.invalid_trajectory == [3, "text"]
 
 
 def test_a_missing_trajectory_is_empty(tmp_path: Path) -> None:
@@ -109,11 +97,6 @@ def test_the_input_is_the_guides_json(tmp_path: Path) -> None:
     assert dumped["run"]["trajectory"][2] == STOPPED
     # An event's absent fields stay absent.
     assert "meta" not in dumped["run"]["trajectory"][0]
-    assert InvalidEvent(line=2, error="x", event=[1]).model_dump() == {
-        "line": 2,
-        "error": "x",
-        "event": [1],
-    }
 
 
 def passing(input: ScorerInput) -> Score:
@@ -196,11 +179,6 @@ def test_the_summary_leaves_scorer_failures_out() -> None:
 def test_a_summary_with_no_scores() -> None:
     summary = summarize([])
     assert (summary.accuracy, summary.pass_rate) == (None, None)
-
-
-def test_a_json_line_that_is_not_an_object_keeps_its_value(tmp_path: Path) -> None:
-    [invalid] = run_in(tmp_path, "[1, 2]").invalid_trajectory
-    assert (invalid.error, invalid.event) == ("isn't a JSON object", [1, 2])
 
 
 def message(n: int, cost: float, tokens: tuple[int, int]) -> dict:

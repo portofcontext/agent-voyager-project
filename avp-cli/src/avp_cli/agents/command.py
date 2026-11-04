@@ -7,6 +7,7 @@ from opensandbox.sync.sandbox import SandboxSync
 from pydantic import ValidationError
 
 from avp.descriptor import AgentDescriptor
+from avp_cli.agents import store
 from avp_cli.console import Failed
 from avp_cli.sandbox import sandboxes
 
@@ -37,6 +38,12 @@ def describe(box: SandboxSync, entrypoint: list[str]) -> AgentDescriptor:
         return AgentDescriptor.model_validate_json(output)
     except ValidationError as exc:
         raise Failed(f"`describe` didn't print a valid Agent Descriptor: {exc}") from None
+
+
+def describe_in_sandbox(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+    """The agent's Descriptor, from `describe` in a sandbox of its own."""
+    with sandboxes.sandbox(agent.image) as box:
+        return describe(box, entrypoint)
 
 
 def run(

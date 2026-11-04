@@ -9,6 +9,7 @@ import typer
 from rich.markup import escape
 
 from avp_cli import console
+from avp_cli._cli_common import AgentOption
 from avp_cli.agents import cli as agent_cli
 from avp_cli.conformance import cli as conformance_cli
 from avp_cli.eval import cli as eval_cli
@@ -26,9 +27,6 @@ app.add_typer(agent_cli.app, name="agent")
 app.add_typer(commission_app, name="commission")
 app.add_typer(vault_cli.app, name="vault")
 app.add_typer(sandbox_cli.app, name="sandbox")
-
-AgentOption = Annotated[str, typer.Option("--agent", help="An installed agent.")]
-JsonOption = Annotated[bool, typer.Option("--json", help="Print JSON.")]
 
 
 @commission_app.command("new")

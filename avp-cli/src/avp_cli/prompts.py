@@ -1,16 +1,10 @@
 """How avp asks the user something before going ahead."""
 
 import sys
-from typing import Annotated
 
 import questionary
-import typer
 
 from avp_cli.console import Failed
-
-YesOption = Annotated[
-    bool, typer.Option("--yes", "-y", "--force", "-f", help="Don't ask before going ahead.")
-]
 
 
 def interactive() -> bool:

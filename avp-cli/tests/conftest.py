@@ -9,8 +9,40 @@ import pytest
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
 
+from avp.descriptor import AgentDescriptor
 from avp_cli import console
+from avp_cli.agents import command, store
+from avp_cli.engine import images
 from avp_cli.eval import scorers, scoring
+
+DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="sh-agent", agent_version="1.0.0")
+
+
+def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Installed agents, a describe that answers, and the names described."""
+    described: list[str] = []
+
+    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+        described.append(agent.name)
+        return DESCRIPTOR
+
+    monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))
+    monkeypatch.setattr(images, "entrypoint", lambda image: ["/agent"])
+    monkeypatch.setattr(images, "image_id", lambda image: f"sha256:{image}")
+    monkeypatch.setattr(command, "describe_in_sandbox", describe)
+    return described
+
+
+def event(n: int, type: str, data: dict) -> dict:
+    """A Trajectory event as JSON."""
+    return {
+        "avp_version": "0.1",
+        "id": str(n),
+        "type": type,
+        "time": "2026-01-01T00:00:00Z",
+        "run_id": "r",
+        "data": data,
+    }
 
 
 class Memory(KeyringBackend):

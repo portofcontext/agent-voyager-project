@@ -1,6 +1,5 @@
 """`avp eval`: run eval files, and look at past eval runs."""
 
-import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -9,15 +8,16 @@ import typer
 from rich.table import Table
 
 from avp_cli import console, paths
-from avp_cli.console import Failed, VerboseOption, err, line, out
+from avp_cli._cli_common import JsonOption, VerboseOption, YesOption
+from avp_cli.console import Failed, err, out
 from avp_cli.eval import results
 from avp_cli.eval.commission import EvalError, load
 from avp_cli.eval.config import EvalConfig
-from avp_cli.eval.engine import run_eval
+from avp_cli.eval.live import run_live
 from avp_cli.eval.report import print_scoreboard, run_line
 from avp_cli.eval.results import RunResult
 from avp_cli.eval.scoring import Result
-from avp_cli.prompts import YesOption, confirm
+from avp_cli.prompts import confirm
 from avp_cli.runs import environment, volumes
 from avp_cli.runs.dispatch import Options
 
@@ -25,8 +25,6 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Run datasets against agents and Commissions, and score the results.",
 )
-
-JsonOption = Annotated[bool, typer.Option("--json", help="Print JSON.")]
 
 
 @app.command("run")
@@ -91,31 +89,16 @@ def run(
     )
     for case in config:
         environment.check(case.built, options.env)
-    total = len(config.commissions) * len(config.agents) * len(config.dataset)
     directory, saved = results.create(ev.name, path.read_text())
     console.detail(f"Eval directory: {directory}")
 
-    with err.status(line("Running ", (ev.name, "bold"), f" - 0 of {total}")) as status:
+    def on_result(result: Result) -> None:
+        saved.runs.append(RunResult.of(result, directory))
+        results.save(directory, saved)
+        if not json:
+            err.print(run_line(saved.runs[-1]), highlight=False)
 
-        def progress(result: Result) -> None:
-            saved.runs.append(RunResult.of(result, directory))
-            results.save(directory, saved)
-            if not json:
-                err.print(run_line(saved.runs[-1]), highlight=False)
-            status.update(line("Running ", (ev.name, "bold"), f" - {len(saved.runs)} of {total}"))
-
-        try:
-            found = asyncio.run(run_eval(config, directory, options, concurrency, progress))
-        except KeyboardInterrupt:
-            found = None
-    if found is None:
-        err.print(
-            f"Stopped after {len(saved.runs)} of {total} runs; their results are in"
-            f" {directory / paths.RESULTS}",
-            highlight=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(130)
+    found = run_live(config, directory, options, concurrency, directory / paths.RESULTS, on_result)
     saved.runs = [RunResult.of(r, directory) for r in found]
     saved.finished = datetime.now(UTC)
     results.save(directory, saved)

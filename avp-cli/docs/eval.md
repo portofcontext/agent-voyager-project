@@ -177,7 +177,7 @@ object, fails the scorer for that run.
 | `run.commission` | name | The Commission's name. |
 | `run.exit_code` | integer | The agent command's exit code. |
 | `run.trajectory` | list of Trajectory events | The run's valid events, in order. |
-| `run.invalid_trajectory` | list of objects | The Trajectory's lines that aren't valid events, left out of `run.trajectory`: each `{"line": 2, "error": "isn't JSON", "event": "{\"type\": "}`, with `line` counted from 1 and `event` the line parsed as JSON, or its text when it isn't JSON. Events of a type avp doesn't know are skipped, not listed. |
+| `run.invalid_trajectory` | list | The Trajectory's lines that aren't valid events of a type the SDK knows, left out of `run.trajectory`: each parsed as JSON, or its text when it isn't JSON. |
 | `run.output` | any | `agent_stopped`'s `output`, or `null`. |
 | `run.reason` | string or `null` | `agent_stopped`'s `reason`, or `null` when there is no `agent_stopped`. |
 | `run.item` | object | The item, as in the dataset. |

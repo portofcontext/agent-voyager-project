@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import event
 from typer.testing import CliRunner
 
 from avp.commission import Model
@@ -17,17 +18,6 @@ from avp_cli.conformance.rules import RULES
 DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="pd", agent_version="1.0.0")
 CONTEXT = Context(descriptor=DESCRIPTOR, model=check.model("anthropic/claude-haiku-4-5"))
 [AGENTS_WITHOUT_ENTRY] = [c for c in CASES if c.name == "agents-without-entry"]
-
-
-def event(n: int, type: str, data: dict) -> dict:
-    return {
-        "avp_version": "0.1",
-        "id": str(n),
-        "type": type,
-        "time": "2026-01-01T00:00:00Z",
-        "run_id": "r",
-        "data": data,
-    }
 
 
 def trajectory(tmp_path: Path, *events: dict | str) -> Path:

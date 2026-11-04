@@ -7,7 +7,8 @@ import typer
 from rich.table import Table
 
 from avp_cli import console, paths
-from avp_cli.console import Failed, VerboseOption, detail, err, out
+from avp_cli._cli_common import VerboseOption
+from avp_cli.console import Failed, detail, err, out
 from avp_cli.vault import oauth, store
 
 app = typer.Typer(

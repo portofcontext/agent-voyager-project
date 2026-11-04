@@ -3,7 +3,8 @@
 import typer
 
 from avp_cli import console, engine, paths
-from avp_cli.console import Failed, VerboseOption, detail, out
+from avp_cli._cli_common import VerboseOption
+from avp_cli.console import Failed, detail, out
 from avp_cli.sandbox import service
 
 app = typer.Typer(no_args_is_help=True, help="The OpenSandbox service every agent runs on.")

@@ -10,8 +10,9 @@ from rich.table import Table
 from rich.text import Text
 
 from avp_cli import console, paths
+from avp_cli._cli_common import VerboseOption
 from avp_cli.agents import command, store
-from avp_cli.console import VerboseOption, detail, err, line, out
+from avp_cli.console import detail, err, line, out
 from avp_cli.engine import images
 from avp_cli.sandbox import sandboxes
 
@@ -113,8 +114,7 @@ def describe(name: NameArgument, verbose: VerboseOption = False) -> None:
     console.set_verbose(verbose)
     agent = store.load(name)
     entrypoint = _entrypoint(agent.image)
-    with sandboxes.sandbox(agent.image) as box:
-        descriptor = command.describe(box, entrypoint)
+    descriptor = command.describe_in_sandbox(agent, entrypoint)
     out.print_json(descriptor.model_dump_json(exclude_none=True))
 
 

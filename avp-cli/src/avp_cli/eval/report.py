@@ -72,7 +72,7 @@ def scoreboard(results: EvalResults, directory: Path) -> RenderableType:
     if failed:
         table = Table("Item", "Commission", "Agent", "Why", "Run")
         for r in failed:
-            table.add_row(r.item, r.commission, r.agent, _why(r), str(directory / r.directory))
+            table.add_row(r.item, r.commission, r.agent, why(r), str(directory / r.directory))
         parts += [Text("Runs that didn't pass", style="bold"), table]
     if results.finished is None:
         parts.append(Text("The eval stopped before every run finished.", style="yellow"))
@@ -114,7 +114,8 @@ def run_line(run: RunResult) -> Text:
     return line
 
 
-def _why(run: RunResult) -> Text:
+def why(run: RunResult) -> Text:
+    """Why a run didn't pass."""
     if run.score is None:
         return Text(f"scorer failed: {run.scorer_error}", style="red")
     return Text("\n".join(run.score.reasons) or "failed")

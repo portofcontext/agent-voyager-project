@@ -10,7 +10,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
-from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.console import Failed
@@ -34,22 +33,25 @@ async def run_eval(
     """Every run's result, in the EvalConfig's order. Runs go in `directory`
     under `runs/<run_id>/`, at most `concurrency` at once. `options` apply to
     every run; their `directory` is set for each. `progress` is called as
-    each run is scored. Each agent is described once, before any run, and
-    saved in `directory` under `agents/<name>.json`. Raises Failed before any
-    run when an agent isn't installed or doesn't describe itself. When cancelled, as by Ctrl-C, it deletes the sandboxes still
+    each run is scored. Each agent is described once, all at the same time and
+    before any run, and saved in `directory` under `agents/<name>.json`. Raises
+    Failed before any run when an agent isn't installed or doesn't describe
+    itself. When cancelled, as by Ctrl-C, it deletes the sandboxes still
     running, which ends their agents."""
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     options = options or Options()
     agents = {name: _load(name) for name in config.agents}
-    for name, (agent, entrypoint) in agents.items():
+
+    async def described(name: str, agent: store.Agent, entrypoint: list[str]) -> None:
         record = results.AgentRecord(
             name=name,
             image=agent.image,
             image_id=images.image_id(agent.image),
-            descriptor=describe(agent, entrypoint),
+            descriptor=await _in_thread(command.describe_in_sandbox, agent, entrypoint),
         )
         results.save_agent(directory, record)
+
     limit = asyncio.Semaphore(concurrency)
 
     async def one(case: EvalCase) -> Result:
@@ -83,8 +85,9 @@ async def run_eval(
         return result
 
     try:
+        await asyncio.gather(*(described(n, a, e) for n, (a, e) in agents.items()))
         return list(await asyncio.gather(*(one(c) for c in config)))
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, Failed):
         sandboxes.kill_all()
         raise
 
@@ -115,12 +118,6 @@ async def _in_thread(function: Callable[..., T], *args: object) -> T:
 
     threading.Thread(target=target, daemon=True).start()
     return await future
-
-
-def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
-    """The agent's Descriptor, from `describe` in a sandbox of its own."""
-    with sandboxes.sandbox(agent.image) as box:
-        return command.describe(box, entrypoint)
 
 
 def _model(case: EvalCase) -> str:

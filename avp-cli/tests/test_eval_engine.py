@@ -8,14 +8,14 @@ import time
 from pathlib import Path
 
 import pytest
+from conftest import DESCRIPTOR, no_sandbox
 from pydantic import JsonValue
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp_cli import paths
-from avp_cli.agents import store
+from avp_cli.agents import command, store
 from avp_cli.console import Failed
-from avp_cli.engine import images
 from avp_cli.eval import engine, results
 from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig
@@ -75,24 +75,6 @@ class Fake:
         trajectory = options.directory / paths.TRAJECTORY
         trajectory.write_text(stopped(commission.run_id, ANSWERS[item]) + "\n")
         return Finished(options.directory, 0, "")
-
-
-DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="sh-agent", agent_version="1.0.0")
-
-
-def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Installed agents, a describe that answers, and the names described."""
-    described: list[str] = []
-
-    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
-        described.append(agent.name)
-        return DESCRIPTOR
-
-    monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))
-    monkeypatch.setattr(images, "entrypoint", lambda image: ["/agent"])
-    monkeypatch.setattr(images, "image_id", lambda image: f"sha256:{image}")
-    monkeypatch.setattr(engine, "describe", describe)
-    return described
 
 
 @pytest.fixture
@@ -234,10 +216,40 @@ def test_cancelling_deletes_running_sandboxes_without_waiting(
 
 def test_each_agent_is_described_once_and_saved(tmp_path: Path, fake: Fake) -> None:
     found = asyncio.run(run_eval(config(tmp_path), tmp_path / "eval"))
-    assert fake.described == ["pd", "my-agent"]
+    assert sorted(fake.described) == ["my-agent", "pd"]
     saved = results.agents(tmp_path / "eval")
     assert list(saved) == ["my-agent", "pd"]
     assert saved["pd"].image_id == "sha256:avp/pd"
     assert saved["pd"].descriptor == DESCRIPTOR
     assert all(r.run.model == "anthropic/claude-haiku-4-5" for r in found)
     assert all(r.run.seconds is not None for r in found)
+
+
+def test_agents_are_described_at_the_same_time(
+    tmp_path: Path, fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    both = threading.Barrier(2, timeout=5)
+
+    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+        both.wait()
+        return DESCRIPTOR
+
+    monkeypatch.setattr(command, "describe_in_sandbox", describe)
+    found = asyncio.run(run_eval(config(tmp_path), tmp_path / "eval"))
+    assert found
+
+
+def test_a_failed_describe_deletes_the_other_sandboxes(
+    tmp_path: Path, fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    killed: list[bool] = []
+
+    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+        raise Failed("`describe` didn't print a valid Agent Descriptor")
+
+    monkeypatch.setattr(command, "describe_in_sandbox", describe)
+    monkeypatch.setattr(sandboxes, "kill_all", lambda: killed.append(True))
+    with pytest.raises(Failed, match="didn't print a valid"):
+        asyncio.run(run_eval(config(tmp_path), tmp_path / "eval"))
+    assert killed == [True]
+    assert fake.options == []
