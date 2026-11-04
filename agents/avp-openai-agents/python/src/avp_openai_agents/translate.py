@@ -1,143 +1,97 @@
-"""OpenAI Responses API data -> AVP wire shapes.
-
-One `Response` (one model call) is one AVP turn. Only translation lives here;
-ordering, spans, steps, tool pairing, and cost are the Recorder's job.
-"""
-
-from __future__ import annotations
+"""Responses items and native tool output to AVP content and usage."""
 
 import json
-from typing import Any
 
-from avp.content import (
-    AVPContentBlock,
-    Citation,
-    RefusalBlock,
-    TextBlock,
-    ThinkingBlock,
-    ToolUseBlock,
-)
-from avp.trajectory import ErrorCode, Usage
+from avp.recorder import UsageReport
+from avp.trajectory import ImageBlock, RefusalBlock, Source, TextBlock, ThinkingBlock, ToolUseBlock
 
 
-def content(output: list[Any]) -> list[AVPContentBlock]:
-    """A response's output items. Function calls become `tool_use` blocks
-    keyed by `call_id` (what the tool output item echoes back)."""
-    blocks: list[AVPContentBlock] = []
-    for item in output:
-        kind = getattr(item, "type", None)
-        if kind == "message":
+def content(items):
+    blocks = []
+    for item in items:
+        if item.type == "message":
             for part in item.content:
                 if part.type == "output_text":
-                    blocks.append(TextBlock(text=part.text, citations=_citations(part.annotations)))
+                    blocks.append(
+                        TextBlock(
+                            type="text",
+                            text=part.text,
+                            openai=part.model_dump(mode="json", exclude_none=True),
+                        )
+                    )
                 elif part.type == "refusal":
-                    blocks.append(RefusalBlock(refusal=part.refusal))
-        elif kind == "function_call":
-            blocks.append(ToolUseBlock(id=item.call_id, name=item.name, input=_args(item)))
-        elif kind == "reasoning":
-            parts = item.summary or item.content or []
-            text = "\n\n".join(p.text for p in parts)
+                    blocks.append(RefusalBlock(type="refusal", refusal=part.refusal))
+                else:
+                    raise ValueError(f"unsupported OpenAI content: {part.type}")
+        elif item.type == "function_call":
+            arguments = json.loads(item.arguments)
+            blocks.append(
+                ToolUseBlock(type="tool_use", id=item.call_id, name=item.name, input=arguments)
+            )
+        elif item.type == "reasoning":
             blocks.append(
                 ThinkingBlock(
-                    thinking=text,
+                    type="thinking",
+                    thinking="\n".join(p.text for p in item.summary or []),
                     signature=item.encrypted_content,
-                    redacted=True if not text and item.encrypted_content else None,
+                    openai=item.model_dump(mode="json", exclude_none=True),
                 )
             )
+        else:
+            raise ValueError(f"unsupported OpenAI response item: {item.type}")
     return blocks
 
 
-def _citations(annotations: list[Any] | None) -> list[Citation] | None:
-    if not annotations:
-        return None
-    return [
-        Citation(
-            type=a.type,
-            start_index=getattr(a, "start_index", None),
-            end_index=getattr(a, "end_index", None),
-            source_id=getattr(a, "file_id", None),
-            source_url=getattr(a, "url", None),
-            source_title=getattr(a, "title", None),
-        )
-        for a in annotations
-    ]
-
-
-def _args(call: Any) -> dict[str, Any]:
-    try:
-        parsed = json.loads(call.arguments or "{}")
-    except json.JSONDecodeError:
-        return {"_raw": call.arguments}
-    return parsed if isinstance(parsed, dict) else {"_value": parsed}
-
-
-def usage(native: Any) -> Usage | None:
-    """Responses usage: `input_tokens` already includes cache reads and writes."""
+def usage(native):
     if native is None:
-        return None
-    cached = getattr(native.input_tokens_details, "cached_tokens", None)
-    written = getattr(native.input_tokens_details, "cache_write_tokens", None)
-    reasoning = getattr(native.output_tokens_details, "reasoning_tokens", None)
-    return Usage(
+        raise ValueError("OpenAI response has no per-response usage")
+    return UsageReport(
         input_tokens=native.input_tokens,
         output_tokens=native.output_tokens,
-        cache_read_input_tokens=cached or None,
-        cache_creation_input_tokens=written or None,
-        reasoning_output_tokens=reasoning or None,
+        cache_read_input_tokens=getattr(native.input_tokens_details, "cached_tokens", None),
+        cache_creation_input_tokens=getattr(
+            native.input_tokens_details, "cache_write_tokens", None
+        ),
+        reasoning_output_tokens=getattr(native.output_tokens_details, "reasoning_tokens", None),
     )
 
 
-def finish_reasons(response: Any) -> list[str] | None:
-    details = getattr(response, "incomplete_details", None)
-    if details is not None and details.reason:
-        return [details.reason]
-    return [response.status] if response.status else None
+def tool_output(raw):
+    if isinstance(raw, str):
+        return raw
+    blocks = []
+    for part in raw:
+        if part["type"] in ("text", "input_text"):
+            blocks.append(TextBlock(type="text", text=part["text"]))
+        elif part["type"] == "input_image" and part["image_url"].startswith("data:"):
+            header, data = part["image_url"].split(",", 1)
+            blocks.append(
+                ImageBlock(
+                    type="image",
+                    source=Source(
+                        type="base64",
+                        media_type=header.removeprefix("data:").split(";")[0],
+                        data=data,
+                    ),
+                )
+            )
+        else:
+            blocks.append(TextBlock(type="text", text=json.dumps(part)))
+    return blocks
 
 
-def tool_output(item: Any) -> str | list[dict[str, Any]]:
-    """The tool result as sent back to the model. The SDK's `input_text` items
-    (an MCP tool's text content) become AVP text blocks."""
-    raw = item.raw_item
-    out = raw.get("output") if isinstance(raw, dict) else getattr(raw, "output", None)
-    if out is None:
-        out = item.output
-    if isinstance(out, str):
-        return out
-    if (
-        isinstance(out, list)
-        and out
-        and all(isinstance(p, dict) and p.get("type") == "input_text" for p in out)
-    ):
-        return [{"type": "text", "text": p.get("text", "")} for p in out]
-    return json.dumps(out, default=str)
-
-
-def call_id(item: Any) -> str | None:
-    raw = item.raw_item
-    return raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
-
-
-def error_code(exc: BaseException) -> ErrorCode:
-    """Provider errors by class name, so the `openai` import stays lazy."""
+def error_code(exc):
     names = {c.__name__ for c in type(exc).__mro__}
-    if "AuthenticationError" in names or "PermissionDeniedError" in names:
-        return ErrorCode.auth_error
-    if "RateLimitError" in names or _out_of_credits(exc):
-        return ErrorCode.rate_limit
-    if "context_length_exceeded" in str(exc) or "ContextWindowExceededError" in names:
-        return ErrorCode.context_limit
-    if "MaxTurnsExceeded" in names:
-        return ErrorCode.unknown
-    return ErrorCode.agent_crash
-
-
-def _out_of_credits(exc: BaseException) -> bool:
-    """An exhausted balance or quota, which OpenAI can deliver mid-stream as a
-    plain `APIError` (`insufficient_quota`, "You have no credits remaining")."""
-    code = getattr(exc, "code", None)
+    if names & {"AuthenticationError", "PermissionDeniedError"}:
+        return "auth_error"
     text = str(exc).lower()
-    return (
-        code == "insufficient_quota"
+    if (
+        "RateLimitError" in names
+        or "insufficient_quota" in text
         or "no credits remaining" in text
         or "exceeded your current quota" in text
-    )
+    ):
+        return "rate_limit"
+    if "context_length_exceeded" in text or "ContextWindowExceededError" in names:
+        return "context_limit"
+    return "agent_crash"

@@ -1,126 +1,131 @@
-"""Commission -> OpenAI Agents SDK configuration.
+"""Commission values to native model, MCP, and output configuration."""
 
-- `model` `openai/<id>` runs on the SDK's native OpenAI Responses provider
-  (`provider.base_url` redirects it). Any other origin routes through the SDK's
-  LiteLLM extension as `litellm/<slug>`, which needs the `litellm` extra.
-- `system_prompt` -> `Agent.instructions`; inline `skills` are appended to the
-  instructions (every file of each skill, SKILL.md first), since the SDK has
-  no skill loader.
-- `prompt` -> the run input.
-- The agent ships no built-ins, so every `enabled_builtin_*` list under
-  `avp-openai-agents` must be empty (any name is a `commission_collision`).
-- Inline `mcp_servers` -> `MCPServerStdio` / `MCPServerStreamableHttp`.
-- `output_schema` -> a non-strict JSON output type.
-"""
-
-from __future__ import annotations
-
-import dataclasses
-import importlib.util
+import json
+import os
 from typing import Any
 
-from avp.commission import Commission, McpServerStdio, Skill
-from avp.preflight import preflight
-from avp.trajectory import ErrorCode
+from agents import AgentOutputSchemaBase, OpenAIProvider
+from agents.mcp import MCPServerStdio, MCPServerStreamableHttp
+from agents.mcp.server import MCPServerStreamableHttpParams
 
-AGENT_NAME = "avp-openai-agents"
-
-
-@dataclasses.dataclass
-class RunPlan:
-    origin: str
-    sdk_model: str
-    base_url: str | None
-    prompt: str
-    instructions: str | None
+from avp.commission import Commission, EnvSecret, McpServerStdio, ProxySecret
 
 
-def from_commission(commission: Commission) -> RunPlan:
-    origin, name = commission.model.split("/", 1)
-    return RunPlan(
-        origin=origin,
-        sdk_model=name if origin == "openai" else f"litellm/{commission.model}",
-        base_url=commission.provider.base_url if commission.provider else None,
-        prompt=commission.prompt or "",
-        instructions=_instructions(commission.system_prompt, commission.skills or []),
-    )
+class MissingSecret(Exception):
+    """The launch environment does not contain the requested credential."""
 
 
-def _instructions(system_prompt: str | None, skills: list[Skill]) -> str | None:
-    parts = [system_prompt] if system_prompt else []
-    for skill in skills:
-        files = sorted(skill.files.items(), key=lambda kv: kv[0] != "SKILL.md")
-        body = "\n\n".join(f"### {path}\n\n{text}" for path, text in files)
-        parts.append(f"## Skill: {skill.name or skill.id}\n\n{body}")
+class OutputInvalid(Exception):
+    """Native output did not match the commissioned schema."""
+
+
+def secret(value: EnvSecret) -> str:
+    try:
+        return os.environ[value.env]
+    except KeyError:
+        raise MissingSecret(f"the agent's environment has no {value.env}") from None
+
+
+def model(commission: Commission):
+    spec = commission.model
+    if isinstance(spec.credential, ProxySecret):
+        key = "avp-proxy-stand-in"
+    elif isinstance(spec.credential, EnvSecret):
+        key = secret(spec.credential)
+    else:
+        name = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}[spec.provider]
+        key = os.environ.get(name)
+        if not key:
+            raise MissingSecret(f"the agent's environment has no {name}")
+    if spec.provider == "openai":
+        return OpenAIProvider(
+            api_key=key, base_url=spec.base_url, use_responses=True, use_responses_websocket=False
+        ).get_model(spec.id)
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    return LitellmModel(model=f"anthropic/{spec.id}", api_key=key, base_url=spec.base_url)
+
+
+def instructions(commission: Commission) -> str | None:
+    parts = [commission.system_prompt] if commission.system_prompt is not None else []
+    for skill in commission.skills or []:
+        text = "\n\n".join(
+            f"### {path}\n\n{body}"
+            for path, body in sorted(skill.files.items(), key=lambda item: item[0] != "SKILL.md")
+        )
+        parts.append(f"## Skill: {skill.name}\n\n{text}")
     return "\n\n".join(parts) or None
 
 
-def mcp_server(entry: Any, on_failure: Any, on_result: Any) -> Any:
-    """An unconnected SDK MCP server for one inline Commission entry.
-    `on_failure` turns a failed tool call into the model-facing message;
-    `on_result` sees every result, as the SDK's custom-data extractor (the one
-    place its `isError` flag surfaces)."""
-    from agents.mcp import MCPServerStdio, MCPServerStreamableHttp
+def mcp_server(entry, results):
+    def on_result(context):
+        if call_id := getattr(context.run_context, "tool_call_id", None):
+            results[call_id] = {
+                "is_error": bool(context.is_error),
+                "structured_content": dict(context.structured_content)
+                if context.structured_content is not None
+                else None,
+            }
 
-    opts = {"failure_error_function": on_failure, "custom_data_extractor": on_result}
+    def on_failure(context, error):
+        if call_id := getattr(context, "tool_call_id", None):
+            results[call_id] = {"is_error": True}
+        return f"Error: {error}"
 
+    options: dict[str, Any] = {
+        "name": entry.id,
+        "cache_tools_list": True,
+        "require_approval": "never",
+        "failure_error_function": on_failure,
+        "custom_data_extractor": on_result,
+    }
     if isinstance(entry, McpServerStdio):
-        params: dict[str, Any] = {
+        params: Any = {
             "command": entry.command[0],
-            "args": entry.command[1:] + (entry.args or []),
+            "args": entry.command[1:],
+            "env": {
+                name: value if isinstance(value, str) else secret(value)
+                for name, value in (entry.env or {}).items()
+            },
         }
-        if entry.env:
-            params["env"] = entry.env
-        return MCPServerStdio(params, name=entry.id, **opts)
-    return MCPServerStreamableHttp(
-        {"url": entry.url, "headers": entry.headers or {}}, name=entry.id, **opts
+        return MCPServerStdio(params, **options)
+    params = MCPServerStreamableHttpParams(
+        url=entry.url,
+        headers={
+            name: value if isinstance(value, str) else secret(value)
+            for name, value in (entry.headers or {}).items()
+            if not isinstance(value, ProxySecret)
+        },
     )
+    return MCPServerStreamableHttp(params, **options)
 
 
-def output_type(schema: dict[str, Any]) -> Any:
-    from agents import AgentOutputSchemaBase
+def output_type(schema):
+    if schema is None:
+        return None
+    from jsonschema import Draft202012Validator
+
+    validator = Draft202012Validator(schema)
 
     class JsonOutput(AgentOutputSchemaBase):
-        def is_plain_text(self) -> bool:
+        def is_plain_text(self):
             return False
 
-        def name(self) -> str:
+        def name(self):
             return "output"
 
-        def json_schema(self) -> dict[str, Any]:
+        def json_schema(self):
             return schema
 
-        def is_strict_json_schema(self) -> bool:
+        def is_strict_json_schema(self):
             return False
 
-        def validate_json(self, json_str: str) -> Any:
-            import json
-
-            return json.loads(json_str)
+        def validate_json(self, json_str):
+            try:
+                value = json.loads(json_str)
+                validator.validate(value)
+                return value
+            except Exception as exc:
+                raise OutputInvalid(str(exc)) from exc
 
     return JsonOutput()
-
-
-def fail_fast(commission: Commission, agent_version: str) -> tuple[ErrorCode, str] | None:
-    """The spec's pre-turn Commission checks (`avp.preflight`), then the
-    refusals specific to this harness: a provider or model it cannot reach."""
-    if failure := preflight(
-        commission,
-        agent_name=AGENT_NAME,
-        agent_version=agent_version,
-        tools=[],
-        subagents=[],
-        skills=[],
-        mcp_servers=[],
-    ):
-        return failure
-    origin = commission.model.split("/", 1)[0]
-    provider = commission.provider
-    if provider is not None and provider.id != origin:
-        return ErrorCode.unsupported_provider, f"cannot serve {origin} models via {provider.id!r}"
-    if origin != "openai" and importlib.util.find_spec("litellm") is None:
-        return (
-            ErrorCode.unsupported_model,
-            f"{commission.model}: non-OpenAI models need avp-openai-agents[litellm]",
-        )
-    return None

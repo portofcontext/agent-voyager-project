@@ -21,6 +21,8 @@
 - Claude uses the rebuilt Python SDK, a locked standalone project, and a
   sandbox image. Native responses, tools, and subagents report through the
   Recorder; the legacy wrapper and installer files are removed.
+- avp-openai-agents uses the rebuilt SDK in a standalone locked project with a sandbox
+  image and installed command. Legacy installer and release files are removed.
 
 - Codex uses the rebuilt Python SDK in its own locked project, with an installed
   `avp-codex-cli`, a sandbox Dockerfile, proxy credentials, and native events
