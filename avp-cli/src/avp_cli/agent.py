@@ -489,8 +489,6 @@ def _provider_env(
             base = base.rstrip("/")
             env.update(_endpoint_env(provider.id, base.removesuffix(_api_path(provider.id))))
 
-    # GOOSE_PROVIDER adapts the Commission's choice for the bundled Goose agent.
-    env["GOOSE_PROVIDER"] = provider.id
     return env
 
 

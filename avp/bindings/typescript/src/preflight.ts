@@ -13,7 +13,7 @@
  *
  * Fill in the surfaces the agent offers in `Offered`; a surface left
  * undefined is not checked by name. Harness-specific refusals stay in the
- * adapter. Matches the Python `avp.preflight` and the Rust `avp::preflight`.
+ * adapter. Matches the Python `avp.preflight`.
  */
 import type { Commission } from "./index.js";
 import type { ErrorCode } from "./trajectory.js";

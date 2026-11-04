@@ -2,7 +2,7 @@
 
 The walkthrough with the reasons: `agents/_template/README.md`.
 
-- [ ] **Scaffold**: `make new-agent NAME=avp-<sdk>` (or `make new-agent-rust`),
+- [ ] **Scaffold**: `make new-agent NAME=avp-<sdk>`,
       then run the `next:` commands it prints.
 - [ ] **Harness**: replace the stand-in `harness` with the SDK; report its
       events through the `Recorder` (`assistant` with tool calls as `tool_use`,

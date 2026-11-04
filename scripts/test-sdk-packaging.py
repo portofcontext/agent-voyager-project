@@ -142,27 +142,6 @@ assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
             )
             self.assert_tar_data(next(Path(out).glob("*.tar.gz")), "src/avp/utils/data")
 
-    def test_rust_crate(self) -> None:
-        with tempfile.TemporaryDirectory() as out:
-            subprocess.run(
-                [
-                    "cargo",
-                    "package",
-                    "--offline",
-                    "--allow-dirty",
-                    "--no-verify",
-                    "--target-dir",
-                    out,
-                ],
-                cwd=ROOT / "avp-sdk" / "rust",
-                check=True,
-                capture_output=True,
-            )
-            self.assert_tar_data(
-                next((Path(out) / "package").glob("*.crate")),
-                "src/utils/data",
-            )
-
     def test_typescript_package(self) -> None:
         with tempfile.TemporaryDirectory() as out:
             subprocess.run(

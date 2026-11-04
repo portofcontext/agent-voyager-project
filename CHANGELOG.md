@@ -4,15 +4,11 @@
 
 ### Added
 
-- Rust and TypeScript endpoint helpers match Python's provider URL and API-key
+- TypeScript endpoint helpers match Python's provider URL and API-key
   authentication lookup, with offline snapshots and optional cache refreshes.
 - A TypeScript SDK in `avp-sdk/typescript`, following the Python reference for
   the rebuilt v0.1 specs. It uses generated wire types, the shared SDK cases,
   and the single price snapshot, bundled in its npm package.
-- A Rust SDK in `avp-sdk/rust` for the rebuilt v0.1 specs: generated wire
-  types, Commission checks, run plans, Recorder, pricing snapshots, and the
-  agent command line. Its tests use the shared SDK cases and exercise the
-  file transport in a subprocess.
 
 ### Changed
 
@@ -29,7 +25,7 @@
   sandbox image. Native responses and tools use the Recorder; inline skills
   use Pi's native loader. Legacy installer and release files are removed.
 
-- All three SDK command lines include `avp_version` in their ping replies,
+- Both SDK command lines include `avp_version` in their ping replies,
   matching the new CLI's image installation check.
 - Deep Agents uses the rebuilt SDK in a standalone locked project with a
   sandbox image. Native model, tool, and subagent events use the Recorder;
@@ -47,7 +43,7 @@
   translated through the Recorder. Its legacy registration and release files
   are removed. Its container uses Python 3.14.
 - SDK prices, endpoints, and endpoint refresh rules are stored once in
-  `avp-sdk/data/`. Python, Rust, and TypeScript package builds bundle the
+  `avp-sdk/data/`. Python and TypeScript package builds bundle the
   shared files through relative links. Package checks cover the full data
   inventory, and all SDKs use shared endpoint translation cases.
 - The SDK's `avp.utils.base_urls` is now `avp.utils.endpoints`. Each provider's
@@ -55,6 +51,12 @@
   models.dev names for it, so a supervisor can set up a credential proxy.
 - The Commission spec says a Model's `proxy` credential is the key alone, which
   the proxy adds the way the provider's API expects.
+
+### Removed
+
+- Goose's Rust adapter and the Rust SDK, including legacy Rust bindings,
+  scaffolding, generation, packaging, and CI jobs. Goose integration is deferred
+  until its Python GDK is available.
 
 ### Fixed
 

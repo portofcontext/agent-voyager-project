@@ -11,9 +11,8 @@ agent-voyager-project/
 ├── spec/v0.1/                     ✅ specs moved; schemas regenerate in step 2
 ├── avp-sdk/
 │   ├── python/                    ⬜
-│   ├── rust/                      ✅ implementation; human review pending
 │   ├── typescript/                ✅ implementation; human review pending
-│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python, Rust, and TypeScript pass)
+│   └── testdata/recorder/, testdata/run_plan/ ✅ (Python and TypeScript pass)
 ├── avp-cli/                       ⬜ cleanup TBD
 │   └── src/avp_cli/conformance/   ⬜ harness and cases/v0.1/
 ├── agents/                        ⬜ one PR per agent
@@ -36,7 +35,7 @@ agent-voyager-project/
 - [x] Python wire models from the spec reference tables
 - [x] JSON Schemas generated into `spec/v0.1/` (`make schemas`)
 - [ ] The spec documents' JSON examples as tests, against the models and the schemas
-- [ ] Rust and TypeScript SDKs, checklists below
+- [ ] TypeScript SDK, checklist below
 - [x] Recorder (`avp.recorder`), with shared cases in `avp-sdk/testdata/recorder/`
 - [x] Run plan (`avp.utils.run_plan`): what a run uses (`agent_started`) and what it turns off, with shared cases in `avp-sdk/testdata/run_plan/`
 - [x] Pricing for the Model object (`avp.utils.pricing`, shared snapshot in `avp-sdk/data/avp_prices.json`)
@@ -45,11 +44,10 @@ agent-voyager-project/
 - [ ] Scripts kept on purpose, each reviewed, moved to `scripts/`
 - [ ] Remove `avp/bindings/` and `avp/scripts/`
 
-#### Rust and TypeScript SDKs
+#### TypeScript SDK
 
 Each SDK is one assignment, built fresh against the specs and the
-[SDK README](avp-sdk/README.md), with the Python SDK as the reference. The two
-lists are the same.
+[SDK README](avp-sdk/README.md), with the Python SDK as the reference.
 
 We are removing AI sprawl/slop, not adding it. A person should read every line of it before it merges; passing tests is not enough.
 The reviewer checks that:
@@ -67,27 +65,6 @@ The reviewer checks that:
 - Generated code is generated, never edited by hand.
 - Tests cover behavior across a boundary (the shared cases, a subprocess, a
   file), not the implementation's internals.
-
-Rust (`avp-sdk/rust`):
-
-- [x] Its own crate, with its tests run from the Makefile
-  - [ ] Reviewed by a person
-- [x] Wire types generated from `spec/v0.1/*.schema.json`, with a make target that regenerates them and a drift check in `make check`
-  - [ ] Reviewed by a person
-- [x] Recorder, passing every case in `avp-sdk/testdata/recorder/`
-  - [ ] Reviewed by a person
-- [x] Commission checks, with the same refusal messages as Python (the Recorder cases pin them)
-  - [ ] Reviewed by a person
-- [x] Run plan, passing every case in `avp-sdk/testdata/run_plan/`
-  - [ ] Reviewed by a person
-- [x] Pricing, shipping `avp_prices.json` and loading it like Python (bundled or cache, optional `max_age`)
-  - [ ] Reviewed by a person
-- [x] Agent command line: `ping`, `describe`, `run`, with the same exit codes
-  - [ ] Reviewed by a person
-- [x] Shared pricing snapshot linked into its data directory and bundled in its package
-  - [ ] Reviewed by a person
-- [ ] Supervisor tools, only when a Rust supervisor needs them: OpenTelemetry, CloudEvents, default base URLs
-  - [ ] Reviewed by a person
 
 TypeScript (`avp-sdk/typescript`):
 
@@ -118,12 +95,15 @@ TypeScript (`avp-sdk/typescript`):
 
 ### 4. Agents (`agents/`)
 
-One PR per agent. TypeScript and Rust agents wait for their SDKs.
+Goose and the Rust SDK are removed while we wait for Goose's Python GDK.
+A future Goose adapter can use the Python SDK.
+
+One PR per agent. TypeScript agents wait for their SDK.
 
 | Agent | Language | New SDK | `<agent>-cli` command | Live run | Old files removed |
 |---|---|---|---|---|---|
 | `avp-pydantic-ai` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
-| `_template` | Python, Rust | ⬜ | ⬜ | ⬜ | ⬜ |
+| `_template` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
 | `avp-claude-agent-sdk` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-codex` | Python | ✅ | ✅ | ✅ OpenAI | ✅ |
 | `avp-deep-agents` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
@@ -131,7 +111,6 @@ One PR per agent. TypeScript and Rust agents wait for their SDKs.
 | `avp-gemini-cli` | TypeScript | ✅ | ✅ | ✅ Google | ✅ |
 | `avp-opencode` | TypeScript | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-pi` | TypeScript | ✅ | ✅ | ✅ Anthropic | ✅ |
-| `avp-goose` | Rust | ⬜ | ⬜ | ⬜ | ⬜ |
 
 - **New SDK:** its own project on `avp-sdk`; `ping`, `describe`, and `run` work.
 - **`<agent>-cli` command:** the command line is installed as a command, to be

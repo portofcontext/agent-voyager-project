@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 # an `id`, and it supplies the egress host both for that case and for the
 # native-default case (no provider block, host derived from the model slug's
 # origin). Keys MUST match the provider `id` an agent passes to its SDK
-# (e.g. goose's provider name) so the egress host actually matches the call.
+# (e.g. a native provider name) so the egress host actually matches the call.
 PROVIDER_REGISTRY: dict[str, tuple[str, str | None]] = {
     "anthropic": ("api.anthropic.com", "https://api.anthropic.com"),
     "openai": ("api.openai.com", "https://api.openai.com/v1"),

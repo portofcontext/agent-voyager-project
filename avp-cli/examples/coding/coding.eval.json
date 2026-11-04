@@ -1,6 +1,6 @@
 {
   "name": "coding-katas",
-  "agents": ["claude-code", "goose"],
+  "agents": ["claude-code", "codex"],
   "dataset": {
     "source": "inline",
     "items": [

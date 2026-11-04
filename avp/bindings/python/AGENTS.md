@@ -16,7 +16,7 @@ In scope:
   buffering, step counter, tool pairing, subagent frames, cost, idempotent
   stop). It is not a base class, owns no loop, and calls nothing back. Its
   behavior is pinned by the language-neutral vectors under
-  `avp/core/conformance/src/avp_conformance/recorder/v0.1/`. The Rust Recorder
+  `avp/core/conformance/src/avp_conformance/recorder/v0.1/`. The TypeScript Recorder
   runs the same vectors; future language implementations must do likewise.
   Change a rule there first.
 

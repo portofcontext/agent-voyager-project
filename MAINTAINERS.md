@@ -8,7 +8,7 @@ This file lists the current maintainers of the Agent Voyager Project. Maintainer
 |---|---|---|
 | Patrick Kelly | [@portofcontext](https://github.com/portofcontext) | Agentic-systems lead: Commission / Agent Descriptor / Trajectory shape, reference agent loop, supervisor patterns, overall governance |
 | Elias Posen | [@portofcontext](https://github.com/portofcontext) | Protocol lead: MCP integration, CloudEvents / OTel GenAI attribute conformance, wire-format details |
-| Patrick Carney | [@portofcontext](https://github.com/portofcontext) | Infrastructure lead: conformance harness and cases, CI/CD, release engineering, cross-language bindings (Rust / TS) and drift detection, the paid real-model test matrix, performance and operational concerns across reference implementations |
+| Patrick Carney | [@portofcontext](https://github.com/portofcontext) | Infrastructure lead: conformance harness and cases, CI/CD, release engineering, cross-language bindings (Python / TS) and drift detection, the paid real-model test matrix, performance and operational concerns across reference implementations |
 
 
 ## How to become a maintainer

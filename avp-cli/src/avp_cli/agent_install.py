@@ -73,7 +73,7 @@ class InstallResult:
 
 
 def current_target() -> str:
-    """The Rust target triple for selecting a binary release asset (mac/linux)."""
+    """The platform target triple for selecting a binary release asset (mac/linux)."""
     machine = platform.machine().lower()
     arch = {"x86_64": "x86_64", "amd64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}.get(
         machine

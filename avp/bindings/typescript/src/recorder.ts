@@ -14,8 +14,7 @@
  * rec.stop("converged");                            // agent_stopped
  * ```
  *
- * The rules match the Python `avp.recorder.Recorder` and the Rust
- * `avp::recorder::Recorder`, and are pinned by the shared vectors under
+ * The rules match the Python `avp.recorder.Recorder` and are pinned by the shared vectors under
  * `avp/core/conformance/src/avp_conformance/recorder/v0.1/` (run by
  * `tests/recorder-vectors.test.ts`):
  *

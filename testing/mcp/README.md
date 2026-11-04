@@ -11,6 +11,5 @@ python3 testing/mcp/avp_test_mcp.py
 
 Only Python's standard library is needed. There is no package installation,
 network access, or persistent state. Stdout contains only JSON-RPC responses.
-The conformance harness and Python tests select their own interpreter; Rust
-tests use `python3` on PATH or `AVP_TEST_PYTHON` when supplied. Real adapter SDKs
+The conformance harness and adapter tests select their own Python interpreter. Real adapter SDKs
 exercise the MCP handshake, discovery, and tool dispatch against this fixture.

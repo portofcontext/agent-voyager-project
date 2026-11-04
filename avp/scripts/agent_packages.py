@@ -7,8 +7,6 @@ file, next to its version and dependencies:
   names, optional `setup` and `env`)
 - Node: `"avp"` in package.json (`node`, `asset`, `entry`, optional `setup`);
   the minimum Node comes from `engines.node`
-- Rust: `[package.metadata.avp]` in Cargo.toml (`binary`, `asset`, optional
-  `gpu_asset`, `setup`, `gpu_setup`)
 
 Shared by release-manifest.py, agent-pins.py, and test-fresh-installs.py.
 """
@@ -57,6 +55,4 @@ def read(agent: str) -> Package:
             data["avp"],
             floor.group(1) if floor else None,
         )
-    data = tomllib.loads((path / "Cargo.toml").read_text())
-    meta = data["package"]["metadata"]["avp"]
-    return Package(agent, "binary", path, data["package"]["version"], meta)
+    raise ValueError(f"no supported package file at {path}")

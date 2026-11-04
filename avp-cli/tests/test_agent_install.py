@@ -23,9 +23,12 @@ def installer_catalog(monkeypatch):
     """Keep legacy installer contracts independent of adapter migrations."""
     catalog = {
         name: agents.AgentSource(
-            name, "1.2.3", "goose" if name == "goose" else f"avp-{name}", f"fixtures/{name}"
+            name,
+            "1.2.3",
+            "binary-fixture" if name == "binary-fixture" else f"avp-{name}",
+            f"fixtures/{name}",
         )
-        for name in ("goose", "pi", "opencode", "gemini-cli")
+        for name in ("binary-fixture", "pi", "opencode", "gemini-cli")
     }
     monkeypatch.setattr(agents, "AGENT_SOURCES", catalog)
     monkeypatch.setattr(agent_install, "AGENT_SOURCES", catalog)
@@ -69,17 +72,17 @@ def _node_release(agent: str, version: str, asset: str) -> dict:
     }
 
 
-def _goose_release(version: str = "local") -> dict:
+def _binary_release(version: str = "local") -> dict:
     return {
         "schema_version": 1,
-        "agent": "goose",
+        "agent": "binary-fixture",
         "version": version,
         "kind": "binary",
         "setup": ["apt-get install -y libgomp1"],
         "binary": {
-            "name": "avp-goose-conformance",
-            "asset": "avp-goose-conformance-{target}.tar.gz",
-            "gpu_asset": "avp-goose-conformance-vulkan-{target}.tar.gz",
+            "name": "avp-binary-fixture-conformance",
+            "asset": "avp-binary-fixture-conformance-{target}.tar.gz",
+            "gpu_asset": "avp-binary-fixture-conformance-vulkan-{target}.tar.gz",
             "gpu_setup": ["apt-get install -y libvulkan1"],
         },
     }
@@ -201,26 +204,28 @@ def test_release_manifest_must_describe_the_agent_and_version(avp_home, monkeypa
 
 
 def test_binary_release_gpu_recipe_uses_its_variant(avp_home, monkeypatch) -> None:
-    pin = agents.AGENT_SOURCES["goose"].version
-    host = f"avp-goose-conformance-{agent_install.current_target()}.tar.gz"
+    pin = agents.AGENT_SOURCES["binary-fixture"].version
+    host = f"avp-binary-fixture-conformance-{agent_install.current_target()}.tar.gz"
     _stub_release(
         monkeypatch,
         {
-            "avp-release.json": json.dumps(_goose_release(pin)).encode(),
-            host: _tar({"avp-goose-conformance": b"\x7fELF"}),
+            "avp-release.json": json.dumps(_binary_release(pin)).encode(),
+            host: _tar({"avp-binary-fixture-conformance": b"\x7fELF"}),
         },
     )
-    agent_install.install("goose")
-    resolved = agents.resolve_agent("goose")
-    assert (avp_home / "agents" / "goose" / "bin" / "avp-goose-conformance").is_file()
+    agent_install.install("binary-fixture")
+    resolved = agents.resolve_agent("binary-fixture")
+    assert (
+        avp_home / "agents" / "binary-fixture" / "bin" / "avp-binary-fixture-conformance"
+    ).is_file()
 
     cpu = agents.container_recipe(resolved)
     gpu = agents.container_recipe(resolved, gpu=True)
-    assert "avp-goose-conformance-$(uname -m)-unknown-linux-gnu.tar.gz" in cpu.install[0]
+    assert "avp-binary-fixture-conformance-$(uname -m)-unknown-linux-gnu.tar.gz" in cpu.install[0]
     assert "vulkan-$(uname -m)-unknown-linux-gnu.tar.gz" in gpu.install[0]
     assert "apt-get install -y libvulkan1" in gpu.setup
     assert "apt-get install -y libvulkan1" not in cpu.setup
-    assert cpu.command == ("avp-goose-conformance",)
+    assert cpu.command == ("avp-binary-fixture-conformance",)
 
 
 def test_install_all_continues_past_failures(avp_home, monkeypatch) -> None:
@@ -241,7 +246,7 @@ def test_install_all_continues_past_failures(avp_home, monkeypatch) -> None:
     assert [n for n, _, err in first if err] == ["pi"]
 
     again = {n: (r, e) for n, r, e in agent_install.install_all()}
-    assert again["goose"] == (None, None)  # already at the pinned release: skipped
+    assert again["binary-fixture"] == (None, None)  # already at the pinned release: skipped
     assert again["pi"][1] is not None  # still failing, still retried
 
 
@@ -254,19 +259,26 @@ def test_install_all_replaces_installs_not_at_the_pinned_release(avp_home, monke
             source.name, source.version, "binary", "release", avp_home
         )
 
-    old = avp_home / "agents" / "goose"
+    old = avp_home / "agents" / "binary-fixture"
     old.mkdir(parents=True)
     (old / "installed.json").write_text(
-        json.dumps({"name": "goose", "from": "release", "agent": "goose", "version": "0.0.1"})
+        json.dumps(
+            {
+                "name": "binary-fixture",
+                "from": "release",
+                "agent": "binary-fixture",
+                "version": "0.0.1",
+            }
+        )
     )
     monkeypatch.setattr(agent_install, "install_release", fake)
     list(agent_install.install_all())
-    assert "goose" in installed
+    assert "binary-fixture" in installed
 
 
 def test_not_installed_points_at_install_all(avp_home) -> None:
     with pytest.raises(SystemExit, match="avp agent install --all"):
-        agents.resolve_agent("goose")
+        agents.resolve_agent("binary-fixture")
 
 
 def test_no_checkout_fallback(avp_home) -> None:
@@ -350,7 +362,7 @@ def test_local_build_needs_its_own_name(avp_home, tmp_path) -> None:
     with pytest.raises(agent_install.InstallError, match="--as pi-dev"):
         agent_install.install("pi", from_dir=d)
     with pytest.raises(agent_install.InstallError, match="built-in agent name"):
-        agent_install.install("pi", from_dir=d, as_name="goose")
+        agent_install.install("pi", from_dir=d, as_name="binary-fixture")
     with pytest.raises(agent_install.InstallError, match="pass --from"):
         agent_install.install("pi", as_name="pi-dev")
     with pytest.raises(agent_install.InstallError, match="--version picks a release"):
@@ -362,8 +374,8 @@ def test_local_build_needs_a_release_manifest_for_the_agent(avp_home, tmp_path) 
     empty.mkdir()
     with pytest.raises(agent_install.InstallError, match=r"no avp-release\.json"):
         agent_install.install("pi", from_dir=empty, as_name="pi-dev")
-    other = _local_dir(tmp_path, _goose_release(), {})
-    with pytest.raises(agent_install.InstallError, match="describes agent 'goose'"):
+    other = _local_dir(tmp_path, _binary_release(), {})
+    with pytest.raises(agent_install.InstallError, match="describes agent 'binary-fixture'"):
         agent_install.install("pi", from_dir=other, as_name="pi-dev")
 
 
@@ -399,16 +411,18 @@ def test_local_build_without_a_host_artifact_runs_but_cannot_describe(
     for mod in (agent_install.platform, agents.platform):
         monkeypatch.setattr(mod, "system", lambda: "Darwin")
     monkeypatch.setattr(agent_install.platform, "machine", lambda: "arm64")
-    linux = "avp-goose-conformance-aarch64-unknown-linux-gnu.tar.gz"
-    d = _local_dir(tmp_path, _goose_release(), {linux: _tar({"avp-goose-conformance": b"x"})})
-    agent_install.install("goose", from_dir=d, as_name="goose-dev")
+    linux = "avp-binary-fixture-conformance-aarch64-unknown-linux-gnu.tar.gz"
+    d = _local_dir(
+        tmp_path, _binary_release(), {linux: _tar({"avp-binary-fixture-conformance": b"x"})}
+    )
+    agent_install.install("binary-fixture", from_dir=d, as_name="binary-fixture-dev")
 
-    assert agents.installed_record("goose-dev")["host"] is False
-    assert "can't describe here" in agents.preflight("goose-dev")
-    recipe = agents.container_recipe(agents.resolve_agent("goose-dev"))
+    assert agents.installed_record("binary-fixture-dev")["host"] is False
+    assert "can't describe here" in agents.preflight("binary-fixture-dev")
+    recipe = agents.container_recipe(agents.resolve_agent("binary-fixture-dev"))
     assert recipe.install == (
-        "cat /opt/avp-artifacts/avp-goose-conformance-$(uname -m)-unknown-linux-gnu.tar.gz "
-        "| tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/avp-goose-conformance",
+        "cat /opt/avp-artifacts/avp-binary-fixture-conformance-$(uname -m)-unknown-linux-gnu.tar.gz "
+        "| tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/avp-binary-fixture-conformance",
     )
 
 

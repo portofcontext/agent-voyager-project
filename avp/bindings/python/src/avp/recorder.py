@@ -45,8 +45,8 @@ Harnesses that deliver one complete message per inference pass no key;
 harnesses that stream one inference as several chunks pass the inference's id.
 
 Behavior is pinned by the language-neutral vectors under
-``avp/core/conformance/src/avp_conformance/recorder/v0.1/``; the Rust and
-TypeScript Recorders run the same vectors.
+``avp/core/conformance/src/avp_conformance/recorder/v0.1/``; the
+TypeScript Recorder runs the same vectors.
 """
 
 from __future__ import annotations

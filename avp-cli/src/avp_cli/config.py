@@ -10,7 +10,7 @@ Schema (eval.json):
 
     {
       "name": "parsebench-table",
-      "agents": ["claude-code", "goose"],   # optional; --agent overrides at run time
+      "agents": ["claude-code", "codex"],   # optional; --agent overrides at run time
       "dataset": { "source": "inline" | "file" | "huggingface", ... },
       "scorer":  { "name": "structural-match" | "exact-match" | "structural-fidelity" | "llm-judge", ...params },
       "commissions": ["baseline", "terse", "few-shot"]   # ids in the library, run on every agent
@@ -24,7 +24,7 @@ agent. Keys are the agents' self-declared `descriptor.agent_name` (what
 registry agent the top-level `agents` can be omitted (the keys imply it);
 a third-party agent's key needs its manifest path listed in `agents`:
 
-    "commissions": { "goose": ["baseline-goose"], "avp-claude-agent-sdk": ["baseline-claude"] }
+    "commissions": { "avp-codex": ["baseline-codex"], "avp-claude-agent-sdk": ["baseline-claude"] }
 
 Dataset sources:
   inline:      { "source": "inline", "items": [ {"id","prompt","expected"} ] }
@@ -109,7 +109,7 @@ def _reject_alias_key(key: str) -> None:
     """A commissions-map key that is a registry ALIAS (not the agent's
     descriptor.agent_name) would bind to nothing at run time, silently. Catch
     it at load with the exact fix. Aliases that equal the descriptor name
-    (goose) pass through; only divergent ones (claude-code) can mislead."""
+    (agents with matching install and descriptor names) pass through; only divergent ones (claude-code) can mislead."""
     from avp_cli.agents import AGENT_SOURCES
 
     source = AGENT_SOURCES.get(key)

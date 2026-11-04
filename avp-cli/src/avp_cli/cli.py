@@ -275,7 +275,7 @@ def _prepare_agent(
             env=agent.manifest.env,
             cwd=agent.manifest_cwd,
         )
-    # The libkrun backend gets the GPU recipe variant (goose's `vulkan` build +
+    # The libkrun backend gets the GPU recipe variant (a Vulkan binary +
     # Venus ICD) and is built with podman into the libkrun machine's own image
     # store; the default backend uses the CPU recipe built with docker.
     gpu = runtime_name == "libkrun"

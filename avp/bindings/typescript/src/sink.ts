@@ -3,7 +3,7 @@
  *
  * A `Sink` is where every emitted trajectory event leaves the agent; the
  * agent owns the run lifecycle, the sink owns serialization and I/O. Emission
- * is synchronous, matching the Rust `Sink`: one event serializes to one line.
+ * is synchronous: one event serializes to one line.
  */
 import { closeSync, openSync, writeSync } from "node:fs";
 
@@ -24,7 +24,7 @@ export class StdioSink implements Sink {
  * One event per line of NDJSON to a file. The file is truncated on
  * construction, then each event is written in emission order, so a
  * concurrent reader (`tail -f`) sees progress. This satisfies the
- * `run --out <path>` contract; the Rust counterpart is `avp::sink::FileSink`.
+ * `run --out <path>` contract.
  */
 export class FileSink implements Sink {
   private fd: number | null;

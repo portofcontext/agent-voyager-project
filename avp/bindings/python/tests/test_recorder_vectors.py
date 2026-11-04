@@ -2,7 +2,7 @@
 
 Each vector under `avp/core/conformance/src/avp_conformance/recorder/v0.1/`
 is a script of Recorder calls plus the NDJSON events they must produce under
-a fixed clock, compared after id normalization (see that directory's README). The Rust and
+a fixed clock, compared after id normalization (see that directory's README). The
 TypeScript bindings run the same files.
 
 Regenerate `expected` after an intentional rule change with

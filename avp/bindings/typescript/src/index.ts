@@ -26,14 +26,9 @@
  * carry inline connection material on the Commission; the agent dials and
  * loads them directly.
  *
- * ## Regenerating
- *
- * Bindings are committed (not generated at build time). To regenerate after
- * a spec bump:
- *
- * ```bash
- * scripts/generate-bindings.sh
- * ```
+ * These legacy bindings remain for the old CLI and conformance stack.
+ * Current generated types live in `avp-sdk/typescript`; `make bindings`
+ * regenerates that SDK from the current schemas.
  */
 
 // Top-level message classes — what most consumers import.

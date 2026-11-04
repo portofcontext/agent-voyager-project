@@ -3,15 +3,14 @@
 # Default target prints help. `make check` is the free pre-commit floor
 # (format / lint / unit tests / conformance / bindings drift).
 #
-# Layout: the core project (spec, conformance, Python/Rust/TS bindings) lives
+# Layout: the core project (spec, conformance, Python/TS bindings) lives
 # under avp/; agents under agents/<name>/<lang>/; the local CLI `avp` under
 # avp-cli/. The uv (Python) workspace is rooted at the repo root (root
 # pyproject.toml + ruff.toml + uv.lock), so `uv` runs from here and spans every
 # Python member.
 #
-# Cost notes: targets that hit a real LLM are clearly marked (the paid block in
-# `make help`) and require ANTHROPIC_API_KEY; they run roughly $0.10 to $0.20 on
-# Haiku. Everything `make check` covers is free.
+# Everything `make check` covers is free. Real-model verification follows
+# each adapter's README.
 
 SHELL := /usr/bin/env bash
 
@@ -29,14 +28,10 @@ TEST_PKGS := \
 
 
 
-.PHONY: new-agent new-agent-rust
+.PHONY: new-agent
 new-agent:
 	@test -n "$(NAME)" || { echo "usage: make new-agent NAME=avp-<sdk>"; exit 2; }
-	@python3 avp/scripts/new-agent.py $(NAME) --lang python
-
-new-agent-rust:
-	@test -n "$(NAME)" || { echo "usage: make new-agent-rust NAME=avp-<sdk>"; exit 2; }
-	@python3 avp/scripts/new-agent.py $(NAME) --lang rust
+	@python3 avp/scripts/new-agent.py $(NAME)
 
 
 .PHONY: help
@@ -57,19 +52,13 @@ help:
 	@echo "    make sdk-data        refresh the SDKs' bundled models.dev prices and endpoints"
 	@echo "    make sdk-data-check  check that SDK packages contain all shared provider data"
 	@echo "    make sync-prices     refresh bundled prices.json from models.dev (--write)"
-	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
-	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
-	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
+	@echo "    make bindings        regenerate current TypeScript SDK wire types"
+	@echo "    make bindings-check  check current TypeScript SDK wire-type drift"
+	@echo "    make bindings-test   npm test (avp/bindings/typescript)"
 	@echo "    make check           format-check + lint + test + pi-check + gemini-cli-check + opencode-check + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
 	@echo "    make test-fresh      Python agents' tests on unlocked, newest deps (AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
-	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
-	@echo ""
-	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make conformance-check  run the legacy v0.1 suite against Goose on a real model"
-	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
-	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
 	@echo "  Releases (cut from main; push a tag, CI builds + publishes):"
 	@echo "    make release-cli         publish avp-cli to PyPI (tag pypi-v<pyproject version>), after"
@@ -81,7 +70,7 @@ help:
 	@echo "    make sync            uv sync the Python workspace (repo root)"
 	@echo "    make build-agents    build each in-tree agent into dist/agents/<name>, laid out like its release"
 	@echo "    make smoke-agents    run dist/agents builds in sandbox images against a stub model (AGENTS=<names>)"
-	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete; PAID=1 adds the vault-broker finale)"
+	@echo "    make cli-smoke       drive the avp CLI end to end (create->list->delete)"
 
 
 # ── Free targets ──────────────────────────────────────────────────────────────
@@ -109,45 +98,16 @@ test-docker:
 
 
 # Manifest paths, relative to the repo root the harness runs from.
-GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
 GEMINI_CLI_DIR := agents/avp-gemini-cli/typescript
 OPENCODE_DIR := agents/avp-opencode/typescript
 
-# Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
-# (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
-# on machines without srt installed; on for any untrusted / CI run.
-SANDBOX ?=
-
-
-# ── Free: validate case files + liveness-ping + describe each agent (no model) ─
-.PHONY: claude-ping goose-build goose-ping claude-describe goose-describe
-claude-ping:
-
-# Compile before pinging: the manifest runs `cargo run`, and a cold build
-# would otherwise eat the ping's timeout.
-goose-build:
-	@cd agents/avp-goose/rust && cargo build --quiet --features conformance --bin avp-goose-conformance
-
-goose-ping: goose-build
-	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
-
-claude-describe:
-
-goose-describe: goose-build
-	@$(UV) run avp-conformance describe --agent $(GOOSE_MANIFEST)
-
-
+# Validate legacy cases and the remaining Python template without model calls.
 .PHONY: conformance
 conformance:
 	@$(UV) run avp-conformance validate
-	@$(MAKE) --no-print-directory claude-ping
-	@$(MAKE) --no-print-directory claude-describe
-	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
-	@$(MAKE) --no-print-directory goose-ping
-	@$(MAKE) --no-print-directory goose-describe
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
@@ -185,23 +145,6 @@ opencode-check: opencode-build
 	@npm --prefix $(OPENCODE_DIR) run typecheck
 	@npm --prefix $(OPENCODE_DIR) test
 
-# ── Paid: run the v0.1 suite against each agent on a real model ────────────────
-.PHONY: claude-check goose-check
-claude-check:
-
-goose-check:
-	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
-
-.PHONY: conformance-check
-conformance-check:
-	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
-		echo "error: ANTHROPIC_API_KEY is not set; conformance-check runs cases on a real model"; exit 2; \
-	fi
-	@$(MAKE) --no-print-directory claude-check
-	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
-	@$(MAKE) --no-print-directory goose-check
-
-
 .PHONY: lint
 lint:
 	@$(UV) run ruff check .
@@ -238,37 +181,16 @@ sync-prices:
 	@$(UV) run python avp/scripts/sync-prices.py --write
 
 
-.PHONY: bindings
-bindings:
-	@bash avp/scripts/generate-bindings.sh
+# Binding generation follows the current SDK schemas. The legacy TypeScript
+# library remains tested until the old CLI/conformance stack is retired.
+.PHONY: bindings bindings-check bindings-test
+bindings: sdk-typescript-generate
 
+bindings-check: sdk-typescript-bindings-check
 
-.PHONY: bindings-check
-bindings-check:
-	@# Drift check: snapshot current bindings, regenerate, diff against
-	@# the snapshot. Pure working-tree comparison; does NOT require the
-	@# bindings to be committed. If regeneration changes any byte, the
-	@# user's bindings are stale relative to types.py / schemas.
-	@snapshot=$$(mktemp -d); \
-	cp -R avp/bindings/rust/src "$$snapshot/rust-src"; \
-	cp -R avp/bindings/typescript/src "$$snapshot/ts-src"; \
-	bash avp/scripts/generate-bindings.sh > /dev/null; \
-	if ! diff -rq "$$snapshot/rust-src" avp/bindings/rust/src > /dev/null 2>&1 \
-	   || ! diff -rq "$$snapshot/ts-src" avp/bindings/typescript/src > /dev/null 2>&1; then \
-		echo "error: Rust/TS bindings are stale relative to schemas. Run 'make bindings'." >&2; \
-		diff -rq "$$snapshot/rust-src" avp/bindings/rust/src 2>&1 | head -10 >&2 || true; \
-		diff -rq "$$snapshot/ts-src" avp/bindings/typescript/src 2>&1 | head -10 >&2 || true; \
-		rm -rf "$$snapshot"; \
-		exit 1; \
-	fi; \
-	rm -rf "$$snapshot"; \
-	echo "✓ Bindings in sync with schemas."
-
-
-.PHONY: bindings-test
 bindings-test:
-	@cd avp/bindings/rust && cargo test --quiet
-	@cd avp/bindings/typescript && npm test --silent
+	@npm --prefix avp/bindings/typescript ci --ignore-scripts --no-audit --no-fund
+	@npm --prefix avp/bindings/typescript test --silent
 
 
 .PHONY: sdk-python-check
@@ -277,23 +199,6 @@ sdk-python-check:
 	@cd avp-sdk/python && $(UV) run ruff check .
 	@cd avp-sdk/python && $(UV) run ty check
 	@cd avp-sdk/python && $(UV) run pytest -q
-
-.PHONY: sdk-rust-generate sdk-rust-bindings-check sdk-rust-test sdk-rust-check
-sdk-rust-generate:
-	@cargo run --locked --quiet --manifest-path avp-sdk/rust/codegen/Cargo.toml
-
-sdk-rust-bindings-check:
-	@cargo run --locked --quiet --manifest-path avp-sdk/rust/codegen/Cargo.toml -- --check
-
-sdk-rust-test:
-	@cargo test --locked --manifest-path avp-sdk/rust/Cargo.toml --all-targets
-
-sdk-rust-check: sdk-rust-bindings-check
-	@cargo fmt --manifest-path avp-sdk/rust/Cargo.toml -- --check
-	@cargo fmt --manifest-path avp-sdk/rust/codegen/Cargo.toml -- --check
-	@cargo clippy --locked --manifest-path avp-sdk/rust/Cargo.toml --all-targets -- -D warnings
-	@cargo clippy --locked --manifest-path avp-sdk/rust/codegen/Cargo.toml -- -D warnings
-	@$(MAKE) --no-print-directory sdk-rust-test
 
 .PHONY: sdk-typescript-install sdk-typescript-generate sdk-typescript-bindings-check sdk-typescript-test sdk-typescript-check
 sdk-typescript-install:
@@ -351,7 +256,7 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
 .PHONY: check
-check: format-check lint sdk-data-check test pi-check gemini-cli-check opencode-check conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
+check: format-check lint sdk-data-check test pi-check gemini-cli-check opencode-check conformance bindings-check sdk-python-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the
@@ -373,15 +278,6 @@ check-agent:
 	@$(UV) run avp-conformance ping --agent agents/$(NAME)/python/avp-conformance.json
 	@$(UV) run avp-conformance describe --agent agents/$(NAME)/python/avp-conformance.json
 	@echo ""; echo "✓ $(NAME) checks passed."
-
-
-# ── Paid targets (real LLM) ───────────────────────────────────────────────────
-
-
-.PHONY: test-live
-test-live:
-	@echo "Running gated avp-goose live tests (mcp_connect is key-free; live_mcp / live_skills / live_subagent call a real model)."
-	@cd agents/avp-goose/rust && cargo test --test live_mcp --test live_skills --test live_subagent -- --ignored
 
 
 # ── Releases ──────────────────────────────────────────────────────────────────
@@ -461,21 +357,17 @@ sync:
 
 # Drive the `avp` CLI end to end: create -> list -> inspect -> delete across
 # commissions, environments, and vault secrets, against a throwaway AVP_HOME.
-# PAID=1 adds the grand finale (a CLI-built secret + env + commission run through
-# the credential broker in a real sandbox; needs Docker + OPENROUTER_API_KEY).
 #   make cli-smoke
-#   make cli-smoke PAID=1
 .PHONY: cli-smoke
 cli-smoke:
-	@AVP_SMOKE_PAID=$(if $(filter 1,$(PAID)),1,0) $(UV) run bash scripts/cli-smoke.sh
+	@$(UV) run bash scripts/cli-smoke.sh
 
 
 # Build the in-tree agents (AGENTS=<names>, default all) into dist/agents/<name>,
 # each laid out like its release (artifacts + avp-release.json). This is the
 # contributor loop for testing an agent before cutting a release: build here,
-# `make smoke-agents`, install under a -dev name, run an eval against it. (The
-# goose build needs the Rust toolchain + Goose's system deps, and runs in the
-# sandbox only when built on Linux; the wheels need uv; Node agents need npm.)
+# `make smoke-agents`, install under a -dev name, run an eval against it.
+# Python wheels need uv; Node agents need npm.
 AGENT_NAMES = $(shell python3 -c "import json; print(' '.join(json.load(open('avp-cli/src/avp_cli/agents.json'))))")
 
 .PHONY: build-agents

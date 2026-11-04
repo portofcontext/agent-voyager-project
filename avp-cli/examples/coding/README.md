@@ -1,4 +1,4 @@
-# Coding katas: claude-code vs goose
+# Coding katas: claude-code vs codex
 
 Four "write code, run it, report the number" tasks, head-to-head on both
 agents in fresh sandboxes, scored by exact match. The last kata

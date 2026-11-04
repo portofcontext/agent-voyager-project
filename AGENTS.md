@@ -36,7 +36,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 - Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`;
   never redefine them inline. Pydantic models under `avp/bindings/python/src/avp/`
   are the source of truth. Run `make schemas` after wire changes and
-  `make bindings` to regenerate Rust and TypeScript bindings.
+  `make bindings` to regenerate TypeScript SDK bindings.
 - Models use canonical `origin/model` slugs, never bare model names.
 - Commission requires `schema_version`, `run_id`, and `model`. Inline MCP server
   configuration and skill content travel on the Commission. Built-in allowlists
@@ -54,10 +54,10 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 
 - `spec/v0.1/`: normative specs.
 - `avp/core/conformance/`: separate harness, cases, and shared Recorder vectors.
-- `avp/bindings/{python,rust,typescript}/`: wire bindings and shared helpers.
+- `avp/bindings/{python,typescript}/`: wire bindings and shared helpers.
   Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.
 - `agents/<name>/<lang>/`: runtime adapters, descriptors, and conformance manifests.
-  Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust`.
+  Scaffold with `make new-agent NAME=avp-<sdk>`.
 - `avp-cli/`: the supervisor CLI. Evaluations are JSON configurations containing
   `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
   its own model. `avp eval run` and `avp run` default to Docker-backed OpenSandbox
@@ -70,8 +70,7 @@ agent runs and streams its trajectory. There is no mid-run supervisor push chann
 ## Verification
 
 Run `make check` on every change. It covers format, lint, Python tests,
-conformance validation and liveness, and generated-binding drift. Rust and
-TypeScript tests run with `make bindings-test`; they do not make model calls.
+conformance validation and liveness, and generated-binding drift. TypeScript binding tests run with `make bindings-test`; they do not make model calls.
 `make test-docker` exercises real container launches and requires a Docker daemon.
 While iterating on one Python agent, `make check-agent NAME=avp-<sdk>` runs its
 share of `make check` without building the other agents.
@@ -97,8 +96,7 @@ Run paid conformance after changes to wire contracts, runtime integration,
 translators, drop-in SDK clients, or Commission-to-SDK configuration. Use
 `avp-conformance check --agent <manifest> --suite v0.1`, optionally with
 `--model <origin>/<model>`, and the appropriate provider credentials.
-`make conformance-check` runs Claude, Goose, and Pi with Anthropic credentials;
-`make gemini-cli-check` runs Gemini CLI with `GEMINI_API_KEY`.
+Use the affected adapter's README for its real-model verification commands.
 Documentation, test-only changes, and internal refactors without observable
 wire impact do not require paid runs. When uncertain about integration impact,
 run the real-model checks.
