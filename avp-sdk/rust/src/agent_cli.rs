@@ -106,7 +106,13 @@ pub fn main(
     let interrupted = Arc::new(AtomicBool::new(false));
     let result = (|| -> Result<()> {
         match args.command {
-            Command::Ping { out } => write(out.as_deref(), "{\"type\": \"pong\"}\n"),
+            Command::Ping { out } => write(
+                out.as_deref(),
+                &format!(
+                    "{}\n",
+                    serde_json::json!({"type": "pong", "avp_version": crate::AVP_VERSION})
+                ),
+            ),
             Command::Describe { out } => write(
                 out.as_deref(),
                 &format!("{}\n", serde_json::to_string_pretty(&describe()?)?),

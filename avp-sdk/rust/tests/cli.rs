@@ -58,7 +58,7 @@ fn ping_describe_and_complete_or_refused_runs() {
     assert!(output.status.success());
     assert_eq!(
         serde_json::from_slice::<Value>(&output.stdout).unwrap(),
-        json!({"type": "pong"})
+        json!({"type": "pong", "avp_version": "0.1"})
     );
     let dir = tempfile::tempdir().unwrap();
     let descriptor_path = dir.path().join("descriptor.json");

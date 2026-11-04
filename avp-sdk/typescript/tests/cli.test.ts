@@ -58,7 +58,10 @@ test("CLI writes complete and refused trajectories, with paths or inline JSON", 
     assert.equal(events(refusal.stdout)[0].data.commission, "not JSON");
     assert.equal(events(refusal.stdout).at(-1).type, "error_occurred");
     assert.equal(JSON.parse(cli("describe").stdout).agent_name, "example");
-    assert.equal(JSON.parse(cli("ping").stdout).type, "pong");
+    assert.deepEqual(JSON.parse(cli("ping").stdout), {
+      type: "pong",
+      avp_version: "0.1",
+    });
   } finally {
     await rm(dir, { recursive: true });
   }
