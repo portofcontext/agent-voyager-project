@@ -183,7 +183,6 @@ export function configuration(
             ),
           },
         },
-        ...(c.system_prompt == null ? {} : { prompt: c.system_prompt || "\n" }),
       },
       title: { disable: true },
       summary: { disable: true },

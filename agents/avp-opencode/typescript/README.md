@@ -42,12 +42,20 @@ use its native environment variables; stored user credentials are not read.
 
 Every server gets private config, data, state, cache, and native home directories.
 It listens only on loopback, on a random port with a random password. Project
-configuration, external plugins, external skill discovery, sharing, updates,
+configuration, ambient plugins, external skill discovery, sharing, updates,
 model-list refreshes, LSP downloads, automatic compaction, and helper agents are
 disabled. Shutdown disposes native instances and stops the owned process group.
 The launcher owns the working directory, OS confinement, and credentials.
 
-An explicit `system_prompt` replaces the native build agent's base prompt.
+A bundled plugin observes OpenCode's assembled system prompt through its native
+`experimental.chat.system.transform` hook. The adapter records that prompt in
+`agent_started` before allowing the model request. An explicit `system_prompt`
+replaces the entire parent prompt, including native environment and skill
+instructions; an empty override sends no system instructions. Child sessions
+keep their native prompts. The hook communicates over an authenticated private
+loopback connection, and a missing hook stops before a model request. No plugin
+packages are installed at runtime.
+
 Commissioned skill files go through native skill discovery and activation, with
 support files available to native tools. Only declared skills and subagents are
 permitted. Object-valued `output_schema` uses OpenCode's native structured-output
@@ -72,9 +80,6 @@ partial content with unknown usage, abort the native session, and close the run.
 - The API reports model usage after its tools have run. Response and child events
   are therefore delayed until that native response completes. Native timestamps
   preserve their timing. Unattributed child responses fail visibly.
-- The full default system prompt and dynamic environment instructions are not
-  exposed by the public API. `agent_started.system_prompt` is omitted; an explicit
-  Commission override is still applied through the native agent setting.
 - Parent tool denies also constrain native child sessions. Started child tool
   declarations include those native restrictions. Subagents use OpenCode's
   shared skill and MCP registries, declared explicitly for each child.
@@ -86,6 +91,5 @@ partial content with unknown usage, abort the native session, and close the run.
   when it has no catalog price. The adapter cannot distinguish that from a free
   response. Live sandbox verification covers Anthropic API-key proxy
   authentication. Provider subscriptions and other authentication remain unverified.
-- Commissioned skills require the native `skill` tool. Non-object
-  structured-output schemas are refused. Unexpected compaction stops
-  visibly. The agent exposes no background subagent capability.
+- Commissioned skills require the native `skill` tool. Unexpected compaction
+  stops visibly. The agent exposes no background subagent capability.

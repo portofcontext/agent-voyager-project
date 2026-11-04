@@ -1,7 +1,7 @@
 /** One pinned native server per run, with private state and no startup downloads. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent, fetch as pooledFetch } from "undici";
@@ -33,6 +33,7 @@ export interface ServerOptions {
   scratch: string;
   config: Record<string, unknown>;
   env?: Record<string, string | undefined>;
+  prompt?: { url: string; token: string };
 }
 export class Server {
   private constructor(
@@ -46,6 +47,19 @@ export class Server {
     const password = randomBytes(24).toString("base64url");
     const home = join(options.scratch, "home");
     mkdirSync(home, { recursive: true });
+    // Native plugin initialization checks this directory's npm dependencies.
+    // Reuse the locked build-time installation, with private configuration and
+    // metadata, so that it never tries to fetch @opencode-ai/plugin at startup.
+    const config = join(options.scratch, "config", "opencode");
+    const project = fileURLToPath(new URL("../../", import.meta.url));
+    mkdirSync(config, { recursive: true });
+    for (const file of ["package.json", "package-lock.json"])
+      copyFileSync(join(project, file), join(config, file));
+    symlinkSync(
+      join(project, "node_modules"),
+      join(config, "node_modules"),
+      "junction",
+    );
     const inherited = Object.fromEntries(
       Object.entries({ ...process.env, ...options.env }).filter(
         ([key, value]) => value !== undefined && !key.startsWith("OPENCODE_"),
@@ -65,10 +79,22 @@ export class Server {
           XDG_STATE_HOME: join(options.scratch, "state"),
           XDG_CACHE_HOME: join(options.scratch, "cache"),
           OPENCODE_TEST_HOME: home,
-          OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config),
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({
+            ...options.config,
+            plugin: options.prompt
+              ? [
+                  [
+                    new URL("./prompt-plugin.js", import.meta.url).href,
+                    options.prompt,
+                  ],
+                ]
+              : [],
+          }),
           OPENCODE_SERVER_PASSWORD: password,
           OPENCODE_CLIENT: "avp",
-          OPENCODE_PURE: "1",
+          // Pure mode suppresses even explicitly configured plugins. Runs load
+          // only our bundled hook; the Descriptor needs no plugins.
+          OPENCODE_PURE: options.prompt ? "0" : "1",
           OPENCODE_DISABLE_PROJECT_CONFIG: "1",
           OPENCODE_DISABLE_AUTOUPDATE: "1",
           OPENCODE_DISABLE_MODELS_FETCH: "1",

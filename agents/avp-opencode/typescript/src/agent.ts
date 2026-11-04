@@ -19,6 +19,7 @@ import { catalog, children, describe, nativeSkills } from "./descriptor.js";
 import { McpFailure, discover } from "./mcp.js";
 import { Server, data } from "./server.js";
 import { EventClock, SessionEvents } from "./session.js";
+import { SystemPrompt } from "./system-prompt.js";
 import * as translate from "./translate.js";
 export interface RunOptions {
   signal?: AbortSignal;
@@ -61,6 +62,9 @@ export async function run(
   }
   const scratch = mkdtempSync(join(tmpdir(), "avp-opencode-"));
   let server: Server | undefined;
+  let prompt: SystemPrompt | undefined;
+  let started: Promise<void> | undefined;
+  let startRun: ((system?: string) => Promise<void>) | undefined;
   const events = new AbortController();
   let interrupted = options.signal?.aborted ?? false;
   let sessionID: string | undefined;
@@ -76,11 +80,15 @@ export async function run(
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
     const env = { ...process.env, ...options.env };
+    prompt = await SystemPrompt.open(commission.system_prompt, (system) =>
+      startRun!(system),
+    );
     server = await Server.start({
       cwd: process.cwd(),
       scratch,
       config: configuration(commission, plan, scratch, env),
       env: options.env,
+      prompt: prompt.pluginOptions,
     });
     const client = server.client;
     const providers = await data(client.provider.list());
@@ -167,19 +175,22 @@ export async function run(
           ) as { type: "object" },
         }
       : undefined;
-    await rec.start({
+    if (!prompt.ready)
+      throw new Error("OpenCode did not load the bundled system-prompt hook");
+    const settings = {
       ...plan.started,
-      system_prompt: undefined,
       tools: [...enabled, ...mcpTools, ...(outputTool ? [outputTool] : [])],
       skills,
       subagents: agents,
       mcp_servers: plan.started.mcp_servers?.map((s) => ({
         ...s,
-        status: "connected",
+        status: "connected" as const,
       })),
-    });
+    };
+    startRun = (system) =>
+      (started ??= rec.start({ ...settings, system_prompt: system }));
     if (interrupted) {
-      await observer?.flushInterrupted();
+      await startRun(commission.system_prompt ?? undefined);
       await rec.stop("interrupted");
       return;
     }
@@ -187,6 +198,7 @@ export async function run(
       client.session.create({ title: `avp ${commission.run_id}` }),
     );
     sessionID = created.id;
+    prompt.sessionID = sessionID;
     const subscription = await client.event.subscribe(
       {},
       { signal: events.signal },
@@ -231,6 +243,16 @@ export async function run(
         );
       await observer.handle(next.value);
     }
+    if (prompt.failure) throw prompt.failure;
+    if (!started) {
+      if (interrupted) await startRun(commission.system_prompt ?? undefined);
+      else
+        throw (
+          observer.failure ??
+          new Error("OpenCode ended before its system-prompt hook ran")
+        );
+    }
+    await started;
     if (!interrupted) observer.check();
     if (interrupted) {
       await observer.flushInterrupted();
@@ -263,6 +285,7 @@ export async function run(
     options.signal?.removeEventListener("abort", abort);
     events.abort();
     await server?.close();
+    await prompt?.close();
     rmSync(scratch, { recursive: true, force: true });
   }
 }

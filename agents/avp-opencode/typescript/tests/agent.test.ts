@@ -6,6 +6,7 @@ import {
   rmSync,
   mkdirSync,
   writeFileSync,
+  renameSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,6 +66,7 @@ async function drive(
     },
   } as JsonValue;
   const events: Event[] = [];
+  let requestsAtStart: number | undefined;
   const previous = process.cwd();
   process.chdir(cwd);
   try {
@@ -72,6 +74,8 @@ async function drive(
       received,
       async (event) => {
         await delay(1);
+        if (event.type === "agent_started")
+          requestsAtStart = model.requests.length;
         events.push(parseTrajectoryEvent(JSON.parse(JSON.stringify(event)))!);
       },
       { signal: options.signal, env: options.env },
@@ -90,7 +94,20 @@ async function drive(
     cwd,
     requests: model.requests,
     headers: model.requestHeaders,
+    requestsAtStart,
   };
+}
+
+function system(request: Record<string, any>): string {
+  return (
+    request.instructions ??
+    (request.input ?? [])
+      .filter((message: { role: string }) =>
+        ["system", "developer"].includes(message.role),
+      )
+      .map((message: { content: string }) => message.content)
+      .join("\n")
+  );
 }
 
 test("CLI ping does not load the native runtime", () => {
@@ -190,16 +207,92 @@ test("native allowlists expose no tools or child agents when disabled", async (t
   assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
 });
 
-test("explicit instructions replace the native agent's base prompt", async (t) => {
-  const { events, requests } = await drive(
+test("the full assembled default prompt is recorded before the model request", async (t) => {
+  const { events, requests, cwd, requestsAtStart } = await drive(t, {}, [
+    { text: "OK" },
+  ]);
+  const actual = system(requests[0]!);
+  assert.match(actual, /You are opencode/);
+  assert.ok(actual.includes(cwd));
+  assert.match(actual, /<env>/);
+  assert.equal(data(events, "agent_started")[0]!.system_prompt, actual);
+  assert.equal(requestsAtStart, 0);
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+test("explicit instructions replace the entire native prompt on every parent response", async (t) => {
+  const { events, requests, requestsAtStart } = await drive(
     t,
-    { system_prompt: "ONLY_COMMISSION_INSTRUCTIONS" },
+    {
+      system_prompt: "ONLY_COMMISSION_INSTRUCTIONS",
+      skills: [
+        {
+          name: "prompt-check",
+          files: {
+            "SKILL.md":
+              "---\nname: prompt-check\ndescription: PROMPT_CHECK_SKILL\n---\nSKILL_BODY",
+          },
+        },
+      ],
+    },
+    (cwd) => [
+      {
+        call: {
+          id: "prompt-write",
+          name: "write",
+          args: { filePath: join(cwd, "prompt.txt"), content: "OK" },
+        },
+      },
+      { text: "OK" },
+    ],
+  );
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests.map(system), [
+    "ONLY_COMMISSION_INSTRUCTIONS",
+    "ONLY_COMMISSION_INSTRUCTIONS",
+  ]);
+  assert.equal(
+    data(events, "agent_started")[0]!.system_prompt,
+    "ONLY_COMMISSION_INSTRUCTIONS",
+  );
+  assert.equal(requestsAtStart, 0);
+  assert.equal(data(events, "tool_returned")[0]!.tool_result.is_error, false);
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+test("an empty system-prompt override sends no native system instructions", async (t) => {
+  const { events, requests, requestsAtStart } = await drive(
+    t,
+    { system_prompt: "" },
     [{ text: "OK" }],
   );
-  const raw = JSON.stringify(requests[0]!.instructions ?? requests[0]!.input);
-  assert.match(raw, /ONLY_COMMISSION_INSTRUCTIONS/);
-  assert.ok(!raw.includes("You are opencode"));
+  assert.equal(requests.length, 1);
+  assert.equal(system(requests[0]!), "");
+  assert.equal(data(events, "agent_started")[0]!.system_prompt, "");
+  assert.equal(requestsAtStart, 0);
   assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+test("a missing bundled prompt hook refuses the run before a model request", async (t) => {
+  const hook = fileURLToPath(
+    new URL("../src/prompt-plugin.js", import.meta.url),
+  );
+  renameSync(hook, `${hook}.disabled`);
+  try {
+    const { events, requests } = await drive(
+      t,
+      { system_prompt: "ONLY_COMMISSION" },
+      [],
+    );
+    assert.equal(requests.length, 0);
+    assert.equal(data(events, "agent_started").length, 0);
+    assert.match(
+      data(events, "error_occurred")[0]!.error_message,
+      /did not load.*system-prompt hook/,
+    );
+  } finally {
+    renameSync(`${hook}.disabled`, hook);
+  }
 });
 
 test("native skill activation uses commissioned SKILL.md and hides ambient skills", async (t) => {
@@ -294,21 +387,25 @@ test("native MCP tools retain server ownership, parallel call IDs, and both erro
 });
 
 test("native child responses are scoped individually without rolled-up double counting", async (t) => {
-  const { events } = await drive(t, {}, [
-    {
-      call: {
-        id: "task1",
-        name: "task",
-        args: {
-          subagent_type: "general",
-          description: "Inspect",
-          prompt: "Reply CHILD_DONE without tools.",
+  const { events, requests } = await drive(
+    t,
+    { system_prompt: "PARENT_ONLY_PROMPT" },
+    [
+      {
+        call: {
+          id: "task1",
+          name: "task",
+          args: {
+            subagent_type: "general",
+            description: "Inspect",
+            prompt: "Reply CHILD_DONE without tools.",
+          },
         },
       },
-    },
-    { text: "CHILD_DONE", usage: { input: 300, cached: 50, output: 20 } },
-    { text: "DONE" },
-  ]);
+      { text: "CHILD_DONE", usage: { input: 300, cached: 50, output: 20 } },
+      { text: "DONE" },
+    ],
+  );
   const invoked = data(events, "subagent_invoked")[0]!;
   assert.equal(invoked.subagent_name, "general");
   const children = data(events, "assistant_message").filter(
@@ -321,6 +418,10 @@ test("native child responses are scoped individually without rolled-up double co
   assert.equal(returned.subagent_usage, undefined);
   assert.match(returned.subagent_result_text, /CHILD_DONE/);
   assert.equal(data(events, "assistant_message").length, 3);
+  assert.equal(system(requests[0]!), "PARENT_ONLY_PROMPT");
+  assert.equal(system(requests[2]!), "PARENT_ONLY_PROMPT");
+  assert.ok(!system(requests[1]!).includes("PARENT_ONLY_PROMPT"));
+  assert.match(system(requests[1]!), /<env>/);
   assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
 });
 

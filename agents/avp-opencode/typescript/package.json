@@ -20,6 +20,7 @@
   "dependencies": {
     "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript",
     "@modelcontextprotocol/sdk": "1.31.0",
+    "@opencode-ai/plugin": "1.18.34",
     "@opencode-ai/sdk": "1.18.34",
     "opencode-ai": "1.18.34",
     "undici": "7.30.0"
