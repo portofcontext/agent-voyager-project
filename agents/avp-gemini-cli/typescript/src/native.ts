@@ -131,9 +131,6 @@ export async function configure(
     autoDistillation: false,
     experimentalAutoMemory: false,
     compressionThreshold: 1,
-    modelConfigServiceConfig: {
-      modelIdResolutions: { [model]: { default: model } },
-    },
   });
   // Core has no switch for project agent/skill discovery. Redirect only those
   // storage paths; tool execution still uses the launcher's working directory.

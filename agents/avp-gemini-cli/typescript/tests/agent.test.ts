@@ -613,3 +613,31 @@ test("an explicit empty system prompt keeps the native base empty", async (t) =>
   assert.equal(data(events, "agent_started")[0]!.system_prompt, "");
   assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
 });
+
+test("native main-model promotion is refused before any provider request", async (t) => {
+  const generator = fake([]);
+  let calls = 0;
+  const stream = generator.generateContentStream.bind(generator);
+  generator.generateContentStream = async (...args) => {
+    calls++;
+    return stream(...args);
+  };
+  const { events } = await drive(
+    t,
+    received({
+      model: {
+        provider: "google",
+        id: "gemini-3.1-flash-lite",
+        credential: { proxy: "test-standin" },
+      },
+    }),
+    generator,
+  );
+  assert.equal(calls, 0);
+  assert.equal(data(events, "assistant_message").length, 0);
+  assert.match(
+    data(events, "error_occurred")[0]!.error_message,
+    /changed the commissioned model to gemini-3.5-flash-lite/,
+  );
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "error");
+});

@@ -57,7 +57,10 @@ scheduler supplies tool results, and all Recorder writes are awaited in order.
 
 - The adapter exposes Gemini API-key authentication. Google subscription OAuth
   and Vertex authentication are outside its declared capabilities. Live sandbox
-  validation against Google remains pending a Gemini credential.
+  validation covers Google API-key proxy authentication.
+- Gemini CLI promotes some older Flash model IDs to newer models. The adapter
+  refuses a changed main model before a provider request. Use a native model ID
+  that Gemini serves unchanged; the live run used `gemini-3.5-flash-lite`.
 - Gemini has no native final structured-output interface exposed here, so
   `output_schema` is refused before a model call.
 - Subagents report rolled-up usage on their invocation. Their individual
