@@ -1,6 +1,6 @@
 {
  "source": "https://models.dev/api.json",
- "fetched": "2026-11-04T20:27:52.323372Z",
+ "fetched": "2026-11-04T21:27:14.851221Z",
  "providers": {
   "302ai": {
    "base_url": "https://api.302.ai/v1",

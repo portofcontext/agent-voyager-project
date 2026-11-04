@@ -1,6 +1,6 @@
 {
   "name": "@agent-voyager-project/sdk",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "AVP wire types and shared agent helpers",
   "license": "MIT",
   "type": "module",

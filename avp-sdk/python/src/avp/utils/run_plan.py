@@ -63,7 +63,9 @@ def plan_run(commission: Commission, descriptor: AgentDescriptor) -> RunPlan:
 
     started = AgentStarted(
         prompt=commission.prompt,
-        system_prompt=commission.system_prompt or descriptor.system_prompt,
+        system_prompt=commission.system_prompt
+        if commission.system_prompt is not None
+        else descriptor.system_prompt,
         model=ModelRef.model_validate(commission.model.model_dump(exclude={"credential"})),
         tools=[t for t in descriptor.tools or [] if tool_on(t.name, t.mcp_server_id)] or None,
         mcp_servers=[

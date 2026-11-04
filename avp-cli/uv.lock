@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "agent-voyager-project"
-version = "0.1.0b1"
+version = "0.1.0b2"
 source = { editable = "../avp-sdk/python" }
 dependencies = [
     { name = "pydantic" },

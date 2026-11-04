@@ -14,7 +14,7 @@ The callback ends its Trajectory and rethrows the abort; the CLI exits with 130.
 ## Install
 
 ```sh
-npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.1/agent-voyager-project-sdk-0.1.0-beta.1.tgz
+npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.2/agent-voyager-project-sdk-0.1.0-beta.2.tgz
 ```
 
 ## Development

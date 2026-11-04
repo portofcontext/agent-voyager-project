@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Both SDK run plans preserve an explicitly empty system prompt.
+
 ### Added
 
 - Built-in agent installation by name, with packaged Dockerfiles and verified

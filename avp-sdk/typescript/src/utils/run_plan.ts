@@ -53,7 +53,7 @@ export function planRun(
   return {
     started: parseDefinition("AgentStarted", {
       prompt: commission.prompt,
-      system_prompt: commission.system_prompt || descriptor.system_prompt,
+      system_prompt: commission.system_prompt ?? descriptor.system_prompt,
       model,
       tools: tools.length ? tools : undefined,
       mcp_servers: servers.length ? servers : undefined,
