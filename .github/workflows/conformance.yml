@@ -285,3 +285,15 @@ jobs:
           python-version: "3.14"
           enable-cache: true
       - run: make openai-agents-check
+
+  deep-agents-sdk:
+    name: avp-deep-agents SDK integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: make deep-agents-check
