@@ -253,3 +253,18 @@ def test_a_failed_describe_deletes_the_other_sandboxes(
         asyncio.run(run_eval(config(tmp_path), tmp_path / "eval"))
     assert killed == [True]
     assert fake.options == []
+
+
+def test_started_is_called_as_each_run_starts(tmp_path: Path, fake: Fake) -> None:
+    seen: list[str] = []
+    asyncio.run(
+        run_eval(
+            config(tmp_path, agents=["pd"]),
+            tmp_path / "eval",
+            None,
+            1,
+            lambda result: seen.append(f"scored {result.run.item.id}"),
+            lambda case: seen.append(f"started {case.item.id}"),
+        )
+    )
+    assert seen[:4] == ["started paris", "scored paris", "started tokyo", "scored tokyo"]

@@ -29,11 +29,12 @@ async def run_eval(
     options: Options | None = None,
     concurrency: int = 1,
     progress: Callable[[Result], None] = lambda _: None,
+    started: Callable[[EvalCase], None] = lambda _: None,
 ) -> list[Result]:
     """Every run's result, in the EvalConfig's order. Runs go in `directory`
     under `runs/<run_id>/`, at most `concurrency` at once. `options` apply to
-    every run; their `directory` is set for each. `progress` is called as
-    each run is scored. Each agent is described once, all at the same time and
+    every run; their `directory` is set for each. `started` is called as each
+    run starts, and `progress` as each is scored. Each agent is described once, all at the same time and
     before any run, and saved in `directory` under `agents/<name>.json`. Raises
     Failed before any run when an agent isn't installed or doesn't describe
     itself. When cancelled, as by Ctrl-C, it deletes the sandboxes still
@@ -56,6 +57,7 @@ async def run_eval(
 
     async def one(case: EvalCase) -> Result:
         async with limit:
+            started(case)
             agent, entrypoint = agents[case.agent]
             run_directory = directory / paths.EVAL_RUNS / case.built.run_id
             began = time.monotonic()
