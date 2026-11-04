@@ -163,7 +163,8 @@ def test_install_run_uninstall(
 
     # Its refusal isn't what commission.5.4 expects, but the runs start, with
     # servers that can't connect in their Commissions.
-    result = CliRunner().invoke(app, [*args, "--rule", "commission.5.4"])
+    connect_cases = ["--case", "stdio-server-wont-start", "--case", "http-server-wont-connect"]
+    result = CliRunner().invoke(app, [*args, *connect_cases])
     assert result.exit_code == 1, result.output
     for outcome in json.loads(result.output[result.output.index("[") :]):
         assert outcome["status"] == "fail", outcome

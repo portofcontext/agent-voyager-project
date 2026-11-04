@@ -229,10 +229,9 @@ with `match` or `command`.
 ## Conformance
 
 `avp conformance check` shows whether an agent follows the spec's rules for
-agents, with no real model calls. The cases are in
-`src/avp_cli/conformance/cases.py`. ⬜ Most cases so far end before a model call,
-in `commission.5.1` and `commission.5.4`; `trajectory.4.1` has the first that
-reaches the mock model.
+agents, with no real model calls. [The conformance guide](docs/conformance.md)
+covers its lifecycle, mock model, and networking. The cases are in
+`src/avp_cli/conformance/cases.py`. The guide lists what the cases can't reach.
 
 - **Cases by rule.** A rule's ID is its spec and section number:
   `commission.5.3` is "Turned-off items are hidden and blocked", and

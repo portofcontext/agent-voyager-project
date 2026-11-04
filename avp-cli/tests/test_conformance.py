@@ -5,6 +5,7 @@ import json
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 
 import pytest
 from conftest import DESCRIPTOR, event, no_sandbox
@@ -23,12 +24,19 @@ from avp_cli.conformance.cases import (
     NO_SUCH_PROVIDER,
     OTHER_SKILL_NAME,
     RUN_ID,
+    SECRET_HEADER,
     SERVER_ID,
     SKILL_NAME,
+    STAND_IN,
+    SYSTEM_PROMPT,
+    TOOL_NAME,
     Case,
     Context,
+    Seen,
     Skip,
+    ToolCallResponse,
 )
+from avp_cli.conformance.model_requests import ModelRequest
 from avp_cli.conformance.rules import RULES
 from avp_cli.console import Failed
 from avp_cli.eval import engine
@@ -66,10 +74,28 @@ class FakeDispatch:
             raise self.error
         assert options.directory is not None
         options.directory.mkdir(parents=True)
+        (options.directory / paths.COMMISSION).write_text(
+            commission.model_dump_json(exclude_none=True)
+        )
         if self.lines is not None:
             text = "\n".join(e if isinstance(e, str) else json.dumps(e) for e in self.lines)
             (options.directory / paths.TRAJECTORY).write_text(text + "\n")
         return Finished(options.directory, self.exit_code, "")
+
+
+class FakeMock:
+    """Stands in for a running mock, with a journal a test can fill."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.journal: list[ModelRequest] = []
+        self.mcp_journal: list[ModelRequest] = []
+
+    def requests(self, case: Case) -> tuple[ModelRequest, ...]:
+        return tuple(self.journal)
+
+    def mcp_requests(self, case: Case) -> tuple[ModelRequest, ...]:
+        return tuple(self.mcp_journal)
 
 
 class FakeServing:
@@ -80,12 +106,15 @@ class FakeServing:
     def __init__(self) -> None:
         self.started: list[tuple[list[Case], str]] = []
         self.open = False
+        self.mock = FakeMock(self.URL)
 
     @contextmanager
-    def __call__(self, cases: list[Case], image: str = mock.IMAGE) -> Generator[str]:
+    def __call__(
+        self, cases: list[Case], descriptor: AgentDescriptor, image: str = mock.IMAGE
+    ) -> Generator[FakeMock]:
         self.started.append((cases, image))
         self.open = True
-        yield self.URL
+        yield self.mock
         self.open = False
 
 
@@ -108,7 +137,7 @@ def case(name: str = "a-case", level: str = "MUST", **change: object) -> Case:
         "commission": lambda context: Commission(
             avp_version="0.1", run_id=RUN_ID, model=context.model, prompt="Say hello."
         ),
-        "check": lambda run: [],
+        "check": lambda run, seen: [],
         **change,
     }
     return Case(**fields)
@@ -258,7 +287,7 @@ def test_every_case_runs_through_the_engine(
     )
     outcomes = check.check("pd", CASES, MODEL)
     by_rule = {o.case: (o.rule, o.status) for o in outcomes}
-    assert len(fake.commissions) == len(CASES)
+    assert len(fake.commissions) == len([o for o in outcomes if o.status != "skip"])
     assert all(status == "pass" for rule, status in by_rule.values() if rule == "commission.5.1"), (
         by_rule
     )
@@ -361,7 +390,7 @@ def test_outcomes_keep_the_cases_order() -> None:
     def skip(context: Context) -> Commission:
         raise Skip("the agent has no subagents")
 
-    def wrong(run: Run) -> list[str]:
+    def wrong(run: Run, seen: Seen) -> list[str]:
         return ["wrong"]
 
     chosen = [case("one", check=wrong), case("two", commission=skip), case("three")]
@@ -392,7 +421,7 @@ def test_a_run_that_did_not_start_fails_with_why(fake: FakeDispatch) -> None:
 
 
 def test_a_check_that_raises_fails_with_why() -> None:
-    def broken(run: Run) -> list[str]:
+    def broken(run: Run, seen: Seen) -> list[str]:
         raise KeyError("bug")
 
     [outcome] = check.check("pd", [case(check=broken)], MODEL)
@@ -509,13 +538,95 @@ def test_a_provider_the_mock_cannot_serve_only_matters_to_a_case_with_responses(
 def test_fixtures_match_each_response_on_the_prompt_and_its_turn() -> None:
     two = case("two", responses=({"content": "a"}, {"content": "b"}))
     one = case("one", responses=SCRIPTED)
-    assert mock.fixtures([two, one]) == {
+    assert mock.fixtures([two, one], DESCRIPTOR) == {
         "fixtures": [
             {"match": {"userMessage": two.prompt, "turnIndex": 0}, "response": {"content": "a"}},
             {"match": {"userMessage": two.prompt, "turnIndex": 1}, "response": {"content": "b"}},
             {"match": {"userMessage": one.prompt, "turnIndex": 0}, "response": {"content": "x"}},
         ]
     }
+
+
+def test_fixtures_give_each_case_its_own_mcp_server() -> None:
+    with_tool = case("tool", responses=SCRIPTED, mcp_tools=({"name": "t", "result": "r"},))
+    failing = case("failing", responses=SCRIPTED, mcp_tools=({"name": "t", "error": "e"},))
+    servers = mock.fixtures([case("plain", responses=SCRIPTED), with_tool, failing], DESCRIPTOR)[
+        "mcpFakes"
+    ]
+    assert [server["mount"] for server in servers] == ["/mcp/tool", "/mcp/failing"]
+    assert servers[0]["tools"][0]["calls"][0]["result"] == "r"
+    assert servers[1]["tools"][0]["calls"][0]["error"] == "e"
+    assert "mcpFakes" not in mock.fixtures([case(responses=SCRIPTED)], DESCRIPTOR)
+
+
+def test_responses_can_come_from_the_descriptor() -> None:
+    scripted = case(responses=lambda descriptor: ({"content": descriptor.agent_name},))
+    [fixture] = mock.fixtures([scripted], DESCRIPTOR)["fixtures"]
+    assert fixture["response"] == {"content": DESCRIPTOR.agent_name}
+
+
+def test_a_case_with_retries_matches_on_the_system_prompt() -> None:
+    retries = case("retries", responses=SCRIPTED, matches_system_prompt=True)
+    [fixture] = mock.fixtures([retries], DESCRIPTOR)["fixtures"]
+    assert fixture["match"] == {"systemMessage": retries.prompt, "turnIndex": 0}
+
+
+def test_tool_call_case_adds_its_mcp_server_on_the_mock(fake: FakeDispatch) -> None:
+    check.check("pd", [by_name("tool-call-has-result")], MODEL)
+    [commission] = fake.commissions
+    [server] = commission.mcp_servers or []
+    assert isinstance(server, McpServerHttp)
+    assert server.url == f"{FakeServing.URL}/mcp/tool-call-has-result"
+
+
+USAGE = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0, "cost_source": "unknown"}
+MODEL_REF = {"provider": "anthropic", "id": "claude-haiku-4-5"}
+
+
+def tool_message(n: int) -> dict:
+    block = {"type": "tool_use", "id": "c1", "name": "t", "input": {}}
+    data = {"content": [block], "model": MODEL_REF, "duration_ms": 1, "usage": USAGE}
+    return event(n, "assistant_message", data)
+
+
+def tool_invoked(n: int, id: str = "c1") -> dict:
+    return event(n, "tool_invoked", {"tool_call_id": id, "tool_name": "t", "tool_input": {}})
+
+
+def tool_returned(n: int, id: str = "c1") -> dict:
+    result = {"type": "tool_result", "tool_use_id": id, "content": "r"}
+    data = {"tool_call_id": id, "tool_name": "t", "duration_ms": 1, "tool_result": result}
+    return event(n, "tool_returned", data)
+
+
+@pytest.mark.parametrize(
+    ("middle", "problems"),
+    [
+        ([tool_message(4), tool_invoked(5), tool_returned(6)], []),
+        ([STARTED[3]], ["no assistant_message has a tool_use block"]),
+        ([tool_message(4), tool_invoked(5)], ["tool call c1 has no tool_returned"]),
+        ([tool_message(4), tool_returned(5)], ["tool call c1 has no tool_invoked"]),
+        (
+            [tool_message(4), tool_invoked(5), tool_returned(6, "other")],
+            ["tool call c1 has no tool_returned"],
+        ),
+        (
+            [tool_message(4), tool_returned(5), tool_invoked(6)],
+            ["tool call c1's tool_returned comes before its tool_invoked"],
+        ),
+        (
+            [tool_invoked(4), tool_message(5), tool_returned(6)],
+            ["tool call c1's tool_invoked comes before its assistant_message"],
+        ),
+    ],
+)
+def test_every_tool_call_needs_its_events_in_order(
+    fake: FakeDispatch, middle: list[dict], problems: list[str]
+) -> None:
+    fake.lines = [*STARTED[:3], *middle, STARTED[4]]
+    [outcome] = check.check("pd", [by_name("tool-call-has-result")], MODEL)
+    assert outcome.reasons == problems
+    assert outcome.status == ("fail" if problems else "pass")
 
 
 def test_no_prompt_matches_inside_another_case() -> None:
@@ -582,7 +693,7 @@ def test_events_in_order_fails(fake: FakeDispatch, lines: list[dict], problem: s
 
 
 def test_mock_image_reaches_the_check(fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "CASES", [case(responses=SCRIPTED, check=lambda run: [])])
+    monkeypatch.setattr(cli, "CASES", [case(responses=SCRIPTED, check=lambda run, seen: [])])
     args = ["conformance", "check", "--agent", "pd", "--json", "--mock-image", "mine"]
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
@@ -605,7 +716,7 @@ def test_model_must_be_provider_slash_id() -> None:
 def test_only_a_must_failure_exits_1(
     monkeypatch: pytest.MonkeyPatch, level: str, exit_code: int
 ) -> None:
-    def wrong(run: Run) -> list[str]:
+    def wrong(run: Run, seen: Seen) -> list[str]:
         return ["wrong"]
 
     monkeypatch.setattr(cli, "CASES", [case(level=level, check=wrong)])
@@ -664,3 +775,403 @@ def test_unknown_rule_fails() -> None:
     result = CliRunner().invoke(app, ["conformance", "check", "--agent", "pd", "--rule", "x.1"])
     assert result.exit_code == 1
     assert "no rule x.1" in str(result.exception)
+
+
+TOOLS = {
+    "tools": [
+        {"name": "bash", "inputSchema": {"type": "object"}},
+        {"name": "search", "inputSchema": {"type": "object"}, "mcp_server_id": "issues"},
+    ],
+}
+SERVERS = {"mcp_servers": [{"id": "issues"}]}
+
+
+def started_with(**lists: object) -> dict:
+    return event(3, "agent_started", {"prompt": "x", "model": MODEL_REF, **lists})
+
+
+def stopped(reason: str = "converged", output: object = None) -> dict:
+    return event(9, "agent_stopped", {"reason": reason, "output": output})
+
+
+def run_lines(*middle: dict) -> list[dict]:
+    return [REQUESTED, DESCRIBED, *middle, stopped()]
+
+
+def request(**body: object) -> ModelRequest:
+    return ModelRequest(path="/v1/messages", headers={"x-api-key": "[REDACTED]"}, body=body)
+
+
+ADDED_SERVER = {
+    "mcp_servers": [{"id": SERVER_ID, "status": "connected"}],
+    "tools": [{"name": TOOL_NAME, "inputSchema": {"type": "object"}, "mcp_server_id": SERVER_ID}],
+}
+OFFERED = [{"type": "function", "function": {"name": TOOL_NAME}}]
+
+
+def message_with(*blocks: dict, usage: dict = USAGE, n: int = 4) -> dict:
+    data = {"content": list(blocks), "model": MODEL_REF, "duration_ms": 1, "usage": usage}
+    return event(n, "assistant_message", data)
+
+
+TEXT = {"type": "text", "text": "x"}
+TOOL_USE = {"type": "tool_use", "id": "c1", "name": "t", "input": {}}
+
+
+def tokens(input: int, output: int, **rest: object) -> dict:
+    return {**USAGE, "input_tokens": input, "output_tokens": output, **rest}
+
+
+@pytest.mark.parametrize(
+    ("name", "lines", "journal", "problem"),
+    [
+        ("enabled-no-tools", run_lines(started_with()), [], None),
+        (
+            "enabled-no-tools",
+            run_lines(started_with(tools=TOOLS["tools"][:1])),
+            [],
+            "agent_started lists bash",
+        ),
+        (
+            "enabled-no-mcp-servers",
+            run_lines(started_with(tools=TOOLS["tools"][1:], **SERVERS)),
+            [],
+            "agent_started lists issues",
+        ),
+        ("enabled-no-mcp-servers", [REQUESTED, DESCRIBED, REFUSED], [], "no agent_started"),
+        ("enabled-one-tool", run_lines(started_with(tools=TOOLS["tools"][:1])), [], None),
+        ("enabled-one-tool", run_lines(started_with()), [], "not only ['bash']"),
+        (
+            "no-settings-allows-all",
+            run_lines(
+                started_with(**TOOLS, **SERVERS, skills=[{"name": "triage", "description": "x"}])
+            ),
+            [],
+            None,
+        ),
+        ("no-settings-allows-all", run_lines(started_with()), [], "leaves out bash"),
+        ("turned-off-tool-hidden", run_lines(), [request(tools=[])], None),
+        (
+            "turned-off-tool-hidden",
+            run_lines(),
+            [request(tools=[{"function": {"name": "bash"}}])],
+            "offered bash",
+        ),
+        ("turned-off-tool-hidden", run_lines(), [], "no request"),
+        (
+            "added-server-used",
+            run_lines(started_with(**ADDED_SERVER)),
+            [request(tools=OFFERED)],
+            None,
+        ),
+        (
+            "added-server-used",
+            run_lines(started_with()),
+            [request()],
+            "doesn't list the MCP server",
+        ),
+        (
+            "added-server-used",
+            run_lines(started_with(**ADDED_SERVER)),
+            [request()],
+            "wasn't offered",
+        ),
+        (
+            "added-skill-loaded",
+            run_lines(started_with(skills=[{"name": SKILL_NAME, "description": "x"}])),
+            [],
+            None,
+        ),
+        ("added-skill-loaded", run_lines(started_with()), [], "doesn't list the skill"),
+        (
+            "system-prompt-replaces",
+            run_lines(),
+            [request(messages=[{"role": "system", "content": SYSTEM_PROMPT}])],
+            None,
+        ),
+        (
+            "system-prompt-replaces",
+            run_lines(),
+            [request(messages=[{"role": "system", "content": f"Mine. {SYSTEM_PROMPT}"}])],
+            "not only the Commission's",
+        ),
+        ("run-uses-model", run_lines(), [request(model="claude-haiku-4-5")], None),
+        ("run-uses-model", run_lines(), [request(model="other")], "asked for the model other"),
+        (
+            "output-mismatch-fails",
+            [
+                REQUESTED,
+                DESCRIBED,
+                event(4, "error_occurred", {"error_code": "output_invalid", "error_message": "x"}),
+                stopped("error", "bad"),
+            ],
+            [],
+            None,
+        ),
+        (
+            "output-mismatch-fails",
+            [REQUESTED, DESCRIBED, stopped("error", "bad")],
+            [],
+            "output_invalid",
+        ),
+        ("output-mismatch-fails", run_lines(), [], "not error"),
+        (
+            "output-match-converges",
+            [REQUESTED, DESCRIBED, stopped("converged", {"answer": "x"})],
+            [],
+            None,
+        ),
+        (
+            "output-match-converges",
+            [REQUESTED, DESCRIBED, stopped("converged", "x")],
+            [],
+            "doesn't match the schema",
+        ),
+        ("secret-not-in-trajectory", run_lines(), [], None),
+        (
+            "secret-not-in-trajectory",
+            run_lines(message_with({"type": "text", "text": STAND_IN})),
+            [],
+            "holds the secret",
+        ),
+        ("env-credential-reaches-model", run_lines(), [request()], None),
+        (
+            "env-credential-reaches-model",
+            run_lines(),
+            [ModelRequest(path="/v1/messages", headers={}, body={})],
+            "no API key",
+        ),
+        (
+            "connected-server-tools-listed",
+            run_lines(started_with(**ADDED_SERVER)),
+            [],
+            None,
+        ),
+        (
+            "connected-server-tools-listed",
+            run_lines(
+                started_with(
+                    mcp_servers=ADDED_SERVER["mcp_servers"],
+                    tools=[*ADDED_SERVER["tools"], {**ADDED_SERVER["tools"][0], "name": "other"}],
+                )
+            ),
+            [],
+            "it offered one tool",
+        ),
+        (
+            "connected-server-tools-listed",
+            run_lines(
+                started_with(
+                    mcp_servers=[{"id": SERVER_ID, "status": "failed"}],
+                    tools=ADDED_SERVER["tools"],
+                )
+            ),
+            [],
+            "the status failed",
+        ),
+        (
+            "one-message-per-response",
+            run_lines(message_with(TEXT), message_with(TEXT, n=5)),
+            [],
+            None,
+        ),
+        ("one-message-per-response", run_lines(message_with(TEXT)), [], "1 assistant_message"),
+        ("message-holds-every-block", run_lines(message_with(TEXT, TOOL_USE)), [], None),
+        (
+            "message-holds-every-block",
+            run_lines(message_with(TOOL_USE)),
+            [],
+            "leaves out the response's text",
+        ),
+        (
+            "message-holds-every-block",
+            run_lines(message_with(TEXT)),
+            [],
+            "leaves out the response's tool",
+        ),
+        (
+            "usage-per-response",
+            run_lines(
+                message_with(TEXT, usage=tokens(100, 10)),
+                message_with(TEXT, usage=tokens(40, 5), n=5),
+            ),
+            [],
+            None,
+        ),
+        (
+            "usage-per-response",
+            run_lines(
+                message_with(TEXT, usage=tokens(100, 10)),
+                message_with(TEXT, usage=tokens(140, 15), n=5),
+            ),
+            [],
+            "not [(100, 10), (40, 5)]",
+        ),
+        (
+            "usage-per-response",
+            run_lines(message_with(TEXT, usage=tokens(100, 10, cache_read_input_tokens=101))),
+            [],
+            "cached input tokens exceed",
+        ),
+        (
+            "usage-per-response",
+            run_lines(message_with(TEXT, usage=tokens(100, 10, cost_usd=1))),
+            [],
+            "cost_source is unknown",
+        ),
+        (
+            "failed-tool-call-is-error",
+            run_lines(
+                event(
+                    5,
+                    "tool_returned",
+                    {
+                        "tool_call_id": "c1",
+                        "tool_name": "t",
+                        "duration_ms": 1,
+                        "tool_result": {
+                            "type": "tool_result",
+                            "tool_use_id": "c1",
+                            "content": "r",
+                            "is_error": True,
+                        },
+                    },
+                )
+            ),
+            [],
+            None,
+        ),
+        ("failed-tool-call-is-error", run_lines(tool_returned(5)), [], "is_error"),
+        ("failed-tool-call-is-error", run_lines(), [], "no tool_returned"),
+        (
+            "failed-run-stops-with-error",
+            [
+                REQUESTED,
+                DESCRIBED,
+                event(4, "error_occurred", {"error_code": "agent_crash", "error_message": "x"}),
+                stopped("error"),
+            ],
+            [],
+            None,
+        ),
+        ("failed-run-stops-with-error", run_lines(), [], "no error_occurred"),
+        (
+            "failed-run-stops-with-error",
+            [REQUESTED, DESCRIBED, stopped("error")],
+            [],
+            "no error_occurred",
+        ),
+    ],
+)
+def test_case_checks(
+    fake: FakeDispatch,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    lines: list[dict],
+    journal: list[ModelRequest],
+    problem: str | None,
+) -> None:
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: FULL
+    )
+    fake.lines = lines
+    fake.serving.mock.journal = journal
+    [outcome] = check.check("pd", [by_name(name)], MODEL)
+    if problem is None:
+        assert (outcome.status, outcome.reasons) == ("pass", [])
+    else:
+        assert outcome.status == "fail"
+        assert any(problem in reason for reason in outcome.reasons), outcome.reasons
+
+
+def test_the_mcp_secret_is_found_in_a_header(fake: FakeDispatch) -> None:
+    fake.serving.mock.mcp_journal = [
+        ModelRequest(path="/mcp/x", headers={SECRET_HEADER: STAND_IN}, body={})
+    ]
+    [outcome] = check.check("pd", [by_name("env-secret-reaches-mcp-server")], MODEL)
+    assert not any("MCP" in reason for reason in outcome.reasons), outcome.reasons
+
+
+def test_turned_off_tool_call_must_be_marked_failed(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: FULL
+    )
+    [response, _] = by_name("turned-off-tool-blocked").scripted(FULL)
+    assert cast(ToolCallResponse, response)["toolCalls"][0]["name"] == "bash"
+    fake.lines = run_lines(
+        event(
+            5,
+            "tool_returned",
+            {
+                "tool_call_id": "c1",
+                "tool_name": "bash",
+                "duration_ms": 1,
+                "tool_result": {"type": "tool_result", "tool_use_id": "c1", "content": "r"},
+            },
+        )
+    )
+    [outcome] = check.check("pd", [by_name("turned-off-tool-blocked")], MODEL)
+    assert any("is_error isn't true" in reason for reason in outcome.reasons), outcome.reasons
+
+
+TOOL = {"name": "bash", "inputSchema": {"type": "object"}}
+
+
+def describes(monkeypatch: pytest.MonkeyPatch, descriptor: AgentDescriptor) -> None:
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: descriptor
+    )
+
+
+def descriptor_with(**fields: object) -> AgentDescriptor:
+    identity = {"avp_version": "0.1", "agent_name": "a", "agent_version": "1"}
+    return AgentDescriptor.model_validate({**identity, **fields})
+
+
+def test_a_repeated_name_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    describes(monkeypatch, descriptor_with(tools=[TOOL, TOOL]))
+    [outcome] = check.check("pd", [by_name("descriptor-names-unique")], MODEL)
+    assert any("repeat bash" in reason for reason in outcome.reasons), outcome.reasons
+
+
+def test_a_tool_naming_an_unknown_server_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    describes(monkeypatch, descriptor_with(tools=[{**TOOL, "mcp_server_id": "gone"}]))
+    [outcome] = check.check("pd", [by_name("mcp-tools-name-their-server")], MODEL)
+    assert any("unknown MCP server gone" in reason for reason in outcome.reasons), outcome.reasons
+
+
+FULL_JSON = FULL.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
+def described(descriptor: dict) -> dict:
+    return event(2, "agent_described", {"descriptor": descriptor})
+
+
+def test_mcp_servers_may_change_the_descriptor(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    describes(monkeypatch, FULL)
+    changed = {
+        **FULL_JSON,
+        "tools": FULL_JSON["tools"][:1],
+        "mcp_servers": [{"id": "issues", "status": "connected"}],
+    }
+    fake.lines = [REQUESTED, described(changed), REFUSED]
+    [outcome] = check.check("pd", [by_name("descriptor-same-every-run")], MODEL)
+    assert outcome.status == "pass", outcome.reasons
+
+
+def test_anything_else_changing_the_descriptor_fails(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    describes(monkeypatch, FULL)
+    fake.lines = [REQUESTED, described({**FULL_JSON, "agent_version": "2"}), REFUSED]
+    [outcome] = check.check("pd", [by_name("descriptor-same-every-run")], MODEL)
+    assert any("differs" in reason for reason in outcome.reasons), outcome.reasons
+
+
+def test_run_requested_must_hold_the_commission_given(fake: FakeDispatch) -> None:
+    [outcome] = check.check("pd", [by_name("refused-run-records-commission")], MODEL)
+    assert any("has no Commission" in reason for reason in outcome.reasons), outcome.reasons

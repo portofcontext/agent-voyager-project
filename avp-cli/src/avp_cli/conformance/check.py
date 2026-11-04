@@ -16,7 +16,7 @@ from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.conformance import mock
-from avp_cli.conformance.cases import Case, Context, Level, Skip
+from avp_cli.conformance.cases import CREDENTIAL_ENV, STAND_IN, Case, Context, Level, Seen, Skip
 from avp_cli.console import Failed, err, line
 from avp_cli.engine import images
 from avp_cli.eval.config import EvalConfig
@@ -27,10 +27,7 @@ from avp_cli.eval.schemas import Item
 from avp_cli.eval.scoring import Result, Score, Scorer, ScorerInput
 from avp_cli.runs.dispatch import Options
 
-KEY = "AVP_CONFORMANCE_API_KEY"
-STAND_IN = "avp-conformance-stand-in"
-"""The model's credential in every case: a stand-in in the agent's environment,
-for runtimes that won't start without a key. No case reaches a real model."""
+KEY = CREDENTIAL_ENV
 BASE_URL = "http://conformance.invalid"
 """The model's URL in a case with no responses, a name that never resolves, so
 the sandbox allows no real provider. A case with responses has the mock model's."""
@@ -81,28 +78,33 @@ def check(
     provider_path = mock.path(model.provider) if mocked else ""
     written: dict[str, Commission] = {}
     outcomes: dict[str, Outcome] = {}
-    with mock.serving(mocked, mock_image) if mocked else nullcontext("") as mock_url:
+    with mock.serving(mocked, descriptor, mock_image) if mocked else nullcontext(None) as server:
         for case in cases:
             context = Context(descriptor=descriptor, model=model)
-            if case.responses:
-                url = model.model_copy(update={"base_url": f"{mock_url}{provider_path}"})
-                context = Context(descriptor=descriptor, model=url, prompt=case.prompt)
+            if case.responses and server:
+                url = model.model_copy(update={"base_url": f"{server.url}{provider_path}"})
+                context = Context(
+                    descriptor=descriptor,
+                    model=url,
+                    prompt=case.prompt,
+                    mcp_url=f"{server.url}{mock.mcp_path(case)}",
+                )
             try:
                 written[case.name] = case.commission(context)
             except Skip as skip:
                 outcomes[case.name] = _outcome(case, "skip", [str(skip)], None)
         if written:
             by_name = {case.name: case for case in cases}
+            kept = directory / paths.EVAL_RUNS
             config = EvalConfig(
                 check_commissions=False,
                 name=NAME,
                 agents=[agent],
                 commissions={NAME: {"$item": "commission"}},
                 dataset=[_item(by_name[name], c) for name, c in written.items()],
-                scorer=_scorer(by_name),
+                scorer=_scorer(by_name, descriptor, model, server, kept),
             )
             options = Options(env={KEY: STAND_IN}, volumes=mounts, entrypoint=entrypoint)
-            kept = directory / paths.EVAL_RUNS
             for result in run_live(config, directory, options, concurrency, kept):
                 case = by_name[result.run.item.id]
                 outcomes[case.name] = _from_result(case, result, directory)
@@ -139,18 +141,33 @@ def _item(case: Case, commission: Commission) -> Item:
     )
 
 
-def _scorer(cases: dict[str, Case]) -> Scorer:
+def _scorer(
+    cases: dict[str, Case],
+    descriptor: AgentDescriptor,
+    model: Model,
+    server: mock.Mock | None,
+    kept: Path,
+) -> Scorer:
     """Passes a run with nothing wrong in its Trajectory or exit code, and
     nothing wrong by its case's check."""
 
     def score(input: ScorerInput) -> Score:
         run = input.run
+        case = cases[run.item.id]
         problems = [f"not a valid event: {i}" for i in run.invalid_trajectory]
         if not run.trajectory and not run.invalid_trajectory:
             problems.append("the agent wrote no Trajectory")
         if run.exit_code != 0:
             problems.append(f"the agent exited with {run.exit_code}")
-        problems += cases[run.item.id].check(run)
+        sent = kept / run.id / paths.COMMISSION
+        seen = Seen(
+            descriptor=descriptor,
+            model=model,
+            sent=Commission.model_validate_json(sent.read_text()) if sent.exists() else None,
+            requests=server.requests(case) if server and case.responses else (),
+            mcp_requests=server.mcp_requests(case) if server and case.mcp_tools else (),
+        )
+        problems += case.check(run, seen)
         return Score(value=0 if problems else 1, passed=not problems, reasons=problems)
 
     return score
