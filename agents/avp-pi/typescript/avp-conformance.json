@@ -1,6 +1,0 @@
-{
-  "command": ["node", "dist/src/main.js"],
-  "cwd": ".",
-  "env": {},
-  "description": "avp-pi (typescript) entrypoint"
-}

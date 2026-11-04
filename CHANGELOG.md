@@ -16,6 +16,10 @@
 
 ### Changed
 
+- Pi uses the rebuilt TypeScript SDK, its own locked project, and a Node 24
+  sandbox image. Native response and tool events use the Recorder; legacy
+  installer and release files are removed.
+
 - All three SDK command lines include `avp_version` in their ping replies,
   matching the new CLI's image installation check.
 - Deep Agents uses the rebuilt SDK in a standalone locked project with a

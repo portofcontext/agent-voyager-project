@@ -130,7 +130,7 @@ One PR per agent. TypeScript and Rust agents wait for their SDKs.
 | `avp-openai-agents` | Python | ✅ | ✅ | ✅ OpenAI | ✅ |
 | `avp-gemini-cli` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
 | `avp-opencode` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
-| `avp-pi` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-pi` | TypeScript | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-goose` | Rust | ⬜ | ⬜ | ⬜ | ⬜ |
 
 - **New SDK:** its own project on `avp-sdk`; `ping`, `describe`, and `run` work.

@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-/**
- * Agent entrypoint (`ping` / `describe` / `run`), via the stock agent CLI.
- * The adapter loads lazily so `ping` never imports Pi.
- */
-import { main } from "@avp/types/agent-cli";
+/** Load the native runtime only for describe or run. */
+import { main } from "@agent-voyager-project/sdk/agent_cli";
 
 process.exitCode = await main({
-  describe: async () => (await import("./agent.js")).describe(),
-  run: async (commission, sink, signal) => (await import("./agent.js")).run(commission, sink, { signal }),
+  describe: async () => (await import("./descriptor.js")).describe(),
+  run: async (received, sink, signal) =>
+    (await import("./agent.js")).run(received, sink, signal),
 });
