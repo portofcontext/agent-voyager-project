@@ -11,14 +11,14 @@ resolution-markers = [
 
 [[package]]
 name = "agent-voyager-project"
-version = "0.1.0b1"
-source = { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl" }
+version = "0.1.0b2"
+source = { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl" }
 dependencies = [
     { name = "pydantic" },
     { name = "typer" },
 ]
 wheels = [
-    { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl", hash = "sha256:20ad7125040f80fba2724514c5b37be614832b7658047e468c72df57bdb3388d" },
+    { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", hash = "sha256:1321ab4c72c3cf872d2936879a532df352a0fa0de7fe6c7712c6f94fd89862ec" },
 ]
 
 [package.metadata]
@@ -88,7 +88,7 @@ wheels = [
 
 [[package]]
 name = "avp-deep-agents"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -109,7 +109,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-voyager-project", url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl" },
+    { name = "agent-voyager-project", url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl" },
     { name = "deepagents", specifier = "==0.7.25" },
     { name = "jsonschema", specifier = ">=4" },
     { name = "langchain-anthropic", specifier = "==1.7.6" },

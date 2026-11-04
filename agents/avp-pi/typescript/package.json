@@ -1,6 +1,6 @@
 {
   "name": "avp-pi",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AVP adapter for the Pi coding agent.",
   "license": "MIT",
   "private": true,
@@ -21,7 +21,7 @@
     "@earendil-works/pi-ai": "1.2.0",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-mcp": "1.2.0",
-    "@agent-voyager-project/sdk": "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.1/agent-voyager-project-sdk-0.1.0-beta.1.tgz"
+    "@agent-voyager-project/sdk": "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.2/agent-voyager-project-sdk-0.1.0-beta.2.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

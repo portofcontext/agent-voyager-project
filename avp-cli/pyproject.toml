@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-    "agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl",
+    "agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl",
     "httpx>=0.28",
     "keyring>=25",
     "mcp>=2.3",

@@ -1,10 +1,10 @@
 [project]
 name = "avp-claude-agent-sdk"
-version = "0.2.3"
+version = "0.2.4"
 description = "AVP agent over Claude Code through the Claude Agent SDK."
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl", "claude-agent-sdk==0.2.87", "jsonschema>=4"]
+dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", "claude-agent-sdk==0.2.87", "jsonschema>=4"]
 
 [project.scripts]
 avp-claude-agent-sdk-cli = "avp_claude_agent_sdk.cli:main"
