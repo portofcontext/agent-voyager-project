@@ -2,7 +2,7 @@
   "name": "avp-gemini-cli",
   "version": "0.1.3",
   "description": "AVP adapter for Gemini CLI.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "bin": {

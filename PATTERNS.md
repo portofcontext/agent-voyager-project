@@ -1,60 +1,62 @@
 # Integration patterns
 
-An AVP adapter configures an existing runtime from a Commission and reports its
-native events as a Trajectory. The runtime owns model calls, tools, and the loop.
-The [SDK guide](avp-sdk/README.md) describes the shared Recorder and run plan.
+An AVP adapter configures an existing runtime from a Commission and records its
+native events as a Trajectory. The runtime calls models, executes tools, and controls the loop.
+Use the SDK's [Recorder and run plan](avp-sdk/README.md) for shared behavior.
 
 ## Adapt a runtime
 
-Use a migrated adapter as a reference: [Pydantic AI](agents/avp-pydantic-ai/python/)
-for Python or [Pi](agents/avp-pi/typescript/) for TypeScript. Each project has its
-own package file, lockfile, tests, installed command, and Dockerfile.
+Start with [Pydantic AI](agents/avp-pydantic-ai/python/) for Python or
+[Pi](agents/avp-pi/typescript/) for TypeScript. Each adapter has its own package,
+lockfile, tests, and command line. Built-in agents' Dockerfiles live in
+[`avp-cli/src/avp_cli/agents/dockerfiles/`](avp-cli/src/avp_cli/agents/dockerfiles/).
 
-1. Describe the runtime's actual built-in tools, MCP servers, skills, subagents,
-   and supported models. Frameworks with no built-ins declare none.
-2. Apply the SDK's run plan through the runtime's native configuration. Honor
-   model and credential references, prompt replacement, output schema, MCP
-   connections, skill files, and the per-agent allowlists.
-3. Report native responses and results through the Recorder. Document data and
-   capabilities that the runtime cannot expose in the adapter's Known gaps.
+1. Describe the runtime's built-in tools, MCP servers, skills, subagents, and
+   supported models. Leave out capabilities the runtime does not provide.
+2. Configure the runtime from the Commission and SDK run plan: model,
+   credentials, system prompt, output schema, MCP servers, skills, and allowlists.
+3. Send native responses and tool results to the Recorder. Document unsupported
+   capabilities and unavailable event data in the adapter's README.
 4. Expose `ping`, `describe`, and `run` through the SDK's agent command line.
-   Keep runtime initialization out of `ping`.
-5. Build the runtime and all dependencies into the image. Avoid startup
-   downloads, telemetry, and helper model calls outside the observed loop.
+   `ping` must work without initializing the runtime.
+5. Bundle the runtime and its dependencies in the image. Disable startup
+   downloads, telemetry, and model calls the adapter cannot record.
 
 ## Translate native events
 
-- Record one `assistant_message` per model response. Preserve all of its content
-  and tool calls, and use the final usage for that response.
-- Convert cumulative runtime usage to deltas before reporting it. Include cache
-  and reasoning tokens as the spec defines them; never count child usage again
-  as parent usage.
-- Match tool results to calls by ID, including parallel calls and error results.
-  Preserve MCP structured results when the runtime exposes them.
-- Scope child responses and tools to the subagent invocation that owns them.
-  Preserve cancellation and failure outcomes, even when the parent recovers.
-- Stop the runtime on cancellation and close the Trajectory with the appropriate
-  reason. Invalid adapter reports are bugs; don't suppress Recorder errors.
+- Record one `assistant_message` per model response, including its content,
+  tool calls, and final usage.
+- Convert cumulative usage to per-response deltas. Include cache and reasoning
+  tokens as the spec defines them. Count subagent usage once.
+- Match tool results to calls by ID, including parallel calls and errors.
+  Keep MCP structured results when the runtime exposes them.
+- Attach child responses and tool events to their subagent invocation.
+  Record child cancellations and failures even when the parent recovers.
+- Stop the runtime on cancellation and close the Trajectory with the matching
+  reason. Fix invalid Recorder reports; do not suppress their errors.
 
-The [Trajectory spec](spec/v0.1/trajectory.md) defines the required events and
-ordering. Shared SDK cases test the Recorder; adapter integration tests must also
-exercise native events through it.
+Follow the [Trajectory spec](spec/v0.1/trajectory.md) for event fields and order.
+Adapter integration tests should pass native runtime events through the Recorder
+and check the resulting Trajectory.
 
 ## Launch and verify
 
-The launcher owns workspaces, environment, credentials, and OS isolation.
-The CLI installs an image, checks `ping` and `describe`, and starts a fresh
-OpenSandbox sandbox for each command. A Commission contains references to secrets;
-the Credential Vault injects proxy credentials outside the agent.
+The launcher sets up the workspace, environment, credentials, and OS isolation.
+The CLI starts a fresh OpenSandbox sandbox for each command. Commissions refer to
+secrets by name; the Credential Vault adds proxy credentials to outgoing requests.
 
-Build an adapter from the repository root while its SDK dependency is local:
+From the repository root, build and check an adapter using its Dockerfile and
+source directory:
 
 ```sh
-uv run --project avp-cli avp agent install pd agents/avp-pydantic-ai/python/Dockerfile --context .
+uv run --project avp-cli avp agent install pd \
+  avp-cli/src/avp_cli/agents/dockerfiles/pydantic-ai.Dockerfile \
+  --context agents/avp-pydantic-ai/python
 uv run --project avp-cli avp agent describe pd
 uv run --project avp-cli avp conformance check --agent pd
 ```
 
-Report conformance passes and skips together. The case inventory is still growing;
-a passing check does not establish coverage for rules with no cases. Use native
-integration tests and the adapter README's real-model checks as well.
+For SDK changes, see [local SDK development](agents/README.md#local-sdk-development).
+Use `avp conformance list` to see which rules have cases. Report passes and skips
+together, and identify rules with no coverage. Also run the adapter's native
+integration tests and real-model checks.

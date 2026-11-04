@@ -2,7 +2,8 @@
 name = "avp-openai-agents"
 version = "0.0.5"
 description = "AVP agent over the OpenAI Agents SDK."
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", "openai-agents==0.23.1", "jsonschema>=4"]
 

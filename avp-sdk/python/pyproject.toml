@@ -3,7 +3,8 @@ name = "agent-voyager-project"
 version = "0.1.0b2"
 description = "Python SDK for the Agent Voyager Project (AVP) v0.1 specs."
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.11,<3", "typer>=0.20"]
 

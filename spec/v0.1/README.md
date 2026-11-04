@@ -66,10 +66,6 @@ AVP reuses existing specs wherever one already fits:
 - **[models.dev](https://models.dev)**: the provider and model IDs that name a model, and the prices AVP uses to compute each response's cost.
 - **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of all three AVP specs.
 
-Trajectory events are not [CloudEvents](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md), and no spec relies on CloudEvents. Each event converts to one, with `run_id` as the `subject`, so a supervisor can forward a Trajectory to event infrastructure that routes CloudEvents.
-
-Trajectory events hold no [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/trace/api/) span IDs either. A Trajectory converts to OpenTelemetry spans: the run, each model response, and each tool call or subagent become spans, linked through the events' IDs.
-
 ## Out of scope
 
 AVP defines the shape of the Commission, the Agent Descriptor, and Trajectory events. Everything else about running an agent is up to the deployment:
