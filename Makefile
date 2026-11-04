@@ -25,7 +25,6 @@ TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
 	agents/_template/python \
-	agents/avp-deep-agents/python \
 	avp-cli
 
 
@@ -112,7 +111,6 @@ test-docker:
 # Manifest paths, relative to the repo root the harness runs from.
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
-AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
 PI_MANIFEST := $(PI_DIR)/avp-conformance.json
@@ -158,9 +156,6 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
-	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
 	@$(MAKE) --no-print-directory pi-build
 	@$(UV) run avp-conformance ping --agent $(PI_MANIFEST)
@@ -384,8 +379,15 @@ openai-agents-check:
 	@cd agents/avp-openai-agents/python && $(UV) run ty check
 	@cd agents/avp-openai-agents/python && $(UV) run pytest -q
 
+.PHONY: deep-agents-check
+deep-agents-check:
+	@cd agents/avp-deep-agents/python && $(UV) run ruff format --check .
+	@cd agents/avp-deep-agents/python && $(UV) run ruff check .
+	@cd agents/avp-deep-agents/python && $(UV) run ty check
+	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
+
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

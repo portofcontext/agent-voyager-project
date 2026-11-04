@@ -39,7 +39,7 @@ llm-judge = [
     "pydantic-ai-slim[anthropic,google,openai,openrouter]>=2.58,<3",
     "anthropic<2",
 ]
-dev = ["pytest>=7", "ruff>=0.6"]
+dev = ["jsonschema>=4", "pytest>=7", "ruff>=0.6"]
 
 [project.scripts]
 avp = "avp_cli.cli:main"

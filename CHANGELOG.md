@@ -16,6 +16,9 @@
 
 ### Changed
 
+- Deep Agents uses the rebuilt SDK in a standalone locked project with a
+  sandbox image. Native model, tool, and subagent events use the Recorder;
+  legacy installer and release files are removed.
 - Pydantic AI installs as a sandbox image and no longer registers with the
   legacy wheel installer or conformance entrypoint.
 - Claude uses the rebuilt Python SDK, a locked standalone project, and a

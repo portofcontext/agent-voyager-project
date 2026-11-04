@@ -16,7 +16,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 
-from avp_deep_agents import commission as cm
+from avp_deep_agents import agent
 
 
 def usage(input_tokens: int = 1000, output_tokens: int = 50, cache_read: int = 400) -> dict:
@@ -72,8 +72,8 @@ def script(monkeypatch: pytest.MonkeyPatch) -> Callable[..., ScriptedModel]:
     """Install a scripted model as the run's chat model."""
 
     def install(*steps: Any) -> ScriptedModel:
-        model = ScriptedModel(messages=iter(steps))
-        monkeypatch.setattr(cm, "chat_model", lambda commission: model)
+        model = ScriptedModel(messages=iter(steps), profile={"structured_output": True})
+        monkeypatch.setattr(agent, "model", lambda commission: model)
         return model
 
     return install
