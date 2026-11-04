@@ -29,8 +29,7 @@
  *
  * `--built-in` is the conformance fixture of the agent's pretend defaults: its
  * `system_prompt` and `prompt` seed the Commission when it leaves them unset
- * (the Commission wins). Matches the Python `avp.agent_cli` and the Rust
- * `avp::agent_cli`.
+ * (the Commission wins). Matches the Python `avp.agent_cli`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 

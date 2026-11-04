@@ -42,7 +42,6 @@ REPLY = "avp-smoke-ok"
 
 # The provider each agent runs on here: its default where it has one.
 MODELS = {
-    "goose": "anthropic/claude-haiku-4-5",
     "claude-code": "anthropic/claude-haiku-4-5",
     "pi": "anthropic/claude-haiku-4-5",
     "opencode": "anthropic/claude-haiku-4-5",
@@ -317,7 +316,7 @@ def _recipe(name: str, args: argparse.Namespace):
 
 def _final_answer(events: list[dict], stopped: dict) -> str:
     """The run's answer: `agent_stopped`'s output when the agent reports one,
-    else the text of its last assistant message (goose leaves output unset)."""
+    else the text of its last assistant message."""
     if stopped.get("avp.output"):
         return str(stopped["avp.output"])
     for e in reversed(events):
@@ -343,7 +342,6 @@ def smoke(name: str, args: argparse.Namespace) -> bool:
         **dirs,
         **_endpoint_env(provider, f"http://host.docker.internal:{stub.port}"),
         f"{provider.upper()}_API_KEY": "avp-smoke",
-        "GOOSE_PROVIDER": provider,
         **dict(recipe.env),
     }
     commission = {

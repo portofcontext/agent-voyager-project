@@ -1,7 +1,7 @@
 # Agent template
 
 Starting point for a new AVP agent: an adapter over a harness (an agent SDK)
-that owns its own loop. Python in `python/`, Rust in `rust/`. Each runs end to
+that owns its own loop. The Python template in `python/` runs end to
 end out of the box against a scripted stand-in harness, so a fresh copy passes
 its tests and `ping` / `describe` before you change a line.
 
@@ -18,10 +18,9 @@ An adapter is two small files of yours on top of the binding:
 
 ```bash
 make new-agent NAME=avp-<sdk>          # Python
-make new-agent-rust NAME=avp-<sdk>     # Rust
 ```
 
-This copies the template to `agents/<NAME>/<lang>/`, renames the package, the
+This copies the template to `agents/<NAME>/python/`, renames the package, the
 agent name (`AGENT_NAME`, the key Commissions use in per-agent allow-lists),
 and the manifest command, and registers the agent in the uv workspace,
 `make test`, `make conformance`, and ruff's first-party list. Run the
@@ -51,11 +50,9 @@ Delete `harness`, add the SDK as a dependency, and map its events in `agent`:
   records `error(...)` and `stop(error)`, then re-raises (non-zero exit).
   SIGINT / SIGTERM must end with `stop(interrupted)`: the Python and
   TypeScript stock entrypoints turn them into task cancellation / an
-  `AbortSignal`, so stop the runtime there; a Rust adapter races its event
-  loop against the signals itself (see `avp-goose`'s `interrupt_signal`).
+  `AbortSignal`, so stop the runtime there.
 - **Invalid reports.** Recorder validation errors are adapter bugs: Python
-  raises `RecorderError`; Rust returns `io::ErrorKind::InvalidInput` (including
-  from `usage`). Propagate them through the crash path. Once stopped, the
+  raises `RecorderError`. Propagate them through the crash path. Once stopped, the
   trajectory is closed, so propagate any later reporting error to the caller.
   Handle SDK-specific repeated signals explicitly before calling the Recorder.
 - **Files.** The stock entrypoint enters `AVP_WORKSPACE` when supplied by the
@@ -71,7 +68,7 @@ the agent: built-in tools, skills, and subagents are invisible to AVP except
 through the descriptor (`avp/core/spec/v0.1/README.md` §1). So the descriptor
 mirrors the harness; the adapter never adds built-ins of its own:
 
-- **A product** (Claude Code, Goose) ships default tools, skills, subagents:
+- **A product** (Claude Code, OpenCode) ships default tools, skills, subagents:
   declare exactly those.
 - **A framework** (the OpenAI Agents SDK) ships agents with none: declare none.
   Tools then come only from the Commission's `mcp_servers`, and cases that
@@ -114,14 +111,13 @@ is registered and has a release. Do all of this in the PR that adds the agent:
 1. Declare how it installs and runs in a sandbox, in its own package file:
    `[tool.avp.release]` in `pyproject.toml` (`module`, `wheels`, optional
    `setup` RUN steps and `env`), `"avp"` in `package.json` (`node`, `asset`,
-   `entry`, optional `setup`; the minimum Node is `engines.node`), or
-   `[package.metadata.avp]` in `Cargo.toml` (`binary`, `asset`). A `{platform}`
-   or `{target}` asset ships one archive per platform. Pin anything the
+   `entry`, optional `setup`; the minimum Node is `engines.node`). A `{platform}`
+   asset ships one archive per platform. Pin anything the
    runtime needs (a CLI it drives, say) there, not in the CLI.
 2. Register it in `avp-cli/src/avp_cli/agents.json` (`version`, `descriptor`,
    `path`); `make pins` keeps the version equal to the package's.
 3. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
-   (Python), `release-goose.yml` (binary), or `release-pi.yml` (Node) and
+   (Python) or `release-pi.yml` (Node) and
    change the agent name. Its build job uploads `dist-*` artifacts and
    `agent-release.yml` smoke-tests and publishes them.
 4. Check it end to end: `make build-agents AGENTS=<name>` then
@@ -131,7 +127,7 @@ is registered and has a release. Do all of this in the PR that adds the agent:
    `make release-cli` cut it).
 
 Worked adapters: `agents/avp-claude-agent-sdk/python/` (streamed chunks, async
-subagents), `agents/avp-goose/rust/` (late usage, subagents via a tool),
+subagents),
 `agents/avp-openai-agents/python/` (complete Responses messages, managed MCP),
 `agents/avp-codex/python/` (native app-server raw inference boundaries),
 `agents/avp-pi/typescript/` (a TypeScript runtime on the TypeScript Recorder, MCP

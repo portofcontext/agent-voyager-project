@@ -1,7 +1,7 @@
 # Python workspace metadata. NOT a publishable package.
 #
 # AVP is a multi-language repo. The core project (spec, conformance, and the
-# Python / Rust / TypeScript bindings) lives under `avp/`; agents live under
+# Python / TypeScript bindings) lives under `avp/`; agents live under
 # `agents/<name>/<lang>/`, SDK adapters under `sdks/`, and supervisor examples
 # under `supervisors/`. The Python workspace root lives at the REPO ROOT so a
 # single `uv sync` spans the core package and every Python member across those

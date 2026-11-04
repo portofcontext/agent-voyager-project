@@ -89,6 +89,34 @@ def test_node_release_installs_setup_and_its_arch_archive(tmp_path, monkeypatch)
     assert m.node.min == "22.19.0"
 
 
+def test_binary_release_generates_cpu_and_gpu_recipes_without_a_registered_agent(
+    tmp_path, monkeypatch
+) -> None:
+    script = _script()
+    package = script.agent_packages.Package(
+        agent="binary-fixture",
+        kind="binary",
+        path=tmp_path,
+        version="1.2.3",
+        meta={
+            "agent": "binary-fixture",
+            "binary": "fixture-agent",
+            "asset": "fixture-agent-{target}.tar.gz",
+            "gpu_asset": "fixture-agent-gpu-{target}.tar.gz",
+            "gpu_setup": ["apt-get install -y libvulkan1"],
+        },
+    )
+    monkeypatch.setattr(script.agent_packages, "read", lambda _agent: package)
+    manifest = _generated("binary-fixture", tmp_path)
+    cpu = release_manifest.container_recipe(manifest, url=URL)
+    gpu = release_manifest.container_recipe(manifest, url=URL, gpu=True)
+    assert cpu.command == gpu.command == ("fixture-agent",)
+    assert "fixture-agent-$(uname -m)-unknown-linux-gnu.tar.gz" in cpu.install[0]
+    assert "fixture-agent-gpu-$(uname -m)-unknown-linux-gnu.tar.gz" in gpu.install[0]
+    assert "apt-get install -y libvulkan1" not in cpu.setup
+    assert gpu.setup == (*cpu.setup, "apt-get install -y libvulkan1")
+
+
 # ── recipes ───────────────────────────────────────────────────────────────────
 
 

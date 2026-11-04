@@ -209,8 +209,7 @@ Record when the agent loads a skill. Today no event does, so a supervisor
 can't tell which of `agent_started`'s `skills` the run used, or when.
 
 - Why: a load shows up only as an ordinary tool call or file read, if at all,
-  and each runtime does it differently: Claude's `Skill` tool, Goose's
-  `load_skill` tool (`agents/avp-goose/rust/src/runner.rs:719`), or a plain
+  and each runtime does it differently: Claude's `Skill` tool or a plain
   read of `SKILL.md` by an agent without a skill tool.
 - To work out:
   - A `skill_loaded` event, or a field on `tool_invoked`.

@@ -61,7 +61,7 @@ class AgentSource:
 
     @property
     def tag_prefix(self) -> str:
-        """The GitHub release tag stem (`agent-goose` → `agent-goose-v<version>`)."""
+        """The GitHub release tag stem (`agent-example` → `agent-example-v<version>`)."""
         return f"agent-{self.name}"
 
     @property

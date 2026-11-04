@@ -230,7 +230,6 @@ def _commission(**kw) -> Commission:
 
 @pytest.mark.parametrize("provider", [None, "anthropic", "openrouter", "local"])
 def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, provider) -> None:
-    monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
     for name in (
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -240,7 +239,7 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
         monkeypatch.setenv(name, name)
     monkeypatch.setenv("OPENAI_UNRELATED_SECRET", "must-not-pass")
     c = _commission(provider=Provider(id=provider) if provider else None)
-    a = agent.PreparedAgent("fake", "x", (), env={"GOOSE_PROVIDER": "mistral"})
+    a = agent.PreparedAgent("fake", "x", (), env={"ADAPTER_SETTING": "preserved"})
     env = agent._sandbox_env(a, c, None)
     expected = {
         None: {"OPENAI_API_KEY"},
@@ -250,11 +249,10 @@ def test_sandbox_env_passes_only_selected_provider_credentials(monkeypatch, prov
     }[provider]
     assert {k for k in env if k.endswith(("API_KEY", "OAUTH_TOKEN"))} == expected
     assert "OPENAI_UNRELATED_SECRET" not in env
-    assert env["GOOSE_PROVIDER"] == (provider or "openai")
+    assert env["ADAPTER_SETTING"] == "preserved"
 
 
 def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:
-    monkeypatch.setenv("GOOSE_PROVIDER", "openrouter")
     a = agent.PreparedAgent(
         "fake",
         "x",
@@ -273,7 +271,6 @@ def test_vault_routing_overrides_manifest_credentials(monkeypatch) -> None:
         env = agent._sandbox_env(a, c, brk)
         assert env["ANTHROPIC_API_KEY"] == brk.token
         assert env["ANTHROPIC_HOST"] == env["ANTHROPIC_BASE_URL"] == brk.route_url("llm/anthropic")
-        assert env["GOOSE_PROVIDER"] == "anthropic"
         assert env["IS_SANDBOX"] == "1"
         assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
 
@@ -402,7 +399,12 @@ def test_start_broker_none_without_secrets() -> None:
 
 def test_sandbox_env_broker_mode_has_no_ambient_credentials(monkeypatch) -> None:
     monkeypatch.setenv("AVP_VAULT_OPENROUTER", "sk-or-REAL")
-    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GOOSE_SECRET"):
+    for name in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "ADAPTER_SECRET",
+    ):
         monkeypatch.setenv(name, "ambient-secret")
     c = _commission(
         provider=Provider(
@@ -417,7 +419,6 @@ def test_sandbox_env_broker_mode_has_no_ambient_credentials(monkeypatch) -> None
         assert env["OPENROUTER_API_KEY"] == brk.token
         assert env["OPENROUTER_HOST"] == brk.route_url("llm/openrouter")
         assert env["OPENROUTER_BASE_URL"] == brk.route_url("llm/openrouter") + "/api/v1"
-        assert env["GOOSE_PROVIDER"] == "openrouter"
         assert not any("sk-or-REAL" in v for v in env.values())  # real key never in sandbox env
         assert "ambient-secret" not in env.values()
     finally:

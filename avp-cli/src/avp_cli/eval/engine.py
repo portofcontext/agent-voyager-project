@@ -1,7 +1,7 @@
 """The eval loop: run every setup over every item, score it, aggregate a board.
 
 `run_eval` is `len(setups) * len(items)` real agent runs. Each run drives a real
-AVP agent (Goose or Claude Code) through its manifest contract
+AVP agent (Codex or Claude Code) through its manifest contract
 (`agent.run_agent`) and reduces the trajectory with `observability.summarize`.
 The only new trajectory reading is `extract_final_output`, which pulls the
 agent's final answer from `agent_stopped.output`, falling back to the last

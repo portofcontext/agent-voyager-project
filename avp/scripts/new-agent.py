@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Scaffold a new AVP agent from `agents/_template/<lang>/`.
+"""Scaffold a new AVP agent from `agents/_template/python/`.
 
     make new-agent NAME=avp-mastra          # Python
-    make new-agent-rust NAME=avp-mastra     # Rust
 
-Copies the template to `agents/<NAME>/<LANG>/`, renames the package, the
+Copies the template to `agents/<NAME>/python/`, renames the package, the
 agent name, and the manifest command, and registers the agent everywhere the
 template is registered: the uv workspace (members, root dependencies,
 sources), `make test` (`TEST_PKGS`), `make conformance`, and ruff's
 first-party list (Python). The result passes its tests and `ping` /
 `describe` before you change a line; then replace its stand-in harness.
 
-`NAME` is the distribution / crate name and the agent's `AGENT_NAME` (the key
+`NAME` is the distribution name and the agent's `AGENT_NAME` (the key
 Commissions use in their per-agent allow-lists), e.g. `avp-mastra`.
 """
 
@@ -39,7 +38,7 @@ def _edit(path: Path, *pairs: tuple[str, str]) -> None:
 
 def _rewrite_tree(root: Path, name: str, pkg: str) -> None:
     for path in root.rglob("*"):
-        if path.is_file() and path.suffix in {".py", ".rs", ".toml", ".json", ".md"}:
+        if path.is_file() and path.suffix in {".py", ".toml", ".json", ".md"}:
             text = path.read_text()
             path.write_text(text.replace(TEMPLATE_PKG, pkg).replace(TEMPLATE_NAME, name))
 
@@ -64,20 +63,10 @@ def scaffold_python(name: str, dest: Path) -> None:
         ),
     )
     _edit(REPO / "ruff.toml", ('"avp_agent_template", ', f'"avp_agent_template", "{pkg}", '))
-    _register_make(name, rel, test_pkg=True)
+    _register_make(name, rel)
 
 
-def scaffold_rust(name: str, dest: Path) -> None:
-    shutil.copytree(
-        REPO / "agents/_template/rust",
-        dest,
-        ignore=shutil.ignore_patterns("target", "Cargo.lock"),
-    )
-    _rewrite_tree(dest, name, name.replace("-", "_"))
-    _register_make(name, dest.relative_to(REPO).as_posix(), test_pkg=False)
-
-
-def _register_make(name: str, rel: str, *, test_pkg: bool) -> None:
+def _register_make(name: str, rel: str) -> None:
     var = re.sub(r"[^A-Z0-9]", "_", name.upper()) + "_MANIFEST"
     pairs = [
         (
@@ -93,32 +82,25 @@ def _register_make(name: str, rel: str, *, test_pkg: bool) -> None:
             f"\t@$(UV) run avp-conformance describe --agent $({var})\n",
         ),
     ]
-    if test_pkg:
-        pairs.append(
-            ("\tagents/_template/python \\\n", f"\tagents/_template/python \\\n\t{rel} \\\n")
-        )
+    pairs.append(("\tagents/_template/python \\\n", f"\tagents/_template/python \\\n\t{rel} \\\n"))
     _edit(REPO / "Makefile", *pairs)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("name", help="distribution / crate name and AGENT_NAME, e.g. avp-mastra")
-    parser.add_argument("--lang", choices=["python", "rust"], default="python")
+    parser.add_argument("name", help="distribution name and AGENT_NAME, e.g. avp-mastra")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z][a-z0-9]*(-[a-z0-9]+)*", args.name):
         sys.exit("error: NAME must be lowercase kebab-case, e.g. avp-mastra")
-    dest = REPO / "agents" / args.name / args.lang
+    dest = REPO / "agents" / args.name / "python"
     if dest.exists():
         sys.exit(f"error: {dest.relative_to(REPO)} already exists")
-    (scaffold_python if args.lang == "python" else scaffold_rust)(args.name, dest)
+    scaffold_python(args.name, dest)
     rel = dest.relative_to(REPO)
     print(f"created {rel}")
     print("next:")
-    if args.lang == "python":
-        print("  uv sync")
-        print(f"  (cd {rel} && uv run pytest -q)")
-    else:
-        print(f"  (cd {rel} && cargo test)")
+    print("  uv sync")
+    print(f"  (cd {rel} && uv run pytest -q)")
     print(f"  uv run avp-conformance ping --agent {rel}/avp-conformance.json")
     print("  then replace the stand-in harness: see agents/_template/README.md")
     return 0

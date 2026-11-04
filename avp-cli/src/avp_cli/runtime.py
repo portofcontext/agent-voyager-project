@@ -10,7 +10,7 @@ Two backends:
   isolation with a DNS-filtering egress sidecar; the production path today.
 - `libkrun`: a podman machine on the libkrun provider. Its reason to exist is GPU
   passthrough — on Apple Silicon it exposes the host GPU to the Linux guest via
-  virtio-gpu Venus, so an in-process local model (goose's `local` provider) runs
+  virtio-gpu Venus, so an in-process local model runs
   GPU-accelerated. Selected with `AVP_RUNTIME=libkrun`.
 
 The `local` selection runs installed subprocesses in `agent.py` and does not

@@ -50,7 +50,7 @@ browse_comp*.jsonl
 
 .ruff_cache
 
-# Rust — match any Cargo target dir, wherever a crate lives (layout-agnostic).
+# Compiler output, including local builds from before Rust support was removed.
 target/
 
 # TypeScript / Node — match anywhere, wherever a package lives (dist/ is

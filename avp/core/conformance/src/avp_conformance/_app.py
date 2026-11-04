@@ -53,7 +53,7 @@ def _resolve_cwd(agent: Path, manifest: AgentManifest) -> Path:
 
 
 # Domains the sandboxed agents (and their build toolchains) reach: the Anthropic
-# model API, plus github for cargo's git-sourced deps (goose pins `block/goose`).
+# model API, plus GitHub for SDK and MCP dependencies.
 # srt forbids a bare "*", so this is an explicit (generous) allow-list; extend it
 # per run with `check --allow-domain`. Network isn't the security lever here
 # (writes are) — this list just keeps the agents from failing to connect.
@@ -64,7 +64,7 @@ _DEFAULT_ALLOW_DOMAINS = (
     "codeload.github.com",
 )
 
-# macOS native-tls (goose's reqwest) resolves cert trust via this Mach service;
+# macOS native TLS resolves cert trust via this Mach service;
 # srt blocks it by default, so the agent can't establish TLS. Linux ignores it.
 _MACOS_TRUST_MACH_SERVICE = "com.apple.trustd.agent"
 
@@ -261,8 +261,7 @@ def _sandbox_prefix(
       (uv cache, cargo/rustup home), and the cargo `target/` under cwd. Repo
       source and the rest of the host stay read-only.
     - network: the default allow-list plus any `--allow-domain` extras. On
-      macOS, allow the trust Mach service so native-tls clients (goose's
-      reqwest) can verify certs.
+      macOS, allow the trust Mach service so native TLS clients can verify certs.
 
     Errors out if `srt` isn't installed. `stack` collects temp settings files
     for the caller to clean up.

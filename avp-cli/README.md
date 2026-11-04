@@ -5,12 +5,12 @@ to **build, run, and iterate on AVP Commissions**, where an **eval is a JSON
 config file, not code**. You author *commissions* (one agent configuration each:
 a prompt, a tool surface, skills, a model, an output schema) as portable files in
 your library, write a short eval that references them by id, run them over a
-dataset against a real agent (Goose or Claude Code), and get a ranked board:
+dataset against a real agent (Claude Code or Codex), and get a ranked board:
 **accuracy, pass-rate, $/run, turns/run**. The trajectories are real AVP, and the
 config is the same artifact that rides `pctx` to the cloud.
 
 ```
-        avp eval · capitals-extraction · 3 items · agent=goose
+        avp eval · capitals-extraction · 3 items · agent=codex
 ┏━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┓
 ┃ # ┃ commission┃ accuracy ┃ pass_rate ┃   $/run ┃ turns/run ┃
 ┡━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━┩
@@ -275,7 +275,7 @@ already have is left untouched):
 | `avp sandbox status` | Docker + managed-server health, live sandbox count |
 | `avp sandbox stop` | stop the managed sandbox server |
 
-Eval-run flags (`eval run`): `--agent goose,claude-code` (compare agents),
+Eval-run flags (`eval run`): `--agent codex,claude-code` (compare agents),
 `--model <id>` (override every commission's model), `--env <name\|path>` (run agents inside an
 environment), `--json out.json` (machine-readable board + per-run trajectory pointers),
 `--threshold T`, `--max-items N`, `--quiet`.
@@ -288,7 +288,7 @@ Press **Ctrl-C** to stop the matrix early; you still get a board of the runs tha
 finished (marked stopped-early). `--quiet` or a non-terminal (piped / CI) falls
 back to plain one-line-per-run logging.
 
-**Comparing agents.** Pass `--agent goose,claude-code` and the run goes
+**Comparing agents.** Pass `--agent codex,claude-code` and the run goes
 task-major: both agents run each item back-to-back, a `⚖` head-to-head prints
 the moment they both finish a task, and at the end you get one board per agent
 plus a head-to-head table (commissions × agents, each agent's mean accuracy and
@@ -297,62 +297,24 @@ accuracy at a fraction of the cost.
 
 ## Agents: install + local dev
 
-A run uses an installed agent, by name. Start with every built-in agent:
+A run uses an installed agent, by name. The legacy built-in archive registry
+is empty: the maintained adapters now install as sandbox images with the new
+CLI in [#86](https://github.com/portofcontext/agent-voyager-project/pull/86).
+Each [adapter's README](../README.md#integrate-an-agent) gives its image build
+and installation commands.
+
+The legacy CLI still accepts custom agent manifests and local release builds.
+For a custom agent:
 
 ```bash
-avp agent install --all          # skips ones already installed; --force reinstalls
-avp agent list                   # each agent, where it came from, and readiness
-```
-
-`avp agent list` shows where each agent's code came from:
-
-- **avp release**: a built-in agent (`claude-code`, `codex`, `openai-agents`,
-  `goose`, `pi`, `gemini-cli`, `deep-agents`, `pydantic-ai`, `opencode`) from
-  a GitHub release, at the version this CLI pins. `avp agent install <name>`
-  installs one, and `--version` picks another release. These names are
-  reserved for the built-in agents.
-- **manifest**: your own agent, installed by name from its
-  `avp-conformance.json`. The manifest needs a `container` block
-  (`{"install": ["<Dockerfile RUN step>", ...], "command": ["<argv>", ...]}`),
-  for container runs. `--runtime local` uses the installed host command.
-- **local build**: a built-in agent built from your checkout, installed under
-  its own name so a board never mistakes it for the release.
-
-```bash
-avp agent install my-agent --manifest ~/work/my-agent/avp-conformance.json
+avp agent install my-agent --manifest /abs/path/avp-conformance.json
+avp agent list
 avp run --agent my-agent "..."
 ```
 
-Every agent release carries an `avp-release.json` saying how the agent
-installs and runs, and the CLI follows it. A binary agent (goose) installs a
-prebuilt executable; a Python agent (claude-code, codex, openai-agents,
-deep-agents, pydantic-ai) installs into a managed venv (needs `uv`) at the
-hash-checked dependency versions the release was tested with, so a new upstream
-release can't break it; a Node agent (pi, gemini-cli, opencode) extracts its
-package archive and runs with the host's `node`. Release downloads go over
-plain HTTPS, so a public repo needs no auth; set `GH_TOKEN` only for a private
-fork or to avoid API rate limits. The host install serves `avp agent describe`
-(the free pre-flight view); actual runs install the agent's **Linux build into
-the sandbox image**, so run-time dependencies (e.g. the claude-code agent's
-Node + `claude` CLI) live in the image, not on your machine. Set
-`AVP_AGENT_REPO` to install releases from a fork; the host install and the
-sandbox image both come from it.
-
-**Testing your own build of a built-in agent (no release needed).** Build it
-into a directory laid out like its release, check it runs, and install it
-under a `-dev` name:
-
-```bash
-make build-agents AGENTS=claude-code    # dist/agents/claude-code/: artifacts + avp-release.json
-make smoke-agents AGENTS=claude-code    # runs it in its sandbox image against a stub model
-avp agent install claude-code --as claude-code-dev --from dist/agents/claude-code
-```
-
-The directory is copied into the sandbox image, so `--agent claude-code-dev`
-runs your build, and boards and run manifests label it as a local build. The
-goose binary runs in the sandbox only when built on Linux. A custom agent needs
-no build step at all: install its manifest, or pass a manifest path to
-`--agent` for a one-off run.
+A release manifest, `avp-release.json`, describes its Python wheel, Node archive,
+or prebuilt executable and the sandbox installation recipe. This format remains
+available for custom releases; no Rust toolchain is needed by the CLI.
 
 ## Environments + `avp run`
 
@@ -370,7 +332,7 @@ avp env create datasci \
 
 avp env show datasci
 avp env run datasci -- python -c "import pandas; print(pandas.__version__)"   # a command
-avp run --agent goose --env datasci "Do the task described in TASK.md"          # an agent
+avp run --agent codex --env datasci "Do the task described in TASK.md"          # an agent
 ```
 
 With the default runtime, `avp run` compiles the env + the agent's container recipe into a derived image

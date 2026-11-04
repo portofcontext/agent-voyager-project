@@ -95,7 +95,6 @@ Adapters in this repository:
 | Runtime | Adapter |
 |---|---|
 | Claude Agent SDK | [avp-claude-agent-sdk](agents/avp-claude-agent-sdk/python/) |
-| Goose | [avp-goose](agents/avp-goose/rust/) |
 | OpenAI Agents SDK | [avp-openai-agents](agents/avp-openai-agents/python/) |
 | Codex | [avp-codex](agents/avp-codex/python/) |
 | Pi | [avp-pi](agents/avp-pi/typescript/) |
@@ -114,7 +113,7 @@ Each spec can be adopted independently:
 - [Trajectory](spec/v0.1/trajectory.md): the execution event stream.
 - [Agent Descriptor](spec/v0.1/agent-descriptor.md): the agent's capabilities.
 
-Typed bindings: [Python](avp/bindings/python/) · [Rust](avp/bindings/rust/) · [TypeScript](avp/bindings/typescript/). Validate integrations with the [conformance suite](avp/core/conformance/).
+SDKs: [Python](avp-sdk/python/) · [TypeScript](avp-sdk/typescript/). Validate integrations with the [conformance suite](avp/core/conformance/).
 
 ## Develop
 

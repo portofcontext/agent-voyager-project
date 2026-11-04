@@ -34,7 +34,6 @@ def directory_env(root: Path, workspace: Path | None = None) -> dict[str, str]:
         "CODEX_HOME": str(root / "state/codex"),
         "CODEX_SQLITE_HOME": str(root / "state/codex"),
         "CLAUDE_CONFIG_DIR": str(root / "state/claude"),
-        "GOOSE_PATH_ROOT": str(root / "state/goose"),
     }
 
 

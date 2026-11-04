@@ -45,7 +45,7 @@ import type { AssistantMessageEvent, AgentStartedData } from "@avp/types/traject
 
 Adapters for TypeScript runtimes report what their harness did to a `Recorder`,
 which owns span minting, step numbering, turn buffering, tool pairing,
-subagent frames, and cost. It mirrors the Python and Rust Recorders and runs
+subagent frames, and cost. It mirrors the Python Recorder and runs
 the same shared vectors
 (`avp/core/conformance/src/avp_conformance/recorder/v0.1/`).
 
@@ -82,20 +82,16 @@ import { main } from "@avp/types/agent-cli";
 process.exitCode = await main({ describe, run });
 ```
 
-## Source of truth
+## Current SDK and legacy bindings
 
-- `avp/bindings/python/src/avp/{commission,descriptor,trajectory}.py` (Pydantic, hand-written)
-  -> `avp/core/spec/v0.1/*.schema.json` (auto-generated; `avp/scripts/generate-schemas.py`)
-  -> `avp/bindings/typescript/src/*.ts` (generated here, via `json-schema-to-typescript`)
-
-Don't edit `src/{commission,trajectory,agent-descriptor}.ts` by hand; they're regenerated. Edit the Python sources upstream. `recorder.ts`, `pricing.ts`, `sink.ts`, `ids.ts`, `agent-cli.ts`, and `preflight.ts` are hand-written.
-
-## Regenerating
+These bindings remain for the legacy CLI and conformance stack. Their wire
+schemas have been retired. New integrations use the
+[TypeScript SDK](../../../avp-sdk/typescript/).
 
 ```bash
-make bindings           # regenerate from current schemas
-make bindings-check     # CI drift check (fails if generated code is stale)
-make bindings-test      # smoke tests for both Rust and TS
+make bindings           # regenerate the current TypeScript SDK's wire types
+make bindings-check     # check the current SDK's generated types
+make bindings-test      # test these legacy TypeScript bindings
 ```
 
 ## Build / test

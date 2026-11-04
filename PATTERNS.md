@@ -28,8 +28,7 @@ async with AVPClaudeSDKClient(commission=commission, sink=sink) as client:
         ...  # application message handling
 ```
 
-Other adapters observe [Goose](agents/avp-goose/rust/),
-[OpenAI Agents](agents/avp-openai-agents/python/), and
+Other adapters observe [OpenAI Agents](agents/avp-openai-agents/python/), and
 [Codex](agents/avp-codex/python/). Each adapter documents the native events it
 uses and the capabilities it can represent.
 
@@ -111,17 +110,17 @@ a deployment convention, outside the Commission and trajectory wire formats.
 The CLI and conformance runner share `avp.launch`: each invocation gets a fresh
 home, workspace, and native state directories for **all** adapters. Container
 runs use the mounted workspace. Host conformance runs use a scratch workspace.
-`CODEX_HOME`/`CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `GOOSE_PATH_ROOT`, and XDG
+`CODEX_HOME`/`CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, and XDG
 paths are assigned centrally. Explicit manifest environment settings override
 these defaults, so callers can deliberately retain native state. Only the
 launcher's temporary root or container is cleaned up.
 
-Source commands bootstrap in the manifest directory. The stock Python and Rust
+Source commands bootstrap in the manifest directory. The stock Python and TypeScript
 entrypoints enter `AVP_WORKSPACE` before `describe` or `run`, so SDKs and MCP child
 processes inherit the same working directory. Relative CLI input/output paths
 still resolve against the launch directory. Direct library calls inherit the
 caller's working directory and native environment unchanged. Persistent SDKs
-with process-global configuration, such as Goose, need that context established
+with process-global configuration need that context established
 before SDK initialization; use a separate process for a different context.
 
 Credential injection and OS confinement remain launcher responsibilities. Host
@@ -137,6 +136,5 @@ an OS sandbox. It uses fresh home and SDK state, a saved workspace, and process
 group cleanup. It forwards selected provider credentials or uses a loopback
 vault broker. Any outer container or VM restrictions still apply. Container-only
 environment settings are rejected, and the runtime is recorded in `run.json`.
-Fresh state directories are not a security sandbox. Host conformance launchers preserve uv
-and Rust build caches so bootstrapping does not require reinstalling toolchains.
+Fresh state directories are not a security sandbox. Host conformance launchers preserve build-tool caches so bootstrapping does not require reinstalling toolchains.
 SDK-specific Commission mapping and tool/skill restrictions remain in adapters.

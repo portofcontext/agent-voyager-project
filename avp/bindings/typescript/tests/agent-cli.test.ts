@@ -18,7 +18,7 @@ function commission(extra: Record<string, unknown> = {}): Commission {
   return { schema_version: "0.1", run_id: "r", model: "x/m", ...extra } as Commission;
 }
 
-test("preflight matches the Python and Rust checks", () => {
+test("preflight matches the Python checks", () => {
   const check = (extra: Record<string, unknown>) =>
     preflight(commission(extra), "a", "1.0", { tools: ["read"] })?.[0];
   assert.equal(check({}), undefined);

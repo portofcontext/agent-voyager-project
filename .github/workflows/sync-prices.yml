@@ -1,7 +1,7 @@
 name: Sync model prices
 
 # Keep the bundled price table (the single canonical `prices.json` in
-# avp/bindings/python, which the Rust crate embeds via include_str!) tracking
+# avp/bindings/python) tracking
 # models.dev, so no one hand-maintains pricing. Runs nightly and commits the
 # refreshed table straight to main, but only when the model prices actually
 # change (the snapshot date alone never triggers a commit). Also runnable on

@@ -35,7 +35,7 @@ def _fake_agent(tmp_path: Path, envdump: Path, env: dict[str, str]) -> AgentMani
             keep = (
                 "HOME", "USERPROFILE", "PATH",
                 "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
-                "CODEX_HOME", "CODEX_SQLITE_HOME", "CLAUDE_CONFIG_DIR", "GOOSE_PATH_ROOT",
+                "CODEX_HOME", "CODEX_SQLITE_HOME", "CLAUDE_CONFIG_DIR",
                 "AVP_ENV_ROOT", "AVP_WORKSPACE",
                 "AVP_TEST_PASSTHROUGH", "AVP_TEST_MANIFEST",
             )
@@ -75,7 +75,6 @@ def test_probe_gets_a_throwaway_home(tmp_path, monkeypatch):
         "CODEX_HOME",
         "CODEX_SQLITE_HOME",
         "CLAUDE_CONFIG_DIR",
-        "GOOSE_PATH_ROOT",
         "AVP_WORKSPACE",
     ):
         assert Path(seen[var]).is_relative_to(root), f"{var} leaked into the probe"

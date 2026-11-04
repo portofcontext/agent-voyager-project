@@ -2,7 +2,7 @@
 
 **Status:** Draft
 
-AVP (Agent Voyager Project) is a set of specs for starting an AI agent on a task and recording what it did. A supervisor, such as a CLI, an evaluation tool, or a hosted platform, sends the agent a Commission describing the task. The agent does the work with its own harness (e.g. Claude Agent SDK or Goose) and reports each step as a Trajectory: a list of events covering every model response, tool call, and result.
+AVP (Agent Voyager Project) is a set of specs for starting an AI agent on a task and recording what it did. A supervisor, such as a CLI, an evaluation tool, or a hosted platform, sends the agent a Commission describing the task. The agent does the work with its own harness (e.g. Claude Agent SDK or OpenCode) and reports each step as a Trajectory: a list of events covering every model response, tool call, and result.
 
 Every agent that follows AVP accepts the same Commission and produces the same Trajectory format. That lets you run different agents on the same task and compare them, rebuild the conversation from a past run, or review a run afterward in a consistent format.
 

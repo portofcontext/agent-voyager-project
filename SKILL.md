@@ -45,8 +45,7 @@ instructions, not the CLI or an agent runtime.
    rate, cost, and turns separately, and point to the saved run artifacts.
 
 Use `avp --help` and subcommand help for the installed release's options.
-`avp agent list` shows availability; prebuilt install names are `goose`,
-`claude-code`, `codex`, `openai-agents`, `pi`, `gemini-cli`, `deep-agents`,
+`avp agent list` shows availability; adapter names include `claude-code`, `codex`, `openai-agents`, `pi`, `gemini-cli`, `deep-agents`,
 `pydantic-ai`, and `opencode` (Pi, Gemini CLI, and OpenCode need Node 22.19 or newer on the host for
 `describe`; runs install Node in the sandbox).
 
@@ -63,7 +62,7 @@ its JSON, then run `avp cm check my-task`.
   `mcp_servers` carries inline stdio commands or HTTP connection details;
   `skills` carries inline files including `SKILL.md`.
 - Built-in allowlists are **maps keyed by the descriptor's `agent_name`**:
-  `"enabled_builtin_tools": {"goose": []}` disables Goose's built-in tools.
+  `"enabled_builtin_tools": {"avp-claude-agent-sdk": []}` disables Claude's built-in tools.
   Omit the field to expose all; a subset exposes only those exact names.
   A present map missing the running agent's key fails preflight. The same rules
   apply to `enabled_builtin_mcp_servers`, `_subagents`, and `_skills`.
@@ -88,7 +87,7 @@ Choose an image with the project's dependencies, then create an environment:
 
 ```bash
 avp env create myproj --image python:3.12-slim --path ./my-project
-avp run --agent goose --env myproj "Add type hints to utils.py, then run the tests"
+avp run --agent claude-code --env myproj "Add type hints to utils.py, then run the tests"
 ```
 
 The run uses a copy of the project and prints its resulting workspace and
@@ -123,7 +122,7 @@ Work in a source checkout and follow its `AGENTS.md`. Start from the
 [adapter guide](https://github.com/portofcontext/agent-voyager-project/blob/main/agents/_template/README.md)
 and [integration patterns](https://github.com/portofcontext/agent-voyager-project/blob/main/PATTERNS.md).
 
-1. Scaffold with `make new-agent NAME=avp-<sdk>` or `make new-agent-rust NAME=avp-<sdk>`.
+1. Scaffold with `make new-agent NAME=avp-<sdk>`.
    Replace the scripted harness with the runtime that owns the model/tool loop.
 2. Map Commission fields to native configuration and describe the runtime's
    actual built-ins and supported capabilities. Use shared preflight checks and

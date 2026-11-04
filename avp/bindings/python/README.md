@@ -25,7 +25,7 @@ It ships:
   `jsonl_sink(path)`. No base class, no agent abstraction.
 
 The JSON Schemas under `avp/core/spec/v0.1/` are generated FROM these models
-(`make schemas`); the models are the source of truth. The Rust and TypeScript
+(`make schemas`); the models are the source of truth. The TypeScript
 bindings are generated from the same schemas, so the three languages cannot
 drift.
 

@@ -1,6 +1,6 @@
 # AVP SDKs
 
-The AVP SDKs (Python, Rust, TypeScript) have two goals:
+The AVP SDKs (Python and TypeScript) have two goals:
 
 - **Define the wire:** types for the Commission, the Agent Descriptor, and
   Trajectory events, matching the specs' schemas.
@@ -9,7 +9,7 @@ The AVP SDKs (Python, Rust, TypeScript) have two goals:
   and pricing a response.
 
 Each SDK behaves the same way, so an agent or supervisor gets the same results
-in any of the three languages.
+in either language.
 
 ## Source of truth
 
@@ -21,13 +21,12 @@ The Python SDK comes second, because the rest is generated from it:
 1. Each spec's reference tables define its fields.
 2. The Python SDK's Pydantic models are written from those tables.
 3. The models generate `spec/v0.1/*.schema.json` (`make schemas`).
-4. Rust and TypeScript take their types from those schemas.
+4. TypeScript takes its types from those schemas.
 
 Nothing yet checks the models against the tables automatically, because the
 tables are text written for people. Reviewers check them by hand.
 
-A new feature is built and decided in Python first, then copied to Rust and
-TypeScript.
+A new feature is built and decided in Python first, then copied to TypeScript.
 
 ## What every SDK provides
 
@@ -66,14 +65,13 @@ language.
 Package builds embed the linked data as regular files, so each published package
 contains its snapshot without depending on the repository or another SDK.
 `make sdk-data-check` verifies the complete file inventory and shared links,
-then checks every data file in the Python wheel, source distribution, Rust
-crate, and TypeScript npm package.
+then checks every data file in the Python wheel, source distribution, and TypeScript npm package.
 
-Endpoints load, cache, and refresh the same way as prices in all three SDKs.
+Endpoints load, cache, and refresh the same way as prices in both SDKs.
 models.dev gives most providers' `api` URL but not the ones whose clients have
 a URL built in, such as `anthropic` and `openai`; a short list of gap fillers covers
 those, and models.dev wins where both have one. Python exposes
-`avp.utils.endpoints`, Rust `avp::utils::endpoints`, and TypeScript
+`avp.utils.endpoints` and TypeScript
 `@agent-voyager-project/sdk/utils/endpoints`. Catalog translation is checked
 against the same cases in [`testdata/endpoints/`](testdata/endpoints/).
 

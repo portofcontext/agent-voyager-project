@@ -55,7 +55,7 @@ section gains them? Are new conformance cases required?
 <!--
 What changes in:
   - avp/bindings/python/ (wire types)
-  - agents/avp-claude-agent-sdk/, agents/avp-goose/
+  - agents/avp-claude-agent-sdk/, agents/avp-opencode/
   - avp-cli/ (the local `avp` CLI)
   - Other bindings (Rust, TypeScript)
   - The conformance suite

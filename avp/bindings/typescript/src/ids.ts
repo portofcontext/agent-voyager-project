@@ -1,7 +1,7 @@
 /**
  * Trace, span, and event identifiers for the CloudEvents envelope.
  *
- * Mirrors `avp.envelope` (Python) and `avp::ids` (Rust): W3C trace-context
+ * Mirrors `avp.envelope` (Python): W3C trace-context
  * lowercase hex for `trace_id` (32) and `span_id` (16), a UUID for the
  * CloudEvents `id`.
  */

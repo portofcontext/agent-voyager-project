@@ -1,7 +1,7 @@
 """avp_cli — the local AVP CLI (`avp`): build, run, and iterate on Commissions.
 
 An eval is a JSON config file (no user code); the CLI is the engine. It loads a
-config, composes a Commission per setup, runs each against a real agent (Goose /
+config, composes a Commission per setup, runs each against a real agent (Claude Code /
 Claude Code) via the agent's `run --commission --out` manifest contract, scores
 each run, and ranks a board by accuracy / pass-rate / cost / turns.
 """
