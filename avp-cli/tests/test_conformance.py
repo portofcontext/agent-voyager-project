@@ -8,16 +8,30 @@ import pytest
 from conftest import DESCRIPTOR, event, no_sandbox
 from typer.testing import CliRunner
 
-from avp.commission import Commission
+from avp.commission import AgentSettings, Commission, McpServerHttp, McpServerStdio
+from avp.descriptor import AgentDescriptor, McpServer, Tool
+from avp.descriptor import Skill as DescriptorSkill
 from avp_cli import paths
-from avp_cli.agents import store
+from avp_cli.agents import command, store
 from avp_cli.cli import app
 from avp_cli.conformance import check, cli
-from avp_cli.conformance.cases import CASES, RUN_ID, Case, Context, Skip
+from avp_cli.conformance.cases import (
+    CASES,
+    NO_SUCH_ITEM,
+    NO_SUCH_PROVIDER,
+    OTHER_SKILL_NAME,
+    RUN_ID,
+    SERVER_ID,
+    SKILL_NAME,
+    Case,
+    Context,
+    Skip,
+)
 from avp_cli.conformance.rules import RULES
 from avp_cli.console import Failed
 from avp_cli.eval import engine
 from avp_cli.eval.scoring import Run
+from avp_cli.runs import environment, network
 from avp_cli.runs.dispatch import Finished, Options
 
 MODEL = check.model("anthropic/claude-haiku-4-5")
@@ -89,6 +103,195 @@ def test_agents_without_entry_names_another_agent() -> None:
     assert commission.agents is not None
     assert DESCRIPTOR.agent_name not in commission.agents
     assert commission.model.credential is not None
+
+
+FULL = AgentDescriptor.model_validate(
+    {
+        "avp_version": "0.1",
+        "agent_name": "full-agent",
+        "agent_version": "1.2.0",
+        "tools": [
+            {"name": "bash", "inputSchema": {"type": "object"}},
+            {"name": "search", "inputSchema": {"type": "object"}, "mcp_server_id": "issues"},
+        ],
+        "mcp_servers": [{"id": "issues"}],
+        "skills": [{"name": "triage", "description": "x"}],
+    }
+)
+FULL_CONTEXT = Context(descriptor=FULL, model=MODEL)
+
+
+def by_name(name: str) -> Case:
+    return next(c for c in CASES if c.name == name)
+
+
+def entry(name: str) -> AgentSettings:
+    agents = by_name(name).commission(FULL_CONTEXT).agents
+    assert agents is not None
+    return agents[FULL.agent_name]
+
+
+def test_version_differs_names_another_version() -> None:
+    assert entry("version-differs").version not in (None, FULL.agent_version)
+
+
+@pytest.mark.parametrize(
+    ("name", "field"),
+    [
+        ("unknown-enabled-tool", "enabled_tools"),
+        ("unknown-enabled-subagent", "enabled_subagents"),
+        ("unknown-enabled-skill", "enabled_skills"),
+        ("unknown-enabled-mcp-server", "enabled_mcp_servers"),
+    ],
+)
+def test_unknown_item_cases_set_only_their_list(name: str, field: str) -> None:
+    assert entry(name).model_dump(exclude_none=True) == {field: [NO_SUCH_ITEM]}
+
+
+def test_enabled_tools_names_a_tool_only_an_mcp_server_has() -> None:
+    assert entry("enabled-tools-names-mcp-tool").enabled_tools == ["search"]
+
+
+def test_enabled_tools_case_skips_a_name_a_built_in_tool_also_has() -> None:
+    tools = [
+        {"name": "search", "inputSchema": {"type": "object"}},
+        {"name": "search", "inputSchema": {"type": "object"}, "mcp_server_id": "issues"},
+    ]
+    descriptor = FULL.model_copy(update={"tools": [Tool.model_validate(t) for t in tools]})
+    with pytest.raises(Skip):
+        by_name("enabled-tools-names-mcp-tool").commission(Context(descriptor, MODEL))
+
+
+def test_skill_name_differs_from_its_frontmatter() -> None:
+    [skill] = by_name("skill-name-differs").commission(FULL_CONTEXT).skills or []
+    assert skill.name == SKILL_NAME
+    assert f"name: {OTHER_SKILL_NAME}\n" in skill.files["SKILL.md"]
+
+
+def test_unknown_provider_has_no_base_url() -> None:
+    model = by_name("unknown-provider").commission(FULL_CONTEXT).model
+    assert (model.provider, model.base_url) == (NO_SUCH_PROVIDER, None)
+    assert model.credential == MODEL.credential
+
+
+def test_added_items_take_a_built_in_name() -> None:
+    [server] = by_name("added-server-id-taken").commission(FULL_CONTEXT).mcp_servers or []
+    assert server.id == "issues"
+    [skill] = by_name("added-skill-name-taken").commission(FULL_CONTEXT).skills or []
+    assert skill.name == "triage"
+    assert "name: triage\n" in skill.files["SKILL.md"]
+
+
+@pytest.mark.parametrize(
+    "name", ["enabled-tools-names-mcp-tool", "added-server-id-taken", "added-skill-name-taken"]
+)
+def test_cases_skip_an_agent_without_the_item(name: str) -> None:
+    with pytest.raises(Skip):
+        by_name(name).commission(CONTEXT)
+
+
+@pytest.mark.parametrize(
+    ("name", "update"),
+    [
+        ("added-server-id-taken", {"mcp_servers": [McpServer(id="Not Valid")]}),
+        (
+            "added-skill-name-taken",
+            {"skills": [DescriptorSkill(name="Not Valid", description="x")]},
+        ),
+    ],
+)
+def test_taken_name_cases_skip_a_name_no_commission_can_use(name: str, update: dict) -> None:
+    context = Context(descriptor=FULL.model_copy(update=update), model=MODEL)
+    with pytest.raises(Skip, match="Not Valid"):
+        by_name(name).commission(context)
+
+
+def test_connect_failure_cases_add_a_server_that_cannot_connect() -> None:
+    [stdio] = by_name("stdio-server-wont-start").commission(FULL_CONTEXT).mcp_servers or []
+    [http] = by_name("http-server-wont-connect").commission(FULL_CONTEXT).mcp_servers or []
+    assert isinstance(stdio, McpServerStdio) and isinstance(http, McpServerHttp)
+    assert http.url.startswith("http://") and ".invalid/" in http.url
+
+
+def test_a_commission_without_a_real_host_can_still_be_dispatched() -> None:
+    commission = by_name("http-server-wont-connect").commission(FULL_CONTEXT)
+    assert "mcp.conformance.invalid" in network.allowed_hosts(commission, [])
+    environment.check(commission, {check.KEY: check.STAND_IN})
+    no_host = by_name("unknown-provider").commission(FULL_CONTEXT)
+    assert network.allowed_hosts(no_host, []) == {}
+    environment.check(no_host, {check.KEY: check.STAND_IN})
+
+
+def connect_failed(message: str = f"can't connect to {SERVER_ID}") -> dict:
+    return event(
+        3, "error_occurred", {"error_code": "mcp_connect_failed", "error_message": message}
+    )
+
+
+def test_every_case_runs_through_the_engine(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each case's Commission survives the eval item's JSON and reaches the agent."""
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: FULL
+    )
+    outcomes = check.check("pd", CASES, MODEL)
+    by_rule = {o.case: (o.rule, o.status) for o in outcomes}
+    assert len(fake.commissions) == len(CASES)
+    assert all(status == "pass" for rule, status in by_rule.values() if rule == "commission.5.1"), (
+        by_rule
+    )
+    assert all(status == "fail" for rule, status in by_rule.values() if rule == "commission.5.4"), (
+        by_rule
+    )
+    # A skill whose `name` differs from its frontmatter is what the case sends.
+    sent = {c.run_id: c for c in fake.commissions}
+    [skill] = sent["conformance-pd-skill-name-differs"].skills or []
+    assert f"name: {OTHER_SKILL_NAME}\n" in skill.files["SKILL.md"]
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "reason"),
+    [
+        (connect_failed(), "pass", None),
+        (
+            connect_failed("can't connect"),
+            "fail",
+            f"error_occurred's message doesn't name {SERVER_ID}",
+        ),
+        (REFUSED, "fail", "error_occurred has the code invalid_commission, not mcp_connect_failed"),
+    ],
+)
+def test_a_connect_failure_must_have_its_code_and_name_the_server(
+    fake: FakeDispatch, error: dict, status: str, reason: str | None
+) -> None:
+    fake.lines = [REQUESTED, DESCRIBED, error]
+    [outcome] = check.check("pd", [by_name("stdio-server-wont-start")], MODEL)
+    assert outcome.status == status
+    assert outcome.reasons == ([reason] if reason else [])
+
+
+def test_a_connect_failure_fails_when_the_run_started_anyway(fake: FakeDispatch) -> None:
+    model = {"provider": "anthropic", "id": "claude-haiku-4-5"}
+    fake.lines = [REQUESTED, DESCRIBED, event(3, "agent_started", {"prompt": "x", "model": model})]
+    [outcome] = check.check("pd", [by_name("http-server-wont-connect")], MODEL)
+    assert outcome.status == "fail"
+    assert outcome.reasons[0].startswith("the events are run_requested")
+
+
+def test_a_should_case_that_fails_exits_0(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake.lines = [REQUESTED, DESCRIBED, connect_failed("issues")]
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: FULL
+    )
+    result = CliRunner().invoke(
+        app, ["conformance", "check", "--agent", "pd", "--case", "added-server-id-taken", "--json"]
+    )
+    assert result.exit_code == 0, result.output
+    [outcome] = json.loads(result.output[result.output.index("[") :])
+    assert (outcome["level"], outcome["status"]) == ("SHOULD", "fail")
 
 
 def test_a_refusal_passes() -> None:
@@ -209,6 +412,44 @@ def test_only_a_must_failure_exits_1(
     assert result.exit_code == exit_code, result.output
     [outcome] = json.loads(result.output[result.output.index("[") :])
     assert (outcome["status"], outcome["reasons"]) == ("fail", ["wrong"])
+
+
+def test_volumes_and_entrypoint_reach_describe_and_each_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake: FakeDispatch
+) -> None:
+    described = no_sandbox(monkeypatch)
+    monkeypatch.setattr(engine, "dispatch", fake)
+    result = CliRunner().invoke(
+        app,
+        [
+            "conformance",
+            "check",
+            "--agent",
+            "pd",
+            "--case",
+            "agents-without-entry",
+            "-v",
+            f"{tmp_path}:/src:ro",
+            "--entrypoint",
+            "cargo run -q --",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    [options] = fake.options
+    assert options.entrypoint == ["cargo", "run", "-q", "--"]
+    assert described.entrypoint == ["cargo", "run", "-q", "--"]
+    assert described == ["pd", "pd"]
+    assert [v.mount_path for v in options.volumes] == ["/src"]
+    assert described.volumes == options.volumes
+
+
+@pytest.mark.parametrize("entrypoint", ["", "'unclosed"])
+def test_a_bad_entrypoint_fails(entrypoint: str) -> None:
+    result = CliRunner().invoke(
+        app, ["conformance", "check", "--agent", "pd", "--entrypoint", entrypoint]
+    )
+    assert result.exit_code == 1
+    assert "--entrypoint" in str(result.exception)
 
 
 def test_list_shows_each_rule_and_its_cases() -> None:

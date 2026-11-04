@@ -3,6 +3,7 @@
 
 import json
 
+from opensandbox.models.sandboxes import Volume
 from opensandbox.sync.sandbox import SandboxSync
 from pydantic import ValidationError
 
@@ -40,9 +41,12 @@ def describe(box: SandboxSync, entrypoint: list[str]) -> AgentDescriptor:
         raise Failed(f"`describe` didn't print a valid Agent Descriptor: {exc}") from None
 
 
-def describe_in_sandbox(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
-    """The agent's Descriptor, from `describe` in a sandbox of its own."""
-    with sandboxes.sandbox(agent.image) as box:
+def describe_in_sandbox(
+    agent: store.Agent, entrypoint: list[str], volumes: list[Volume] | None = None
+) -> AgentDescriptor:
+    """The agent's Descriptor, from `describe` in a sandbox of its own, with
+    `volumes` mounted as a run's are."""
+    with sandboxes.sandbox(agent.image, volumes=volumes) as box:
         return describe(box, entrypoint)
 
 

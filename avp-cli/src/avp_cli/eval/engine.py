@@ -33,7 +33,8 @@ async def run_eval(
 ) -> list[Result]:
     """Every run's result, in the EvalConfig's order. Runs go in `directory`
     under `runs/<run_id>/`, at most `concurrency` at once. `options` apply to
-    every run; their `directory` is set for each. `started` is called as each
+    every run, and their volumes and entrypoint to each describe too; their
+    `directory` is set for each run. `started` is called as each
     run starts, and `progress` as each is scored. Each agent is described once, all at the same time and
     before any run, and saved in `directory` under `agents/<name>.json`. Raises
     Failed before any run when an agent isn't installed or doesn't describe
@@ -42,14 +43,16 @@ async def run_eval(
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     options = options or Options()
-    agents = {name: _load(name) for name in config.agents}
+    agents = {name: _load(name, options.entrypoint) for name in config.agents}
 
     async def described(name: str, agent: store.Agent, entrypoint: list[str]) -> None:
         record = results.AgentRecord(
             name=name,
             image=agent.image,
             image_id=images.image_id(agent.image),
-            descriptor=await _in_thread(command.describe_in_sandbox, agent, entrypoint),
+            descriptor=await _in_thread(
+                command.describe_in_sandbox, agent, entrypoint, options.volumes
+            ),
         )
         results.save_agent(directory, record)
 
@@ -126,9 +129,9 @@ def _model(case: EvalCase) -> str:
     return f"{case.built.model.provider}/{case.built.model.id}"
 
 
-def _load(name: str) -> tuple[store.Agent, list[str]]:
+def _load(name: str, entrypoint: list[str] | None) -> tuple[store.Agent, list[str]]:
     agent = store.load(name)
-    return agent, images.entrypoint(agent.image)
+    return agent, entrypoint or images.entrypoint(agent.image)
 
 
 def _not_started(case: EvalCase, error: Failed) -> Result:

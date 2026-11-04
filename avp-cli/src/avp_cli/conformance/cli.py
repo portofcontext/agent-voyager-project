@@ -1,5 +1,6 @@
 """`avp conformance check` and `avp conformance list`."""
 
+import shlex
 from dataclasses import asdict
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from avp_cli.conformance import check as checking
 from avp_cli.conformance.cases import CASES, Case
 from avp_cli.conformance.rules import RULES
 from avp_cli.console import Failed, out
+from avp_cli.runs import volumes
 
 app = typer.Typer(
     no_args_is_help=True, help="Check that an agent follows the spec's rules for agents."
@@ -30,6 +32,16 @@ def check(
     rule: RuleOption = None,
     case: Annotated[list[str] | None, typer.Option(help="Only this case.")] = None,
     concurrency: Annotated[int, typer.Option(min=1, help="How many runs at once.")] = 1,
+    volume: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--volume", "-v", help="HOST:SANDBOX[:ro] to mount a host path in every sandbox."
+        ),
+    ] = None,
+    entrypoint: Annotated[
+        str | None,
+        typer.Option(help="Run the agent with this command line, not the image's ENTRYPOINT."),
+    ] = None,
     model: Annotated[
         str, typer.Option(help="The model each Commission names, as provider/model.")
     ] = DEFAULT_MODEL,
@@ -40,7 +52,14 @@ def check(
     Exits 1 when a MUST case fails."""
     console.set_verbose(verbose)
     chosen = _cases(rule, case)
-    outcomes = checking.check(agent, chosen, checking.model(model), concurrency)
+    outcomes = checking.check(
+        agent,
+        chosen,
+        checking.model(model),
+        concurrency,
+        volumes.parse(volume or []),
+        _command_line(entrypoint),
+    )
     if json:
         out.print_json(
             data=[
@@ -71,6 +90,18 @@ def list_rules(rule: RuleOption = None) -> None:
         names = [c.name for c in CASES if c.rule == rule_id]
         table.add_row(rule_id, title, "\n".join(names) or "[dim]none yet[/]")
     out.print(table)
+
+
+def _command_line(entrypoint: str | None) -> list[str] | None:
+    if entrypoint is None:
+        return None
+    try:
+        words = shlex.split(entrypoint)
+    except ValueError as error:
+        raise Failed(f"--entrypoint {entrypoint!r}: {error}") from None
+    if not words:
+        raise Failed("--entrypoint is empty")
+    return words
 
 
 def _check_rules(rules: list[str] | None) -> None:

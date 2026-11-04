@@ -32,6 +32,8 @@ class Options:
     HTTP MCP servers'."""
     volumes: list[Volume] = field(default_factory=list)
     """Host paths mounted in the sandbox."""
+    entrypoint: list[str] | None = None
+    """The agent's command line, instead of the image's ENTRYPOINT."""
     directory: Path | None = None
     """The run's directory, which must not exist yet. Default:
     `~/.avp/runs/<time>-<run_id>/`."""
@@ -63,6 +65,7 @@ def dispatch(
     Commission needs or a sandbox that won't start. Once the agent is running,
     how it ended is the exit code."""
     options = options or Options()
+    entrypoint = options.entrypoint or entrypoint
     environment.check(commission, options.env)
     hosts = network.allowed_hosts(commission, options.allow_hosts)
     vault = credentials.vault(commission)

@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import DESCRIPTOR, no_sandbox
+from conftest import DESCRIPTOR, Described, no_sandbox
+from opensandbox.models.sandboxes import Host, Volume
 from pydantic import JsonValue
 
 from avp.commission import Commission
@@ -16,6 +17,7 @@ from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.console import Failed
+from avp_cli.engine import images
 from avp_cli.eval import engine, results
 from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig
@@ -51,7 +53,7 @@ class Fake:
         self.most = 0
         self.options: list[Options] = []
         self.lock = threading.Lock()
-        self.described: list[str] = []
+        self.described = Described()
 
     def __call__(
         self,
@@ -230,7 +232,9 @@ def test_agents_are_described_at_the_same_time(
 ) -> None:
     both = threading.Barrier(2, timeout=5)
 
-    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+    def describe(
+        agent: store.Agent, entrypoint: list[str], volumes: list[Volume] | None = None
+    ) -> AgentDescriptor:
         both.wait()
         return DESCRIPTOR
 
@@ -244,7 +248,9 @@ def test_a_failed_describe_deletes_the_other_sandboxes(
 ) -> None:
     killed: list[bool] = []
 
-    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+    def describe(
+        agent: store.Agent, entrypoint: list[str], volumes: list[Volume] | None = None
+    ) -> AgentDescriptor:
         raise Failed("`describe` didn't print a valid Agent Descriptor")
 
     monkeypatch.setattr(command, "describe_in_sandbox", describe)
@@ -268,3 +274,18 @@ def test_started_is_called_as_each_run_starts(tmp_path: Path, fake: Fake) -> Non
         )
     )
     assert seen[:4] == ["started paris", "scored paris", "started tokyo", "scored tokyo"]
+
+
+def test_describes_get_the_options_volumes_and_entrypoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake: Fake
+) -> None:
+    volume = Volume(name="v", host=Host(path=str(tmp_path)), mount_path="/src")
+    options = Options(volumes=[volume], entrypoint=["cargo", "run", "--"])
+
+    def no_image(image: str) -> list[str]:
+        raise AssertionError("the image's ENTRYPOINT isn't needed")
+
+    monkeypatch.setattr(images, "entrypoint", no_image)
+    asyncio.run(run_eval(config(tmp_path), tmp_path / "eval", options))
+    assert fake.described.volumes == [volume]
+    assert fake.described.entrypoint == ["cargo", "run", "--"]

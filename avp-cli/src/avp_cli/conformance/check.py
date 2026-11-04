@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from opensandbox.models.sandboxes import Volume
+
 from avp.commission import Commission, EnvSecret, Model
 from avp_cli import paths
 from avp_cli.agents import command, store
@@ -51,14 +53,23 @@ def model(text: str) -> Model:
     return Model(provider=provider, id=id, base_url=BASE_URL, credential=EnvSecret(env=KEY))
 
 
-def check(agent: str, cases: list[Case], model: Model, concurrency: int = 1) -> list[Outcome]:
-    """Every case's outcome, in the cases' order."""
+def check(
+    agent: str,
+    cases: list[Case],
+    model: Model,
+    concurrency: int = 1,
+    volumes: list[Volume] | None = None,
+    entrypoint: list[str] | None = None,
+) -> list[Outcome]:
+    """Every case's outcome, in the cases' order. `volumes` are mounted, and
+    `entrypoint` replaces the image's, in every sandbox the check starts."""
     directory = paths.conformance() / paths.stamped(agent, datetime.now(UTC))
     directory.mkdir(parents=True)
     installed = store.load(agent)
-    entrypoint = images.entrypoint(installed.image)
+    command_line = entrypoint or images.entrypoint(installed.image)
+    mounts = volumes or []
     with err.status(line("Getting the agent's Descriptor")):
-        descriptor = command.describe_in_sandbox(installed, entrypoint)
+        descriptor = command.describe_in_sandbox(installed, command_line, mounts)
     context = Context(descriptor=descriptor, model=model)
     written: dict[str, Commission] = {}
     outcomes: dict[str, Outcome] = {}
@@ -76,7 +87,7 @@ def check(agent: str, cases: list[Case], model: Model, concurrency: int = 1) -> 
             dataset=[_item(by_name[name], c) for name, c in written.items()],
             scorer=_scorer(by_name),
         )
-        options = Options(env={KEY: STAND_IN})
+        options = Options(env={KEY: STAND_IN}, volumes=mounts, entrypoint=entrypoint)
         kept = directory / paths.EVAL_RUNS
         for result in run_live(config, directory, options, concurrency, kept):
             case = by_name[result.run.item.id]

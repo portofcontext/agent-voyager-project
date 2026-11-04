@@ -77,11 +77,52 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     assert events[0]["data"]["commission"] == commission
 
     # sh-agent refuses every Commission, which is what this case expects.
-    checked = avp("conformance", "check", "--agent", "sh-agent", "--json")
+    args = ["conformance", "check", "--agent", "sh-agent", "--concurrency", "4", "--json"]
+    checked = avp(*args, "--rule", "commission.5.1")
+    outcomes = json.loads(checked[checked.index("[") :])
+    # Its Descriptor lists no items, so the cases that need one skip.
+    skipped = {"enabled-tools-names-mcp-tool", "added-server-id-taken", "added-skill-name-taken"}
+    assert {o["case"] for o in outcomes if o["status"] == "skip"} == skipped, outcomes
+    passed = [o for o in outcomes if o["status"] == "pass"]
+    assert len(passed) == len(outcomes) - len(skipped), outcomes
+    for outcome in passed:
+        assert outcome["run_directory"].startswith(str(avp_home / "conformance"))
+        assert Path(outcome["run_directory"], "trajectory.ndjson").is_file()
+
+    # -v and --entrypoint run code from the host, for describe and for the run.
+    develop = tmp_path / "develop"
+    develop.mkdir()
+    script = develop / "agent.sh"
+    script.write_text((AGENT / "agent.sh").read_text().replace('"1.0.0"', '"9.9.9"'))
+    script.chmod(0o755)
+    checked = avp(
+        "conformance",
+        "check",
+        "--agent",
+        "sh-agent",
+        "--case",
+        "agents-without-entry",
+        "--json",
+        "-v",
+        f"{develop}:/develop:ro",
+        "--entrypoint",
+        "/develop/agent.sh",
+    )
     [outcome] = json.loads(checked[checked.index("[") :])
-    assert (outcome["case"], outcome["status"]) == ("agents-without-entry", "pass"), outcome
-    assert outcome["run_directory"].startswith(str(avp_home / "conformance"))
-    assert Path(outcome["run_directory"], "trajectory.ndjson").is_file()
+    assert outcome["status"] == "pass", outcome
+    run = Path(outcome["run_directory"])
+    saved = json.loads((run.parent.parent / "agents" / "sh-agent.json").read_text())
+    assert saved["descriptor"]["agent_version"] == "9.9.9"
+    described = json.loads((run / "trajectory.ndjson").read_text().splitlines()[1])
+    assert described["data"]["descriptor"]["agent_version"] == "9.9.9"
+
+    # Its refusal isn't what commission.5.4 expects, but the runs start, with
+    # servers that can't connect in their Commissions.
+    result = CliRunner().invoke(app, [*args, "--rule", "commission.5.4"])
+    assert result.exit_code == 1, result.output
+    for outcome in json.loads(result.output[result.output.index("[") :]):
+        assert outcome["status"] == "fail", outcome
+        assert "not mcp_connect_failed" in "\n".join(outcome["reasons"]), outcome
 
     # An eval runs each item through the same dispatch, in its own sandbox.
     eval_file = tmp_path / "hi.eval.json"

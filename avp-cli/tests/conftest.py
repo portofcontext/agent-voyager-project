@@ -8,6 +8,7 @@ import keyring
 import pytest
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
+from opensandbox.models.sandboxes import Volume
 
 from avp.descriptor import AgentDescriptor
 from avp_cli import console
@@ -18,12 +19,23 @@ from avp_cli.eval import scorers, scoring
 DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="sh-agent", agent_version="1.0.0")
 
 
-def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Installed agents, a describe that answers, and the names described."""
-    described: list[str] = []
+class Described(list[str]):
+    """The names described, with what the last describe was given."""
 
-    def describe(agent: store.Agent, entrypoint: list[str]) -> AgentDescriptor:
+    entrypoint: list[str] | None = None
+    volumes: list[Volume] | None = None
+
+
+def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> Described:
+    """Installed agents, a describe that answers, and the names described."""
+    described = Described()
+
+    def describe(
+        agent: store.Agent, entrypoint: list[str], volumes: list[Volume] | None = None
+    ) -> AgentDescriptor:
         described.append(agent.name)
+        described.entrypoint = entrypoint
+        described.volumes = volumes
         return DESCRIPTOR
 
     monkeypatch.setattr(store, "load", lambda name: store.Agent(name=name, image=f"avp/{name}"))

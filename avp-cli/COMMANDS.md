@@ -79,6 +79,9 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │              runs are kept in ~/.avp/conformance/<time>-<agent>/. Exits 1 when a MUST case fails.
 │   │     avp conformance check --agent pd [--rule commission.5.1] [--case agents-without-entry]
 │   │         [--model anthropic/claude-haiku-4-5] [--concurrency 4] [--json]
+│   │         [-v ./src:/app/src:ro] [--entrypoint "cargo run -q --"]
+│   │     While developing an agent, -v mounts its code and --entrypoint changes how it
+│   │     starts, in every sandbox the check uses, so no rebuild is needed.
 │   └── ✅ list    List the rules and the cases for each.
 │         avp conformance list [--rule commission.5.1]
 │
@@ -163,7 +166,8 @@ with `match` or `command`.
 
 `avp conformance check` shows whether an agent follows the spec's rules for
 agents, with no real model calls. The cases are in
-`src/avp_cli/conformance/cases.py`. ⬜ Only `commission.5.1` has a case so far.
+`src/avp_cli/conformance/cases.py`. ⬜ Only the cases that end before a model
+call exist so far, in `commission.5.1` and `commission.5.4`.
 
 - **Cases by rule.** A rule's ID is its spec and section number:
   `commission.5.3` is "Turned-off items are hidden and blocked", and
@@ -177,7 +181,8 @@ agents, with no real model calls. The cases are in
   Descriptor says it lacks what the rule needs, such as subagents. The report
   lists passes and skips together.
 - **The agent as shipped.** A case writes its Commission from the agent's real
-  Descriptor and never patches the agent. A `conform` entrypoint that patches
+  Descriptor and never patches the agent. `-v` and `--entrypoint` are for
+  development, so a final check runs without them. A `conform` entrypoint that patches
   an agent to force a scenario is a future idea, for a scenario no Commission
   or mock can create.
 - **No real model calls.** ⬜ A case that needs a model scripts its responses
