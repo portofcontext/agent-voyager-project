@@ -73,6 +73,9 @@
 
 ### Fixed
 
+- SDK packaging checks install the TypeScript archive with a fresh npm cache,
+  so clean CI runners do not depend on cached registry metadata.
+
 - LLM judges accept models across providers, saved AVP credentials, and custom
   endpoints. Judge models are now explicit `origin/model` slugs; output token
   budgets are configurable. Missing saved credentials fail before agent runs begin.
