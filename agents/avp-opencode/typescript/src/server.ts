@@ -1,240 +1,201 @@
-/**
- * One hermetic `opencode serve` per run.
- *
- * The server is the pinned native binary from the platform package
- * (`opencode-<os>-<arch>`), started in its own process group on
- * `127.0.0.1` with an ephemeral port and a random password. OpenCode's
- * config, data, and state directories point into a scratch directory, so no
- * user config, auth file, session database, or plugin is read, and the
- * Commission's config arrives inline (`OPENCODE_CONFIG_CONTENT`). External
- * plugins, sharing, autoupdate, model-catalog fetches, Claude Code prompt and
- * skill discovery, and LSP downloads are off; the catalog is the one the
- * binary bundles. The cache directory is the adapter's own
- * (`$XDG_CACHE_HOME/avp-opencode`) so OpenCode's ripgrep download, when `rg`
- * is not on PATH, happens once. Child processes (tools, stdio MCP servers)
- * inherit these XDG directories.
- *
- * Each server's client has its own connection pool, closed with the server.
- * Linux hands a freed ephemeral port to the next server at once, and a shared
- * pool would reuse a kept-alive socket to the dead one (ECONNRESET).
- *
- * `close` disposes the server (closing MCP connections), then kills the
- * process group; an exit hook kills it if Node exits first.
- */
+/** One pinned native server per run, with private state and no startup downloads. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { homedir } from "node:os";
+import { copyFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Agent, fetch as pooledFetch } from "undici";
+import {
+  createOpencodeClient,
+  type OpencodeClient,
+} from "@opencode-ai/sdk/v2/client";
 
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { Agent, fetch as poolFetch } from "undici";
-
-const START_TIMEOUT_MS = 60_000;
-const STOP_GRACE_MS = 3_000;
-
-export interface ServerOptions {
-  /** The workspace OpenCode works in. */
-  cwd: string;
-  /** Scratch directory for OpenCode's config, data, and state; the caller removes it. */
-  scratch: string;
-  /** Inline OpenCode config. */
-  config: Record<string, unknown>;
-  /** Extra environment for the server (credentials in tests, say). */
-  env?: Record<string, string | undefined>;
-  /** The `opencode` executable; defaults to the platform package's. */
-  binary?: string;
+export function binary(): string {
+  // The package's build-time installer chooses and copies its pinned platform binary.
+  return join(
+    dirname(fileURLToPath(import.meta.resolve("opencode-ai/package.json"))),
+    "bin",
+    "opencode.exe",
+  );
 }
-
-export class OpencodeServer {
-  private readonly onExit = () => this.kill("SIGKILL");
-
+export async function data<T>(
+  request: Promise<{ data?: T; error?: unknown; response?: Response }>,
+): Promise<T> {
+  const result = await request;
+  if (result.error !== undefined || result.data === undefined)
+    throw new Error(
+      `OpenCode request failed (${result.response?.status}): ${JSON.stringify(result.error)}`,
+    );
+  return result.data;
+}
+export interface ServerOptions {
+  cwd: string;
+  scratch: string;
+  config: Record<string, unknown>;
+  env?: Record<string, string | undefined>;
+  prompt?: { url: string; token: string };
+}
+export class Server {
   private constructor(
-    readonly url: string,
     readonly client: OpencodeClient,
-    /** Resolves with a description once the server process is gone. */
     readonly exited: Promise<string>,
-    private readonly proc: ChildProcess,
-    private readonly pool: Agent,
-    private readonly output: () => string,
-  ) {
-    process.on("exit", this.onExit);
-  }
-
-  static async start(opts: ServerOptions): Promise<OpencodeServer> {
-    const password = randomBytes(18).toString("base64url");
-    const proc = spawn(opts.binary ?? opencodeBinary(), ["serve", "--hostname=127.0.0.1", "--port=0"], {
-      cwd: opts.cwd,
-      env: serverEnv(opts, password),
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
+    private proc: ChildProcess,
+    private pool: Agent,
+    private onExit: () => void,
+  ) {}
+  static async start(options: ServerOptions): Promise<Server> {
+    const password = randomBytes(24).toString("base64url");
+    const home = join(options.scratch, "home");
+    mkdirSync(home, { recursive: true });
+    // Native plugin initialization checks this directory's npm dependencies.
+    // Reuse the locked build-time installation, with private configuration and
+    // metadata, so that it never tries to fetch @opencode-ai/plugin at startup.
+    const config = join(options.scratch, "config", "opencode");
+    const project = fileURLToPath(new URL("../../", import.meta.url));
+    mkdirSync(config, { recursive: true });
+    for (const file of ["package.json", "package-lock.json"])
+      copyFileSync(join(project, file), join(config, file));
+    symlinkSync(
+      join(project, "node_modules"),
+      join(config, "node_modules"),
+      "junction",
+    );
+    const inherited = Object.fromEntries(
+      Object.entries({ ...process.env, ...options.env }).filter(
+        ([key, value]) => value !== undefined && !key.startsWith("OPENCODE_"),
+      ),
+    );
+    const proc = spawn(
+      binary(),
+      ["serve", "--hostname=127.0.0.1", "--port=0"],
+      {
+        cwd: options.cwd,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...inherited,
+          XDG_CONFIG_HOME: join(options.scratch, "config"),
+          XDG_DATA_HOME: join(options.scratch, "data"),
+          XDG_STATE_HOME: join(options.scratch, "state"),
+          XDG_CACHE_HOME: join(options.scratch, "cache"),
+          OPENCODE_TEST_HOME: home,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({
+            ...options.config,
+            plugin: options.prompt
+              ? [
+                  [
+                    new URL("./prompt-plugin.js", import.meta.url).href,
+                    options.prompt,
+                  ],
+                ]
+              : [],
+          }),
+          OPENCODE_SERVER_PASSWORD: password,
+          OPENCODE_CLIENT: "avp",
+          // Pure mode suppresses even explicitly configured plugins. Runs load
+          // only our bundled hook; the Descriptor needs no plugins.
+          OPENCODE_PURE: options.prompt ? "0" : "1",
+          OPENCODE_DISABLE_PROJECT_CONFIG: "1",
+          OPENCODE_DISABLE_AUTOUPDATE: "1",
+          OPENCODE_DISABLE_MODELS_FETCH: "1",
+          OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+          OPENCODE_DISABLE_CLAUDE_CODE: "1",
+          OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "1",
+          OPENCODE_DISABLE_EMBEDDED_WEB_UI: "1",
+        },
+      },
+    );
+    const kill = (signal: NodeJS.Signals) => {
+      if (proc.pid)
+        try {
+          process.kill(-proc.pid, signal);
+        } catch {}
+    };
+    const onExit = () => kill("SIGKILL");
+    process.on("exit", onExit);
+    let logs = "";
+    proc.stderr!.on("data", (chunk: Buffer) => {
+      logs = (logs + chunk).slice(-2000);
     });
-    let output = "";
     const exited = new Promise<string>((resolve) => {
-      proc.once("error", (err) => resolve(`could not start opencode: ${err.message}`));
+      proc.once("error", (error) =>
+        resolve(`OpenCode failed to start: ${error.message}`),
+      );
       proc.once("exit", (code, signal) =>
-        resolve(`opencode server exited (${signal ?? `code ${code}`})${tail(output) ? `: ${tail(output)}` : ""}`),
+        resolve(`OpenCode exited (${signal ?? code}): ${logs}`),
       );
     });
-    proc.stderr!.on("data", (chunk: Buffer) => (output = (output + chunk.toString()).slice(-4000)));
-    const url = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`opencode server did not start in ${START_TIMEOUT_MS}ms`)), START_TIMEOUT_MS);
-      let buffered = "";
-      proc.stdout!.on("data", (chunk: Buffer) => {
-        buffered += chunk.toString();
-        const match = buffered.match(/opencode server listening on (https?:\/\/\S+)/);
-        if (match) {
-          clearTimeout(timer);
-          resolve(match[1]!);
-        }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const url = await Promise.race([
+        new Promise<string>((resolve) => {
+          let buffer = "";
+          proc.stdout!.on("data", (chunk: Buffer) => {
+            buffer += chunk;
+            const match = buffer.match(
+              /opencode server listening on (https?:\/\/\S+)/,
+            );
+            if (match) resolve(match[1]!);
+          });
+        }),
+        exited.then((why) => {
+          throw new Error(why);
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("OpenCode startup timed out")),
+            30_000,
+          );
+        }),
+      ]);
+      const pool = new Agent();
+      const client = createOpencodeClient({
+        baseUrl: url,
+        directory: options.cwd,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
+        },
+        fetch: ((input: Request) =>
+          pooledFetch(input.url, {
+            method: input.method,
+            headers: [...input.headers],
+            body: input.body,
+            signal: input.signal,
+            duplex: "half",
+            dispatcher: pool,
+          })) as unknown as typeof fetch,
       });
-      void exited.then((why) => {
-        clearTimeout(timer);
-        reject(new Error(why));
-      });
-    }).catch((err) => {
-      killGroup(proc, "SIGKILL");
-      throw err;
-    });
-    proc.stdout!.resume();
-    const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
-    const pool = new Agent();
-    const client = createOpencodeClient({
-      baseUrl: url,
-      directory: opts.cwd,
-      headers: { Authorization: auth },
-      fetch: ((input: Request) =>
-        poolFetch(input.url, {
-          method: input.method,
-          headers: [...input.headers],
-          body: input.body,
-          signal: input.signal,
-          duplex: "half",
-          dispatcher: pool,
-        })) as unknown as typeof fetch,
-    });
-    return new OpencodeServer(url, client, exited, proc, pool, () => output);
+      return new Server(client, exited, proc, pool, onExit);
+    } catch (error) {
+      kill("SIGKILL");
+      process.off("exit", onExit);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
-
-  /** The tail of the server's log output, for error messages. */
-  get log(): string {
-    return tail(this.output());
-  }
-
-  /** Dispose OpenCode's instances, then stop the process group. Safe to call twice. */
   async close(): Promise<void> {
+    const timeout = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        timer.unref();
+      });
     if (this.proc.exitCode === null && this.proc.signalCode === null) {
-      await withTimeout(this.client.global.dispose(), STOP_GRACE_MS).catch(() => {});
-      this.kill("SIGTERM");
-      const stopped = await withTimeout(this.exited, STOP_GRACE_MS).then(
-        () => true,
-        () => false,
-      );
-      if (!stopped) this.kill("SIGKILL");
+      await Promise.race([
+        this.client.global.dispose().catch(() => {}),
+        timeout(1000),
+      ]);
+      try {
+        process.kill(-this.proc.pid!, "SIGTERM");
+      } catch {}
+      await Promise.race([this.exited, timeout(2000)]);
+      if (this.proc.exitCode === null && this.proc.signalCode === null)
+        try {
+          process.kill(-this.proc.pid!, "SIGKILL");
+        } catch {}
     }
     await this.pool.destroy().catch(() => {});
     process.off("exit", this.onExit);
   }
-
-  private kill(signal: NodeJS.Signals): void {
-    killGroup(this.proc, signal);
-  }
-}
-
-function killGroup(proc: ChildProcess, signal: NodeJS.Signals): void {
-  if (proc.pid === undefined) return;
-  try {
-    process.kill(-proc.pid, signal);
-  } catch {
-    // Already gone.
-  }
-}
-
-function serverEnv(opts: ServerOptions, password: string): Record<string, string> {
-  const env: Record<string, string | undefined> = { ...process.env };
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("OPENCODE_")) delete env[key];
-  }
-  const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "avp-opencode");
-  const home = join(opts.scratch, "home");
-  for (const dir of [cache, home]) mkdirSync(dir, { recursive: true });
-  Object.assign(env, {
-    XDG_CONFIG_HOME: join(opts.scratch, "config"),
-    XDG_DATA_HOME: join(opts.scratch, "data"),
-    XDG_STATE_HOME: join(opts.scratch, "state"),
-    XDG_CACHE_HOME: cache,
-    // OpenCode's own notion of home: `~/.opencode`, `~/.claude`, and
-    // `~/.agents` discovery. Tools still see the real home.
-    OPENCODE_TEST_HOME: home,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(opts.config),
-    OPENCODE_SERVER_PASSWORD: password,
-    // A headless client: no `question` tool asking a user who isn't there.
-    OPENCODE_CLIENT: "avp",
-    OPENCODE_PURE: "1",
-    OPENCODE_DISABLE_AUTOUPDATE: "1",
-    OPENCODE_DISABLE_MODELS_FETCH: "1",
-    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
-    OPENCODE_DISABLE_CLAUDE_CODE: "1",
-    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
-    OPENCODE_DISABLE_LSP_DOWNLOAD: "1",
-    OPENCODE_DISABLE_EMBEDDED_WEB_UI: "1",
-    ...opts.env,
-  });
-  return Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined));
-}
-
-/** The platform package's `opencode` executable, as OpenCode's own installer picks it. */
-export function opencodeBinary(): string {
-  const os = { darwin: "darwin", linux: "linux", win32: "windows" }[process.platform as string] ?? process.platform;
-  const base = `opencode-${os}-${process.arch}`;
-  const libc = os === "linux" && isMusl() ? ["-musl", ""] : ["", "-musl"];
-  // x64 builds need AVX2; the baseline build runs without it.
-  const cpu = process.arch === "x64" && !hasAvx2() ? ["-baseline", ""] : ["", "-baseline"];
-  const names = libc.flatMap((l) => cpu.map((c) => `${base}${c}${l}`));
-  const require = createRequire(import.meta.url);
-  for (const name of names) {
-    try {
-      const bin = join(dirname(require.resolve(`${name}/package.json`)), "bin", "opencode");
-      if (existsSync(bin)) return bin;
-    } catch {
-      // Not installed; try the next variant.
-    }
-  }
-  throw new Error(`no OpenCode binary for ${process.platform}-${process.arch} (expected the ${base} package)`);
-}
-
-function hasAvx2(): boolean {
-  if (process.platform !== "linux") return true;
-  try {
-    return /(^|\s)avx2(\s|$)/i.test(readFileSync("/proc/cpuinfo", "utf8"));
-  } catch {
-    return false;
-  }
-}
-
-function isMusl(): boolean {
-  if (existsSync("/etc/alpine-release")) return true;
-  const header = (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header;
-  return header !== undefined && !header.glibcVersionRuntime;
-}
-
-function tail(text: string): string {
-  return text.trim().split("\n").slice(-5).join("\n");
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timed out")), ms);
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(timer);
-        reject(e);
-      },
-    );
-  });
 }

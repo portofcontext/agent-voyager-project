@@ -129,7 +129,7 @@ One PR per agent. TypeScript and Rust agents wait for their SDKs.
 | `avp-deep-agents` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-openai-agents` | Python | ✅ | ✅ | ✅ OpenAI | ✅ |
 | `avp-gemini-cli` | TypeScript | ✅ | ✅ | ✅ Google | ✅ |
-| `avp-opencode` | TypeScript | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-opencode` | TypeScript | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-pi` | TypeScript | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-goose` | Rust | ⬜ | ⬜ | ⬜ | ⬜ |
 
