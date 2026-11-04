@@ -1,7 +1,7 @@
 /** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
@@ -13,6 +13,7 @@ import {
   type JsonValue,
 } from "@agent-voyager-project/sdk/trajectory";
 import {
+  getSystemMessageText,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
@@ -107,7 +108,7 @@ test("native responses retain reasoning, skills, replacement instructions, and p
       (context) => {
         system = context.messages
           .filter((m) => m.role === "system")
-          .map((m) => m.content)
+          .map(getSystemMessageText)
           .join("\n\n");
         return fauxAssistantMessage([
           fauxThinking("THOUGHT"),
@@ -126,8 +127,12 @@ test("native responses retain reasoning, skills, replacement instructions, and p
       "agent_stopped",
     ],
   );
-  assert.ok(system?.startsWith("SYSTEM\n\n## Skill: greeting"));
-  assert.ok(system?.includes("SUPPORT"));
+  assert.ok(system?.startsWith("SYSTEM"));
+  assert.ok(system?.includes("<available_skills>"));
+  assert.ok(system?.includes("<name>greeting</name>"));
+  assert.ok(!system?.includes("GREETING"));
+  assert.ok(!system?.includes("SUPPORT"));
+  assert.ok(!system?.includes("You are an expert coding assistant"));
   assert.equal(data(events, "agent_started")[0]!.system_prompt, system);
   const response = data(events, "assistant_message")[0]!;
   assert.equal(response.content[0]!.type, "thinking");
@@ -507,4 +512,91 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+});
+
+test("Pi loads commissioned skills and support files on demand through its native reader", async () => {
+  let skillPath = "";
+  const { events } = await scripted(
+    received({
+      system_prompt: "Use the matching skill.",
+      skills: [
+        {
+          name: "greeting",
+          files: {
+            "SKILL.md":
+              "---\nname: greeting\ndescription: Greeting\n---\nRead support.txt for the answer.",
+            "support.txt": "NATIVE_SKILL_RESULT",
+          },
+        },
+      ],
+    }),
+    [
+      (context) => {
+        const prompt = context.messages
+          .filter((m) => m.role === "system")
+          .map(getSystemMessageText)
+          .join("\n");
+        assert.ok(!prompt.includes("NATIVE_SKILL_RESULT"));
+        const match = prompt.match(/<location>([^<]+)<\/location>/);
+        assert.ok(match);
+        skillPath = match[1]!;
+        return fauxAssistantMessage(
+          [fauxToolCall("read", { path: skillPath }, { id: "skill" })],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        assert.ok(
+          JSON.stringify(context.messages).includes(
+            "Read support.txt for the answer.",
+          ),
+        );
+        return fauxAssistantMessage(
+          [
+            fauxToolCall(
+              "read",
+              { path: join(dirname(skillPath), "support.txt") },
+              { id: "support" },
+            ),
+          ],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        assert.ok(
+          JSON.stringify(context.messages).includes("NATIVE_SKILL_RESULT"),
+        );
+        return text();
+      },
+    ],
+  );
+  assert.deepEqual(
+    data(events, "tool_returned").map((result) => result.tool_call_id),
+    ["skill", "support"],
+  );
+  assert.equal(data(events, "agent_started")[0]!.skills?.[0]?.name, "greeting");
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+test("commissioned skills without a native file reader are refused", async () => {
+  const { events, faux } = await scripted(
+    received({
+      agents: { "avp-pi": { enabled_tools: [] } },
+      skills: [
+        {
+          name: "greeting",
+          files: {
+            "SKILL.md":
+              "---\nname: greeting\ndescription: Greeting\n---\nGREETING",
+          },
+        },
+      ],
+    }),
+    [],
+  );
+  assert.equal(
+    data(events, "error_occurred")[0]!.error_code,
+    "invalid_commission",
+  );
+  assert.equal(faux.state.callCount, 0);
 });

@@ -44,11 +44,14 @@ so the sandbox proxy can supply them; environment references are resolved before
 connecting. Credentials and model caches stay in memory. The launcher supplies
 the working directory, environment, CA, and OS confinement.
 
-An explicit `system_prompt` replaces Pi's instructions through its native
-`before_agent_start` hook. Inline skill files become instructions as in the
-Pydantic AI reference agent. Native extensions, workspace context files, skills,
-and prompt templates are not discovered. Sessions and settings are in memory;
-install telemetry, cache warming, and automatic compaction are off.
+An explicit `system_prompt` replaces Pi's base instructions through its native
+custom prompt setting. Commissioned skill files are written to a private
+temporary directory and registered with Pi's native skill loader. Pi exposes
+their names, descriptions, and locations; the model loads skill bodies and
+support files on demand through its native tools. Other extensions, workspace
+context files, skills, and prompt templates are not discovered. Sessions and
+settings are in memory; install telemetry, cache warming, and automatic
+compaction are off.
 
 Each complete model response produces one `assistant_message`; input usage
 includes the cache reads and writes Pi reports separately. AVP's shared prices
@@ -64,8 +67,8 @@ content when it is an object. Signals abort the session and close its Trajectory
 - The bundled model catalog limits supported model IDs. Other native Pi tools,
   extensions, custom model routes, and subagents are outside this agent's
   declared capabilities.
-- Skills are embedded as instructions rather than loaded through filesystem
-  skill discovery. The agent ships no built-in skills or MCP servers.
+- Commissioned skills require Pi's `read` or `bash` tool. The run is refused
+  when neither is enabled. The agent ships no built-in skills or MCP servers.
 - Context compaction and deferred model responses cannot be recorded by this
   adapter. Automatic compaction is disabled; unexpected compaction or deferred
   response events stop the run with an error.

@@ -14,6 +14,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
   DefaultResourceLoader,
+  loadSkillsFromDir,
   SessionManager,
   SettingsManager,
   type AgentSession,
@@ -191,7 +192,8 @@ export async function run(
       cacheWarming: "off",
       compaction: { enabled: false },
     });
-    let effectivePrompt = "";
+    const skillsDirectory = join(scratch, "skills");
+    cm.writeSkills(commission, skillsDirectory);
     const loader = new DefaultResourceLoader({
       cwd: process.cwd(),
       agentDir: options.agentDir ?? scratch,
@@ -201,15 +203,28 @@ export async function run(
       noPromptTemplates: true,
       noThemes: true,
       noContextFiles: true,
-      extensionFactories: [
-        (pi) => {
-          pi.on("before_agent_start", () => ({
-            systemPrompt: effectivePrompt,
-          }));
-        },
-      ],
+      // Pi treats an empty custom prompt as absent; whitespace keeps the base empty.
+      systemPrompt:
+        commission.system_prompt === ""
+          ? "\n"
+          : (commission.system_prompt ?? undefined),
+      skillsOverride: () =>
+        loadSkillsFromDir({ dir: skillsDirectory, source: "avp-commission" }),
     });
     await loader.reload();
+    const loadedSkills = new Set(
+      loader.getSkills().skills.map((skill) => skill.name),
+    );
+    const missingSkill = commission.skills?.find(
+      (skill) => !loadedSkills.has(skill.name),
+    );
+    if (missingSkill) {
+      await rec.error(
+        "invalid_commission",
+        `Pi could not load commissioned skill ${missingSkill.name}`,
+      );
+      return;
+    }
     const names = [
       ...(plan.started.tools ?? []).map((t) => t.name),
       ...mcp.definitions.map((t) => t.name),
@@ -226,13 +241,19 @@ export async function run(
       settingsManager: settings,
     }));
     await session.bindExtensions({});
-    effectivePrompt = [
-      commission.system_prompt ?? session.systemPrompt,
-      cm.skillInstructions(commission),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const effectivePrompt = session.systemPrompt;
     const active = new Set(session.getActiveToolNames());
+    if (
+      commission.skills?.length &&
+      !active.has("read") &&
+      !active.has("bash")
+    ) {
+      await rec.error(
+        "invalid_commission",
+        "Pi needs a file-reading tool to load commissioned skills",
+      );
+      return;
+    }
     const managed = new Map(mcp.declarations.map((t) => [t.name, t]));
     const tools: Tool[] = session
       .getAllTools()

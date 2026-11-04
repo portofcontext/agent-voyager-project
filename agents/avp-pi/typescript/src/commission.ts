@@ -1,5 +1,7 @@
 /** Commission values mapped to Pi's native runtime. */
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve, sep } from "node:path";
 import type {
   Commission,
   EnvSecret,
@@ -24,18 +26,19 @@ export function credential(commission: Commission): string | undefined {
       : envSecret(value);
 }
 
-export function skillInstructions(commission: Commission): string {
-  return (commission.skills ?? [])
-    .map(
-      (skill) =>
-        `## Skill: ${skill.name}\n\n${Object.entries(skill.files)
-          .sort(
-            ([a], [b]) => Number(b === "SKILL.md") - Number(a === "SKILL.md"),
-          )
-          .map(([path, text]) => `### ${path}\n\n${text}`)
-          .join("\n\n")}`,
-    )
-    .join("\n\n");
+/** Materialize the Commission's skill files for Pi's native skill loader. */
+export function writeSkills(commission: Commission, root: string): void {
+  mkdirSync(root, { recursive: true });
+  for (const skill of commission.skills ?? []) {
+    const directory = resolve(root, skill.name);
+    for (const [path, text] of Object.entries(skill.files)) {
+      const target = resolve(directory, path);
+      if (!target.startsWith(directory + sep))
+        throw new Error(`skill file escapes its directory: ${path}`);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, text);
+    }
+  }
 }
 
 export function toolName(

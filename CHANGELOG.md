@@ -17,8 +17,8 @@
 ### Changed
 
 - Pi uses the rebuilt TypeScript SDK, its own locked project, and a Node 24
-  sandbox image. Native response and tool events use the Recorder; legacy
-  installer and release files are removed.
+  sandbox image. Native responses and tools use the Recorder; inline skills
+  use Pi's native loader. Legacy installer and release files are removed.
 
 - All three SDK command lines include `avp_version` in their ping replies,
   matching the new CLI's image installation check.
