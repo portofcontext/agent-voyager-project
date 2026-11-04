@@ -154,11 +154,15 @@ assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
             self.assert_tar_data(archive, "dist/utils/data")
             consumer = Path(out) / "consumer"
             consumer.mkdir()
+            # A published package resolves its dependencies from the registry.
+            # Use an empty cache so a developer's cached metadata cannot hide
+            # failures on a fresh CI runner.
             subprocess.run(
                 [
                     "npm",
                     "install",
-                    "--offline",
+                    "--cache",
+                    str(Path(out) / "npm-cache"),
                     "--ignore-scripts",
                     "--no-audit",
                     "--no-fund",
@@ -166,7 +170,6 @@ assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
                 ],
                 cwd=consumer,
                 check=True,
-                capture_output=True,
             )
             subprocess.run(
                 [

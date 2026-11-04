@@ -58,11 +58,23 @@
 
 ### Removed
 
+- Legacy SDK bindings, CLI, conformance harness, root uv workspace, and Python
+  agent template and scaffolder. Checks now run each maintained project in its
+  own environment. Schema and provider-data generation stay in `scripts/`,
+  which also holds skill packaging.
+- Legacy publication and fresh-install workflows, which depended on the retired
+  agent catalog and release manifests. Beta publication is tracked in #116.
+  The legacy nightly price job is removed; `make sdk-data` refreshes both SDKs'
+  shared prices and endpoints before publishing.
+
 - Goose's Rust adapter and the Rust SDK, including legacy Rust bindings,
   scaffolding, generation, packaging, and CI jobs. Goose integration is deferred
   until its Python GDK is available.
 
 ### Fixed
+
+- SDK packaging checks install the TypeScript archive with a fresh npm cache,
+  so clean CI runners do not depend on cached registry metadata.
 
 - LLM judges accept models across providers, saved AVP credentials, and custom
   endpoints. Judge models are now explicit `origin/model` slugs; output token

@@ -1,8 +1,0 @@
-{
-  "image": "python:3.12-slim",
-  "packages": { "pip": ["six"] },
-  "files": {
-    "README.md": "seeded by avp env\n"
-  },
-  "net": ["api.anthropic.com"]
-}
