@@ -26,7 +26,6 @@ TEST_PKGS := \
 	avp/core/conformance \
 	agents/avp-claude-agent-sdk/python \
 	agents/_template/python \
-	agents/avp-pydantic-ai/python \
 	agents/avp-deep-agents/python \
 	agents/avp-openai-agents/python \
 	avp-cli
@@ -116,7 +115,6 @@ test-docker:
 CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
-AVP_PYDANTIC_AI_MANIFEST := agents/avp-pydantic-ai/python/avp-conformance.json
 AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
@@ -167,9 +165,6 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-pydantic-ai ──\033[0m\n"
-	@$(UV) run avp-conformance ping --agent $(AVP_PYDANTIC_AI_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(AVP_PYDANTIC_AI_MANIFEST)
 	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
@@ -380,8 +375,15 @@ codex-check:
 	@cd agents/avp-codex/python && $(UV) run ty check
 	@cd agents/avp-codex/python && $(UV) run pytest -q
 
+.PHONY: pydantic-ai-check
+pydantic-ai-check:
+	@cd agents/avp-pydantic-ai/python && $(UV) run ruff format --check .
+	@cd agents/avp-pydantic-ai/python && $(UV) run ruff check .
+	@cd agents/avp-pydantic-ai/python && $(UV) run ty check
+	@cd agents/avp-pydantic-ai/python && $(UV) run pytest -q
+
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

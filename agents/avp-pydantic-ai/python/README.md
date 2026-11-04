@@ -25,6 +25,20 @@ The command line is the SDK's agent command line; see the
   replace; an `env` credential reads that variable; without one, the provider's
   client reads its own, such as `ANTHROPIC_API_KEY`.
 
+## Sandbox
+
+Build from the repository root with the new CLI from [#86](https://github.com/portofcontext/agent-voyager-project/pull/86):
+
+```sh
+avp agent install pydantic-ai agents/avp-pydantic-ai/python/Dockerfile --context .
+avp agent ping pydantic-ai
+avp agent describe pydantic-ai
+avp run --agent pydantic-ai --commission c.json
+```
+
+The image bundles the SDK and provider dependencies. A model credential
+`{"proxy": "anthropic"}` uses the named vault secret through the sandbox proxy.
+
 ## Code
 
 | Module | What it does |

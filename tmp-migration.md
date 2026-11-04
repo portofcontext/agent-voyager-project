@@ -122,7 +122,7 @@ One PR per agent. TypeScript and Rust agents wait for their SDKs.
 
 | Agent | Language | New SDK | `<agent>-cli` command | Live run | Old files removed |
 |---|---|---|---|---|---|
-| `avp-pydantic-ai` | Python | ✅ | ✅ | ✅ Anthropic | ⬜ |
+| `avp-pydantic-ai` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `_template` | Python, Rust | ⬜ | ⬜ | ⬜ | ⬜ |
 | `avp-claude-agent-sdk` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
 | `avp-codex` | Python | ✅ | ✅ | ✅ OpenAI | ✅ |
