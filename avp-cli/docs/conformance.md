@@ -181,3 +181,14 @@ path to `base_url`.
 
 A case with responses stops the check for any other provider. The table is
 `PATHS` in `conformance/mock.py`.
+
+## Iterating on an agent
+
+`--volume` (`-v`) mounts local source over the installed package, so a change
+needs no image rebuild. `--case` runs one case. The sandbox path depends on the
+image.
+
+```sh
+avp conformance check --agent pd --case output-mismatch-fails \
+  -v ../agents/avp-pydantic-ai/python/src/avp_pydantic_ai:/avp/agents/avp-pydantic-ai/python/.venv/lib/python3.13/site-packages/avp_pydantic_ai:ro
+```
