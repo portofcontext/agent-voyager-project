@@ -21,7 +21,7 @@
     "@earendil-works/pi-ai": "1.2.0",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-mcp": "1.2.0",
-    "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript"
+    "@agent-voyager-project/sdk": "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.1/agent-voyager-project-sdk-0.1.0-beta.1.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

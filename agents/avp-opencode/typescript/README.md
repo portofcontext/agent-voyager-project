@@ -18,7 +18,7 @@ make opencode-check
 With the new CLI from #86:
 
 ```bash
-avp agent install opencode agents/avp-opencode/typescript/Dockerfile --context .
+avp agent install opencode agents/avp-opencode/typescript/Dockerfile
 avp agent ping opencode
 avp agent describe opencode
 avp run --agent opencode --commission commission.json
@@ -93,3 +93,5 @@ partial content with unknown usage, abort the native session, and close the run.
   authentication. Provider subscriptions and other authentication remain unverified.
 - Commissioned skills require the native `skill` tool. Unexpected compaction
   stops visibly. The agent exposes no background subagent capability.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

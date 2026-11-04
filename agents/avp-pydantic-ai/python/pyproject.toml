@@ -5,7 +5,7 @@ description = "AVP agent over Pydantic AI: the framework runs the loop, the adap
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-    "agent-voyager-project",
+    "agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl",
     "pydantic-ai-slim[anthropic,google,mcp,openai]==2.64.0",
 ]
 
@@ -14,9 +14,6 @@ avp-pydantic-ai-cli = "avp_pydantic_ai.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
-
-[tool.uv.sources]
-agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]

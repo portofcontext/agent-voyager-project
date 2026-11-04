@@ -4,7 +4,7 @@ An AVP agent using the pinned [Pi coding agent](https://github.com/earendil-work
 Pi owns the session, model calls, and tool execution. Native response and tool
 results feed the [TypeScript SDK Recorder](../../../avp-sdk/README.md).
 
-The project has its own npm lockfile and depends on `avp-sdk/typescript` by path.
+The project has its own npm lockfile and installs the TypeScript SDK beta from GitHub.
 It requires Node 22.19 or newer; its sandbox image uses Node 24. From the
 repository root:
 
@@ -14,11 +14,11 @@ make pi-check
 node agents/avp-pi/typescript/dist/src/main.js describe
 ```
 
-The package exposes `avp-pi-cli` through its `bin` entry. With the new CLI from
-#86, build and run its sandbox image from the repository root:
+The package exposes `avp-pi-cli` through its `bin` entry. Install its sandbox
+image with this agent's directory as the build context:
 
 ```bash
-avp agent install pi agents/avp-pi/typescript/Dockerfile --context .
+avp agent install pi agents/avp-pi/typescript/Dockerfile
 avp agent ping pi
 avp agent describe pi
 avp run --agent pi --commission commission.json
@@ -79,3 +79,5 @@ content when it is an object. Signals abort the session and close its Trajectory
 - Live sandbox validation covers Anthropic API-key proxy authentication.
   Other native providers and subscription OAuth remain unverified. Stored
   credentials are not read; the launcher can supply provider environment keys.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

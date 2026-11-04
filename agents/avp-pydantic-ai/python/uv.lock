@@ -12,23 +12,19 @@ resolution-markers = [
 [[package]]
 name = "agent-voyager-project"
 version = "0.1.0b1"
-source = { editable = "../../../avp-sdk/python" }
+source = { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl" }
 dependencies = [
     { name = "pydantic" },
     { name = "typer" },
+]
+wheels = [
+    { url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl", hash = "sha256:20ad7125040f80fba2724514c5b37be614832b7658047e468c72df57bdb3388d" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "typer", specifier = ">=0.20" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.6" },
-    { name = "ty", specifier = ">=0.0.95" },
 ]
 
 [[package]]
@@ -133,7 +129,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-voyager-project", editable = "../../../avp-sdk/python" },
+    { name = "agent-voyager-project", url = "https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "google", "mcp", "openai"], specifier = "==2.64.0" },
 ]
 

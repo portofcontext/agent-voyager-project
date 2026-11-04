@@ -41,10 +41,10 @@ Its HTTPS clients inherit the launcher's CA bundle for credential proxies.
 
 ## Sandbox
 
-Build from the repository root with the new CLI from [#86](https://github.com/portofcontext/agent-voyager-project/pull/86):
+Install using this agent's directory as the build context:
 
 ```sh
-avp agent install openai-agents agents/avp-openai-agents/python/Dockerfile --context .
+avp agent install openai-agents agents/avp-openai-agents/python/Dockerfile
 avp agent ping openai-agents
 avp agent describe openai-agents
 avp run --agent openai-agents --commission c.json
@@ -78,3 +78,5 @@ uv run pytest
 
 Tests drive the real Runner with its scripted model and native stdio MCP
 fixture, using no API credits.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

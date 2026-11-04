@@ -4,7 +4,7 @@ version = "0.0.4"
 description = "AVP agent over the OpenAI Agents SDK."
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project", "openai-agents==0.23.1", "jsonschema>=4"]
+dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl", "openai-agents==0.23.1", "jsonschema>=4"]
 
 [project.optional-dependencies]
 litellm = ["openai-agents[litellm]==0.23.1"]
@@ -14,9 +14,6 @@ avp-openai-agents-cli = "avp_openai_agents.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
-
-[tool.uv.sources]
-agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]

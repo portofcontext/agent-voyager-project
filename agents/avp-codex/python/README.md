@@ -48,10 +48,10 @@ analytics, feedback, apps, plugins, and web search are disabled.
 
 ## Sandbox
 
-Build from the repository root so the SDK and shared data are available:
+Install using this agent's directory as the build context:
 
 ```sh
-avp agent install codex agents/avp-codex/python/Dockerfile --context .
+avp agent install codex agents/avp-codex/python/Dockerfile
 avp agent ping codex
 avp agent describe codex
 avp vault set openai
@@ -106,3 +106,5 @@ The native tests and tool capture use local model endpoints, with no API
 credits. They cover the bundled runtime, MCP calls, parallel calls, shell
 polling, tool filtering, and a custom CA. Regenerate `tools.json` and run these
 tests whenever the Codex dependency pin changes.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

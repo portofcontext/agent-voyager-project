@@ -24,10 +24,10 @@ confinement; each Commission starts a new session.
 
 ## Sandbox
 
-Build from the repository root with the new CLI from [#86](https://github.com/portofcontext/agent-voyager-project/pull/86):
+Install using this agent's directory as the build context:
 
 ```sh
-avp agent install claude-code agents/avp-claude-agent-sdk/python/Dockerfile --context .
+avp agent install claude-code agents/avp-claude-agent-sdk/python/Dockerfile
 avp agent ping claude-code
 avp agent describe claude-code
 avp run --agent claude-code --commission c.json
@@ -98,3 +98,5 @@ uv run python scripts/capture_catalog.py
 Native tests and catalog capture require the pinned `claude` command on PATH
 (or `AVP_CLAUDE_CLI`) and use local model endpoints without API credits.
 Regenerate the catalog and run them when updating the native CLI pin.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

@@ -23,6 +23,8 @@
 
 ### Changed
 
+- Agents install the published SDK betas and build from their own directories.
+
 - Single runs and evaluations replace stored `run_id` and `supervisor` values
   at dispatch. Repeating a task creates distinct runs while preserving
   `thread_id`, `tags`, and `meta`.

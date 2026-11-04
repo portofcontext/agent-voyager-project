@@ -5,7 +5,7 @@ The native graph owns model calls, tools, and delegation. The adapter maps a
 Commission into its configuration and sends native callbacks through the
 [Python SDK Recorder](../../../avp-sdk/README.md).
 
-The project has its own lockfile and depends on `avp-sdk/python` by path.
+The project has its own lockfile and installs the Python SDK beta from GitHub.
 From this directory:
 
 ```bash
@@ -15,10 +15,10 @@ uv run avp-deep-agents-cli describe
 uv run avp-deep-agents-cli run --commission commission.json --out trajectory.ndjson
 ```
 
-With the new sandbox CLI from #86, run from the repository root:
+Install using this agent's directory as the build context:
 
 ```bash
-avp agent install deep-agents agents/avp-deep-agents/python/Dockerfile --context .
+avp agent install deep-agents agents/avp-deep-agents/python/Dockerfile
 avp agent ping deep-agents
 avp agent describe deep-agents
 avp run --agent deep-agents --commission commission.json
@@ -80,3 +80,5 @@ structured content when available.
   OpenAI and Google configuration is tested through their native clients; their
   live provider behavior, subscription OAuth, and managed cloud identity are
   unverified. The sandbox proxy supports fixed API-key headers.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

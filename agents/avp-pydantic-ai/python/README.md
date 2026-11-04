@@ -27,10 +27,10 @@ The command line is the SDK's agent command line; see the
 
 ## Sandbox
 
-Build from the repository root with the new CLI from [#86](https://github.com/portofcontext/agent-voyager-project/pull/86):
+Install using this agent's directory as the build context:
 
 ```sh
-avp agent install pydantic-ai agents/avp-pydantic-ai/python/Dockerfile --context .
+avp agent install pydantic-ai agents/avp-pydantic-ai/python/Dockerfile
 avp agent ping pydantic-ai
 avp agent describe pydantic-ai
 avp run --agent pydantic-ai --commission c.json
@@ -65,3 +65,5 @@ uv run ruff format --check
 uv run ty check
 uv run pytest
 ```
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).

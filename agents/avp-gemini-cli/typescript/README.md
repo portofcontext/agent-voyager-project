@@ -17,7 +17,7 @@ make gemini-cli-check
 With the new CLI from #86:
 
 ```bash
-avp agent install gemini-cli agents/avp-gemini-cli/typescript/Dockerfile --context .
+avp agent install gemini-cli agents/avp-gemini-cli/typescript/Dockerfile
 avp agent ping gemini-cli
 avp agent describe gemini-cli
 avp run --agent gemini-cli --commission commission.json
@@ -81,3 +81,5 @@ scheduler supplies tool results, and all Recorder writes are awaited in order.
 - Native process-wide configuration makes direct library runs sequential per
   process. Use separate processes for concurrent runs. The launcher owns OS
   confinement, credentials, and workspace provisioning.
+
+For local SDK changes, see [agent development](../../README.md#local-sdk-development).
