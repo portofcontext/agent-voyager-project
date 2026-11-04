@@ -1,57 +1,80 @@
 # avp-openai-agents
 
-An AVP agent over the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python)
-(`openai-agents`, import `agents`). The SDK owns the loop (`Runner.run_streamed`);
-this package translates its stream into calls on the binding's `Recorder` and
-exposes the stock entrypoint (`ping` / `describe` / `run`).
+An AVP agent over the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/).
+The SDK's Runner owns the loop. This package maps a Commission to its native
+model and MCP configuration and sends each model response and tool result to
+the AVP SDK's Recorder.
 
-```bash
-uv run --no-sync python -m avp_openai_agents.conformance run --commission c.json --out t.ndjson
-uv run avp-conformance ping --agent agents/avp-openai-agents/python/avp-conformance.json
+The standalone project pins OpenAI Agents `0.23.1`. From this directory:
+
+```sh
+uv sync
+uv run avp-openai-agents-cli ping
+uv run avp-openai-agents-cli describe
+uv run avp-openai-agents-cli run --commission c.json --out t.ndjson
 ```
 
-## What maps where
+See the [SDK command line](../../../avp-sdk/README.md#the-agent-command-line).
 
-| SDK signal | AVP |
-|---|---|
-| raw `response.completed` / `response.incomplete` | one turn: `Recorder.assistant(content, usage, finish_reasons, duration_ms)` |
-| `ResponseOutputText` / `ResponseOutputRefusal` | `TextBlock` (annotations as citations) / `RefusalBlock` |
-| `ResponseFunctionToolCall` | `ToolUseBlock` keyed by `call_id`, JSON arguments parsed |
-| `ResponseReasoningItem` | `ThinkingBlock` (summary text; `encrypted_content` as `signature`) |
-| `ResponseUsage` | `Usage` (`cached_tokens` → `cache_read_input_tokens`, `cache_write_tokens` → `cache_creation_input_tokens`, `reasoning_tokens` → `reasoning_output_tokens`) |
-| `tool_output` run item | `Recorder.tool_result(call_id, output)` |
-| stream ends | `stop(converged, final_output)` |
-| `ModelRefusalError` | `stop(refused)` |
-| auth / rate-limit / context errors | `error(auth_error / rate_limit / context_limit)` + `stop(error)` |
-| cancellation | `stop(interrupted)` |
+## What it runs
 
-Commission: `model` `openai/<id>` runs natively (`provider.base_url` redirects
-it); another origin routes through the SDK's LiteLLM extension as
-`litellm/<slug>` and needs the `litellm` extra, else the run fails fast with
-`unsupported_model`. A `provider.id` other than the model's origin fails fast
-with `unsupported_provider`. `system_prompt` → `instructions`; inline `skills`
-are appended to the instructions (all files, SKILL.md first); inline
-`mcp_servers` are dialed before `agent_started` and their tools listed with
-`avp.mcp_server_id`; `output_schema` becomes a non-strict JSON output type.
+- OpenAI models through the Responses API. `model.base_url` selects an
+  OpenAI-compatible endpoint. Installing the `litellm` extra also offers
+  Anthropic models through the SDK's native LiteLLM extension; `describe`
+  reflects the installed profile.
+- The framework supplies no built-in tools, skills, or subagents. Tools come
+  from the Commission's stdio and HTTP MCP servers, using native SDK clients.
+  The started event records the actual names and schemas the Runner exposes.
+- `system_prompt` becomes the agent's instructions. Commissioned skill files
+  follow those instructions, SKILL.md first.
+- `output_schema` uses a native SDK output schema, with JSON Schema validation
+  before `converged`. Invalid output reports `output_invalid`.
+- A `proxy` model credential sends a stand-in key. An `env` reference reads its
+  named variable; without one the client uses `OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY`. MCP proxy headers are left for the sandbox proxy to add.
+  Missing environment references fail before model calls.
 
-No built-ins. The OpenAI Agents SDK is a framework: its agents ship with no
-tools, skills, or subagents, and the descriptor mirrors that rather than adding
-any (see `agents/_template/README.md` §3). Tools come from the Commission's
-`mcp_servers`; every `enabled_builtin_*` list under `avp-openai-agents` must be
-empty. Cases requiring built-in tools or subagents report SKIP. The common
-managed MCP round-trip case still runs and checks tool execution plus a
-subsequent model response. The
-adapter sets no turn cap (`max_turns=None`) and uses the SDK's MCP connect
-timeout; the supervisor bounds the run.
+The launcher supplies the working directory, credentials, and confinement.
+Each Commission starts a fresh native run. SDK tracing is disabled; the image
+installs dependencies when built and uses the bundled pricing snapshot offline.
+Its HTTPS clients inherit the launcher's CA bundle for credential proxies.
+
+## Sandbox
+
+Build from the repository root with the new CLI from [#86](https://github.com/portofcontext/agent-voyager-project/pull/86):
+
+```sh
+avp agent install openai-agents agents/avp-openai-agents/python/Dockerfile --context .
+avp agent ping openai-agents
+avp agent describe openai-agents
+avp run --agent openai-agents --commission c.json
+```
+
+The default image installs the OpenAI profile. A model credential
+`{"proxy": "openai"}` uses the named vault key without exposing its value to
+the agent. The LiteLLM extra must be installed when building a profile that
+uses Anthropic.
 
 ## Known gaps
 
-- Tool errors: the SDK's tool output item has no error flag. MCP tool failures
-  that raise are flagged `is_error`; an MCP result that returns `isError: true`
-  without raising is not.
-- Hosted tools (web search, file search, code interpreter, hosted MCP) are not
-  offered, so `server_tool_use` blocks are never produced.
+- Responses are reported when complete. Each raw response boundary has its own
+  usage; the run's cumulative usage is not added again.
+- OpenAI annotations remain in text blocks' `openai` extension. Audio, files,
+  compaction, and other unsupported response item kinds fail visibly rather
+  than silently losing content or usage.
+- The agent does not add hosted tools or handoffs. Those are application
+  features a caller would configure on its own SDK agent.
+- MCP images with inline data are recorded as images. Other unsupported tool
+  content is retained as JSON text.
 
-The separate [`avp-codex`](../../avp-codex/python/README.md) package observes
-the native Codex runtime. It shares the Recorder and entrypoint, while keeping
-its runtime-specific configuration and translation independent.
+## Development
+
+```sh
+uv run ruff check
+uv run ruff format --check
+uv run ty check
+uv run pytest
+```
+
+Tests drive the real Runner with its scripted model and native stdio MCP
+fixture, using no API credits.

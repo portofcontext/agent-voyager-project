@@ -5,6 +5,7 @@
 !agents/avp-pydantic-ai/python
 !agents/avp-codex/python
 !agents/avp-claude-agent-sdk/python
+!agents/avp-openai-agents/python
 **/.venv
 **/__pycache__
 **/.pytest_cache

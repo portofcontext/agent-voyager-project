@@ -273,3 +273,15 @@ jobs:
         with:
           name: opencode-live-conformance
           path: live-results/
+
+  openai-agents-sdk:
+    name: avp-openai-agents SDK integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: make openai-agents-check

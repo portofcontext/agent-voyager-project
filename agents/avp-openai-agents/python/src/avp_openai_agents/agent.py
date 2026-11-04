@@ -1,194 +1,158 @@
-"""The adapter: OpenAI Agents SDK stream in, Recorder calls out.
-
-The SDK owns the loop (`Runner.run_streamed`). Each raw `response.completed`
-(or `response.incomplete`) event closes one model call and is reported as one
-complete turn; each `tool_output` run item is reported as its tool result.
-
-The OpenAI Agents SDK is a framework: its agents ship with no tools, skills, or
-subagents, so neither does this one (the descriptor mirrors the harness). Tools
-come from the Commission's `mcp_servers`. The SDK is imported inside `run` so
-`ping` stays light.
-"""
-
-from __future__ import annotations
+"""The native Runner owns the loop; each completed response goes to the Recorder."""
 
 import asyncio
 import time
-from importlib.metadata import version
+from contextlib import AsyncExitStack
 from typing import Any
 
-from avp.commission import Commission
-from avp.descriptor import AgentDescriptor, McpServerDecl, SkillDecl, ToolDecl
-from avp.pricing import load_default_prices
+from agents import Agent, FunctionTool, ModelSettings, RunConfig, RunContextWrapper, Runner
+from agents.exceptions import ModelRefusalError
+from agents.items import ToolCallOutputItem
+from agents.tool import get_function_tool_origin
+from openai.types.responses import ResponseCompletedEvent, ResponseIncompleteEvent
+from pydantic import JsonValue
+
+from avp.agent_cli import EventSink
+from avp.descriptor import Tool
 from avp.recorder import Recorder
-from avp.sink import EventSink
-from avp.trajectory import ErrorCode, StopReason
+from avp.utils.run_plan import plan_run
 from avp_openai_agents import commission as cm
 from avp_openai_agents import translate
-
-AGENT_VERSION = version(cm.AGENT_NAME)
-
-
-def describe() -> AgentDescriptor:
-    """What the agent ships with, before any Commission."""
-    return AgentDescriptor(
-        agent_name=cm.AGENT_NAME,
-        agent_version=AGENT_VERSION,
-        spec_version="0.1",
-    )
+from avp_openai_agents.descriptor import AGENT_NAME, describe
 
 
-def model_provider(plan: cm.RunPlan) -> Any:
-    """The SDK `ModelProvider` for the run; None keeps the SDK default.
-    Tests replace this to script the model."""
-    if plan.base_url and plan.origin == "openai":
-        from agents import OpenAIProvider
-
-        return OpenAIProvider(base_url=plan.base_url)
-    return None
+def model(commission):
+    """The native model for the run. Tests replace only this boundary."""
+    return cm.model(commission)
 
 
-async def _dial(
-    commission: Commission, rec: Recorder, errored: set[str]
-) -> tuple[list, list, list]:
-    """Connect each inline MCP server; a server that fails is reported and
-    left out of the run."""
-    servers, decls, tool_decls = [], [], []
-    for entry in commission.mcp_servers or []:
-        server = cm.mcp_server(entry, _failure_recorder(errored), _error_result_recorder(errored))
-        try:
-            await server.connect()
-            listed = await server.list_tools()
-        except Exception as exc:
-            await rec.error(ErrorCode.mcp_connect_failed, f"{entry.id}: {exc}")
-            decls.append(McpServerDecl(id=entry.id, status="failed"))
-            await server.cleanup()
-            continue
-        servers.append(server)
-        decls.append(McpServerDecl(id=entry.id, status="connected"))
-        tool_decls += [
-            ToolDecl(
-                name=t.name,
-                description=t.description,
-                inputSchema=_input_schema(t),
-                mcp_server_id=entry.id,
-            )
-            for t in listed
-        ]
-    return servers, decls, tool_decls
-
-
-async def run(commission: Commission, sink: EventSink) -> None:
-    prices = load_default_prices()
-    origin = commission.model.split("/", 1)[0]
-    rec = Recorder(sink, run_id=commission.run_id, provider=origin, prices=prices)
-    await rec.prelude(commission, describe())
-    if failure := cm.fail_fast(commission, AGENT_VERSION):
-        await rec.error(*failure)
-        await rec.stop(StopReason.error)
+async def run(received: JsonValue, sink: EventSink) -> None:
+    descriptor = describe()
+    rec = Recorder(sink)
+    commission = await rec.begin(received, descriptor)
+    if commission is None:
         return
-
-    from agents import Agent, ModelSettings, RunConfig, Runner
-    from agents.exceptions import ModelRefusalError
-
-    plan = cm.from_commission(commission)
-    # MCP tool calls that failed, by raising or with an `isError` result; the
-    # SDK's tool output item has no error flag.
-    errored: set[str] = set()
-    servers: list[Any] = []
+    if commission.model.provider not in {p.provider for p in descriptor.supported_models or []}:
+        await rec.error(
+            "invalid_commission", f"{AGENT_NAME} cannot call {commission.model.provider!r}"
+        )
+        return
+    plan = plan_run(commission, descriptor)
+    reports = {}
     try:
-        servers, mcp_decls, mcp_tool_decls = await _dial(commission, rec, errored)
-        await rec.start(
-            request_model=commission.model,
-            prompt=plan.prompt,
-            system_prompt=plan.instructions,
-            tools=mcp_tool_decls,
-            mcp_servers=mcp_decls or None,
-            skills=[
-                SkillDecl(name=s.name or s.id, description=s.description)
-                for s in commission.skills or []
-            ]
-            or None,
-            thread_id=commission.thread_id,
-            tags=commission.tags,
-        )
-        config = RunConfig(tracing_disabled=True)
-        if (provider := model_provider(plan)) is not None:
-            config.model_provider = provider
-        agent = Agent(
-            name=cm.AGENT_NAME,
-            instructions=plan.instructions,
-            model=plan.sdk_model,
-            mcp_servers=servers,
-            output_type=cm.output_type(commission.output_schema)
-            if commission.output_schema
-            else None,
-            model_settings=ModelSettings(include_usage=True),
-        )
-        # No turn cap from the adapter (the SDK defaults to 10): the supervisor
-        # bounds the run.
-        result = Runner.run_streamed(agent, plan.prompt, max_turns=None, run_config=config)
-        started = time.monotonic()
-        async for event in result.stream_events():
-            if event.type == "raw_response_event":
-                kind = event.data.type
-                if kind == "response.created":
-                    started = time.monotonic()
-                elif kind in ("response.completed", "response.incomplete"):
-                    response = event.data.response
-                    await rec.assistant(
-                        translate.content(response.output),
-                        translate.usage(response.usage),
-                        model=response.model,
-                        request_model=commission.model,
-                        finish_reasons=translate.finish_reasons(response),
-                        duration_ms=int((time.monotonic() - started) * 1000),
+        try:
+            native = model(commission)
+        except cm.MissingSecret as exc:
+            await rec.error("auth_error", str(exc))
+            return
+        async with AsyncExitStack() as stack:
+            servers = []
+            for entry in commission.mcp_servers or []:
+                try:
+                    server = cm.mcp_server(entry, reports)
+                    await stack.enter_async_context(server)
+                except cm.MissingSecret as exc:
+                    await rec.error("auth_error", str(exc))
+                    return
+                except Exception as exc:
+                    await rec.error("mcp_connect_failed", f"{entry.id}: {exc}")
+                    return
+                servers.append(server)
+            instructions = cm.instructions(commission)
+            agent = Agent(
+                name=AGENT_NAME,
+                model=native,
+                instructions=instructions,
+                mcp_servers=servers,
+                model_settings=ModelSettings(include_usage=True),
+                output_type=cm.output_type(commission.output_schema),
+            )
+            try:
+                tools = await agent.get_all_tools(RunContextWrapper(context=None))
+            except Exception as exc:
+                await rec.error("mcp_connect_failed", str(exc))
+                return
+            declarations = []
+            for tool in tools:
+                if not isinstance(tool, FunctionTool):
+                    raise ValueError(f"unexpected native tool {type(tool).__name__}")
+                origin = get_function_tool_origin(tool)
+                declarations.append(
+                    Tool(
+                        name=tool.name,
+                        description=tool.description,
+                        inputSchema=tool.params_json_schema,
+                        mcp_server_id=origin.mcp_server_name if origin else None,
                     )
-            elif event.type == "run_item_stream_event" and event.name == "tool_output":
-                if (call_id := translate.call_id(event.item)) is not None:
-                    await rec.tool_result(
-                        call_id, translate.tool_output(event.item), is_error=call_id in errored
+                )
+            await rec.start(
+                plan.started.model_copy(
+                    update={
+                        "system_prompt": instructions,
+                        "tools": declarations or None,
+                        "mcp_servers": [
+                            s.model_copy(update={"status": "connected"})
+                            for s in plan.started.mcp_servers or []
+                        ]
+                        or None,
+                    }
+                )
+            )
+            run = Runner.run_streamed(
+                agent,
+                commission.prompt,
+                max_turns=None,
+                run_config=RunConfig(tracing_disabled=True),
+            )
+            started = time.monotonic()
+            refused = False
+            async for event in run.stream_events():
+                if event.type == "raw_response_event":
+                    kind = event.data.type
+                    if kind == "response.created":
+                        started = time.monotonic()
+                    elif isinstance(event.data, (ResponseCompletedEvent, ResponseIncompleteEvent)):
+                        response = event.data.response
+                        blocks = translate.content(response.output)
+                        refused |= any(b.type == "refusal" for b in blocks)
+                        incomplete = response.incomplete_details
+                        await rec.response(
+                            blocks,
+                            usage=translate.usage(response.usage),
+                            response_model=response.model
+                            if response.model != commission.model.id
+                            else None,
+                            finish_reasons=[incomplete.reason]
+                            if incomplete and incomplete.reason
+                            else [response.status]
+                            if response.status
+                            else None,
+                            duration_ms=int((time.monotonic() - started) * 1000),
+                        )
+                elif event.type == "run_item_stream_event" and isinstance(
+                    event.item, ToolCallOutputItem
+                ):
+                    item = event.item
+                    raw: Any = item.raw_item
+                    await rec.tool_returned(
+                        raw["call_id"],
+                        translate.tool_output(raw["output"]),
+                        **reports.pop(raw["call_id"], {}),
                     )
-        await rec.stop(StopReason.converged, result.final_output)
+            output = run.final_output
+            reason = "refused" if refused else "converged"
+        await rec.stop(reason, output)
     except ModelRefusalError as exc:
-        await rec.stop(StopReason.refused, exc.refusal)
+        await rec.stop("refused", exc.refusal)
+    except cm.OutputInvalid as exc:
+        await rec.error("output_invalid", str(exc))
+        await rec.stop("error")
     except asyncio.CancelledError:
-        await rec.stop(StopReason.interrupted)
+        await rec.stop("interrupted")
         raise
     except Exception as exc:
         code = translate.error_code(exc)
         await rec.error(code, str(exc) or type(exc).__name__)
-        await rec.stop(StopReason.error)
-        if code is ErrorCode.agent_crash:
+        await rec.stop("error")
+        if code == "agent_crash":
             raise
-    finally:
-        for server in servers:
-            await server.cleanup()
-
-
-def _error_result_recorder(errored: set[str]) -> Any:
-    """Marks a call whose MCP result carries `isError`. The SDK hands that
-    result to the model as ordinary output."""
-
-    def on_result(ctx: Any) -> None:
-        call_id = getattr(ctx.run_context, "tool_call_id", None)
-        if ctx.is_error and call_id:
-            errored.add(call_id)
-        return None
-
-    return on_result
-
-
-def _failure_recorder(errored: set[str]) -> Any:
-    def on_failure(ctx: Any, exc: Exception) -> str:
-        if call_id := getattr(ctx, "tool_call_id", None):
-            errored.add(call_id)
-        return f"Error: {exc}"
-
-    return on_failure
-
-
-def _input_schema(tool: Any) -> Any:
-    """A listed MCP tool's input schema: `input_schema` in MCP SDK 2,
-    `inputSchema` in 1."""
-    return getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
