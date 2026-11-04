@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from avp_cli.commissions import store
 from avp_cli.eval.commission import EvalError, build, load, read
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.schemas import Eval, Item, NamedCommission
@@ -70,6 +71,17 @@ def test_avp_replaces_the_files_run_id() -> None:
     assert build({**TEMPLATE, "run_id": "from-the-file"}, item, "r").run_id == "r"
 
 
+def test_dispatch_owned_fields_are_replaced_before_rendering() -> None:
+    item = Item(id="a", text="x", schema={"type": "object"})
+    built = build(
+        {**TEMPLATE, "run_id": "{item.missing}", "supervisor": {"name": "{item.missing}"}},
+        item,
+        "fresh",
+    )
+    assert built.run_id == "fresh"
+    assert built.supervisor and built.supervisor.name == "avp-cli"
+
+
 def test_a_commission_that_fills_to_a_non_object_fails() -> None:
     with pytest.raises(TemplateError, match="isn't a JSON object once filled"):
         build({"$item": "id"}, Item(id="a"), "r", "commission.x")
@@ -102,11 +114,14 @@ def test_check_reports_a_missing_file(tmp_path: Path) -> None:
     assert problem.startswith("commission.capitals: can't read")
 
 
-def test_saved_commissions_are_not_supported_yet(tmp_path: Path) -> None:
+def test_saved_commissions_are_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AVP_HOME", str(tmp_path / "home"))
     ev = load(write(tmp_path, TEMPLATE))
     ev.commission = [NamedCommission("baseline")]
-    [problem] = check(ev, tmp_path)
-    assert "saved Commissions aren't supported yet" in problem
+    assert "no saved Commission 'baseline'" in check(ev, tmp_path)[0]
+    store.save("baseline", TEMPLATE)
+    assert check(ev, tmp_path) == []
+    assert read(NamedCommission("baseline"), tmp_path) == TEMPLATE
 
 
 def test_load_reports_an_invalid_eval(tmp_path: Path) -> None:

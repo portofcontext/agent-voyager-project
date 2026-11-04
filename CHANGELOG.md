@@ -4,6 +4,10 @@
 
 ### Added
 
+- Commission creation, validation with all errors and warnings, and a named
+  library shared by `avp run` and evaluations. Runs and evals validate tasks
+  before launch and check agent settings against a fresh Descriptor.
+
 - A standalone CLI on the rebuilt v0.1 SDK, with sandboxed runs, evaluations,
   conformance commands, image installation, and vault credentials. The previous
   CLI is retained separately until the legacy cleanup.
@@ -15,6 +19,10 @@
   and the single price snapshot, bundled in its npm package.
 
 ### Changed
+
+- Single runs and evaluations replace stored `run_id` and `supervisor` values
+  at dispatch. Repeating a task creates distinct runs while preserving
+  `thread_id`, `tags`, and `meta`.
 
 - OpenCode uses the rebuilt TypeScript SDK, a standalone locked project, and
   a sandbox image. Native responses, tools, and child sessions feed the Recorder;

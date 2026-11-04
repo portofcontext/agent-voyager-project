@@ -37,7 +37,7 @@ stderr in `~/.avp/runs/<time>-<run_id>/`.
 avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --help, prints help.
 │     avp [--eval RUN_ID | --run RUN_ID]
 ├── ✅ run               Run one agent on one Commission and write its Trajectory.
-│     avp run --commission task.json --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
+│     avp run --commission task.json|NAME --agent pd [--env NAME=VALUE | NAME] [--env-file .env]
 │         [--allow-host pypi.org] [-v ./testing/mcp:/mcp:ro] [--out traj.ndjson] [--timeout 30m]
 │     The agent's environment has only the variables --env and --env-file give. It can
 │     reach only the model's host (model.base_url, or avp's default for the provider),
@@ -100,11 +100,17 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   └── ✅ uninstall  Remove an agent and its image.
 │         avp agent uninstall pd
 │
-├── ⬜ commission        Commission files.
-│   ├── new     Write a Commission for an agent, with its built-in items listed.
+├── commission          Reusable Commission files and saved names. See Commissions.
+│   ├── ✅ new     Print JSON with an installed agent's version and built-in items.
 │   │     avp commission new --agent pd --model openai/gpt-5-mini [--prompt "..."] > task.json
-│   └── check   Validate a Commission and apply the Commission checks for an agent.
-│         avp commission check task.json [--agent pd]
+│   ├── ✅ check   Report all errors and warnings. Errors exit 1; warnings alone exit 0.
+│   │     avp commission check task.json|NAME [--agent pd]
+│   ├── ✅ save    Validate and save under a name. --force replaces an existing entry.
+│   │     avp commission save NAME task.json [--force]
+│   ├── ✅ list    Print saved Commission names.
+│   │     avp commission list
+│   └── ✅ delete  Delete a saved Commission, keeping its past runs. Asks first.
+│         avp commission delete NAME [--yes]
 │
 ├── vault               Secrets in the system's credential store (the macOS Keychain, Windows
 │   │                   Credential Manager, or the Secret Service on Linux), for a Commission's
@@ -139,6 +145,45 @@ the CLI runs the image's ENTRYPOINT in it through OpenSandbox's exec daemon,
 so it can fill the vault first and gets the command's exit code and output.
 Everything that changes per run (the Commission, the workspace,
 the credentials) reaches the sandbox at run time, never through the image.
+
+## Commissions
+
+A saved Commission has a name, with no separate ID, and lives at
+`$AVP_HOME/commissions/<name>.json` (normally `~/.avp/commissions/`). Names start
+with a lowercase letter or digit and contain lowercase letters, digits, `.`,
+`_`, or `-`; they cannot end in `.json`. A source containing `/` or ending in
+`.json` is a file path. Anything else is a saved name. Use `./task` for a file
+without a `.json` suffix, even if a saved Commission has the same name. This
+rule also applies to an eval's Commission sources; eval paths are relative to
+the eval file.
+
+`new` requires `--agent`, asks it for its Descriptor, and prints JSON without
+saving it. The `agents` entry uses the Descriptor's `agent_name`, which can
+differ from the installed alias. It pins `agent_version` and lists every
+built-in tool, subagent, skill, and MCP server in the matching allowlist.
+Tools from MCP servers are controlled by their server's list. `--prompt`
+defaults to an empty string. Edit the JSON to change the task, credentials,
+version pin, or allowlists, then use `save NAME FILE` to keep it.
+
+Files may omit `run_id` and `supervisor`. `save` removes them, and both `run`
+and `eval run` replace any supplied values with fresh per-run identity and
+avp's supervisor information. `thread_id`, `tags`, and `meta` remain caller data.
+Each run directory contains the Commission sent to the agent.
+
+`check` reports model validation errors, duplicate MCP server IDs and skill
+names, case-insensitive duplicate HTTP header names, duplicate allowlist
+entries, and skill names that differ from their SKILL.md frontmatter. Secret
+references using `env` produce warnings. With `--agent`, it also checks the
+Descriptor name, version, and all enabled built-ins, and warns about built-in
+name clashes and models outside `supported_models`. It checks the installed
+agent's settings; it does not load other agents named in the file.
+
+`run` and `eval run` apply these checks too. Static errors stop them before
+any sandbox starts. Getting a fresh Descriptor itself needs a sandbox; errors
+against that Descriptor stop them before any task sandbox starts. An eval
+checks all its Commission/agent/item combinations before launching any task.
+Warnings allow execution. Conformance deliberately bypasses these checks so
+invalid-Commission cases can test the agent's refusal behavior.
 
 ## Eval
 
@@ -246,14 +291,13 @@ sessions, and scripts (`--json`), and the TUI is for exploring.
 
 1. Installed agents are state under `~/.avp/agents/`. An eval file could name
    a Dockerfile instead, to be committed with it.
-2. Removing the saved-Commission library: `run --commission` takes a path.
-3. Removing `init` and the catalog templates, for an example eval file in the docs.
-4. Credential names: the default name a Commission uses for a model's key (the
+2. Removing `init` and the catalog templates, for an example eval file in the docs.
+3. Credential names: the default name a Commission uses for a model's key (the
    provider ID?), and whether a key already in the shell's environment counts.
-5. What `run` prints, and where the Trajectory goes without `--out`
+4. What `run` prints, and where the Trajectory goes without `--out`
    (`~/.avp/runs/<run_id>/`?).
-6. OAuth tokens in the Credential Vault: avp refreshes an expired token before
+5. OAuth tokens in the Credential Vault: avp refreshes an expired token before
    a run, but the vault doesn't refresh it during one, so a run longer than
    the token lasts can lose access.
-7. Installing the project's own agents by name and version, without a
+6. Installing the project's own agents by name and version, without a
    checkout, once the SDK and agents are published.

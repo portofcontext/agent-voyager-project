@@ -7,11 +7,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
+from uuid import uuid4
 
 from pydantic import JsonValue, ValidationError
 
 from avp.commission import Commission
-from avp_cli.eval.commission import EvalError, build, read
+from avp_cli.commissions.check import check as check_commission
+from avp_cli.eval.commission import EvalError, build, fill, read
 from avp_cli.eval.schemas import Eval, Item, JsonObject, ScorerSpec
 from avp_cli.eval.scorers import SCORERS
 from avp_cli.eval.scoring import Run, Scorer
@@ -42,12 +44,15 @@ class EvalConfig:
     """The scorer's fields, filled from `item` and `run` for each run and
     passed to the scorer as `config`."""
 
+    check_commissions: bool = True
+    """Conformance turns this off to test deliberate agent refusal cases."""
+
     def __iter__(self) -> Iterator[EvalCase]:
         """Every Commission, on every agent, for every item."""
         for name, template in self.commissions.items():
             for agent in self.agents:
                 for item in self.dataset:
-                    run_id = f"{name}-{agent}-{item.id}"
+                    run_id = f"{uuid4().hex}-{name}-{agent}-{item.id}"
                     yield EvalCase(name, agent, item, build(template, item, run_id))
 
     @classmethod
@@ -79,14 +84,14 @@ def _commission_problems(name: str, template: JsonObject, dataset: list[Item]) -
     problems = []
     for item in dataset:
         try:
-            build(template, item, f"{name}-{item.id}", where)
+            value = fill(template, item, where)
+            problems.extend(
+                f"item {item.id}, {where}.{p.where}: {p.message}"
+                for p in check_commission(value)
+                if p.level == "error"
+            )
         except TemplateError as error:
             problems.append(f"item {item.id}, {error}")
-        except ValidationError as error:
-            problems.extend(
-                f"item {item.id}, {'.'.join([where, *map(str, e['loc'])])}: {e['msg']}"
-                for e in error.errors()
-            )
     return problems
 
 

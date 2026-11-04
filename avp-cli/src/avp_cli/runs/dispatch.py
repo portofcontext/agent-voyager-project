@@ -56,11 +56,9 @@ def dispatch(
     entrypoint: list[str],
     commission: Commission,
     options: Options | None = None,
-    text: str | None = None,
     watch: Watch | None = None,
 ) -> Finished:
-    """Sends the Commission to the agent and waits for it. `text` is the
-    Commission as given, kept in the run's directory; by default its JSON.
+    """Sends the finalized Commission to the agent and keeps its JSON in the run directory.
     Raises Failed before the agent starts, for a variable or secret the
     Commission needs or a sandbox that won't start. Once the agent is running,
     how it ended is the exit code."""
@@ -70,8 +68,7 @@ def dispatch(
     hosts = network.allowed_hosts(commission, options.allow_hosts)
     vault = credentials.vault(commission)
     detail(f"Image: {agent.image}, entrypoint {shlex.join(entrypoint)}")
-    if text is None:
-        text = commission.model_dump_json(exclude_none=True)
+    text = commission.model_dump_json(exclude_none=True)
     run_directory = directory.create(commission.run_id, text, options.directory)
     detail(f"Run directory: {run_directory}")
     if not any(network.MODEL in reasons for reasons in hosts.values()):

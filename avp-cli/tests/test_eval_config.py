@@ -58,7 +58,7 @@ def test_every_commission_on_every_agent_for_every_item(tmp_path: Path) -> None:
         for i in ["paris", "tokyo"]
     ]
     first = runs[0].built
-    assert first.run_id == "inline-1-pd-paris"
+    assert first.run_id.endswith("-inline-1-pd-paris")
     assert first.prompt == "Name the city in: Paris is in France."
     assert runs[-1].built.prompt == "City? Tokyo is in Japan."
 
@@ -66,6 +66,22 @@ def test_every_commission_on_every_agent_for_every_item(tmp_path: Path) -> None:
 def test_agent_option_replaces_the_files_agents(tmp_path: Path) -> None:
     path = eval_file(tmp_path)
     assert EvalConfig.from_eval(load(path), path.parent, ["other"]).agents == ["other"]
+
+
+def test_semantic_errors_are_checked_for_every_rendered_item(tmp_path: Path) -> None:
+    path = eval_file(
+        tmp_path,
+        commission={
+            **COMMISSION,
+            "skills": [
+                {"name": "guide", "files": {"SKILL.md": "---\nname: {item.id}\n---\n"}},
+            ],
+        },
+    )
+    found = problems(path)
+    assert len(found) == 2
+    assert "item paris" in found[0] and "'paris'" in found[0]
+    assert "item tokyo" in found[1] and "'tokyo'" in found[1]
 
 
 def test_agents_are_required(tmp_path: Path) -> None:
@@ -162,9 +178,9 @@ def test_conformance_builds_an_eval_config_directly() -> None:
         scorer=case,
     )
     [(name, agent, item, built)] = list(config)
-    assert (name, agent, item.id, built.run_id) == (
+    assert built.run_id.endswith("-agents-without-entry-pd-case")
+    assert (name, agent, item.id) == (
         "agents-without-entry",
         "pd",
         "case",
-        "agents-without-entry-pd-case",
     )

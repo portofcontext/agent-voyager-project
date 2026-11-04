@@ -46,7 +46,8 @@ A Commission is given as one of:
 - A path to its JSON file, relative to the eval file. A string with a `/`
   or ending in `.json` is a path.
 - An inline Commission object.
-- ⬜ A saved Commission's name. Saved Commissions aren't supported yet.
+- A saved Commission's name, created with `avp commission save NAME FILE`.
+  Names live under `$AVP_HOME/commissions/` (normally `~/.avp/commissions/`).
 
 Each Commission has a name, used on the scoreboard and in its runs' IDs: its
 file's name without `.json`, its saved name, or `inline-1`, `inline-2`, and so
@@ -55,7 +56,9 @@ file's name must be a valid name.
 
 A Commission file can leave out `run_id` and `supervisor`. avp sets them for
 each run and replaces any value the file gives. A run's `run_id` is
-`<commission>-<agent>-<item>`, such as `inline-1-pd-paris`.
+`<unique-id>-<commission>-<agent>-<item>`. Each eval execution gets fresh IDs,
+including when running the same file again. `thread_id`, `tags`, and `meta`
+remain as the rendered Commission supplies them.
 
 ## Running
 
@@ -66,8 +69,12 @@ avp eval list
 avp eval delete ID       # asks first; --yes doesn't
 ```
 
-avp first runs each agent's `describe` once, and stops if an agent isn't
-installed or doesn't answer. Then every Commission runs on every agent for
+avp checks every rendered Commission before starting any sandbox. It then
+runs each agent's `describe` once in a sandbox, and checks every Commission
+against the matching Descriptor before starting any task sandbox. An error in
+any Commission stops the entire eval; warnings are printed and allow it to run.
+An agent that isn't installed or doesn't answer also stops the eval.
+Then every Commission runs on every agent for
 every item, each run in its own sandbox as `avp run` runs it, one at a time unless `--concurrency` says more.
 `--env`, `--env-file`, `--allow-host`, and `-v` work as they do for `avp run`
 and apply to every run. A run whose agent never starts, such as one whose

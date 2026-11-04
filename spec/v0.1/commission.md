@@ -173,6 +173,10 @@ These rules apply to the supervisor that writes a Commission. A supervisor confo
 
 The supervisor MUST give every Commission it sends a `run_id` it has not used before.
 
+Stored Commissions can omit `run_id` and `supervisor`. The supervisor sets
+`run_id` before each run and can identify itself in `supervisor`.
+`thread_id`, `tags`, and `meta` can be reused across runs.
+
 ### 4.2 IDs are unique
 
 Within one Commission, the supervisor MUST NOT repeat an MCP server `id` or a skill `name`. Within one HTTP server's `headers`, it MUST NOT repeat a header name, ignoring case.
