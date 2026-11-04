@@ -5,6 +5,10 @@
 ### Fixed
 
 - Both SDK run plans preserve an explicitly empty system prompt.
+- `avp-pydantic-ai` no longer lets Pydantic AI add its `<system>` tag sentence
+  to the Commission's system prompt.
+- `avp-pydantic-ai` keeps the rejected output on `agent_stopped` when a run ends
+  with `output_invalid`.
 
 ### Added
 

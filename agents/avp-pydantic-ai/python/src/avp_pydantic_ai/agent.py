@@ -29,6 +29,11 @@ from avp_pydantic_ai.descriptor import AGENT_NAME, describe
 pydantic_ai.BANNER_ENABLED = False  # ty: ignore[invalid-assignment]
 """Pydantic AI prints a banner to stderr on its first run in a process."""
 
+Model._announces_system_voice = False
+"""Pydantic AI adds a sentence about `<system>` tags to the system prompt of a
+model without mid-conversation system messages. A Commission's `system_prompt`
+replaces the agent's own, so the agent must not add to it."""
+
 
 def model(commission: Commission) -> Model:
     """The Pydantic AI model for the run. Tests replace this to script it."""
@@ -74,11 +79,14 @@ class _History:
         self.seen = 0
         self.started = time.monotonic()
         self.finish: str | None = None
+        self.last_output: JsonValue = None
 
     async def report(self, messages: list[ModelMessage]) -> None:
         for message in messages[self.seen :]:
             if isinstance(message, ModelResponse):
                 self.finish = message.finish_reason
+                output = translate.offered_output(message.parts)
+                self.last_output = self.last_output if output is None else output
                 await self.rec.response(
                     translate.content(message.parts),
                     usage=translate.usage(message.usage),
@@ -157,7 +165,7 @@ async def run(received: JsonValue, sink: EventSink) -> None:
                 return
             code = translate.error_code(exc)
             await rec.error(code, str(exc) or type(exc).__name__)
-            await rec.stop("error")
+            await rec.stop("error", history.last_output if code == "output_invalid" else None)
             # The Trajectory reports the error, so the run ends normally. The
             # traceback goes to stderr, for whoever debugs the crash.
             if code == "agent_crash":

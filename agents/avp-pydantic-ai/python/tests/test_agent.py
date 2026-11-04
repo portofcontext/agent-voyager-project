@@ -10,6 +10,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+import httpx2
 import pytest
 from anthropic import AsyncAnthropic
 from pydantic import TypeAdapter
@@ -25,6 +26,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from avp.agent_cli import main
 from avp.commission import Commission
@@ -180,6 +182,33 @@ def test_output_schema_ends_on_the_output_tool(script, tmp_path: Path) -> None:
     assert events[-1]["data"]["output"] == {"answer": 3}
 
 
+@pytest.mark.parametrize(
+    ("first", "second", "output"),
+    [
+        (TextPart("This isn't JSON."), TextPart("This isn't JSON."), "This isn't JSON."),
+        (
+            ToolCallPart("final_result", '{"answer": 3', tool_call_id="o1"),
+            ToolCallPart("final_result", '{"answer": 4', tool_call_id="o2"),
+            '{"answer": 4',
+        ),
+    ],
+)
+def test_rejected_output_stays_on_agent_stopped(
+    script, tmp_path: Path, first: ModelResponsePart, second: ModelResponsePart, output: str
+) -> None:
+    script(_reply(first), _reply(second))
+    events = _run(tmp_path, output_schema={"type": "object"})
+    error = next(event for event in events if event["type"] == "error_occurred")
+    assert error["data"]["error_code"] == "output_invalid"
+    assert events[-1]["data"] == {"reason": "error", "output": output}
+
+
+def test_other_errors_stop_without_rejected_output(script, tmp_path: Path) -> None:
+    script(_reply(TextPart("This isn't JSON.")), ModelHTTPError(429, "m", {"error": "slow down"}))
+    events = _run(tmp_path, output_schema={"type": "object"})
+    assert events[-1]["data"] == {"reason": "error"}
+
+
 def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
     seen = script(_reply(TextPart("hi")))
     skill = {
@@ -189,6 +218,35 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
     events = _run(tmp_path, system_prompt="base", skills=[skill])
     assert events[2]["data"]["skills"] == [{"name": "greet", "description": "Greet people."}]
     assert "Say hi." in seen[0][0][0].instructions
+
+
+def test_the_model_gets_only_the_commissions_system_prompt(monkeypatch, tmp_path: Path) -> None:
+    """Pydantic AI adds a sentence about `<system>` tags to this model's system
+    prompt unless it's turned off, so check the request that goes to the provider."""
+    systems = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        systems.append(body["system"])
+        return httpx2.Response(
+            200,
+            json={
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": body["model"],
+                "content": [{"type": "text", "text": "hi"}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    client = httpx2.AsyncClient(transport=httpx2.MockTransport(respond))
+    provider = AnthropicProvider(api_key="test", http_client=client)
+    monkeypatch.setattr(agent, "model", lambda c: AnthropicModel(MODEL["id"], provider=provider))
+    _run(tmp_path, system_prompt="base")
+    assert [[block["text"] for block in system] for system in systems] == [["base"]]
 
 
 def test_rate_limit_ends_the_run(script, tmp_path: Path) -> None:

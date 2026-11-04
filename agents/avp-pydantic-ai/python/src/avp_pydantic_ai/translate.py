@@ -9,6 +9,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+from pydantic import JsonValue
 from pydantic_ai import (
     FilePart,
     ModelHTTPError,
@@ -26,6 +27,7 @@ from pydantic_ai import (
     UsageLimitExceeded,
     UserError,
 )
+from pydantic_ai._output import DEFAULT_OUTPUT_TOOL_NAME
 from pydantic_ai.messages import (
     BaseToolCallPart,
     Citation,
@@ -106,6 +108,18 @@ def content(parts: Sequence[ModelResponsePart]) -> list[ContentBlock]:
         # - SpeechPart: audio the model spoke, with its transcript.
         # - FilePart that isn't an image, such as a generated PDF.
     return blocks
+
+
+def offered_output(parts: Sequence[ModelResponsePart]) -> JsonValue:
+    """What a response offers as the run's output, or None: the output tool's
+    arguments, as sent if they aren't valid JSON, or else the response's text."""
+    for part in parts:
+        if isinstance(part, ToolCallPart) and part.tool_name == DEFAULT_OUTPUT_TOOL_NAME:
+            try:
+                return json.loads(part.args) if isinstance(part.args, str) else part.args
+            except ValueError:
+                return part.args
+    return "".join(part.content for part in parts if isinstance(part, TextPart)) or None
 
 
 def _citations(citations: list[Citation] | None) -> list[AVPCitation] | None:
