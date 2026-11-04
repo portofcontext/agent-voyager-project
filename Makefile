@@ -24,7 +24,6 @@ UV := uv
 TEST_PKGS := \
 	avp/bindings/python \
 	avp/core/conformance \
-	agents/avp-claude-agent-sdk/python \
 	agents/_template/python \
 	agents/avp-deep-agents/python \
 	agents/avp-openai-agents/python \
@@ -112,7 +111,6 @@ test-docker:
 
 
 # Manifest paths, relative to the repo root the harness runs from.
-CLAUDE_MANIFEST := agents/avp-claude-agent-sdk/python/avp-conformance.json
 GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
@@ -136,7 +134,6 @@ SANDBOX ?=
 # ── Free: validate case files + liveness-ping + describe each agent (no model) ─
 .PHONY: claude-ping goose-build goose-ping claude-describe goose-describe
 claude-ping:
-	@$(UV) run avp-conformance ping --agent $(CLAUDE_MANIFEST)
 
 # Compile before pinging: the manifest runs `cargo run`, and a cold build
 # would otherwise eat the ping's timeout.
@@ -147,7 +144,6 @@ goose-ping: goose-build
 	@$(UV) run avp-conformance ping --agent $(GOOSE_MANIFEST)
 
 claude-describe:
-	@$(UV) run avp-conformance describe --agent $(CLAUDE_MANIFEST)
 
 goose-describe: goose-build
 	@$(UV) run avp-conformance describe --agent $(GOOSE_MANIFEST)
@@ -156,7 +152,6 @@ goose-describe: goose-build
 .PHONY: conformance
 conformance:
 	@$(UV) run avp-conformance validate
-	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
 	@$(MAKE) --no-print-directory claude-ping
 	@$(MAKE) --no-print-directory claude-describe
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
@@ -219,7 +214,6 @@ test-opencode: opencode-build
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
 .PHONY: claude-check goose-check
 claude-check:
-	@$(UV) run avp-conformance check --agent $(CLAUDE_MANIFEST) --suite v0.1 $(SANDBOX)
 
 goose-check:
 	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
@@ -247,7 +241,6 @@ conformance-check:
 	@if [ -z "$$ANTHROPIC_API_KEY" ]; then \
 		echo "error: ANTHROPIC_API_KEY is not set; conformance-check runs cases on a real model"; exit 2; \
 	fi
-	@printf "\n\033[1;36m── avp-claude-agent-sdk ──\033[0m\n"
 	@$(MAKE) --no-print-directory claude-check
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-check
@@ -382,8 +375,15 @@ pydantic-ai-check:
 	@cd agents/avp-pydantic-ai/python && $(UV) run ty check
 	@cd agents/avp-pydantic-ai/python && $(UV) run pytest -q
 
+.PHONY: claude-check
+claude-check:
+	@cd agents/avp-claude-agent-sdk/python && $(UV) run ruff format --check .
+	@cd agents/avp-claude-agent-sdk/python && $(UV) run ruff check .
+	@cd agents/avp-claude-agent-sdk/python && $(UV) run ty check
+	@cd agents/avp-claude-agent-sdk/python && $(UV) run pytest -q
+
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

@@ -18,6 +18,9 @@
 
 - Pydantic AI installs as a sandbox image and no longer registers with the
   legacy wheel installer or conformance entrypoint.
+- Claude uses the rebuilt Python SDK, a locked standalone project, and a
+  sandbox image. Native responses, tools, and subagents report through the
+  Recorder; the legacy wrapper and installer files are removed.
 
 - Codex uses the rebuilt Python SDK in its own locked project, with an installed
   `avp-codex-cli`, a sandbox Dockerfile, proxy credentials, and native events

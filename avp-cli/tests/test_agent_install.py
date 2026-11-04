@@ -291,9 +291,14 @@ def test_manifest_install_resolves_by_name_and_uses_its_container(avp_home, tmp_
     assert "my-agent" in agents.installed_agents()
 
 
-def test_manifest_cannot_take_a_built_in_name(avp_home, tmp_path) -> None:
+def test_manifest_cannot_take_a_built_in_name(avp_home, tmp_path, monkeypatch) -> None:
+    monkeypatch.setitem(
+        agents.AGENT_SOURCES,
+        "built-in",
+        agents.AgentSource("built-in", "1.0", "example-agent", "example"),
+    )
     with pytest.raises(agent_install.InstallError, match="built-in agent name"):
-        agent_install.install("claude-code", manifest=_manifest(tmp_path))
+        agent_install.install("built-in", manifest=_manifest(tmp_path))
 
 
 def test_manifest_without_container_installs_for_local_execution(avp_home, tmp_path) -> None:

@@ -124,7 +124,7 @@ One PR per agent. TypeScript and Rust agents wait for their SDKs.
 |---|---|---|---|---|---|
 | `avp-pydantic-ai` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `_template` | Python, Rust | ⬜ | ⬜ | ⬜ | ⬜ |
-| `avp-claude-agent-sdk` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
+| `avp-claude-agent-sdk` | Python | ✅ | ✅ | ✅ Anthropic | ✅ |
 | `avp-codex` | Python | ✅ | ✅ | ✅ OpenAI | ✅ |
 | `avp-deep-agents` | Python | ⬜ | ⬜ | ⬜ | ⬜ |
 | `avp-openai-agents` | Python | ⬜ | ⬜ | ⬜ | ⬜ |

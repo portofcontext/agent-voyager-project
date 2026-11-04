@@ -12,7 +12,7 @@ import json
 import pytest
 
 from avp.commission import Commission
-from avp_cli import catalog, config, library
+from avp_cli import agents, catalog, config, library
 from avp_cli.eval.scoring import ExactMatchScorer, FidelityScorer, StructuralMatchScorer
 
 _DATASET = {"source": "inline", "items": [{"id": "i1", "prompt": "hi", "expected": "ok"}]}
@@ -86,20 +86,25 @@ def test_expected_pattern_with_no_match_is_rejected(lib, tmp_path) -> None:
         config.eval_from_dict(cfg, commissions_dir=lib)
 
 
-def test_commissions_map_binds_each_id_to_its_agent(tmp_path) -> None:
-    # The `{agent_name: [ids]}` form binds by descriptor.agent_name (the one
-    # public agent identity). Known agents' keys also imply `agents` locators
-    # (identity → registry alias), so no separate "agents" key is needed.
+def test_commissions_map_binds_each_id_to_its_agent(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        agents,
+        "AGENT_SOURCES",
+        {
+            "one": agents.AgentSource("one", "1.0", "example-one", "one"),
+            "two": agents.AgentSource("two", "1.0", "example-two", "two"),
+        },
+    )
     d = tmp_path / "commissions"
-    _save(d, "for-goose", prompt="{input}")
-    _save(d, "for-claude", prompt="{input}")
-    cfg = _cfg(commissions={"goose": ["for-goose"], "avp-claude-agent-sdk": ["for-claude"]})
+    _save(d, "for-one", prompt="{input}")
+    _save(d, "for-two", prompt="{input}")
+    cfg = _cfg(commissions={"example-one": ["for-one"], "example-two": ["for-two"]})
     ev = config.eval_from_dict(cfg, commissions_dir=d)
     assert {(s.id, s.agent) for s in ev.setups} == {
-        ("for-goose", "goose"),
-        ("for-claude", "avp-claude-agent-sdk"),
+        ("for-one", "example-one"),
+        ("for-two", "example-two"),
     }
-    assert ev.agents == ["goose", "claude-code"]  # locators: registry aliases
+    assert ev.agents == ["one", "two"]
 
 
 def test_commissions_map_unknown_key_needs_explicit_agents(tmp_path) -> None:
