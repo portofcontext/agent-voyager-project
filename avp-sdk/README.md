@@ -155,5 +155,4 @@ Recorder passes the shared test cases in [`testdata/recorder/`](testdata/recorde
   command line above.
 - Workspace and directory setup for launching an agent: avp-cli.
 - The conformance harness and cases: `avp conformance` in avp-cli.
-- Dropped from the old SDK: `launch` (moved to avp-cli), `history` (see
-  "Converting message histories" in `tmp-future-ideas.md`), and `envelope`.
+- Conversation-history conversion between provider formats.

@@ -5,8 +5,8 @@
 - Each HTTP MCP server's host. A stdio server runs in the sandbox.
 - Each `--allow-host`, added to the others.
 
-The hosts an agent needs on its own, such as its built-in remote MCP servers,
-aren't known yet; see "Open: the hosts an agent needs" in tmp-migration.md.
+Hosts needed by the runtime itself, such as built-in remote MCP servers,
+are not discovered automatically. Add them with `--allow-host`.
 """
 
 from urllib.parse import urlparse

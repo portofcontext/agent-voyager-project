@@ -74,6 +74,9 @@
 
 ### Removed
 
+- Temporary planning files. Release checks are tracked in the release PR;
+  future proposals have moved to the internal ticketing board.
+
 - Legacy SDK bindings, CLI, conformance harness, root uv workspace, and Python
   agent template and scaffolder. Checks now run each maintained project in its
   own environment. Schema and provider-data generation stay in `scripts/`,
