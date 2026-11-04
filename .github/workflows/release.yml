@@ -1,0 +1,51 @@
+name: GitHub Packages
+
+on:
+  push:
+    tags: [sdk-python-v*, sdk-typescript-v*, cli-v*]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check SDKs and CLI
+        run: make sdk-python-check sdk-typescript-check sdk-data-check cli-check release-check
+      - name: Build and install the release artifact
+        run: |
+          package=$(python scripts/release.py resolve "$GITHUB_REF_NAME")
+          python scripts/release.py build "$package" --out dist/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/release/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist/release
+      - name: Publish the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/* --verify-tag --prerelease \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Install instructions: https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/releases/README.md"

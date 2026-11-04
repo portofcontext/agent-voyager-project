@@ -1,0 +1,156 @@
+{
+  "name": "no-commission",
+  "description": "A run without a Commission: run_requested has no commission, and run_id is the one the Recorder was given.",
+  "prices": {
+    "anthropic/claude-test-1": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75
+    },
+    "anthropic/claude-test-1-20260101": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  },
+  "calls": [
+    {
+      "t": 0,
+      "call": "begin",
+      "received": null,
+      "descriptor": {
+        "avp_version": "0.1",
+        "agent_name": "case-agent",
+        "agent_version": "1.0.0"
+      }
+    },
+    {
+      "t": 1,
+      "call": "start",
+      "started": {
+        "prompt": "Do the task.",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "tools": [
+          {
+            "name": "read_file",
+            "inputSchema": {
+              "type": "object"
+            }
+          },
+          {
+            "name": "search",
+            "inputSchema": {
+              "type": "object"
+            },
+            "mcp_server_id": "docs"
+          },
+          {
+            "name": "Task",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        ],
+        "mcp_servers": [
+          {
+            "id": "docs",
+            "name": "Docs",
+            "status": "connected"
+          }
+        ],
+        "subagents": [
+          {
+            "name": "researcher",
+            "description": "Finds things."
+          }
+        ]
+      }
+    },
+    {
+      "t": 2,
+      "call": "stop",
+      "reason": "converged"
+    }
+  ],
+  "events": [
+    {
+      "avp_version": "0.1",
+      "run_id": "run-0",
+      "type": "run_requested",
+      "data": {},
+      "t": 0
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-0",
+      "type": "agent_described",
+      "data": {
+        "descriptor": {
+          "avp_version": "0.1",
+          "agent_name": "case-agent",
+          "agent_version": "1.0.0"
+        }
+      },
+      "t": 0
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-0",
+      "type": "agent_started",
+      "data": {
+        "prompt": "Do the task.",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "tools": [
+          {
+            "name": "read_file",
+            "inputSchema": {
+              "type": "object"
+            }
+          },
+          {
+            "name": "search",
+            "inputSchema": {
+              "type": "object"
+            },
+            "mcp_server_id": "docs"
+          },
+          {
+            "name": "Task",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        ],
+        "mcp_servers": [
+          {
+            "id": "docs",
+            "name": "Docs",
+            "status": "connected"
+          }
+        ],
+        "subagents": [
+          {
+            "name": "researcher",
+            "description": "Finds things."
+          }
+        ]
+      },
+      "t": 1
+    },
+    {
+      "avp_version": "0.1",
+      "run_id": "run-0",
+      "type": "agent_stopped",
+      "data": {
+        "reason": "converged"
+      },
+      "t": 2
+    }
+  ]
+}

@@ -4,6 +4,106 @@
 
 ### Fixed
 
+- Both SDK run plans preserve an explicitly empty system prompt.
+
+### Added
+
+- Built-in agent installation by name, with packaged Dockerfiles and verified
+  source pins. `avp agent list --builtin` lists the available versions.
+
+- GitHub beta releases for the Python SDK, TypeScript SDK, and CLI, with
+  artifact checksums and clean-install verification before publication.
+
+- Commission creation, validation with all errors and warnings, and a named
+  library shared by `avp run` and evaluations. Runs and evals validate tasks
+  before launch and check agent settings against a fresh Descriptor.
+
+- A standalone CLI on the rebuilt v0.1 SDK, with sandboxed runs, evaluations,
+  conformance commands, image installation, and vault credentials. The previous
+  CLI is retained separately until the legacy cleanup.
+
+- TypeScript endpoint helpers match Python's provider URL and API-key
+  authentication lookup, with offline snapshots and optional cache refreshes.
+- A TypeScript SDK in `avp-sdk/typescript`, following the Python reference for
+  the rebuilt v0.1 specs. It uses generated wire types, the shared SDK cases,
+  and the single price snapshot, bundled in its npm package.
+
+### Changed
+
+- Agents install the published SDK betas and build from their own directories.
+
+- Single runs and evaluations replace stored `run_id` and `supervisor` values
+  at dispatch. Repeating a task creates distinct runs while preserving
+  `thread_id`, `tags`, and `meta`.
+
+- OpenCode uses the rebuilt TypeScript SDK, a standalone locked project, and
+  a sandbox image. Native responses, tools, and child sessions feed the Recorder;
+  a native plugin records the assembled system prompt and applies complete
+  Commission prompt replacement. Legacy installer and release files are removed.
+
+- Gemini CLI uses the rebuilt TypeScript SDK in a standalone locked project
+  and sandbox image, with native sessions, tools, skills, and subagent usage.
+  Legacy installer and release files are removed.
+
+- Pi uses the rebuilt TypeScript SDK, its own locked project, and a Node 24
+  sandbox image. Native responses and tools use the Recorder; inline skills
+  use Pi's native loader. Legacy installer and release files are removed.
+
+- Both SDK command lines include `avp_version` in their ping replies,
+  matching the new CLI's image installation check.
+- Deep Agents uses the rebuilt SDK in a standalone locked project with a
+  sandbox image. Native model, tool, and subagent events use the Recorder;
+  legacy installer and release files are removed.
+- Pydantic AI installs as a sandbox image and no longer registers with the
+  legacy wheel installer or conformance entrypoint.
+- Claude uses the rebuilt Python SDK, a locked standalone project, and a
+  sandbox image. Native responses, tools, and subagents report through the
+  Recorder; the legacy wrapper and installer files are removed.
+- avp-openai-agents uses the rebuilt SDK in a standalone locked project with a sandbox
+  image and installed command. Legacy installer and release files are removed.
+
+- Codex uses the rebuilt Python SDK in its own locked project, with an installed
+  `avp-codex-cli`, a sandbox Dockerfile, proxy credentials, and native events
+  translated through the Recorder. Its legacy registration and release files
+  are removed. Its container uses Python 3.14.
+- SDK prices, endpoints, and endpoint refresh rules are stored once in
+  `avp-sdk/data/`. Python and TypeScript package builds bundle the
+  shared files through relative links. Package checks cover the full data
+  inventory, and all SDKs use shared endpoint translation cases.
+- The SDK's `avp.utils.base_urls` is now `avp.utils.endpoints`. Each provider's
+  entry adds where its API key goes (header and prefix), from the AI SDK package
+  models.dev names for it, so a supervisor can set up a credential proxy.
+- The Commission spec says a Model's `proxy` credential is the key alone, which
+  the proxy adds the way the provider's API expects.
+
+### Removed
+
+- Temporary planning files. Release checks are tracked in the release PR;
+  future proposals have moved to the internal ticketing board.
+
+- Legacy SDK bindings, CLI, conformance harness, root uv workspace, and Python
+  agent template and scaffolder. Checks now run each maintained project in its
+  own environment. Schema and provider-data generation stay in `scripts/`,
+  which also holds skill packaging.
+- Legacy publication and fresh-install workflows, which depended on the retired
+  agent catalog and release manifests. Beta publication is tracked in #116.
+  The legacy nightly price job is removed; `make sdk-data` refreshes both SDKs'
+  shared prices and endpoints before publishing.
+
+- Goose's Rust adapter and the Rust SDK, including legacy Rust bindings,
+  scaffolding, generation, packaging, and CI jobs. Goose integration is deferred
+  until its Python GDK is available.
+
+### Fixed
+
+- The OpenSandbox service key uses the system credential store or
+  `OPENSANDBOX_SERVER_API_KEY`, and stays out of the TOML config.
+- Check workflows use read-only repository permissions. The Codex test server
+  requires TLS 1.2 or newer.
+
+- SDK packaging checks install the TypeScript archive with a fresh npm cache,
+  so clean CI runners do not depend on cached registry metadata.
+
 - LLM judges accept models across providers, saved AVP credentials, and custom
   endpoints. Judge models are now explicit `origin/model` slugs; output token
   budgets are configurable. Missing saved credentials fail before agent runs begin.

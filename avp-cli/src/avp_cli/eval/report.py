@@ -1,178 +1,125 @@
-"""Render a `Board`: a rich leaderboard table for humans, a JSON dump for
-post-processing.
+"""The scoreboard `eval run` prints at the end and `eval show` prints for a
+past eval."""
 
-The JSON dump carries per-setup metrics plus, per run, a pointer to its NDJSON
-trajectory, so a benchmark write-up has the numbers and the raw evidence in one
-file (and aligns with the platform's `/api/evals/{name}` shape).
-"""
-
-from __future__ import annotations
-
-import json
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
+from rich.console import Console, Group, RenderableType
 from rich.table import Table
+from rich.text import Text
 
-from avp_cli.eval.engine import Board
-
-
-def _accuracy_style(value: float) -> str:
-    if value >= 0.9:
-        return "bold green"
-    if value >= 0.7:
-        return "green"
-    if value >= 0.5:
-        return "yellow"
-    return "red"
+from avp_cli.eval.results import EvalResults, RunResult, agents
 
 
-def board_table(board: Board) -> Table:
-    """The ranked leaderboard as a rich Table."""
-    n_items = len(board.rows[0].results) if board.rows else 0
-    table = Table(
-        title=f"avp eval · {board.dataset_name} · {n_items} items · agent={board.agent_label}",
-        title_style="bold",
-        caption=(
-            f"{len(board.rows)} setups · {board.total_runs} runs · "
-            f"total spend ${board.total_cost:.4f} · trajectories in {board.out_dir}/"
-        ),
-        header_style="bold",
+def _percent(value: float | None) -> str:
+    return "-" if value is None else f"{value:.0%}"
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _money(value: float | None) -> str:
+    return "-" if value is None else f"${value:.4f}"
+
+
+def _seconds(value: float | None) -> str:
+    return "-" if value is None else f"{value:.1f}s"
+
+
+def scoreboard(results: EvalResults, directory: Path) -> RenderableType:
+    """The agents, one row per Commission and agent, then the runs that
+    didn't pass. Cost, turns, and time are per run, over the runs that
+    started."""
+    runs = results.runs
+    board = Table(
+        "Commission",
+        "Agent",
+        "Model",
+        "Runs",
+        "Accuracy",
+        "Pass rate",
+        "$/run",
+        "Turns/run",
+        "Time/run",
+        "Scorer failed",
     )
-    table.add_column("#", justify="right", style="dim")
-    table.add_column("commission")
-    table.add_column("accuracy", justify="right")
-    table.add_column("pass_rate", justify="right")
-    table.add_column("$/run", justify="right")
-    table.add_column("turns/run", justify="right")
-    for i, row in enumerate(board.rows, start=1):
-        errored = f"  [red]({row.n_errors} errored)[/red]" if row.n_errors else ""
-        table.add_row(
-            str(i),
-            f"{row.name}{errored}",
-            f"[{_accuracy_style(row.accuracy)}]{row.accuracy:.0%}[/]",
-            f"{row.pass_rate:.0%}",
-            f"${row.cost_per_run:.4f}",
-            f"{row.turns_per_run:.1f}",
+    pairs = dict.fromkeys((r.commission, r.agent) for r in runs)
+    for commission, name in pairs:
+        rows = results.of(commission, name)
+        started = [r for r in rows if r.seconds is not None]
+        summary = results.summary(commission, name)
+        models = sorted({r.model for r in rows if r.model})
+        board.add_row(
+            commission,
+            name,
+            ", ".join(models) or "-",
+            str(summary.runs),
+            _percent(summary.accuracy),
+            _percent(summary.pass_rate),
+            _money(_mean([r.totals.cost_usd for r in started])),
+            "-" if not started else f"{_mean([r.totals.turns for r in started]):.1f}",
+            _seconds(_mean([r.seconds or 0 for r in started])),
+            str(summary.scorer_failures) if summary.scorer_failures else "-",
         )
-    return table
+    spend = sum(r.totals.cost_usd for r in runs)
+    parts: list[RenderableType] = [
+        Text(f"{results.name} ({results.id})", style="bold"),
+        *_agents(directory),
+        board,
+        Text(f"{len(runs)} runs, {_money(spend)} in all", style="dim"),
+    ]
+    failed = [r for r in runs if r.score is None or not r.score.passed]
+    if failed:
+        table = Table("Item", "Commission", "Agent", "Why", "Run")
+        for r in failed:
+            table.add_row(r.item, r.commission, r.agent, why(r), str(directory / r.directory))
+        parts += [Text("Runs that didn't pass", style="bold"), table]
+    if results.finished is None:
+        parts.append(Text("The eval stopped before every run finished.", style="yellow"))
+    return Group(*parts)
 
 
-def comparison_table(boards: list[Board]) -> Table:
-    """Head-to-head: commissions as rows, one accuracy/$ pair per agent column.
-
-    The highest-accuracy agent's cell per commission is highlighted; the caption
-    gives each agent's overall mean accuracy and $/run.
-    """
-    agents = [b.agent_label for b in boards]
-    # commission -> agent -> SetupRow
-    by_commission: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
-    for b in boards:
-        for row in b.rows:
-            if row.name not in by_commission:
-                by_commission[row.name] = {}
-                order.append(row.name)
-            by_commission[row.name][b.agent_label] = row
-
-    n_items = len(boards[0].rows[0].results) if boards and boards[0].rows else 0
-    table = Table(
-        title=f"head-to-head · {boards[0].dataset_name} · {n_items} items",
-        title_style="bold",
-        header_style="bold",
-        caption=" · ".join(
-            f"{b.agent_label}: {_mean_acc(b):.0%} acc, ${_mean_cost(b):.4f}/run" for b in boards
-        ),
-    )
-    table.add_column("commission")
-    for a in agents:
-        table.add_column(a, justify="right")
-    for commission_name in order:
-        cells = by_commission[commission_name]
-        best = max(
-            (a for a in agents if a in cells),
-            key=lambda a: cells[a].accuracy,
-            default=None,
+def _agents(directory: Path) -> list[Text]:
+    """One line per agent: its Descriptor's name and version, and its image."""
+    lines = []
+    for name, record in agents(directory).items():
+        d = record.descriptor
+        lines.append(
+            Text(
+                f"{name}: {d.agent_name} {d.agent_version}, image {record.image_id[:19]}",
+                style="dim",
+            )
         )
-        rendered = [commission_name]
-        for a in agents:
-            row = cells.get(a)
-            if row is None:
-                rendered.append("[dim]—[/dim]")
-                continue
-            style = "bold green" if a == best else _accuracy_style(row.accuracy)
-            rendered.append(f"[{style}]{row.accuracy:.0%}[/]  [#7fa0b3]${row.cost_per_run:.4f}[/]")
-        table.add_row(*rendered)
-    return table
+    return lines
 
 
-def _mean_acc(board: Board) -> float:
-    return sum(r.accuracy for r in board.rows) / len(board.rows) if board.rows else 0.0
+def run_line(run: RunResult) -> Text:
+    """One finished run, as `eval run` shows it while the others run."""
+    line = Text()
+    if run.score is None:
+        line.append("scorer failed ", style="red")
+    elif run.score.passed:
+        line.append("pass ", style="green")
+    else:
+        line.append("fail ", style="yellow")
+    line.append(f"{run.commission} / {run.agent} / {run.item}")
+    if run.score is not None:
+        line.append(f"  {run.score.value:.0%}")
+    if run.seconds is not None:
+        totals = run.totals
+        line.append(
+            f"  {_money(totals.cost_usd)}  {totals.turns} turns  {_seconds(run.seconds)}",
+            style="dim",
+        )
+    return line
 
 
-def _mean_cost(board: Board) -> float:
-    return sum(r.cost_per_run for r in board.rows) / len(board.rows) if board.rows else 0.0
+def why(run: RunResult) -> Text:
+    """Why a run didn't pass."""
+    if run.score is None:
+        return Text(f"scorer failed: {run.scorer_error}", style="red")
+    return Text("\n".join(run.score.reasons) or "failed")
 
 
-def failures(board: Board) -> list[str]:
-    """One line per failed / errored run, for a diagnostics panel."""
-    out: list[str] = []
-    for row in board.rows:
-        for r in row.results:
-            if r.spawn_error is not None:
-                out.append(f"{row.name} / {r.item_id}: run error: {r.spawn_error}")
-            elif not r.passed:
-                detail = r.score.detail if r.score else "no score"
-                out.append(f"{row.name} / {r.item_id}: {detail}")
-    return out
-
-
-def board_to_dict(board: Board) -> dict:
-    return {
-        "dataset": board.dataset_name,
-        "agent": board.agent_label,
-        "generated_at": datetime.now(UTC).isoformat(),
-        "trajectories_dir": board.out_dir,
-        "commissions": [
-            {
-                "rank": i,
-                "name": row.name,
-                "description": row.description,
-                "model": row.model,
-                "accuracy": row.accuracy,
-                "pass_rate": row.pass_rate,
-                "cost_per_run": row.cost_per_run,
-                "turns_per_run": row.turns_per_run,
-                "n_items": row.n_items,
-                "n_errors": row.n_errors,
-                "runs": [
-                    {
-                        "item_id": r.item_id,
-                        "score": (
-                            None
-                            if r.score is None
-                            else {
-                                "value": r.score.value,
-                                "passed": r.score.passed,
-                                "detail": r.score.detail,
-                            }
-                        ),
-                        "cost_usd": r.summary.total_cost_usd if r.summary else None,
-                        "turns": r.summary.total_turns if r.summary else None,
-                        "tokens": r.summary.total_tokens if r.summary else None,
-                        "stop_reason": r.summary.stop_reason if r.summary else None,
-                        "output_text": r.output.text if r.output else None,
-                        "spawn_error": r.spawn_error,
-                        "trajectory_path": r.trajectory_path,
-                    }
-                    for r in row.results
-                ],
-            }
-            for i, row in enumerate(board.rows, start=1)
-        ],
-    }
-
-
-def dump_json(board: Board, path: str | Path) -> None:
-    Path(path).write_text(json.dumps(board_to_dict(board), indent=2) + "\n")
+def print_scoreboard(console: Console, results: EvalResults, directory: Path) -> None:
+    console.print(scoreboard(results, directory))

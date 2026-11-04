@@ -1,24 +1,22 @@
-"""Integration tests: the stock command line drives `run` end to end over the real
-OpenAI Agents SDK loop, with only the model scripted (the SDK's own
-`ScriptedModel`, which synthesizes the Responses stream including
-`response.completed` with usage). Every emitted line must parse as AVP."""
-
-from __future__ import annotations
+"""The real Agents Runner, a scripted model, and native MCP cross into wire events."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from agents import ModelProvider
-from agents.testing import ScriptedModel, assistant_message, function_call
+from agents.testing import ModelStep, ScriptedModel, assistant_message, function_call
 from agents.usage import InputTokensDetails, OutputTokensDetails, Usage
+from pydantic import TypeAdapter
 
 from avp.agent_cli import main
-from avp.trajectory import parse_event
+from avp.trajectory import Event
 from avp_openai_agents import agent
-from avp_openai_agents.agent import describe, run
+from avp_openai_agents.descriptor import describe
 
+MODEL = {"provider": "openai", "id": "gpt-5-mini"}
+FIXTURE = Path(__file__).resolve().parents[4] / "testing/mcp/avp_test_mcp.py"
 USAGE = Usage(
     requests=1,
     input_tokens=1000,
@@ -29,267 +27,199 @@ USAGE = Usage(
 )
 
 
-class _Provider(ModelProvider):
-    def __init__(self, model: ScriptedModel) -> None:
-        self.model = model
-
-    def get_model(self, model_name: str | None) -> ScriptedModel:
-        return self.model
-
-
 @pytest.fixture
-def script(monkeypatch: pytest.MonkeyPatch):
-    def install(*steps: object) -> ScriptedModel:
+def script(monkeypatch):
+    def install(*steps):
         model = ScriptedModel(steps, default_usage=USAGE)
-        monkeypatch.setattr(agent, "model_provider", lambda plan: _Provider(model))
+        monkeypatch.setattr(agent, "model", lambda commission: model)
         return model
 
     return install
 
 
-def _run(tmp_path: Path, **fields: object) -> list[dict]:
-    commission = {"schema_version": "0.1", "run_id": "r1", "model": "openai/gpt-4o-mini"}
-    commission.update(fields)
-    out = tmp_path / "t.jsonl"
-    argv = ["run", "--commission", json.dumps(commission), "--out", str(out)]
-    assert main(run=run, describe=describe, argv=argv) == 0
+def run_cli(tmp_path, **fields):
+    received = {
+        "avp_version": "0.1",
+        "run_id": "test",
+        "model": MODEL,
+        "prompt": "Say DONE",
+        **fields,
+    }
+    out = tmp_path / "trajectory.ndjson"
+    code = main(
+        run=agent.run,
+        describe=describe,
+        argv=["run", "--commission", json.dumps(received), "--out", str(out)],
+    )
     events = [json.loads(line) for line in out.read_text().splitlines()]
     for event in events:
-        parse_event(event)
-    return events
+        TypeAdapter(Event).validate_python(event)
+    return code, events
 
 
-def _types(events: list[dict]) -> list[str]:
-    return [e["type"].removeprefix("avp.") for e in events]
+def fixture(tmp_path, **fields):
+    return run_cli(
+        tmp_path,
+        mcp_servers=[{"type": "stdio", "id": "fixture", "command": [sys.executable, str(FIXTURE)]}],
+        **fields,
+    )
 
 
-def test_plain_text_turn(script, tmp_path: Path) -> None:
+def test_native_text_response_and_instructions(script, tmp_path):
     model = script([assistant_message("DONE")])
-    events = _run(tmp_path, prompt="say DONE", system_prompt="be terse")
-    assert _types(events) == [
+    _, events = run_cli(
+        tmp_path,
+        system_prompt="SYSTEM",
+        skills=[
+            {
+                "name": "hello",
+                "files": {
+                    "SKILL.md": "---\nname: hello\ndescription: Hello\n---\nGREETING",
+                    "support.txt": "SUPPORT",
+                },
+            }
+        ],
+    )
+    assert [e["type"] for e in events] == [
         "run_requested",
         "agent_described",
         "agent_started",
         "assistant_message",
         "agent_stopped",
     ]
-    started, msg, stopped = events[2]["data"], events[3]["data"], events[4]["data"]
-    assert msg["avp.content"] == [{"type": "text", "text": "DONE"}]
-    assert msg["avp.usage"] == {
-        "input_tokens": 1000,
-        "output_tokens": 50,
-        "cache_read_input_tokens": 400,
-        "reasoning_output_tokens": 10,
-    }
-    # 600 fresh * 0.15 + 400 cached * 0.075 + 50 * 0.6, per million tokens.
-    assert msg["avp.cost.source"] == "computed"
-    assert msg["avp.cost_usd"] == pytest.approx(0.00015)
-    # The wire keeps the model that answered; the table lacks it, so the turn is
-    # priced as the requested model.
-    assert msg["avp.response.model"] == "scripted-model"
-    assert msg["avp.request.model"] == "openai/gpt-4o-mini"
-    assert stopped == {**stopped, "avp.reason": "converged", "avp.output": "DONE"}
-    assert model.first_call.system_instructions == "be terse"
+    usage = events[3]["data"]["usage"]
+    assert usage["input_tokens"] == 1000 and usage["output_tokens"] == 50
+    assert usage["cache_read_input_tokens"] == 400 and usage["reasoning_output_tokens"] == 10
+    assert "SYSTEM" in model.first_call.system_instructions
+    assert "SUPPORT" in model.first_call.system_instructions
+    assert events[-1]["data"] == {"reason": "converged", "output": "DONE"}
 
 
-def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
-    model = script([assistant_message("DONE")])
-    skill = {"id": "greet", "files": {"SKILL.md": "---\nname: greet\n---\nSay hi."}}
-    events = _run(tmp_path, prompt="hi", system_prompt="base", skills=[skill])
-    assert events[2]["data"]["avp.skills"] == [{"name": "greet"}]
-    assert "Say hi." in model.first_call.system_instructions
-
-
-def test_unknown_allowlisted_tool_fails_fast(script, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"agents": {"other": {}}},
+        {"agents": {"avp-openai-agents": {"enabled_tools": ["missing"]}}},
+        {"model": {"provider": "google", "id": "gemini-2.5-flash"}},
+    ],
+)
+def test_invalid_commissions_are_refused_by_sdk(script, tmp_path, fields):
     model = script()
-    events = _run(tmp_path, enabled_builtin_tools={"avp-openai-agents": ["nope"]})
-    assert _types(events) == [
-        "run_requested",
-        "agent_described",
-        "error_occurred",
-        "agent_stopped",
-    ]
-    assert events[2]["data"]["avp.error.code"] == "commission_collision"
-    assert events[3]["data"]["avp.reason"] == "error"
-    assert model.calls == ()
+    _, events = run_cli(tmp_path, **fields)
+    assert [e["type"] for e in events] == ["run_requested", "agent_described", "error_occurred"]
+    assert events[-1]["data"]["error_code"] == "invalid_commission"
+    assert not model.calls
 
 
-def test_foreign_provider_fails_fast(script, tmp_path: Path) -> None:
-    script()
-    events = _run(tmp_path, provider={"id": "openrouter"})
-    assert events[-2]["data"]["avp.error.code"] == "unsupported_provider"
-    assert events[-1]["data"]["avp.reason"] == "error"
+@pytest.mark.parametrize("mode", ["one", "parallel", "errors"])
+def test_native_mcp_tools_and_error_results_pair(script, tmp_path, mode):
+    def choose(call):
+        name = next(t.name for t in call.tools if t.name.endswith("Avptest_Echo"))
+        calls = [function_call(name, {"text": "BOUNDARY"}, call_id="one")]
+        if mode == "parallel":
+            calls.append(function_call(name, {"text": "SECOND"}, call_id="two"))
+        if mode == "errors":
+            fail = next(t.name for t in call.tools if t.name.endswith("Avptest_Fail"))
+            calls += [
+                function_call(fail, {"message": "BAD-RESULT", "mode": "result"}, call_id="result"),
+                function_call(
+                    fail, {"message": "BAD-PROTOCOL", "mode": "protocol"}, call_id="protocol"
+                ),
+            ]
+        return calls
+
+    script(ModelStep.respond(choose), [assistant_message("DONE")])
+    _, events = fixture(tmp_path)
+    responses = [e for e in events if e["type"] == "assistant_message"]
+    assert len(responses) == 2
+    assert [e["data"]["usage"]["input_tokens"] for e in responses] == [1000, 1000]
+    results = {e["data"]["tool_call_id"]: e["data"] for e in events if e["type"] == "tool_returned"}
+    invoked = {e["data"]["tool_call_id"]: e["data"] for e in events if e["type"] == "tool_invoked"}
+    assert set(results) == set(invoked)
+    assert all(e["mcp_server_id"] == "fixture" for e in invoked.values())
+    assert "BOUNDARY" in str(results["one"]["tool_result"]["content"])
+    if mode == "parallel":
+        assert "SECOND" in str(results["two"]["tool_result"]["content"])
+    if mode == "errors":
+        assert results["result"]["tool_result"]["is_error"] is True
+        assert results["protocol"]["tool_result"]["is_error"] is True
+    assert events[-1]["data"]["reason"] == "converged"
 
 
-def test_refusal_stops_refused(script, tmp_path: Path) -> None:
+def test_mcp_failure_never_starts_the_model(script, tmp_path):
+    model = script()
+    _, events = run_cli(
+        tmp_path, mcp_servers=[{"id": "missing", "type": "stdio", "command": ["/nonexistent/mcp"]}]
+    )
+    assert events[-1]["data"]["error_code"] == "mcp_connect_failed"
+    assert not model.calls
+
+
+def test_schema_validation_crosses_native_runner(script, tmp_path):
+    script([assistant_message('{"answer":42}')])
+    schema = {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+    _, events = run_cli(tmp_path, output_schema=schema)
+    assert events[-1]["data"]["output"] == {"answer": 42}
+    script([assistant_message('{"answer":"wrong"}')])
+    _, events = run_cli(tmp_path, output_schema=schema)
+    assert events[-2]["data"]["error_code"] == "output_invalid"
+    assert events[-1]["data"]["reason"] == "error"
+
+
+def test_missing_secret_is_an_auth_error(tmp_path, monkeypatch):
+    monkeypatch.delenv("MISSING_AVP_KEY", raising=False)
+    _, events = run_cli(tmp_path, model={**MODEL, "credential": {"env": "MISSING_AVP_KEY"}})
+    assert events[-1]["data"]["error_code"] == "auth_error"
+
+
+def test_native_refusal_stops_refused(script, tmp_path):
     from openai.types.responses import ResponseOutputMessage, ResponseOutputRefusal
 
-    refusal = ResponseOutputMessage(
-        id="m1",
-        type="message",
-        role="assistant",
-        status="completed",
-        content=[ResponseOutputRefusal(type="refusal", refusal="I can't help with that.")],
-    )
-    script([refusal])
-    events = _run(tmp_path, prompt="something bad")
-    assert events[3]["data"]["avp.content"] == [
-        {"type": "refusal", "refusal": "I can't help with that."}
-    ]
-    assert events[-1]["data"]["avp.reason"] == "refused"
-
-
-TEST_MCP = Path(__file__).resolve().parents[4] / "testing" / "mcp" / "avp_test_mcp.py"
-
-
-def test_mcp_server_tools_round_trip(script, tmp_path: Path) -> None:
-    """The real MCP boundary: dial the repo's stdio test server, surface its tools
-    with `avp.mcp_server_id`, and dispatch one through the SDK."""
-    from agents.testing import ModelStep
-
-    def call_echo(call):
-        echo = next(t.name for t in call.tools if "echo" in t.name.lower())
-        return [function_call(echo, {"text": "PING"}, call_id="call_1")]
-
-    script(ModelStep.respond(call_echo), [assistant_message("PING")])
-    events = _run(
-        tmp_path,
-        prompt="echo PING",
-        enabled_builtin_tools={"avp-openai-agents": []},
-        mcp_servers=[
-            {"type": "stdio", "id": "avptest", "command": [sys.executable, str(TEST_MCP)]}
-        ],
-    )
-    started = events[2]["data"]
-    assert started["avp.mcp_servers"] == [{"id": "avptest", "status": "connected"}]
-    assert started["avp.tools"] and all(
-        t["avp.mcp_server_id"] == "avptest" for t in started["avp.tools"]
-    )
-    invoked = next(e["data"] for e in events if e["type"] == "avp.tool_invoked")
-    returned = next(e["data"] for e in events if e["type"] == "avp.tool_returned")
-    assert invoked["avp.tool.dispatch_target"] == "mcp_server"
-    assert "PING" in json.dumps(returned["avp.tool_result"]["content"])
-    assert events[-1]["data"]["avp.reason"] == "converged"
-
-
-def _fixture_tool(call, name: str) -> str:
-    return next(t.name for t in call.tools if t.name.endswith(name))
-
-
-def _with_fixture(tmp_path: Path, **fields: object) -> list[dict]:
-    return _run(
-        tmp_path,
-        prompt="use the tools",
-        enabled_builtin_tools={"avp-openai-agents": []},
-        mcp_servers=[
-            {"type": "stdio", "id": "avptest", "command": [sys.executable, str(TEST_MCP)]}
-        ],
-        **fields,
-    )
-
-
-def _results(events: list[dict]) -> dict[str, dict]:
-    return {
-        e["data"]["avp.tool.call_id"]: e["data"]["avp.tool_result"]
-        for e in events
-        if e["type"] == "avp.tool_returned"
-    }
-
-
-def test_parallel_and_failing_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
-    """Four calls in one response: two echoes and both ways an MCP tool fails.
-    Each result pairs with its own call, and only the failures are errors;
-    the SDK hands an `isError` result to the model as ordinary output."""
-    from agents.testing import ModelStep
-
-    def calls(call):
-        echo, fail = _fixture_tool(call, "Avptest_Echo"), _fixture_tool(call, "Avptest_Fail")
-        return [
-            function_call(echo, {"text": "ALPHA"}, call_id="c_alpha"),
-            function_call(echo, {"text": "BETA"}, call_id="c_beta"),
-            function_call(fail, {"message": "BAD-RESULT", "mode": "result"}, call_id="c_result"),
-            function_call(fail, {"message": "BAD-PROTO", "mode": "protocol"}, call_id="c_proto"),
+    script(
+        [
+            ResponseOutputMessage(
+                id="refusal",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[ResponseOutputRefusal(type="refusal", refusal="Declined")],
+            )
         ]
-
-    script(ModelStep.respond(calls), [assistant_message("done")])
-    events = _with_fixture(tmp_path)
-    turns = [e for e in events if e["type"] == "avp.assistant_message"]
-    assert len(turns) == 2, "one turn per model response"
-    results = _results(events)
-    assert set(results) == {"c_alpha", "c_beta", "c_result", "c_proto"}
-    for call, text, failed in [
-        ("c_alpha", "ALPHA", False),
-        ("c_beta", "BETA", False),
-        ("c_result", "BAD-RESULT", True),
-        ("c_proto", "BAD-PROTO", True),
-    ]:
-        assert text in json.dumps(results[call]["content"]), call
-        assert bool(results[call].get("is_error")) is failed, call
-    assert results["c_alpha"]["content"] == [{"type": "text", "text": "ALPHA"}]
-    assert events[-1]["data"]["avp.reason"] == "converged"
-
-
-def test_dependent_rounds_are_one_turn_each(script, tmp_path: Path) -> None:
-    from agents.testing import ModelStep
-
-    def add(a: int, b: int, call_id: str):
-        return ModelStep.respond(
-            lambda call: [
-                function_call(_fixture_tool(call, "Avptest_Add"), {"a": a, "b": b}, call_id=call_id)
-            ]
-        )
-
-    script(add(17, 25, "r1"), add(42, 8, "r2"), [assistant_message("50")])
-    events = _with_fixture(tmp_path)
-    assert len([e for e in events if e["type"] == "avp.assistant_message"]) == 3
-    results = _results(events)
-    assert "42" in json.dumps(results["r1"]["content"])
-    assert "50" in json.dumps(results["r2"]["content"])
-    assert events[-1]["data"]["avp.reason"] == "converged"
-
-
-def test_unreachable_mcp_server_is_reported(script, tmp_path: Path) -> None:
-    script([assistant_message("DONE")])
-    events = _run(
-        tmp_path,
-        prompt="hi",
-        mcp_servers=[{"type": "stdio", "id": "gone", "command": ["/nonexistent/mcp"]}],
     )
-    assert "error_occurred" in _types(events)
-    assert events[3]["data"]["avp.mcp_servers"] == [{"id": "gone", "status": "failed"}]
-    assert events[-1]["data"]["avp.reason"] == "converged"
+    _, events = run_cli(tmp_path)
+    assert events[-1]["data"]["reason"] == "refused"
+    assert events[3]["data"]["content"] == [{"type": "refusal", "refusal": "Declined"}]
 
 
-def test_ships_no_builtins_and_rejects_allowlisted_names(script, tmp_path: Path) -> None:
-    # A framework's agents ship nothing: the descriptor and agent_started
-    # declare no tools / subagents, empty allow-lists are fine, and any
-    # allow-listed name is a collision.
-    script([assistant_message("DONE")])
-    events = _run(
-        tmp_path,
-        prompt="hi",
-        enabled_builtin_tools={"avp-openai-agents": []},
-        enabled_builtin_subagents={"avp-openai-agents": []},
-    )
-    described, started = events[1]["data"]["avp.descriptor"], events[2]["data"]
-    assert "tools" not in described and "subagents" not in described
-    assert started.get("avp.tools", []) == []
-    assert events[-1]["data"]["avp.reason"] == "converged"
-
-
-def test_exhausted_credits_end_the_run_without_crashing(script, tmp_path: Path) -> None:
-    """OpenAI delivers an empty balance mid-stream as a plain APIError."""
+def test_provider_quota_error_is_reported(script, tmp_path):
+    import httpx2
     from openai import APIError
 
-    # The OpenAI SDK's HTTP client: httpx2 from openai 3.x, httpx before.
-    try:
-        import httpx2 as http
-    except ImportError:
-        import httpx as http
+    script(
+        APIError(
+            "You have no credits remaining.",
+            httpx2.Request("POST", "https://api.openai.com/v1/responses"),
+            body=None,
+        )
+    )
+    _, events = run_cli(tmp_path)
+    assert events[-2]["data"]["error_code"] == "rate_limit"
+    assert events[-1]["data"]["reason"] == "error"
 
-    request = http.Request("POST", "https://api.openai.com/v1/responses")
-    script(APIError("You have no credits remaining. Add credits to continue.", request, body=None))
-    events = _run(tmp_path, prompt="hi")
-    assert _types(events)[-2:] == ["error_occurred", "agent_stopped"]
-    assert events[-2]["data"]["avp.error.code"] == "rate_limit"
-    assert events[-1]["data"]["avp.reason"] == "error"
+
+def test_ping_and_descriptor_are_lazy():
+    for verb in ["ping", "describe"]:
+        value = json.loads(
+            subprocess.check_output(
+                [sys.executable, "-m", "avp_openai_agents.cli", verb], text=True
+            )
+        )
+        assert (
+            value["type"] == "pong"
+            if verb == "ping"
+            else value["agent_name"] == "avp-openai-agents"
+        )

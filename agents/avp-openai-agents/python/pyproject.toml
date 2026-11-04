@@ -1,31 +1,29 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "avp-openai-agents"
-version = "0.0.3"
-description = "AVP agent over the OpenAI Agents SDK: the SDK owns the loop, the adapter records the trajectory."
-license = { text = "MIT" }
+version = "0.0.5"
+description = "AVP agent over the OpenAI Agents SDK."
+license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project==0.2.0", "openai-agents>=0.23"]
+dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", "openai-agents==0.23.1", "jsonschema>=4"]
 
 [project.optional-dependencies]
-# Non-OpenAI `Commission.model` origins route through the SDK's LiteLLM extension.
-litellm = ["openai-agents[litellm]>=0.23"]
+litellm = ["openai-agents[litellm]==0.23.1"]
+
+[project.scripts]
+avp-openai-agents-cli = "avp_openai_agents.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=9.0.3"]
+dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/avp_openai_agents"]
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "avp_openai_agents"
+
+[tool.ty.environment]
+python-version = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-# How this agent installs and runs in a sandbox: release-manifest.py writes it
-# into the release's avp-release.json, with the workspace lock as requirements.txt.
-[tool.avp.release]
-agent = "openai-agents"
-module = "avp_openai_agents.conformance"
-wheels = ["agent-voyager-project", "avp-openai-agents"]

@@ -1,51 +1,56 @@
-"""Developer-facing output. One pair of rich Consoles with strict discipline.
+"""How avp prints: results to stdout, progress and errors to stderr."""
 
-Results (boards, rendered Commissions) and `--json` go to **stdout** so they
-pipe cleanly; progress, status, and diagnostics go to **stderr**. `--json`
-output bypasses rich entirely (machine-clean).
-"""
-
-from __future__ import annotations
-
-import json as _json
-import sys
-from typing import Any
+import logging
 
 from rich.console import Console
-from rich.panel import Panel
+from rich.text import Text
 
-# stdout: the result a caller might pipe or capture.
 out = Console()
-# stderr: progress, status, warnings, errors. Never pollutes piped stdout.
 err = Console(stderr=True)
 
-
-def print_json(obj: Any) -> None:
-    """Emit machine-clean JSON to stdout (no rich styling)."""
-    sys.stdout.write(_json.dumps(obj, indent=2) + "\n")
+verbose: bool = False
+"""Set by a command's --verbose, through `set_verbose`."""
 
 
-def progress(msg: str) -> None:
-    """A live progress line on stderr (rich markup allowed in `msg`)."""
-    err.print(msg)
+def set_verbose(on: bool) -> None:
+    """With --verbose, the OpenSandbox SDK's logs print as details too."""
+    global verbose
+    verbose = on
+    sdk = logging.getLogger("opensandbox")
+    for handler in sdk.handlers:
+        if isinstance(handler, _Detail):
+            sdk.removeHandler(handler)
+    if on:
+        sdk.addHandler(_Detail())
+        sdk.setLevel(logging.INFO)
 
 
-def note(msg: str) -> None:
-    err.print(f"[dim]{msg}[/dim]")
+class _Detail(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        # SandboxSync.create logs the create its adapter then logs and sends.
+        if record.name == "opensandbox.sync.sandbox" and record.getMessage().startswith(
+            "Creating sandbox"
+        ):
+            return
+        detail(f"opensandbox: {record.getMessage()}")
 
 
-def warn(msg: str) -> None:
-    err.print(f"[yellow]{msg}[/yellow]")
+def detail(text: str) -> None:
+    """Print a line to stderr with --verbose only. Never a secret's value."""
+    if verbose:
+        err.print(text, style="dim", markup=False, highlight=False, soft_wrap=True)
 
 
-def error_panel(title: str, body: str) -> None:
-    err.print(Panel(body, title=title, border_style="red", title_align="left"))
+def line(*parts: str | tuple[str, str]) -> Text:
+    """One line from text and (text, style) parts, such as a spinner's, cut to
+    the terminal's width. Not markup, so `ENTRYPOINT ["/agent.sh"]` shows as
+    written."""
+    text = Text.assemble(*parts)
+    text.no_wrap = True
+    text.overflow = "ellipsis"
+    return text
 
 
-def diag(title: str, body: str, *, style: str = "yellow") -> None:
-    """A diagnostic panel on stderr (e.g. the board's failures section)."""
-    err.print(Panel(body, title=title, border_style=style, title_align="left"))
-
-
-def panel(title: str, body: Any, *, style: str = "cyan") -> None:
-    out.print(Panel(body, title=title, border_style=style, title_align="left"))
+class Failed(Exception):
+    """A failure the user can act on. avp prints the message, without a
+    traceback, and exits 1."""

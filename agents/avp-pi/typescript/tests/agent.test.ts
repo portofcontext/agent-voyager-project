@@ -1,365 +1,602 @@
-/**
- * Integration tests: Pi's real session loop, tools, and MCP extension on a scripted
- * (`faux`) model, through the adapter, into the Recorder's trajectory.
- */
+/** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-
-import { MemorySink, type Commission } from "@avp/types";
+import { setTimeout as delay } from "node:timers/promises";
 import {
+  parseTrajectoryEvent,
+  type Event,
+  type JsonValue,
+} from "@agent-voyager-project/sdk/trajectory";
+import {
+  getSystemMessageText,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
+  fauxThinking,
   fauxToolCall,
   type FauxResponseStep,
 } from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-
 import { run } from "../src/agent.js";
-
-type Json = Record<string, any>;
+import { describe, runtime } from "../src/descriptor.js";
 
 const MODEL = "claude-haiku-4-5";
-
-const FIXTURE = (() => {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  while (!existsSync(join(dir, "testing", "mcp", "avp_test_mcp.py"))) {
-    if (dirname(dir) === dir) throw new Error("testing/mcp/avp_test_mcp.py not found");
-    dir = dirname(dir);
-  }
-  return join(dir, "testing", "mcp", "avp_test_mcp.py");
-})();
-
-function commission(extra: Partial<Commission> = {}): Commission {
+const fixture = fileURLToPath(
+  new URL("../../../../../testing/mcp/avp_test_mcp.py", import.meta.url),
+);
+function received(extra = {}): JsonValue {
   return {
-    schema_version: "0.1",
+    avp_version: "0.1",
     run_id: "pi-test",
-    model: `anthropic/${MODEL}`,
-    prompt: "do the thing",
+    model: { provider: "anthropic", id: MODEL },
+    prompt: "Say DONE",
     ...extra,
-  } as Commission;
+  };
 }
-
-/** Run the adapter in a fresh workspace on a scripted Anthropic-shaped model. */
-async function runScripted(
-  c: Commission,
+type DataByType = { [E in Event as E["type"]]: E["data"] };
+function data<K extends keyof DataByType>(
+  events: Event[],
+  kind: K,
+): DataByType[K][] {
+  return events
+    .filter((e) => e.type === kind)
+    .map((e) => e.data) as DataByType[K][];
+}
+async function scripted(
+  commission: JsonValue,
   responses: FauxResponseStep[],
-  opts: { signal?: AbortSignal; tokensPerSecond?: number } = {},
-): Promise<{ events: Json[]; cwd: string }> {
-  const home = mkdtempSync(join(tmpdir(), "avp-pi-home-"));
+  options: {
+    signal?: AbortSignal;
+    slowSink?: boolean;
+    tokensPerSecond?: number;
+  } = {},
+) {
   const cwd = mkdtempSync(join(tmpdir(), "avp-pi-ws-"));
+  const models = await runtime();
   const faux = fauxProvider({
     provider: "anthropic",
     models: [{ id: MODEL }],
-    ...(opts.tokensPerSecond ? { tokensPerSecond: opts.tokensPerSecond } : {}),
+    tokensPerSecond: options.tokensPerSecond,
   });
   faux.setResponses(responses);
-  const modelRuntime = await ModelRuntime.create({
-    authPath: join(home, "auth.json"),
-    modelsPath: null,
-    refreshOnCreate: false,
-  });
-  modelRuntime.registerNativeProvider(faux.provider);
-  await modelRuntime.setRuntimeApiKey("anthropic", "test-key");
-  const sink = new MemorySink();
-  const previous = process.cwd();
+  models.registerNativeProvider(faux.provider);
+  await models.setRuntimeApiKey("anthropic", "fixture-stand-in");
+  const events: Event[] = [];
+  const before = process.cwd();
   process.chdir(cwd);
   try {
-    await run(c, sink, { agentDir: home, modelRuntime, signal: opts.signal });
+    await run(
+      commission,
+      async (event) => {
+        if (options.slowSink) await delay(5);
+        const parsed = parseTrajectoryEvent(event);
+        assert.ok(parsed);
+        events.push(parsed);
+      },
+      options.signal ?? new AbortController().signal,
+      { modelRuntime: models },
+    );
+    return { events, cwd, faux };
   } finally {
-    process.chdir(previous);
+    process.chdir(before);
+    rmSync(cwd, { force: true, recursive: true });
   }
-  return { events: JSON.parse(JSON.stringify(sink.events)), cwd };
 }
+const text = (value = "DONE") => fauxAssistantMessage([fauxText(value)]);
 
-const types = (events: Json[]) => events.map((e) => e.type.replace(/^avp\./, ""));
-const one = (events: Json[], type: string) => events.find((e) => e.type === `avp.${type}`)!;
-
-test("a built-in tool round trip is one turn per inference with paired tool events", async () => {
-  const { events, cwd } = await runScripted(commission(), [
-    fauxAssistantMessage([fauxToolCall("write", { path: "out.txt", content: "OK" }, { id: "call_w" })], {
-      stopReason: "toolUse",
+test("native responses retain reasoning, skills, replacement instructions, and per-response usage", async () => {
+  let system: string | undefined;
+  const { events } = await scripted(
+    received({
+      system_prompt: "SYSTEM",
+      skills: [
+        {
+          name: "greeting",
+          files: {
+            "SKILL.md":
+              "---\nname: greeting\ndescription: Greeting\n---\nGREETING",
+            "support.txt": "SUPPORT",
+          },
+        },
+      ],
     }),
-    fauxAssistantMessage([fauxText("DONE")]),
-  ]);
-  assert.deepEqual(types(events), [
-    "run_requested",
-    "agent_described",
-    "agent_started",
-    "assistant_message",
-    "tool_invoked",
-    "tool_returned",
-    "assistant_message",
-    "agent_stopped",
-  ]);
-  assert.equal(readFileSync(join(cwd, "out.txt"), "utf8"), "OK");
-
-  const started = one(events, "agent_started").data;
+    [
+      (context) => {
+        system = context.messages
+          .filter((m) => m.role === "system")
+          .map(getSystemMessageText)
+          .join("\n\n");
+        return fauxAssistantMessage([
+          fauxThinking("THOUGHT"),
+          fauxText("DONE"),
+        ]);
+      },
+    ],
+  );
   assert.deepEqual(
-    started["avp.tools"].map((t: Json) => t.name),
+    events.map((e) => e.type),
+    [
+      "run_requested",
+      "agent_described",
+      "agent_started",
+      "assistant_message",
+      "agent_stopped",
+    ],
+  );
+  assert.ok(system?.startsWith("SYSTEM"));
+  assert.ok(system?.includes("<available_skills>"));
+  assert.ok(system?.includes("<name>greeting</name>"));
+  assert.ok(!system?.includes("GREETING"));
+  assert.ok(!system?.includes("SUPPORT"));
+  assert.ok(!system?.includes("You are an expert coding assistant"));
+  assert.equal(data(events, "agent_started")[0]!.system_prompt, system);
+  const response = data(events, "assistant_message")[0]!;
+  assert.equal(response.content[0]!.type, "thinking");
+  assert.ok(
+    response.usage.input_tokens > 0 && response.usage.output_tokens > 0,
+  );
+  assert.equal(data(events, "agent_stopped")[0]!.output, "DONE");
+});
+
+test("native filesystem and bash tools complete with ordered asynchronous sink writes", async () => {
+  const { events } = await scripted(
+    received(),
+    [
+      fauxAssistantMessage(
+        [
+          fauxToolCall(
+            "write",
+            { path: "answer.txt", content: "BOUNDARY" },
+            { id: "write" },
+          ),
+        ],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(
+        [fauxToolCall("bash", { command: "cat answer.txt" }, { id: "read" })],
+        { stopReason: "toolUse" },
+      ),
+      text(),
+    ],
+    { slowSink: true },
+  );
+  assert.equal(data(events, "assistant_message").length, 3);
+  const returns = data(events, "tool_returned");
+  assert.deepEqual(
+    returns.map((e) => e.tool_call_id),
+    ["write", "read"],
+  );
+  assert.match(JSON.stringify(returns[1]!.tool_result.content), /BOUNDARY/);
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  for (const result of returns)
+    assert.ok(
+      events.findIndex(
+        (e) =>
+          e.type === "tool_invoked" &&
+          e.data.tool_call_id === result.tool_call_id,
+      ) <
+        events.findIndex(
+          (e) =>
+            e.type === "tool_returned" &&
+            e.data.tool_call_id === result.tool_call_id,
+        ),
+    );
+});
+
+test("disabled built-ins are absent from the model and refused if called", async () => {
+  const { events } = await scripted(
+    received({ agents: { "avp-pi": { enabled_tools: [] } } }),
+    [
+      fauxAssistantMessage(
+        [
+          fauxToolCall(
+            "bash",
+            { command: "touch MUST_NOT_EXIST" },
+            { id: "denied" },
+          ),
+        ],
+        { stopReason: "toolUse" },
+      ),
+      text(),
+    ],
+  );
+  assert.equal(data(events, "agent_started")[0]!.tools, undefined);
+  assert.equal(data(events, "tool_returned")[0]!.tool_result.is_error, true);
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+for (const mode of ["parallel", "errors"] as const)
+  test(`native MCP ${mode} calls retain ownership and pair by call ID`, async () => {
+    const calls = [
+      fauxToolCall(
+        "mcp__fixture__Avptest_Echo",
+        { text: "BOUNDARY" },
+        { id: "echo" },
+      ),
+    ];
+    if (mode === "parallel")
+      calls.push(
+        fauxToolCall(
+          "mcp__fixture__Avptest_Add",
+          { a: 2, b: 3 },
+          { id: "sum" },
+        ),
+      );
+    else
+      calls.push(
+        fauxToolCall(
+          "mcp__fixture__Avptest_Fail",
+          { message: "BAD-RESULT", mode: "result" },
+          { id: "result" },
+        ),
+        fauxToolCall(
+          "mcp__fixture__Avptest_Fail",
+          { message: "BAD-PROTOCOL", mode: "protocol" },
+          { id: "protocol" },
+        ),
+      );
+    const { events } = await scripted(
+      received({
+        agents: { "avp-pi": { enabled_tools: [] } },
+        mcp_servers: [
+          { type: "stdio", id: "fixture", command: ["python3", fixture] },
+        ],
+      }),
+      [fauxAssistantMessage(calls, { stopReason: "toolUse" }), text()],
+    );
+    const invoked = data(events, "tool_invoked");
+    const returned = data(events, "tool_returned");
+    assert.equal(invoked.length, calls.length);
+    assert.equal(returned.length, calls.length);
+    assert.ok(invoked.every((e) => e.mcp_server_id === "fixture"));
+    assert.match(
+      JSON.stringify(
+        returned.find((e) => e.tool_call_id === "echo")!.tool_result.content,
+      ),
+      /BOUNDARY/,
+    );
+    if (mode === "errors") {
+      assert.equal(
+        returned.find((e) => e.tool_call_id === "result")!.tool_result.is_error,
+        true,
+      );
+      assert.equal(
+        returned.find((e) => e.tool_call_id === "protocol")!.tool_result
+          .is_error,
+        true,
+      );
+    }
+    assert.equal(data(events, "assistant_message").length, 2);
+    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  });
+
+for (const fields of [
+  { agents: { other: {} } },
+  { agents: { "avp-pi": { enabled_tools: ["missing"] } } },
+  { output_schema: { type: "object" } },
+  { model: { provider: "missing", id: "missing" } },
+])
+  test(`unusable Commission stops before any model call: ${JSON.stringify(fields)}`, async () => {
+    const { events, faux } = await scripted(received(fields), []);
+    assert.deepEqual(
+      events.map((e) => e.type),
+      ["run_requested", "agent_described", "error_occurred"],
+    );
+    assert.equal(
+      data(events, "error_occurred")[0]!.error_code,
+      "invalid_commission",
+    );
+    assert.equal(faux.state.callCount, 0);
+  });
+
+test("missing environment credentials stop as auth_error", async () => {
+  delete process.env.MISSING_AVP_PI_KEY;
+  const { events } = await scripted(
+    received({
+      model: {
+        provider: "anthropic",
+        id: MODEL,
+        credential: { env: "MISSING_AVP_PI_KEY" },
+      },
+    }),
+    [],
+  );
+  assert.equal(data(events, "error_occurred")[0]!.error_code, "auth_error");
+});
+
+test("unreachable MCP server stops before model execution", async () => {
+  const { events, faux } = await scripted(
+    received({
+      mcp_servers: [
+        { type: "stdio", id: "bad", command: ["/nonexistent/mcp"] },
+      ],
+    }),
+    [],
+  );
+  assert.equal(
+    data(events, "error_occurred")[0]!.error_code,
+    "mcp_connect_failed",
+  );
+  assert.equal(faux.state.callCount, 0);
+});
+
+test("provider errors are terminal errors rather than synthetic model responses", async () => {
+  const { events } = await scripted(received(), [
+    fauxAssistantMessage([], {
+      stopReason: "error",
+      errorMessage: "401 authentication failed",
+    }),
+  ]);
+  assert.equal(data(events, "assistant_message").length, 0);
+  assert.equal(data(events, "error_occurred")[0]!.error_code, "auth_error");
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "error");
+});
+
+test("cancelling a native streamed response closes the run as interrupted", async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 150);
+  try {
+    const { events } = await scripted(
+      received(),
+      [text("A long streamed response to interrupt")],
+      { signal: controller.signal, tokensPerSecond: 2 },
+    );
+    assert.equal(data(events, "agent_stopped")[0]!.reason, "interrupted");
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+test("CLI ping stays lazy and the descriptor lists native default tools", async () => {
+  const entry = fileURLToPath(new URL("../src/main.js", import.meta.url));
+  assert.equal(
+    JSON.parse(
+      execFileSync(process.execPath, [entry, "ping"], { encoding: "utf8" }),
+    ).type,
+    "pong",
+  );
+  const descriptor = await describe();
+  assert.deepEqual(
+    descriptor.tools?.map((t) => t.name),
     ["read", "bash", "edit", "write"],
   );
-  const invoked = one(events, "tool_invoked").data;
-  assert.equal(invoked["avp.tool.name"], "write");
-  assert.equal(invoked["avp.tool.dispatch_target"], "local");
-  const returned = one(events, "tool_returned").data;
-  assert.equal(returned["avp.tool.call_id"], "call_w");
-  assert.equal(returned["avp.tool_result"].is_error, false);
-
-  const [first, second] = events.filter((e) => e.type === "avp.assistant_message").map((e) => e.data);
-  assert.deepEqual(first["avp.content"][0], {
-    type: "tool_use",
-    id: "call_w",
-    name: "write",
-    input: { path: "out.txt", content: "OK" },
-  });
-  assert.deepEqual(first["avp.response.finish_reasons"], ["toolUse"]);
-  for (const turn of [first, second]) {
-    const u = turn["avp.usage"];
-    // AVP input includes the cache split that Pi reports separately.
-    assert.ok(u.input_tokens >= u.cache_read_input_tokens + u.cache_creation_input_tokens);
-    assert.ok(u.output_tokens > 0);
-    assert.equal(turn["avp.cost.source"], "computed");
-    assert.equal(turn["avp.response.model"], MODEL);
-  }
-  const stopped = one(events, "agent_stopped").data;
-  assert.equal(stopped["avp.reason"], "converged");
-  assert.equal(stopped["avp.output"], "DONE");
+  assert.ok(
+    descriptor.supported_models?.some((m) => m.provider === "anthropic"),
+  );
+  assert.equal(descriptor.subagents, undefined);
 });
 
-test("Commission MCP tools run through Pi's MCP extension", async () => {
-  const { events } = await runScripted(
-    commission({
-      mcp_servers: [{ type: "stdio", id: "avptest", command: ["python3", FIXTURE] }],
-      enabled_builtin_tools: { "avp-pi": [] },
-    }),
-    [
-      fauxAssistantMessage([fauxToolCall("mcp__avptest__Avptest_Echo", { text: "AVP-MCP" }, { id: "call_m" })], {
-        stopReason: "toolUse",
+test("native MCP structured output, environment references, and colliding names survive", async () => {
+  const before = process.env.AVP_TEST_PI_CREDENTIAL;
+  process.env.AVP_TEST_PI_CREDENTIAL = "fixture-env-value";
+  try {
+    const path = fileURLToPath(
+      new URL("../../tests/fixtures/mcp.mjs", import.meta.url),
+    );
+    let names: string[] = [];
+    const { events } = await scripted(
+      received({
+        agents: { "avp-pi": { enabled_tools: [] } },
+        mcp_servers: ["same-name", "same_name"].map((id) => ({
+          type: "stdio",
+          id,
+          command: [process.execPath, path],
+          env: { AVP_TEST_MCP_CREDENTIAL: { env: "AVP_TEST_PI_CREDENTIAL" } },
+        })),
       }),
-      fauxAssistantMessage([fauxText("AVP-MCP")]),
-    ],
-  );
-  const started = one(events, "agent_started").data;
-  assert.deepEqual(started["avp.mcp_servers"], [{ id: "avptest", status: "connected" }]);
-  const echo = started["avp.tools"].find((t: Json) => t.name === "mcp__avptest__Avptest_Echo");
-  assert.equal(echo["avp.mcp_server_id"], "avptest");
-  assert.ok(!started["avp.tools"].some((t: Json) => t.name === "write"), "empty allow-list hides built-ins");
-
-  const invoked = one(events, "tool_invoked").data;
-  assert.equal(invoked["avp.tool.dispatch_target"], "mcp_server");
-  const result = one(events, "tool_returned").data["avp.tool_result"];
-  assert.equal(result.is_error, false);
-  assert.match(JSON.stringify(result.content), /AVP-MCP/);
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
-});
-
-test("an MCP server that fails to connect is reported and left out", async () => {
-  const { events } = await runScripted(
-    commission({ mcp_servers: [{ type: "stdio", id: "broken", command: ["/nonexistent/avp-mcp"] }] }),
-    [fauxAssistantMessage([fauxText("fine")])],
-  );
-  assert.deepEqual(types(events).slice(0, 4), ["run_requested", "agent_described", "error_occurred", "agent_started"]);
-  assert.equal(one(events, "error_occurred").data["avp.error.code"], "mcp_connect_failed");
-  assert.deepEqual(one(events, "agent_started").data["avp.mcp_servers"], [{ id: "broken", status: "failed" }]);
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
-});
-
-test("a provider failure ends the run with a classified error", async () => {
-  const { events } = await runScripted(commission(), [
-    fauxAssistantMessage([], { stopReason: "error", errorMessage: "401 invalid x-api-key" }),
-  ]);
-  const error = one(events, "error_occurred").data;
-  assert.equal(error["avp.error.code"], "auth_error");
-  assert.match(error["avp.error.message"], /invalid x-api-key/);
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "error");
-  assert.ok(!types(events).includes("assistant_message"), "an empty failed inference is not a turn");
-});
-
-test("a Commission the agent cannot honor fails fast before agent_started", async () => {
-  for (const [c, code] of [
-    [commission({ enabled_builtin_tools: { "avp-pi": ["fly"] } }), "commission_collision"],
-    [commission({ agent_versions: { "avp-pi": "9.9.9" } }), "unsupported_agent_version"],
-    [commission({ model: "anthropic/no-such-model" }), "unsupported_model"],
-    [commission({ provider: { id: "openrouter" } }), "unsupported_provider"],
-  ] as const) {
-    const { events } = await runScripted(c, []);
-    assert.deepEqual(types(events), ["run_requested", "agent_described", "error_occurred", "agent_stopped"]);
-    assert.equal(one(events, "error_occurred").data["avp.error.code"], code);
-    assert.equal(one(events, "agent_stopped").data["avp.reason"], "error");
+      [
+        (context) => {
+          names = context.messages
+            .flatMap((m) => (m.role === "system" ? (m.toolsAdded ?? []) : []))
+            .map((t) => t.name);
+          return fauxAssistantMessage(
+            names.map((name, i) =>
+              fauxToolCall(name, {}, { id: `structured-${i}` }),
+            ),
+            { stopReason: "toolUse" },
+          );
+        },
+        text(),
+      ],
+    );
+    assert.equal(names.length, 2);
+    assert.equal(new Set(names).size, 2);
+    assert.ok(names.every((name) => name.length <= 64));
+    const results = data(events, "tool_returned");
+    assert.equal(results.length, 2);
+    assert.ok(
+      results.every(
+        (result) =>
+          result.tool_result.structured_content?.value === "fixture-env-value",
+      ),
+    );
+    assert.deepEqual(
+      new Set(data(events, "tool_invoked").map((call) => call.mcp_server_id)),
+      new Set(["same-name", "same_name"]),
+    );
+    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  } finally {
+    if (before === undefined) delete process.env.AVP_TEST_PI_CREDENTIAL;
+    else process.env.AVP_TEST_PI_CREDENTIAL = before;
   }
 });
 
-test("an abort mid-inference stops the run as interrupted", async () => {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), 300);
-  const { events } = await runScripted(
-    commission(),
-    [fauxAssistantMessage([fauxText("word ".repeat(400))])],
-    { signal: controller.signal, tokensPerSecond: 20 },
-  );
-  const last = events.at(-1)!;
-  assert.equal(last.type, "avp.agent_stopped");
-  assert.equal(last.data["avp.reason"], "interrupted");
-  assert.ok(types(events).includes("agent_started"));
-});
-
-test("the launcher's ANTHROPIC_HOST routes Pi's catalog model", async () => {
-  const paths: string[] = [];
-  const sse = [
-    {
-      type: "message_start",
-      message: {
-        id: "msg_1",
-        type: "message",
-        role: "assistant",
-        model: MODEL,
-        content: [],
-        stop_reason: null,
-        usage: { input_tokens: 11, output_tokens: 1 },
+test("native Anthropic HTTP requests use the proxy key and retain cache-inclusive usage", async () => {
+  const { createServer } = await import("node:http");
+  let key: string | string[] | undefined;
+  const server = createServer((request, response) => {
+    key = request.headers["x-api-key"];
+    request.resume();
+    const frames = [
+      {
+        type: "message_start",
+        message: {
+          id: "native-response",
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5-20251001",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: 600,
+            cache_read_input_tokens: 300,
+            cache_creation_input_tokens: 100,
+            output_tokens: 0,
+          },
+        },
       },
-    },
-    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "routed" } },
-    { type: "content_block_stop", index: 0 },
-    { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
-    { type: "message_stop" },
-  ];
-  const server = createServer((req, res) => {
-    paths.push((req.url ?? "").split("?")[0]!);
-    req.resume();
-    req.on("end", () => {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      for (const e of sse) res.write(`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
-      res.end();
-    });
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "DONE" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 50 },
+      },
+      { type: "message_stop" },
+    ];
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end(
+      frames
+        .map(
+          (frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`,
+        )
+        .join(""),
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const home = mkdtempSync(join(tmpdir(), "avp-pi-home-"));
-  const modelRuntime = await ModelRuntime.create({
-    authPath: join(home, "auth.json"),
-    modelsPath: null,
-    refreshOnCreate: false,
-  });
-  await modelRuntime.setRuntimeApiKey("anthropic", "test-key");
-  const before = process.env.ANTHROPIC_HOST;
-  process.env.ANTHROPIC_HOST = `http://127.0.0.1:${(server.address() as AddressInfo).port}/llm/anthropic`;
-  const sink = new MemorySink();
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const events: Event[] = [];
   try {
-    await run(commission({ enabled_builtin_tools: { "avp-pi": [] } }), sink, { agentDir: home, modelRuntime });
-  } finally {
-    if (before === undefined) delete process.env.ANTHROPIC_HOST;
-    else process.env.ANTHROPIC_HOST = before;
-    server.close();
-  }
-  const events: Json[] = JSON.parse(JSON.stringify(sink.events));
-  assert.deepEqual(paths, ["/llm/anthropic/v1/messages"]);
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
-  assert.equal(one(events, "assistant_message").data["avp.usage"].input_tokens, 11);
-});
-
-const MCP_ONLY = {
-  mcp_servers: [{ type: "stdio", id: "avptest", command: ["python3", FIXTURE] }],
-  enabled_builtin_tools: { "avp-pi": [] },
-} as Partial<Commission>;
-
-const turns = (events: Json[]) => events.filter((e) => e.type === "avp.assistant_message").map((e) => e.data);
-const results = (events: Json[]) =>
-  new Map<string, Json>(
-    events
-      .filter((e) => e.type === "avp.tool_returned")
-      .map((e) => [e.data["avp.tool.call_id"], e.data["avp.tool_result"]]),
-  );
-
-test("parallel tool calls in one response are one turn, each call paired with its own result", async () => {
-  const calls = [
-    fauxToolCall("mcp__avptest__Avptest_Echo", { text: "ALPHA" }, { id: "call_a" }),
-    fauxToolCall("mcp__avptest__Avptest_Echo", { text: "BRAVO" }, { id: "call_b" }),
-    fauxToolCall("mcp__avptest__Avptest_Fail", { message: "RESULT-FAILED", mode: "result" }, { id: "call_r" }),
-    fauxToolCall("mcp__avptest__Avptest_Fail", { message: "PROTOCOL-FAILED", mode: "protocol" }, { id: "call_p" }),
-  ];
-  const { events } = await runScripted(commission(MCP_ONLY), [
-    fauxAssistantMessage(calls, { stopReason: "toolUse" }),
-    fauxAssistantMessage([fauxText("DONE")]),
-  ]);
-
-  const [first, second] = turns(events);
-  assert.equal(turns(events).length, 2);
-  assert.deepEqual(
-    first!["avp.content"].map((b: Json) => [b.type, b.id]),
-    calls.map((c) => ["tool_use", c.id]),
-  );
-  assert.deepEqual(second!["avp.content"], [{ type: "text", text: "DONE" }]);
-
-  assert.equal(events.filter((e) => e.type === "avp.tool_returned").length, calls.length);
-  const byId = results(events);
-  for (const [id, text, isError] of [
-    ["call_a", "ALPHA", false],
-    ["call_b", "BRAVO", false],
-    ["call_r", "RESULT-FAILED", true],
-    ["call_p", "PROTOCOL-FAILED", true],
-  ] as const) {
-    const result = byId.get(id)!;
-    assert.equal(result.is_error, isError, id);
-    const own = JSON.stringify(result.content);
-    assert.match(own, new RegExp(text), id);
-    for (const other of ["ALPHA", "BRAVO", "RESULT-FAILED", "PROTOCOL-FAILED"].filter((t) => t !== text)) {
-      assert.doesNotMatch(own, new RegExp(other), `${id} carries ${other}`);
-    }
-  }
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
-});
-
-test("dependent rounds are one turn per response, each with its own usage", async () => {
-  const steps = [
-    [fauxText("First I add."), fauxToolCall("mcp__avptest__Avptest_Add", { a: 2, b: 3 }, { id: "call_1" })],
-    [
-      fauxText("Now I echo the sum, at somewhat greater length than before."),
-      fauxToolCall("mcp__avptest__Avptest_Echo", { text: "sum was 5" }, { id: "call_2" }),
-    ],
-    [fauxText("The answer is 5. ".repeat(20))],
-  ];
-  const { events } = await runScripted(commission(MCP_ONLY), [
-    fauxAssistantMessage(steps[0]!, { stopReason: "toolUse" }),
-    fauxAssistantMessage(steps[1]!, { stopReason: "toolUse" }),
-    fauxAssistantMessage(steps[2]!),
-  ]);
-  assert.deepEqual(types(events).slice(3), [
-    "assistant_message",
-    "tool_invoked",
-    "tool_returned",
-    "assistant_message",
-    "tool_invoked",
-    "tool_returned",
-    "assistant_message",
-    "agent_stopped",
-  ]);
-
-  const byId = results(events);
-  assert.match(JSON.stringify(byId.get("call_1")!.content), /sum: 5/);
-  assert.match(JSON.stringify(byId.get("call_2")!.content), /sum was 5/);
-
-  // The faux provider bills ceil(chars / 4) output tokens for the response's
-  // own content (a running total would read 13, 40, 125), and each later
-  // request reads the longer transcript so far from cache.
-  const own = (blocks: Json[]) =>
-    Math.ceil(
-      blocks.map((b) => (b.type === "text" ? b.text : `${b.name}:${JSON.stringify(b.arguments)}`)).join("\n").length / 4,
+    await run(
+      received({
+        model: {
+          provider: "anthropic",
+          id: MODEL,
+          base_url: `http://127.0.0.1:${address.port}`,
+          credential: { proxy: "fixture" },
+        },
+        agents: { "avp-pi": { enabled_tools: [] } },
+      }),
+      async (event) => {
+        events.push(event);
+      },
+      new AbortController().signal,
     );
-  const recorded = turns(events);
-  assert.equal(recorded.length, steps.length);
-  recorded.forEach((turn, i) => {
-    assert.equal(turn["avp.usage"].output_tokens, own(steps[i]!), `turn ${i} output`);
-    if (i > 0) {
-      const [now, before] = [turn["avp.usage"], recorded[i - 1]!["avp.usage"]];
-      assert.ok(now.cache_read_input_tokens > before.cache_read_input_tokens, `turn ${i} input`);
-    }
-  });
-  assert.equal(one(events, "agent_stopped").data["avp.reason"], "converged");
+    assert.equal(key, "avp-proxy-stand-in");
+    const response = data(events, "assistant_message")[0]!;
+    assert.equal(response.usage.input_tokens, 1000);
+    assert.equal(response.usage.output_tokens, 50);
+    assert.equal(response.usage.cache_read_input_tokens, 300);
+    assert.equal(response.usage.cache_creation_input_tokens, 100);
+    assert.equal(response.response_model, "claude-haiku-4-5-20251001");
+    assert.deepEqual(response.finish_reasons, ["end_turn"]);
+    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test("Pi loads commissioned skills and support files on demand through its native reader", async () => {
+  let skillPath = "";
+  const { events } = await scripted(
+    received({
+      system_prompt: "Use the matching skill.",
+      skills: [
+        {
+          name: "greeting",
+          files: {
+            "SKILL.md":
+              "---\nname: greeting\ndescription: Greeting\n---\nRead support.txt for the answer.",
+            "support.txt": "NATIVE_SKILL_RESULT",
+          },
+        },
+      ],
+    }),
+    [
+      (context) => {
+        const prompt = context.messages
+          .filter((m) => m.role === "system")
+          .map(getSystemMessageText)
+          .join("\n");
+        assert.ok(!prompt.includes("NATIVE_SKILL_RESULT"));
+        const match = prompt.match(/<location>([^<]+)<\/location>/);
+        assert.ok(match);
+        skillPath = match[1]!;
+        return fauxAssistantMessage(
+          [fauxToolCall("read", { path: skillPath }, { id: "skill" })],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        assert.ok(
+          JSON.stringify(context.messages).includes(
+            "Read support.txt for the answer.",
+          ),
+        );
+        return fauxAssistantMessage(
+          [
+            fauxToolCall(
+              "read",
+              { path: join(dirname(skillPath), "support.txt") },
+              { id: "support" },
+            ),
+          ],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        assert.ok(
+          JSON.stringify(context.messages).includes("NATIVE_SKILL_RESULT"),
+        );
+        return text();
+      },
+    ],
+  );
+  assert.deepEqual(
+    data(events, "tool_returned").map((result) => result.tool_call_id),
+    ["skill", "support"],
+  );
+  assert.equal(data(events, "agent_started")[0]!.skills?.[0]?.name, "greeting");
+  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+});
+
+test("commissioned skills without a native file reader are refused", async () => {
+  const { events, faux } = await scripted(
+    received({
+      agents: { "avp-pi": { enabled_tools: [] } },
+      skills: [
+        {
+          name: "greeting",
+          files: {
+            "SKILL.md":
+              "---\nname: greeting\ndescription: Greeting\n---\nGREETING",
+          },
+        },
+      ],
+    }),
+    [],
+  );
+  assert.equal(
+    data(events, "error_occurred")[0]!.error_code,
+    "invalid_commission",
+  );
+  assert.equal(faux.state.callCount, 0);
 });

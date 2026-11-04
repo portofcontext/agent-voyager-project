@@ -1,328 +1,272 @@
-/**
- * OpenCode session events -> Recorder calls.
- *
- * OpenCode makes one model request per assistant message, bracketed by a
- * `step-start` and a `step-finish` part; the `step-finish` part carries that
- * request's tokens. So each root-session `step-finish` is reported as one
- * turn: the message's text, reasoning, and tool parts as content, the step's
- * tokens as usage. OpenCode runs a step's tools before the step finishes, so
- * their results usually follow the turn at once; a result that lands later is
- * reported when its part completes. Reporting after the fact, the Recorder's
- * clock is pinned to OpenCode's own timestamps (`EventClock`), so event times
- * and tool durations are the real ones.
- *
- * The `task` tool runs a subagent in a child session. Its frame opens and
- * closes around the task call; the child's own requests (and any
- * grandchildren's) are rolled up onto `subagent_returned` as `SubagentUsage`,
- * since the Recorder places every turn under the agent span.
- *
- * Cost is computed from the AVP price table, not taken from OpenCode's
- * `cost`, so it is reproducible from the trajectory.
- */
-import { computeCost, type Clock, type ContentBlock, type PriceTable, type Recorder } from "@avp/types";
-import type { ErrorCode, SubagentUsage } from "@avp/types/trajectory";
-import type { AssistantMessage, Event, Part, StepFinishPart, ToolPart } from "@opencode-ai/sdk/v2/client";
-
+/** Translate native complete responses and tools, including child sessions. */
+import type {
+  AssistantMessage,
+  Event,
+  Part,
+  StepFinishPart,
+  ToolPart,
+} from "@opencode-ai/sdk/v2/client";
+import type { Recorder } from "@agent-voyager-project/sdk/recorder";
+import type { JsonValue } from "@agent-voyager-project/sdk/trajectory";
 import * as translate from "./translate.js";
-
-export interface TranslatorOptions {
-  /** Maps OpenCode's tool name to the AVP name. */
-  toolName: (name: string) => string;
-  /** The Commission's model id, the price-table fallback. */
-  requestModel: string;
-  /** The origin the price table keys models under. */
-  provider: string;
-  prices: PriceTable;
-  /** OpenCode asked for a permission; the run is sandboxed, so it is granted. */
-  onPermission: (requestID: string) => void;
-  /** OpenCode is retrying a request that can't succeed; stop it. */
-  onHopeless: () => void;
-}
-
-/**
- * The Recorder's clock: wall time, or a past instant while reporting what
- * OpenCode did then. It never runs backwards, so event times stay in
- * emission order.
- */
-export class EventClock implements Clock {
-  private pinned: number | undefined;
-  private last = 0;
-
-  /** Run `fn` with the clock reading `epochMs` (or later, to stay monotonic). */
-  at<T>(epochMs: number | undefined, fn: () => T): T {
-    this.pinned = epochMs;
-    try {
-      return fn();
-    } finally {
-      this.pinned = undefined;
-    }
-  }
-
-  nowIso(): string {
-    return new Date(this.now()).toISOString();
-  }
-
-  monotonic(): number {
-    return this.now() / 1000;
-  }
-
-  private now(): number {
-    this.last = Math.max(this.pinned ?? Date.now(), this.last);
-    return this.last;
-  }
-}
-
 interface Message {
-  sessionID: string;
+  session: string;
   info?: AssistantMessage;
   parts: Map<string, Part>;
-  reported: Set<string>;
+  consumed: Set<string>;
 }
-
-interface Spend {
-  cost: number;
-  priced: boolean;
-  input: number;
-  output: number;
-  turns: number;
-  text: string;
+interface Step {
+  message: Message;
+  finish?: StepFinishPart;
+  parts: Part[];
 }
-
-export class SessionTranslator {
-  /** The first provider failure on the root session, if any. */
-  error: [ErrorCode, string] | undefined;
-  /** True once the root session is idle. */
+export class EventClock {
+  private timestamp?: number;
+  now = (): Date => new Date(this.timestamp ?? Date.now());
+  async at<T>(timestamp: number | undefined, fn: () => Promise<T>): Promise<T> {
+    this.timestamp = timestamp;
+    try {
+      return await fn();
+    } finally {
+      this.timestamp = undefined;
+    }
+  }
+}
+export class SessionEvents {
   idle = false;
-
-  private readonly parents = new Map<string, string>();
-  private readonly messages = new Map<string, Message>();
-  private readonly pending = new Set<string>();
-  /** Task call id -> its child session, once OpenCode reports it. */
-  private readonly children = new Map<string, string>();
-  private readonly opened = new Set<string>();
-  private readonly spend = new Map<string, Spend>();
-  private last: Message | undefined;
-
+  failure?: unknown;
+  private messages = new Map<string, Message>();
+  private steps = new Map<string, Step[]>();
+  private seen = new Set<string>();
+  private scopes = new Map<string, string>();
+  private pending = new Map<string, { part: ToolPart; parent?: string }>();
+  private frames = new Set<string>();
+  private last?: Message;
   constructor(
-    private readonly rec: Recorder,
-    private readonly clock: EventClock,
+    private rec: Recorder,
+    private clock: EventClock,
     readonly root: string,
-    private readonly opts: TranslatorOptions,
+    private subagents: Set<string>,
+    private abort: () => Promise<unknown>,
   ) {}
-
-  handle(event: Event): void {
-    switch (event.type) {
-      case "session.created":
-      case "session.updated":
-        if (event.properties.info.parentID) this.parents.set(event.properties.info.id, event.properties.info.parentID);
-        return;
-      case "message.updated": {
-        const info = event.properties.info;
-        if (info.role !== "assistant") return;
-        const message = this.message(info.id, info.sessionID);
-        message.info = info;
-        if (info.sessionID === this.root) this.last = message;
-        return;
-      }
-      case "message.part.updated":
-        return this.part(event.properties.part);
-      case "message.part.delta": {
-        // Streamed text arrives as deltas; a cut-off request never gets its final part update.
-        const { messageID, partID, field, delta } = event.properties;
-        const part = this.messages.get(messageID)?.parts.get(partID) as Record<string, unknown> | undefined;
-        if (part && typeof part[field] === "string") part[field] += delta;
-        return;
-      }
-      case "session.status": {
-        const { sessionID, status } = event.properties;
-        if (sessionID === this.root && status.type === "retry" && translate.hopelessRetry(status.message)) {
-          this.error ??= [translate.messageCode(status.message), status.message];
-          this.opts.onHopeless();
-        }
-        return;
-      }
-      case "session.error": {
-        const { sessionID, error } = event.properties;
-        if (error && (sessionID === undefined || sessionID === this.root) && error.name !== "MessageAbortedError") {
-          this.error ??= [translate.errorCode(error), translate.errorMessage(error)];
-        }
-        return;
-      }
-      case "permission.asked":
-        this.opts.onPermission(event.properties.id);
-        return;
-      case "session.idle":
-        if (event.properties.sessionID === this.root) this.idle = true;
-        return;
+  private message(id: string, session: string): Message {
+    let m = this.messages.get(id);
+    if (!m) {
+      m = { session, parts: new Map(), consumed: new Set() };
+      this.messages.set(id, m);
     }
+    return m;
   }
-
-  /** The root session's final failure, from its last assistant message. */
-  get lastError(): [ErrorCode, string] | undefined {
-    const error = this.last?.info?.error;
-    if (!error || error.name === "MessageAbortedError") return undefined;
-    return [translate.errorCode(error), translate.errorMessage(error)];
-  }
-
-  /** The root session's final answer: its structured output, else its last message's text. */
-  get output(): unknown {
-    if (this.last?.info?.structured !== undefined) return this.last.info.structured;
-    return text(this.last) || undefined;
-  }
-
-  /**
-   * After an interrupt: report what the cut-off request produced (its text,
-   * and any tool calls that finished), without usage.
-   */
-  flushInterrupted(): void {
-    const message = this.last;
-    if (!message || message.info?.finish) return;
-    const parts = [...message.parts.values()].filter(
-      (p) => !message.reported.has(p.id) && (p.type !== "tool" || translate.toolResult(p) !== undefined),
-    );
-    this.report(message, parts, undefined, ["aborted"]);
-  }
-
-  private part(part: Part): void {
-    const message = this.message(part.messageID, part.sessionID);
-    message.parts.set(part.id, part);
-    if (part.type === "tool") {
-      const child = part.tool === "task" && "metadata" in part.state ? part.state.metadata?.sessionId : undefined;
-      if (typeof child === "string") this.children.set(part.callID, child);
-      if (this.pending.has(part.callID) && translate.toolResult(part)) this.result(part);
-    } else if (part.type === "step-finish") {
-      if (part.sessionID === this.root) {
-        const parts = [...message.parts.values()].filter((p) => !message.reported.has(p.id));
-        this.report(message, parts, part, [part.reason]);
-      } else {
-        this.rollUp(message, part);
-      }
-    }
-  }
-
-  private report(message: Message, parts: Part[], finish: StepFinishPart | undefined, reasons: string[]): void {
-    const content: ContentBlock[] = [];
-    const tools: ToolPart[] = [];
-    // The response is complete when its last text ends or its last tool call starts running.
-    let done = 0;
-    for (const p of parts) {
-      message.reported.add(p.id);
-      const block = translate.block(p, this.opts.toolName);
-      if (block) content.push(block);
-      if (p.type === "tool") tools.push(p);
-      done = Math.max(done, endOf(p) ?? 0);
-    }
-    const created = message.info?.time.created;
-    const at = done || Date.now();
-    this.clock.at(at, () =>
-      this.rec.assistant(content, finish ? translate.usage(finish.tokens) : undefined, {
-        model: message.info?.modelID ?? this.opts.requestModel,
-        requestModel: this.opts.requestModel,
-        finishReasons: reasons,
-        durationMs: created ? Math.max(0, at - created) : undefined,
-      }),
-    );
-    for (const tool of tools) {
-      this.pending.add(tool.callID);
-      if (tool.tool === "task") {
-        const input = tool.state.input as { subagent_type?: string; description?: string };
-        this.clock.at(started(tool), () =>
-          this.rec.subagentStart(tool.callID, input.subagent_type ?? "task", { description: input.description }),
+  async handle(event: Event): Promise<void> {
+    if (event.type === "message.updated") {
+      const info = event.properties.info;
+      if (info.role !== "assistant") return;
+      const m = this.message(info.id, info.sessionID);
+      m.info = info;
+      if (m.session === this.root) this.last = m;
+    } else if (event.type === "message.part.updated") {
+      const part = event.properties.part,
+        m = this.message(part.messageID, part.sessionID);
+      m.parts.set(part.id, part);
+      if (part.type === "compaction")
+        throw new Error(
+          "OpenCode compacted the run despite compaction being disabled",
         );
-        this.opened.add(tool.callID);
+      if (part.type === "step-finish" && !this.seen.has(part.id)) {
+        this.seen.add(part.id);
+        const step = {
+          message: m,
+          finish: part,
+          parts: [...m.parts.values()].filter((p) => !m.consumed.has(p.id)),
+        };
+        step.parts.forEach((p) => m.consumed.add(p.id));
+        const list = this.steps.get(m.session) ?? [];
+        list.push(step);
+        this.steps.set(m.session, list);
+        if (m.session === this.root || this.scopes.has(m.session))
+          await this.flush(m.session);
+      } else if (part.type === "tool" && this.pending.has(part.callID)) {
+        const pending = this.pending.get(part.callID)!;
+        pending.part = part;
+        await this.attach(part, pending.parent);
+        if (translate.completed(part))
+          await this.returned(part, pending.parent);
       }
-    }
-    // Parallel calls finish in any order; report results as they finished, so
-    // each lands at its own end time on the monotonic clock.
-    const finished = tools.filter((t) => translate.toolResult(t)).sort((a, b) => (ended(a) ?? 0) - (ended(b) ?? 0));
-    for (const tool of finished) this.result(tool);
-  }
-
-  private result(tool: ToolPart): void {
-    const result = translate.toolResult(tool)!;
-    this.pending.delete(tool.callID);
-    this.clock.at(ended(tool), () => {
-      if (this.opened.delete(tool.callID)) {
-        const child = this.children.get(tool.callID);
-        const spend = child ? this.spend.get(child) : undefined;
-        this.rec.subagentResult(tool.callID, spend?.text || result.text, {
-          reason: result.isError ? "error" : "converged",
-          usage: spend ? subagentUsage(spend) : undefined,
-        });
+    } else if (event.type === "message.part.delta") {
+      const p = event.properties;
+      const part = this.messages.get(p.messageID)?.parts.get(p.partID);
+      if (
+        part &&
+        (part.type === "text" || part.type === "reasoning") &&
+        p.field === "text"
+      )
+        part.text += p.delta;
+    } else if (event.type === "session.error") {
+      if (
+        (!event.properties.sessionID ||
+          event.properties.sessionID === this.root) &&
+        event.properties.error?.name !== "MessageAbortedError"
+      )
+        this.failure = event.properties.error;
+    } else if (
+      event.type === "session.status" &&
+      event.properties.sessionID === this.root &&
+      event.properties.status.type === "retry"
+    ) {
+      if (
+        /quota|credits|billing|insufficient/i.test(
+          event.properties.status.message,
+        )
+      ) {
+        this.failure = event.properties.status.message;
+        await this.abort();
       }
-      this.rec.toolResult(tool.callID, result.text, { isError: result.isError });
-    });
+    } else if (
+      event.type === "session.idle" &&
+      event.properties.sessionID === this.root
+    )
+      this.idle = true;
   }
-
-  /** Add a child-session request to the spend of the root's direct child it descends from. */
-  private rollUp(message: Message, finish: StepFinishPart): void {
-    let child = message.sessionID;
-    for (let parent = this.parents.get(child); parent && parent !== this.root; parent = this.parents.get(child)) {
-      child = parent;
+  async flushInterrupted(): Promise<void> {
+    for (const message of this.messages.values()) {
+      if (message.session !== this.root || !message.info || message.info.finish)
+        continue;
+      const parts = [...message.parts.values()].filter(
+        (p) =>
+          !message.consumed.has(p.id) &&
+          (p.type !== "tool" || p.state.status !== "pending"),
+      );
+      parts.forEach((p) => message.consumed.add(p.id));
+      if (parts.length) await this.report({ message, parts });
     }
-    if (this.parents.get(child) !== this.root) return;
-    const spend = this.spend.get(child) ?? { cost: 0, priced: true, input: 0, output: 0, turns: 0, text: "" };
-    this.spend.set(child, spend);
-    const usage = translate.usage(finish.tokens);
-    let priced: [number, string] = [0, "unknown"];
-    for (const model of new Set([message.info?.modelID, this.opts.requestModel])) {
-      if (!model || priced[1] !== "unknown") continue;
-      priced = computeCost(
-        this.opts.provider,
-        model,
-        usage.input_tokens,
-        usage.output_tokens,
-        usage.cache_read_input_tokens ?? 0,
-        usage.cache_creation_input_tokens ?? 0,
-        this.opts.prices,
+  }
+  private async flush(session: string): Promise<void> {
+    const list = this.steps.get(session) ?? [];
+    while (list.length) {
+      const step = list.shift()!;
+      await this.report(step, this.scopes.get(session));
+    }
+  }
+  private async report(step: Step, parent?: string): Promise<void> {
+    const info = step.message.info;
+    if (!info)
+      throw new Error("OpenCode completed a response without model metadata");
+    const parts = step.parts
+      .map((p) => ({ part: p, block: translate.block(p) }))
+      .filter((p) => p.block !== undefined);
+    const fallback = step.finish
+      ? info.time.created
+      : (info.time.completed ?? Date.now());
+    const done = Math.max(
+      info.time.created,
+      ...parts.map((p) => translate.start(p.part) ?? fallback),
+    );
+    const options = {
+      key: step.finish?.id ?? `aborted:${info.id}`,
+      model: { provider: info.providerID, id: info.modelID },
+      usage: step.finish ? translate.usage(step.finish) : undefined,
+      finishReasons: [step.finish?.reason ?? "aborted"],
+      durationMs: Math.max(0, done - info.time.created),
+      subagentInvocationId: parent,
+    };
+    // Pin each call's own native start time; the Recorder then calculates tool
+    // durations from native starts/ends even when parallel results arrive later.
+    for (const p of parts)
+      await this.clock.at(translate.start(p.part) ?? done, () =>
+        this.rec.response([p.block!], options),
+      );
+    if (parts.length)
+      await this.clock.at(done, () => this.rec.response([], options));
+    await this.rec.closeResponse();
+    const tools = step.parts.filter((p): p is ToolPart => p.type === "tool");
+    for (const tool of tools) {
+      this.pending.set(tool.callID, { part: tool, parent });
+      await this.attach(tool, parent);
+    }
+    for (const tool of tools
+      .filter(translate.completed)
+      .sort((a, b) => (translate.end(a) ?? 0) - (translate.end(b) ?? 0)))
+      await this.returned(tool, parent);
+  }
+  private async attach(tool: ToolPart, parent?: string): Promise<void> {
+    if (tool.tool !== "task") return;
+    const name = String(tool.state.input.subagent_type ?? "");
+    if (!this.subagents.has(name)) return;
+    if (!this.frames.has(tool.callID)) {
+      await this.clock.at(translate.start(tool), () =>
+        this.rec.subagentInvoked(
+          tool.callID,
+          name,
+          tool.state.input as Record<string, JsonValue>,
+          { subagentInvocationId: parent },
+        ),
+      );
+      this.frames.add(tool.callID);
+    }
+    const child =
+      "metadata" in tool.state ? tool.state.metadata?.sessionId : undefined;
+    if (typeof child === "string") {
+      this.scopes.set(child, tool.callID);
+      await this.flush(child);
+    }
+  }
+  private async returned(tool: ToolPart, _parent?: string): Promise<void> {
+    if (!this.pending.delete(tool.callID)) return;
+    const child =
+      "metadata" in tool.state ? tool.state.metadata?.sessionId : undefined;
+    let isError = tool.state.status === "error";
+    if (this.frames.delete(tool.callID)) {
+      const messages = [...this.messages.values()].filter(
+        (m) => m.session === child,
+      );
+      const last = messages.at(-1);
+      isError ||= !!last?.info?.error;
+      const content = translate.result(tool);
+      const text =
+        this.text(last) ||
+        (typeof content === "string"
+          ? content
+          : content
+              .filter((b) => b.type === "text")
+              .map((b) => b.text)
+              .join(""));
+      await this.clock.at(translate.end(tool), () =>
+        this.rec.subagentReturned(
+          tool.callID,
+          text,
+          isError ? "error" : "converged",
+        ),
       );
     }
-    spend.cost += priced[0];
-    spend.priced &&= priced[1] !== "unknown";
-    spend.input += usage.input_tokens;
-    spend.output += usage.output_tokens;
-    spend.turns += 1;
-    if (message.sessionID === child) spend.text = text(message) || spend.text;
+    await this.clock.at(translate.end(tool), () =>
+      this.rec.toolReturned(tool.callID, translate.result(tool), { isError }),
+    );
   }
-
-  private message(id: string, sessionID: string): Message {
-    let message = this.messages.get(id);
-    if (!message) {
-      message = { sessionID, parts: new Map(), reported: new Set() };
-      this.messages.set(id, message);
-    }
-    return message;
+  private text(m?: Message): string {
+    return m
+      ? [...m.parts.values()]
+          .flatMap((p) =>
+            p.type === "text" && !p.synthetic && !p.ignored ? [p.text] : [],
+          )
+          .join("")
+      : "";
   }
-}
-
-/** When a part's model output was complete: a text or reasoning end, or a tool call starting to run. */
-function endOf(part: Part): number | undefined {
-  if (part.type === "text" || part.type === "reasoning") return part.time?.end;
-  if (part.type === "tool") return started(part);
-  return undefined;
-}
-
-function started(tool: ToolPart): number | undefined {
-  return "time" in tool.state ? tool.state.time.start : undefined;
-}
-
-function ended(tool: ToolPart): number | undefined {
-  return "time" in tool.state && "end" in tool.state.time ? tool.state.time.end : undefined;
-}
-
-function text(message: Message | undefined): string {
-  if (!message) return "";
-  return [...message.parts.values()]
-    .filter((p): p is Extract<Part, { type: "text" }> => p.type === "text" && !p.synthetic && !p.ignored)
-    .map((p) => p.text)
-    .join("");
-}
-
-function subagentUsage(spend: Spend): SubagentUsage {
-  return {
-    ...(spend.priced ? { cost_usd: spend.cost } : {}),
-    tokens_input: spend.input,
-    tokens_output: spend.output,
-    turns: spend.turns,
-  };
+  get output(): JsonValue | undefined {
+    return (
+      (this.last?.info?.structured as JsonValue | undefined) ??
+      (this.text(this.last) || undefined)
+    );
+  }
+  get lastError(): unknown {
+    return this.last?.info?.error?.name === "MessageAbortedError"
+      ? undefined
+      : this.last?.info?.error;
+  }
+  check(): void {
+    for (const [session, steps] of this.steps)
+      if (steps.length && session !== this.root && !this.scopes.has(session))
+        throw new Error(
+          "OpenCode child responses could not be attributed to a task invocation",
+        );
+  }
 }

@@ -7,19 +7,17 @@ on:
     branches: [main]
     paths:
       - "SKILL.md"
-      - "avp/core/spec/v0.1/**"
-      - "FOUNDATIONS.md"
+      - "spec/v0.1/**"
       - "LICENSE"
-      - "avp/scripts/build-skill.sh"
+      - "scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
     tags: ["v*"]
   pull_request:
     paths:
       - "SKILL.md"
-      - "avp/core/spec/v0.1/**"
-      - "FOUNDATIONS.md"
+      - "spec/v0.1/**"
       - "LICENSE"
-      - "avp/scripts/build-skill.sh"
+      - "scripts/build-skill.sh"
       - ".github/workflows/build-skill.yml"
   workflow_dispatch:
 
@@ -40,7 +38,7 @@ jobs:
           python-version: "3.11"
 
       - name: Build avp.skill
-        run: bash avp/scripts/build-skill.sh dist
+        run: bash scripts/build-skill.sh dist
 
       - name: Verify archive and bundled references
         run: |

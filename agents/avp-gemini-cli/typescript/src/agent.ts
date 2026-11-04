@@ -1,603 +1,465 @@
-/**
- * The adapter: Gemini CLI's own headless loop in, Recorder calls out.
- *
- * Gemini CLI owns the loop through `LegacyAgentSession`, the session its
- * headless mode (`gemini -p`) runs on: Gemini client turns, the tool
- * scheduler, MCP, skills, and subagents. The adapter observes three of its
- * hooks without replacing any:
- *
- * - the Gemini client's stream, where each model response ends with one
- *   `Finished` event carrying that response's usage; the thoughts, text, and
- *   tool calls since the previous one are reported as one turn;
- * - the tool scheduler, whose completed calls carry the response parts the
- *   model sees next, reported as tool results (`invoke_agent` calls also open
- *   and close a subagent frame);
- * - the content generator, which attributes subagent model calls (made inside
- *   an `invoke_agent` call) to that call's frame as rolled-up usage.
- *
- * Gemini CLI is a product: the descriptor declares its default headless tools,
- * subagents, and skills, and nothing else. Each run gets a private Gemini CLI
- * home, so no user settings, extensions, policies, skills, OAuth state, or
- * stored keys are read; approval mode is YOLO (runs are sandboxed); telemetry
- * and usage statistics are off. The SDK is imported inside `describe` and
- * `run`, so `ping` stays light.
- */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+/** Observe Gemini's session, scheduler, and generator; never drive its tool loop. */
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import * as core from "@google/gemini-cli-core";
+import { isSubagentProgress } from "@google/gemini-cli-core/dist/src/agents/types.js";
+import { getToolCallContext } from "@google/gemini-cli-core/dist/src/utils/toolCallContext.js";
+import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
+import type { Commission } from "@agent-voyager-project/sdk/commission";
+import type {
+  ContentBlock,
+  EventSink,
+  JsonValue,
+  SubagentUsage,
+} from "@agent-voyager-project/sdk/trajectory";
+import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import {
   computeCost,
-  loadDefaultPrices,
-  Recorder,
-  RecorderError,
-  type AgentDescriptor,
-  type Commission,
-  type ContentBlock,
-  type Sink,
-} from "@avp/types";
-import type { McpServerDecl, SkillDecl, SubagentDecl, ToolDecl } from "@avp/types/trajectory";
-import type {
-  CompletedToolCall,
-  Config,
-  ContentGenerator,
-  MCPServerConfig,
-  ServerGeminiStreamEvent,
-} from "@google/gemini-cli-core";
-
-import {
-  AGENT_NAME,
-  DEFAULT_SKILLS,
-  DEFAULT_SUBAGENTS,
-  DEFAULT_TOOLS,
-  failFast,
-  fromCommission,
-  ORIGIN,
-  SUBAGENT_TOOL,
-  writeSkills,
-  writeSystemPrompt,
-  type McpEntry,
-  type RunPlan,
-} from "./commission.js";
+  loadPrices,
+  type Prices,
+} from "@agent-voyager-project/sdk/utils/pricing";
+import { credential, MissingSecret } from "./commission.js";
+import { describe, tools, skills, subagents } from "./descriptor.js";
+import { configure, isolated } from "./native.js";
 import * as translate from "./translate.js";
 
-type Core = typeof import("@google/gemini-cli-core");
-type GenerateContentResponse = Awaited<ReturnType<ContentGenerator["generateContent"]>>;
-
-export const AGENT_VERSION: string = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-).version;
-
-/** The model `describe` configures; the descriptor does not depend on it. */
-const DESCRIBE_MODEL = "gemini-2.5-flash";
-
-/** Hooks for tests and embedders; every field is optional. */
 export interface RunOptions {
-  /**
-   * A content generator to call in place of the Gemini API, such as Gemini
-   * CLI's own `FakeContentGenerator` (what `gemini --fake-responses` uses).
-   */
-  contentGenerator?: ContentGenerator;
-  /** Aborting it stops Gemini CLI and closes the trajectory as `interrupted`. */
+  contentGenerator?: core.ContentGenerator;
   signal?: AbortSignal;
 }
-
-/** What the agent ships with, before any Commission. */
-export async function describe(): Promise<AgentDescriptor> {
-  const core = await import("@google/gemini-cli-core");
-  const scratch = mkdtempSync(join(tmpdir(), "avp-gemini-cli-describe-"));
-  const workspace = join(scratch, "workspace");
-  mkdirSync(workspace);
-  try {
-    return await withHome(join(scratch, "home"), async () => {
-      const config = await configure(core, { cwd: workspace, sessionId: "describe", modelId: DESCRIBE_MODEL });
-      try {
-        return {
-          agent_name: AGENT_NAME,
-          agent_version: AGENT_VERSION,
-          spec_version: "0.1",
-          tools: tools(core, config, DESCRIBE_MODEL),
-          subagents: subagents(config),
-          skills: skills(config),
-        };
-      } finally {
-        await config.dispose();
-      }
-    });
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
-
-export async function run(commission: Commission, sink: Sink, options: RunOptions = {}): Promise<void> {
-  const mcpNames = new Set<string>();
-  const prices = loadDefaultPrices();
-  const rec = new Recorder(sink, {
-    runId: commission.run_id,
-    provider: ORIGIN,
-    prices,
-    dispatchTarget: (name) => (mcpNames.has(name) ? "mcp_server" : "local"),
-  });
+export async function run(
+  received: JsonValue,
+  sink: EventSink,
+  options: RunOptions = {},
+): Promise<void> {
+  const prices = await loadPrices();
+  const rec = new Recorder(sink, { prices });
   const descriptor = await describe();
-  rec.prelude(commission, descriptor);
-  const refusal = failFast(commission, AGENT_VERSION);
-  if (refusal) {
-    rec.error(...refusal);
-    rec.stop("error");
+  const commission = await rec.begin(received, descriptor);
+  if (!commission) return;
+  if (commission.output_schema != null) {
+    await rec.error(
+      "invalid_commission",
+      "Gemini CLI has no native final structured-output interface exposed by this adapter",
+    );
     return;
   }
-
-  const core = await import("@google/gemini-cli-core");
-  const { getToolCallContext } = await import("@google/gemini-cli-core/dist/src/utils/toolCallContext.js");
-  const plan = fromCommission(commission);
+  const plan = planRun(commission, descriptor);
   const scratch = mkdtempSync(join(tmpdir(), "avp-gemini-cli-"));
   const home = join(scratch, "home");
-  writeSystemPrompt(home, plan.systemPrompt);
-  writeSkills(commission.skills ?? [], join(home, ".gemini", "skills"));
-
-  let config: Config | undefined;
-  let session: InstanceType<Core["LegacyAgentSession"]> | undefined;
-  const onAbort = () => void session?.abort();
-  options.signal?.addEventListener("abort", onAbort, { once: true });
+  let session: core.LegacyAgentSession | undefined;
+  const abort = () => session?.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
   try {
-    await withHome(home, async () => {
-      config = await configure(core, {
-        cwd: process.cwd(),
-        sessionId: commission.run_id,
-        modelId: plan.modelId,
-        plan,
-      });
-      await config.refreshAuth(core.AuthType.USE_GEMINI, undefined, plan.baseUrl);
-      const cfg = config;
-      // Serve the Commission's model as named: Gemini CLI otherwise promotes
-      // some Flash and Flash Lite ids to its newest release.
-      cfg.hasLatestFlashGAAccess = () => false;
-      cfg.hasLatestFlashLiteGAAccess = () => false;
-      const generator = options.contentGenerator;
-      if (generator) cfg.getContentGenerator = () => generator;
-
-      // MCP servers connected during `initialize`; one that failed is reported
-      // and left out (Gemini CLI registers no tools for it).
-      const manager = cfg.getMcpClientManager();
-      const mcpDecls: McpServerDecl[] = [];
-      for (const entry of plan.mcpServers) {
-        const client = manager?.getClient(entry.id);
-        if (client?.getStatus() === core.MCPServerStatus.CONNECTED) {
-          mcpDecls.push({ id: entry.id, status: "connected" });
-        } else {
-          const reason = manager?.getLastError(entry.id) ?? "could not connect";
-          rec.error("mcp_connect_failed", `${entry.id}: ${reason}`);
-          mcpDecls.push({ id: entry.id, status: "failed" });
+    await isolated(
+      home,
+      async () => {
+        const config = await configure(
+          home,
+          process.cwd(),
+          commission.run_id,
+          commission.model.id,
+          commission,
+          plan,
+        );
+        let scheduler: core.Scheduler | undefined;
+        try {
+          await config.refreshAuth(
+            core.AuthType.USE_GEMINI,
+            credential(commission),
+            commission.model.base_url ?? undefined,
+          );
+          if (options.contentGenerator)
+            config.getContentGenerator = () => options.contentGenerator!;
+          const manager = config.getMcpClientManager();
+          for (const server of commission.mcp_servers ?? []) {
+            if (
+              manager?.getClient(server.id)?.getStatus() !==
+              core.MCPServerStatus.CONNECTED
+            ) {
+              await rec.error(
+                "mcp_connect_failed",
+                `${server.id}: ${manager?.getLastError(server.id) ?? "could not connect"}`,
+              );
+              return;
+            }
+          }
+          const loaded = new Set(skills(config).map((skill) => skill.name));
+          if (commission.skills?.some((skill) => !loaded.has(skill.name))) {
+            await rec.error(
+              "invalid_commission",
+              "Gemini could not load all commissioned skills",
+            );
+            return;
+          }
+          const declared = tools(config, commission.model.id);
+          if (
+            commission.skills?.length &&
+            !declared.some((tool) => tool.name === "activate_skill")
+          ) {
+            await rec.error(
+              "invalid_commission",
+              "Gemini needs activate_skill to load commissioned skills",
+            );
+            return;
+          }
+          await rec.start({
+            ...plan.started,
+            system_prompt: core.getCoreSystemPrompt(
+              config,
+              config.getSystemInstructionMemory(),
+            ),
+            tools: declared,
+            skills: skills(config),
+            subagents: subagents(config, commission.model.id),
+            mcp_servers: plan.started.mcp_servers?.map((server) => ({
+              ...server,
+              status: "connected",
+            })),
+          });
+          const observer = new Observer(rec, config, commission, prices);
+          const observedGenerator = observer.generator(
+            config.getContentGenerator(),
+          );
+          config.getContentGenerator = () => observedGenerator;
+          scheduler = new core.Scheduler({
+            context: config,
+            messageBus: config.getMessageBus(),
+            getPreferredEditor: () => undefined,
+            schedulerId: core.ROOT_SCHEDULER_ID,
+          });
+          const schedule = scheduler.schedule.bind(scheduler);
+          scheduler.schedule = async (...args) => {
+            const completed = await schedule(...args);
+            await observer.completed(completed);
+            return completed;
+          };
+          session = new core.LegacyAgentSession({
+            config,
+            client: observer.client(config.getGeminiClient()),
+            scheduler,
+            promptId: config.getSessionId(),
+          });
+          let end: string | undefined;
+          let fatal: string | undefined;
+          if (!options.signal?.aborted) {
+            for await (const event of session.sendStream({
+              message: { content: [{ type: "text", text: commission.prompt }] },
+            })) {
+              if (event.type === "error" && event.fatal) fatal = event.message;
+              if (event.type === "agent_end") end = event.reason;
+            }
+          }
+          if (options.signal?.aborted || end === "aborted")
+            await rec.stop("interrupted");
+          else if (
+            observer.adapterFailure ||
+            observer.failure ||
+            fatal ||
+            end === "failed" ||
+            end === "max_turns" ||
+            !end
+          ) {
+            const error =
+              observer.adapterFailure ??
+              observer.failure ??
+              fatal ??
+              `Gemini ended the run: ${end ?? "no terminal event"}`;
+            await rec.error(translate.errorCode(error), error);
+            await rec.stop("error");
+          } else
+            await rec.stop(
+              end === "refusal" ? "refused" : "converged",
+              observer.lastText,
+            );
+        } finally {
+          scheduler?.dispose();
+          await config.dispose();
         }
-      }
-      const declared = tools(core, cfg, plan.modelId);
-      for (const t of declared) if (t["avp.mcp_server_id"]) mcpNames.add(t.name);
-      const enabledSubagents = subagents(cfg);
-      const enabledSkills = skills(cfg);
-      rec.start({
-        requestModel: commission.model,
-        prompt: plan.prompt,
-        systemPrompt: core.getCoreSystemPrompt(cfg, cfg.getSystemInstructionMemory()),
-        tools: declared,
-        mcpServers: mcpDecls.length > 0 ? mcpDecls : undefined,
-        subagents: enabledSubagents.length > 0 ? enabledSubagents : undefined,
-        skills: enabledSkills.length > 0 ? enabledSkills : undefined,
-        sessionId: cfg.getSessionId(),
-        threadId: commission.thread_id ?? undefined,
-        tags: commission.tags ?? undefined,
-      });
-
-      const observer = new Observer(rec, cfg, plan, prices, () => void session?.abort());
-      observer.tapContentGenerator(getToolCallContext);
-      const client = cfg.getGeminiClient();
-      const scheduler = new core.Scheduler({
-        context: cfg,
-        messageBus: cfg.getMessageBus(),
-        getPreferredEditor: () => undefined,
-        schedulerId: core.ROOT_SCHEDULER_ID,
-      });
-      const schedule = scheduler.schedule.bind(scheduler);
-      scheduler.schedule = async (requests, signal) => {
-        const done = await schedule(requests, signal);
-        observer.toolsCompleted(done);
-        return done;
-      };
-      session = new core.LegacyAgentSession({
-        config: cfg,
-        client: observer.tapClient(client),
-        scheduler,
-        promptId: cfg.getSessionId(),
-      });
-
-      let endReason: string | undefined;
-      let fatal: string | undefined;
-      if (plan.prompt && !options.signal?.aborted) {
-        for await (const event of session.sendStream({ message: { content: [{ type: "text", text: plan.prompt }] } })) {
-          if (event.type === "error" && event.fatal) fatal ??= event.message;
-          if (event.type === "agent_end") endReason = event.reason;
-        }
-      }
-      if (observer.reportError !== undefined) throw observer.reportError;
-
-      const failure = observer.failure ?? (fatal !== undefined ? classify(fatal) : undefined);
-      if (options.signal?.aborted || endReason === "aborted") {
-        rec.stop("interrupted");
-      } else if (failure) {
-        rec.error(failure.code, failure.message);
-        rec.stop("error");
-      } else if (endReason === "failed" || endReason === "max_turns") {
-        rec.error("unknown", `Gemini CLI ended the run: ${endReason}`);
-        rec.stop("error");
-      } else if (endReason === "refusal") {
-        rec.stop("refused", observer.lastText || undefined);
-      } else {
-        rec.stop("converged", observer.lastText || undefined);
-      }
-    });
-  } catch (err) {
-    if (rec.stopped) throw err;
-    const message = err instanceof Error ? err.message : String(err);
-    const code = err instanceof RecorderError ? "agent_crash" : translate.errorCode(message);
-    if (code === "unknown" || code === "agent_crash") {
-      rec.error("agent_crash", message);
-      rec.stop("error");
-      throw err;
+      },
+      commission.system_prompt,
+    );
+  } catch (error) {
+    if (rec.ended) throw error;
+    if (options.signal?.aborted) {
+      await rec.stop("interrupted");
+      return;
     }
-    // An expected failure before the first turn (missing credentials, say).
-    rec.error(code, message);
-    rec.stop("error");
+    const code =
+      error instanceof MissingSecret
+        ? "auth_error"
+        : error instanceof RecorderError
+          ? "agent_crash"
+          : translate.errorCode(error);
+    await rec.error(
+      code,
+      error instanceof Error ? error.message : String(error),
+    );
+    await rec.stop("error");
+    if (error instanceof RecorderError) throw error;
   } finally {
-    options.signal?.removeEventListener("abort", onAbort);
-    await config?.dispose().catch(() => {});
+    options.signal?.removeEventListener("abort", abort);
     rmSync(scratch, { recursive: true, force: true });
   }
 }
 
-/** A failure message as an AVP error. */
-function classify(message: string, status?: number): { code: ReturnType<typeof translate.errorCode>; message: string } {
-  return { code: translate.errorCode(message, status), message };
-}
-
-/**
- * Run `fn` with Gemini CLI's home (`GEMINI_CLI_HOME`) at `home`, and its
- * console output kept off stdout as its own CLI does: debug lines dropped,
- * the rest on stderr.
- */
-async function withHome<T>(home: string, fn: () => Promise<T>): Promise<T> {
-  const previous = process.env.GEMINI_CLI_HOME;
-  const saved = { log: console.log, info: console.info, debug: console.debug };
-  process.env.GEMINI_CLI_HOME = home;
-  console.log = console.info = console.error;
-  console.debug = () => {};
-  try {
-    return await fn();
-  } finally {
-    Object.assign(console, saved);
-    if (previous === undefined) delete process.env.GEMINI_CLI_HOME;
-    else process.env.GEMINI_CLI_HOME = previous;
-  }
-}
-
-/**
- * A Gemini CLI `Config` as its headless mode builds one from empty settings,
- * with the Commission's selections applied, initialized (MCP servers
- * connected, skills and subagents loaded).
- */
-async function configure(
-  core: Core,
-  opts: { cwd: string; sessionId: string; modelId: string; plan?: RunPlan },
-): Promise<Config> {
-  const { plan } = opts;
-  // Gemini CLI's headless mode always drops `ask_user`.
-  const excludeTools = ["ask_user", ...(plan?.excludeTools ?? [])];
-  const mcpServers = Object.fromEntries((plan?.mcpServers ?? []).map((e) => [e.id, mcpConfig(core, e)]));
-  const subagents = new Set(plan?.subagents ?? DEFAULT_SUBAGENTS);
-  const skills = new Set(plan?.skills ?? DEFAULT_SKILLS);
-  const policyEngineConfig = await core.createPolicyEngineConfig(
-    { tools: { exclude: excludeTools }, mcpServers },
-    core.ApprovalMode.YOLO,
-    undefined,
-    false,
-  );
-  const config = new core.Config({
-    sessionId: opts.sessionId,
-    targetDir: opts.cwd,
-    cwd: opts.cwd,
-    debugMode: false,
-    model: opts.modelId,
-    approvalMode: core.ApprovalMode.YOLO,
-    policyEngineConfig,
-    interactive: false,
-    trustedFolder: true,
-    usageStatisticsEnabled: false,
-    telemetry: { enabled: false },
-    excludeTools,
-    mcpServers,
-    extensionLoader: new core.SimpleExtensionLoader([]),
-    enableHooks: false,
-    agents: {
-      overrides: Object.fromEntries(
-        DEFAULT_SUBAGENTS.filter((name) => !subagents.has(name)).map((name) => [name, { enabled: false }]),
-      ),
-    },
-    disabledSkills: DEFAULT_SKILLS.filter((name) => !skills.has(name)),
-  });
-  await config.initialize();
-  return config;
-}
-
-/** A Commission MCP entry as Gemini CLI server config, values passed literally. */
-function mcpConfig(core: Core, entry: McpEntry): MCPServerConfig {
-  if (entry.type === "stdio") {
-    const [command, ...args] = entry.command;
-    return new core.MCPServerConfig(command, [...args, ...(entry.args ?? [])], entry.env ?? undefined);
-  }
-  return new core.MCPServerConfig(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    entry.url,
-    entry.headers ?? undefined,
-  );
-}
-
-/** The tool declarations the model sees, MCP tools tagged with their server. */
-function tools(core: Core, config: Config, modelId: string): ToolDecl[] {
-  const registry = config.getToolRegistry();
-  const servers = new Map<string, string>();
-  for (const tool of registry.getAllTools()) {
-    if (tool instanceof core.DiscoveredMCPTool) servers.set(tool.name, tool.serverName);
-  }
-  return registry.getFunctionDeclarations(modelId).map((d) => ({
-    name: d.name ?? "",
-    description: d.description,
-    inputSchema: plain(d.parametersJsonSchema ?? d.parameters),
-    ...(servers.has(d.name ?? "") ? { "avp.mcp_server_id": servers.get(d.name ?? "") } : {}),
-  }));
-}
-
-function subagents(config: Config): SubagentDecl[] {
-  return config
-    .getAgentRegistry()
-    .getAllDefinitions()
-    .map((a) => ({
-      name: a.name,
-      description: a.description,
-      ...(a.kind === "local" ? { inputSchema: plain(a.inputConfig?.inputSchema) } : {}),
-    }));
-}
-
-function skills(config: Config): SkillDecl[] {
-  return config
-    .getSkillManager()
-    .getSkills()
-    .map((s) => ({ name: s.name, description: s.description }));
-}
-
-/** A JSON copy of a schema object. */
-function plain(schema: unknown): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(schema ?? {}));
-}
-
-/** Accumulated usage of one subagent frame's model calls. */
-interface ChildUsage {
+type NativeResponse = Awaited<
+  ReturnType<core.ContentGenerator["generateContent"]>
+>;
+interface Child {
   input: number;
   output: number;
+  cache: number;
+  reasoning: number;
   cost: number;
-  turns: number;
+  priced: boolean;
+  responses: number;
 }
-
-/**
- * Turns Gemini CLI's native events into Recorder calls. Recorder rejections
- * are adapter bugs: the first one is kept in `reportError`, the session is
- * aborted, and `run` rethrows it.
- */
 class Observer {
-  /** A provider failure seen on the stream, reported when the run ends. */
-  failure: { code: ReturnType<typeof translate.errorCode>; message: string } | undefined;
-  reportError: unknown;
+  failure?: string;
+  adapterFailure?: string;
   lastText = "";
-
   private content: ContentBlock[] = [];
-  private startedAt = performance.now();
-  private mainModel: string | undefined;
-  /** Tool calls reported in a turn and not yet resulted. */
-  private readonly pending = new Set<string>();
-  /** Open subagent frames, by `invoke_agent` call id, in opening order. */
-  private readonly frames = new Map<string, ChildUsage>();
-
+  private responseModel?: string;
+  private opened = performance.now();
+  private frames = new Map<string, Child>();
   constructor(
-    private readonly rec: Recorder,
-    private readonly config: Config,
-    private readonly plan: RunPlan,
-    private readonly prices: ReturnType<typeof loadDefaultPrices>,
-    private readonly abort: () => void,
+    private rec: Recorder,
+    private config: core.Config,
+    private commission: Commission,
+    private prices: Prices,
   ) {}
-
-  /** The Gemini client with its message stream observed. */
-  tapClient<T extends object>(client: T): T {
+  client(client: core.GeminiClient): core.GeminiClient {
     const self = this;
     return new Proxy(client, {
-      get(target, prop) {
-        const value = Reflect.get(target, prop, target);
-        if (prop === "sendMessageStream") {
-          return (...args: unknown[]) => self.observe((value as (...a: unknown[]) => AsyncGenerator<ServerGeminiStreamEvent>).apply(target, args));
-        }
+      get(target, key) {
+        if (key === "sendMessageStream")
+          return (
+            ...args: Parameters<core.GeminiClient["sendMessageStream"]>
+          ) => self.stream(target.sendMessageStream(...args));
+        const value = Reflect.get(target, key, target);
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
   }
-
-  /**
-   * Observe the content generator: the main model's served version, and
-   * subagent calls attributed to the `invoke_agent` call they run under.
-   */
-  tapContentGenerator(callContext: () => { callId: string } | undefined): void {
-    const inner = this.config.getContentGenerator();
+  private fail(message: string): never {
+    this.adapterFailure = message;
+    throw new Error(message);
+  }
+  private childFor(role: string): Child | undefined {
+    if (role === "main") return;
+    if (role !== "subagent")
+      this.fail(`Gemini utility model calls cannot be recorded: ${role}`);
+    const id = getToolCallContext()?.callId;
+    const child = id ? this.frames.get(id) : undefined;
+    if (child) return child;
+    // Nested native tool contexts can hide the root invocation. A single root
+    // is unambiguous; concurrent roots must never be charged by opening order.
+    if (this.frames.size === 1) return this.frames.values().next().value;
+    return this.fail(
+      "cannot attribute Gemini subagent model usage to one invocation",
+    );
+  }
+  generator(inner: core.ContentGenerator): core.ContentGenerator {
     const self = this;
-    const tapped: ContentGenerator = new Proxy(inner, {
-      get(target, prop) {
-        const value = Reflect.get(target, prop, target);
-        if (prop === "generateContentStream") {
-          return async (req: { model: string }, promptId: string, role: string) => {
-            const callId = callContext()?.callId;
-            const stream: AsyncGenerator<GenerateContentResponse> = await value.call(target, req, promptId, role);
+    return new Proxy(inner, {
+      get(target, key) {
+        if (key === "generateContentStream")
+          return async (
+            ...args: Parameters<core.ContentGenerator["generateContentStream"]>
+          ) => {
+            const [request, , role] = args;
+            const child = self.childFor(role);
+            if (!child && request.model !== self.commission.model.id)
+              self.fail(
+                `Gemini changed the commissioned model to ${request.model}`,
+              );
+            if (!child) self.responseModel = undefined;
+            const stream = await target.generateContentStream(...args);
             return (async function* () {
-              let last: GenerateContentResponse | undefined;
-              try {
-                for await (const chunk of stream) {
-                  if (role === "main" && chunk.modelVersion) self.mainModel = chunk.modelVersion;
-                  if (chunk.usageMetadata) last = chunk;
-                  yield chunk;
-                }
-              } finally {
-                if (role === "subagent") self.childCall(callId, last?.modelVersion ?? req.model, last);
+              let final: NativeResponse | undefined;
+              for await (const chunk of stream) {
+                if (!child && chunk.modelVersion)
+                  self.responseModel = chunk.modelVersion;
+                if (chunk.usageMetadata) final = chunk;
+                yield chunk;
               }
+              if (child) self.childResponse(child, request.model, final);
             })();
           };
-        }
-        if (prop === "generateContent") {
-          return async (req: { model: string }, promptId: string, role: string) => {
-            const callId = callContext()?.callId;
-            const response: GenerateContentResponse = await value.call(target, req, promptId, role);
-            if (role === "subagent") self.childCall(callId, response.modelVersion ?? req.model, response);
+        if (key === "generateContent")
+          return async (
+            ...args: Parameters<core.ContentGenerator["generateContent"]>
+          ) => {
+            const child = self.childFor(args[2]);
+            if (!child)
+              self.fail("unexpected non-streaming Gemini main response");
+            const response = await target.generateContent(...args);
+            self.childResponse(child!, args[0].model, response);
             return response;
           };
-        }
+        const value = Reflect.get(target, key, target);
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    this.config.getContentGenerator = () => tapped;
   }
-
-  /** Report the scheduler's completed calls: subagent frames, then results. */
-  toolsCompleted(done: readonly CompletedToolCall[]): void {
-    this.guard(() => {
-      for (const call of done) {
-        const id = call.request.callId;
-        if (!this.pending.delete(id)) continue;
-        const content = translate.toolResultContent(call.response.responseParts ?? []);
-        const isError = call.response.error !== undefined || call.status !== "success";
-        const child = this.frames.get(id);
-        if (child) {
-          this.frames.delete(id);
-          const text = content.map((b) => (b.type === "text" ? b.text : "")).join("");
-          this.rec.subagentResult(id, text, {
-            reason: call.status === "cancelled" ? "interrupted" : isError ? "error" : "converged",
-            usage: {
-              tokens_input: child.input,
-              tokens_output: child.output,
-              cost_usd: child.cost,
-              turns: child.turns,
-            },
-          });
-        }
-        this.rec.toolResult(id, content, { isError });
-      }
-    });
-  }
-
-  private async *observe(stream: AsyncGenerator<ServerGeminiStreamEvent>): AsyncGenerator<ServerGeminiStreamEvent> {
-    this.startedAt = performance.now();
-    for await (const event of stream) {
-      this.guard(() => this.onEvent(event));
-      yield event;
-    }
-  }
-
-  private onEvent(event: ServerGeminiStreamEvent): void {
-    switch (event.type) {
-      case "retry":
-        // Gemini CLI retries the request; what streamed so far is discarded.
-        this.content = [];
-        break;
-      case "thought":
-        this.append({ type: "thinking", thinking: translate.thoughtText(event.value.subject, event.value.description) });
-        break;
-      case "content":
-        this.append({ type: "text", text: event.value });
-        break;
-      case "tool_call_request":
-        this.content.push({ type: "tool_use", id: event.value.callId, name: event.value.name, input: event.value.args });
-        break;
-      case "finished":
-        this.finish(event.value.reason, event.value.usageMetadata);
-        break;
-      case "error": {
-        const error = event.value.error as { message?: string; status?: number } | undefined;
-        this.failure ??= classify(error?.message ?? String(event.value.error), error?.status);
-        this.content = [];
-        break;
-      }
-      case "invalid_stream":
-        this.failure ??= classify(event.value.message || `invalid stream: ${event.value.type}`);
-        this.content = [];
-        break;
-      case "context_window_will_overflow":
-        this.failure ??= {
-          code: "context_limit",
-          message: `context window will overflow (estimated ${event.value.estimatedRequestTokenCount} tokens, ${event.value.remainingTokenCount} remaining)`,
-        };
-        break;
-      default:
-        break;
-    }
-  }
-
-  /** Append a block, merging a text or thinking chunk into the previous one. */
-  private append(block: ContentBlock): void {
-    const last = this.content.at(-1);
-    if (last?.type === "text" && block.type === "text") last.text += block.text;
-    else if (last?.type === "thinking" && block.type === "thinking") last.thinking += `\n${block.thinking}`;
-    else this.content.push(block);
-  }
-
-  /** One complete model response: report it as a turn. */
-  private finish(reason: string | undefined, usage: translate.GeminiUsage | undefined): void {
-    const content = this.content;
-    this.content = [];
-    const model = this.mainModel ?? this.config.getGeminiClient().getCurrentSequenceModel() ?? this.plan.modelId;
-    this.rec.assistant(content, translate.usage(usage), {
-      model,
-      requestModel: this.plan.modelId,
-      finishReasons: reason ? [reason] : undefined,
-      durationMs: Math.max(0, Math.trunc(performance.now() - this.startedAt)),
-    });
-    this.startedAt = performance.now();
-    const text = content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    if (text) this.lastText = text;
-    for (const b of content) {
-      if (b.type !== "tool_use") continue;
-      this.pending.add(b.id);
-      if (b.name === SUBAGENT_TOOL) {
-        const input = b.input as Record<string, unknown>;
-        this.frames.set(b.id, { input: 0, output: 0, cost: 0, turns: 0 });
-        this.rec.subagentStart(b.id, String(input["agent_name"] ?? SUBAGENT_TOOL), { input });
-      }
-    }
-  }
-
-  /** Roll a subagent model call up onto its frame (else the latest open one). */
-  private childCall(callId: string | undefined, model: string, response: GenerateContentResponse | undefined): void {
-    const frame = (callId && this.frames.get(callId)) || [...this.frames.values()].at(-1);
-    if (!frame) return;
-    const u = translate.usage(response?.usageMetadata);
-    const [cost] = computeCost(ORIGIN, model, u.input_tokens, u.output_tokens, u.cache_read_input_tokens ?? 0, 0, this.prices);
-    frame.input += u.input_tokens;
-    frame.output += u.output_tokens;
-    frame.cost += cost;
-    frame.turns += 1;
-  }
-
-  private guard(fn: () => void): void {
-    if (this.reportError !== undefined) return;
+  private childResponse(
+    child: Child,
+    model: string,
+    response?: NativeResponse,
+  ): void {
+    let u;
     try {
-      fn();
-    } catch (err) {
-      this.reportError = err;
-      this.abort();
+      u = translate.usage(response?.usageMetadata);
+    } catch (error) {
+      this.fail(String(error));
+    }
+    const [cost, source] = computeCost(
+      this.prices,
+      { provider: "google", id: model },
+      {
+        inputTokens: u.input_tokens,
+        outputTokens: u.output_tokens,
+        cacheReadInputTokens: u.cache_read_input_tokens ?? undefined,
+        responseModel: response?.modelVersion,
+      },
+    );
+    child.input += u.input_tokens;
+    child.output += u.output_tokens;
+    child.cache += u.cache_read_input_tokens ?? 0;
+    child.reasoning += u.reasoning_output_tokens ?? 0;
+    child.responses++;
+    child.cost += cost;
+    child.priced &&= source === "computed";
+  }
+  async completed(calls: readonly core.CompletedToolCall[]): Promise<void> {
+    for (const call of calls) {
+      const content = translate.toolContent(call.response.responseParts);
+      const child = this.frames.get(call.request.callId);
+      const progress = isSubagentProgress(call.response.resultDisplay)
+        ? call.response.resultDisplay
+        : undefined;
+      const interrupted =
+        call.status === "cancelled" || progress?.state === "cancelled";
+      const isError =
+        call.status !== "success" ||
+        call.response.error !== undefined ||
+        progress?.state === "error" ||
+        (progress?.terminateReason != null &&
+          progress.terminateReason !== "GOAL");
+      if (child) {
+        this.frames.delete(call.request.callId);
+        const usage: SubagentUsage = {
+          input_tokens: child.input,
+          output_tokens: child.output,
+          cache_read_input_tokens: child.cache,
+          reasoning_output_tokens: child.reasoning,
+          responses: child.responses,
+          cost_source: child.priced ? "computed" : "unknown",
+          ...(child.priced ? { cost_usd: child.cost } : {}),
+        };
+        const text = content
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .join("");
+        await this.rec.subagentReturned(
+          call.request.callId,
+          text,
+          interrupted ? "interrupted" : isError ? "error" : "converged",
+          { usage: child.responses ? usage : undefined },
+        );
+      }
+      await this.rec.toolReturned(call.request.callId, content, { isError });
+    }
+  }
+  private async *stream(
+    stream: AsyncGenerator<core.ServerGeminiStreamEvent>,
+  ): AsyncGenerator<core.ServerGeminiStreamEvent> {
+    this.opened = performance.now();
+    for await (const event of stream) {
+      switch (event.type) {
+        case "retry":
+          this.content = [];
+          this.failure = undefined;
+          this.opened = performance.now();
+          break;
+        case "thought":
+          translate.append(this.content, {
+            type: "thinking",
+            thinking: [event.value.subject, event.value.description]
+              .filter(Boolean)
+              .join("\n"),
+          });
+          break;
+        case "content":
+          translate.append(this.content, { type: "text", text: event.value });
+          break;
+        case "tool_call_request":
+          this.content.push({
+            type: "tool_use",
+            id: event.value.callId,
+            name: event.value.name,
+            input: event.value.args as Record<string, JsonValue>,
+          });
+          break;
+        case "finished": {
+          const content = this.content;
+          this.content = [];
+          await this.rec.response(content, {
+            usage: translate.usage(event.value.usageMetadata),
+            responseModel: this.responseModel,
+            finishReasons: event.value.reason
+              ? [event.value.reason]
+              : undefined,
+            durationMs: Math.max(
+              0,
+              Math.trunc(performance.now() - this.opened),
+            ),
+          });
+          await this.rec.closeResponse();
+          this.failure = undefined;
+          this.lastText = content
+            .flatMap((block) => (block.type === "text" ? [block.text] : []))
+            .join("");
+          for (const block of content) {
+            if (block.type !== "tool_use" || block.name !== "invoke_agent")
+              continue;
+            const name = String(block.input.agent_name ?? "");
+            if (!this.config.getAgentRegistry().getDefinition(name)) continue;
+            await this.rec.subagentInvoked(block.id, name, block.input);
+            this.frames.set(block.id, {
+              input: 0,
+              output: 0,
+              cache: 0,
+              reasoning: 0,
+              cost: 0,
+              priced: true,
+              responses: 0,
+            });
+          }
+          this.opened = performance.now();
+          break;
+        }
+        case "error":
+          this.failure = String(
+            (event.value.error as { message?: string })?.message ??
+              event.value.error,
+          );
+          this.content = [];
+          break;
+        case "invalid_stream":
+          this.failure = event.value.message || event.value.type;
+          this.content = [];
+          break;
+        case "context_window_will_overflow":
+          this.failure = "Gemini context window will overflow";
+          break;
+        case "chat_compressed":
+          this.fail(
+            "Gemini context compaction cannot be recorded by this adapter",
+          );
+      }
+      yield event;
     }
   }
 }

@@ -1,0 +1,5 @@
+extend = "../../ruff.toml"
+
+[lint]
+# pep8-naming: keep Python names snake_case; wire names that differ are aliases.
+extend-select = ["N"]

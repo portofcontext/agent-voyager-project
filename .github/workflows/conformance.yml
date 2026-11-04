@@ -1,4 +1,4 @@
-name: Conformance Suite
+name: Checks
 
 on:
   push:
@@ -6,111 +6,33 @@ on:
   pull_request:
   workflow_dispatch:
 
-# All AVP-conforming implementations must pass the language-agnostic conformance
-# suite. This workflow gates that contract on every push and PR.
+permissions:
+  contents: read
 
 concurrency:
-  group: conformance-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Ruff (lint + format)
+  check:
+    name: SDKs, CLI, and adapters
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           enable-cache: true
-      - name: Sync the workspace
-        run: uv sync --locked
-      - name: ruff check
-        run: uv run --no-sync ruff check .
-      - name: ruff format --check
-        run: uv run --no-sync ruff format --check .
-
-  spec-and-conformance:
-    name: Spec validation + Python conformance
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: lint
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # The repo is a uv workspace rooted at the repo root; `uv sync` installs
-      # every Python member editable and resolves the cross-package deps (`avp`,
-      # `avp-conformance`, ...) to the in-tree sources rather than PyPI. (There's
-      # an unrelated `avp` package on PyPI; the workspace sources override it.)
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Validate conformance case files against the test-case schema
-        run: uv run avp-conformance validate
-
-      # Use the same package list as local checks, including new adapters and templates.
-      - name: Run every Python package's deterministic tests
-        run: make test
-
-  bindings:
-    name: Rust and TypeScript bindings
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            avp/bindings/rust
-            agents/_template/rust
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - name: Rust binding tests
-        run: cargo test --locked --manifest-path avp/bindings/rust/Cargo.toml
-      - name: Rust template tests when present
+          node-version: "24"
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: make check
+      - name: Check generated schemas and types
         run: |
-          if [ -f agents/_template/rust/Cargo.toml ]; then
-            cargo test --locked --manifest-path agents/_template/rust/Cargo.toml
-          fi
-      - name: TypeScript binding tests
-        working-directory: avp/bindings/typescript
-        run: npm ci && npm test
-      - name: Pi adapter integration tests
-        working-directory: agents/avp-pi/typescript
-        run: npm ci && npm test
-      - name: Gemini CLI adapter integration tests
-        working-directory: agents/avp-gemini-cli/typescript
-        run: npm ci --omit=optional && npm test
-      - name: OpenCode adapter integration tests
-        working-directory: agents/avp-opencode/typescript
-        run: npm ci && npm test
-
-  goose:
-    name: Goose Rust tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake pkg-config libssl-dev
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: agents/avp-goose/rust
-      # Hosted-provider tests do not need the optional llama.cpp backend.
-      - name: Test the Goose adapter and native MCP connection
-        run: cargo test --locked --manifest-path agents/avp-goose/rust/Cargo.toml --no-default-features --features conformance
+          make schemas bindings
+          git diff --exit-code -- spec/v0.1 avp-sdk/typescript/src
 
   codex-native:
     name: Native Codex (${{ matrix.os }})
@@ -127,175 +49,28 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: uv sync --locked
+      - run: uv sync --locked --project agents/avp-codex/python
       - name: Exercise the bundled Codex runtime and managed MCP tools
         env:
           AVP_TEST_CODEX: "1"
-        run: uv run --no-sync pytest -q agents/avp-codex/python/tests/test_native.py
+        run: cd agents/avp-codex/python && uv run --no-sync pytest -q tests/test_native.py
 
-  real-llm-smoke:
-    name: Claude live conformance (manual only)
+  claude-native:
+    name: Claude native integration
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Manual-trigger only: never auto-fires on push/PR. Burns API credits and exposes
-    # the ANTHROPIC_API_KEY secret to the job, so the cost/risk of an automatic run is
-    # not justified when mock tests already cover translation logic. Run this on demand
-    # (Actions tab → "Conformance Suite" → "Run workflow") after Claude Agent SDK bumps,
-    # before releases, or anytime you want to verify against real Claude.
-    if: github.event_name == 'workflow_dispatch'
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      # The avp-claude-agent-sdk real_llm tests drive the Claude Agent SDK, which
-      # shells out to the `claude` CLI; install it so it's on PATH.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Install the claude CLI
-        run: npm install -g @anthropic-ai/claude-code
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Run Claude live conformance
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ANTHROPIC_API_KEY repository secret is required for live conformance."
-            exit 1
-          fi
-          uv run avp-conformance check --agent agents/avp-claude-agent-sdk/python/avp-conformance.json --suite v0.1 --dump-dir live-results/claude
-      - uses: actions/upload-artifact@v4
-        if: always()
+          node-version: "24"
+      - uses: astral-sh/setup-uv@v5
         with:
-          name: claude-live-conformance
-          path: live-results/
-
-  pi-live:
-    name: Pi live conformance (manual only)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Manual-trigger only, like the Claude job: it spends API credits and exposes
-    # ANTHROPIC_API_KEY. Run it after Pi bumps and before releases.
-    if: github.event_name == 'workflow_dispatch'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
+          python-version: "3.14"
           enable-cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Run Pi live conformance
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - working-directory: agents/avp-claude-agent-sdk/python
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "ANTHROPIC_API_KEY repository secret is required for live conformance."
-            exit 1
-          fi
-          make pi-build
-          uv run avp-conformance check --agent agents/avp-pi/typescript/avp-conformance.json --suite v0.1 --dump-dir live-results/pi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pi-live-conformance
-          path: live-results/
-
-  gemini-cli-live:
-    name: Gemini CLI live conformance (manual only)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Manual-trigger only, like the Claude and Pi jobs: it spends API credits
-    # and exposes GEMINI_API_KEY. Run it after Gemini CLI bumps and before
-    # releases.
-    if: github.event_name == 'workflow_dispatch'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Run Gemini CLI live conformance
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "GEMINI_API_KEY repository secret is required for live conformance."
-            exit 1
-          fi
-          make gemini-cli-build
-          uv run avp-conformance check --agent agents/avp-gemini-cli/typescript/avp-conformance.json --suite v0.1 --model google/gemini-3.1-flash-lite --dump-dir live-results/gemini-cli
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: gemini-cli-live-conformance
-          path: live-results/
-
-  opencode-live:
-    name: OpenCode live conformance (manual only)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Manual-trigger only, like the Pi job: it spends API credits and exposes
-    # OPENAI_API_KEY. Run it after OpenCode bumps and before releases.
-    if: github.event_name == 'workflow_dispatch'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Run OpenCode live conformance
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_API_KEY repository secret is required for live conformance."
-            exit 1
-          fi
-          make opencode-build
-          uv run avp-conformance check --agent agents/avp-opencode/typescript/avp-conformance.json --suite v0.1 --model openai/gpt-5-mini --dump-dir live-results/opencode
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: opencode-live-conformance
-          path: live-results/
+          uv sync --locked
+          version=$(uv run --no-sync python -c 'from avp_claude_agent_sdk.descriptor import CLAUDE_VERSION; print(CLAUDE_VERSION)')
+          npm install --global "@anthropic-ai/claude-code@$version"
+          AVP_TEST_CLAUDE=1 uv run --no-sync pytest -q

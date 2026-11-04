@@ -1,0 +1,36 @@
+{
+  "name": "empty-system-prompt",
+  "description": "An explicit empty system prompt replaces the agent default.",
+  "commission": {
+    "avp_version": "0.1",
+    "run_id": "run-1",
+    "prompt": "Hi",
+    "model": {
+      "provider": "openai",
+      "id": "test"
+    },
+    "system_prompt": ""
+  },
+  "descriptor": {
+    "avp_version": "0.1",
+    "agent_name": "case-agent",
+    "agent_version": "1.0.0",
+    "system_prompt": "Default instructions"
+  },
+  "plan": {
+    "started": {
+      "prompt": "Hi",
+      "model": {
+        "provider": "openai",
+        "id": "test"
+      },
+      "system_prompt": ""
+    },
+    "turned_off": {
+      "tools": [],
+      "subagents": [],
+      "skills": [],
+      "mcp_servers": []
+    }
+  }
+}

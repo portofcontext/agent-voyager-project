@@ -50,7 +50,7 @@ browse_comp*.jsonl
 
 .ruff_cache
 
-# Rust — match any Cargo target dir, wherever a crate lives (layout-agnostic).
+# Compiler output, including local builds from before Rust support was removed.
 target/
 
 # TypeScript / Node — match anywhere, wherever a package lives (dist/ is
@@ -58,8 +58,10 @@ target/
 node_modules/
 dist-test/
 package-lock.json
-!avp/bindings/typescript/package-lock.json
+!avp-sdk/typescript/package-lock.json
 !agents/avp-pi/typescript/package-lock.json
 !agents/avp-gemini-cli/typescript/package-lock.json
 !agents/avp-opencode/typescript/package-lock.json
 
+# Misc
+.scratch

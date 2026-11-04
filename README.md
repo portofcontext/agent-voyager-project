@@ -5,97 +5,57 @@
 
 > **Status:** Draft v0.1
 
-AVP is an open standard for running and observing AI agents. A supervisor sends a JSON **Commission** with the task, model, and resources. The agent streams back a **Trajectory** of model calls, tool calls, usage, cost, and outcome.
-
-![AVP evaluation viewer comparing agents by correctness, cost, and time, with a selected run's tools and trajectory](assets/avp-eval-view.png)
-
-## Can agents onboard themselves to AVP?
-
-We used AVP to test Codex, Claude Code, and Pi installing AVP and running a nested evaluation. We compared skills, CLI docs, a short prompt, and a repository URL. [Case study: results, costs, and limitations](avp-cli/examples/onboarding/README.md#observed-local-results).
+AVP is an open standard for running and observing AI agents. A supervisor sends
+one JSON **Commission** with the task, model, and resources. The agent streams a
+**Trajectory** of model responses, tool calls, usage, cost, and outcome.
 
 ```text
 Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
-AVP builds on CloudEvents, OpenTelemetry, MCP, and Agent Skills. See the [foundations](FOUNDATIONS.md) for how they fit together.
+See the [spec overview](spec/v0.1/README.md) for the contracts and how AVP uses
+MCP, Agent Skills, CloudEvents, and OpenTelemetry.
 
-## Install
+## Try the current CLI
 
-Requires **macOS or Linux**, [uv](https://docs.astral.sh/uv/getting-started/installation/), and a running [Docker daemon](https://docs.docker.com/get-started/get-docker/).
+Install the [GitHub beta](docs/releases/README.md). Requires
+[uv](https://docs.astral.sh/uv/) and a running container engine with a Docker API,
+such as Docker or podman:
 
-```bash
-uv tool install avp-cli
-avp agent install --all
+```sh
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
+avp agent install pydantic-ai
+avp vault set anthropic
 ```
 
-Or install individual agents: `avp agent install codex`, `avp agent install claude-code`, or `avp agent install pi`.
+The vault command prompts for your key. Save this as `task.json`:
 
-## Model authentication
-
-Store a key for each provider you use. Each command prompts for the key:
-
-| Provider | Get a key | Store it |
-|---|---|---|
-| OpenAI (Codex) | [OpenAI dashboard](https://platform.openai.com/api-keys) | `avp env secret create openai` |
-| Anthropic (Claude Code) | [Claude Console](https://platform.claude.com/settings/keys) | `avp env secret create anthropic` |
-| Google (Gemini) | [AI Studio](https://aistudio.google.com/apikey) | `avp env secret create google` |
-
-Commissions reference the stored key by name. Pi and other multi-provider agents
-use the selected model's provider. See [authentication](avp-cli/README.md#model-authentication).
-
-## Start with your coding agent
-
-Paste into your coding agent:
-
-```text
-Read https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli/examples/onboarding/PROMPT.md and follow it to set up AVP.
-
-Run a sample evaluation and show me the results.
+```json
+{
+  "avp_version": "0.1",
+  "model": {
+    "provider": "anthropic",
+    "id": "claude-haiku-4-5",
+    "credential": {"proxy": "anthropic"}
+  },
+  "prompt": "Say hello."
+}
 ```
 
-## CLI quickstart
-
-With an Anthropic key stored above, configure and run the bundled sample:
-
-```bash
-avp init capitals --agent claude-code
-for id in capitals-baseline capitals-few-shot; do
-  avp cm create "$id" --from "$id" --force --provider-id anthropic --credential anthropic
-done
-avp eval run capitals.eval.json
+```sh
+avp run --agent pydantic-ai --commission task.json
 ```
 
-This example makes paid model calls and ranks Commission variants by accuracy, pass rate, cost, and turns. The first run builds the agent's container image.
+This makes a paid model call in an OpenSandbox sandbox. The CLI prints the
+Trajectory location. See the [command guide](avp-cli/COMMANDS.md) for credentials,
+networking and volumes, and the [eval guide](avp-cli/docs/eval.md) for comparisons.
 
-For execution without Docker, select [`--runtime local`](avp-cli/README.md#quickstart), which adds no OS isolation.
-
-To give an agent a task in your own project:
-
-```bash
-avp env create myproj --image python:3.12-slim --path ./my-project
-avp cm create my-task --agent claude-code --provider-id anthropic --credential anthropic
-avp run --agent claude-code --commission my-task --env myproj "Add type hints to utils.py, then run the tests"
-```
-
-Each run uses a copy of your project and prints the resulting workspace path. See the [CLI guide](avp-cli/README.md) for comparing agents, configuring models, credentials, and sandboxing.
-
-## Optional skill
-
-Install the [AVP skill](SKILL.md) with Node.js 22+:
-
-```bash
-npx skills add portofcontext/agent-voyager-project --skill avp
-```
-
-## Integrate an agent
-
-Adapters in this repository:
+## Agents and SDKs
 
 | Runtime | Adapter |
 |---|---|
 | Claude Agent SDK | [avp-claude-agent-sdk](agents/avp-claude-agent-sdk/python/) |
-| Goose | [avp-goose](agents/avp-goose/rust/) |
 | OpenAI Agents SDK | [avp-openai-agents](agents/avp-openai-agents/python/) |
 | Codex | [avp-codex](agents/avp-codex/python/) |
 | Pi | [avp-pi](agents/avp-pi/typescript/) |
@@ -104,26 +64,26 @@ Adapters in this repository:
 | Pydantic AI | [avp-pydantic-ai](agents/avp-pydantic-ai/python/) |
 | OpenCode | [avp-opencode](agents/avp-opencode/typescript/) |
 
-To add another runtime, follow the [adapter guide](agents/_template/README.md). See [integration patterns](PATTERNS.md) for runtime adaptation and launch context.
+To integrate another runtime, start with the [SDK guide](avp-sdk/README.md),
+[integration patterns](PATTERNS.md), and a migrated adapter above.
 
-## Specs and bindings
-
-Each spec can be adopted independently:
-
-- [Commission](avp/core/spec/v0.1/commission.md): the run configuration.
-- [Trajectory](avp/core/spec/v0.1/trajectory.md): the execution event stream.
-- [Agent Descriptor](avp/core/spec/v0.1/agent-descriptor.md): the agent's capabilities.
-
-Typed bindings: [Python](avp/bindings/python/) · [Rust](avp/bindings/rust/) · [TypeScript](avp/bindings/typescript/). Validate integrations with the [conformance suite](avp/core/conformance/).
+SDKs: [Python](avp-sdk/python/) and [TypeScript](avp-sdk/typescript/).
+Specs: [Commission](spec/v0.1/commission.md),
+[Agent Descriptor](spec/v0.1/agent-descriptor.md), and
+[Trajectory](spec/v0.1/trajectory.md).
+The CLI's `avp conformance` checks agents against the spec's rules.
 
 ## Develop
 
-```bash
-git clone https://github.com/portofcontext/agent-voyager-project
-cd agent-voyager-project
-make sync && make check
+Each SDK, CLI, and adapter is an independent project with its own lockfile.
+
+```sh
+make sync
+make check
 ```
 
-See the [contributor guide](AGENTS.md), [spec proposals](proposals/), or `make help` for next steps.
+Use Node.js 24 for the TypeScript projects. `make check` makes no paid model
+calls; CLI sandbox tests run when a container engine is available.
+See the [contributor guide](AGENTS.md), [AVP skill](SKILL.md), or `make help`.
 
-Built by [Port of Context](https://github.com/portofcontext). [Issues](https://github.com/portofcontext/agent-voyager-project/issues) · [Discussions](https://github.com/portofcontext/agent-voyager-project/discussions).
+Built by [Port of Context](https://github.com/portofcontext).

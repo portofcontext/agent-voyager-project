@@ -1,0 +1,590 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.agentvoyagerproject.com/schema/v0.1/commission.schema.json",
+  "$defs": {
+    "AgentSettings": {
+      "additionalProperties": false,
+      "description": "Settings for the agent whose `agent_name` is their key in `agents`.",
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `agent_version` the Commission was written for.",
+          "title": "Version"
+        },
+        "enabled_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in tools the run may use, by name. Covers only tools without an\n`mcp_server_id`.",
+          "title": "Enabled Tools"
+        },
+        "enabled_subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in subagents the run may use, by name.",
+          "title": "Enabled Subagents"
+        },
+        "enabled_skills": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in skills the run may use, by name.",
+          "title": "Enabled Skills"
+        },
+        "enabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in MCP servers the run may use, by `id`.",
+          "title": "Enabled Mcp Servers"
+        }
+      },
+      "title": "AgentSettings",
+      "type": "object"
+    },
+    "EnvSecret": {
+      "additionalProperties": false,
+      "description": "A secret in a variable of the agent's environment.",
+      "properties": {
+        "env": {
+          "description": "The name of a variable in the agent's environment that holds the secret,\nfor example `\"TEST_DB_PASSWORD\"`.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "env"
+      ],
+      "title": "EnvSecret",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "McpServerHttp": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent connects to over Streamable HTTP.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "The server's URL.",
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ProxySecret"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "HTTP headers to send with each request. A Secret reference's secret is\nthe header's entire value.",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "url"
+      ],
+      "title": "McpServerHttp",
+      "type": "object"
+    },
+    "McpServerStdio": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent starts as a local program and talks to over stdio.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        },
+        "command": {
+          "description": "The program and its arguments, for example `[\"npx\", \"-y\", \"@example/db-mcp\"]`.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Environment variables to set for the program, on top of those the\nagent's MCP client gives it.",
+          "title": "Env"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "command"
+      ],
+      "title": "McpServerStdio",
+      "type": "object"
+    },
+    "Model": {
+      "additionalProperties": false,
+      "description": "A model as one service offers it, named with models.dev provider and model IDs.",
+      "properties": {
+        "provider": {
+          "description": "The service that runs the model, for example `\"anthropic\"`,\n`\"amazon-bedrock\"`, or `\"openrouter\"`. It decides which API the agent calls\nand how it authenticates.",
+          "pattern": "^[a-z0-9._-]+$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "The model's ID at that service, as the agent sends it, for example\n`\"claude-sonnet-4-6\"`.",
+          "title": "Id",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The URL of the service's API. Absent means the service's default.",
+          "title": "Base Url"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProxySecret"
+            },
+            {
+              "$ref": "#/$defs/EnvSecret"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The API key for the service. Absent means the agent uses whatever\ncredential its environment has for the service. A `proxy` credential is the\nkey alone; the proxy adds it as `provider`'s API expects.",
+          "title": "Credential"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "ProxySecret": {
+      "additionalProperties": false,
+      "description": "A secret that a proxy outside the agent holds and adds to its requests.",
+      "properties": {
+        "proxy": {
+          "description": "The name of a credential that a proxy outside the agent holds. The proxy\nadds it to the agent's matching requests, so the agent never receives its\nvalue.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Proxy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proxy"
+      ],
+      "title": "ProxySecret",
+      "type": "object"
+    },
+    "Skill": {
+      "additionalProperties": false,
+      "description": "A skill directory, as defined by Agent Skills, carried in the Commission.",
+      "properties": {
+        "name": {
+          "description": "The skill's name. Equals the `name` in the frontmatter of its `SKILL.md`.",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The skill's files: each key is a path relative to the skill directory,\nand each value is the file's UTF-8 content. Includes `\"SKILL.md\"`.",
+          "required": [
+            "SKILL.md"
+          ],
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "files"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "Supervisor": {
+      "additionalProperties": false,
+      "description": "The supervisor that wrote the Commission.",
+      "properties": {
+        "name": {
+          "description": "The supervisor's name, for example `\"avp-cli\"`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The supervisor's version.",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Supervisor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The message a supervisor sends once to start an agent run. See commission.md.",
+  "properties": {
+    "avp_version": {
+      "const": "0.1",
+      "description": "The AVP version the Commission follows.",
+      "title": "Avp Version",
+      "type": "string"
+    },
+    "run_id": {
+      "description": "The run's ID, chosen by the supervisor.",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "model": {
+      "$ref": "#/$defs/Model",
+      "description": "The model to run, and the service that runs it."
+    },
+    "system_prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The system prompt for the run. It replaces the agent's own.",
+      "title": "System Prompt"
+    },
+    "prompt": {
+      "description": "The first user message of the run.",
+      "title": "Prompt",
+      "type": "string"
+    },
+    "supervisor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Supervisor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The supervisor that wrote the Commission."
+    },
+    "mcp_servers": {
+      "anyOf": [
+        {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "http": "#/$defs/McpServerHttp",
+                "stdio": "#/$defs/McpServerStdio"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/McpServerHttp"
+              },
+              {
+                "$ref": "#/$defs/McpServerStdio"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "MCP servers to add for the run.",
+      "title": "Mcp Servers"
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Skills to add for the run.",
+      "title": "Skills"
+    },
+    "agents": {
+      "anyOf": [
+        {
+          "patternProperties": {
+            "^[a-z0-9_-]+$": {
+              "$ref": "#/$defs/AgentSettings"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Settings for specific agents, keyed by `agent_name`.",
+      "title": "Agents"
+    },
+    "output_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "A JSON Schema for the agent's final output. Its `type` is `\"object\"`.",
+      "title": "Output Schema"
+    },
+    "thread_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "An ID that groups related runs, such as the turns of one conversation.",
+      "title": "Thread Id"
+    },
+    "tags": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Labels for the run.",
+      "title": "Tags"
+    },
+    "meta": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Key-value data for the supervisor's own use.",
+      "title": "Meta"
+    }
+  },
+  "required": [
+    "avp_version",
+    "run_id",
+    "model",
+    "prompt"
+  ],
+  "title": "AVP v0.1 Commission",
+  "type": "object"
+}

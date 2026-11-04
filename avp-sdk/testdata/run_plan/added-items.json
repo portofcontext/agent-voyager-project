@@ -1,0 +1,162 @@
+{
+  "name": "added-items",
+  "description": "The Commission's system prompt replaces the agent's. Its MCP servers and skills are used even when the agent settings turn off every built-in of their kind; an added skill's description comes from its SKILL.md.",
+  "commission": {
+    "avp_version": "0.1",
+    "run_id": "run-1",
+    "prompt": "Do the task.",
+    "model": {
+      "provider": "anthropic",
+      "id": "claude-test-1",
+      "credential": {
+        "env": "ANTHROPIC_API_KEY"
+      }
+    },
+    "system_prompt": "Use this prompt instead.",
+    "mcp_servers": [
+      {
+        "id": "issues",
+        "name": "Issue tracker",
+        "type": "http",
+        "url": "https://issues.example/mcp"
+      }
+    ],
+    "skills": [
+      {
+        "name": "triage",
+        "files": {
+          "SKILL.md": "---\nname: triage\ndescription: >\n  How to triage\n  an issue.\n---\n\nSteps.\n"
+        }
+      }
+    ],
+    "agents": {
+      "case-agent": {
+        "enabled_skills": [],
+        "enabled_mcp_servers": []
+      }
+    }
+  },
+  "descriptor": {
+    "avp_version": "0.1",
+    "agent_name": "case-agent",
+    "agent_version": "1.0.0",
+    "system_prompt": "You are the agent's own prompt.",
+    "tools": [
+      {
+        "name": "read_file",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "bash",
+        "inputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "docs_search",
+        "inputSchema": {
+          "type": "object"
+        },
+        "mcp_server_id": "docs"
+      },
+      {
+        "name": "db_query",
+        "inputSchema": {
+          "type": "object"
+        },
+        "mcp_server_id": "db"
+      }
+    ],
+    "mcp_servers": [
+      {
+        "id": "docs",
+        "name": "Docs"
+      },
+      {
+        "id": "db",
+        "name": "Database"
+      }
+    ],
+    "skills": [
+      {
+        "name": "review",
+        "description": "How to review a change."
+      },
+      {
+        "name": "release",
+        "description": "How to release."
+      }
+    ],
+    "subagents": [
+      {
+        "name": "researcher",
+        "description": "Finds things."
+      },
+      {
+        "name": "writer"
+      }
+    ]
+  },
+  "plan": {
+    "started": {
+      "prompt": "Do the task.",
+      "system_prompt": "Use this prompt instead.",
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-test-1"
+      },
+      "tools": [
+        {
+          "name": "read_file",
+          "inputSchema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "bash",
+          "inputSchema": {
+            "type": "object"
+          }
+        }
+      ],
+      "mcp_servers": [
+        {
+          "id": "issues",
+          "name": "Issue tracker"
+        }
+      ],
+      "skills": [
+        {
+          "name": "triage",
+          "description": "How to triage an issue."
+        }
+      ],
+      "subagents": [
+        {
+          "name": "researcher",
+          "description": "Finds things."
+        },
+        {
+          "name": "writer"
+        }
+      ]
+    },
+    "turned_off": {
+      "tools": [
+        "docs_search",
+        "db_query"
+      ],
+      "subagents": [],
+      "skills": [
+        "review",
+        "release"
+      ],
+      "mcp_servers": [
+        "docs",
+        "db"
+      ]
+    }
+  }
+}

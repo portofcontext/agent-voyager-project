@@ -1,261 +1,193 @@
-"""OAuth vault handles: browser login, token refresh, and the broker's retry.
+"""`avp vault login` and `refresh` against a local MCP server that requires an
+OAuth sign-in, with the browser replaced by a plain request that follows the
+redirects."""
 
-A fake MCP server and authorization server stand in for the real ones. Login
-runs the full discovery, registration, PKCE, and code exchange against them;
-the broker tests check that the agent's run token is swapped for a live access
-token, refreshed after a 401, and that rotated refresh tokens persist.
-"""
-
-from __future__ import annotations
-
-import base64
-import hashlib
-import json
-import stat
+import socket
 import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlencode, urlsplit
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+import uvicorn
+from conftest import Memory
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.routing import Route
+from typer.testing import CliRunner
 
-from avp_cli import broker, oauth, vault
+from avp_cli.cli import app
+from avp_cli.console import Failed
+from avp_cli.vault import oauth, store
 
 
-class FakeAuth:
-    """An MCP server that is also its own authorization server."""
+class Server:
+    """An MCP server and its authorization server, in one app."""
 
     def __init__(self) -> None:
-        self.valid = {"at-1"}
-        self.issued = 0
-        self.challenges: dict[str, str] = {}
-        self.token_forms: list[dict[str, str]] = []
-        self.seen_auth: list[str | None] = []
-        self.refresh_tokens = {"rt-1"}
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
-        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
-        self.origin = f"http://127.0.0.1:{self.srv.server_address[1]}"
-        self.mcp = f"{self.origin}/mcp"
+        self.base = ""
+        self.token_requests: list[dict[str, str]] = []
+        self.refusing = False
 
-    def _issue(self) -> dict:
-        self.issued += 1
-        at, rt = f"at-{self.issued}", f"rt-{self.issued}"
-        self.valid = {at}
-        self.refresh_tokens = {rt}
-        return {"access_token": at, "refresh_token": rt, "expires_in": 3600, "token_type": "Bearer"}
+    def app(self) -> Starlette:
+        return Starlette(
+            routes=[
+                Route("/mcp", self.mcp, methods=["GET", "POST", "DELETE"]),
+                Route("/.well-known/oauth-protected-resource/mcp", self.resource_metadata),
+                Route("/.well-known/oauth-authorization-server", self.server_metadata),
+                Route("/register", self.register, methods=["POST"]),
+                Route("/authorize", self.authorize),
+                Route("/token", self.token, methods=["POST"]),
+            ]
+        )
 
-    def _handler(self):
-        fake = self
+    async def mcp(self, request: Request) -> Response:
+        if request.headers.get("authorization") != "Bearer access-1":
+            metadata = f"{self.base}/.well-known/oauth-protected-resource/mcp"
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata}"'},
+            )
+        if request.method != "POST":
+            return Response(status_code=405)
+        message = await request.json()
+        if "id" not in message:
+            return Response(status_code=202)
+        result = {
+            "protocolVersion": message["params"]["protocolVersion"],
+            "capabilities": {},
+            "serverInfo": {"name": "test", "version": "1"},
+        }
+        return JSONResponse({"jsonrpc": "2.0", "id": message["id"], "result": result})
 
-        class H(BaseHTTPRequestHandler):
-            def log_message(self, *a):
-                pass
+    async def resource_metadata(self, request: Request) -> Response:
+        return JSONResponse({"resource": f"{self.base}/mcp", "authorization_servers": [self.base]})
 
-            def _json(self, code: int, body: dict, headers: dict | None = None) -> None:
-                raw = json.dumps(body).encode()
-                self.send_response(code)
-                for k, v in (headers or {}).items():
-                    self.send_header(k, v)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(raw)))
-                self.end_headers()
-                self.wfile.write(raw)
+    async def server_metadata(self, request: Request) -> Response:
+        return JSONResponse(
+            {
+                "issuer": self.base,
+                "authorization_endpoint": f"{self.base}/authorize",
+                "token_endpoint": f"{self.base}/token",
+                "registration_endpoint": f"{self.base}/register",
+                "response_types_supported": ["code"],
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+                "code_challenge_methods_supported": ["S256"],
+                "token_endpoint_auth_methods_supported": ["none"],
+            }
+        )
 
-            def _body(self) -> bytes:
-                return self.rfile.read(int(self.headers.get("Content-Length") or 0))
+    async def register(self, request: Request) -> Response:
+        client = {**await request.json(), "client_id": "client-1"}
+        client["token_endpoint_auth_method"] = "none"
+        return JSONResponse(client, status_code=201)
 
-            def do_GET(self):
-                split = urlsplit(self.path)
-                if split.path == "/.well-known/oauth-protected-resource/mcp":
-                    return self._json(
-                        200, {"resource": fake.mcp, "authorization_servers": [fake.origin]}
-                    )
-                if split.path == "/.well-known/oauth-authorization-server":
-                    return self._json(
-                        200,
-                        {
-                            "issuer": fake.origin,
-                            "authorization_endpoint": f"{fake.origin}/authorize",
-                            "token_endpoint": f"{fake.origin}/token",
-                            "registration_endpoint": f"{fake.origin}/register",
-                            "code_challenge_methods_supported": ["S256"],
-                        },
-                    )
-                if split.path == "/authorize":
-                    q = {k: v[0] for k, v in parse_qs(split.query).items()}
-                    assert q["resource"] == fake.mcp and q["code_challenge_method"] == "S256"
-                    fake.challenges["code-1"] = q["code_challenge"]
-                    loc = (
-                        f"{q['redirect_uri']}?{urlencode({'code': 'code-1', 'state': q['state']})}"
-                    )
-                    self.send_response(302)
-                    self.send_header("Location", loc)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
-                    return None
-                self.send_error(404)
-                return None
+    async def authorize(self, request: Request) -> Response:
+        query = request.query_params
+        return RedirectResponse(f"{query['redirect_uri']}?code=code-1&state={query['state']}")
 
-            def do_POST(self):
-                body = self._body()
-                path = urlsplit(self.path).path
-                if path == "/mcp":
-                    auth = self.headers.get("authorization")
-                    fake.seen_auth.append(auth)
-                    if auth and auth.removeprefix("Bearer ") in fake.valid:
-                        return self._json(200, {"jsonrpc": "2.0", "id": 1, "result": {}})
-                    meta = f"{fake.origin}/.well-known/oauth-protected-resource/mcp"
-                    return self._json(
-                        401,
-                        {"error": "unauthorized"},
-                        {"WWW-Authenticate": f'Bearer resource_metadata="{meta}"'},
-                    )
-                if path == "/register":
-                    assert json.loads(body)["token_endpoint_auth_method"] == "none"
-                    return self._json(201, {"client_id": "client-1"})
-                if path == "/token":
-                    form = {k: v[0] for k, v in parse_qs(body.decode()).items()}
-                    fake.token_forms.append(form)
-                    if form.get("resource") != fake.mcp:
-                        return self._json(400, {"error": "invalid_target"})
-                    if form["grant_type"] == "authorization_code":
-                        digest = hashlib.sha256(form["code_verifier"].encode()).digest()
-                        expect = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-                        if fake.challenges.get(form["code"]) != expect:
-                            return self._json(400, {"error": "invalid_grant"})
-                        return self._json(200, fake._issue())
-                    if form["grant_type"] == "refresh_token":
-                        if form["refresh_token"] not in fake.refresh_tokens:
-                            return self._json(400, {"error": "invalid_grant"})
-                        return self._json(200, fake._issue())
-                self.send_error(404)
-                return None
-
-        return H
+    async def token(self, request: Request) -> Response:
+        form = {key: str(value) for key, value in (await request.form()).items()}
+        self.token_requests.append(form)
+        if form["grant_type"] == "authorization_code" and form["code"] == "code-1":
+            return JSONResponse(
+                {
+                    "access_token": "access-1",
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "refresh_token": "refresh-1",
+                    "scope": "read",
+                }
+            )
+        if form["grant_type"] == "refresh_token" and not self.refusing:
+            # No refresh token or scope: they don't change.
+            return JSONResponse({"access_token": "access-2", "expires_in": 60})
+        return JSONResponse({"error": "invalid_grant"}, status_code=400)
 
 
 @pytest.fixture
-def fake(tmp_path, monkeypatch):
-    monkeypatch.setenv("AVP_HOME", str(tmp_path))
-    f = FakeAuth()
-    yield f
-    f.srv.shutdown()
+def server(memory: Memory, monkeypatch: pytest.MonkeyPatch) -> Iterator[Server]:
+    fake = Server()
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    fake.base = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    running = uvicorn.Server(uvicorn.Config(fake.app(), log_level="error"))
+    thread = threading.Thread(target=running.run, kwargs={"sockets": [sock]}, daemon=True)
+    thread.start()
+    while not running.started:
+        threading.Event().wait(0.01)
+    monkeypatch.setattr(oauth, "browse", lambda url: httpx.get(url, follow_redirects=True))
+    yield fake
+    running.should_exit = True
+    thread.join()
 
 
-def _browser(url: str) -> None:
-    """Stand in for the user: follow the authorize redirect to the loopback callback."""
-    threading.Thread(
-        target=lambda: httpx.get(url, follow_redirects=True, timeout=10), daemon=True
-    ).start()
-
-
-def _grant(fake: FakeAuth, **over) -> oauth.Grant:
-    base = {
-        "resource": fake.mcp,
-        "token_endpoint": f"{fake.origin}/token",
-        "client_id": "client-1",
-        "access_token": "at-1",
-        "refresh_token": "rt-1",
-        "expires_at": time.time() + 3600,
-    }
-    return oauth.Grant(**{**base, **over})
-
-
-def test_login_discovers_registers_and_stores_the_grant(fake) -> None:
-    grant = oauth.login("pctx", fake.mcp, open_url=_browser, timeout_s=10)
-
-    assert grant.client_id == "client-1"
-    assert grant.access_token == "at-1" and grant.refresh_token == "rt-1"
-    assert grant.resource == fake.mcp
-    exchange = fake.token_forms[0]
-    assert exchange["grant_type"] == "authorization_code" and exchange["client_id"] == "client-1"
-    path = oauth.grant_path("pctx")
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert oauth.load("pctx") == grant
-    assert vault.oauth_names() == ["pctx"]
-
-
-def test_login_rejects_an_invalid_handle(fake) -> None:
-    with pytest.raises(oauth.OAuthError, match="invalid handle"):
-        oauth.login("Bad Handle", fake.mcp, open_url=_browser, timeout_s=1)
-
-
-def test_vault_resolves_an_expired_login_by_refreshing(fake) -> None:
-    oauth._save("pctx", _grant(fake, access_token="stale", expires_at=time.time() - 5))
-
-    token = vault.resolve("pctx")
-
-    assert isinstance(token, oauth.Token)
-    assert token.access_token() == "at-1"
-    assert fake.token_forms[-1]["grant_type"] == "refresh_token"
-    assert oauth.load("pctx").refresh_token == "rt-1"  # rotated token persisted
-
-
-def test_vault_reports_a_lapsed_login(fake) -> None:
-    oauth._save("pctx", _grant(fake, refresh_token="revoked", expires_at=time.time() - 5))
-    with pytest.raises(vault.VaultError, match="avp env secret login pctx"):
-        vault.resolve("pctx")
-
-
-def test_static_secret_wins_over_an_oauth_login(fake, monkeypatch) -> None:
-    oauth._save("pctx", _grant(fake))
-    monkeypatch.setenv("AVP_VAULT_PCTX", "static")
-    assert vault.resolve("pctx") == "static"
-
-
-def test_remove_deletes_the_oauth_login(fake) -> None:
-    oauth._save("pctx", _grant(fake))
-    assert vault.remove("pctx") is True
-    assert oauth.load("pctx") is None
-
-
-def test_broker_refreshes_after_a_401_and_retries(fake) -> None:
-    oauth._save("pctx", _grant(fake, access_token="revoked-early"))
-    token = vault.resolve("pctx")
-    brk = broker.Broker()
-    brk.add_route(
-        "mcp/pctx",
-        broker.Route(upstream=fake.mcp, header="authorization", prefix="Bearer ", secret=token),
+def test_login_stores_the_tokens_and_when_they_expire(server: Server, memory: Memory) -> None:
+    url = f"{server.base}/mcp"
+    result = CliRunner().invoke(
+        app, ["vault", "login", "test", "--url", url, "--scope", "read", "-d", "Test server"]
     )
-    brk.start()
-    try:
-        r = httpx.post(
-            f"http://127.0.0.1:{brk.port}/mcp/pctx",
-            headers={"authorization": f"Bearer {brk.token}"},
-            json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
-        )
-        assert r.status_code == 200
-        assert fake.seen_auth == ["Bearer revoked-early", "Bearer at-1"]
-        assert brk.token not in str(fake.seen_auth)  # the run token never leaves the host
-        assert oauth.load("pctx").access_token == "at-1"
-    finally:
-        brk.stop()
+    assert result.exit_code == 0, result.output
+
+    grant = oauth.Grant.model_validate_json(memory.values[("avp", "test")])
+    assert (grant.tokens.access_token, grant.tokens.refresh_token) == ("access-1", "refresh-1")
+    assert grant.client.client_id == "client-1"
+
+    secret = store.find("test")
+    assert secret.description == "Test server"
+    assert secret.oauth is not None
+    assert secret.oauth.url == url
+    assert secret.oauth.token_endpoint == f"{server.base}/token"
+    assert secret.oauth.resource == url
+    assert secret.oauth.scopes == ["read"]
+    assert secret.oauth.expires_at is not None
+    in_an_hour = datetime.now(UTC) + timedelta(hours=1)
+    assert abs(secret.oauth.expires_at - in_an_hour) < timedelta(minutes=1)
+    assert not oauth.expired(secret)
 
 
-def test_broker_returns_401_when_the_login_cannot_refresh(fake) -> None:
-    oauth._save("pctx", _grant(fake, access_token="revoked-early", refresh_token="revoked"))
-    token = vault.resolve("pctx")
-    brk = broker.Broker()
-    brk.add_route(
-        "mcp/pctx",
-        broker.Route(upstream=fake.mcp, header="authorization", prefix="Bearer ", secret=token),
-    )
-    brk.start()
-    try:
-        r = httpx.post(
-            f"http://127.0.0.1:{brk.port}/mcp/pctx",
-            headers={"authorization": f"Bearer {brk.token}"},
-            json={},
-        )
-        assert r.status_code == 401
-    finally:
-        brk.stop()
+def test_verbose_login_shows_what_it_found(server: Server) -> None:
+    url = f"{server.base}/mcp"
+    result = CliRunner().invoke(app, ["vault", "login", "test", "--url", url, "--verbose"])
+    assert result.exit_code == 0, result.output
+    assert f"Token endpoint: {server.base}/token" in result.stderr
+    assert f"Registration endpoint: {server.base}/register" in result.stderr
+    assert "Client ID: client-1" in result.stderr
+    assert "Scopes granted: read" in result.stderr
+    assert "access-1" not in result.output
+    assert "refresh-1" not in result.output
+
+    listed = CliRunner().invoke(app, ["vault", "list", "--verbose"])
+    assert f"test: token endpoint {server.base}/token" in listed.stderr
+    assert "test: scopes requested none" in listed.stderr
 
 
-def test_token_adopts_a_refresh_done_by_another_process(fake) -> None:
-    token = oauth.Token("pctx", _grant(fake, access_token="old", expires_at=time.time() - 5))
-    oauth._save("pctx", _grant(fake, access_token="fresh-from-elsewhere"))
+def test_refresh_keeps_the_refresh_token(server: Server, memory: Memory) -> None:
+    oauth.login("test", f"{server.base}/mcp", [])
+    result = CliRunner().invoke(app, ["vault", "refresh", "test"])
+    assert result.exit_code == 0, result.output
 
-    assert token.access_token() == "fresh-from-elsewhere"
-    assert fake.token_forms == []  # no second refresh spent
+    refresh = server.token_requests[-1]
+    assert refresh["refresh_token"] == "refresh-1"
+    assert refresh["client_id"] == "client-1"
+    assert refresh["resource"] == f"{server.base}/mcp"
+
+    grant = oauth.Grant.model_validate_json(memory.values[("avp", "test")])
+    assert (grant.tokens.access_token, grant.tokens.refresh_token) == ("access-2", "refresh-1")
+    assert grant.tokens.scope == "read"
+    # 60 seconds is within the margin, so the new token already counts as expired.
+    assert oauth.expired(store.find("test"))
+
+
+def test_refused_refresh_says_to_sign_in_again(server: Server) -> None:
+    oauth.login("test", f"{server.base}/mcp", [])
+    server.refusing = True
+    with pytest.raises(Failed, match=r"refused to refresh 'test' \(400\)\. Sign in again"):
+        oauth.refresh("test")
+
+
+def test_refresh_of_a_plain_secret_fails(memory: Memory) -> None:
+    store.set_("plain", "value")
+    with pytest.raises(Failed, match="isn't an OAuth sign-in"):
+        oauth.refresh("plain")
