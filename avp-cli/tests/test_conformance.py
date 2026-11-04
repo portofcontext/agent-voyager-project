@@ -2,6 +2,8 @@
 Trajectory, so no sandbox starts. test_agent.py runs a case against a real agent."""
 
 import json
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -14,7 +16,7 @@ from avp.descriptor import Skill as DescriptorSkill
 from avp_cli import paths
 from avp_cli.agents import command, store
 from avp_cli.cli import app
-from avp_cli.conformance import check, cli
+from avp_cli.conformance import check, cli, mock
 from avp_cli.conformance.cases import (
     CASES,
     NO_SUCH_ITEM,
@@ -69,12 +71,30 @@ class FakeDispatch:
         return Finished(options.directory, self.exit_code, "")
 
 
+class FakeServing:
+    """Stands in for `mock.serving`, and keeps what each start was given."""
+
+    URL = "http://10.0.0.9:4010"
+
+    def __init__(self) -> None:
+        self.started: list[tuple[list[Case], str]] = []
+        self.open = False
+
+    @contextmanager
+    def __call__(self, cases: list[Case], image: str = mock.IMAGE) -> Generator[str]:
+        self.started.append((cases, image))
+        self.open = True
+        yield self.URL
+        self.open = False
+
+
 @pytest.fixture(autouse=True)
 def fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeDispatch:
     monkeypatch.setenv("AVP_HOME", str(tmp_path / "home"))
     fake = FakeDispatch()
     no_sandbox(monkeypatch)
     monkeypatch.setattr(engine, "dispatch", fake)
+    monkeypatch.setattr(mock, "serving", FakeServing())
     return fake
 
 
@@ -387,6 +407,184 @@ def test_runs_get_the_stand_in_and_the_url_that_never_resolves(fake: FakeDispatc
     assert commission.run_id == "conformance-pd-a-case"
     assert commission.supervisor is not None
     assert options.env == {check.KEY: check.STAND_IN}
+
+
+SCRIPTED = {"responses": ({"content": "x"},)}
+STARTED = [
+    REQUESTED,
+    DESCRIBED,
+    event(
+        3,
+        "agent_started",
+        {"prompt": "x", "model": {"provider": "anthropic", "id": "claude-haiku-4-5"}},
+    ),
+    event(
+        4,
+        "assistant_message",
+        {
+            "content": [{"type": "text", "text": "x"}],
+            "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
+            "duration_ms": 10,
+            "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0,
+                "cost_source": "unknown",
+            },
+        },
+    ),
+    event(5, "agent_stopped", {"reason": "converged"}),
+]
+
+
+def test_a_case_without_responses_starts_no_mock(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    check.check("pd", [case()], MODEL)
+    assert mock.serving.started == []
+
+
+def test_only_a_case_with_responses_gets_the_mock_and_its_prompt(fake: FakeDispatch) -> None:
+    def commission(context: Context) -> Commission:
+        return Commission(
+            avp_version="0.1", run_id=RUN_ID, model=context.model, prompt=context.prompt
+        )
+
+    scripted = case("scripted", commission=commission, **SCRIPTED)
+    check.check("pd", [case("plain", commission=commission), scripted], MODEL, mock_image="mine")
+    assert mock.serving.started == [([scripted], "mine")]
+    sent = {c.run_id: c for c in fake.commissions}
+    assert sent["conformance-pd-plain"].model.base_url == check.BASE_URL
+    assert sent["conformance-pd-plain"].prompt == "Say hello."
+    assert sent["conformance-pd-scripted"].model.base_url == FakeServing.URL
+    assert sent["conformance-pd-scripted"].prompt == scripted.prompt
+    assert network.allowed_hosts(sent["conformance-pd-scripted"], []) == {
+        "10.0.0.9": [network.MODEL]
+    }
+
+
+def test_the_mock_stays_up_until_the_runs_finish(
+    fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    open_during_run = []
+    dispatch = engine.dispatch
+
+    def watching(*args: object, **kwargs: object) -> Finished:
+        open_during_run.append(mock.serving.open)
+        return dispatch(*args, **kwargs)
+
+    monkeypatch.setattr(engine, "dispatch", watching)
+    check.check("pd", [case(**SCRIPTED)], MODEL)
+    assert open_during_run == [True]
+    assert mock.serving.open is False
+
+
+@pytest.mark.parametrize(
+    ("slug", "url"),
+    [
+        ("anthropic/claude-haiku-4-5", FakeServing.URL),
+        ("google/gemini-3.1-flash-lite", FakeServing.URL),
+        ("openai/gpt-5-mini", f"{FakeServing.URL}/v1"),
+    ],
+)
+def test_each_provider_gets_the_path_its_sdk_needs(fake: FakeDispatch, slug: str, url: str) -> None:
+    check.check("pd", [case(**SCRIPTED)], check.model(slug))
+    assert fake.commissions[0].model.base_url == url
+
+
+def test_a_provider_the_mock_cannot_serve_fails_before_it_starts() -> None:
+    with pytest.raises(Failed, match="can't serve 'mistral'"):
+        check.check("pd", [case(**SCRIPTED)], check.model("mistral/large"))
+    assert mock.serving.started == []
+
+
+def test_a_provider_the_mock_cannot_serve_only_matters_to_a_case_with_responses() -> None:
+    [outcome] = check.check("pd", [case()], check.model("mistral/large"))
+    assert outcome.status == "pass"
+
+
+def test_fixtures_match_each_response_on_the_prompt_and_its_turn() -> None:
+    two = case("two", responses=({"content": "a"}, {"content": "b"}))
+    one = case("one", **SCRIPTED)
+    assert mock.fixtures([two, one]) == {
+        "fixtures": [
+            {"match": {"userMessage": two.prompt, "turnIndex": 0}, "response": {"content": "a"}},
+            {"match": {"userMessage": two.prompt, "turnIndex": 1}, "response": {"content": "b"}},
+            {"match": {"userMessage": one.prompt, "turnIndex": 0}, "response": {"content": "x"}},
+        ]
+    }
+
+
+def test_no_prompt_matches_inside_another_case() -> None:
+    assert case("a-case").prompt not in case("a-case-2").prompt
+
+
+@pytest.mark.parametrize(
+    ("patterns", "supported"),
+    [
+        (None, True),
+        ([{"provider": "anthropic", "id": "*"}], True),
+        ([{"provider": "*", "id": "claude-*"}], True),
+        ([{"provider": "openai", "id": "*"}], False),
+        ([{"provider": "anthropic", "id": "gpt-*"}], False),
+        ([], False),
+    ],
+)
+def test_a_model_the_agent_does_not_support_stops_the_check(
+    fake: FakeDispatch,
+    monkeypatch: pytest.MonkeyPatch,
+    patterns: list[dict] | None,
+    supported: bool,
+) -> None:
+    descriptor = AgentDescriptor.model_validate(
+        {
+            "avp_version": "0.1",
+            "agent_name": "a",
+            "agent_version": "1",
+            **({} if patterns is None else {"supported_models": patterns}),
+        }
+    )
+    monkeypatch.setattr(
+        command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: descriptor
+    )
+    if supported:
+        check.check("pd", [case()], MODEL)
+        assert len(fake.commissions) == 1
+    else:
+        with pytest.raises(Failed, match="doesn't support anthropic/claude-haiku-4-5"):
+            check.check("pd", [case()], MODEL)
+        assert fake.commissions == []
+
+
+def test_events_in_order_passes_a_run_with_a_model_response(fake: FakeDispatch) -> None:
+    fake.lines = STARTED
+    [outcome] = check.check("pd", [by_name("events-in-order")], MODEL)
+    assert (outcome.status, outcome.reasons) == ("pass", [])
+
+
+@pytest.mark.parametrize(
+    ("lines", "problem"),
+    [
+        ([STARTED[0], STARTED[2], *STARTED[1:2], *STARTED[3:]], "the events start"),
+        (STARTED[:-1], "agent_stopped isn't last"),
+        ([*STARTED, STARTED[3]], "agent_stopped isn't last"),
+        ([*STARTED[:3], STARTED[4]], "no assistant_message"),
+    ],
+)
+def test_events_in_order_fails(fake: FakeDispatch, lines: list[dict], problem: str) -> None:
+    fake.lines = lines
+    [outcome] = check.check("pd", [by_name("events-in-order")], MODEL)
+    assert outcome.status == "fail"
+    assert any(problem in reason for reason in outcome.reasons), outcome.reasons
+
+
+def test_mock_image_reaches_the_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "CASES", [case(**SCRIPTED, check=lambda run: [])])
+    args = ["conformance", "check", "--agent", "pd", "--json", "--mock-image", "mine"]
+    result = CliRunner().invoke(app, args)
+    assert result.exit_code == 0, result.output
+    [(_, image)] = mock.serving.started
+    assert image == "mine"
 
 
 def test_model_must_be_provider_slash_id() -> None:

@@ -80,8 +80,10 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │     avp conformance check --agent pd [--rule commission.5.1] [--case agents-without-entry]
 │   │         [--model anthropic/claude-haiku-4-5] [--concurrency 4] [--json]
 │   │         [-v ./src:/app/src:ro] [--entrypoint "cargo run -q --"]
+│   │         [--mock-image my/aimock:dev]
 │   │     While developing an agent, -v mounts its code and --entrypoint changes how it
-│   │     starts, in every sandbox the check uses, so no rebuild is needed.
+│   │     starts, in every sandbox the agent runs in, so no rebuild is needed.
+│   │     --mock-image runs another aimock image for the mock model.
 │   └── ✅ list    List the rules and the cases for each.
 │         avp conformance list [--rule commission.5.1]
 │
@@ -166,8 +168,9 @@ with `match` or `command`.
 
 `avp conformance check` shows whether an agent follows the spec's rules for
 agents, with no real model calls. The cases are in
-`src/avp_cli/conformance/cases.py`. ⬜ Only the cases that end before a model
-call exist so far, in `commission.5.1` and `commission.5.4`.
+`src/avp_cli/conformance/cases.py`. ⬜ Most cases so far end before a model call,
+in `commission.5.1` and `commission.5.4`; `trajectory.4.1` has the first that
+reaches the mock model.
 
 - **Cases by rule.** A rule's ID is its spec and section number:
   `commission.5.3` is "Turned-off items are hidden and blocked", and
@@ -185,13 +188,19 @@ call exist so far, in `commission.5.1` and `commission.5.4`.
   development, so a final check runs without them. A `conform` entrypoint that patches
   an agent to force a scenario is a future idea, for a scenario no Commission
   or mock can create.
-- **No real model calls.** ⬜ A case that needs a model scripts its responses
-  in [aimock](https://github.com/CopilotKit/aimock), which avp starts in its
-  own OpenSandbox sandbox, with the image pinned by digest. The case's
-  `model.base_url` points at it, so the agent needs no launch option and the
-  spec defines nothing for it. aimock serves each provider's API, streaming
-  included, and also serves the MCP servers a case adds. A check costs nothing
-  and needs no provider key, so it can run in CI.
+- **No real model calls.** A case that needs a model lists its responses, once,
+  in the format of [aimock](https://github.com/CopilotKit/aimock), which answers
+  in the format of the provider `--model` names. When a selected case has
+  responses, avp starts one aimock for the check, in its own OpenSandbox sandbox
+  with no outbound access, from a published image pinned by digest
+  (`--mock-image` runs another). The case's `model.base_url` points at it, so the
+  agent needs no launch option and the spec defines nothing for it. A request no
+  case scripted gets an error. A check costs nothing and needs no provider key,
+  so it can run in CI.
+- **One provider per check.** Each scenario is one case, and `--model` picks the
+  provider, so a second provider is a second check. A check stops up front when
+  the agent's `supported_models` rules out the model, and the mock serves
+  Anthropic, Google, and OpenAI so far.
 - **One engine with `eval`.** A conformance case is an eval item defined in
   avp: it writes a Commission from the agent's Descriptor, the engine runs it,
   and the case scores the run. Pass is a score of 1 and fail is 0. A skipped
@@ -199,8 +208,8 @@ call exist so far, in `commission.5.1` and `commission.5.4`.
   couldn't score, fails with the reason. Any line that isn't a valid event of a
   type the SDK knows fails the case. Conformance adds a rule and a level (MUST or
   SHOULD) to each item and groups its report by rule. The engine settings differ:
-  conformance uses a stand-in credential and a `model.base_url` that never
-  resolves until its mocks exist, and prints its report; an eval uses `avp vault`
+  conformance uses a stand-in credential and a `model.base_url` that is the mock
+  model's or never resolves, and prints its report; an eval uses `avp vault`
   credentials and saves its results.
 
 ## TUI
