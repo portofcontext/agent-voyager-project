@@ -2,7 +2,7 @@
 Trajectory, so no sandbox starts. test_agent.py runs a case against a real agent."""
 
 import json
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -50,11 +50,12 @@ class FakeDispatch:
     """Writes `lines` as each run's Trajectory, or raises `error`."""
 
     def __init__(self) -> None:
-        self.lines: list[dict | str] | None = [*REFUSAL]
+        self.lines: Sequence[dict | str] | None = [*REFUSAL]
         self.exit_code = 0
         self.error: Failed | None = None
         self.commissions: list[Commission] = []
         self.options: list[Options] = []
+        self.serving = FakeServing()
 
     def __call__(
         self, agent: store.Agent, entrypoint: list[str], commission: Commission, options: Options
@@ -94,7 +95,7 @@ def fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeDispatch:
     fake = FakeDispatch()
     no_sandbox(monkeypatch)
     monkeypatch.setattr(engine, "dispatch", fake)
-    monkeypatch.setattr(mock, "serving", FakeServing())
+    monkeypatch.setattr(mock, "serving", fake.serving)
     return fake
 
 
@@ -409,7 +410,7 @@ def test_runs_get_the_stand_in_and_the_url_that_never_resolves(fake: FakeDispatc
     assert options.env == {check.KEY: check.STAND_IN}
 
 
-SCRIPTED = {"responses": ({"content": "x"},)}
+SCRIPTED = ({"content": "x"},)
 STARTED = [
     REQUESTED,
     DESCRIBED,
@@ -441,7 +442,7 @@ def test_a_case_without_responses_starts_no_mock(
     fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     check.check("pd", [case()], MODEL)
-    assert mock.serving.started == []
+    assert fake.serving.started == []
 
 
 def test_only_a_case_with_responses_gets_the_mock_and_its_prompt(fake: FakeDispatch) -> None:
@@ -450,9 +451,9 @@ def test_only_a_case_with_responses_gets_the_mock_and_its_prompt(fake: FakeDispa
             avp_version="0.1", run_id=RUN_ID, model=context.model, prompt=context.prompt
         )
 
-    scripted = case("scripted", commission=commission, **SCRIPTED)
+    scripted = case("scripted", commission=commission, responses=SCRIPTED)
     check.check("pd", [case("plain", commission=commission), scripted], MODEL, mock_image="mine")
-    assert mock.serving.started == [([scripted], "mine")]
+    assert fake.serving.started == [([scripted], "mine")]
     sent = {c.run_id: c for c in fake.commissions}
     assert sent["conformance-pd-plain"].model.base_url == check.BASE_URL
     assert sent["conformance-pd-plain"].prompt == "Say hello."
@@ -469,14 +470,16 @@ def test_the_mock_stays_up_until_the_runs_finish(
     open_during_run = []
     dispatch = engine.dispatch
 
-    def watching(*args: object, **kwargs: object) -> Finished:
-        open_during_run.append(mock.serving.open)
-        return dispatch(*args, **kwargs)
+    def watching(
+        agent: store.Agent, entrypoint: list[str], commission: Commission, options: Options
+    ) -> Finished:
+        open_during_run.append(fake.serving.open)
+        return dispatch(agent, entrypoint, commission, options)
 
     monkeypatch.setattr(engine, "dispatch", watching)
-    check.check("pd", [case(**SCRIPTED)], MODEL)
+    check.check("pd", [case(responses=SCRIPTED)], MODEL)
     assert open_during_run == [True]
-    assert mock.serving.open is False
+    assert fake.serving.open is False
 
 
 @pytest.mark.parametrize(
@@ -488,14 +491,14 @@ def test_the_mock_stays_up_until_the_runs_finish(
     ],
 )
 def test_each_provider_gets_the_path_its_sdk_needs(fake: FakeDispatch, slug: str, url: str) -> None:
-    check.check("pd", [case(**SCRIPTED)], check.model(slug))
+    check.check("pd", [case(responses=SCRIPTED)], check.model(slug))
     assert fake.commissions[0].model.base_url == url
 
 
-def test_a_provider_the_mock_cannot_serve_fails_before_it_starts() -> None:
+def test_a_provider_the_mock_cannot_serve_fails_before_it_starts(fake: FakeDispatch) -> None:
     with pytest.raises(Failed, match="can't serve 'mistral'"):
-        check.check("pd", [case(**SCRIPTED)], check.model("mistral/large"))
-    assert mock.serving.started == []
+        check.check("pd", [case(responses=SCRIPTED)], check.model("mistral/large"))
+    assert fake.serving.started == []
 
 
 def test_a_provider_the_mock_cannot_serve_only_matters_to_a_case_with_responses() -> None:
@@ -505,7 +508,7 @@ def test_a_provider_the_mock_cannot_serve_only_matters_to_a_case_with_responses(
 
 def test_fixtures_match_each_response_on_the_prompt_and_its_turn() -> None:
     two = case("two", responses=({"content": "a"}, {"content": "b"}))
-    one = case("one", **SCRIPTED)
+    one = case("one", responses=SCRIPTED)
     assert mock.fixtures([two, one]) == {
         "fixtures": [
             {"match": {"userMessage": two.prompt, "turnIndex": 0}, "response": {"content": "a"}},
@@ -578,12 +581,12 @@ def test_events_in_order_fails(fake: FakeDispatch, lines: list[dict], problem: s
     assert any(problem in reason for reason in outcome.reasons), outcome.reasons
 
 
-def test_mock_image_reaches_the_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "CASES", [case(**SCRIPTED, check=lambda run: [])])
+def test_mock_image_reaches_the_check(fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "CASES", [case(responses=SCRIPTED, check=lambda run: [])])
     args = ["conformance", "check", "--agent", "pd", "--json", "--mock-image", "mine"]
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
-    [(_, image)] = mock.serving.started
+    [(_, image)] = fake.serving.started
     assert image == "mine"
 
 

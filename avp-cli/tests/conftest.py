@@ -1,7 +1,7 @@
 """An in-memory credential store in place of the system's, a scratch AVP home,
 and --verbose off."""
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 import keyring
@@ -15,6 +15,7 @@ from avp_cli import console
 from avp_cli.agents import command, store
 from avp_cli.engine import images
 from avp_cli.eval import scorers, scoring
+from avp_cli.sandbox import service
 
 DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="sh-agent", agent_version="1.0.0")
 
@@ -105,3 +106,19 @@ def fixed_scorer(monkeypatch: pytest.MonkeyPatch) -> None:
             return scoring.Score(value=self.value, passed=self.value == 1)
 
     monkeypatch.setitem(scorers.SCORERS, "fixed", Fixed)
+
+
+TEST_PORT = 18799
+
+
+@pytest.fixture(scope="module")
+def avp_home(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
+    home = tmp_path_factory.mktemp("avp")
+    with pytest.MonkeyPatch.context() as patch:
+        # Its own port, so it never meets the service on avp's.
+        patch.setattr(service, "PORT", TEST_PORT)
+        if service.running():
+            pytest.skip(f"an OpenSandbox service is already running on {TEST_PORT}")
+        patch.setenv("AVP_HOME", str(home))
+        yield home
+        service.stop()

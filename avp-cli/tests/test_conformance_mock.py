@@ -24,7 +24,10 @@ def engine_answers() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(not engine_answers(), reason="no container engine answers")
+pytestmark = [
+    pytest.mark.skipif(not engine_answers(), reason="no container engine answers"),
+    pytest.mark.usefixtures("avp_home"),
+]
 
 REPLY = "A scripted reply."
 
