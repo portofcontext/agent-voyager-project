@@ -167,9 +167,8 @@ version pin, or allowlists, then use `save NAME FILE` to keep it.
 
 Files may omit `run_id` and `supervisor`. `save` removes them, and both `run`
 and `eval run` replace any supplied values with fresh per-run identity and
-avp's supervisor information. The dispatched Commission still has the required
-wire fields. `thread_id`, `tags`, and `meta` remain caller data. The Commission
-in each run directory is the finalized one sent to the agent.
+avp's supervisor information. `thread_id`, `tags`, and `meta` remain caller data.
+Each run directory contains the Commission sent to the agent.
 
 `check` reports model validation errors, duplicate MCP server IDs and skill
 names, case-insensitive duplicate HTTP header names, duplicate allowlist

@@ -173,16 +173,9 @@ These rules apply to the supervisor that writes a Commission. A supervisor confo
 
 The supervisor MUST give every Commission it sends a `run_id` it has not used before.
 
-`run_id` and `supervisor` describe the dispatch, rather than the reusable task.
-A supervisor can store a task without these fields, then fill them before
-sending it. Reusing a stored task requires a fresh `run_id`; when supplied,
-`supervisor` identifies the supervisor sending this run. The Commission sent to
-the agent still follows the reference, including the required `run_id`.
-Storage formats and how a supervisor prepares them are outside this wire contract.
-
-`thread_id`, `tags`, and `meta` can stay with a reusable task. A `thread_id` groups
-related runs; it does not replace their distinct `run_id` values. AVP does not
-require these fields to be regenerated for a dispatch.
+Stored Commissions can omit `run_id` and `supervisor`. The supervisor sets
+`run_id` before each run and can identify itself in `supervisor`.
+`thread_id`, `tags`, and `meta` can be reused across runs.
 
 ### 4.2 IDs are unique
 

@@ -22,7 +22,7 @@
 
 - Single runs and evaluations replace stored `run_id` and `supervisor` values
   at dispatch. Repeating a task creates distinct runs while preserving
-  `thread_id`, `tags`, and `meta`; the Commission wire shape stays the same.
+  `thread_id`, `tags`, and `meta`.
 
 - OpenCode uses the rebuilt TypeScript SDK, a standalone locked project, and
   a sandbox image. Native responses, tools, and child sessions feed the Recorder;
