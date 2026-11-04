@@ -9,139 +9,56 @@ description: >
 
 # Agent Voyager Project
 
-AVP lets a supervisor send a **Commission** (task, model, resources) to an agent
-and observe its **Trajectory** (model responses, tools, usage, cost, outcome).
-The existing agent runtime owns execution. The supervisor configures once and
-observes; v0.1 has no mid-run supervisor push channel.
+A supervisor sends one Commission; the agent's existing runtime does the work
+and streams its Trajectory. There is no mid-run supervisor push channel.
+Read the [spec overview](spec/v0.1/README.md) before constructing wire objects.
 
-Start with the user's task below. Read the linked reference only when needed.
-Resolve relative reference paths from this skill's directory; run CLI commands
-and create evaluation files in the user's project. Installing this skill adds
-instructions, not the CLI or an agent runtime.
+## Run an agent
 
-## Get a first evaluation running
+1. Inspect the installed CLI's `--help`. The rebuilt v0.1 CLI currently needs a
+   repository checkout and uses OpenSandbox with a Docker-compatible container
+   engine. From the checkout, use `uv run --project avp-cli avp`.
+2. Install an adapter image with `avp agent install <name> <Dockerfile> --context
+   <repository-root>`. SDK dependencies are still local to the repository.
+   Use `avp agent list`, `ping`, and `describe` to inspect the installed agent.
+3. Store a model key with `avp vault set <name>`, which prompts locally. Never
+   request secret values in chat or write them into a Commission. Reference it
+   as `model.credential: {"proxy": "<name>"}`. For environment references, pass
+   the named variable with `--env NAME` or `--env-file`.
+4. Write a Commission file following the [Commission spec](spec/v0.1/commission.md).
+   Required fields are `avp_version`, `run_id`, `model`, and `prompt`. The model
+   is an object with `provider` and `id`. Choose a fresh run ID for each dispatch.
+5. Run `avp run --agent <name> --commission <file>`. Real provider calls cost money.
+   Report the outcome and the saved Trajectory location. Inspect errors before
+   retrying a failed run.
 
-1. Check for `uv` and the `avp` command. The CLI supports macOS and Linux.
-   The default runtime needs a running Docker daemon. When the user selects
-   local execution, or the task explicitly supplies an outer sandbox, use
-   `--runtime local` on `avp run` and `avp eval run`. Local execution adds no OS
-   isolation; do not silently select it when Docker fails.
-2. Install missing components, then scaffold the small capitals example:
+Agent-specific built-in settings live under `agents`, keyed by the Descriptor's
+`agent_name`. Omitted allowlists allow all built-ins; `[]` allows none. The
+Commission adds its own MCP servers and skill files alongside built-ins.
+`system_prompt` replaces the runtime's prompt. `output_schema` describes an object.
+Read the spec rather than guessing unsupported settings.
 
-   ```bash
-   uv tool install avp-cli
-   avp agent install --all
-   avp init capitals --agent claude-code
-   ```
+## Evaluate and inspect
 
-3. This example uses Anthropic. Use `ANTHROPIC_API_KEY` from the environment, or
-   have the user configure it locally; never put credentials in project files
-   or ask for them in chat. For another provider, inspect `avp eval run --help`
-   and select a supported canonical `origin/model` with `--model`.
-4. Inspect `capitals.eval.json` and its Commission files, then validate each with
-   `avp cm check <id>`. Scaffolding and validation make no model calls.
-5. Run `avp eval run capitals.eval.json`. Explain that execution makes paid model
-   calls and the first run builds the container image. Report accuracy, pass
-   rate, cost, and turns separately, and point to the saved run artifacts.
+In the checkout, read `avp-cli/docs/eval.md` for the current eval format. Evals
+specify `eval_version`, `name`, `commission`, `dataset`, and `scorer`, and select
+installed agents in the file or through `--agent`. The built-in scorers are
+`match` and `command`. Use `avp eval run`, `list`, and `show` to run comparisons
+and inspect results. Saved Commissions and the TUI are not implemented yet.
 
-Use `avp --help` and subcommand help for the installed release's options.
-`avp agent list` shows availability; adapter names include `claude-code`, `codex`, `openai-agents`, `pi`, `gemini-cli`, `deep-agents`,
-`pydantic-ai`, and `opencode` (Pi, Gemini CLI, and OpenCode need Node 22.19 or newer on the host for
-`describe`; runs install Node in the sandbox).
+Compare correctness, cost, and response counts separately. Preserve the run's
+Commission and Trajectory as evidence. Reduce per-response usage and cost once;
+do not add runtime totals or count subagent usage twice. See the
+[Trajectory spec](spec/v0.1/trajectory.md).
 
-## Configure a Commission or evaluation
+## Integrate a runtime
 
-Inspect `avp agent describe <name> --json` before choosing tools or capabilities.
-Create a starting Commission with `avp cm create my-task --agent <name>`, edit
-its JSON, then run `avp cm check my-task`.
+In a checkout, read `avp-sdk/README.md` and a migrated adapter's README. The SDK
+provides types, Recorder, run plan, pricing, endpoints, and agent command line.
+The runtime still owns its loop. Describe only its actual built-in capabilities,
+using the [Agent Descriptor spec](spec/v0.1/agent-descriptor.md).
 
-- Commissions live at `~/.avp/commissions/<id>.json`; `AVP_HOME` overrides the
-  library root. Required fields are `schema_version: "0.1"`, `run_id`, and
-  `model` as `origin/model`. Start from the scaffold instead of guessing fields.
-- `prompt`, `system_prompt`, and `output_schema` configure the task and output.
-  `mcp_servers` carries inline stdio commands or HTTP connection details;
-  `skills` carries inline files including `SKILL.md`.
-- Built-in allowlists are **maps keyed by the descriptor's `agent_name`**:
-  `"enabled_builtin_tools": {"avp-claude-agent-sdk": []}` disables Claude's built-in tools.
-  Omit the field to expose all; a subset exposes only those exact names.
-  A present map missing the running agent's key fails preflight. The same rules
-  apply to `enabled_builtin_mcp_servers`, `_subagents`, and `_skills`.
-  These filters do not disable Commission-managed MCP servers or skills.
-- `agent_versions` pins exact descriptor versions. A mismatch fails before a
-  model call; inspect the new descriptor before updating the pin.
-- Eval JSON contains `name`, `agents`, `dataset`, `scorer`, and `commissions`
-  (library IDs). Each Commission carries its own model. Clone a Commission and
-  vary one field to make an interpretable comparison.
-- Dataset sources are `inline`, `file`, and `huggingface`. Scorers are
-  `exact-match`, `structural-match`, `structural-fidelity`, and `llm-judge`.
-  Check the CLI guide for optional dependencies before using external datasets
-  or scorers.
-
-Read the [Commission spec](spec/v0.1/commission.md) for field semantics
-and the [CLI guide](https://github.com/portofcontext/agent-voyager-project/blob/main/avp-cli/README.md)
-for eval configuration, provider routing, and credentials.
-
-## Run a task in a project
-
-Choose an image with the project's dependencies, then create an environment:
-
-```bash
-avp env create myproj --image python:3.12-slim --path ./my-project
-avp run --agent claude-code --env myproj "Add type hints to utils.py, then run the tests"
-```
-
-The run uses a copy of the project and prints its resulting workspace and
-trajectory paths. Inspect those outputs before claiming the task succeeded.
-The launcher owns workspace staging, credentials, native runtime state, and OS
-sandboxing. A Commission's tool allowlists do not replace OS confinement.
-`--runtime local` uses the installed agent command and fresh native state without
-creating another sandbox. Local environments accept `paths`, `files`, and `setup`;
-container image, package, network, and resource settings are rejected.
-
-## Diagnose a run
-
-1. For startup failures, check `avp sandbox status`, agent availability, and
-   `avp cm check <id|file>`. Read the actual error before changing configuration.
-2. Find saved evaluations with `avp eval list`; outputs live under
-   `~/.avp/runs/` (or `AVP_HOME/runs/`). Inspect the trajectory and launch logs.
-3. Compare the requested Commission with `agent_described` capabilities and the
-   effective tools and asset status recorded by `agent_started`.
-4. Read `error_occurred`, tool results, and the final `agent_stopped` reason.
-   Distinguish launch/auth failures, unsupported capabilities, adapter failures,
-   and an agent that ran successfully but failed the task or scorer.
-5. Sum per-response `assistant_message` usage and cost. Never add cumulative
-   runtime/thread totals again. A model turn is not a conversational user turn.
-
-The [Trajectory spec](spec/v0.1/trajectory.md) defines event payloads,
-ordering, span relationships, and accounting. All agent events use the
-CloudEvents envelope and `source: avp://agent`.
-
-## Adapt an existing runtime
-
-Work in a source checkout and follow its `AGENTS.md`. Start from the
-[adapter guide](https://github.com/portofcontext/agent-voyager-project/blob/main/agents/_template/README.md)
-and [integration patterns](https://github.com/portofcontext/agent-voyager-project/blob/main/PATTERNS.md).
-
-1. Scaffold with `make new-agent NAME=avp-<sdk>`.
-   Replace the scripted harness with the runtime that owns the model/tool loop.
-2. Map Commission fields to native configuration and describe the runtime's
-   actual built-ins and supported capabilities. Use shared preflight checks and
-   the stock `ping`, `describe`, and `run` entrypoint.
-3. Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`.
-   Translate native responses and tool results into Recorder reports. Preserve
-   response boundaries, call IDs, content, and per-response usage. Normalize
-   SDK-specific duplicate notifications in the adapter; propagate invalid
-   Recorder reports instead of silently discarding them.
-4. Leave workspace, home, credentials, and session-state provisioning to the
-   launcher. Stock entrypoints honor `AVP_WORKSPACE`; library calls inherit
-   their caller's context.
-5. Test the native-event-to-Recorder path, then run live conformance for the
-   adapter with `avp-conformance check --agent <manifest> --suite v0.1`.
-   Report capability skips alongside passes: skipped behavior was not tested.
-   Consult [conformance coverage](https://github.com/portofcontext/agent-voyager-project/blob/main/avp/core/conformance/src/avp_conformance/COVERAGE.md)
-   before claiming support. Follow the checkout's required verification commands.
-
-Use the [Agent Descriptor spec](spec/v0.1/agent-descriptor.md) for
-capability declarations and the [spec index](spec/v0.1/README.md) for
-schemas and examples. If a requested behavior is outside v0.1, identify that
-boundary explicitly; do not invent wire fields or supervisor callbacks.
+Test native event translation into a Trajectory, install the adapter's image,
+check `ping` and `describe`, and run `avp conformance check`. Report passes and
+capability skips together. Use the adapter's real-model checks after changes to
+runtime integration. Keep unsupported behavior explicit in its Known gaps.

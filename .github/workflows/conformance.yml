@@ -1,4 +1,4 @@
-name: Conformance Suite
+name: Checks
 
 on:
   push:
@@ -6,73 +6,30 @@ on:
   pull_request:
   workflow_dispatch:
 
-# All AVP-conforming implementations must pass the language-agnostic conformance
-# suite. This workflow gates that contract on every push and PR.
-
 concurrency:
-  group: conformance-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Ruff (lint + format)
+  check:
+    name: SDKs, CLI, and adapters
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           enable-cache: true
-      - name: Sync the workspace
-        run: uv sync --locked
-      - name: ruff check
-        run: uv run --no-sync ruff check .
-      - name: ruff format --check
-        run: uv run --no-sync ruff format --check .
-
-  spec-and-conformance:
-    name: Spec validation + Python conformance
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: lint
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # The repo is a uv workspace rooted at the repo root; `uv sync` installs
-      # every Python member editable and resolves the cross-package deps (`avp`,
-      # `avp-conformance`, ...) to the in-tree sources rather than PyPI. (There's
-      # an unrelated `avp` package on PyPI; the workspace sources override it.)
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      - name: Sync the workspace
-        run: uv sync --locked
-
-      - name: Validate conformance case files against the test-case schema
-        run: uv run avp-conformance validate
-
-      # Use the same package list as local checks, including new adapters and templates.
-      - name: Run every Python package's deterministic tests
-        run: make test
-
-  bindings:
-    name: Legacy TypeScript bindings
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - name: TypeScript binding tests
-        working-directory: avp/bindings/typescript
-        run: npm ci && npm test
+          node-version: "24"
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: make check
+      - name: Check generated schemas and types
+        run: |
+          make schemas bindings
+          git diff --exit-code -- spec/v0.1 avp-sdk/typescript/src
 
   codex-native:
     name: Native Codex (${{ matrix.os }})
@@ -114,76 +71,3 @@ jobs:
           version=$(uv run --no-sync python -c 'from avp_claude_agent_sdk.descriptor import CLAUDE_VERSION; print(CLAUDE_VERSION)')
           npm install --global "@anthropic-ai/claude-code@$version"
           AVP_TEST_CLAUDE=1 uv run --no-sync pytest -q
-
-  openai-agents-sdk:
-    name: avp-openai-agents SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.14"
-          enable-cache: true
-      - run: make openai-agents-check
-
-  deep-agents-sdk:
-    name: avp-deep-agents SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.14"
-          enable-cache: true
-      - run: make deep-agents-check
-
-  sdk:
-    name: Python and TypeScript SDKs
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.14"
-          enable-cache: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - run: make sdk-python-check sdk-typescript-check
-
-  pi-sdk:
-    name: Pi SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - run: make pi-check
-
-  gemini-cli-sdk:
-    name: Gemini CLI SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - run: make gemini-cli-check
-
-  opencode-sdk:
-    name: OpenCode SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - run: make opencode-check

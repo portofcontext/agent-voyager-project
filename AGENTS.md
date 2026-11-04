@@ -1,126 +1,96 @@
 # Working on AVP
 
-AVP (Agent Voyager Project) defines Commission, Agent Descriptor, and Trajectory
-specs for running and observing agents. A supervisor sends one Commission; the
-agent runs and streams its trajectory. There is no mid-run supervisor push channel.
+AVP defines Commission, Agent Descriptor, and Trajectory specs for running and
+observing agents. A supervisor sends one Commission; the runtime owns the loop
+and streams its Trajectory. There is no mid-run supervisor push channel.
 
 ## References
 
-- [README](README.md): installation and quickstart.
+- [README](README.md): setup and quickstart.
 - [Specs](spec/v0.1/): normative wire contracts.
-- [Integration patterns](PATTERNS.md): runtime adaptation and launch context.
-- [Adapter template](agents/_template/README.md): adding a runtime.
-- [CLI guide](avp-cli-legacy/README.md): Commissions, environments, and evaluations.
+- [SDK guide](avp-sdk/README.md): types, Recorder, run plan, and agent command line.
+- [Integration patterns](PATTERNS.md): adapting an existing runtime.
+- [CLI command tree](avp-cli/COMMANDS.md) and [eval guide](avp-cli/docs/eval.md).
 - [Skill](SKILL.md): agent and supervisor workflows.
 
 ## Design boundaries
 
-- The existing agent runtime owns model calls, tool execution, and the loop.
-  Adapters map Commissions into runtime configuration and report native events to
-  the Recorder. Do not reintroduce agent base classes or driver protocols.
+- The runtime owns model calls, tools, and the loop. Adapters configure it from
+  the Commission and report native events to the Recorder. Do not add agent
+  base classes, driver protocols, or a second loop.
 - The supervisor configures and observes. Runtime gating belongs in a managed
   MCP server the agent calls, never a supervisor-to-agent callback.
-- Workspace provisioning, credentials, native SDK state, and OS confinement are
-  launcher responsibilities, outside the wire specs. Adapters inherit that
-  context. Stock entrypoints honor `AVP_WORKSPACE`; direct library callers own
-  their working directory, state, and cleanup.
-- AVP defines data shapes. Transport, multi-run orchestration, and persistence
-  belong to the deployment or supervisor. In-tree agents use the file contract
-  `run --commission <path> --out <ndjson>`.
-- v0.1 permits breaking changes without compatibility shims or a deprecation
-  cycle. Update every affected schema, binding, case, adapter, example, and doc
-  together. Question unnecessary concepts rather than preserving them by habit.
+- AVP defines data shapes. Transport, orchestration, persistence, credentials,
+  workspace provisioning, and OS confinement belong to the deployment.
+- v0.1 permits breaking changes without compatibility shims. Update the specs,
+  SDKs, cases, agents, examples, and docs together.
 
-## Wire conventions
+## Wire and SDKs
 
-- Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`;
-  never redefine them inline. Pydantic models under `avp/bindings/python/src/avp/`
-  are the source of truth. Run `make schemas` after wire changes and
-  `make bindings` to regenerate TypeScript SDK bindings.
-- Models use canonical `origin/model` slugs, never bare model names.
-- Commission requires `schema_version`, `run_id`, and `model`. Inline MCP server
-  configuration and skill content travel on the Commission. Built-in allowlists
-  are subtractive: absent exposes all, `[]` exposes none.
-- Preserve compatibility with CloudEvents 1.0, OTel span identification,
-  MCP, and Agent Skills. AVP attributes use `avp.*`; the `gen_ai.*`
-  projection is for consumers, not the wire.
-- Agent events use `source: avp://agent`. A trajectory opens `run_requested`,
-  `agent_described`, `agent_started` and closes `agent_stopped` with a stop reason.
-- Each `assistant_message` represents a model response with per-response usage
-  and cost. Consumers reduce these deltas; never add cumulative runtime totals.
-  Preserve tool calls alongside assistant content when translating history.
+The reference tables in `spec/v0.1/` come first. Python's Pydantic models in
+`avp-sdk/python/src/avp/` follow them; `make schemas` generates JSON Schemas and
+`make bindings` generates TypeScript types. Never edit generated types by hand.
+Build and decide shared behavior in Python first, then implement it in TypeScript.
+
+- Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`.
+- A Commission has `avp_version`, `run_id`, `model`, and `prompt`. Its Model is an
+  object with `provider` and `id`, plus optional endpoint and credential reference.
+- Agent settings live under `agents`, keyed by the Descriptor's `agent_name`.
+  Built-in allowlists are subtractive: absent allows all; `[]` allows none.
+- Secrets travel as references, never secret values. MCP configuration and
+  skill files travel inline.
+- Events use the AVP envelope. CloudEvents and OpenTelemetry are optional
+  consumer projections provided by the SDK, not the wire format.
+- Each `assistant_message` represents one model response with per-response
+  usage and cost. Never repeat cumulative totals. Preserve tool calls alongside
+  assistant content and pair results by call ID.
+- Share generic Recorder and run-plan behavior through `avp-sdk/testdata/`.
+  Runtime-specific translation stays in the adapter.
 
 ## Repository layout
 
-- `spec/v0.1/`: normative specs.
-- `avp/core/conformance/`: separate harness, cases, and shared Recorder vectors.
-- `avp/bindings/{python,typescript}/`: wire bindings and shared helpers.
-  Follow the [Python binding charter](avp/bindings/python/AGENTS.md) there.
-- `agents/<name>/<lang>/`: runtime adapters, descriptors, and conformance manifests.
-  Scaffold with `make new-agent NAME=avp-<sdk>`.
-- `avp-cli/`: the new standalone supervisor CLI; see its `COMMANDS.md`.
-- `avp-cli-legacy/`: the previous supervisor CLI. Evaluations are JSON configurations containing
-  `name`, `agents`, `dataset`, `scorer`, and `commissions`; each Commission carries
-  its own model. `avp eval run` and `avp run` default to Docker-backed OpenSandbox
-  containers with default-deny networking. `--runtime local` runs installed agent
-  subprocesses without additional OS isolation. Vault credentials go through the
-  host-side broker (loopback for local execution).
-- `avp/scripts/`: schema/binding generation, prices, and skill packaging.
-- The repository root is the uv workspace. `make help` lists development commands.
+- `spec/v0.1/`: normative specs and generated schemas.
+- `avp-sdk/{python,typescript}/`: SDKs; `data/` and `testdata/` are shared.
+- `avp-cli/`: supervisor CLI, eval engine, and conformance cases.
+- `agents/<name>/<language>/`: independent runtime adapters and Dockerfiles.
+- `scripts/`: schema generation, SDK-data refresh, packaging checks, and skill packaging.
+- `testing/mcp/`: shared MCP fixtures.
+
+Each Python project has its own `pyproject.toml`, `uv.lock`, and environment;
+there is no root uv workspace. Use `uv run --project <path>` or enter the project.
+The CLI runs installed images through OpenSandbox with default-deny networking
+and its Credential Vault. Agents implement `ping`, `describe`, and
+`run --commission <path | JSON> --out <path | ->`.
 
 ## Verification
 
-Run `make check` on every change. It covers format, lint, Python tests,
-conformance validation and liveness, and generated-binding drift. TypeScript binding tests run with `make bindings-test`; they do not make model calls.
-`make test-docker` exercises real container launches and requires a Docker daemon.
-While iterating on one Python agent, `make check-agent NAME=avp-<sdk>` runs its
-share of `make check` without building the other agents.
-`make test-fresh` runs the Python agents' tests on unlocked installs of their
-wheels (newest allowed dependencies), as CI does weekly: early warning before a
-`uv lock --upgrade`. `make build-agents` then `make smoke-agents` runs each agent
-in its sandbox image against a stub model, as a release does before publishing.
+Run `make check` on every change. It checks Python formatting, lint, types and
+project tests; TypeScript types, formatting and tests; shared SDK packaging;
+generated TypeScript drift; and skill packaging. Tests make no paid model calls.
+CLI sandbox tests run when a container engine answers; `make test-docker`
+requires one. On macOS, use a `TMPDIR` shared with the container engine.
 
-Add tests at the boundary where a change can fail:
+Use `make check-agent NAME=avp-<sdk>` for one Python adapter while iterating.
+TypeScript adapters have `pi-check`, `gemini-cli-check`, and `opencode-check`.
+Run `make schemas bindings` after wire changes and review generated diffs.
 
-- Wire requirements: conformance cases plus schema validation.
-- Local behavior: the affected package's tests.
-- Cross-component behavior: a integration test, such as SDK events to Recorder output,
-  cumulative usage to per-response accounting, subprocess trajectories, or
-  workspace-relative tool execution.
-- Native/provider behavior: the affected adapter's real-model conformance suite.
+Add tests at the boundary where a change can fail: shared schema/Recorder cases
+for wire behavior, native-event-to-Trajectory integration for adapters, and
+subprocess or sandbox tests for launching. Report passes and capability skips
+together. Native opt-in tests remain separate CI jobs where needed.
 
-Features need a test crossing a relevant boundary. Do not rely on unit tests alone
-for stateful translation or lifecycle behavior. Report conformance passes and
-capability skips together.
+Run real-model checks after changes to wire contracts, runtime integration,
+translators, or Commission-to-runtime configuration, using the affected adapter's
+README. Documentation, test-only changes, and internal refactors without
+observable wire impact do not require paid runs.
 
-Run paid conformance after changes to wire contracts, runtime integration,
-translators, drop-in SDK clients, or Commission-to-SDK configuration. Use
-`avp-conformance check --agent <manifest> --suite v0.1`, optionally with
-`--model <origin>/<model>`, and the appropriate provider credentials.
-Use the affected adapter's README for its real-model verification commands.
-Documentation, test-only changes, and internal refactors without observable
-wire impact do not require paid runs. When uncertain about integration impact,
-run the real-model checks.
+## Documentation and releases
 
-## Documentation
+Keep change notes in `CHANGELOG.md`. Keep the README concise and link to the
+existing guides. Do not duplicate normative specs or put test counts in docs.
+Avoid em dashes in prose.
 
-Keep change notes in `CHANGELOG.md`. Keep the README concise and link to existing
-guides. Do not duplicate normative specs, add compatibility guides for draft
-changes, or put test counts in documentation. Avoid em dashes in prose.
-
-## Releases
-
-Release tags trigger CI publication. Use the Makefile targets from a clean `main`
-that matches `origin/main`:
-
-- `make release-cli`: derives `pypi-v<version>` from `avp-cli-legacy/pyproject.toml`.
-  The CLI wheel vendors the Python wire types. It first cuts any agent release
-  the CLI pins that doesn't exist yet and waits for it to publish.
-- `make release-<agent>`: one agent's release, tagged with its package version.
-- An agent's version lives only in its package file. `make pins` copies it into
-  `avp-cli-legacy/src/avp_cli/agents.json` (a test fails when they differ). How the
-  agent installs and runs (its locked requirements, a Node or CLI version) lives
-  in the same package file and ships in the release's `avp-release.json`; keep
-  version strings out of the CLI's code.
-- An agent release publishes only after its artifacts run in a sandbox image
-  against a stub model (`.github/workflows/agent-release.yml`).
+Beta SDK and CLI publication is being rebuilt in #116. Agents currently consume
+the SDK by local path; #114 moves them to beta artifacts and #117 adds built-in
+installation by name. Do not revive the retired publication targets. Refresh
+shared provider snapshots with `make sdk-data` before publishing SDK packages.

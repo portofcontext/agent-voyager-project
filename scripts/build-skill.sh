@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build dist/avp.skill (a ZIP) with instructions and offline spec references.
-# Usage: bash avp/scripts/build-skill.sh [output-directory]
+# Usage: bash scripts/build-skill.sh [output-directory]
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
 "$PYTHON" - "$ROOT" "${1:-$ROOT/dist}" <<'PY'
 from pathlib import Path

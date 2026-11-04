@@ -1,10 +1,4 @@
-# Ruff config for the AVP Python workspace.
-# Lives next to pyproject.toml at python/. Run from python/ (or via
-# `uv --directory python run ruff ...`):
-#   ruff check .                # lint
-#   ruff check --fix .          # autofix safe issues
-#   ruff format .               # apply formatting
-
+# Shared Python style. Each project runs Ruff in its own environment.
 target-version = "py311"
 line-length = 100
 extend-exclude = [".venv", ".pytest_cache"]
@@ -37,11 +31,9 @@ ignore = [
 "**/tests/**" = ["B011", "SIM", "F841"]
 # __init__.py files re-export; F401 is not unused there.
 "**/__init__.py" = ["F401"]
-# The conformance harness reaches into private attrs by design.
-"avp/src/avp/conformance/harness.py" = ["SLF001"]
 
 [lint.isort]
-known-first-party = ["avp", "avp_agent_template", "avp_pydantic_ai", "avp_deep_agents", "avp_codex", "avp_claude_agent_sdk", "avp_cli", "avp_openai_agents"]
+known-first-party = ["avp", "avp_pydantic_ai", "avp_deep_agents", "avp_codex", "avp_claude_agent_sdk", "avp_cli", "avp_openai_agents"]
 # The OpenAI Agents SDK imports as `agents`, which would otherwise read as the
 # repo's top-level `agents/` directory.
 known-third-party = ["agents"]

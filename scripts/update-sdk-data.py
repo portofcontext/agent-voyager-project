@@ -3,7 +3,7 @@ and each provider's default base URL and auth header.
 
 Fetches models.dev once with the Python SDK. Data lives in one shared directory;
 each SDK bundles it when built. Run from the repo root in the SDK's environment,
-since the root workspace still installs the old `avp`:
+using its own dependencies:
 
     uv run --project avp-sdk/python python scripts/update-sdk-data.py
 """

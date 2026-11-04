@@ -1,8 +1,7 @@
 # avp command tree
 
 The design for the new `avp` CLI. Commands not built yet raise
-NotImplementedError. The old CLI is in
-`avp-cli-legacy/` for reference only; nothing is copied from it.
+NotImplementedError.
 
 ## Decisions
 
