@@ -266,7 +266,7 @@ def test_every_case_runs_through_the_engine(
         by_rule
     )
     # A skill whose `name` differs from its frontmatter is what the case sends.
-    sent = {c.run_id: c for c in fake.commissions}
+    sent = {c.run_id.split("-", 1)[1]: c for c in fake.commissions}
     [skill] = sent["conformance-pd-skill-name-differs"].skills or []
     assert f"name: {OTHER_SKILL_NAME}\n" in skill.files["SKILL.md"]
 
@@ -405,7 +405,7 @@ def test_runs_get_the_stand_in_and_the_url_that_never_resolves(fake: FakeDispatc
     [commission] = fake.commissions
     [options] = fake.options
     assert commission.model.base_url == check.BASE_URL
-    assert commission.run_id == "conformance-pd-a-case"
+    assert commission.run_id.endswith("-conformance-pd-a-case")
     assert commission.supervisor is not None
     assert options.env == {check.KEY: check.STAND_IN}
 
@@ -454,7 +454,7 @@ def test_only_a_case_with_responses_gets_the_mock_and_its_prompt(fake: FakeDispa
     scripted = case("scripted", commission=commission, responses=SCRIPTED)
     check.check("pd", [case("plain", commission=commission), scripted], MODEL, mock_image="mine")
     assert fake.serving.started == [([scripted], "mine")]
-    sent = {c.run_id: c for c in fake.commissions}
+    sent = {c.run_id.split("-", 1)[1]: c for c in fake.commissions}
     assert sent["conformance-pd-plain"].model.base_url == check.BASE_URL
     assert sent["conformance-pd-plain"].prompt == "Say hello."
     assert sent["conformance-pd-scripted"].model.base_url == FakeServing.URL

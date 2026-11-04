@@ -28,23 +28,23 @@ def run_live(
     many finished, that they are in `kept`, and exits 130."""
     total = len(config.commissions) * len(config.agents) * len(config.dataset)
     done = 0
-    active: list[str] = []
+    active: dict[str, str] = {}
 
     def running() -> Text:
         count = f" - {done} of {total}"
-        names = (f"  {', '.join(active)}", "dim") if active else ""
+        names = (f"  {', '.join(active.values())}", "dim") if active else ""
         return line("Running ", (config.name, "bold"), count, names)
 
     with err.status(running()) as status:
 
         def started(case: EvalCase) -> None:
-            active.append(case.built.run_id)
+            active[case.built.run_id] = f"{case.commission}-{case.agent}-{case.item.id}"
             status.update(running())
 
         def progress(result: Result) -> None:
             nonlocal done
             done += 1
-            active.remove(result.run.id)
+            active.pop(result.run.id)
             on_result(result)
             status.update(running())
 

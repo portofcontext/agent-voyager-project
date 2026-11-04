@@ -4,6 +4,7 @@ given, `results.json`, and each run's directory under `runs/`."""
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -112,7 +113,13 @@ def create(name: str, eval_text: str) -> tuple[Path, EvalResults]:
     started = datetime.now(UTC)
     id = paths.stamped(name, started)
     directory = paths.evals() / id
-    directory.mkdir(parents=True)
+    while True:
+        try:
+            directory.mkdir(parents=True)
+            break
+        except FileExistsError:
+            id = f"{paths.stamped(name, started)}-{uuid4().hex}"
+            directory = paths.evals() / id
     (directory / paths.EVAL).write_text(eval_text)
     results = EvalResults(id=id, name=name, started=started)
     save(directory, results)

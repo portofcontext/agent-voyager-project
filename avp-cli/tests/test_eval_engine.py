@@ -5,6 +5,7 @@ import asyncio
 import json
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -131,6 +132,50 @@ def test_options_apply_to_every_run(tmp_path: Path, fake: Fake) -> None:
     options = Options(env={"KEY": "x"}, allow_hosts=["pypi.org"])
     asyncio.run(run_eval(config(tmp_path, agents="pd"), tmp_path / "eval", options))
     assert all(o.env == {"KEY": "x"} and o.allow_hosts == ["pypi.org"] for o in fake.options)
+
+
+def test_reusing_an_eval_gets_new_run_ids(tmp_path: Path, fake: Fake) -> None:
+    ready = config(tmp_path)
+    first = asyncio.run(run_eval(ready, tmp_path / "first"))
+    second = asyncio.run(run_eval(ready, tmp_path / "second"))
+    assert {r.run.id for r in first}.isdisjoint(r.run.id for r in second)
+
+
+def test_invalid_commissions_stop_the_entire_eval_before_any_run(
+    tmp_path: Path, fake: Fake
+) -> None:
+    ready = config(tmp_path)
+    template = next(iter(ready.commissions.values()))
+    bad = replace(
+        ready,
+        commissions={
+            "good": template,
+            "bad": {
+                **template,
+                "skills": [{"name": "guide", "files": {"SKILL.md": "missing frontmatter"}}],
+            },
+        },
+    )
+    with pytest.raises(Failed, match=r"SKILL\.md"):
+        asyncio.run(run_eval(bad, tmp_path / "bad"))
+    assert fake.described == []
+    assert fake.options == []
+
+    bad = replace(
+        ready,
+        commissions={
+            "good": template,
+            "bad": {
+                **template,
+                "agents": {"sh-agent": {"version": "old", "enabled_tools": ["absent"]}},
+            },
+        },
+    )
+    with pytest.raises(Failed, match="agent version") as error:
+        asyncio.run(run_eval(bad, tmp_path / "bad"))
+    assert "absent" in str(error.value)
+    assert len(fake.described) == 2
+    assert fake.options == []
 
 
 def run_timed(tmp_path: Path, fake: Fake, concurrency: int) -> list[Result]:

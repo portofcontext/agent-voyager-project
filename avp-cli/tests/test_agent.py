@@ -32,7 +32,9 @@ def avp(*args: str) -> str:
     return result.output
 
 
-def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
+def test_install_run_uninstall(
+    avp_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     avp("agent", "install", "sh-agent", str(AGENT / "Dockerfile"))
     assert "sh-agent" in avp("agent", "list")
     assert json.loads(avp("agent", "describe", "sh-agent"))["agent_name"] == "sh-agent"
@@ -57,7 +59,46 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     assert "Running /agent.sh run --commission /io/commission.json" in output
     [run_directory] = (avp_home / "runs").iterdir()
     events = [json.loads(line) for line in (run_directory / "trajectory.ndjson").open()]
-    assert events[0]["data"]["commission"] == commission
+    sent = json.loads((run_directory / "commission.json").read_text())
+    assert sent["run_id"] != "sh-run"
+    assert sent["supervisor"]["name"] == "avp-cli"
+    assert events[0]["data"]["commission"] == sent
+    assert all(e["run_id"] == sent["run_id"] for e in events)
+
+    # The whole saved-Commission workflow uses the installed image and a real sandbox.
+    assert "Commission is valid" in avp(
+        "commission", "check", str(tmp_path / "c.json"), "--agent", "sh-agent"
+    )
+    avp("commission", "save", "baseline", str(tmp_path / "c.json"))
+    assert "baseline" in avp("commission", "list")
+    avp("run", "--commission", "baseline", "--agent", "sh-agent")
+    runs = list((avp_home / "runs").iterdir())
+    assert len(runs) == 2
+    ids = {json.loads((p / "commission.json").read_text())["run_id"] for p in runs}
+    assert len(ids) == 2
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(
+        json.dumps(
+            {
+                **commission,
+                "skills": [
+                    {"name": "guide", "files": {"SKILL.md": "no frontmatter"}},
+                ],
+            }
+        )
+    )
+    with monkeypatch.context() as patch:
+        from avp_cli.agents import command
+        from avp_cli.runs import cli as run_cli
+
+        patch.setattr(command, "describe_in_sandbox", lambda *a: pytest.fail("started describe"))
+        patch.setattr(run_cli, "dispatch", lambda *a, **kw: pytest.fail("started run"))
+        invalid = CliRunner().invoke(app, ["run", "--commission", str(bad), "--agent", "sh-agent"])
+        assert invalid.exit_code == 1
+        assert isinstance(invalid.exception, Failed)
+        assert "SKILL.md" in str(invalid.exception)
+    assert len(list((avp_home / "runs").iterdir())) == 2
 
     # sh-agent refuses every Commission, which is what this case expects.
     args = ["conformance", "check", "--agent", "sh-agent", "--concurrency", "4", "--json"]
@@ -115,7 +156,7 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
                 "eval_version": "0.1",
                 "name": "hi",
                 "agents": "sh-agent",
-                "commission": {k: v for k, v in commission.items() if k != "run_id"},
+                "commission": "baseline",
                 "dataset": [{"id": "a", "answer": "hello"}],
                 "scorer": {"name": "match", "expected": "{item.answer}"},
             }

@@ -3,6 +3,7 @@
 avp's state lives under `$AVP_HOME`, or `~/.avp`:
 
     agents/<name>.json                   one installed agent
+    commissions/<name>.json              one reusable Commission, without run identity
     runs/<time>-<run_id>/                a run directory, from `avp run`
     evals/<time>-<name>/                 one eval run
         eval.json                        the eval file, as given
@@ -22,7 +23,7 @@ avp's state lives under `$AVP_HOME`, or `~/.avp`:
 A run directory, under `runs/` or in an eval's `runs/`, is mounted in the
 sandbox at `/io`:
 
-    commission.json                      the Commission, as given
+    commission.json                      the dispatched Commission, with fresh run identity
     trajectory.ndjson                    the Trajectory the agent writes
     agent.stderr                         what the agent printed to stderr, when anything
     scorer-error.txt                     in an eval, why its scorer failed
@@ -74,6 +75,10 @@ def home() -> Path:
 
 def agents() -> Path:
     return home() / "agents"
+
+
+def commissions() -> Path:
+    return home() / "commissions"
 
 
 def agent(name: str) -> Path:

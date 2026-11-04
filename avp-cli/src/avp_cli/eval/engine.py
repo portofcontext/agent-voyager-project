@@ -10,8 +10,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
+from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.agents import command, store
+from avp_cli.commissions.check import Problem, check, require_valid
 from avp_cli.console import Failed
 from avp_cli.engine import images
 from avp_cli.eval import results
@@ -43,6 +45,18 @@ async def run_eval(
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
     options = options or Options()
+    # Materialize once so validation and dispatch use the same fresh identities.
+    cases = list(config)
+    if config.check_commissions:
+        require_valid(
+            [
+                Problem(p.level, f"{c.commission}/{c.agent}/{c.item.id}.{p.where}", p.message)
+                for c in cases
+                for p in check(c.built.model_dump(mode="json", exclude_none=True))
+                if p.level == "error"
+            ]
+        )
+    descriptors: dict[str, AgentDescriptor] = {}
     agents = {name: _load(name, options.entrypoint) for name in config.agents}
 
     async def described(name: str, agent: store.Agent, entrypoint: list[str]) -> None:
@@ -54,6 +68,7 @@ async def run_eval(
                 command.describe_in_sandbox, agent, entrypoint, options.volumes
             ),
         )
+        descriptors[name] = record.descriptor
         results.save_agent(directory, record)
 
     limit = asyncio.Semaphore(concurrency)
@@ -91,7 +106,17 @@ async def run_eval(
 
     try:
         await asyncio.gather(*(described(n, a, e) for n, (a, e) in agents.items()))
-        return list(await asyncio.gather(*(one(c) for c in config)))
+        if config.check_commissions:
+            require_valid(
+                [
+                    Problem(p.level, f"{c.commission}/{c.agent}/{c.item.id}.{p.where}", p.message)
+                    for c in cases
+                    for p in check(
+                        c.built.model_dump(mode="json", exclude_none=True), descriptors[c.agent]
+                    )
+                ]
+            )
+        return list(await asyncio.gather(*(one(c) for c in cases)))
     except (asyncio.CancelledError, Failed):
         sandboxes.kill_all()
         raise

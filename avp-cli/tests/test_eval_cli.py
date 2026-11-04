@@ -13,7 +13,7 @@ from avp.commission import Commission
 from avp_cli import console, paths, prompts
 from avp_cli.agents import store
 from avp_cli.cli import app
-from avp_cli.eval import engine, live
+from avp_cli.eval import engine, live, results
 from avp_cli.eval.scoring import Result
 from avp_cli.runs.dispatch import Finished, Options
 
@@ -85,13 +85,23 @@ def test_run_prints_the_scoreboard_and_saves_results(tmp_path: Path) -> None:
         ("tokyo", False),
     ]
     assert (eval_directory / "eval.json").read_text() == eval_file(tmp_path).read_text()
-    assert (eval_directory / "runs" / "inline-1-pd-paris" / "trajectory.ndjson").is_file()
+    assert (eval_directory / saved["runs"][0]["directory"] / "trajectory.ndjson").is_file()
 
 
 def test_run_json(tmp_path: Path) -> None:
     code, output = avp("eval", "run", str(eval_file(tmp_path)), "--json")
     assert code == 0, output
     assert json.loads(output)["name"] == "capitals"
+
+
+def test_eval_directory_collision_keeps_both_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(paths, "stamped", lambda name, started: "same-second-capitals")
+    first, _ = results.create("capitals", '{"first": true}')
+    second, saved = results.create("capitals", '{"second": true}')
+    assert first != second
+    assert saved.id == second.name
+    assert json.loads((first / paths.EVAL).read_text()) == {"first": True}
+    assert json.loads((second / paths.EVAL).read_text()) == {"second": True}
 
 
 def test_threshold_exits_1_below_it(tmp_path: Path) -> None:

@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic import ValidationError
 
-from avp.commission import Commission
 from avp_cli import console, paths
 from avp_cli._cli_common import AgentOption, VerboseOption
-from avp_cli.agents import store
+from avp_cli.agents import command, store
+from avp_cli.commissions import store as commissions
+from avp_cli.commissions.check import check, require_valid
+from avp_cli.commissions.prepare import prepare
 from avp_cli.console import Failed, err, line, out
 from avp_cli.engine import images
 from avp_cli.runs import environment, events, volumes
@@ -25,7 +26,7 @@ POLL_S = 0.1
 
 
 def run(
-    commission: Annotated[Path, typer.Option(help="The Commission file.")],
+    commission: Annotated[str, typer.Option(help="A Commission file path or saved name.")],
     agent: AgentOption,
     env: Annotated[
         list[str] | None,
@@ -58,11 +59,9 @@ def run(
     given with --allow-host. A {"proxy": NAME} credential comes from `avp vault`,
     and the sandbox's Credential Vault adds it to the agent's requests."""
     console.set_verbose(verbose)
-    text = commission.read_text()
-    try:
-        parsed = Commission.model_validate_json(text)
-    except ValidationError as exc:
-        raise Failed(f"{commission} isn't a valid Commission: {exc}") from None
+    value = commissions.read(commissions.resolve(commission))
+    require_valid([p for p in check(value) if p.level == "error"])
+    parsed = prepare(value)
     options = Options(
         env=environment.variables(env or [], env_file or []),
         allow_hosts=allow_host or [],
@@ -70,6 +69,9 @@ def run(
     )
     installed = store.load(agent)
     entrypoint = images.entrypoint(installed.image)
+    environment.check(parsed, options.env)
+    descriptor = command.describe_in_sandbox(installed, entrypoint, options.volumes)
+    require_valid(check(value, descriptor))
     followers: list[events.Follower] = []
     with err.status(line("Starting a sandbox for ", (agent, "bold"))) as status:
 
@@ -83,7 +85,7 @@ def run(
                 ),
             )
 
-        finished = dispatch(installed, entrypoint, parsed, options, text, watch)
+        finished = dispatch(installed, entrypoint, parsed, options, watch=watch)
     for follower in followers:
         follower.finish()
     # Shown even when the agent crashed, since its events up to then are there.

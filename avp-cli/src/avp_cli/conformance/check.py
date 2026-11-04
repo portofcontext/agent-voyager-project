@@ -94,6 +94,7 @@ def check(
         if written:
             by_name = {case.name: case for case in cases}
             config = EvalConfig(
+                check_commissions=False,
                 name=NAME,
                 agents=[agent],
                 commissions={NAME: {"$item": "commission"}},
