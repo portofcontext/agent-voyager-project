@@ -65,15 +65,24 @@ and its Credential Vault. Agents implement `ping`, `describe`, and
 
 ## Verification
 
-Run `make check` on every change. It checks Python formatting, lint, types and
-project tests; TypeScript types, formatting and tests; shared SDK packaging;
-generated TypeScript drift; and skill packaging. Tests make no paid model calls.
-CLI sandbox tests run when a container engine answers; `make test-docker`
-requires one. On macOS, use a `TMPDIR` shared with the container engine.
+Run the checks for the paths you changed. CI runs `make check` on everything.
 
-Use `make check-agent NAME=avp-<sdk>` for one Python adapter while iterating.
-TypeScript adapters have `pi-check`, `gemini-cli-check`, and `opencode-check`.
-Run `make schemas bindings` after wire changes and review generated diffs.
+| Changed | Run |
+| --- | --- |
+| `agents/<name>/python/` | `make check-agent NAME=<name>` |
+| `agents/avp-{pi,gemini-cli,opencode}/typescript/` | `make {pi,gemini-cli,opencode}-check` |
+| `avp-cli/` | `make cli-check` |
+| `avp-sdk/python/` | `make sdk-python-check cli-check` |
+| `avp-sdk/typescript/` | `make sdk-typescript-check` |
+| `spec/`, wire types | `make schemas bindings`, review generated diffs, then `make check` |
+| `avp-sdk/data/`, `avp-sdk/testdata/`, `scripts/`, `testing/mcp/`, `Makefile`, anything else | `make check` |
+| Prose only | none |
+
+`make check` covers Python formatting, lint, types and project tests; TypeScript
+types, formatting and tests; shared SDK packaging; generated TypeScript drift;
+and skill packaging. Tests make no paid model calls. CLI sandbox tests run when
+a container engine answers; `make test-docker` requires one. On macOS, use a
+`TMPDIR` shared with the container engine.
 
 Add tests at the boundary where a change can fail: shared schema/Recorder cases
 for wire behavior, native-event-to-Trajectory integration for adapters, and
