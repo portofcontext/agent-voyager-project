@@ -1,9 +1,12 @@
 # Agent Dockerfiles install the SDK by path from the repository root.
 *
 !avp-sdk/python
+!avp-sdk/typescript
 !avp-sdk/data
+!spec/v0.1
 !agents/avp-pydantic-ai/python
 !agents/avp-codex/python
+!agents/avp-pi/typescript
 !agents/avp-deep-agents/python
 !agents/avp-claude-agent-sdk/python
 !agents/avp-openai-agents/python
@@ -11,3 +14,5 @@
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
+**/node_modules
+**/dist

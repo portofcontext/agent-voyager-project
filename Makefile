@@ -44,6 +44,7 @@ help:
 	@echo "AVP: orchestration commands"
 	@echo ""
 	@echo "  Free targets (no API calls):"
+	@echo "    make pi-check           check the Pi adapter (free; Node >= 22.19)"
 	@echo "    make test            pytest across every package, docker integration tests excluded"
 	@echo "    make test-docker     real-sandbox integration tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
@@ -57,15 +58,14 @@ help:
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
-	@echo "    make check           format-check + lint + test + test-pi + test-gemini-cli + test-opencode + conformance + bindings-check"
+	@echo "    make check           format-check + lint + test + pi-check + test-gemini-cli + test-opencode + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
 	@echo "    make test-fresh      Python agents' tests on unlocked, newest deps (AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
 	@echo "    make new-agent-rust NAME=avp-<sdk>  scaffold a Rust agent from agents/_template"
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
-	@echo "    make conformance-check  run the v0.1 suite against Claude, Goose, and Pi on a real model"
-	@echo "    make pi-check           run the v0.1 suite against avp-pi only (Node >= 22.19)"
+	@echo "    make conformance-check  run the legacy v0.1 suite against Goose on a real model"
 	@echo "    make gemini-cli-check   run the v0.1 suite against avp-gemini-cli on Gemini (GEMINI_API_KEY)"
 	@echo "    make opencode-check     run the v0.1 suite against avp-opencode (OPENAI_API_KEY)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
@@ -113,7 +113,6 @@ GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
-PI_MANIFEST := $(PI_DIR)/avp-conformance.json
 GEMINI_CLI_DIR := agents/avp-gemini-cli/typescript
 GEMINI_CLI_MANIFEST := $(GEMINI_CLI_DIR)/avp-conformance.json
 # The cases pin a Claude model; Gemini CLI runs them on a Gemini one.
@@ -156,10 +155,6 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
-	@$(MAKE) --no-print-directory pi-build
-	@$(UV) run avp-conformance ping --agent $(PI_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(PI_MANIFEST)
 	@printf "\n\033[1;36m── avp-gemini-cli ──\033[0m\n"
 	@$(MAKE) --no-print-directory gemini-cli-build
 	@$(UV) run avp-conformance ping --agent $(GEMINI_CLI_MANIFEST)
@@ -169,14 +164,16 @@ conformance:
 	@$(UV) run avp-conformance ping --agent $(OPENCODE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(OPENCODE_MANIFEST)
 
-.PHONY: pi-build test-pi
-pi-build:
-	@cd $(PI_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
+.PHONY: pi-build pi-check
+pi-build: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run build
+	@npm --prefix $(PI_DIR) ci --no-audit --no-fund
+	@npm --prefix $(PI_DIR) run build
 
-# Pi's integration tests: its real session loop, tools, and MCP extension on a
-# scripted model. Free; needs Node >= 22.19 and python3 (the MCP fixture).
-test-pi: pi-build
-	@cd $(PI_DIR) && node --test 'dist/tests/*.test.js'
+pi-check: pi-build
+	@npm --prefix $(PI_DIR) run format:check
+	@npm --prefix $(PI_DIR) run typecheck
+	@npm --prefix $(PI_DIR) test
 
 .PHONY: gemini-cli-build test-gemini-cli
 # Without optional dependencies (native PTY and keychain modules), as the
@@ -208,10 +205,6 @@ claude-check:
 goose-check:
 	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
 
-.PHONY: pi-check
-pi-check: pi-build
-	@$(UV) run avp-conformance check --agent $(PI_MANIFEST) --suite v0.1 $(SANDBOX)
-
 .PHONY: gemini-cli-check
 gemini-cli-check: gemini-cli-build
 	@if [ -z "$$GEMINI_API_KEY" ]; then \
@@ -234,8 +227,6 @@ conformance-check:
 	@$(MAKE) --no-print-directory claude-check
 	@printf "\n\033[1;36m── avp-goose ──\033[0m\n"
 	@$(MAKE) --no-print-directory goose-check
-	@printf "\n\033[1;36m── avp-pi ──\033[0m\n"
-	@$(MAKE) --no-print-directory pi-check
 
 
 .PHONY: lint
@@ -387,7 +378,7 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
+check: format-check lint sdk-data-check test pi-check test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

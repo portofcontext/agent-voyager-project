@@ -18,6 +18,19 @@ from avp_cli import agent_install, agents, images, release_manifest
 from avp_cli.environment import Environment
 
 
+@pytest.fixture(autouse=True)
+def installer_catalog(monkeypatch):
+    """Keep legacy installer contracts independent of adapter migrations."""
+    catalog = {
+        name: agents.AgentSource(
+            name, "1.2.3", "goose" if name == "goose" else f"avp-{name}", f"fixtures/{name}"
+        )
+        for name in ("goose", "pi", "opencode", "gemini-cli")
+    }
+    monkeypatch.setattr(agents, "AGENT_SOURCES", catalog)
+    monkeypatch.setattr(agent_install, "AGENT_SOURCES", catalog)
+
+
 @pytest.fixture
 def avp_home(tmp_path, monkeypatch):
     monkeypatch.setenv("AVP_HOME", str(tmp_path))

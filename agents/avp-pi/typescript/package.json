@@ -1,35 +1,31 @@
 {
   "name": "avp-pi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AVP adapter for the Pi coding agent.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "bin": {
-    "avp-pi": "./dist/src/main.js"
+    "avp-pi-cli": "./dist/src/main.js"
   },
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "npm --prefix ../../../avp/bindings/typescript run build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test 'dist/tests/*.test.js'"
+    "format:check": "prettier --check src tests package.json tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js"
   },
   "dependencies": {
-    "@avp/types": "file:../../../avp/bindings/typescript",
     "@earendil-works/pi-ai": "1.2.0",
     "@earendil-works/pi-coding-agent": "1.2.0",
-    "@earendil-works/pi-mcp": "1.2.0"
+    "@earendil-works/pi-mcp": "1.2.0",
+    "@agent-voyager-project/sdk": "file:../../../avp-sdk/typescript"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
-  },
-  "avp": {
-    "agent": "pi",
-    "node": "22.23.3",
-    "asset": "avp-pi.tar.gz",
-    "entry": "dist/src/main.js"
+    "typescript": "^7.0.2",
+    "prettier": "^3.9.10"
   }
 }
