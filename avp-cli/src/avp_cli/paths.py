@@ -3,12 +3,15 @@
 avp's state lives under `$AVP_HOME`, or `~/.avp`:
 
     agents/<name>.json                   one installed agent
-    runs/<time>-<run_id>/                a run directory, from `avp run` or `avp conformance`
+    runs/<time>-<run_id>/                a run directory, from `avp run`
     evals/<time>-<name>/                 one eval run
         eval.json                        the eval file, as given
         results.json                     each run's outcome and score
         agents/<name>.json               an agent's image and Descriptor, from one describe
         runs/<run_id>/                   a run directory
+    conformance/<time>-<agent>/          one `avp conformance check`, laid out as an eval run's
+        agents/<name>.json               as above
+        runs/<run_id>/                   as above
     vault.json                           secrets' names and descriptions, never their values
     opensandbox/
         config.toml                      the config the service was last started with
@@ -29,7 +32,7 @@ they started.
 
 This module only names paths. Reading, writing, and creating them belong to the
 modules that use them: `agents.store` for agents; `runs.directory`,
-`runs.dispatch`, and `conformance.check` for run directories; `eval.results`,
+and `runs.dispatch` for run directories; `conformance.check` for its directory; `eval.results`,
 `eval.engine`, and `eval.scoring` for evals; `vault.store`; and
 `sandbox.service`. A new file or directory gets its name here and its line in
 the tree above, and its code in its module.
@@ -83,6 +86,10 @@ def runs() -> Path:
 
 def evals() -> Path:
     return home() / "evals"
+
+
+def conformance() -> Path:
+    return home() / "conformance"
 
 
 def vault() -> Path:

@@ -80,6 +80,8 @@ def test_install_run_uninstall(avp_home: Path, tmp_path: Path) -> None:
     checked = avp("conformance", "check", "--agent", "sh-agent", "--json")
     [outcome] = json.loads(checked[checked.index("[") :])
     assert (outcome["case"], outcome["status"]) == ("agents-without-entry", "pass"), outcome
+    assert outcome["run_directory"].startswith(str(avp_home / "conformance"))
+    assert Path(outcome["run_directory"], "trajectory.ndjson").is_file()
 
     # An eval runs each item through the same dispatch, in its own sandbox.
     eval_file = tmp_path / "hi.eval.json"

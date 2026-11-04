@@ -75,10 +75,10 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │         avp eval unshare RUN_ID
 │
 ├── conformance         Check that an agent follows the spec's rules for agents. See Conformance.
-│   ├── ✅ check   Run the cases against an agent and report pass, fail, or skip by rule. Each
-│   │              case's run is kept in ~/.avp/runs/, as with `avp run`. Exits 1 when a MUST case fails.
+│   ├── ✅ check   Run the cases against an agent and report pass, fail, or skip by rule. The
+│   │              runs are kept in ~/.avp/conformance/<time>-<agent>/. Exits 1 when a MUST case fails.
 │   │     avp conformance check --agent pd [--rule commission.5.1] [--case agents-without-entry]
-│   │         [--model anthropic/claude-haiku-4-5] [--json]
+│   │         [--model anthropic/claude-haiku-4-5] [--concurrency 4] [--json]
 │   └── ✅ list    List the rules and the cases for each.
 │         avp conformance list [--rule commission.5.1]
 │
@@ -187,14 +187,16 @@ agents, with no real model calls. The cases are in
   spec defines nothing for it. aimock serves each provider's API, streaming
   included, and also serves the MCP servers a case adds. A check costs nothing
   and needs no provider key, so it can run in CI.
-- **⬜ One engine with `eval`.** A conformance case is an eval item defined in
+- **One engine with `eval`.** A conformance case is an eval item defined in
   avp: it writes a Commission from the agent's Descriptor, the engine runs it,
-  and the case scores the run. Pass is a score of 1, fail is 0, and skip is a
-  result that eval scorers don't use. Conformance adds a rule and a level
-  (MUST or SHOULD) to each item and groups its report by rule. The engine
-  settings differ: conformance uses a stand-in credential, no network beyond
-  its mocks, and prints its report; an eval uses `avp vault` credentials and
-  saves its results.
+  and the case scores the run. Pass is a score of 1 and fail is 0. A skipped
+  case never reaches the engine, and a run that didn't start, or that its scorer
+  couldn't score, fails with the reason. Any line that isn't a valid event of a
+  type the SDK knows fails the case. Conformance adds a rule and a level (MUST or
+  SHOULD) to each item and groups its report by rule. The engine settings differ:
+  conformance uses a stand-in credential and a `model.base_url` that never
+  resolves until its mocks exist, and prints its report; an eval uses `avp vault`
+  credentials and saves its results.
 
 ## TUI
 

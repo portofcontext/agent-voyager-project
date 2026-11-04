@@ -11,7 +11,7 @@ from avp_cli._cli_common import AgentOption, JsonOption, VerboseOption
 from avp_cli.conformance import check as checking
 from avp_cli.conformance.cases import CASES, Case
 from avp_cli.conformance.rules import RULES
-from avp_cli.console import Failed, err, line, out
+from avp_cli.console import Failed, out
 
 app = typer.Typer(
     no_args_is_help=True, help="Check that an agent follows the spec's rules for agents."
@@ -29,6 +29,7 @@ def check(
     agent: AgentOption,
     rule: RuleOption = None,
     case: Annotated[list[str] | None, typer.Option(help="Only this case.")] = None,
+    concurrency: Annotated[int, typer.Option(min=1, help="How many runs at once.")] = 1,
     model: Annotated[
         str, typer.Option(help="The model each Commission names, as provider/model.")
     ] = DEFAULT_MODEL,
@@ -39,10 +40,7 @@ def check(
     Exits 1 when a MUST case fails."""
     console.set_verbose(verbose)
     chosen = _cases(rule, case)
-    with err.status(line("Starting")) as status:
-        outcomes = checking.check(
-            agent, chosen, checking.model(model), lambda text: status.update(line(text))
-        )
+    outcomes = checking.check(agent, chosen, checking.model(model), concurrency)
     if json:
         out.print_json(
             data=[
@@ -65,9 +63,7 @@ def check(
 @app.command("list")
 def list_rules(rule: RuleOption = None) -> None:
     """List the rules for agents and the cases for each."""
-    unknown = sorted(set(rule or []) - set(RULES))
-    if unknown:
-        raise Failed(f"no rule {', '.join(unknown)}. `avp conformance list` shows them")
+    _check_rules(rule)
     table = Table("Rule", "Title", "Cases")
     for rule_id, title in RULES.items():
         if rule and rule_id not in rule:
@@ -77,10 +73,14 @@ def list_rules(rule: RuleOption = None) -> None:
     out.print(table)
 
 
-def _cases(rules: list[str] | None, names: list[str] | None) -> list[Case]:
+def _check_rules(rules: list[str] | None) -> None:
     unknown = sorted(set(rules or []) - set(RULES))
     if unknown:
         raise Failed(f"no rule {', '.join(unknown)}. `avp conformance list` shows them")
+
+
+def _cases(rules: list[str] | None, names: list[str] | None) -> list[Case]:
+    _check_rules(rules)
     missing = sorted(set(names or []) - {c.name for c in CASES})
     if missing:
         raise Failed(f"no case {', '.join(missing)}. `avp conformance list` shows them")
