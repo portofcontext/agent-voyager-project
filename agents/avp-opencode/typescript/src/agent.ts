@@ -1,427 +1,268 @@
-/**
- * The adapter: an `opencode serve` session in, Recorder calls out.
- *
- * OpenCode owns the loop. The adapter starts a hermetic server (`server.ts`),
- * reads the built-in surface from it for the descriptor, maps the Commission
- * into the server's config and the prompt request, then follows the server's
- * event stream (`session.ts`) until the session goes idle. OpenCode is a
- * product: the descriptor declares its default tools, subagents, and skills.
- *
- * Inline MCP servers are connected by OpenCode; the adapter reads their status
- * from it and lists each connected server's tools once, for the tool
- * declarations on `agent_started`.
- */
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+/** The native OpenCode server owns model calls, tools, and the loop. */
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
+import type {
+  EventSink,
+  JsonValue,
+} from "@agent-voyager-project/sdk/trajectory";
+import { loadPrices } from "@agent-voyager-project/sdk/utils/pricing";
+import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import {
-  loadDefaultPrices,
-  Recorder,
-  RecorderError,
-  type AgentDescriptor,
-  type Commission,
-  type PriceTable,
-  type Sink,
-} from "@avp/types";
-import type { ErrorCode, McpServerDecl, SkillDecl, SubagentDecl, ToolDecl } from "@avp/types/trajectory";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-
-import {
-  AGENT_NAME,
-  allowed,
-  avpMcpName,
-  BUILTIN_SKILLS,
-  BUILTIN_SUBAGENTS,
-  BUNDLED_SDKS,
-  failFast,
-  fromCommission,
-  HIDDEN_TOOLS,
-  MCP_CONNECT_MS,
-  opencodeConfig,
-  opencodeMcpName,
-  splitModel,
-  vaultVar,
-  writeSkills,
-  type Builtins,
-  type McpEntry,
-  type RunPlan,
+  BUNDLED,
+  configuration,
+  MissingSecret,
+  toolSwitches,
 } from "./commission.js";
-import { OpencodeServer } from "./server.js";
-import { EventClock, SessionTranslator } from "./session.js";
-
-export const AGENT_VERSION: string = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-).version;
-
-/** Where OpenCode lists a skill compiled into the binary. */
-const BUILTIN_SKILL_LOCATION = "<built-in>";
-
-/**
- * OpenCode turns a prompt's `edit: false` into a deny rule on the `edit`
- * permission, which `write` and `apply_patch` also ask for. A later rule on a
- * pattern matching `edit` re-allows that permission, so only the `edit` tool
- * stays hidden.
- */
-const EDIT_PERMISSION_TOOLS = ["write", "apply_patch"];
-const EDIT_PERMISSION_REALLOW = "edit*";
-
-/** Models whose tool lists together cover every built-in (OpenCode offers GPT models `apply_patch` instead of `edit` / `write`). */
-const SURVEY_MODELS = [
-  ["anthropic", "claude-sonnet-4-5"],
-  ["openai", "gpt-5"],
-] as const;
-
-/** How long to wait for the session to settle after an abort. */
-const ABORT_SETTLE_MS = 10_000;
-
-/** Hooks for tests and embedders; every field is optional. */
+import { catalog, children, describe, nativeSkills } from "./descriptor.js";
+import { McpFailure, discover } from "./mcp.js";
+import { Server, data } from "./server.js";
+import { EventClock, SessionEvents } from "./session.js";
+import * as translate from "./translate.js";
 export interface RunOptions {
-  /** Aborting it stops OpenCode and closes the trajectory as `interrupted`. */
   signal?: AbortSignal;
-  /** Extra environment for the OpenCode server (provider credentials, say). */
   env?: Record<string, string | undefined>;
-  /** The `opencode` executable; defaults to the pinned platform package's. */
-  binary?: string;
 }
-
-interface Surface extends Builtins {
-  descriptor: AgentDescriptor;
-}
-
-/** What the agent ships with, before any Commission. */
-export async function describe(options: Pick<RunOptions, "env" | "binary"> = {}): Promise<AgentDescriptor> {
-  const scratch = mkdtempSync(join(tmpdir(), "avp-opencode-"));
-  const server = await OpencodeServer.start({
-    cwd: process.cwd(),
-    scratch,
-    config: { share: "disabled", autoupdate: false, snapshot: false, enabled_providers: [] },
-    env: options.env,
-    binary: options.binary,
-  });
-  try {
-    return (await survey(server.client)).descriptor;
-  } finally {
-    await server.close();
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
-
-/** The built-in tools, subagents, and skills a server offers. */
-async function survey(client: OpencodeClient): Promise<Surface> {
-  const ids = await data(client.tool.ids());
-  const lists = await Promise.all(
-    SURVEY_MODELS.map(([provider, model]) => data(client.tool.list({ provider, model }))),
-  );
-  const tools: ToolDecl[] = [];
-  for (const id of ids) {
-    if (HIDDEN_TOOLS.has(id)) continue;
-    const tool = lists.flat().find((t) => t.id === id);
-    if (tool) tools.push(toolDecl(tool));
-  }
-  const subagents: SubagentDecl[] = (await data(client.app.agents()))
-    .filter((a) => a.native && a.mode === "subagent" && !a.hidden)
-    .map((a) => ({ name: a.name, ...(a.description ? { description: a.description } : {}) }));
-  const skills: SkillDecl[] = (await data(client.app.skills()))
-    .filter((s) => s.location === BUILTIN_SKILL_LOCATION)
-    .map((s) => ({ name: s.name, description: s.description, "avp.source": s.location }));
-  return {
-    descriptor: {
-      agent_name: AGENT_NAME,
-      agent_version: AGENT_VERSION,
-      spec_version: "0.1",
-      tools,
-      subagents,
-      skills,
-    },
-    tools: tools.map((t) => t.name),
-    subagents: subagents.map((s) => s.name),
-    skills: skills.map((s) => s.name),
-  };
-}
-
-export async function run(commission: Commission, sink: Sink, options: RunOptions = {}): Promise<void> {
-  const [origin] = splitModel(commission.model);
-  const prices = loadDefaultPrices();
+export async function run(
+  received: JsonValue,
+  sink: EventSink,
+  options: RunOptions = {},
+): Promise<void> {
   const clock = new EventClock();
   const rec = new Recorder(sink, {
-    runId: commission.run_id,
-    provider: origin,
-    prices,
-    clock,
-    dispatchTarget: (name) => (name.startsWith("mcp__") ? "mcp_server" : "local"),
+    prices: await loadPrices(),
+    now: clock.now,
   });
-  const plan = fromCommission(commission, { ...process.env, ...options.env });
-  const cwd = process.cwd();
+  const descriptor = await describe();
+  const commission = await rec.begin(received, descriptor);
+  if (!commission) return;
+  if (
+    !descriptor.supported_models?.some(
+      (model) => model.provider === commission.model.provider,
+    )
+  ) {
+    await rec.error(
+      "invalid_commission",
+      "OpenCode has no bundled SDK for this provider",
+    );
+    return;
+  }
+  const plan = planRun(commission, descriptor);
+  if (
+    commission.output_schema != null &&
+    commission.output_schema.type !== "object"
+  ) {
+    await rec.error(
+      "invalid_commission",
+      "OpenCode structured output requires an object schema",
+    );
+    return;
+  }
   const scratch = mkdtempSync(join(tmpdir(), "avp-opencode-"));
-  const skillsDir = join(scratch, "skills");
-  let server: OpencodeServer | undefined;
+  let server: Server | undefined;
+  const events = new AbortController();
+  let interrupted = options.signal?.aborted ?? false;
+  let sessionID: string | undefined;
+  let observer: SessionEvents | undefined;
+  const abortNative = async () => {
+    if (sessionID && server) await server.client.session.abort({ sessionID });
+  };
+  const abort = () => {
+    interrupted = true;
+    void abortNative().catch(() => {});
+    setTimeout(() => events.abort(), 10_000).unref();
+  };
+  options.signal?.addEventListener("abort", abort, { once: true });
   try {
-    writeSkills(commission.skills ?? [], skillsDir);
-    const config = opencodeConfig(plan, {
-      skillsDir,
-      deniedSubagents: withheld(commission.enabled_builtin_subagents, BUILTIN_SUBAGENTS),
-      deniedSkills: withheld(commission.enabled_builtin_skills, BUILTIN_SKILLS),
+    const env = { ...process.env, ...options.env };
+    server = await Server.start({
+      cwd: process.cwd(),
+      scratch,
+      config: configuration(commission, plan, scratch, env),
+      env: options.env,
     });
-    server = await OpencodeServer.start({ cwd, scratch, config, env: options.env, binary: options.binary });
-    const surface = await survey(server.client);
-    rec.prelude(commission, surface.descriptor);
-    await session(rec, clock, prices, server, commission, plan, surface, options);
-  } catch (err) {
-    if (rec.stopped) throw err;
-    const message = err instanceof Error ? err.message : String(err);
-    if (!(err instanceof RecorderError)) {
-      try {
-        rec.prelude(commission, { agent_name: AGENT_NAME, agent_version: AGENT_VERSION, spec_version: "0.1" });
-      } catch {
-        // The prelude was already written.
-      }
+    const client = server.client;
+    const providers = await data(client.provider.list());
+    const provider = providers.all.find(
+      (p) => p.id === commission.model.provider,
+    );
+    const model = provider?.models[commission.model.id];
+    if (!model || !BUNDLED.has(model.api.npm)) {
+      await rec.error(
+        "invalid_commission",
+        "OpenCode cannot serve this model with a bundled provider SDK",
+      );
+      return;
     }
-    rec.error("agent_crash", message);
-    rec.stop("error");
-    throw err;
+    if (!providers.connected.includes(commission.model.provider)) {
+      await rec.error(
+        "auth_error",
+        `no credentials for ${commission.model.provider}`,
+      );
+      return;
+    }
+    const offered = await catalog(
+      client,
+      commission.model.provider,
+      commission.model.id,
+    );
+    const allowed = new Set(plan.started.tools?.map((t) => t.name) ?? []);
+    if (!plan.started.subagents?.length) allowed.delete("task");
+    const enabled = offered.filter((t) => allowed.has(t.name));
+    if (
+      commission.skills?.length &&
+      !enabled.some((tool) => tool.name === "skill")
+    ) {
+      await rec.error(
+        "invalid_commission",
+        "OpenCode needs its skill tool to activate commissioned skills",
+      );
+      return;
+    }
+    const off = (await data(client.tool.ids())).filter(
+      (name) => !enabled.some((t) => t.name === name),
+    );
+    const status = await data(client.mcp.status());
+    for (const item of commission.mcp_servers ?? [])
+      if (status[item.id]?.status !== "connected")
+        throw new McpFailure(`${item.id}: native MCP connection failed`);
+    const mcpTools = await discover(
+      commission,
+      env,
+      new Set(offered.map((t) => t.name)),
+    );
+    const skills = (await nativeSkills(client))
+      .filter((s) => plan.started.skills?.some((item) => item.name === s.name))
+      .map(({ name, description }) => ({
+        name,
+        description: description ?? "",
+      }));
+    if (
+      commission.skills?.some((s) => !skills.some((n) => n.name === s.name))
+    ) {
+      await rec.error(
+        "invalid_commission",
+        "OpenCode did not load all commissioned skills",
+      );
+      return;
+    }
+    const agentList = await data(client.app.agents());
+    const agents = children(
+      agentList,
+      [...offered, ...mcpTools],
+      skills,
+      toolSwitches(
+        off,
+        enabled.map((t) => t.name),
+      ),
+    ).filter((a) => plan.started.subagents?.some((s) => s.name === a.name));
+    const outputTool = commission.output_schema
+      ? {
+          name: "StructuredOutput",
+          inputSchema: Object.fromEntries(
+            Object.entries(commission.output_schema).filter(
+              ([key]) => key !== "$schema",
+            ),
+          ) as { type: "object" },
+        }
+      : undefined;
+    await rec.start({
+      ...plan.started,
+      system_prompt: undefined,
+      tools: [...enabled, ...mcpTools, ...(outputTool ? [outputTool] : [])],
+      skills,
+      subagents: agents,
+      mcp_servers: plan.started.mcp_servers?.map((s) => ({
+        ...s,
+        status: "connected",
+      })),
+    });
+    if (interrupted) {
+      await observer?.flushInterrupted();
+      await rec.stop("interrupted");
+      return;
+    }
+    const created = await data(
+      client.session.create({ title: `avp ${commission.run_id}` }),
+    );
+    sessionID = created.id;
+    const subscription = await client.event.subscribe(
+      {},
+      { signal: events.signal },
+    );
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    await iterator.next();
+    observer = new SessionEvents(
+      rec,
+      clock,
+      sessionID,
+      new Set(agents.map((a) => a.name)),
+      abortNative,
+    );
+    const request = await client.session.promptAsync({
+      sessionID,
+      model: {
+        providerID: commission.model.provider,
+        modelID: commission.model.id,
+      },
+      agent: "build",
+      parts: [{ type: "text", text: commission.prompt }],
+      tools: toolSwitches(
+        off,
+        enabled.map((t) => t.name),
+      ),
+      ...(commission.output_schema
+        ? { format: { type: "json_schema", schema: commission.output_schema } }
+        : {}),
+    });
+    if (request.error)
+      throw new Error(
+        `OpenCode rejected the prompt: ${JSON.stringify(request.error)}`,
+      );
+    const exited = server.exited.then((why) => {
+      throw new Error(why);
+    });
+    while (!observer.idle) {
+      const next = await Promise.race([iterator.next(), exited]);
+      if (next.done)
+        throw new Error(
+          "OpenCode event stream ended before the session became idle",
+        );
+      await observer.handle(next.value);
+    }
+    if (!interrupted) observer.check();
+    if (interrupted) {
+      await observer.flushInterrupted();
+      await rec.stop("interrupted");
+    } else if (observer.failure || observer.lastError) {
+      const error = observer.failure ?? observer.lastError;
+      await rec.error(translate.errorCode(error), translate.errorText(error));
+      await rec.stop("error");
+    } else await rec.stop("converged", observer.output);
+  } catch (error) {
+    if (rec.ended) throw error;
+    if (interrupted) {
+      await observer?.flushInterrupted();
+      await rec.stop("interrupted");
+      return;
+    }
+    await rec.error(
+      error instanceof MissingSecret
+        ? "auth_error"
+        : error instanceof McpFailure
+          ? "mcp_connect_failed"
+          : error instanceof RecorderError
+            ? "agent_crash"
+            : translate.errorCode(error),
+      translate.errorText(error),
+    );
+    await rec.stop("error");
+    if (error instanceof RecorderError) throw error;
   } finally {
+    options.signal?.removeEventListener("abort", abort);
+    events.abort();
     await server?.close();
     rmSync(scratch, { recursive: true, force: true });
   }
-}
-
-/** Everything after the prelude: Commission checks, `agent_started`, the session, `agent_stopped`. */
-async function session(
-  rec: Recorder,
-  clock: EventClock,
-  prices: PriceTable,
-  server: OpencodeServer,
-  commission: Commission,
-  plan: RunPlan,
-  surface: Surface,
-  options: RunOptions,
-): Promise<void> {
-  const client = server.client;
-  const refusal = failFast(commission, AGENT_VERSION, surface) ?? (await route(client, plan));
-  if (refusal) {
-    rec.error(...refusal);
-    rec.stop("error");
-    return;
-  }
-
-  // Tools for this model, after the Commission's allow-lists.
-  const offered = (await data(client.tool.list({ provider: plan.route, model: plan.routeModel }))).filter(
-    (t) => surface.tools.includes(t.id),
-  );
-  let enabled = allowed(commission.enabled_builtin_tools, offered.map((t) => t.id));
-  const subagents = surface.descriptor.subagents!.filter((s) =>
-    allowed(commission.enabled_builtin_subagents, surface.subagents).includes(s.name),
-  );
-  if (subagents.length === 0) enabled = enabled.filter((t) => t !== "task");
-  const off = (await data(client.tool.ids())).filter((id) => id !== "invalid" && !enabled.includes(id));
-  const tools: Record<string, boolean> = Object.fromEntries(off.map((id) => [id, false]));
-  if (off.includes("edit") && enabled.some((t) => EDIT_PERMISSION_TOOLS.includes(t))) {
-    tools[EDIT_PERMISSION_REALLOW] = true;
-  }
-
-  const mcp = await mcpServers(client, plan.mcpServers, rec);
-  const withheldSkills = withheld(commission.enabled_builtin_skills, surface.skills);
-  const skills = (await data(client.app.skills()))
-    .filter((s) => s.location !== BUILTIN_SKILL_LOCATION || !withheldSkills.includes(s.name))
-    .map((s): SkillDecl => ({ name: s.name, description: s.description, "avp.source": s.location }));
-  rec.start({
-    requestModel: commission.model,
-    prompt: plan.prompt,
-    systemPrompt: plan.system,
-    tools: [...offered.filter((t) => enabled.includes(t.id)).map(toolDecl), ...mcp.tools],
-    mcpServers: mcp.decls.length > 0 ? mcp.decls : undefined,
-    skills: skills.length > 0 ? skills : undefined,
-    subagents: subagents.length > 0 ? subagents : undefined,
-    threadId: commission.thread_id ?? undefined,
-    tags: commission.tags ?? undefined,
-  });
-
-  const providers = await data(client.provider.list());
-  if (!providers.connected.includes(plan.route)) {
-    const env = providers.all.find((p) => p.id === plan.route)?.env ?? [];
-    rec.error("auth_error", `no credentials for ${plan.route}${env.length ? ` (set ${env.join(" or ")})` : ""}`);
-    rec.stop("error");
-    return;
-  }
-  if (options.signal?.aborted) {
-    rec.stop("interrupted");
-    return;
-  }
-
-  const created = await data(client.session.create({ title: `avp ${commission.run_id}` }));
-  const events = new AbortController();
-  const subscription = await client.event.subscribe({}, { signal: events.signal });
-  const translator = new SessionTranslator(rec, clock, created.id, {
-    toolName: mcp.toolName,
-    requestModel: plan.modelId,
-    provider: plan.origin,
-    prices,
-    onPermission: (requestID) => void client.permission.reply({ requestID, reply: "once" }).catch(() => {}),
-    onHopeless: () => void client.session.abort({ sessionID: created.id }).catch(() => {}),
-  });
-  let interrupted = false;
-  const onAbort = () => {
-    interrupted = true;
-    void client.session.abort({ sessionID: created.id }).catch(() => {});
-    setTimeout(() => events.abort(), ABORT_SETTLE_MS).unref();
-  };
-  options.signal?.addEventListener("abort", onAbort, { once: true });
-  try {
-    const stream = subscription.stream[Symbol.asyncIterator]();
-    // The first event confirms the subscription, so nothing is missed.
-    await stream.next();
-    const sent = await client.session.promptAsync({
-      sessionID: created.id,
-      model: { providerID: plan.route, modelID: plan.routeModel },
-      agent: "build",
-      parts: [{ type: "text", text: plan.prompt }],
-      ...(plan.system ? { system: plan.system } : {}),
-      ...(plan.outputSchema ? { format: { type: "json_schema" as const, schema: plan.outputSchema } } : {}),
-      ...(off.length > 0 ? { tools } : {}),
-    });
-    if (sent.error) throw new Error(`opencode rejected the prompt: ${JSON.stringify(sent.error)}`);
-    const exited = server.exited.then((why) => {
-      throw new Error(`${why}${server.log ? `\n${server.log}` : ""}`);
-    });
-    while (!translator.idle) {
-      const next = await Promise.race([stream.next(), exited]);
-      if (next.done) break;
-      translator.handle(next.value as Event);
-    }
-  } finally {
-    options.signal?.removeEventListener("abort", onAbort);
-    events.abort();
-  }
-
-  if (interrupted) {
-    translator.flushInterrupted();
-    rec.stop("interrupted");
-    return;
-  }
-  const failure = translator.error ?? translator.lastError;
-  if (failure) {
-    rec.error(...failure);
-    rec.stop("error");
-    return;
-  }
-  rec.stop("converged", translator.output);
-}
-
-/** Refuse a model OpenCode can't serve from its bundled catalog and SDKs. */
-async function route(client: OpencodeClient, plan: RunPlan): Promise<[ErrorCode, string] | undefined> {
-  const provider = (await data(client.provider.list())).all.find((p) => p.id === plan.route);
-  // The config declares the run's model, which makes OpenCode synthesize a
-  // provider it doesn't know; only cataloged providers name their key variables.
-  if (!provider || provider.env.length === 0) {
-    return ["unsupported_provider", `OpenCode has no provider ${JSON.stringify(plan.route)}`];
-  }
-  const model = provider.models[plan.routeModel];
-  if (!model) return ["unsupported_model", `${plan.route}/${plan.routeModel}: not in OpenCode's model catalog`];
-  if (!BUNDLED_SDKS.has(model.api.npm)) {
-    return ["unsupported_provider", `${plan.route} needs ${model.api.npm}, which this OpenCode build does not bundle`];
-  }
-  return undefined;
-}
-
-/**
- * MCP status from OpenCode (which dials the Commission's servers), and the
- * tools of each connected server, listed once for the declarations. A server
- * OpenCode couldn't connect is reported and left out.
- */
-async function mcpServers(
-  client: OpencodeClient,
-  entries: readonly McpEntry[],
-  rec: Recorder,
-): Promise<{ decls: McpServerDecl[]; tools: ToolDecl[]; toolName: (name: string) => string }> {
-  const decls: McpServerDecl[] = [];
-  const tools: ToolDecl[] = [];
-  const names = new Map<string, string>();
-  const status = entries.length > 0 ? await data(client.mcp.status()) : {};
-  for (const entry of entries) {
-    const s = status[entry.id];
-    if (s?.status !== "connected") {
-      const why = s && "error" in s ? s.error : (s?.status ?? "not connected");
-      rec.error("mcp_connect_failed", `${entry.id}: ${why}`);
-      decls.push({ id: entry.id, status: "failed" });
-      continue;
-    }
-    decls.push({ id: entry.id, status: "connected" });
-    for (const tool of await listTools(entry)) {
-      const name = avpMcpName(entry.id, tool.name);
-      names.set(opencodeMcpName(entry.id, tool.name), name);
-      tools.push({ ...tool, name, "avp.mcp_server_id": entry.id });
-    }
-  }
-  const prefixes = decls
-    .filter((d) => d.status === "connected")
-    .map((d) => [opencodeMcpName(d.id, ""), d.id] as const);
-  const toolName = (name: string) => {
-    const known = names.get(name);
-    if (known) return known;
-    const server = prefixes.find(([prefix]) => name.startsWith(prefix));
-    return server ? avpMcpName(server[1], name.slice(server[0].length)) : name;
-  };
-  return { decls, tools, toolName };
-}
-
-/** One server's tools, or none when listing fails (OpenCode's connection is what the run uses). */
-async function listTools(entry: McpEntry): Promise<ToolDecl[]> {
-  const client = new Client({ name: AGENT_NAME, version: AGENT_VERSION });
-  try {
-    await client.connect(transport(entry), { timeout: MCP_CONNECT_MS });
-    const { tools } = await client.listTools(undefined, { timeout: MCP_CONNECT_MS });
-    return tools.map((t) => ({
-      name: t.name,
-      ...(t.description ? { description: t.description } : {}),
-      inputSchema: t.inputSchema,
-      ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
-    }));
-  } catch {
-    return [];
-  } finally {
-    await client.close().catch(() => {});
-  }
-}
-
-function transport(entry: McpEntry): Transport {
-  if (entry.type === "stdio") {
-    const [command, ...args] = entry.command;
-    return new StdioClientTransport({
-      command,
-      args: [...args, ...(entry.args ?? [])],
-      env: { ...getDefaultEnvironment(), ...stringEnv(process.env), ...(entry.env ?? {}) },
-      stderr: "ignore",
-    });
-  }
-  const headers: Record<string, string> = { ...(entry.headers ?? {}) };
-  const secret = entry.auth ? process.env[vaultVar(entry.auth.vault)] : undefined;
-  if (secret) headers.Authorization = `Bearer ${secret}`;
-  return new StreamableHTTPClientTransport(new URL(entry.url), { requestInit: { headers } });
-}
-
-function toolDecl(tool: { id: string; description: string; parameters: unknown }): ToolDecl {
-  return { name: tool.id, description: tool.description, inputSchema: tool.parameters as Record<string, unknown> };
-}
-
-/** The built-in names a Commission allow-list leaves out. */
-function withheld(map: Record<string, string[]> | null | undefined, names: readonly string[]): string[] {
-  const list = map?.[AGENT_NAME];
-  return list ? names.filter((n) => !list.includes(n)) : [];
-}
-
-function stringEnv(env: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined));
-}
-
-/** A request's body, or an error carrying the server's reply. */
-async function data<T>(request: Promise<{ data?: T; error?: unknown; response?: Response }>): Promise<T> {
-  const { data, error, response } = await request;
-  if (error === undefined && data !== undefined) return data;
-  const status = response ? `${response.status} ${response.url}` : "no response";
-  throw new Error(`opencode request failed (${status}): ${JSON.stringify(error)}`);
 }

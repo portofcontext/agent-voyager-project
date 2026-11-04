@@ -24,6 +24,7 @@ export interface Usage {
   input: number;
   cached: number;
   output: number;
+  reasoning?: number;
 }
 
 export const USAGE: Usage = { input: 120, cached: 20, output: 30 };
@@ -31,6 +32,7 @@ export const USAGE: Usage = { input: 120, cached: 20, output: 30 };
 export class ScriptedModel {
   /** Every request body received, in order. */
   readonly requests: Record<string, any>[] = [];
+  readonly requestHeaders: IncomingMessage["headers"][] = [];
   private readonly server: Server;
   private steps: Step[] = [];
 
@@ -48,16 +50,26 @@ export class ScriptedModel {
           return;
         }
         model.requests.push(JSON.parse(raw || "{}"));
-        const step = model.steps.shift() ?? { text: "(no more scripted steps)" };
+        model.requestHeaders.push(req.headers);
+        const step = model.steps.shift() ?? {
+          text: "(no more scripted steps)",
+        };
         if ("status" in step) {
-          res.writeHead(step.status, { "content-type": "application/json" }).end(JSON.stringify(step.body));
+          res
+            .writeHead(step.status, { "content-type": "application/json" })
+            .end(JSON.stringify(step.body));
           return;
         }
-        res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+        res.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+        });
         void stream(res, step).catch(() => res.destroy());
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
     return model;
   }
 
@@ -68,6 +80,7 @@ export class ScriptedModel {
   script(steps: Step[]): void {
     this.steps = [...steps];
     this.requests.length = 0;
+    this.requestHeaders.length = 0;
   }
 
   async close(): Promise<void> {
@@ -76,40 +89,86 @@ export class ScriptedModel {
   }
 }
 
-async function stream(res: import("node:http").ServerResponse, step: Exclude<Step, { status: number }>): Promise<void> {
+async function stream(
+  res: import("node:http").ServerResponse,
+  step: Exclude<Step, { status: number }>,
+): Promise<void> {
   let seq = 0;
   const send = (data: Record<string, unknown>) =>
-    new Promise<void>((resolve) => res.write(`data: ${JSON.stringify({ ...data, sequence_number: seq++ })}\n\n`, () => resolve()));
+    new Promise<void>((resolve) =>
+      res.write(
+        `data: ${JSON.stringify({ ...data, sequence_number: seq++ })}\n\n`,
+        () => resolve(),
+      ),
+    );
   const id = `resp_${Math.random().toString(36).slice(2)}`;
-  await send({ type: "response.created", response: { id, created_at: Math.floor(Date.now() / 1000), model: "gpt-4.1-2025-04-14" } });
+  await send({
+    type: "response.created",
+    response: {
+      id,
+      created_at: Math.floor(Date.now() / 1000),
+      model: "gpt-4.1-2025-04-14",
+    },
+  });
   let index = 0;
   const text = "text" in step ? step.text : undefined;
   if (text) {
     const item = `msg_${index}`;
-    await send({ type: "response.output_item.added", output_index: index, item: { type: "message", id: item } });
+    await send({
+      type: "response.output_item.added",
+      output_index: index,
+      item: { type: "message", id: item },
+    });
     const delay = "chunkDelayMs" in step ? step.chunkDelayMs : undefined;
-    for (const word of delay ? text.match(/\S+\s*/g) ?? [text] : [text]) {
+    for (const word of delay ? (text.match(/\S+\s*/g) ?? [text]) : [text]) {
       if (res.destroyed) return;
-      await send({ type: "response.output_text.delta", item_id: item, delta: word });
+      await send({
+        type: "response.output_text.delta",
+        item_id: item,
+        delta: word,
+      });
       if (delay) await new Promise((r) => setTimeout(r, delay));
     }
-    await send({ type: "response.output_item.done", output_index: index, item: { type: "message", id: item } });
+    await send({
+      type: "response.output_item.done",
+      output_index: index,
+      item: { type: "message", id: item },
+    });
     index++;
   }
-  const calls = "calls" in step ? step.calls : "call" in step ? [step.call] : [];
+  const calls =
+    "calls" in step ? step.calls : "call" in step ? [step.call] : [];
   for (const { id: callId, name, args } of calls) {
     const item = `fc_${index}`;
     const json = JSON.stringify(args);
     await send({
       type: "response.output_item.added",
       output_index: index,
-      item: { type: "function_call", id: item, call_id: callId, name, arguments: "" },
+      item: {
+        type: "function_call",
+        id: item,
+        call_id: callId,
+        name,
+        arguments: "",
+      },
     });
-    await send({ type: "response.function_call_arguments.delta", item_id: item, output_index: index, delta: json });
+    await send({
+      type: "response.function_call_arguments.delta",
+      item_id: item,
+      output_index: index,
+      delta: json,
+    });
     await send({
       type: "response.output_item.done",
       output_index: index,
-      item: { type: "function_call", id: item, call_id: callId, name, arguments: json, status: "completed" },
+      item: {
+        type: "function_call",
+        id: item,
+        call_id: callId,
+        name,
+        arguments: json,
+        status: "completed",
+      },
     });
     index++;
   }
@@ -122,7 +181,7 @@ async function stream(res: import("node:http").ServerResponse, step: Exclude<Ste
         input_tokens: usage.input,
         input_tokens_details: { cached_tokens: usage.cached },
         output_tokens: usage.output,
-        output_tokens_details: { reasoning_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: usage.reasoning ?? 0 },
       },
     },
   });

@@ -65,11 +65,27 @@ def test_every_agent_generates_a_valid_manifest(agent: str, tmp_path) -> None:
         assert "agent-voyager-project" not in pinned  # in-repo wheels ship as files
 
 
-def test_opencode_installs_ripgrep_and_its_arch_archive(tmp_path) -> None:
-    m = _generated("opencode", tmp_path)
+def test_node_release_installs_setup_and_its_arch_archive(tmp_path, monkeypatch) -> None:
+    script = _script()
+    package = script.agent_packages.Package(
+        agent="node-fixture",
+        kind="node",
+        path=tmp_path,
+        version="1.2.3",
+        meta={
+            "agent": "node-fixture",
+            "node": "24.22.2",
+            "asset": "avp-node-fixture-{platform}.tar.gz",
+            "entry": "dist/src/main.js",
+            "setup": ["apt-get install -y ripgrep"],
+        },
+        engines_node="22.19.0",
+    )
+    monkeypatch.setattr(script.agent_packages, "read", lambda _agent: package)
+    m = _generated("node-fixture", tmp_path)
     recipe = release_manifest.container_recipe(m, url=URL)
     assert any("ripgrep" in step for step in recipe.setup)
-    assert f"{URL}/avp-opencode-linux-$(uname -m | sed" in recipe.install[0]
+    assert f"{URL}/avp-node-fixture-linux-$(uname -m | sed" in recipe.install[0]
     assert m.node.min == "22.19.0"
 
 

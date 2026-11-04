@@ -16,6 +16,10 @@
 
 ### Changed
 
+- OpenCode uses the rebuilt TypeScript SDK, a standalone locked project, and
+  a sandbox image. Native responses, tools, and child sessions feed the Recorder;
+  legacy installer and release files are removed.
+
 - Gemini CLI uses the rebuilt TypeScript SDK in a standalone locked project
   and sandbox image, with native sessions, tools, skills, and subagent usage.
   Legacy installer and release files are removed.

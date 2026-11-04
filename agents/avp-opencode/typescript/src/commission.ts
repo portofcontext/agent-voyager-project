@@ -1,51 +1,16 @@
-/**
- * Commission -> OpenCode configuration.
- *
- * - `model` `<origin>/<id>` is OpenCode provider `<origin>`, model `<id>`. The
- *   model is declared in the provider's config, so a model newer than the
- *   catalog the pinned binary bundles still runs on that provider's SDK. An
- *   origin OpenCode doesn't know, or whose SDK it doesn't bundle (it would
- *   install one from npm), is `unsupported_provider`. Credentials come from the provider's environment
- *   variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); Google's also
- *   from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, which launchers set.
- * - `provider.base_url` is the provider's `baseURL`. Without it, a launcher's
- *   `<PROVIDER>_HOST` stands in for the provider's root and the SDK's version
- *   path is appended (`ANTHROPIC_HOST=http://broker/llm/anthropic` becomes
- *   `http://broker/llm/anthropic/v1`). A `provider.id` other
- *   than the origin routes through that OpenCode provider when its catalog
- *   lists the model as `<origin>/<id>` (OpenRouter, say); pricing stays keyed
- *   by the origin.
- * - `system_prompt` rides on the prompt's `system`, appended after
- *   OpenCode's own system prompt.
- * - `prompt` is the session's single user message.
- * - `output_schema` is OpenCode's `json_schema` output format; the structured
- *   result is the run's output.
- * - Inline `skills` are written to a scratch directory listed in
- *   `skills.paths`.
- * - Inline `mcp_servers` are OpenCode `local` (stdio) / `remote` (HTTP)
- *   servers. An HTTP server's `auth` SecretRef becomes a bearer header read
- *   from `AVP_VAULT_<HANDLE>` through OpenCode's `{env:...}` substitution.
- * - `enabled_builtin_tools` / `_subagents` / `_skills` under `avp-opencode`
- *   select among the descriptor's built-ins: tools are switched off on the
- *   prompt, subagents and skills by `deny` permission rules.
- */
+/** Native configuration built from the SDK run plan. */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, sep } from "node:path";
-
-import { preflight, type Commission, type commission as wire } from "@avp/types";
-import type { ErrorCode } from "@avp/types/trajectory";
-
-export const AGENT_NAME = "avp-opencode";
-
-/** How long OpenCode waits for an MCP server to connect and list its tools. */
-export const MCP_CONNECT_MS = 30_000;
-
-/**
- * The provider SDKs compiled into the OpenCode binary (`BUNDLED_PROVIDERS` in
- * `packages/opencode/src/provider/provider.ts`). A model on any other SDK is
- * installed from npm at run time, which a sandbox can't do.
- */
-export const BUNDLED_SDKS = new Set([
+import { dirname, join, resolve, sep, matchesGlob } from "node:path";
+import type {
+  Commission,
+  EnvSecret,
+} from "@agent-voyager-project/sdk/commission";
+import type { RunPlan } from "@agent-voyager-project/sdk/utils/run_plan";
+import type { PermissionRuleset } from "@opencode-ai/sdk/v2/client";
+export const NAME = "avp-opencode";
+export const HIDDEN = new Set(["invalid", "websearch"]);
+// SDKs compiled into the pinned OpenCode binary; other packages need runtime npm.
+export const BUNDLED = new Set([
   "@ai-sdk/amazon-bedrock",
   "@ai-sdk/amazon-bedrock/mantle",
   "@ai-sdk/anthropic",
@@ -71,212 +36,172 @@ export const BUNDLED_SDKS = new Set([
   "@ai-sdk/github-copilot",
   "venice-ai-sdk-provider",
 ]);
-
-/**
- * The subagents and skills this OpenCode version ships. A Commission that
- * withholds one is enforced in the server config, written before the server
- * can be asked; the integration tests check these against the server's own lists.
- */
-export const BUILTIN_SUBAGENTS = ["general", "explore"] as const;
-export const BUILTIN_SKILLS = ["customize-opencode"] as const;
-
-/** Registry tools the descriptor leaves out: a repair sink the model never sees, and a search tool off by default. */
-export const HIDDEN_TOOLS = new Set(["invalid", "websearch"]);
-
-export type McpEntry = wire.McpServerStdio | wire.McpServerHttp;
-
-/** The surfaces the agent ships, by name (the descriptor's). */
-export interface Builtins {
-  tools: string[];
-  subagents: string[];
-  skills: string[];
-}
-
-export interface RunPlan {
-  origin: string;
-  modelId: string;
-  /** The OpenCode provider that serves the model (the origin unless `provider.id` routes elsewhere). */
-  route: string;
-  /** The model's id in `route`'s catalog. */
-  routeModel: string;
-  baseUrl: string | undefined;
-  /** The variable holding the key when the SDK's own is unset (see `KEY_VARS`). */
-  keyVar: string | undefined;
-  prompt: string;
-  system: string | undefined;
-  outputSchema: Record<string, unknown> | undefined;
-  mcpServers: McpEntry[];
-}
-
-/**
- * The version path each bundled provider SDK expects at the end of its
- * `baseURL` (its default URL minus the provider's root).
- */
-const API_PATHS: Record<string, string> = {
-  anthropic: "/v1",
-  openai: "/v1",
-  google: "/v1beta",
-  mistral: "/v1",
-  openrouter: "/api/v1",
+export const BASE = {
+  share: "disabled",
+  autoupdate: false,
+  snapshot: false,
+  plugin: [],
+  instructions: [],
+  lsp: false,
+  formatter: false,
+  compaction: { auto: false, prune: false },
+  permission: { "*": "allow" },
 };
-
-/**
- * Where a launcher puts a provider's key when it isn't the variable the
- * bundled SDK reads: the first is the SDK's own, the rest are read in order.
- * Google's SDK reads `GOOGLE_GENERATIVE_AI_API_KEY`; launchers and the Gemini
- * tools set `GEMINI_API_KEY` or `GOOGLE_API_KEY`.
- */
-const KEY_VARS: Record<string, string[]> = {
-  google: ["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"],
-};
-
-/** The variable to read `route`'s key from, when it isn't the SDK's own. */
-export function keyVar(route: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const [own, ...aliases] = KEY_VARS[route] ?? [];
-  return own && !env[own] ? aliases.find((name) => env[name]) : undefined;
+export class MissingSecret extends Error {}
+export function envSecret(value: EnvSecret, env: NodeJS.ProcessEnv): string {
+  const found = env[value.env];
+  if (!found)
+    throw new MissingSecret(`environment variable ${value.env} is missing`);
+  return found;
 }
-
-/** `route`'s `baseURL` under the launcher's `<PROVIDER>_HOST`, if it sets one. */
-export function launcherBaseUrl(route: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const host = env[`${route.toUpperCase().replace(/-/g, "_")}_HOST`];
-  return host ? host.replace(/\/+$/, "") + (API_PATHS[route] ?? "") : undefined;
+/** Native Permission.disabled filters tool names; resource checks select skills. */
+export function permitted(
+  rules: PermissionRuleset,
+  name: string,
+  resource?: string,
+): boolean {
+  const permission = ["edit", "write", "apply_patch"].includes(name)
+    ? "edit"
+    : [
+          "list_mcp_resources",
+          "list_mcp_resource_templates",
+          "read_mcp_resource",
+        ].includes(name)
+      ? "read"
+      : name;
+  const rule = rules
+    .filter(
+      (rule) =>
+        matchesGlob(permission, rule.permission) &&
+        (resource === undefined || matchesGlob(resource, rule.pattern)),
+    )
+    .at(-1);
+  return resource === undefined
+    ? !(rule?.pattern === "*" && rule.action === "deny")
+    : rule?.action !== "deny";
 }
-
-export function fromCommission(commission: Commission, env: NodeJS.ProcessEnv = process.env): RunPlan {
-  const [origin, modelId] = splitModel(commission.model);
-  const route = commission.provider?.id ?? origin;
-  return {
-    origin,
-    modelId,
-    route,
-    routeModel: route === origin ? modelId : `${origin}/${modelId}`,
-    baseUrl: commission.provider?.base_url ?? launcherBaseUrl(route, env),
-    keyVar: keyVar(route, env),
-    prompt: commission.prompt ?? "",
-    system: commission.system_prompt ?? undefined,
-    outputSchema: commission.output_schema ?? undefined,
-    mcpServers: (commission.mcp_servers ?? []) as McpEntry[],
-  };
-}
-
-export function splitModel(model: string): [string, string] {
-  const slash = model.indexOf("/");
-  return slash < 0 ? ["", model] : [model.slice(0, slash), model.slice(slash + 1)];
-}
-
-/** The spec's pre-turn Commission checks against the descriptor's surfaces. */
-export function failFast(
-  commission: Commission,
-  agentVersion: string,
-  builtins: Builtins,
-): [ErrorCode, string] | undefined {
-  return preflight(commission, AGENT_NAME, agentVersion, {
-    tools: builtins.tools,
-    subagents: builtins.subagents,
-    skills: builtins.skills,
-    mcpServers: [],
-  });
-}
-
-/** The allow-listed subset of `names` (all of them when the Commission sets no list). */
-export function allowed(map: Record<string, string[]> | null | undefined, names: readonly string[]): string[] {
-  const list = map?.[AGENT_NAME];
-  return list ? names.filter((n) => list.includes(n)) : [...names];
-}
-
-/**
- * The OpenCode config for a run: hermetic settings, the provider route, the
- * Commission's MCP servers and skills, and permission rules that auto-allow
- * (the run is sandboxed) except where the Commission withholds a built-in.
- */
-export function opencodeConfig(
+export function configuration(
+  c: Commission,
   plan: RunPlan,
-  opts: { skillsDir?: string; deniedSubagents?: string[]; deniedSkills?: string[] } = {},
+  scratch: string,
+  env: NodeJS.ProcessEnv,
 ): Record<string, unknown> {
-  const model = `${plan.route}/${plan.routeModel}`;
-  const permission: Record<string, unknown> = {
-    doom_loop: "allow",
-    external_directory: "allow",
-    read: "allow",
-  };
-  if (opts.deniedSubagents?.length) {
-    permission.task = Object.fromEntries(opts.deniedSubagents.map((n) => [n, "deny"]));
-  }
-  if (opts.deniedSkills?.length) {
-    permission.skill = Object.fromEntries(opts.deniedSkills.map((n) => [n, "deny"]));
-  }
-  return {
-    share: "disabled",
-    autoupdate: false,
-    snapshot: false,
-    model,
-    small_model: model,
-    enabled_providers: [plan.route],
-    provider: {
-      [plan.route]: {
-        // Declared so a model the bundled catalog predates still resolves; a
-        // cataloged model keeps its catalog entry (config merges over it).
-        models: { [plan.routeModel]: {} },
-        ...(plan.baseUrl || plan.keyVar ? { options: providerOptions(plan) } : {}),
-      },
+  const secret = c.model.credential;
+  const key =
+    secret == null
+      ? c.model.provider === "google"
+        ? (env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY)
+        : undefined
+      : "proxy" in secret
+        ? secret.proxy
+        : envSecret(secret, env);
+  const permission = {
+    "*": "allow",
+    skill: {
+      "*": "deny",
+      ...Object.fromEntries(
+        (plan.started.skills ?? []).map((item) => [item.name, "allow"]),
+      ),
     },
-    ...(plan.mcpServers.length > 0 ? { mcp: Object.fromEntries(plan.mcpServers.map((e) => [e.id, mcpConfig(e)])) } : {}),
-    ...(opts.skillsDir ? { skills: { paths: [opts.skillsDir] } } : {}),
-    permission,
   };
-}
-
-/** The route's SDK options: its `baseURL`, and its key by `{env:...}` reference. */
-function providerOptions(plan: RunPlan): Record<string, string> {
-  return {
-    ...(plan.baseUrl ? { baseURL: plan.baseUrl } : {}),
-    ...(plan.keyVar ? { apiKey: `{env:${plan.keyVar}}` } : {}),
-  };
-}
-
-function mcpConfig(entry: McpEntry): Record<string, unknown> {
-  if (entry.type === "stdio") {
-    return {
-      type: "local",
-      command: [...entry.command, ...(entry.args ?? [])],
-      ...(entry.env ? { environment: entry.env } : {}),
-      timeout: MCP_CONNECT_MS,
-    };
-  }
-  const headers: Record<string, string> = { ...(entry.headers ?? {}) };
-  if (entry.auth) headers.Authorization = `Bearer {env:${vaultVar(entry.auth.vault)}}`;
-  return { type: "remote", url: entry.url, headers, oauth: false, timeout: MCP_CONNECT_MS };
-}
-
-/** The environment variable a supervisor sets for a SecretRef handle. */
-export function vaultVar(handle: string): string {
-  return `AVP_VAULT_${handle.toUpperCase().replace(/-/g, "_")}`;
-}
-
-/** Write each inline skill's files under `root/<id>/`, returning `root`. */
-export function writeSkills(skills: readonly wire.Skill[], root: string): string {
-  mkdirSync(root, { recursive: true });
-  for (const skill of skills) {
-    const base = join(root, skill.id);
+  const mcp = Object.fromEntries(
+    (c.mcp_servers ?? []).map((server) => [
+      server.id,
+      server.type === "stdio"
+        ? {
+            type: "local",
+            command: server.command,
+            environment: Object.fromEntries(
+              Object.entries(server.env ?? {}).map(([name, value]) => [
+                name,
+                typeof value === "string" ? value : envSecret(value, env),
+              ]),
+            ),
+            enabled: true,
+            timeout: 30_000,
+          }
+        : {
+            type: "remote",
+            url: server.url,
+            headers: Object.fromEntries(
+              Object.entries(server.headers ?? {})
+                .filter(
+                  ([, value]) =>
+                    typeof value === "string" || !("proxy" in value),
+                )
+                .map(([name, value]) => [
+                  name,
+                  typeof value === "string"
+                    ? value
+                    : envSecret(value as EnvSecret, env),
+                ]),
+            ),
+            oauth: false,
+            enabled: true,
+            timeout: 30_000,
+          },
+    ]),
+  );
+  const skillsDir = join(scratch, "skills");
+  mkdirSync(skillsDir, { recursive: true });
+  for (const skill of c.skills ?? [])
     for (const [path, text] of Object.entries(skill.files)) {
-      const target = join(base, path);
-      if (!target.startsWith(base + sep)) {
-        throw new Error(`skill ${skill.id}: file path ${JSON.stringify(path)} escapes the skill`);
-      }
+      const root = resolve(skillsDir, skill.name),
+        target = resolve(root, path);
+      if (!target.startsWith(root + sep))
+        throw new Error(`skill file escapes its directory: ${path}`);
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, text);
     }
-  }
-  return root;
+  return {
+    ...BASE,
+    model: `${c.model.provider}/${c.model.id}`,
+    small_model: `${c.model.provider}/${c.model.id}`,
+    enabled_providers: [c.model.provider],
+    provider: {
+      [c.model.provider]: {
+        models: { [c.model.id]: {} },
+        options: {
+          ...(key ? { apiKey: key } : {}),
+          ...(c.model.base_url ? { baseURL: c.model.base_url } : {}),
+        },
+      },
+    },
+    skills: { paths: [skillsDir] },
+    mcp,
+    permission,
+    agent: {
+      build: {
+        permission: {
+          task: {
+            "*": "deny",
+            ...Object.fromEntries(
+              (plan.started.subagents ?? []).map((item) => [
+                item.name,
+                "allow",
+              ]),
+            ),
+          },
+        },
+        ...(c.system_prompt == null ? {} : { prompt: c.system_prompt || "\n" }),
+      },
+      title: { disable: true },
+      summary: { disable: true },
+      compaction: { disable: true },
+    },
+  };
 }
-
-/** OpenCode's model-facing name for an MCP tool (`<server>_<tool>`, sanitized). */
-export function opencodeMcpName(server: string, tool: string): string {
-  const clean = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return `${clean(server)}_${clean(tool)}`;
-}
-
-/** The AVP name for an MCP tool, as the other adapters report it (`mcp__<server>__<tool>`). */
-export function avpMcpName(server: string, tool: string): string {
-  return `mcp__${server}__${tool}`;
+export function toolSwitches(
+  off: string[],
+  enabled: string[],
+): Record<string, boolean> {
+  const result = Object.fromEntries(off.map((name) => [name, false]));
+  // OpenCode filters exact tool IDs but groups write/apply_patch under the edit
+  // permission. Keep that permission when only the edit tool is withheld.
+  if (
+    off.includes("edit") &&
+    enabled.some((name) => ["write", "apply_patch"].includes(name))
+  )
+    result["edit*"] = true;
+  return result;
 }

@@ -46,6 +46,7 @@ help:
 	@echo "  Free targets (no API calls):"
 	@echo "    make pi-check           check the Pi adapter (free; Node >= 22.19)"
 	@echo "    make gemini-cli-check   check the Gemini CLI adapter (free; Node >= 22.19)"
+	@echo "    make opencode-check     check the OpenCode adapter (free; Node >= 22.19)"
 	@echo "    make test            pytest across every package, docker integration tests excluded"
 	@echo "    make test-docker     real-sandbox integration tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
@@ -59,7 +60,7 @@ help:
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
-	@echo "    make check           format-check + lint + test + pi-check + gemini-cli-check + test-opencode + conformance + bindings-check"
+	@echo "    make check           format-check + lint + test + pi-check + gemini-cli-check + opencode-check + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
 	@echo "    make test-fresh      Python agents' tests on unlocked, newest deps (AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
@@ -67,7 +68,6 @@ help:
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the legacy v0.1 suite against Goose on a real model"
-	@echo "    make opencode-check     run the v0.1 suite against avp-opencode (OPENAI_API_KEY)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
 	@echo ""
@@ -115,7 +115,6 @@ TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 PI_DIR := agents/avp-pi/typescript
 GEMINI_CLI_DIR := agents/avp-gemini-cli/typescript
 OPENCODE_DIR := agents/avp-opencode/typescript
-OPENCODE_MANIFEST := $(OPENCODE_DIR)/avp-conformance.json
 
 # Set SANDBOX=--sandbox to run each agent inside the `srt` sandbox
 # (@anthropic-ai/sandbox-runtime). Off by default so `conformance-check` works
@@ -152,10 +151,6 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-opencode ──\033[0m\n"
-	@$(MAKE) --no-print-directory opencode-build
-	@$(UV) run avp-conformance ping --agent $(OPENCODE_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(OPENCODE_MANIFEST)
 
 .PHONY: pi-build pi-check
 pi-build: sdk-typescript-install
@@ -179,16 +174,16 @@ gemini-cli-check: gemini-cli-build
 	@npm --prefix $(GEMINI_CLI_DIR) run typecheck
 	@npm --prefix $(GEMINI_CLI_DIR) test
 
-.PHONY: opencode-build test-opencode
-opencode-build:
-	@cd $(OPENCODE_DIR) && npm ci --silent --no-audit --no-fund && npm run --silent build
+.PHONY: opencode-build opencode-check
+opencode-build: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run build
+	@npm --prefix $(OPENCODE_DIR) ci --ignore-scripts --no-audit --no-fund
+	@npm --prefix $(OPENCODE_DIR) run build
 
-# OpenCode's integration tests: the real `opencode serve` (pinned binary), its tools,
-# MCP client, and subagents on a scripted model. Free; needs Node >= 22.19 and
-# python3 (the MCP fixture).
-test-opencode: opencode-build
-	@cd $(OPENCODE_DIR) && node --test --test-concurrency=1 'dist/tests/*.test.js'
-
+opencode-check: opencode-build
+	@npm --prefix $(OPENCODE_DIR) run format:check
+	@npm --prefix $(OPENCODE_DIR) run typecheck
+	@npm --prefix $(OPENCODE_DIR) test
 
 # ── Paid: run the v0.1 suite against each agent on a real model ────────────────
 .PHONY: claude-check goose-check
@@ -196,13 +191,6 @@ claude-check:
 
 goose-check:
 	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
-
-# OpenCode on an OpenAI model (OPENAI_API_KEY); override with OPENCODE_MODEL.
-OPENCODE_MODEL ?= openai/gpt-5-mini
-.PHONY: opencode-check
-opencode-check: opencode-build
-	@$(UV) run avp-conformance check --agent $(OPENCODE_MANIFEST) --suite v0.1 --model $(OPENCODE_MODEL) $(SANDBOX)
-
 
 .PHONY: conformance-check
 conformance-check:
@@ -363,7 +351,7 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
 .PHONY: check
-check: format-check lint sdk-data-check test pi-check gemini-cli-check test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
+check: format-check lint sdk-data-check test pi-check gemini-cli-check opencode-check conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

@@ -8,6 +8,7 @@
 !agents/avp-codex/python
 !agents/avp-pi/typescript
 !agents/avp-gemini-cli/typescript
+!agents/avp-opencode/typescript
 !agents/avp-deep-agents/python
 !agents/avp-claude-agent-sdk/python
 !agents/avp-openai-agents/python
