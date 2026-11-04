@@ -1,0 +1,249 @@
+"""`avp eval run`, `show`, and `list`, with `dispatch` faked to write a saved
+Trajectory, so no sandbox starts."""
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+from conftest import no_sandbox as fakes
+from typer.testing import CliRunner
+
+from avp.commission import Commission
+from avp_cli import console, paths, prompts
+from avp_cli.agents import store
+from avp_cli.cli import app
+from avp_cli.eval import engine, live
+from avp_cli.eval.scoring import Result
+from avp_cli.runs.dispatch import Finished, Options
+
+ANSWERS = {"paris": "Paris", "tokyo": "Kyoto"}
+
+
+def fake_dispatch(
+    agent: store.Agent, entrypoint: list[str], commission: Commission, options: Options
+) -> Finished:
+    assert options.directory is not None
+    item = commission.run_id.rsplit("-", 1)[1]
+    options.directory.mkdir(parents=True)
+    event = {
+        "avp_version": "0.1",
+        "id": "1",
+        "type": "agent_stopped",
+        "time": "2026-01-01T00:00:00Z",
+        "run_id": commission.run_id,
+        "data": {"reason": "converged", "output": ANSWERS[item]},
+    }
+    (options.directory / paths.TRAJECTORY).write_text(json.dumps(event) + "\n")
+    return Finished(options.directory, 0, "")
+
+
+@pytest.fixture(autouse=True)
+def sandbox_free(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No sandbox, a scratch AVP home, and a wide terminal so tables don't wrap."""
+    monkeypatch.setenv("AVP_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(console.out, "width", 200)
+    monkeypatch.setattr(engine, "dispatch", fake_dispatch)
+    fakes(monkeypatch)
+
+
+def eval_file(tmp_path: Path, **change: object) -> Path:
+    path = tmp_path / "capitals.eval.json"
+    fields = {
+        "eval_version": "0.1",
+        "name": "capitals",
+        "agents": "pd",
+        "commission": {
+            "avp_version": "0.1",
+            "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
+            "prompt": "Name the city in: {item.id}",
+        },
+        "dataset": [{"id": "paris", "answer": "Paris"}, {"id": "tokyo", "answer": "Tokyo"}],
+        "scorer": {"name": "match", "expected": "{item.answer}"},
+    }
+    path.write_text(json.dumps({**fields, **change}))
+    return path
+
+
+def avp(*args: str) -> tuple[int, str]:
+    result = CliRunner().invoke(app, list(args))
+    return result.exit_code, result.output
+
+
+def test_run_prints_the_scoreboard_and_saves_results(tmp_path: Path) -> None:
+    code, output = avp("eval", "run", str(eval_file(tmp_path)))
+    assert code == 0, output
+    assert "inline-1" in output
+    assert "50%" in output
+    assert "expected 'Tokyo', got 'Kyoto'" in output
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    assert eval_directory.name.endswith("-capitals")
+    saved = json.loads((eval_directory / "results.json").read_text())
+    assert saved["finished"] is not None
+    assert [(r["item"], r["score"]["passed"]) for r in saved["runs"]] == [
+        ("paris", True),
+        ("tokyo", False),
+    ]
+    assert (eval_directory / "eval.json").read_text() == eval_file(tmp_path).read_text()
+    assert (eval_directory / "runs" / "inline-1-pd-paris" / "trajectory.ndjson").is_file()
+
+
+def test_run_json(tmp_path: Path) -> None:
+    code, output = avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    assert code == 0, output
+    assert json.loads(output)["name"] == "capitals"
+
+
+def test_threshold_exits_1_below_it(tmp_path: Path) -> None:
+    assert avp("eval", "run", str(eval_file(tmp_path)), "--threshold", "0.5")[0] == 0
+    assert avp("eval", "run", str(eval_file(tmp_path)), "--threshold", "0.6")[0] == 1
+
+
+def test_max_items(tmp_path: Path) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--max-items", "1", "--json")
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    saved = json.loads((eval_directory / "results.json").read_text())
+    assert [r["item"] for r in saved["runs"]] == ["paris"]
+
+
+def test_problems_are_listed_with_the_agent_hint(tmp_path: Path) -> None:
+    path = eval_file(tmp_path, agents=None, scorer={"name": "match", "expected": "{item.city}"})
+    result = CliRunner().invoke(app, ["eval", "run", str(path)])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, Exception)
+    message = str(result.exception)
+    assert "no agents: the eval names none, and none were given; give --agent" in message
+    assert "item paris, scorer.expected: item has no field 'city'" in message
+    assert not (tmp_path / "home" / "evals").exists()
+
+
+def test_a_missing_variable_fails_before_any_run(tmp_path: Path) -> None:
+    commission = {
+        "avp_version": "0.1",
+        "model": {"provider": "anthropic", "id": "claude-haiku-4-5", "credential": {"env": "KEY"}},
+        "prompt": "x",
+    }
+    result = CliRunner().invoke(
+        app, ["eval", "run", str(eval_file(tmp_path, commission=commission))]
+    )
+    assert result.exit_code == 1
+    assert "KEY" in str(result.exception)
+    assert not (tmp_path / "home" / "evals").exists()
+
+
+def test_show_and_list(tmp_path: Path) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)))
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    code, shown = avp("eval", "show")
+    assert code == 0, shown
+    assert eval_directory.name in shown
+    assert "expected 'Tokyo', got 'Kyoto'" in shown
+    assert json.loads(avp("eval", "show", eval_directory.name, "--json")[1])["id"] == (
+        eval_directory.name
+    )
+    assert json.loads(avp("eval", "show", "--agent", "other", "--json")[1])["runs"] == []
+    code, listed = avp("eval", "list")
+    assert code == 0
+    assert eval_directory.name in listed
+
+
+def test_show_without_evals() -> None:
+    result = CliRunner().invoke(app, ["eval", "show"])
+    assert result.exit_code == 1
+    assert "no evals have run yet" in str(result.exception)
+
+
+@pytest.mark.parametrize("flag", [["--model", "openai/gpt-5-mini"], ["--resume", "x"]])
+def test_unbuilt_options_say_so(tmp_path: Path, flag: list[str]) -> None:
+    result = CliRunner().invoke(app, ["eval", "run", str(eval_file(tmp_path)), *flag])
+    assert "isn't built yet" in str(result.exception)
+
+
+def test_ctrl_c_keeps_the_runs_that_finished(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = live.run_eval
+
+    async def interrupted(*args: Any) -> list[Result]:
+        """Every run finishes, then Ctrl-C."""
+        await real(*args)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(live, "run_eval", interrupted)
+    result = CliRunner().invoke(app, ["eval", "run", str(eval_file(tmp_path))])
+    assert result.exit_code == 130
+    assert "Stopped after 2 of 2 runs" in result.output
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    saved = json.loads((eval_directory / "results.json").read_text())
+    assert (len(saved["runs"]), saved["finished"]) == (2, None)
+
+
+def test_the_scoreboard_shows_cost_turns_time_and_agents(tmp_path: Path) -> None:
+    code, output = avp("eval", "run", str(eval_file(tmp_path)))
+    assert code == 0, output
+    for column in ["Model", "$/run", "Turns/run", "Time/run"]:
+        assert column in output
+    assert "anthropic/claude-haiku-4-5" in output
+    assert "pd: sh-agent 1.0.0, image sha256:avp/pd" in output
+    assert "2 runs, $0.0000 in all" in output
+    assert "pass inline-1 / pd / paris  100%" in output
+    assert "fail inline-1 / pd / tokyo  0%" in output
+
+
+def test_delete_asks_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    asked: list[str] = []
+
+    class Answer:
+        def __init__(self, question: str, default: bool) -> None:
+            asked.append(question)
+
+        def ask(self) -> bool:
+            return answer
+
+    monkeypatch.setattr(prompts, "interactive", lambda: True)
+    monkeypatch.setattr(prompts.questionary, "confirm", Answer)
+    answer = False
+    code, output = avp("eval", "delete", eval_directory.name)
+    assert (code, output) == (1, "Nothing deleted\n")
+    assert eval_directory.is_dir()
+    answer = True
+    code, output = avp("eval", "delete", eval_directory.name)
+    assert code == 0, output
+    assert not eval_directory.exists()
+    assert asked == [f"Delete {eval_directory.name}, with their runs' directories?"] * 2
+
+
+def test_delete_needs_yes_without_a_terminal(tmp_path: Path) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    [eval_directory] = (tmp_path / "home" / "evals").iterdir()
+    result = CliRunner().invoke(app, ["eval", "delete", eval_directory.name])
+    assert result.exit_code == 1
+    assert "give --yes" in str(result.exception)
+    assert eval_directory.is_dir()
+
+
+@pytest.mark.parametrize("flag", ["--yes", "-y", "--force", "-f"])
+def test_delete_all_with_yes(tmp_path: Path, flag: str) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    code, output = avp("eval", "delete", "--all", flag)
+    assert code == 0, output
+    assert "Deleted all 1 eval runs" in output
+    assert list((tmp_path / "home" / "evals").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["../home"], "no eval '../home'"),
+        ([], "give the eval runs to delete, or --all"),
+        (["x", "--all"], "give the eval runs to delete, or --all"),
+    ],
+)
+def test_delete_refuses(tmp_path: Path, args: list[str], message: str) -> None:
+    avp("eval", "run", str(eval_file(tmp_path)), "--json")
+    result = CliRunner().invoke(app, ["eval", "delete", *args, "--yes"])
+    assert result.exit_code == 1
+    assert message in str(result.exception)
+    assert len(list((tmp_path / "home" / "evals").iterdir())) == 1

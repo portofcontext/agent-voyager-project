@@ -8,6 +8,7 @@ model response, and each tool return or retry prompt in the following
 
 import asyncio
 import time
+import traceback
 from contextlib import AsyncExitStack
 
 import pydantic_ai
@@ -157,5 +158,7 @@ async def run(received: JsonValue, sink: EventSink) -> None:
             code = translate.error_code(exc)
             await rec.error(code, str(exc) or type(exc).__name__)
             await rec.stop("error")
+            # The Trajectory reports the error, so the run ends normally. The
+            # traceback goes to stderr, for whoever debugs the crash.
             if code == "agent_crash":
-                raise
+                traceback.print_exc()

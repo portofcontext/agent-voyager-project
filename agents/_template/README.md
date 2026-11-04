@@ -105,7 +105,7 @@ eval's agent for a one-off run).
 
 **In tree** (published from this repo): an agent is added when
 `avp agent install --all` installs it, not when conformance passes.
-`avp-cli/tests/test_agent_sources.py` fails until every adapter under `agents/`
+`avp-cli-legacy/tests/test_agent_sources.py` fails until every adapter under `agents/`
 is registered and has a release. Do all of this in the PR that adds the agent:
 
 1. Declare how it installs and runs in a sandbox, in its own package file:
@@ -114,7 +114,7 @@ is registered and has a release. Do all of this in the PR that adds the agent:
    `entry`, optional `setup`; the minimum Node is `engines.node`). A `{platform}`
    asset ships one archive per platform. Pin anything the
    runtime needs (a CLI it drives, say) there, not in the CLI.
-2. Register it in `avp-cli/src/avp_cli/agents.json` (`version`, `descriptor`,
+2. Register it in `avp-cli-legacy/src/avp_cli/agents.json` (`version`, `descriptor`,
    `path`); `make pins` keeps the version equal to the package's.
 3. Add a release workflow: copy `.github/workflows/release-claude-code.yml`
    (Python) or `release-pi.yml` (Node) and

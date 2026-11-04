@@ -44,7 +44,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           uv run --no-sync python avp/scripts/agent-pins.py --check
-          version=$(uv run --no-sync python -c "import json, os; print(json.load(open('avp-cli/src/avp_cli/agents.json'))[os.environ['AGENT']]['version'])")
+          version=$(uv run --no-sync python -c "import json, os; print(json.load(open('avp-cli-legacy/src/avp_cli/agents.json'))[os.environ['AGENT']]['version'])")
           test "agent-$AGENT-v$version" = "$TAG" \
             || { echo "$TAG is not the version avp-cli pins for $AGENT ($version)"; exit 1; }
 

@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT / "bindings" / "python" / "src"))
 sys.path.insert(0, str(ROOT / "core" / "conformance" / "src"))
-sys.path.insert(0, str(REPO / "avp-cli" / "src"))
+sys.path.insert(0, str(REPO / "avp-cli-legacy" / "src"))
 
 from avp_conformance.case import AgentBuiltins  # noqa: E402
 from pydantic import TypeAdapter  # noqa: E402
@@ -130,7 +130,7 @@ def main() -> int:
             "implementation must reproduce are in avp-cli/EVAL-FORMAT.md."
         ),
     )
-    write_json(REPO / "avp-cli" / "eval.schema.json", eval_schema)
+    write_json(REPO / "avp-cli-legacy" / "eval.schema.json", eval_schema)
 
     # Clean up files we no longer produce.
     for old in ("event.schema.json", "supervisor-message.schema.json"):

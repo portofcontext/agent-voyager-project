@@ -4,6 +4,10 @@
 
 ### Added
 
+- A standalone CLI on the rebuilt v0.1 SDK, with sandboxed runs, evaluations,
+  conformance commands, image installation, and vault credentials. The previous
+  CLI is retained separately until the legacy cleanup.
+
 - TypeScript endpoint helpers match Python's provider URL and API-key
   authentication lookup, with offline snapshots and optional cache refreshes.
 - A TypeScript SDK in `avp-sdk/typescript`, following the Python reference for
