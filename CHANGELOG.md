@@ -16,6 +16,10 @@
 
 ### Changed
 
+- Gemini CLI uses the rebuilt TypeScript SDK in a standalone locked project
+  and sandbox image, with native sessions, tools, skills, and subagent usage.
+  Legacy installer and release files are removed.
+
 - Pi uses the rebuilt TypeScript SDK, its own locked project, and a Node 24
   sandbox image. Native responses and tools use the Recorder; inline skills
   use Pi's native loader. Legacy installer and release files are removed.

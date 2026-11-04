@@ -1,97 +1,89 @@
-/**
- * Gemini CLI values -> AVP wire values.
- *
- * Gemini's `promptTokenCount` already includes `cachedContentTokenCount`, as
- * AVP's `input_tokens` includes cache reads; tool-use prompt tokens are input
- * too. `candidatesTokenCount` excludes `thoughtsTokenCount`, while AVP's
- * `output_tokens` includes reasoning, so thoughts are added to output and
- * reported as `reasoning_output_tokens` as well. The Gemini API has no
- * cache-write charge.
- */
-import type { ContentBlock } from "@avp/types";
-import type { ErrorCode, Usage } from "@avp/types/trajectory";
+/** Translate per-response native values; cache is input and reasoning is output. */
 import type { Part } from "@google/gemini-cli-core";
-
-/** The `usageMetadata` fields Gemini returns on a response. */
+import type {
+  ContentBlock,
+  ErrorCode,
+  TextBlock,
+  ImageBlock,
+} from "@agent-voyager-project/sdk/trajectory";
+import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
 export interface GeminiUsage {
   promptTokenCount?: number;
-  cachedContentTokenCount?: number;
   candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
   thoughtsTokenCount?: number;
   toolUsePromptTokenCount?: number;
 }
-
-export function usage(u: GeminiUsage | undefined): Usage {
-  const thoughts = u?.thoughtsTokenCount ?? 0;
+export function usage(value?: GeminiUsage): UsageReport {
+  if (!value || value.promptTokenCount === undefined)
+    throw new Error("Gemini response has no input usage metadata");
   return {
-    input_tokens: (u?.promptTokenCount ?? 0) + (u?.toolUsePromptTokenCount ?? 0),
-    output_tokens: (u?.candidatesTokenCount ?? 0) + thoughts,
-    cache_read_input_tokens: u?.cachedContentTokenCount ?? 0,
-    ...(thoughts ? { reasoning_output_tokens: thoughts } : {}),
+    input_tokens: value.promptTokenCount + (value.toolUsePromptTokenCount ?? 0),
+    output_tokens:
+      (value.candidatesTokenCount ?? 0) + (value.thoughtsTokenCount ?? 0),
+    cache_read_input_tokens: value.cachedContentTokenCount ?? 0,
+    ...(value.thoughtsTokenCount == null
+      ? {}
+      : { reasoning_output_tokens: value.thoughtsTokenCount }),
   };
 }
-
-/**
- * A thought summary as Gemini CLI parses it (`**subject** description`) back
- * into one thinking text.
- */
-export function thoughtText(subject: string, description: string): string {
-  return subject ? `**${subject}**${description ? `\n${description}` : ""}` : description;
-}
-
-/**
- * The model-facing parts of a tool response as AVP blocks: a function
- * response's `output` (or `error`) text, otherwise its JSON; inline images
- * as image blocks.
- */
-export function toolResultContent(parts: readonly Part[]): ContentBlock[] {
-  const out: ContentBlock[] = [];
-  for (const part of parts) {
-    if (part.functionResponse) {
-      const response = part.functionResponse.response ?? {};
-      const text = typeof response["output"] === "string"
-        ? response["output"]
-        : typeof response["error"] === "string"
-          ? response["error"]
-          : JSON.stringify(response);
-      out.push({ type: "text", text });
-      for (const inner of part.functionResponse.parts ?? []) {
-        const data = inner.inlineData;
-        if (data?.data && data.mimeType?.startsWith("image/")) {
-          out.push({ type: "image", source: { type: "base64", media_type: data.mimeType, data: data.data } });
-        }
+export function toolContent(
+  parts: readonly Part[],
+): (TextBlock | ImageBlock)[] {
+  const out: (TextBlock | ImageBlock)[] = [];
+  for (const p of parts) {
+    if (p.functionResponse) {
+      const response = p.functionResponse.response ?? {};
+      out.push({
+        type: "text",
+        text:
+          typeof response.output === "string"
+            ? response.output
+            : typeof response.error === "string"
+              ? response.error
+              : JSON.stringify(response),
+      });
+      for (const inner of p.functionResponse.parts ?? []) {
+        const d = inner.inlineData;
+        if (d?.data && d.mimeType?.startsWith("image/"))
+          out.push({
+            type: "image",
+            source: { type: "base64", media_type: d.mimeType, data: d.data },
+          });
+        else throw new Error("unsupported Gemini function response content");
       }
-    } else if (part.text !== undefined) {
-      out.push({ type: "text", text: part.text });
-    } else if (part.inlineData?.data && part.inlineData.mimeType?.startsWith("image/")) {
+    } else if (p.text !== undefined) out.push({ type: "text", text: p.text });
+    else if (p.inlineData?.data && p.inlineData.mimeType?.startsWith("image/"))
       out.push({
         type: "image",
-        source: { type: "base64", media_type: part.inlineData.mimeType, data: part.inlineData.data },
+        source: {
+          type: "base64",
+          media_type: p.inlineData.mimeType,
+          data: p.inlineData.data,
+        },
       });
-    }
+    else throw new Error("unsupported Gemini tool content");
   }
   return out;
 }
-
-/** Classify a provider failure from its message and HTTP status. */
-export function errorCode(message: string, status?: number): ErrorCode {
+export function append(content: ContentBlock[], block: ContentBlock): void {
+  const last = content.at(-1);
+  if (last?.type === "text" && block.type === "text") last.text += block.text;
+  else if (last?.type === "thinking" && block.type === "thinking")
+    last.thinking += `\n${block.thinking}`;
+  else content.push(block);
+}
+export function errorCode(error: unknown): ErrorCode {
+  const text = error instanceof Error ? error.message : String(error);
   if (
-    status === 401 ||
-    status === 403 ||
-    /api[ _-]?key not valid|invalid[ _-]?api[ _-]?key|api_key_invalid|unauthenticated|unauthori[sz]ed|permission denied|no api key|api key (is )?(missing|must be set)/i.test(
-      message,
+    /\b401\b|\b403\b|api.?key.*(invalid|not valid|missing|must)|unauth|permission denied|no api key/i.test(
+      text,
     )
-  ) {
+  )
     return "auth_error";
-  }
-  if (status === 429 || /\b429\b|rate[ _-]?limit|resource[ _-]?exhausted|quota|too many requests/i.test(message)) {
+  if (/\b429\b|quota|resource.exhausted|rate.limit/i.test(text))
     return "rate_limit";
-  }
-  if (/context window|exceeds the maximum number of tokens|input token count|too long|token limit/i.test(message)) {
+  if (/context window|token limit|too long|input token count/i.test(text))
     return "context_limit";
-  }
-  if (status === 404 || /\bmodels\/\S+ is not found|model .*not found|not supported for generatecontent/i.test(message)) {
-    return "unsupported_model";
-  }
   return "unknown";
 }

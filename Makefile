@@ -45,6 +45,7 @@ help:
 	@echo ""
 	@echo "  Free targets (no API calls):"
 	@echo "    make pi-check           check the Pi adapter (free; Node >= 22.19)"
+	@echo "    make gemini-cli-check   check the Gemini CLI adapter (free; Node >= 22.19)"
 	@echo "    make test            pytest across every package, docker integration tests excluded"
 	@echo "    make test-docker     real-sandbox integration tests (free; needs a Docker daemon)"
 	@echo "    make conformance     avp-conformance validate + ping (free; no model)"
@@ -58,7 +59,7 @@ help:
 	@echo "    make bindings        regenerate language bindings from Pydantic schemas"
 	@echo "    make bindings-check  drift detector (regen + git-diff against tracked)"
 	@echo "    make bindings-test   cargo test (avp/bindings/rust) + npm test (avp/bindings/typescript)"
-	@echo "    make check           format-check + lint + test + pi-check + test-gemini-cli + test-opencode + conformance + bindings-check"
+	@echo "    make check           format-check + lint + test + pi-check + gemini-cli-check + test-opencode + conformance + bindings-check"
 	@echo "    make check-agent NAME=avp-<sdk>  one Python agent: format, lint, its tests + avp-cli's, ping, describe"
 	@echo "    make test-fresh      Python agents' tests on unlocked, newest deps (AGENTS=<names>)"
 	@echo "    make new-agent NAME=avp-<sdk>       scaffold a Python agent from agents/_template"
@@ -66,7 +67,6 @@ help:
 	@echo ""
 	@echo "  Paid targets (cost real money; require ANTHROPIC_API_KEY):"
 	@echo "    make conformance-check  run the legacy v0.1 suite against Goose on a real model"
-	@echo "    make gemini-cli-check   run the v0.1 suite against avp-gemini-cli on Gemini (GEMINI_API_KEY)"
 	@echo "    make opencode-check     run the v0.1 suite against avp-opencode (OPENAI_API_KEY)"
 	@echo "    make test-live          gated avp-goose live tests (live_mcp /"
 	@echo "                            live_skills; spawn the Python fixture + call a real model)."
@@ -114,9 +114,6 @@ TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
 GEMINI_CLI_DIR := agents/avp-gemini-cli/typescript
-GEMINI_CLI_MANIFEST := $(GEMINI_CLI_DIR)/avp-conformance.json
-# The cases pin a Claude model; Gemini CLI runs them on a Gemini one.
-GEMINI_CLI_MODEL ?= google/gemini-3.1-flash-lite
 OPENCODE_DIR := agents/avp-opencode/typescript
 OPENCODE_MANIFEST := $(OPENCODE_DIR)/avp-conformance.json
 
@@ -155,10 +152,6 @@ conformance:
 	@printf "\n\033[1;36m── agent template (python) ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(TEMPLATE_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(TEMPLATE_MANIFEST)
-	@printf "\n\033[1;36m── avp-gemini-cli ──\033[0m\n"
-	@$(MAKE) --no-print-directory gemini-cli-build
-	@$(UV) run avp-conformance ping --agent $(GEMINI_CLI_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(GEMINI_CLI_MANIFEST)
 	@printf "\n\033[1;36m── avp-opencode ──\033[0m\n"
 	@$(MAKE) --no-print-directory opencode-build
 	@$(UV) run avp-conformance ping --agent $(OPENCODE_MANIFEST)
@@ -175,17 +168,16 @@ pi-check: pi-build
 	@npm --prefix $(PI_DIR) run typecheck
 	@npm --prefix $(PI_DIR) test
 
-.PHONY: gemini-cli-build test-gemini-cli
-# Without optional dependencies (native PTY and keychain modules), as the
-# release archive ships: the shell tool runs on child processes.
-gemini-cli-build:
-	@cd $(GEMINI_CLI_DIR) && npm ci --silent --omit=optional --no-audit --no-fund && npm run --silent build
+.PHONY: gemini-cli-build gemini-cli-check
+gemini-cli-build: sdk-typescript-install
+	@npm --prefix avp-sdk/typescript run build
+	@npm --prefix $(GEMINI_CLI_DIR) ci --no-audit --no-fund
+	@npm --prefix $(GEMINI_CLI_DIR) run build
 
-# Gemini CLI's integration tests: its headless session, tools, subagents, and MCP
-# client on its scripted content generator. Free; needs Node >= 22.19 and
-# python3 (the MCP fixture).
-test-gemini-cli: gemini-cli-build
-	@cd $(GEMINI_CLI_DIR) && node --test 'dist/tests/*.test.js'
+gemini-cli-check: gemini-cli-build
+	@npm --prefix $(GEMINI_CLI_DIR) run format:check
+	@npm --prefix $(GEMINI_CLI_DIR) run typecheck
+	@npm --prefix $(GEMINI_CLI_DIR) test
 
 .PHONY: opencode-build test-opencode
 opencode-build:
@@ -204,13 +196,6 @@ claude-check:
 
 goose-check:
 	@$(UV) run avp-conformance check --agent $(GOOSE_MANIFEST) --suite v0.1 $(SANDBOX)
-
-.PHONY: gemini-cli-check
-gemini-cli-check: gemini-cli-build
-	@if [ -z "$$GEMINI_API_KEY" ]; then \
-		echo "error: GEMINI_API_KEY is not set; gemini-cli-check runs cases on a real model"; exit 2; \
-	fi
-	@$(UV) run avp-conformance check --agent $(GEMINI_CLI_MANIFEST) --suite v0.1 --model $(GEMINI_CLI_MODEL) $(SANDBOX)
 
 # OpenCode on an OpenAI model (OPENAI_API_KEY); override with OPENCODE_MODEL.
 OPENCODE_MODEL ?= openai/gpt-5-mini
@@ -378,7 +363,7 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
 .PHONY: check
-check: format-check lint sdk-data-check test pi-check test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
+check: format-check lint sdk-data-check test pi-check gemini-cli-check test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the
