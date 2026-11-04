@@ -30,10 +30,3 @@ python-version = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-# How this agent installs and runs in a sandbox: release-manifest.py writes it
-# into the release's avp-release.json, with the lock as requirements.txt.
-[tool.avp.release]
-agent = "pydantic-ai"
-module = "avp_pydantic_ai.cli"
-wheels = ["agent-voyager-project", "avp-pydantic-ai"]

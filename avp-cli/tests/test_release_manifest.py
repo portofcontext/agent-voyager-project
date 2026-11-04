@@ -73,13 +73,6 @@ def test_claude_code_pins_its_cli_and_runs_as_a_sandbox(tmp_path) -> None:
     assert "avp_conformance-0.0.0-py3-none-any.whl" in m.python.wheels
 
 
-def test_pydantic_ai_locks_anthropic_below_2(tmp_path) -> None:
-    _generated("pydantic-ai", tmp_path)
-    lock = (tmp_path / "requirements.txt").read_text()
-    (line,) = [x for x in lock.splitlines() if x.startswith("anthropic==")]
-    assert int(line.split("==")[1].split(".")[0]) < 2
-
-
 def test_opencode_installs_ripgrep_and_its_arch_archive(tmp_path) -> None:
     m = _generated("opencode", tmp_path)
     recipe = release_manifest.container_recipe(m, url=URL)
