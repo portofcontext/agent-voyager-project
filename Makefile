@@ -23,6 +23,7 @@ help:
 	@echo "make sdk-data-check verify data links and SDK archives"
 	@echo "make build-skill    package the skill and offline specs"
 	@echo "make sync           install each Python project's locked dependencies"
+	@echo "make release-sdk-python | release-sdk-typescript | release-cli  publish a GitHub beta"
 
 .PHONY: sync test format format-check lint schemas sdk-data sdk-data-check build-skill
 sync:
@@ -169,6 +170,19 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
 
+.PHONY: release-check release-sdk-python release-sdk-typescript release-cli
+release-check:
+	@$(UV) run --project avp-sdk/python python scripts/test-releases.py
+
+release-sdk-python:
+	@$(UV) run --project avp-sdk/python python scripts/release.py tag sdk-python
+
+release-sdk-typescript:
+	@$(UV) run --project avp-sdk/python python scripts/release.py tag sdk-typescript
+
+release-cli:
+	@$(UV) run --project avp-sdk/python python scripts/release.py tag cli
+
 .PHONY: check
-check: format-check lint sdk-data-check sdk-python-check sdk-typescript-check cli-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check pi-check gemini-cli-check opencode-check build-skill
+check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check pi-check gemini-cli-check opencode-check build-skill
 	@echo "All free checks passed."

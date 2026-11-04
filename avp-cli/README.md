@@ -3,6 +3,12 @@
 The `avp` command line: run, evaluate, and check AVP agents in sandboxes. The
 design is in [COMMANDS.md](COMMANDS.md).
 
+## Install
+
+```sh
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b1/avp_cli-0.6.0b1-py3-none-any.whl
+```
+
 ## Commissions
 
 ```sh

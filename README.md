@@ -19,25 +19,21 @@ MCP, Agent Skills, CloudEvents, and OpenTelemetry.
 
 ## Try the current CLI
 
-The rebuilt CLI currently runs from a checkout. Requires [uv](https://docs.astral.sh/uv/)
-and a running container engine with a Docker API, such as Docker or podman.
-Beta release packaging is tracked in [#116](https://github.com/portofcontext/agent-voyager-project/issues/116).
-
-From the repository root:
+Install the [GitHub beta](docs/releases/README.md). Requires
+[uv](https://docs.astral.sh/uv/) and a running container engine with a Docker API,
+such as Docker or podman. Run the agent install command from this checkout:
 
 ```sh
-uv sync --locked --project avp-cli
-uv run --project avp-cli avp agent install pd agents/avp-pydantic-ai/python/Dockerfile --context .
-uv run --project avp-cli avp vault set anthropic
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b1/avp_cli-0.6.0b1-py3-none-any.whl
+avp agent install pd agents/avp-pydantic-ai/python/Dockerfile --context .
+avp vault set anthropic
 ```
 
-The vault command prompts for your key. Save this as `task.json`, using a fresh
-`run_id` for each run:
+The vault command prompts for your key. Save this as `task.json`:
 
 ```json
 {
   "avp_version": "0.1",
-  "run_id": "hello-1",
   "model": {
     "provider": "anthropic",
     "id": "claude-haiku-4-5",
@@ -48,7 +44,7 @@ The vault command prompts for your key. Save this as `task.json`, using a fresh
 ```
 
 ```sh
-uv run --project avp-cli avp run --agent pd --commission task.json
+avp run --agent pd --commission task.json
 ```
 
 This makes a paid model call in an OpenSandbox sandbox. The CLI prints the

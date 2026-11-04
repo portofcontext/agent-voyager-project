@@ -90,7 +90,10 @@ Keep change notes in `CHANGELOG.md`. Keep the README concise and link to the
 existing guides. Do not duplicate normative specs or put test counts in docs.
 Avoid em dashes in prose.
 
-Beta SDK and CLI publication is being rebuilt in #116. Agents currently consume
-the SDK by local path; #114 moves them to beta artifacts and #117 adds built-in
-installation by name. Do not revive the retired publication targets. Refresh
-shared provider snapshots with `make sdk-data` before publishing SDK packages.
+SDKs and the CLI publish as GitHub prereleases. Follow
+[the release guide](docs/releases/README.md): update the package version and
+lockfile, run `make check`, and push the clean branch before `make release-sdk-python`,
+`make release-sdk-typescript`, or `make release-cli`. Tags trigger artifact builds
+and clean-install tests before publication. Publish the SDK before packages that
+depend on it. Refresh shared provider snapshots with `make sdk-data` before an
+SDK release. Never overwrite a published version.

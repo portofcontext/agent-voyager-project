@@ -11,6 +11,12 @@ event types when reading a Trajectory.
 The agent CLI passes its run callback an `AbortSignal` for SIGINT and SIGTERM.
 The callback ends its Trajectory and rethrows the abort; the CLI exits with 130.
 
+## Install
+
+```sh
+npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.1/agent-voyager-project-sdk-0.1.0-beta.1.tgz
+```
+
 ## Development
 
 From the repository root:

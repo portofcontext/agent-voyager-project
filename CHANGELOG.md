@@ -4,6 +4,9 @@
 
 ### Added
 
+- GitHub beta releases for the Python SDK, TypeScript SDK, and CLI, with
+  artifact checksums and clean-install verification before publication.
+
 - Commission creation, validation with all errors and warnings, and a named
   library shared by `avp run` and evaluations. Runs and evals validate tasks
   before launch and check agent settings against a fresh Descriptor.

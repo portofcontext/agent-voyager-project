@@ -1,12 +1,12 @@
 [project]
 name = "avp-cli"
-version = "0.1.0"
+version = "0.6.0b1"
 description = "The avp command line: run, evaluate, and check AVP agents in sandboxes."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-    "agent-voyager-project",
+    "agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b1/agent_voyager_project-0.1.0b1-py3-none-any.whl",
     "httpx>=0.28",
     "keyring>=25",
     "mcp>=2.3",
