@@ -4,7 +4,7 @@ Descriptor says it lacks what the rule needs."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from pydantic import ValidationError
 
@@ -20,12 +20,33 @@ class Skip(Exception):
     """The case doesn't apply to the agent. The message says why."""
 
 
+class ToolCall(TypedDict):
+    name: str
+    arguments: str
+    """The tool's arguments, as JSON text."""
+
+
+class TextResponse(TypedDict):
+    content: str
+
+
+class ToolCallResponse(TypedDict):
+    toolCalls: list[ToolCall]
+
+
+Response = TextResponse | ToolCallResponse
+"""One model response: the part of aimock's fixture `response` format the cases
+use, which aimock answers with in the format of each provider's API. Add a field
+when a case needs it. aimock's `FixtureFileResponse` type lists the rest."""
+
+
 @dataclass(frozen=True)
 class Context:
     """What a case writes its Commission from."""
 
     descriptor: AgentDescriptor
     model: Model
+    prompt: str = "Say hello."
 
 
 @dataclass(frozen=True)
@@ -38,6 +59,16 @@ class Case:
     check: Callable[[Run], list[str]]
     """The problems with the run, besides an invalid Trajectory or a failed
     exit, which every case fails on; none means it passed."""
+    responses: tuple[Response, ...] = ()
+    """The model's responses, in order. A case with responses runs against the
+    mock model."""
+
+    @property
+    def prompt(self) -> str:
+        """The prompt of a case with responses, which is how the mock model
+        tells its requests apart. aimock matches part of the message, so the
+        brackets stop one case's name matching inside another's."""
+        return f"[avp-conformance {self.name}]"
 
 
 RUN_ID = "set-by-the-engine"
@@ -77,7 +108,7 @@ OTHER_SKILL_NAME = "avp-conformance-other-skill"
 
 def _commission(context: Context, **fields: Any) -> Commission:
     return Commission(
-        avp_version="0.1", run_id=RUN_ID, model=context.model, prompt="Say hello.", **fields
+        avp_version="0.1", run_id=RUN_ID, model=context.model, prompt=context.prompt, **fields
     )
 
 
@@ -189,7 +220,36 @@ def _connect_failure(name: str, about: str, commission: Callable[[Context], Comm
     )
 
 
+def _events_in_order(run: Run) -> list[str]:
+    """A run that started: `run_requested`, `agent_described`, `agent_started`,
+    the run's other events with at least one `assistant_message`, and
+    `agent_stopped` last and only once."""
+    types = [e.type for e in run.trajectory]
+    start = ["run_requested", "agent_described", "agent_started"]
+    problems = []
+    if types[:3] != start:
+        problems.append(
+            f"the events start {', '.join(types[:3]) or 'with none'}; expected {', '.join(start)}"
+        )
+    if not types or types[-1] != "agent_stopped" or types.count("agent_stopped") != 1:
+        problems.append(
+            f"agent_stopped isn't last and only once in {', '.join(types) or 'no events'}"
+        )
+    if "assistant_message" not in types:
+        problems.append(f"no assistant_message in {', '.join(types) or 'no events'}")
+    return problems
+
+
 CASES: list[Case] = [
+    Case(
+        name="events-in-order",
+        rule="trajectory.4.1",
+        level="MUST",
+        about="A run with one model response sends its events in the fixed order",
+        commission=_commission,
+        check=_events_in_order,
+        responses=({"content": "A scripted reply."},),
+    ),
     _refusal("agents-without-entry", "`agents` has no entry for the agent", _agents_without_entry),
     _refusal("version-differs", "the agent's entry has another `version`", _version_differs),
     _unknown_item("unknown-enabled-tool", "a tool", "enabled_tools"),

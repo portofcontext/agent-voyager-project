@@ -10,6 +10,7 @@ from rich.table import Table
 from avp_cli import console
 from avp_cli._cli_common import AgentOption, JsonOption, VerboseOption
 from avp_cli.conformance import check as checking
+from avp_cli.conformance import mock
 from avp_cli.conformance.cases import CASES, Case
 from avp_cli.conformance.rules import RULES
 from avp_cli.console import Failed, out
@@ -45,6 +46,9 @@ def check(
     model: Annotated[
         str, typer.Option(help="The model each Commission names, as provider/model.")
     ] = DEFAULT_MODEL,
+    mock_image: Annotated[
+        str, typer.Option(help="The aimock image for the mock model, instead of the pinned one.")
+    ] = mock.IMAGE,
     json: JsonOption = False,
     verbose: VerboseOption = False,
 ) -> None:
@@ -59,6 +63,7 @@ def check(
         concurrency,
         volumes.parse(volume or []),
         _command_line(entrypoint),
+        mock_image,
     )
     if json:
         out.print_json(

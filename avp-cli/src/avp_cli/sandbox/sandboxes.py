@@ -74,18 +74,20 @@ def sandbox(
     allowed_hosts: list[str] | None = None,
     volumes: list[Volume] | None = None,
     vault: Vault | None = None,
+    lifetime: timedelta = LIFETIME,
 ) -> Generator[SandboxSync]:
-    """A sandbox from the image, deleted on exit. It can reach only
-    `allowed_hosts`: domains, `*.` wildcards, IP addresses, or CIDR ranges. A
-    run directory is mounted at `IO`, and each of `volumes` where it says. With
-    `vault`, its Credential Vault is filled before anything runs in it."""
+    """A sandbox from the image, deleted on exit or after `lifetime`. It can
+    reach only `allowed_hosts`: domains, `*.` wildcards, IP addresses, or CIDR
+    ranges. A run directory is mounted at `IO`, and each of `volumes` where it
+    says. With `vault`, its Credential Vault is filled before anything runs in
+    it."""
     if run_directory:
         io = Volume(name="io", host=Host(path=str(run_directory)), mount_path=IO)
         volumes = [io, *(volumes or [])]
     try:
         box = SandboxSync.create(
             image,
-            timeout=LIFETIME,
+            timeout=lifetime,
             network_policy=NetworkPolicy(
                 default_action="deny",
                 egress=[NetworkRule(action="allow", target=h) for h in allowed_hosts or []],

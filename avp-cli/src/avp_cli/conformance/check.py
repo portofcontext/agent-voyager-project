@@ -2,6 +2,8 @@
 is an item whose Commission was written from the agent's Descriptor, and a
 scorer checks its run. Runs are kept in `~/.avp/conformance/<time>-<agent>/`."""
 
+import re
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,8 +12,10 @@ from typing import Literal
 from opensandbox.models.sandboxes import Volume
 
 from avp.commission import Commission, EnvSecret, Model
+from avp.descriptor import AgentDescriptor
 from avp_cli import paths
 from avp_cli.agents import command, store
+from avp_cli.conformance import mock
 from avp_cli.conformance.cases import Case, Context, Level, Skip
 from avp_cli.console import Failed, err, line
 from avp_cli.engine import images
@@ -28,8 +32,8 @@ STAND_IN = "avp-conformance-stand-in"
 """The model's credential in every case: a stand-in in the agent's environment,
 for runtimes that won't start without a key. No case reaches a real model."""
 BASE_URL = "http://conformance.invalid"
-"""The model's URL in every case, a name that never resolves, so the sandbox
-allows no real provider. The mock model's URL replaces it."""
+"""The model's URL in a case with no responses, a name that never resolves, so
+the sandbox allows no real provider. A case with responses has the mock model's."""
 NAME = "conformance"
 
 Status = Literal["pass", "fail", "skip"]
@@ -60,9 +64,11 @@ def check(
     concurrency: int = 1,
     volumes: list[Volume] | None = None,
     entrypoint: list[str] | None = None,
+    mock_image: str = mock.IMAGE,
 ) -> list[Outcome]:
     """Every case's outcome, in the cases' order. `volumes` are mounted, and
-    `entrypoint` replaces the image's, in every sandbox the check starts."""
+    `entrypoint` replaces the image's, in every sandbox the agent runs in. The
+    mock model starts from `mock_image` only when a case has responses."""
     directory = paths.conformance() / paths.stamped(agent, datetime.now(UTC))
     directory.mkdir(parents=True)
     installed = store.load(agent)
@@ -70,29 +76,57 @@ def check(
     mounts = volumes or []
     with err.status(line("Getting the agent's Descriptor")):
         descriptor = command.describe_in_sandbox(installed, command_line, mounts)
-    context = Context(descriptor=descriptor, model=model)
+    _check_supported(agent, descriptor, model)
+    mocked = [case for case in cases if case.responses]
+    provider_path = mock.path(model.provider) if mocked else ""
     written: dict[str, Commission] = {}
     outcomes: dict[str, Outcome] = {}
-    for case in cases:
-        try:
-            written[case.name] = case.commission(context)
-        except Skip as skip:
-            outcomes[case.name] = _outcome(case, "skip", [str(skip)], None)
-    if written:
-        by_name = {case.name: case for case in cases}
-        config = EvalConfig(
-            name=NAME,
-            agents=[agent],
-            commissions={NAME: {"$item": "commission"}},
-            dataset=[_item(by_name[name], c) for name, c in written.items()],
-            scorer=_scorer(by_name),
-        )
-        options = Options(env={KEY: STAND_IN}, volumes=mounts, entrypoint=entrypoint)
-        kept = directory / paths.EVAL_RUNS
-        for result in run_live(config, directory, options, concurrency, kept):
-            case = by_name[result.run.item.id]
-            outcomes[case.name] = _from_result(case, result, directory)
+    with mock.serving(mocked, mock_image) if mocked else nullcontext("") as mock_url:
+        for case in cases:
+            context = Context(descriptor=descriptor, model=model)
+            if case.responses:
+                url = model.model_copy(update={"base_url": f"{mock_url}{provider_path}"})
+                context = Context(descriptor=descriptor, model=url, prompt=case.prompt)
+            try:
+                written[case.name] = case.commission(context)
+            except Skip as skip:
+                outcomes[case.name] = _outcome(case, "skip", [str(skip)], None)
+        if written:
+            by_name = {case.name: case for case in cases}
+            config = EvalConfig(
+                name=NAME,
+                agents=[agent],
+                commissions={NAME: {"$item": "commission"}},
+                dataset=[_item(by_name[name], c) for name, c in written.items()],
+                scorer=_scorer(by_name),
+            )
+            options = Options(env={KEY: STAND_IN}, volumes=mounts, entrypoint=entrypoint)
+            kept = directory / paths.EVAL_RUNS
+            for result in run_live(config, directory, options, concurrency, kept):
+                case = by_name[result.run.item.id]
+                outcomes[case.name] = _from_result(case, result, directory)
     return [outcomes[case.name] for case in cases]
+
+
+def _check_supported(agent: str, descriptor: AgentDescriptor, model: Model) -> None:
+    """Stops a check the agent can't run: it would refuse every Commission for
+    its model, so refusal cases would pass for the wrong reason. A Descriptor
+    with no `supported_models` doesn't say, so the check runs."""
+    patterns = descriptor.supported_models
+    if patterns is None or any(
+        _matches(p.provider, model.provider) and _matches(p.id, model.id) for p in patterns
+    ):
+        return
+    listed = ", ".join(f"{p.provider}/{p.id}" for p in patterns) or "none"
+    raise Failed(
+        f"{agent} doesn't support {model.provider}/{model.id}; its Descriptor lists {listed}. "
+        "--model names another"
+    )
+
+
+def _matches(pattern: str, value: str) -> bool:
+    """A Model pattern's field: `*` matches any characters."""
+    return re.fullmatch(".*".join(re.escape(p) for p in pattern.split("*")), value) is not None
 
 
 def _item(case: Case, commission: Commission) -> Item:
