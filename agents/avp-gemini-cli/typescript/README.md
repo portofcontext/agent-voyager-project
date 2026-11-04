@@ -1,105 +1,83 @@
 # avp-gemini-cli
 
-AVP adapter for [Gemini CLI](https://github.com/google-gemini/gemini-cli),
-driven in-process through its published core package
-(`@google/gemini-cli-core`) and built on the TypeScript binding's `Recorder`.
-Gemini CLI owns the loop, tools, subagents, skills, and MCP connections; the
-adapter maps the Commission into a Gemini CLI configuration and reports its
-native events.
+An AVP agent built on pinned Gemini CLI 0.63.0 and the
+[TypeScript SDK](../../../avp-sdk/README.md). Gemini owns its headless session,
+model calls, tool scheduler, MCP clients, skills, and subagents. The adapter
+configures that runtime from a Commission and records its native events.
 
-Requires Node 22.19 or newer. Install the released agent with
-`avp agent install gemini-cli`; sandboxed runs install Node and the same
-archive from the agent's container recipe. Runs need `GEMINI_API_KEY` (the
-Gemini API; Vertex AI and Google sign-in are not used).
+The standalone npm project links the SDK by path. Node 22.19 or newer is
+required; the sandbox image uses Node 24 and includes the pinned `gemini` CLI,
+git, and ripgrep. From the repository root:
 
 ```bash
-make gemini-cli-build              # npm ci + build (binding and adapter)
-make test-gemini-cli               # integration tests on Gemini CLI's scripted content generator
-node dist/src/main.js describe     # Gemini CLI's default tools, subagents, and skills
-node dist/src/main.js run --commission commission.json --out trajectory.ndjson
-make gemini-cli-check              # v0.1 conformance on google/gemini-3.1-flash-lite (paid)
-scripts/package.sh                 # the release archive, dist/release/avp-gemini-cli.tar.gz
+make gemini-cli-build
+make gemini-cli-check
 ```
 
-Releases: bump `version` in `package.json`, run `make pins`, then
-`make release-gemini-cli` from a clean `main`. How the agent runs in the sandbox
-(the Node version, any extra packages) is the `"avp"` block of `package.json`.
+With the new CLI from #86:
 
-## Why in-process
+```bash
+avp agent install gemini-cli agents/avp-gemini-cli/typescript/Dockerfile --context .
+avp agent ping gemini-cli
+avp agent describe gemini-cli
+avp run --agent gemini-cli --commission commission.json
+```
 
-Gemini CLI's headless mode (`gemini -p`) runs `LegacyAgentSession` from its
-core package, and the adapter runs that same session. Its
-`--output-format stream-json` output was the alternative, but it streams text
-deltas and reports usage only as run totals in a final `result` event, so it
-cannot give per-response usage. In-process, the Gemini client's stream ends
-every model response with one `Finished` event carrying that response's
-`usageMetadata`, tool calls carry the call ids the scheduler's results use,
-and the content generator sees subagent model calls under the `invoke_agent`
-call that made them.
+## Native configuration
 
-## Mapping
+The Descriptor reads Gemini's default headless tool, skill, and subagent
+registries. Each subagent explicitly declares its own native tools, including
+its completion tool. The SDK run plan applies built-in allowlists through
+Gemini's native configuration. MCP servers connect once; a connection failure
+stops the run before a model call. Actual native tool names and schemas, with
+MCP ownership, appear in `agent_started`.
 
-| Commission | Gemini CLI |
-|---|---|
-| `model` `google/<id>` | the Gemini model `<id>`, served as named; another origin is `unsupported_model` |
-| `provider.base_url` | the Gemini API endpoint; a `provider.id` other than `google` is `unsupported_provider` |
-| `system_prompt` | the user-level `GEMINI.md` in the run's private Gemini CLI home, which Gemini CLI appends to its system prompt |
-| `prompt` | the session's single message, sent literally (no `@file` expansion) |
-| `skills` | written to the private home's user skills directory; the model loads them with `activate_skill` |
-| `mcp_servers` | Gemini CLI's MCP client (stdio, and streamable HTTP with headers); tools are `mcp_<server>_<tool>` |
-| `enabled_builtin_tools["avp-gemini-cli"]` | Gemini CLI's headless tools; the rest are excluded |
-| `enabled_builtin_subagents["avp-gemini-cli"]` | `codebase_investigator`, `cli_help`, `generalist`; the rest are disabled |
-| `enabled_builtin_skills["avp-gemini-cli"]` | `skill-creator`, `antigravity-support`; the rest are disabled |
-| `enabled_builtin_mcp_servers` | must be empty: Gemini CLI ships no MCP servers |
-| `output_schema` | ignored; Gemini CLI has no structured final output |
+Models use provider `google`. Proxy stand-ins and environment credentials go to
+Gemini's API-key client; `model.base_url` overrides its endpoint. HTTP MCP proxy
+headers are omitted for the sandbox proxy to supply; environment references are
+resolved before connecting. Node honors the launcher's sandbox CA.
 
-## Runtime
+Each run has a private Gemini home. Project agent and skill discovery paths
+point into that private directory, while native tools use the launcher's working
+directory. Stored OAuth state and user settings are not read. Extensions, hooks,
+telemetry, model routing, automatic memory extraction, and helper model calls
+are disabled. Startup needs no additional network hosts.
 
-- Each model response is one turn: thought summaries as `thinking` blocks,
-  text, and `tool_use` blocks keyed by Gemini CLI's call ids. Usage converts
-  to AVP's convention: `input_tokens` is `promptTokenCount` (which already
-  includes `cachedContentTokenCount`) plus tool-use prompt tokens;
-  `output_tokens` is `candidatesTokenCount` plus `thoughtsTokenCount`, which
-  is also `reasoning_output_tokens`. Cost comes from the AVP price table for
-  the served model (`modelVersion`).
-- Tool results are the response parts the model sees next, taken from the
-  scheduler's completed calls.
-- `invoke_agent` calls open a subagent frame that closes before the call's
-  tool result. The subagent's own model calls are not turns of this
-  trajectory; their usage and cost roll up onto `subagent_returned`.
-- Provider failures end with `error_occurred` (`auth_error`, `rate_limit`
-  including exhausted quota, `context_limit`, `unsupported_model`, or
-  `unknown`) and `agent_stopped(error)`, without a turn for the failed
-  response. An abort (SIGINT/SIGTERM) stops as `interrupted`.
-- Each run gets a private Gemini CLI home (`GEMINI_CLI_HOME`), so no user
-  settings, extensions, policies, skills, subagents, OAuth state, or stored
-  keys are read. The workspace is trusted, as the sandbox is the boundary: its
-  `GEMINI.md` context, `.gemini/skills`, and `.gemini/agents` load as they do
-  in Gemini CLI. Approval mode is YOLO, telemetry and usage statistics are off,
-  hooks are off, and `ask_user` is left out as in Gemini CLI's headless mode.
-- Gemini CLI promotes some Flash and Flash Lite ids to its newest release; the
-  adapter turns that off so the Commission's model is the one served.
-- MCP servers connect while Gemini CLI initializes, before `agent_started`; a
-  server that fails is reported as `mcp_connect_failed` and left out.
-- The release archive leaves out Gemini CLI's optional native modules (a PTY
-  and the system keychain, with prebuilds for only some platforms). Its one
-  required native module, `tree-sitter-bash`, ships a prebuild per platform,
-  so one archive serves macOS and Linux on both architectures. The shell tool
-  then runs commands as child processes. Without a
-  `rg` binary on `PATH`, `grep_search` uses Gemini CLI's JavaScript grep.
+An explicit `system_prompt` uses Gemini's native system-file override.
+Commissioned files go through its native skill loader and `activate_skill`
+tool, with support files available to native filesystem tools. Skill bodies are
+not embedded in the initial system prompt.
 
-## Gaps
+Each main model response produces one `assistant_message`, preserving native
+tool-call IDs and per-response usage. Input includes cached and tool-use prompt
+tokens; output includes reasoning. Shared SDK prices supply costs. The native
+scheduler supplies tool results, and all Recorder writes are awaited in order.
 
-- `output_schema` is ignored.
-- Gemini CLI's utility model calls (chat compression, the loop-detection
-  check) are not reported as turns, and their spend is not counted.
-- Subagent model calls are rolled up, not reported turn by turn.
-- Thought text is Gemini CLI's parsed summary (`**subject**` and
-  description); thought signatures are not carried.
-- Gemini CLI writes its own error reports (`gemini-client-error-*.json`) to
-  the system temporary directory when a request fails.
-- Gemini CLI parses an MCP tool's text result as JSON and stores it as
-  `structuredContent` when the server sends none. A result whose text is bare
-  JSON that isn't an object (`42`, `"ok"`) then fails MCP validation, and the
-  call ends as an error the model sees. The adapter records it faithfully as
-  `is_error: true`; the behavior is Gemini CLI's (`McpComplianceTransport`).
+## Known gaps
+
+- The adapter exposes Gemini API-key authentication. Google subscription OAuth
+  and Vertex authentication are outside its declared capabilities. Live sandbox
+  validation covers Google API-key proxy authentication.
+- Gemini CLI promotes some older Flash model IDs to newer models. The adapter
+  refuses a changed main model before a provider request. Use a native model ID
+  that Gemini serves unchanged; the live run used `gemini-3.5-flash-lite`.
+- Gemini has no native final structured-output interface exposed here, so
+  `output_schema` is refused before a model call.
+- Subagents report rolled-up usage on their invocation. Their individual
+  responses, expanded system instructions, and internal tool events are not exposed
+  through the observed parent session. They are not also emitted as main
+  responses. Native subagent model choices remain Gemini's.
+- Gemini derives string-referenced subagent tools from the active parent
+  registry. Parent tool allowlists therefore also constrain those child tools;
+  each started subagent declaration records the resulting catalog.
+- The parent stream exposes text, thought summaries, and tool calls. Provider
+  thought signatures, citations, and other response content are not exposed
+  by these hooks.
+- MCP results retain the native model-facing content and error status. Gemini
+  does not expose the original MCP structured-content field here.
+- Context compaction and utility model calls cannot be represented by these
+  hooks. Unexpected compaction or helper calls stop the run visibly. Missing
+  response usage also fails visibly. Non-image binary tool content is unsupported.
+- Native process-wide configuration makes direct library runs sequential per
+  process. Use separate processes for concurrent runs. The launcher owns OS
+  confinement, credentials, and workspace provisioning.
