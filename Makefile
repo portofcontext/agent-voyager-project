@@ -28,7 +28,6 @@ TEST_PKGS := \
 	agents/_template/python \
 	agents/avp-pydantic-ai/python \
 	agents/avp-deep-agents/python \
-	agents/avp-codex/python \
 	agents/avp-openai-agents/python \
 	avp-cli
 
@@ -119,7 +118,6 @@ GOOSE_MANIFEST  := agents/avp-goose/rust/avp-conformance.json
 TEMPLATE_MANIFEST := agents/_template/python/avp-conformance.json
 AVP_PYDANTIC_AI_MANIFEST := agents/avp-pydantic-ai/python/avp-conformance.json
 AVP_DEEP_AGENTS_MANIFEST := agents/avp-deep-agents/python/avp-conformance.json
-AVP_CODEX_MANIFEST := agents/avp-codex/python/avp-conformance.json
 OPENAI_MANIFEST := agents/avp-openai-agents/python/avp-conformance.json
 # TypeScript adapters run from their build output; `pi-build` installs and builds.
 PI_DIR := agents/avp-pi/typescript
@@ -175,9 +173,6 @@ conformance:
 	@printf "\n\033[1;36m── avp-deep-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(AVP_DEEP_AGENTS_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(AVP_DEEP_AGENTS_MANIFEST)
-	@printf "\n\033[1;36m── avp-codex ──\033[0m\n"
-	@$(UV) run avp-conformance ping --agent $(AVP_CODEX_MANIFEST)
-	@$(UV) run avp-conformance describe --agent $(AVP_CODEX_MANIFEST)
 	@printf "\n\033[1;36m── avp-openai-agents ──\033[0m\n"
 	@$(UV) run avp-conformance ping --agent $(OPENAI_MANIFEST)
 	@$(UV) run avp-conformance describe --agent $(OPENAI_MANIFEST)
@@ -378,8 +373,15 @@ sdk-typescript-check: sdk-typescript-install
 	@npm --prefix avp-sdk/typescript test
 
 
+.PHONY: codex-check
+codex-check:
+	@cd agents/avp-codex/python && $(UV) run ruff format --check .
+	@cd agents/avp-codex/python && $(UV) run ruff check .
+	@cd agents/avp-codex/python && $(UV) run ty check
+	@cd agents/avp-codex/python && $(UV) run pytest -q
+
 .PHONY: check
-check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check
+check: format-check lint sdk-data-check test test-pi test-gemini-cli test-opencode conformance bindings-check sdk-python-check sdk-rust-check sdk-typescript-check codex-check
 	@echo ""; echo "✓ All free checks passed."
 
 # One Python agent's share of `make check`: format and lint, its tests, the

@@ -1,63 +1,87 @@
-"""CLI to Recorder boundary, with official SDK notifications scripted."""
-
-from __future__ import annotations
+"""The installed SDK notifications cross the adapter and Recorder into wire events."""
 
 import asyncio
 import json
-from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, ClassVar
 
 import pytest
-from openai_codex.generated.notification_registry import NOTIFICATION_MODELS
+from openai_codex.client import CodexClient
 from openai_codex.generated.v2_all import AskForApproval, TurnStartResponse
-from openai_codex.models import Notification, UnknownNotification
+from pydantic import TypeAdapter
 
 from avp.agent_cli import main
-from avp.trajectory import parse_event
-from avp_codex import agent
-from avp_codex import commission as cm
-from avp_codex.commission import CODEX_VERSION
+from avp.trajectory import Event
+from avp_codex import agent, descriptor
 
-
-def notification(method, **params):
-    return {"method": method, "params": {"threadId": "thread", "turnId": "turn", **params}}
+MODEL = {"provider": "openai", "id": "gpt-5-mini"}
 
 
 def raw(item):
-    return notification("rawResponseItem/completed", item=item)
+    return {"method": "rawResponseItem/completed", "item": item}
 
 
-def completed(tokens=10):
-    return notification(
-        "rawResponse/completed",
-        usage={
+def text(value="DONE"):
+    return raw(
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": value}],
+        }
+    )
+
+
+def boundary(tokens=10):
+    return {
+        "method": "rawResponse/completed",
+        "usage": {
             "inputTokens": tokens,
             "outputTokens": 2,
             "cachedInputTokens": 3,
             "reasoningOutputTokens": 1,
         },
-    )
-
-
-def text_item(text="DONE"):
-    return {
-        "type": "message",
-        "role": "assistant",
-        "content": [{"type": "output_text", "text": text}],
     }
 
 
-def stopped(status="completed"):
-    return notification(
-        "turn/completed", turn={"id": "turn", "items": [], "itemsView": "full", "status": status}
-    )
+def completed(status="completed"):
+    return {
+        "method": "turn/completed",
+        "turn": {"id": "turn", "items": [], "itemsView": "full", "status": status},
+    }
+
+
+def run_cli(tmp_path, *, raises=False, **fields):
+    received = {
+        "avp_version": "0.1",
+        "run_id": "test",
+        "model": MODEL,
+        "prompt": "Say DONE",
+        **fields,
+    }
+    path = tmp_path / "trajectory.ndjson"
+    argv = ["run", "--commission", json.dumps(received), "--out", str(path)]
+    if raises:
+        with pytest.raises((ValueError, RuntimeError)):
+            main(run=agent.run, describe=descriptor.describe, argv=argv)
+        code = 1
+    else:
+        code = main(run=agent.run, describe=descriptor.describe, argv=argv)
+    events = [json.loads(line) for line in path.read_text().splitlines()]
+    parser = TypeAdapter(Event)
+    for event in events:
+        parser.validate_python(event)
+    return code, events
 
 
 @pytest.fixture
 def script(monkeypatch):
     class Server:
+        config: ClassVar[Any] = None
         events = []
         calls = []
+
+        def __init__(self, config):
+            Server.config = config
 
         async def __aenter__(self):
             return self
@@ -65,32 +89,12 @@ def script(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-        def __init__(self, config):
-            self.config = config
-            Server.config = config
-
         async def initialize(self):
             pass
 
-        def unregister_turn_notifications(self, turn_id):
-            assert turn_id == "turn"
-
-        async def thread_start(self, params):
-            self.calls.append(("thread/start", params))
-            return SimpleNamespace(
-                thread=SimpleNamespace(id="thread", cli_version=CODEX_VERSION),
-                approval_policy=AskForApproval.model_validate("never"),
-            )
-
-        async def turn_start(self, thread, input_items, *, params):
-            self.calls.append(("turn/start", params))
-            return TurnStartResponse.model_validate(
-                {"turn": {"id": "turn", "items": [], "itemsView": "full", "status": "inProgress"}}
-            )
-
         async def request(self, method, params, *, response_model):
             self.calls.append((method, params))
-            data = {
+            values = {
                 "skills/list": {
                     "data": [
                         {
@@ -116,69 +120,62 @@ def script(monkeypatch):
                             "authStatus": "unsupported",
                             "resources": [],
                             "resourceTemplates": [],
-                            "tools": {
-                                "Echo": {"name": "Echo", "inputSchema": {"type": "object"}},
-                            },
+                            "tools": {"Echo": {"name": "Echo", "inputSchema": {"type": "object"}}},
                         }
                     ]
                 },
-            }[method]
-            return response_model.model_validate(data)
+            }
+            return response_model.model_validate(values[method])
 
-        async def next_turn_notification(self, turn_id):
+        async def thread_start(self, params):
+            self.calls.append(("thread/start", params))
+            return SimpleNamespace(
+                thread=SimpleNamespace(id="thread", cli_version=agent.CODEX_VERSION),
+                approval_policy=AskForApproval.model_validate("never"),
+            )
+
+        async def turn_start(self, thread, input_items, *, params):
+            self.calls.append(("turn/start", params))
+            return TurnStartResponse.model_validate(
+                {"turn": {"id": "turn", "items": [], "itemsView": "full", "status": "inProgress"}}
+            )
+
+        async def next_turn_notification(self, turn):
             if not self.events:
                 raise RuntimeError("unexpected EOF")
             event = self.events.pop(0)
-            while isinstance(event, float):  # a pause, in seconds, before the next event
-                await asyncio.sleep(event)
-                event = self.events.pop(0)
-            method, params = event["method"], event["params"]
-            model = NOTIFICATION_MODELS.get(method)
-            payload = model.model_validate(params) if model else UnknownNotification(params)
-            return Notification(method, payload)
+            if isinstance(event, asyncio.CancelledError):
+                raise event
+            event = dict(event)
+            method = event.pop("method")
+            return CodexClient()._coerce_notification(
+                method, {"threadId": "thread", "turnId": turn, **event}
+            )
 
+        def unregister_turn_notifications(self, turn):
+            assert turn == "turn"
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(agent, "AsyncCodexClient", Server)
     return Server
 
 
-def run_cli(tmp_path: Path, *, raises=False, **fields):
-    commission = {
-        "schema_version": "0.1",
-        "run_id": "codex-test",
-        "model": "openai/gpt-5-mini",
-        "prompt": "Say DONE",
-    }
-    commission.update(fields)
-    out = tmp_path / "trajectory.jsonl"
-    argv = ["run", "--commission", json.dumps(commission), "--out", str(out)]
-    if raises:
-        with pytest.raises((ValueError, RuntimeError)):
-            main(run=agent.run, describe=agent.describe, argv=argv)
-        code = 1
-    else:
-        code = main(run=agent.run, describe=agent.describe, argv=argv)
-    events = [json.loads(line) for line in out.read_text().splitlines()]
-    for event in events:
-        parse_event(event)
-    return code, events
-
-
-def test_roundtrip_usage_and_failure_status(script, tmp_path):
-    call = {
-        "type": "function_call",
-        "namespace": "mcp__echo",
-        "name": "Echo",
-        "call_id": "call",
-        "arguments": '{"text":"hello"}',
-    }
+def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_path):
     script.events = [
-        raw({"type": "message", "role": "user", "content": []}),
-        raw(call),
-        completed(),
-        notification(
-            "item/completed",
-            completedAtMs=1,
-            item={
+        raw(
+            {
+                "type": "function_call",
+                "namespace": "mcp__echo",
+                "name": "Echo",
+                "call_id": "call",
+                "arguments": '{"text":"hello"}',
+            }
+        ),
+        boundary(10),
+        {
+            "method": "item/completed",
+            "completedAtMs": 1,
+            "item": {
                 "type": "mcpToolCall",
                 "id": "call",
                 "status": "failed",
@@ -186,146 +183,126 @@ def test_roundtrip_usage_and_failure_status(script, tmp_path):
                 "tool": "Echo",
                 "arguments": {"text": "hello"},
             },
-        ),
-        raw(
-            {
-                "type": "function_call_output",
-                "call_id": "call",
-                "output": [{"type": "input_text", "text": "failed"}],
-            }
-        ),
-        notification(
-            "thread/tokenUsage/updated",
-            tokenUsage={
+        },
+        raw({"type": "function_call_output", "call_id": "call", "output": "failed"}),
+        {
+            "method": "thread/tokenUsage/updated",
+            "tokenUsage": {
                 key: {
-                    "inputTokens": tokens,
+                    "inputTokens": value,
                     "outputTokens": 2,
-                    "totalTokens": tokens + 2,
                     "cachedInputTokens": 3,
                     "reasoningOutputTokens": 1,
+                    "totalTokens": value + 2,
                 }
-                for key, tokens in [("last", 10), ("total", 999)]
+                for key, value in [("last", 10), ("total", 999)]
             },
-        ),
-        raw(text_item()),
-        completed(20),
-        stopped(),
+        },
+        text(),
+        boundary(20),
+        completed(),
     ]
     code, events = run_cli(
         tmp_path, mcp_servers=[{"id": "echo", "type": "stdio", "command": ["echo"]}]
     )
     assert code == 0
-    assert [e["type"] for e in events] == [
-        "avp." + t
-        for t in [
-            "run_requested",
-            "agent_described",
-            "agent_started",
-            "assistant_message",
-            "tool_invoked",
-            "tool_returned",
-            "assistant_message",
-            "agent_stopped",
-        ]
+    assert [event["type"] for event in events] == [
+        "run_requested",
+        "agent_described",
+        "agent_started",
+        "assistant_message",
+        "tool_invoked",
+        "tool_returned",
+        "assistant_message",
+        "agent_stopped",
     ]
-    assert [
-        e["data"]["avp.usage"]["input_tokens"]
-        for e in events
-        if e["type"] == "avp.assistant_message"
-    ] == [10, 20]
-    assert events[4]["data"]["avp.tool.dispatch_target"] == "mcp_server"
-    assert events[5]["data"]["avp.tool_result"]["is_error"] is True
-    assert events[-1]["data"]["avp.output"] == "DONE"
-    thread_params = dict(script.calls)["thread/start"]
-    assert thread_params["config"]["skills.config"] == [
+    responses = [event["data"] for event in events if event["type"] == "assistant_message"]
+    assert [item["usage"]["input_tokens"] for item in responses] == [10, 20]
+    assert responses[0]["usage"]["cache_read_input_tokens"] == 3
+    assert events[4]["data"]["mcp_server_id"] == "echo"
+    assert events[5]["data"]["tool_result"]["is_error"] is True
+    assert events[-1]["data"] == {"reason": "converged", "output": "DONE"}
+    assert dict(script.calls)["thread/start"]["config"]["skills.config"] == [
         {"path": "/host/secret/SKILL.md", "enabled": False}
     ]
 
 
 @pytest.mark.parametrize(
-    "events",
+    "fields,message",
     [
-        [raw(text_item()), stopped()],
-        [stopped("failed")],
-        [raw({"type": "future_output"}), stopped()],
-        [raw({"type": "function_call_output", "call_id": "missing", "output": "bad"}), stopped()],
-        [
-            raw({"type": "function_call", "name": "bad", "call_id": "c", "arguments": "[]"}),
-            completed(),
-            stopped(),
-        ],
+        ({"agents": {"other": {}}}, "no entry"),
+        ({"agents": {"avp-codex": {"enabled_tools": ["unknown"]}}}, "doesn't have"),
+        ({"model": {"provider": "anthropic", "id": "test"}}, "Responses"),
+        ({"agents": {"avp-codex": {"enabled_tools": ["exec_command"]}}}, "together"),
     ],
 )
-def test_incomplete_or_untranslatable_stream_never_converges(script, tmp_path, events):
-    script.events = events
-    _, trajectory = run_cli(
-        tmp_path, raises=events[0].get("params", {}).get("turn", {}).get("status") != "failed"
-    )
-    assert trajectory[-1]["data"]["avp.reason"] == "error"
-    assert any(e["type"] == "avp.error_occurred" for e in trajectory)
+def test_refusal_uses_sdk_prelude_before_starting_codex(script, tmp_path, fields, message):
+    _, events = run_cli(tmp_path, **fields)
+    assert [event["type"] for event in events] == [
+        "run_requested",
+        "agent_described",
+        "error_occurred",
+    ]
+    assert events[-1]["data"]["error_code"] == "invalid_commission"
+    assert message in events[-1]["data"]["error_message"]
+    assert not script.calls
 
 
 @pytest.mark.parametrize(
-    "fields, expected",
+    "payload,raises",
     [
-        ({"enabled_builtin_tools": {"avp-codex": ["exec_command"]}}, "commission_collision"),
-        ({"enabled_builtin_tools": {"other": []}}, "commission_collision"),
-        ({"model": "anthropic/claude-haiku-4-5"}, "unsupported_model"),
-        ({"provider": {"id": "anthropic"}}, "unsupported_provider"),
+        ([text(), completed()], True),
+        ([raw({"type": "unknown"}), completed()], True),
+        ([completed("failed")], False),
     ],
 )
-def test_unsupported_commissions_fail_before_native_start(script, tmp_path, fields, expected):
-    _, events = run_cli(tmp_path, **fields)
-    assert script.calls == []
-    assert events[-2]["data"]["avp.error.code"] == expected
-    assert events[-1]["data"]["avp.reason"] == "error"
+def test_incomplete_streams_do_not_converge(script, tmp_path, payload, raises):
+    script.events = payload
+    _, events = run_cli(tmp_path, raises=raises)
+    assert events[-1]["data"]["reason"] == "error"
 
 
-def test_instructions_schema_and_interruption(script, tmp_path):
-    script.events = [stopped("interrupted")]
+def test_credentials_skills_prompt_schema_and_output_validation(script, tmp_path):
+    script.events = [text('{"answer":42}'), boundary(), completed()]
     _, events = run_cli(
         tmp_path,
+        model={**MODEL, "credential": {"proxy": "openai"}},
         system_prompt="Be brief",
         skills=[
             {
-                "id": "greet",
-                "files": {"SKILL.md": "Say hi", "extra.txt": "support"},
+                "name": "greet",
+                "files": {
+                    "SKILL.md": "---\nname: greet\ndescription: Say hi\n---\nSay hi",
+                    "extra.txt": "support",
+                },
             }
         ],
-        output_schema={"type": "object"},
+        output_schema={
+            "type": "object",
+            "required": ["answer"],
+            "properties": {"answer": {"type": "integer"}},
+        },
     )
-    calls = dict(script.calls)
-    assert calls["thread/start"]["baseInstructions"] == "Be brief"
-    assert "support" in calls["thread/start"]["developerInstructions"]
-    assert calls["turn/start"]["outputSchema"] == {"type": "object"}
-    assert events[-1]["data"]["avp.reason"] == "interrupted"
+    assert events[-1]["data"]["output"] == {"answer": 42}
+    assert script.config.env == {"AVP_CODEX_API_KEY": "avp-proxy-stand-in"}
+    params = dict(script.calls)["thread/start"]
+    assert params["baseInstructions"] == "Be brief"
+    assert "support" in params["developerInstructions"]
+    script.events = [text("invalid JSON"), boundary(), completed()]
+    _, events = run_cli(tmp_path, output_schema={"type": "object"})
+    assert events[-2]["data"]["error_code"] == "output_invalid"
+    assert events[-1]["data"]["reason"] == "error"
 
 
-@pytest.mark.parametrize(
-    "info, expected",
-    [
-        ("unauthorized", "auth_error"),
-        ("usageLimitExceeded", "rate_limit"),
-        ("contextWindowExceeded", "context_limit"),
-        ({"responseStreamConnectionFailed": {"httpStatusCode": 401}}, "auth_error"),
-    ],
-)
-def test_provider_failure_is_an_error_not_an_assistant_turn(script, tmp_path, info, expected):
+def test_missing_env_secret_fails_without_starting_codex(script, tmp_path):
+    _, events = run_cli(tmp_path, model={**MODEL, "credential": {"env": "MISSING_AVP_TEST_KEY"}})
+    assert events[-1]["type"] == "error_occurred"
+    assert events[-1]["data"]["error_code"] == "auth_error"
+    assert not script.calls
+
+
+def test_disabled_tool_call_is_reported_as_failure(script, tmp_path):
     script.events = [
-        notification(
-            "error", error={"message": "provider failed", "codexErrorInfo": info}, willRetry=False
-        ),
-        stopped("failed"),
-    ]
-    _, events = run_cli(tmp_path)
-    assert not any(e["type"] == "avp.assistant_message" for e in events)
-    assert events[-2]["data"]["avp.error.code"] == expected
-    assert events[-1]["data"]["avp.reason"] == "error"
-
-
-def test_retry_reroute_and_early_result(script, tmp_path):
-    script.events = [
-        notification("error", error={"message": "retry"}, willRetry=True),
         raw(
             {
                 "type": "function_call",
@@ -334,218 +311,81 @@ def test_retry_reroute_and_early_result(script, tmp_path):
                 "arguments": '{"cmd":"pwd"}',
             }
         ),
-        raw({"type": "function_call_output", "call_id": "call", "output": "workspace"}),
+        boundary(),
         completed(),
-        notification(
-            "model/rerouted",
-            fromModel="gpt-5-mini",
-            toModel="gpt-5",
-            reason="highRiskCyberActivity",
-        ),
-        raw(text_item()),
-        completed(),
-        stopped(),
     ]
-    _, events = run_cli(tmp_path)
-    assert events[-1]["data"]["avp.reason"] == "converged"
-    assert events[-2]["data"]["avp.response.model"] == "openai/gpt-5"
-    assert events[-2]["data"]["avp.request.model"] == "openai/gpt-5-mini"
-    assert not any(e["type"] == "avp.error_occurred" for e in events)
+    _, events = run_cli(tmp_path, raises=True, agents={"avp-codex": {"enabled_tools": []}})
+    assert events[-1]["data"]["reason"] == "error"
+    assert "disabled tool" in events[-2]["data"]["error_message"]
 
 
-def test_shutdown_failure_cannot_follow_converged(script, tmp_path):
-    async def fail_exit(self, *args):
-        raise RuntimeError("native shutdown failed")
-
-    script.__aexit__ = fail_exit
-    script.events = [raw(text_item()), completed(), stopped()]
-    _, events = run_cli(tmp_path, raises=True)
-    assert events[-1]["data"]["avp.reason"] == "error"
-    assert events[-2]["data"]["avp.error.message"] == "native shutdown failed"
-    assert sum(e["type"] == "avp.agent_stopped" for e in events) == 1
-
-
-@pytest.mark.parametrize(
-    "method",
-    [
-        "item/completed",
-        "turn/completed",
-        "error",
-        "model/rerouted",
-        "thread/tokenUsage/updated",
-    ],
-)
-def test_sdk_validation_fallback_is_not_silently_accepted(method):
-    from openai_codex.client import CodexClient
-
-    from avp_codex.translate import notification_params
-
-    # This exercises the SDK's actual fallback on malformed known payloads.
-    event = CodexClient()._coerce_notification(method, {"threadId": "thread"})
-    assert isinstance(event.payload, UnknownNotification)
-    with pytest.raises(ValueError, match="could not validate"):
-        notification_params(event)
-
-
-@pytest.mark.parametrize(
-    "events",
-    [
-        [
-            raw(text_item("partial")),
-            notification("error", error={"message": "retry"}, willRetry=True),
-        ],
-        [
-            notification(
-                "item/completed",
-                completedAtMs=1,
-                item={"id": "compact", "type": "contextCompaction"},
-            )
-        ],
-        [notification("thread/compacted")],
-    ],
-)
-def test_unaccountable_retry_and_compaction_fail_visibly(script, tmp_path, events):
-    script.events = [*events, raw(text_item()), completed(), stopped()]
-    _, trajectory = run_cli(tmp_path, raises=True)
-    assert trajectory[-1]["data"]["avp.reason"] == "error"
-    assert not any(e["type"] == "avp.assistant_message" for e in trajectory)
-
-
-@pytest.mark.parametrize(
-    "allowed",
-    [
-        [],
-        ["request_user_input"],
-        ["apply_patch", "view_image"],
-        ["apply_patch", "exec_command", "write_stdin"],
-    ],
-)
-def test_selected_tools_reach_sdk_and_trajectory(script, tmp_path, allowed):
-    script.events = [raw(text_item()), completed(), stopped()]
-    _, events = run_cli(tmp_path, enabled_builtin_tools={"avp-codex": allowed})
-    started = next(e["data"] for e in events if e["type"] == "avp.agent_started")
-    assert {t["name"] for t in started["avp.tools"]} == set(allowed)
-    assert events[-1]["data"]["avp.reason"] == "converged"
-    params = dict(script.calls)["thread/start"]
-    assert (params.get("environments") == []) is (
-        not set(allowed) & {"apply_patch", "view_image", "exec_command"}
-    )
-
-
-@pytest.mark.parametrize(
-    "allowed, mcp, model, message",
-    [
-        (["write_stdin", "apply_patch"], [], "openai/gpt-5-mini", "together"),
-        (["exec_command", "write_stdin"], [], "openai/gpt-5.5", "apply_patch"),
-        (
-            [],
-            [{"id": "echo", "type": "stdio", "command": ["echo"]}],
-            "openai/gpt-5-mini",
-            "MCP servers",
-        ),
-    ],
-)
-def test_unrepresentable_tool_selection_fails_before_sdk(
-    script, tmp_path, allowed, mcp, model, message
-):
-    _, events = run_cli(
-        tmp_path, model=model, enabled_builtin_tools={"avp-codex": allowed}, mcp_servers=mcp
-    )
-    assert script.calls == []
-    assert events[-2]["data"]["avp.error.code"] == "commission_collision"
-    assert message in events[-2]["data"]["avp.error.message"]
-
-
-@pytest.mark.parametrize(
-    "model, mcp, message",
-    [
-        ("openai/gpt-6.1-sol", [], "model catalogs"),
-        ("openai/gpt-5.5", [{"id": "echo", "type": "stdio", "command": ["echo"]}], "tool search"),
-    ],
-)
-def test_model_added_tools_cannot_bypass_allowlist(script, tmp_path, model, mcp, message):
-    _, events = run_cli(
-        tmp_path, model=model, mcp_servers=mcp, enabled_builtin_tools={"avp-codex": []}
-    )
-    assert script.calls == []
-    assert message in events[-2]["data"]["avp.error.message"]
-
-
-def test_inherits_caller_context_without_deleting_it(script, tmp_path, monkeypatch):
+def test_ping_and_describe_are_lazy_and_match_the_pinned_catalog(tmp_path):
     import os
+    import subprocess
+    import sys
 
-    home = tmp_path / "codex-home"
-    home.mkdir()
-    marker = home / "caller-state"
-    marker.write_text("keep")
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    monkeypatch.setenv("CODEX_HOME", str(home))
-    monkeypatch.setenv("AVP_WORKSPACE", str(workspace))
-    script.events = [raw(text_item()), completed(), stopped()]
-    run_cli(tmp_path)
-    assert Path(script.config.cwd) == workspace
-    assert not script.config.env, "the adapter must inherit native env"
-    assert dict(script.calls)["thread/start"]["cwd"] == str(workspace)
-    assert os.environ["CODEX_HOME"] == str(home)
-    assert marker.read_text() == "keep"
-
-
-def test_descriptor_carries_what_codex_sends_the_model():
-    """Decl fidelity (spec SHOULD): each built-in carries the description and
-    input schema the pinned CLI sends; freeform apply_patch has no schema."""
-    tools = {t.name: t for t in agent.describe().tools}
-    assert set(tools) == set(cm.BUILTIN_TOOLS)
-    assert all(t.description for t in tools.values())
-    assert tools["exec_command"].inputSchema["type"] == "object"
-    assert tools["apply_patch"].inputSchema is None
+    for verb in ("ping", "describe"):
+        result = subprocess.run(
+            [sys.executable, "-m", "avp_codex.cli", verb],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={name: value for name, value in os.environ.items() if name != "OPENAI_API_KEY"},
+        )
+        value = json.loads(result.stdout)
+        if verb == "ping":
+            assert value == {"type": "pong"}
+        else:
+            assert value["agent_name"] == "avp-codex"
+            assert {tool["name"] for tool in value["tools"]} == set(descriptor.BUILTIN_TOOLS)
+            assert all(tool["inputSchema"]["type"] == "object" for tool in value["tools"])
+    assert descriptor.catalog()["codex"] == agent.CODEX_VERSION
 
 
-def test_started_tools_follow_the_commissioned_model(script, tmp_path):
-    """A run declares the definitions its model gets: view_image takes a
-    `detail` argument on gpt-5.5 and not on gpt-5-mini."""
-    script.events = [raw(text_item()), completed(), stopped()]
-    _, events = run_cli(tmp_path)
-    started = next(e["data"] for e in events if e["type"] == "avp.agent_started")
-    view = next(t for t in started["avp.tools"] if t["name"] == "view_image")
-    assert view["description"]
-    assert set(view["inputSchema"]["properties"]) == {"path"}
-
-
-def test_each_response_is_timed_from_its_request(script, tmp_path):
-    """Codex reports a response only when it completes; the adapter times it
-    from the turn start, then from the tool results the next request carries."""
-    call = {
-        "type": "function_call",
-        "name": "exec_command",
-        "call_id": "call",
-        "arguments": '{"cmd":"echo hi"}',
-    }
+def test_final_output_keeps_all_text_parts(script, tmp_path):
     script.events = [
-        0.15,
-        raw(call),
+        raw(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {"type": "output_text", "text": "first "},
+                    {"type": "output_text", "text": "second"},
+                ],
+            }
+        ),
+        boundary(),
         completed(),
-        0.3,  # the tool runs
-        raw({"type": "function_call_output", "call_id": "call", "output": "hi"}),
-        0.05,
-        raw(text_item()),
-        completed(),
-        stopped(),
     ]
+    _, events = run_cli(tmp_path)
+    assert events[-1]["data"]["output"] == "first second"
+
+
+@pytest.mark.parametrize(
+    "info,code",
+    [
+        ("unauthorized", "auth_error"),
+        ("usageLimitExceeded", "rate_limit"),
+        ("contextWindowExceeded", "context_limit"),
+    ],
+)
+def test_provider_errors_keep_their_classification(script, tmp_path, info, code):
+    script.events = [
+        {
+            "method": "error",
+            "error": {"message": "provider failed", "codexErrorInfo": info},
+            "willRetry": False,
+        },
+        completed("failed"),
+    ]
+    _, events = run_cli(tmp_path)
+    assert events[-2]["data"]["error_code"] == code
+    assert events[-1]["data"]["reason"] == "error"
+    assert not any(event["type"] == "assistant_message" for event in events)
+
+
+def test_cancellation_finishes_the_trajectory_and_returns_130(script, tmp_path):
+    script.events = [asyncio.CancelledError()]
     code, events = run_cli(tmp_path)
-    assert code == 0
-    first, second = [
-        e["data"]["avp.duration_ms"] for e in events if e["type"] == "avp.assistant_message"
-    ]
-    assert 150 <= first < 300
-    assert 50 <= second < 300, "the second response excludes the tool's run time"
-
-
-def test_captured_tools_match_the_installed_sdk_version():
-    import json
-    from importlib.metadata import version
-    from importlib.resources import files
-
-    capture = json.loads(files("avp_codex").joinpath("tools.json").read_text())
-    assert CODEX_VERSION == version("openai-codex")
-    assert capture["codex"] == CODEX_VERSION, "Regenerate tools.json after changing the SDK pin"
+    assert code == 130
+    assert events[-1]["data"]["reason"] == "interrupted"

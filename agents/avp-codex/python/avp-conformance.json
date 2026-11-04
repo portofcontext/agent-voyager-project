@@ -1,6 +1,0 @@
-{
-  "command": ["uv", "run", "--no-sync", "python", "-m", "avp_codex.conformance"],
-  "cwd": ".",
-  "env": {},
-  "description": "avp-codex entrypoint"
-}

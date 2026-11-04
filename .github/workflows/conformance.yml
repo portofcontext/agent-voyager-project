@@ -127,11 +127,11 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      - run: uv sync --locked
+      - run: uv sync --locked --project agents/avp-codex/python
       - name: Exercise the bundled Codex runtime and managed MCP tools
         env:
           AVP_TEST_CODEX: "1"
-        run: uv run --no-sync pytest -q agents/avp-codex/python/tests/test_native.py
+        run: cd agents/avp-codex/python && uv run --no-sync pytest -q tests/test_native.py
 
   real-llm-smoke:
     name: Claude live conformance (manual only)

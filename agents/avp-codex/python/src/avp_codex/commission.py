@@ -1,156 +1,105 @@
-"""Commission mapping for the pinned, noninteractive Codex profile."""
-
-from __future__ import annotations
+"""Commission to Codex configuration, following the SDK's run plan."""
 
 import json
 import os
-from functools import cache
-from importlib.metadata import version
-from importlib.resources import files
 
-from avp.commission import Commission, McpServerStdio
-from avp.descriptor import ToolDecl
-from avp.preflight import preflight
-from avp.trajectory import ErrorCode
+from avp.commission import Commission, EnvSecret, McpServerStdio, ProxySecret
+from avp.utils.run_plan import RunPlan
+from avp_codex.descriptor import AGENT_NAME, ENVIRONMENT_TOOLS, RESOURCE_TOOLS, SHELL_TOOLS
 
-AGENT_NAME = "avp-codex"
-CODEX_VERSION = version("openai-codex")
-# Available native surface for the pinned runtime. Model metadata determines
-# whether apply_patch is exposed; shell execution uses the unified exec pair.
-BUILTIN_TOOLS = [
-    "exec_command",
-    "write_stdin",
-    "apply_patch",
-    "view_image",
-    "request_user_input",
-    "list_mcp_resources",
-    "list_mcp_resource_templates",
-    "read_mcp_resource",
-]
-
-SHELL_TOOLS = {"exec_command", "write_stdin"}
-ENVIRONMENT_TOOLS = SHELL_TOOLS | {"apply_patch", "view_image"}
-RESOURCE_TOOLS = {"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}
+STAND_IN_KEY = "avp-proxy-stand-in"
 
 
-# The model the descriptor describes before a Commission picks one.
-DESCRIBE_MODEL = "gpt-5.5"
+class MissingSecret(Exception):
+    """An env Secret reference names a missing environment variable."""
 
 
-@cache
-def _catalog() -> dict[str, dict[str, dict]]:
-    """Built-in definitions Codex sends each verified model, captured from the
-    pinned CLI by scripts/capture_tools.py."""
-    return json.loads(files("avp_codex").joinpath("tools.json").read_text())["models"]
+def env_secret(secret: EnvSecret) -> str:
+    try:
+        return os.environ[secret.env]
+    except KeyError:
+        raise MissingSecret(f"the agent's environment has no {secret.env}") from None
 
 
-def tool_decls(names: list[str], model: str = DESCRIBE_MODEL) -> list[ToolDecl]:
-    """Declarations for built-ins, with the description and input schema Codex
-    sends `model` (or the describe model's, for a model not captured)."""
-    catalog = _catalog()
-    sent = catalog.get(model) or catalog[DESCRIBE_MODEL]
-    fallback = catalog[DESCRIBE_MODEL]
-    decls = []
-    for name in names:
-        entry = sent.get(name) or fallback.get(name) or {}
-        decls.append(
-            ToolDecl(
-                name=name,
-                description=entry.get("description"),
-                inputSchema=entry.get("inputSchema"),
-            )
-        )
-    return decls
-
-
-def selected_tools(cm: Commission) -> list[str]:
-    allow = (cm.enabled_builtin_tools or {}).get(AGENT_NAME)
-    return [name for name in BUILTIN_TOOLS if allow is None or name in allow]
-
-
-def uses_environment(cm: Commission) -> bool:
-    return bool(set(selected_tools(cm)) & ENVIRONMENT_TOOLS)
-
-
-def fail_fast(cm: Commission, version: str):
-    if failure := preflight(
-        cm,
-        agent_name=AGENT_NAME,
-        agent_version=version,
-        tools=BUILTIN_TOOLS,
-        skills=[],
-        subagents=[],
-        mcp_servers=[],
+def refusal(commission: Commission, plan: RunPlan) -> str | None:
+    if commission.model.provider != "openai":
+        return f"{AGENT_NAME} runs models at openai through the Responses API"
+    allowed = {tool.name for tool in plan.started.tools or []}
+    settings = (commission.agents or {}).get(AGENT_NAME)
+    if (
+        settings
+        and settings.enabled_tools is not None
+        and commission.model.id not in {"gpt-5-mini", "gpt-5.5"}
     ):
-        return failure
-    if cm.model.split("/", 1)[0] != "openai":
-        return ErrorCode.unsupported_model, "Codex profile requires an openai/model slug"
-    if cm.provider and cm.provider.id != "openai":
-        return (
-            ErrorCode.unsupported_provider,
-            "Codex profile requires the OpenAI Responses protocol",
-        )
-    allowed = set(selected_tools(cm))
-    filtered = (cm.enabled_builtin_tools or {}).get(AGENT_NAME) is not None
-    if filtered and cm.model not in {"openai/gpt-5-mini", "openai/gpt-5.5"}:
-        return (
-            ErrorCode.commission_collision,
-            "Codex tool filtering is verified only for openai/gpt-5-mini and openai/gpt-5.5; "
-            "other model catalogs can add tools without independent disable switches",
-        )
-    if filtered and cm.model == "openai/gpt-5.5" and cm.mcp_servers:
-        return (
-            ErrorCode.commission_collision,
-            "Codex gpt-5.5 adds native tool search for MCP servers; "
-            "filtered MCP runs currently require openai/gpt-5-mini",
-        )
+        return "Codex tool filtering is verified only for gpt-5-mini and gpt-5.5"
     if allowed & SHELL_TOOLS and not allowed >= SHELL_TOOLS:
-        return (
-            ErrorCode.commission_collision,
-            "Codex requires exec_command and write_stdin together",
-        )
+        return "Codex requires exec_command and write_stdin together"
     if (
         allowed & ENVIRONMENT_TOOLS
         and "apply_patch" not in allowed
-        and cm.model != "openai/gpt-5-mini"
+        and commission.model.id != "gpt-5-mini"
     ):
-        return (
-            ErrorCode.commission_collision,
-            "Codex environment tools require allowing model-dependent apply_patch; "
-            "omit all environment tools to disable environment access",
-        )
-    if cm.mcp_servers and not allowed >= RESOURCE_TOOLS:
-        return (
-            ErrorCode.commission_collision,
-            "Codex exposes list_mcp_resources, list_mcp_resource_templates, and read_mcp_resource "
-            "when Commission MCP servers are configured; include all three in the allow-list",
-        )
+        return "Codex environment access also requires allowing apply_patch for this model"
+    if commission.mcp_servers:
+        if not allowed >= RESOURCE_TOOLS:
+            return "Codex MCP servers require all three MCP resource tools to be allowed"
+        if commission.model.id != "gpt-5-mini" and "tool_search" not in allowed:
+            return "Codex MCP servers require tool_search to be allowed for this model"
     return None
 
 
-def config(cm: Commission) -> dict:
-    allowed = set(selected_tools(cm))
+def configuration(commission: Commission, plan: RunPlan) -> tuple[tuple[str, ...], dict[str, str]]:
+    model = commission.model
+    if isinstance(model.credential, ProxySecret):
+        key = STAND_IN_KEY
+    elif isinstance(model.credential, EnvSecret):
+        key = env_secret(model.credential)
+    else:
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise MissingSecret("the agent's environment has no OPENAI_API_KEY")
+    allowed = {tool.name for tool in plan.started.tools or []}
     servers = {}
-    for entry in cm.mcp_servers or []:
-        server = {"default_tools_approval_mode": "approve"}
-        if isinstance(entry, McpServerStdio):
-            server.update(
-                command=entry.command[0],
-                args=entry.command[1:] + (entry.args or []),
-                env=entry.env or {},
+    for server in commission.mcp_servers or []:
+        entry = {"default_tools_approval_mode": "approve"}
+        if isinstance(server, McpServerStdio):
+            entry.update(
+                command=server.command[0],
+                args=server.command[1:],
+                env={
+                    name: value if isinstance(value, str) else env_secret(value)
+                    for name, value in (server.env or {}).items()
+                },
             )
         else:
-            server.update(url=entry.url, http_headers=entry.headers or {})
-        servers[entry.id] = server
-    return {
+            entry.update(
+                url=server.url,
+                http_headers={
+                    name: value
+                    for name, value in (server.headers or {}).items()
+                    if isinstance(value, str)
+                },
+                env_http_headers={
+                    name: value.env
+                    for name, value in (server.headers or {}).items()
+                    if isinstance(value, EnvSecret)
+                },
+            )
+            for value in (server.headers or {}).values():
+                if isinstance(value, EnvSecret):
+                    env_secret(value)
+
+        servers[server.id] = entry
+    config = {
         "model_provider": "avp",
         "model_providers.avp": {
             "name": "AVP",
-            "base_url": (cm.provider.base_url if cm.provider else None)
+            "base_url": model.base_url
             or os.environ.get("OPENAI_BASE_URL")
             or "https://api.openai.com/v1",
-            "env_key": "OPENAI_API_KEY",
+            "env_key": "AVP_CODEX_API_KEY",
             "wire_api": "responses",
+            "requires_openai_auth": False,
             "supports_websockets": False,
         },
         "mcp_servers": servers,
@@ -158,36 +107,43 @@ def config(cm: Commission) -> dict:
         "features.goals": False,
         "features.apps": False,
         "features.plugins": False,
-        "features.web_search": False,
+        "features.skill_search": False,
+        "features.sleep_tool": False,
+        "features.tool_suggest": False,
         "web_search": "disabled",
         "features.shell_tool": bool(allowed & SHELL_TOOLS),
         "features.unified_exec": True,
         "features.view_image": "view_image" in allowed,
         "features.stable_environment_tools": False,
-        "tools.experimental_request_user_input.enabled": "request_user_input" in allowed,
+        "tools.experimental_request_user_input.enabled": False,
         "tools.update_plan.enabled": False,
+        "check_for_update_on_startup": False,
+        "analytics.enabled": False,
+        "feedback.enabled": False,
+    }
+    return tuple(f"{name}={toml(value)}" for name, value in config.items()), {
+        "AVP_CODEX_API_KEY": key
     }
 
 
-def skill_instructions(cm: Commission) -> str | None:
+def skill_instructions(commission: Commission) -> str | None:
     parts = []
-    for skill in cm.skills or []:
-        files = sorted(skill.files.items(), key=lambda item: item[0] != "SKILL.md")
-        body = "\n\n".join(f"### {path}\n\n{text}" for path, text in files)
-        parts.append(f"## Skill: {skill.name or skill.id}\n\n{body}")
+    for skill in commission.skills or []:
+        body = "\n\n".join(
+            f"### {path}\n\n{text}"
+            for path, text in sorted(skill.files.items(), key=lambda item: item[0] != "SKILL.md")
+        )
+        parts.append(f"## Skill: {skill.name}\n\n{body}")
     return "\n\n".join(parts) or None
 
 
-def config_overrides(cm: Commission) -> tuple[str, ...]:
-    """Encode Commission config for CodexConfig's native TOML overrides."""
-    return tuple(f"{key}={_toml(value)}" for key, value in config(cm).items())
-
-
-def _toml(value) -> str:
+def toml(value) -> str:
     if isinstance(value, dict):
-        return "{" + ", ".join(f"{json.dumps(k)} = {_toml(v)}" for k, v in value.items()) + "}"
+        return (
+            "{"
+            + ", ".join(f"{json.dumps(key)} = {toml(item)}" for key, item in value.items())
+            + "}"
+        )
     if isinstance(value, list):
-        return "[" + ", ".join(_toml(v) for v in value) + "]"
-    if value is None:
-        raise ValueError("TOML config cannot contain null")
+        return "[" + ", ".join(toml(item) for item in value) + "]"
     return json.dumps(value)

@@ -16,6 +16,10 @@
 
 ### Changed
 
+- Codex uses the rebuilt Python SDK in its own locked project, with an installed
+  `avp-codex-cli`, a sandbox Dockerfile, proxy credentials, and native events
+  translated through the Recorder. Its legacy registration and release files
+  are removed. Its container uses Python 3.14.
 - SDK prices, endpoints, and endpoint refresh rules are stored once in
   `avp-sdk/data/`. Python, Rust, and TypeScript package builds bundle the
   shared files through relative links. Package checks cover the full data
