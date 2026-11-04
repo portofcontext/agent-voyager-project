@@ -45,9 +45,9 @@ def test_ping_never_calls_the_agent(tmp_path, capsys):
         raise AssertionError("ping must not load the agent")
 
     assert main(run=run, describe=describe, argv=["ping", "--out", str(tmp_path / "p")]) == 0
-    assert json.loads((tmp_path / "p").read_text()) == {"type": "pong"}
+    assert json.loads((tmp_path / "p").read_text()) == {"type": "pong", "avp_version": "0.1"}
     assert main(run=run, describe=describe, argv=["ping"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"type": "pong"}
+    assert json.loads(capsys.readouterr().out) == {"type": "pong", "avp_version": "0.1"}
 
 
 def test_describe(tmp_path, capsys):

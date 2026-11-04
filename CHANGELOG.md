@@ -16,6 +16,8 @@
 
 ### Changed
 
+- All three SDK command lines include `avp_version` in their ping replies,
+  matching the new CLI's image installation check.
 - Deep Agents uses the rebuilt SDK in a standalone locked project with a
   sandbox image. Native model, tool, and subagent events use the Recorder;
   legacy installer and release files are removed.

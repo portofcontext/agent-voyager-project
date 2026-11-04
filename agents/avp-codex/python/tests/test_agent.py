@@ -334,7 +334,7 @@ def test_ping_and_describe_are_lazy_and_match_the_pinned_catalog(tmp_path):
         )
         value = json.loads(result.stdout)
         if verb == "ping":
-            assert value == {"type": "pong"}
+            assert value == {"type": "pong", "avp_version": "0.1"}
         else:
             assert value["agent_name"] == "avp-codex"
             assert {tool["name"] for tool in value["tools"]} == set(descriptor.BUILTIN_TOOLS)

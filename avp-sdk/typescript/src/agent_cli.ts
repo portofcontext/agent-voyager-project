@@ -61,7 +61,7 @@ export async function main({
     .description("Check that the agent runs, without loading it.")
     .option("--out <path>", "Where to write it (default: stdout).")
     .action(async ({ out }: { out?: string }) => {
-      await write(out, '{"type": "pong"}\n');
+      await write(out, '{"type": "pong", "avp_version": "0.1"}\n');
     });
   app
     .command("describe")

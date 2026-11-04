@@ -297,3 +297,22 @@ jobs:
           python-version: "3.14"
           enable-cache: true
       - run: make deep-agents-check
+
+  sdk:
+    name: Python, Rust, and TypeScript SDKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: avp-sdk/rust
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: make sdk-python-check sdk-rust-check sdk-typescript-check
