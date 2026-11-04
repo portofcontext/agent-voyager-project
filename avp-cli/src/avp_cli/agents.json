@@ -1,6 +1,5 @@
 {
   "goose": {"version": "0.2.2", "descriptor": "goose", "path": "agents/avp-goose/rust"},
-  "claude-code": {"version": "0.2.2", "descriptor": "avp-claude-agent-sdk", "path": "agents/avp-claude-agent-sdk/python"},
   "openai-agents": {"version": "0.0.3", "descriptor": "avp-openai-agents", "path": "agents/avp-openai-agents/python"},
   "pi": {"version": "0.1.1", "descriptor": "avp-pi", "path": "agents/avp-pi/typescript"},
   "gemini-cli": {"version": "0.1.1", "descriptor": "avp-gemini-cli", "path": "agents/avp-gemini-cli/typescript"},

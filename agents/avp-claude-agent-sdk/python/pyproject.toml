@@ -1,51 +1,29 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "avp-claude-agent-sdk"
-version = "0.2.2"
-description = "AVP v0.1 agent for the Claude Agent SDK (Claude Code as an SDK). Observer pattern: the SDK owns its loop; this package translates the SDK's lifecycle events into AVP."
-readme = "README.md"
-license = { text = "MIT" }
+version = "0.2.3"
+description = "AVP agent over Claude Code through the Claude Agent SDK."
+license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project==0.2.0", "claude-agent-sdk>=0.1.81"]
+dependencies = ["agent-voyager-project", "claude-agent-sdk==0.2.87", "jsonschema>=4"]
 
-[tool.uv.sources]
-avp = { workspace = true }
+[project.scripts]
+avp-claude-agent-sdk-cli = "avp_claude_agent_sdk.cli:main"
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "rich>=15.0.0",
-    "ruff>=0.15.12",
-    "ty>=0.0.35",
-]
+dev = ["pytest>=8", "ruff>=0.6", "ty>=0.0.95"]
 
-[project.urls]
-Spec = "https://github.com/portofcontext/agent-voyager-project/tree/main/avp/core/spec/v0.1"
+[tool.uv.sources]
+agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/avp_claude_agent_sdk"]
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "avp_claude_agent_sdk"
+
+[tool.ty.environment]
+python-version = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = [
-    "real_llm: tests that hit a live LLM via the Claude Agent SDK (require ANTHROPIC_API_KEY + claude CLI in PATH; cost real money)",
-]
-
-# How this agent installs and runs in a sandbox: release-manifest.py writes it
-# into the release's avp-release.json, with the workspace lock as requirements.txt.
-[tool.avp.release]
-agent = "claude-code"
-module = "avp_claude_agent_sdk.conformance"
-wheels = ["agent-voyager-project", "avp-conformance", "avp-claude-agent-sdk"]
-# The conformance entrypoint also imports avp_conformance, so its wheel ships
-# too. The SDK drives the `claude` CLI, pinned here so an image built later
-# gets the CLI this release was tested with. The CLI refuses bypassPermissions
-# as root (the sandbox's user) unless told it is already in a sandbox. It is.
-setup = [
-    "apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates && rm -rf /var/lib/apt/lists/*",
-    "npm install -g @anthropic-ai/claude-code@2.1.303",
-]
-env = { IS_SANDBOX = "1" }

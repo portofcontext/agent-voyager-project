@@ -65,14 +65,6 @@ def test_every_agent_generates_a_valid_manifest(agent: str, tmp_path) -> None:
         assert "agent-voyager-project" not in pinned  # in-repo wheels ship as files
 
 
-def test_claude_code_pins_its_cli_and_runs_as_a_sandbox(tmp_path) -> None:
-    m = _generated("claude-code", tmp_path)
-    recipe = release_manifest.container_recipe(m, url=URL)
-    assert ("IS_SANDBOX", "1") in recipe.env
-    assert any("@anthropic-ai/claude-code@" in step for step in recipe.setup)
-    assert "avp_conformance-0.0.0-py3-none-any.whl" in m.python.wheels
-
-
 def test_opencode_installs_ripgrep_and_its_arch_archive(tmp_path) -> None:
     m = _generated("opencode", tmp_path)
     recipe = release_manifest.container_recipe(m, url=URL)

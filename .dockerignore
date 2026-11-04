@@ -4,6 +4,7 @@
 !avp-sdk/data
 !agents/avp-pydantic-ai/python
 !agents/avp-codex/python
+!agents/avp-claude-agent-sdk/python
 **/.venv
 **/__pycache__
 **/.pytest_cache

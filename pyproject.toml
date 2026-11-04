@@ -23,7 +23,6 @@ requires-python = ">=3.11"
 dependencies = [
     "agent-voyager-project",
     "avp-conformance",
-    "avp-claude-agent-sdk",
     "avp-agent-template",
     "avp-deep-agents",
     "avp-cli",
@@ -51,14 +50,13 @@ members = [
     "avp/bindings/python",
     "avp/core/conformance",
     "avp-cli",
-    "agents/avp-claude-agent-sdk/python",
     "agents/_template/python",
     "agents/avp-deep-agents/python",
     "agents/avp-openai-agents/python",
 ]
 # The new SDK is its own project with its own uv.lock. Members keep the old
 # avp/bindings/python until each one migrates.
-exclude = ["avp-sdk/python", "agents/avp-pydantic-ai/python", "agents/avp-codex/python"]
+exclude = ["agents/avp-claude-agent-sdk/python", "avp-sdk/python", "agents/avp-pydantic-ai/python", "agents/avp-codex/python"]
 
 # When any workspace member declares `avp`, `avp-conformance`, etc. as a
 # dependency, resolve it from the workspace rather than PyPI. Critical:
@@ -67,7 +65,6 @@ exclude = ["avp-sdk/python", "agents/avp-pydantic-ai/python", "agents/avp-codex/
 [tool.uv.sources]
 agent-voyager-project = { workspace = true }
 avp-conformance = { workspace = true }
-avp-claude-agent-sdk = { workspace = true }
 avp-agent-template = { workspace = true }
 avp-deep-agents = { workspace = true }
 avp-cli = { workspace = true }
