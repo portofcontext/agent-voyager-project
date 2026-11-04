@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from avp_cli import engine
+from avp_cli.agents import builtins
 from avp_cli.cli import app
 from avp_cli.console import Failed
 from avp_cli.engine import images
@@ -30,6 +31,26 @@ def avp(*args: str) -> str:
     result = CliRunner().invoke(app, list(args))
     assert result.exit_code == 0, result.output
     return result.output
+
+
+def test_install_builtin_without_checkout(
+    avp_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    avp("agent", "install", "pydantic-ai")
+    try:
+        assert "pong" in avp("agent", "ping", "pydantic-ai")
+        descriptor = json.loads(avp("agent", "describe", "pydantic-ai"))
+        expected = builtins.get("pydantic-ai")
+        assert descriptor["agent_name"] == expected.agent_name
+        assert descriptor["agent_version"] == expected.version
+        checked = avp(
+            "conformance", "check", "--agent", "pydantic-ai", "--rule", "trajectory.4.1", "--json"
+        )
+        [outcome] = json.loads(checked[checked.index("[") :])
+        assert outcome["status"] == "pass", outcome
+    finally:
+        avp("agent", "uninstall", "pydantic-ai")
 
 
 def test_install_run_uninstall(

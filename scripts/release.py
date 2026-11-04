@@ -87,6 +87,16 @@ assert bundled_prices().models
             )
             if package == "cli":
                 run(str(environment / "bin/avp"), "--help", cwd=consumer)
+                run(str(environment / "bin/avp"), "agent", "list", "--builtin", cwd=consumer)
+                run(
+                    str(python),
+                    "-I",
+                    "-c",
+                    "from avp_cli.agents import builtins; "
+                    "assert all((builtins.PACKAGE / 'dockerfiles' / (name + '.Dockerfile')).is_file() "
+                    "for name in builtins.catalog().agents)",
+                    cwd=consumer,
+                )
                 (consumer / "commission.json").write_text(
                     json.dumps(
                         {

@@ -18,7 +18,7 @@ make opencode-check
 With the new CLI from #86:
 
 ```bash
-avp agent install opencode agents/avp-opencode/typescript/Dockerfile
+avp agent install opencode
 avp agent ping opencode
 avp agent describe opencode
 avp run --agent opencode --commission commission.json

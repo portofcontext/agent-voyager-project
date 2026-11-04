@@ -15,10 +15,10 @@ node agents/avp-pi/typescript/dist/src/main.js describe
 ```
 
 The package exposes `avp-pi-cli` through its `bin` entry. Install its sandbox
-image with this agent's directory as the build context:
+image with the CLI:
 
 ```bash
-avp agent install pi agents/avp-pi/typescript/Dockerfile
+avp agent install pi
 avp agent ping pi
 avp agent describe pi
 avp run --agent pi --commission commission.json

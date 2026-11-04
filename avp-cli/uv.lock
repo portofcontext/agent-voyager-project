@@ -274,7 +274,7 @@ wheels = [
 
 [[package]]
 name = "avp-cli"
-version = "0.6.0b1"
+version = "0.6.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "agent-voyager-project" },

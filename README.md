@@ -21,11 +21,11 @@ MCP, Agent Skills, CloudEvents, and OpenTelemetry.
 
 Install the [GitHub beta](docs/releases/README.md). Requires
 [uv](https://docs.astral.sh/uv/) and a running container engine with a Docker API,
-such as Docker or podman. Run the agent install command from this checkout:
+such as Docker or podman:
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b1/avp_cli-0.6.0b1-py3-none-any.whl
-avp agent install pd agents/avp-pydantic-ai/python/Dockerfile
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
+avp agent install pydantic-ai
 avp vault set anthropic
 ```
 
@@ -44,7 +44,7 @@ The vault command prompts for your key. Save this as `task.json`:
 ```
 
 ```sh
-avp run --agent pd --commission task.json
+avp run --agent pydantic-ai --commission task.json
 ```
 
 This makes a paid model call in an OpenSandbox sandbox. The CLI prints the

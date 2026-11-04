@@ -1,6 +1,6 @@
 [project]
 name = "avp-cli"
-version = "0.6.0b1"
+version = "0.6.0b2"
 description = "The avp command line: run, evaluate, and check AVP agents in sandboxes."
 readme = "README.md"
 license = "MIT"

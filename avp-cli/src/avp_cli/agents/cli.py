@@ -2,6 +2,7 @@
 
 import shlex
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Annotated
 
@@ -11,8 +12,8 @@ from rich.text import Text
 
 from avp_cli import console, paths
 from avp_cli._cli_common import VerboseOption
-from avp_cli.agents import command, store
-from avp_cli.console import detail, err, line, out
+from avp_cli.agents import builtins, command, store
+from avp_cli.console import Failed, detail, err, line, out
 from avp_cli.engine import images
 from avp_cli.sandbox import sandboxes
 
@@ -27,8 +28,8 @@ NameArgument = Annotated[str, typer.Argument(help="The agent.")]
 def install(
     name: Annotated[str, typer.Argument(help="A name for the agent.")],
     dockerfile: Annotated[
-        Path, typer.Argument(help="A Dockerfile whose ENTRYPOINT is the agent's command line.")
-    ],
+        Path | None, typer.Argument(help="A custom agent's Dockerfile. Omit for a built-in agent.")
+    ] = None,
     context: Annotated[
         Path | None,
         typer.Option(help="The build context (default: the Dockerfile's directory)."),
@@ -40,6 +41,13 @@ def install(
     prints the build's output."""
     console.set_verbose(verbose)
     store.check_name(name)
+    builtin = None
+    if dockerfile is None:
+        builtin = builtins.get(name)
+        if context is not None:
+            raise Failed("--context requires a custom Dockerfile")
+    elif name in builtins.catalog().agents:
+        raise Failed(f"{name!r} is a built-in name; choose another name for a custom Dockerfile")
     building = ("Building ", (name, "bold"), " image")
     began = time.monotonic()
     with err.status(line(*building)) as status:
@@ -51,9 +59,18 @@ def install(
             cached = (" (cached)", "dim") if step.cached else ""
             show(*building, f" - step {step.number}: ", (step.instruction, "dim"), cached)
 
-        image = images.build(
-            dockerfile, context or dockerfile.parent, tag=f"localhost/avp/{name}", step=step
+        source = (
+            builtins.context(name)
+            if dockerfile is None
+            else nullcontext(context or dockerfile.parent)
         )
+        with source as directory:
+            image = images.build(
+                dockerfile or directory / "Dockerfile",
+                directory,
+                tag=f"localhost/avp/{name}",
+                step=step,
+            )
         built = time.monotonic() - began
         entrypoint = _entrypoint(image)
         show("Starting a sandbox for ", (name, "bold"))
@@ -62,6 +79,14 @@ def install(
             version = command.ping(box, entrypoint)
             show("Checking ", ("describe", "bold"))
             descriptor = command.describe(box, entrypoint)
+            if builtin and (descriptor.agent_name, descriptor.agent_version) != (
+                builtin.agent_name,
+                builtin.version,
+            ):
+                raise Failed(
+                    f"expected {builtin.agent_name} {builtin.version}; the image describes "
+                    f"{descriptor.agent_name} {descriptor.agent_version}"
+                )
     store.save(store.Agent(name=name, image=image))
     err.print(
         Text.assemble(
@@ -87,9 +112,18 @@ def uninstall(name: NameArgument, verbose: VerboseOption = False) -> None:
 
 
 @app.command("list")
-def list_(verbose: VerboseOption = False) -> None:
-    """List your agents."""
+def list_(
+    builtin: Annotated[bool, typer.Option("--builtin", help="List the built-in agents.")] = False,
+    verbose: VerboseOption = False,
+) -> None:
+    """List installed agents, or the built-in agents available to install."""
     console.set_verbose(verbose)
+    if builtin:
+        table = Table("Name", "Agent", "Version", box=None)
+        for name, entry in builtins.catalog().agents.items():
+            table.add_row(Text(name, "bold"), entry.agent_name, entry.version)
+        out.print(table)
+        return
     detail(f"Agents: {paths.agents()}")
     table = Table("Name", "Image", box=None)
     for agent in store.installed():

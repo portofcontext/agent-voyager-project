@@ -48,10 +48,10 @@ analytics, feedback, apps, plugins, and web search are disabled.
 
 ## Sandbox
 
-Install using this agent's directory as the build context:
+Install the built-in agent with the CLI:
 
 ```sh
-avp agent install codex agents/avp-codex/python/Dockerfile
+avp agent install codex
 avp agent ping codex
 avp agent describe codex
 avp vault set openai

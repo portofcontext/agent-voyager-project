@@ -17,7 +17,7 @@ make gemini-cli-check
 With the new CLI from #86:
 
 ```bash
-avp agent install gemini-cli agents/avp-gemini-cli/typescript/Dockerfile
+avp agent install gemini-cli
 avp agent ping gemini-cli
 avp agent describe gemini-cli
 avp run --agent gemini-cli --commission commission.json

@@ -41,10 +41,10 @@ Its HTTPS clients inherit the launcher's CA bundle for credential proxies.
 
 ## Sandbox
 
-Install using this agent's directory as the build context:
+Install the built-in agent with the CLI:
 
 ```sh
-avp agent install openai-agents agents/avp-openai-agents/python/Dockerfile
+avp agent install openai-agents
 avp agent ping openai-agents
 avp agent describe openai-agents
 avp run --agent openai-agents --commission c.json

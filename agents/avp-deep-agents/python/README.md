@@ -15,10 +15,10 @@ uv run avp-deep-agents-cli describe
 uv run avp-deep-agents-cli run --commission commission.json --out trajectory.ndjson
 ```
 
-Install using this agent's directory as the build context:
+Install the built-in agent with the CLI:
 
 ```bash
-avp agent install deep-agents agents/avp-deep-agents/python/Dockerfile
+avp agent install deep-agents
 avp agent ping deep-agents
 avp agent describe deep-agents
 avp run --agent deep-agents --commission commission.json

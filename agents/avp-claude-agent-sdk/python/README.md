@@ -24,10 +24,10 @@ confinement; each Commission starts a new session.
 
 ## Sandbox
 
-Install using this agent's directory as the build context:
+Install the built-in agent with the CLI:
 
 ```sh
-avp agent install claude-code agents/avp-claude-agent-sdk/python/Dockerfile
+avp agent install claude-code
 avp agent ping claude-code
 avp agent describe claude-code
 avp run --agent claude-code --commission c.json

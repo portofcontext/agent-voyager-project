@@ -51,8 +51,9 @@ Build and decide shared behavior in Python first, then implement it in TypeScrip
 
 - `spec/v0.1/`: normative specs and generated schemas.
 - `avp-sdk/{python,typescript}/`: SDKs; `data/` and `testdata/` are shared.
-- `avp-cli/`: supervisor CLI, eval engine, and conformance cases.
-- `agents/<name>/<language>/`: independent runtime adapters and Dockerfiles.
+- `avp-cli/`: supervisor CLI, built-in agent Dockerfiles and source pins, eval
+  engine, and conformance cases.
+- `agents/<name>/<language>/`: independent runtime adapters.
 - `scripts/`: schema generation, SDK-data refresh, packaging checks, and skill packaging.
 - `testing/mcp/`: shared MCP fixtures.
 

@@ -6,21 +6,32 @@ design is in [COMMANDS.md](COMMANDS.md).
 ## Install
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b1/avp_cli-0.6.0b1-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
 ```
+
+## Agents
+
+```sh
+avp agent list --builtin
+avp agent install pydantic-ai
+avp agent ping pydantic-ai
+```
+
+A running Docker or podman engine is required. The CLI downloads the pinned
+source and builds the agent image. No checkout is needed.
 
 ## Commissions
 
 ```sh
-avp commission new --agent pd --model anthropic/claude-haiku-4-5 --prompt "Say hello" > task.json
-avp commission check task.json --agent pd
+avp commission new --agent pydantic-ai --model anthropic/claude-haiku-4-5 --prompt "Say hello" > task.json
+avp commission check task.json --agent pydantic-ai
 avp commission save hello task.json
-avp run --commission hello --agent pd
+avp run --commission hello --agent pydantic-ai
 avp commission list
 avp commission delete hello --yes
 ```
 
-`pd` is an installed agent name. `run --commission` also accepts a file path.
+`pydantic-ai` is the installed agent name. `run --commission` also accepts a file path.
 See [Commission commands](COMMANDS.md#commissions) for names, validation, and
 per-run identity. Saved Commissions also work in [eval files](docs/eval.md).
 

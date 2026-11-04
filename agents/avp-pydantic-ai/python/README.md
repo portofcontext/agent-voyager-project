@@ -27,10 +27,10 @@ The command line is the SDK's agent command line; see the
 
 ## Sandbox
 
-Install using this agent's directory as the build context:
+Install the built-in agent with the CLI:
 
 ```sh
-avp agent install pydantic-ai agents/avp-pydantic-ai/python/Dockerfile
+avp agent install pydantic-ai
 avp agent ping pydantic-ai
 avp agent describe pydantic-ai
 avp run --agent pydantic-ai --commission c.json

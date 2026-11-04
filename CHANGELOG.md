@@ -4,6 +4,9 @@
 
 ### Added
 
+- Built-in agent installation by name, with packaged Dockerfiles and verified
+  source pins. `avp agent list --builtin` lists the available versions.
+
 - GitHub beta releases for the Python SDK, TypeScript SDK, and CLI, with
   artifact checksums and clean-install verification before publication.
 

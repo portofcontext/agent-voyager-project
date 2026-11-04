@@ -20,7 +20,7 @@ npm install https://github.com/portofcontext/agent-voyager-project/releases/down
 CLI (includes the SDK dependency):
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b1/avp_cli-0.6.0b1-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
 avp --help
 ```
 
