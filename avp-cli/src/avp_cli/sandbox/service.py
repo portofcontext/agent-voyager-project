@@ -12,6 +12,8 @@ import tomllib
 from pathlib import Path
 
 import httpx
+import keyring
+from keyring.errors import KeyringError
 from opensandbox.config import ConnectionConfigSync
 
 from avp_cli import engine, paths
@@ -24,15 +26,16 @@ PORT = 18764
 EXECD_IMAGE = "opensandbox/execd:release-1.2.0"
 EGRESS_IMAGE = "opensandbox/egress:release-1.2.0"
 START_TIMEOUT_S = 30
+KEY_SERVICE = "avp-opensandbox"
+KEY_ENV = "OPENSANDBOX_SERVER_API_KEY"
 
 
-def config_text(api_key: str) -> str:
+def config_text() -> str:
     return f"""\
 # Written by avp each time it starts the service.
 [server]
 host = "127.0.0.1"
 port = {PORT}
-api_key = "{api_key}"
 max_sandbox_timeout_seconds = 86400
 
 [runtime]
@@ -106,8 +109,9 @@ def start() -> None:
     detail(f"Engine: {engine.where()}")
     engine.client()
     paths.opensandbox().mkdir(parents=True, exist_ok=True)
+    api_key = _api_key(create=True)
     config = paths.opensandbox_config()
-    config.write_text(config_text(secrets.token_hex(32)))
+    config.write_text(config_text())
     config.chmod(0o600)
     with paths.opensandbox_log().open("ab") as log:
         server = subprocess.Popen(
@@ -116,6 +120,7 @@ def start() -> None:
             stderr=log,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            env={**os.environ, KEY_ENV: api_key},
         )
     paths.opensandbox_pid().write_text(str(server.pid))
     began = time.monotonic()
@@ -147,5 +152,24 @@ def stop() -> bool:
 
 
 def _connection() -> ConnectionConfigSync:
-    api_key = (config() or {})["server"]["api_key"]
-    return ConnectionConfigSync(domain=f"127.0.0.1:{PORT}", api_key=api_key, protocol="http")
+    return ConnectionConfigSync(domain=f"127.0.0.1:{PORT}", api_key=_api_key(), protocol="http")
+
+
+def _api_key(*, create: bool = False) -> str:
+    """Share the service key across commands through the OS credential store or environment."""
+    if value := os.environ.get(KEY_ENV):
+        return value
+    identity = str(paths.opensandbox().resolve())
+    try:
+        value = keyring.get_password(KEY_SERVICE, identity)
+        if value is None and create:
+            value = secrets.token_hex(32)
+            keyring.set_password(KEY_SERVICE, identity, value)
+    except KeyringError:
+        raise Failed(
+            f"the system credential store is unavailable; set {KEY_ENV} "
+            "to the same secret for each avp command on this host"
+        ) from None
+    if not value:
+        raise Failed("the OpenSandbox service key is missing; restart it with `avp sandbox stop`")
+    return value

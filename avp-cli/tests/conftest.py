@@ -1,6 +1,7 @@
 """An in-memory credential store in place of the system's, a scratch AVP home,
 and --verbose off."""
 
+import secrets
 from collections.abc import Generator, Iterator
 from pathlib import Path
 
@@ -120,5 +121,6 @@ def avp_home(tmp_path_factory: pytest.TempPathFactory) -> Generator[Path]:
         if service.running():
             pytest.skip(f"an OpenSandbox service is already running on {TEST_PORT}")
         patch.setenv("AVP_HOME", str(home))
+        patch.setenv(service.KEY_ENV, secrets.token_hex(32))
         yield home
         service.stop()

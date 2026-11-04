@@ -98,6 +98,7 @@ def model_endpoint():
         scheme = "http"
         if certificate:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(certificate, key)
             server.socket = context.wrap_socket(server.socket, server_side=True)
             scheme = "https"

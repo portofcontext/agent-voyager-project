@@ -138,6 +138,11 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 
 ## How an agent is installed and run
 
+The local OpenSandbox service keeps its API key in the system credential store.
+For headless hosts without one, set `OPENSANDBOX_SERVER_API_KEY` to the same
+secret for each CLI invocation. The key is passed to the service in its
+environment and is never written to its TOML config.
+
 One agent is one image. OpenSandbox runs images but doesn't build them, so
 the CLI builds the image itself and OpenSandbox starts a fresh sandbox from it
 for each command, deleted when the command ends. Each sandbox starts idle, and

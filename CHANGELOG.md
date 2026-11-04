@@ -84,6 +84,11 @@
 
 ### Fixed
 
+- The OpenSandbox service key uses the system credential store or
+  `OPENSANDBOX_SERVER_API_KEY`, and stays out of the TOML config.
+- Check workflows use read-only repository permissions. The Codex test server
+  requires TLS 1.2 or newer.
+
 - SDK packaging checks install the TypeScript archive with a fresh npm cache,
   so clean CI runners do not depend on cached registry metadata.
 
