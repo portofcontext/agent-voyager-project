@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from docker.errors import NotFound
 from typer.testing import CliRunner
 
 from avp_cli import engine
@@ -229,3 +230,58 @@ def test_build_reports_each_step_and_the_ones_it_reuses() -> None:
     assert steps[0] == images.Step("1/3", "FROM docker.io/library/alpine:3.20")
     assert images.Step("2/3", "COPY agent.sh /agent.sh", cached=True) in steps
     assert steps[-1].number == "3/3"
+
+
+ALPINE = (
+    "docker.io/library/alpine:3.20"
+    "@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc"
+)
+
+
+def test_pulled_image_has_only_its_tag_and_remove_deletes_it() -> None:
+    tag = "localhost/avp/test-pull"
+    name = images.pull(ALPINE, tag)
+    try:
+        pulled = engine.client().images.get(name)
+        assert pulled.tags == [name]
+        assert name.startswith(tag)
+    finally:
+        images.remove(name)
+    with pytest.raises(NotFound):
+        engine.client().images.get(pulled.id)
+
+
+def test_failed_pull_names_the_reference() -> None:
+    missing = "localhost:1/avp/missing@sha256:" + "0" * 64
+    with pytest.raises(Failed, match="couldn't pull localhost:1/avp/missing"):
+        images.pull(missing, "localhost/avp/test-missing")
+
+
+def test_builtin_with_a_pinned_image_is_pulled_and_build_overrides(
+    avp_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pinned = builtins.Catalog(
+        commit="test",
+        sha256="0" * 64,
+        agents={"pydantic-ai": builtins.Agent("sh-agent", "1.0.0", "agents/example", "pinned")},
+    )
+    monkeypatch.setattr(builtins, "catalog", lambda: pinned)
+    pulls: list[str] = []
+
+    def pull(reference: str, tag: str, progress: object = None) -> str:
+        pulls.append(reference)
+        return images.build(AGENT / "Dockerfile", AGENT, tag=tag)
+
+    monkeypatch.setattr(images, "pull", pull)
+    result = CliRunner().invoke(app, ["agent", "install", "pydantic-ai"])
+    try:
+        assert result.exit_code == 0, result.output
+        assert pulls == ["pinned"]
+        assert "pulled in" in result.output
+        assert "pong" in avp("agent", "ping", "pydantic-ai")
+    finally:
+        avp("agent", "uninstall", "pydantic-ai")
+    # --build reaches for the pinned source, which this catalog doesn't have.
+    built = CliRunner().invoke(app, ["agent", "install", "pydantic-ai", "--build"])
+    assert isinstance(built.exception, Failed)
+    assert pulls == ["pinned"]

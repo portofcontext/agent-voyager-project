@@ -8,6 +8,11 @@
 
 ### Added
 
+- Built-in agents install from published images pinned by digest, when the CLI
+  pins one. `avp agent install NAME --build` builds from the pinned source. The
+  Agent images workflow publishes them for amd64 and arm64, and
+  `make agent-images` records their digests.
+
 - Built-in agent installation by name, with packaged Dockerfiles and verified
   source pins. `avp agent list --builtin` lists the available versions.
 

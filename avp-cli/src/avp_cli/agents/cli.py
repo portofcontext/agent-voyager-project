@@ -22,6 +22,7 @@ app = typer.Typer(
     help="Agents: an image whose ENTRYPOINT is an AVP agent command line.",
 )
 NameArgument = Annotated[str, typer.Argument(help="The agent.")]
+MB = 1_000_000
 
 
 @app.command()
@@ -34,11 +35,20 @@ def install(
         Path | None,
         typer.Option(help="The build context (default: the Dockerfile's directory)."),
     ] = None,
+    build: Annotated[
+        bool,
+        typer.Option(
+            "--build",
+            help="Build a built-in agent from its pinned source, not its published image.",
+        ),
+    ] = False,
     verbose: VerboseOption = False,
 ) -> None:
-    """Build the agent's image, check it answers `ping` and `describe` in a
-    sandbox, and save it. Installing over an agent replaces it. --verbose
-    prints the build's output."""
+    """Get the agent's image, check it answers `ping` and `describe` in a
+    sandbox, and save it. A built-in agent's image is pulled when this CLI pins
+    a published one, and built from its pinned source otherwise or with
+    --build. A custom agent's is built from its Dockerfile. Installing over an
+    agent replaces it. --verbose prints the build's or pull's output."""
     console.set_verbose(verbose)
     store.check_name(name)
     builtin = None
@@ -48,30 +58,43 @@ def install(
             raise Failed("--context requires a custom Dockerfile")
     elif name in builtins.catalog().agents:
         raise Failed(f"{name!r} is a built-in name; choose another name for a custom Dockerfile")
-    building = ("Building ", (name, "bold"), " image")
+    elif build:
+        raise Failed("--build is for built-in agents; a custom Dockerfile is always built")
+    tag = f"localhost/avp/{name}"
+    published = builtin.image if builtin and not build else None
+    getting = ("Pulling " if published else "Building ", (name, "bold"), " image")
     began = time.monotonic()
-    with err.status(line(*building)) as status:
+    with err.status(line(*getting)) as status:
 
         def show(*parts: str | tuple[str, str]) -> None:
             status.update(line(*parts))
 
         def step(step: images.Step) -> None:
             cached = (" (cached)", "dim") if step.cached else ""
-            show(*building, f" - step {step.number}: ", (step.instruction, "dim"), cached)
+            show(*getting, f" - step {step.number}: ", (step.instruction, "dim"), cached)
 
-        source = (
-            builtins.context(name)
-            if dockerfile is None
-            else nullcontext(context or dockerfile.parent)
-        )
-        with source as directory:
-            image = images.build(
-                dockerfile or directory / "Dockerfile",
-                directory,
-                tag=f"localhost/avp/{name}",
-                step=step,
+        def progress(downloaded: int) -> None:
+            show(*getting, f" - {downloaded / MB:.0f} MB")
+
+        if published:
+            detail(f"Image: {published}")
+            try:
+                image = images.pull(published, tag, progress)
+            except Failed as exc:
+                raise Failed(
+                    f"{exc}\n`avp agent install {name} --build` builds it from source instead."
+                ) from None
+        else:
+            source = (
+                builtins.context(name)
+                if dockerfile is None
+                else nullcontext(context or dockerfile.parent)
             )
-        built = time.monotonic() - began
+            with source as directory:
+                image = images.build(
+                    dockerfile or directory / "Dockerfile", directory, tag=tag, step=step
+                )
+        took = time.monotonic() - began
         entrypoint = _entrypoint(image)
         show("Starting a sandbox for ", (name, "bold"))
         with sandboxes.sandbox(image) as box:
@@ -95,7 +118,7 @@ def install(
             ": ",
             (descriptor.agent_name, "bold"),
             f" {descriptor.agent_version}, AVP {version}, ",
-            (f"in {image} (built in {built:.0f}s)", "dim"),
+            (f"in {image} ({'pulled' if published else 'built'} in {took:.0f}s)", "dim"),
         )
     )
 

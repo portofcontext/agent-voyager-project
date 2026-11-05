@@ -87,10 +87,12 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │         avp conformance list [--rule commission.5.1]
 │
 ├── agent               Agents: an image whose ENTRYPOINT is an AVP agent command line.
-│   ├── ✅ install    Build the agent's image, check it answers ping and describe in a
-│   │                 sandbox, and save it. Installing over an agent replaces it. Shows
-│   │                 each build step and check as it runs; --verbose prints the build.
-│   │     avp agent install pydantic-ai
+│   ├── ✅ install    Pull or build the agent's image, check it answers ping and describe
+│   │                 in a sandbox, and save it. Installing over an agent replaces it.
+│   │                 Shows the download or each build step, and each check, as it runs;
+│   │                 --verbose prints the engine's output. --build builds a built-in
+│   │                 agent from its pinned source, not its published image.
+│   │     avp agent install pydantic-ai [--build]
 │   │     avp agent install my-agent ./Dockerfile [--context ./src]
 │   ├── ✅ list       List installed agents, or built-ins available to install.
 │   │     avp agent list [--builtin]
@@ -145,7 +147,7 @@ secret for each CLI invocation. The key is passed to the service in its
 environment and is never written to its TOML config.
 
 One agent is one image. OpenSandbox runs images but doesn't build them, so
-the CLI builds the image itself and OpenSandbox starts a fresh sandbox from it
+the CLI pulls or builds the image itself and OpenSandbox starts a fresh sandbox from it
 for each command, deleted when the command ends. Each sandbox starts idle, and
 the CLI runs the image's ENTRYPOINT in it through OpenSandbox's exec daemon,
 so it can fill the vault first and gets the command's exit code and output.
@@ -155,10 +157,14 @@ the credentials) reaches the sandbox at run time, never through the image.
 ## Built-in agents
 
 `avp agent list --builtin` lists the agents and versions included in this CLI
-release. `avp agent install NAME` downloads the pinned source, verifies its
-checksum, builds the image, and checks `ping` and `describe` in a sandbox.
-No checkout is needed. Updating the CLI supplies new pins; reinstall an agent
-to build the version listed by that CLI.
+release. `avp agent install NAME` pulls the agent's published image at the
+digest this CLI pins, and checks `ping` and `describe` in a sandbox. Images are
+published for amd64 and arm64 at `ghcr.io/portofcontext/<agent_name>`.
+
+When this CLI pins no image for the agent, or with `--build`, it downloads the
+pinned source, verifies its checksum, and builds the image with the CLI's
+Dockerfile for the agent. No checkout is needed either way. Updating the CLI
+supplies new pins; reinstall an agent to get the version listed by that CLI.
 
 For a custom agent, use `avp agent install my-agent ./Dockerfile`. Its build
 context defaults to the Dockerfile's directory; `--context` sets another.

@@ -1,4 +1,5 @@
-"""Agent images: build one from a Dockerfile, read its entrypoint, remove it."""
+"""Agent images: build one from a Dockerfile or pull a published one, read its
+entrypoint, remove it."""
 
 import re
 from collections import deque
@@ -66,6 +67,31 @@ def build(
     return engine.images.get(tag).tags[0]
 
 
+def pull(reference: str, tag: str, progress: Callable[[int], None] | None = None) -> str:
+    """Pull the image at `reference`, which names a digest, and name it `tag`
+    alone. `progress` is called with the bytes downloaded so far. Returns the
+    engine's name for the image, as `build` does."""
+    engine = client()
+    layers: dict[str, int] = {}
+    try:
+        for chunk in engine.api.pull(reference, stream=True, decode=True):
+            if "error" in chunk:
+                raise Failed(f"couldn't pull {reference}: {chunk['error'].strip()}")
+            status, layer = chunk.get("status", ""), chunk.get("id")
+            if status:
+                detail(f"{layer}: {status}" if layer else status)
+            current = (chunk.get("progressDetail") or {}).get("current")
+            if layer and status == "Downloading" and current:
+                layers[layer] = current
+                if progress:
+                    progress(sum(layers.values()))
+        engine.images.get(reference).tag(tag)
+        engine.images.remove(reference)
+    except APIError as exc:
+        raise Failed(f"couldn't pull {reference}: {exc.explanation or exc}") from None
+    return engine.images.get(tag).tags[0]
+
+
 def entrypoint(image: str) -> list[str]:
     """The image's ENTRYPOINT: the agent's command line, which avp runs with
     `ping`, `describe`, or `run` after it."""
@@ -88,8 +114,14 @@ def image_id(image: str) -> str:
 
 
 def remove(image: str) -> None:
+    """Remove the image's name, and the image when that was its last name. A
+    pulled image otherwise stays, held by the digest it was pulled at."""
+    engine = client()
     try:
-        client().images.remove(image)
+        found = engine.images.get(image).id
+        engine.images.remove(image)
+        if not engine.images.get(found).tags:
+            engine.images.remove(found)
     except NotFound:
         # Docker raises ImageNotFound, a NotFound; podman a plain NotFound.
         pass
