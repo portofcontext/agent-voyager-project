@@ -20,9 +20,11 @@ npm install https://github.com/portofcontext/agent-voyager-project/releases/down
 CLI (includes the SDK dependency):
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.7.0/avp_cli-0.7.0-py3-none-any.whl
 avp --help
 ```
+
+`avp update` installs the newest CLI release over the one you have.
 
 Use these URLs to install the beta. `pip install avp-cli` installs the release
 on PyPI, currently 0.5.0. The beta is distributed through GitHub.

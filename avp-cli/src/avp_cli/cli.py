@@ -7,6 +7,7 @@ import typer
 from rich.markup import escape
 
 from avp_cli import console, hello
+from avp_cli import update as update_cli
 from avp_cli.agents import cli as agent_cli
 from avp_cli.commissions import cli as commission_cli
 from avp_cli.conformance import cli as conformance_cli
@@ -25,6 +26,7 @@ app.add_typer(agent_cli.app, name="agent")
 app.add_typer(commission_cli.app, name="commission")
 app.add_typer(vault_cli.app, name="vault")
 app.add_typer(sandbox_cli.app, name="sandbox")
+app.command()(update_cli.update)
 
 
 def main() -> None:

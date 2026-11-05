@@ -8,6 +8,9 @@
 
 ### Added
 
+- `avp update` installs the newest CLI release, and `avp agent update`
+  reinstalls the built-in agents whose versions the CLI changed.
+
 - `avp hello-world` runs an example eval on three built-in agents against a
   mock model, with no credential.
 

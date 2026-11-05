@@ -1,6 +1,6 @@
 [project]
 name = "avp-cli"
-version = "0.6.0b2"
+version = "0.7.0"
 description = "The avp command line: run, evaluate, and check AVP agents in sandboxes."
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,6 +13,7 @@ dependencies = [
     "mcp>=2.3",
     "opensandbox>=1.2",
     "opensandbox-server>=1.2",
+    "packaging>=24",
     "pydantic>=2.11,<3",
     "python-dotenv>=1.2",
     "questionary>=2",
