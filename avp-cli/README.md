@@ -17,8 +17,11 @@ avp agent install pydantic-ai
 avp agent ping pydantic-ai
 ```
 
-A running Docker or podman engine is required. The CLI downloads the pinned
-source and builds the agent image. No checkout is needed.
+A running Docker or podman engine is required. The CLI pulls the agent's
+published image. No checkout is needed.
+
+`avp hello-world` runs an example eval on three agents with a mock model, with
+no API key.
 
 ## Commissions
 

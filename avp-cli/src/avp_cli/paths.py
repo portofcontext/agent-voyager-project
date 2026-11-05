@@ -10,6 +10,7 @@ avp's state lives under `$AVP_HOME`, or `~/.avp`:
         results.json                     each run's outcome and score
         agents/<name>.json               an agent's image and Descriptor, from one describe
         runs/<run_id>/                   a run directory
+        share.json                       where the eval is shared, and the token that takes it down
     conformance/<time>-<agent>/          one `avp conformance check`, laid out as an eval run's
         agents/<name>.json               as above
         runs/<run_id>/                   as above
@@ -58,6 +59,7 @@ RESULTS = "results.json"
 EVAL_RUNS = "runs"
 """One run directory per run, named by its `run_id`."""
 EVAL_AGENTS = "agents"
+SHARE = "share.json"
 """One `<name>.json` per agent: its image and Descriptor."""
 
 

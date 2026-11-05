@@ -11,6 +11,7 @@ from avp_cli import console, paths
 from avp_cli._cli_common import JsonOption, VerboseOption, YesOption
 from avp_cli.console import Failed, err, out
 from avp_cli.eval import results
+from avp_cli.eval import share as sharing
 from avp_cli.eval.commission import EvalError, load
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.live import run_live
@@ -89,19 +90,7 @@ def run(
     )
     for case in config:
         environment.check(case.built, options.env)
-    directory, saved = results.create(ev.name, path.read_text())
-    console.detail(f"Eval directory: {directory}")
-
-    def on_result(result: Result) -> None:
-        saved.runs.append(RunResult.of(result, directory))
-        results.save(directory, saved)
-        if not json:
-            err.print(run_line(saved.runs[-1]), highlight=False)
-
-    found = run_live(config, directory, options, concurrency, directory / paths.RESULTS, on_result)
-    saved.runs = [RunResult.of(r, directory) for r in found]
-    saved.finished = datetime.now(UTC)
-    results.save(directory, saved)
+    directory, saved = run_and_save(config, path.read_text(), options, concurrency, quiet=json)
     if json:
         out.print_json(saved.model_dump_json())
     else:
@@ -110,6 +99,27 @@ def run(
     accuracy = saved.summary().accuracy
     if threshold is not None and (accuracy is None or accuracy < threshold):
         raise typer.Exit(1)
+
+
+def run_and_save(
+    config: EvalConfig, eval_text: str, options: Options, concurrency: int, quiet: bool = False
+) -> tuple[Path, results.EvalResults]:
+    """Run the eval in a new eval directory holding `eval_text`, saving each
+    run's result as it is scored and, unless `quiet`, printing its line."""
+    directory, saved = results.create(config.name, eval_text)
+    console.detail(f"Eval directory: {directory}")
+
+    def on_result(result: Result) -> None:
+        saved.runs.append(RunResult.of(result, directory))
+        results.save(directory, saved)
+        if not quiet:
+            err.print(run_line(saved.runs[-1]), highlight=False)
+
+    found = run_live(config, directory, options, concurrency, directory / paths.RESULTS, on_result)
+    saved.runs = [RunResult.of(r, directory) for r in found]
+    saved.finished = datetime.now(UTC)
+    results.save(directory, saved)
+    return directory, saved
 
 
 def _problems(path: Path, error: EvalError) -> str:
@@ -155,6 +165,43 @@ def show(
         out.print_json(saved.model_dump_json())
     else:
         print_scoreboard(out, saved, directory)
+
+
+SiteOption = Annotated[str, typer.Option(help="The site to share on.", hidden=True)]
+
+
+@app.command("share")
+def share(
+    id: Annotated[str | None, typer.Argument(help="The eval run; the latest when omitted.")] = None,
+    site: SiteOption = sharing.SITE,
+    yes: YesOption = False,
+) -> None:
+    """Publish an eval's results and Trajectories at a public URL on
+    agentvoyagerproject.com that lasts 30 days. Anyone with the URL can read
+    every run's prompts, replies, and tool inputs and outputs, so avp asks
+    first."""
+    directory, saved = results.load(id)
+    if not confirm(
+        f"Publish {saved.id} at a public URL on {site}? Anyone with the URL can read every "
+        "run's prompts, replies, and tool inputs and outputs.",
+        yes,
+    ):
+        err.print("Nothing published")
+        raise typer.Exit(1)
+    with err.status("Publishing"):
+        shared = sharing.share(directory, saved, site)
+    out.print(shared.url, highlight=False, soft_wrap=True)
+    err.print(f"Until {shared.expires_at:%Y-%m-%d}. `avp eval unshare {saved.id}` takes it down.")
+
+
+@app.command("unshare")
+def unshare(
+    id: Annotated[str | None, typer.Argument(help="The eval run; the latest when omitted.")] = None,
+) -> None:
+    """Take a shared eval's link down before it expires."""
+    directory, _ = results.load(id)
+    gone = sharing.unshare(directory)
+    err.print(f"Took down {gone.url}", highlight=False, soft_wrap=True)
 
 
 @app.command("delete")
