@@ -47,6 +47,13 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │     agent never sees it: model.credential to requests to the model's host, and an HTTP
 │     MCP server's headers to requests to the server's host. ⬜ --out, --timeout.
 │
+├── ✅ hello-world       Run an example eval on three built-in agents, print its scoreboard,
+│     avp hello-world [--no-share]     and share it for a link.
+│     A mock model answers in place of a real one, so no credential is needed and
+│     nothing is billed. Installs the agents that aren't installed. The upload holds
+│     only the example's text and what the built-in agents say of themselves, so it
+│     doesn't ask first; --no-share skips it.
+│
 ├── eval              Run datasets against agents and Commissions, and score the results.
 │   ├── ✅ run  Run an eval file and print the scoreboard. Each agent is described once first,
 │   │           and each run goes in its own sandbox, as `avp run` runs it. The eval's runs,
@@ -65,13 +72,14 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   ├── ✅ delete  Delete past eval runs and their runs' directories. Asks first; --yes
 │   │           (or --force) doesn't, and is needed without a terminal.
 │   │     avp eval delete RUN_ID... | --all [--yes]
-│   ├── ⬜ share   Later, not a priority. Upload an eval's results and Trajectories to
-│   │           agentvoyagerproject.com and print a link that lasts 30 days, as the old CLI's
-│   │           `eval share` does. The upload holds every run's prompts, replies, and tool
-│   │           inputs and outputs, so avp says so and asks before uploading.
-│   │     avp eval share [RUN_ID]
-│   └── ⬜ unshare Later, with share. Take a shared eval's link down before it expires.
-│         avp eval unshare RUN_ID
+│   ├── ✅ share   Upload an eval's results and Trajectories to agentvoyagerproject.com
+│   │           and print a link that lasts 30 days. The upload holds every run's
+│   │           prompts, replies, and tool inputs and outputs, so avp says so and
+│   │           asks before uploading. Long text is cut, and no credential, header,
+│   │           or model URL is uploaded.
+│   │     avp eval share [RUN_ID] [--yes]
+│   └── ✅ unshare Take a shared eval's link down before it expires.
+│         avp eval unshare [RUN_ID]
 │
 ├── conformance         Check that an agent follows the spec's rules for agents. See Conformance.
 │   ├── ✅ check   Run the cases against an agent and report pass, fail, or skip by rule. The

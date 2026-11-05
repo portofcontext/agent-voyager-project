@@ -67,6 +67,8 @@ avp eval run capitals.eval.json [--agent pd] [--concurrency 4] [--env-file .env]
 avp eval show            # the latest eval's scoreboard again
 avp eval list
 avp eval delete ID       # asks first; --yes doesn't
+avp eval share           # upload the latest eval for a link; asks first
+avp eval unshare         # take the link down
 ```
 
 avp checks every rendered Commission before starting any sandbox. It then
@@ -93,6 +95,7 @@ pass and why. An eval run keeps its files in
 | `results.json` | Each run's score, model, time, and totals, written as each run finishes. |
 | `agents/<name>.json` | The agent's image ID and Descriptor, from its `describe`. The image ID changes when the agent is installed again. |
 | `runs/<run_id>/` | The run's Commission, Trajectory, the agent's stderr, and `scorer-error.txt` when its scorer failed. |
+| `share.json` | Where the eval is shared, and the token that takes it down. |
 
 ## Items
 

@@ -6,7 +6,7 @@ import logging
 import typer
 from rich.markup import escape
 
-from avp_cli import console
+from avp_cli import console, hello
 from avp_cli.agents import cli as agent_cli
 from avp_cli.commissions import cli as commission_cli
 from avp_cli.conformance import cli as conformance_cli
@@ -18,6 +18,7 @@ from avp_cli.vault import cli as vault_cli
 app = typer.Typer(no_args_is_help=True, help="Run, evaluate, and check AVP agents in sandboxes.")
 
 app.command()(run_cli.run)
+app.command("hello-world")(hello.hello_world)
 app.add_typer(eval_cli.app, name="eval")
 app.add_typer(conformance_cli.app, name="conformance")
 app.add_typer(agent_cli.app, name="agent")

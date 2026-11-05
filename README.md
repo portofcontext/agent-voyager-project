@@ -20,19 +20,34 @@ Supervisor ◀── Trajectory ─── Agent
 See the [spec overview](spec/v0.1/README.md) for the three contracts and how
 they fit together.
 
-## Run an agent
+## Try it
 
-Install the CLI. Requires
-[uv](https://docs.astral.sh/uv/) and a running container engine with a Docker API,
-such as Docker or podman:
+Install the CLI. Requires [uv](https://docs.astral.sh/uv/) and a running
+container engine with a Docker API, such as Docker or podman:
 
 ```sh
 uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
+avp hello-world
+```
+
+`avp hello-world` installs three agents and runs an example eval on them. It
+ends on the eval's scoreboard and a link to view it on agentvoyagerproject.com.
+A mock model answers the LLM calls, so it needs no API key and costs nothing.
+It is a quick way to get a feel for working with AVP.
+
+## Run an agent
+
+Install a few agents and save a provider key in the vault. The vault command
+prompts for your key:
+
+```sh
 avp agent install pydantic-ai
+avp agent install claude-code
+avp agent install pi
 avp vault set anthropic
 ```
 
-The vault command prompts for your key. Save this as `task.json`:
+Save this as `task.json`:
 
 ```json
 {
@@ -46,12 +61,16 @@ The vault command prompts for your key. Save this as `task.json`:
 }
 ```
 
+Run the same Commission on each runtime:
+
 ```sh
 avp run --agent pydantic-ai --commission task.json
+avp run --agent claude-code --commission task.json
+avp run --agent pi --commission task.json
 ```
 
-This runs the agent in an OpenSandbox sandbox. The CLI prints the
-Trajectory location. See the [command guide](avp-cli/COMMANDS.md) for credentials,
+Each run happens in an OpenSandbox sandbox, and the CLI prints the Trajectory's
+location. See the [command guide](avp-cli/COMMANDS.md) for credentials,
 networking and volumes, and the [eval guide](avp-cli/docs/eval.md) for comparisons.
 
 ## Agents and SDKs

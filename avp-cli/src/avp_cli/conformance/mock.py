@@ -6,17 +6,17 @@ one format for a response and answers in the format of each provider's API. With
 import json
 import shlex
 import time
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from opensandbox.exceptions import SandboxException
 from opensandbox.models.execd import RunCommandOpts
 from opensandbox.models.filesystem import WriteEntry
 from opensandbox.sync.sandbox import SandboxSync
 
-from avp_cli.conformance.cases import Case
+from avp_cli.conformance.cases import Response
 from avp_cli.console import Failed, err, line
 from avp_cli.sandbox import sandboxes
 
@@ -46,6 +46,16 @@ _ADDRESS = (
 )
 
 
+class Scripted(Protocol):
+    """A prompt and the model's responses to it, in order. A conformance case
+    is one."""
+
+    @property
+    def prompt(self) -> str: ...
+    @property
+    def responses(self) -> Sequence[Response]: ...
+
+
 def path(provider: str) -> str:
     """What `model.base_url` adds to the mock's address for `provider`."""
     if provider not in PATHS:
@@ -56,7 +66,7 @@ def path(provider: str) -> str:
     return PATHS[provider]
 
 
-def fixtures(cases: Iterable[Case]) -> dict[str, Any]:
+def fixtures(cases: Iterable[Scripted]) -> dict[str, Any]:
     """aimock's fixture file: each case's responses in order, matched on the
     case's prompt and how many responses came before. Both come from the
     request, so runs at the same time can share a mock."""
@@ -70,7 +80,7 @@ def fixtures(cases: Iterable[Case]) -> dict[str, Any]:
 
 
 @contextmanager
-def serving(cases: Iterable[Case], image: str = IMAGE) -> Generator[str]:
+def serving(cases: Iterable[Scripted], image: str = IMAGE) -> Generator[str]:
     """A running mock with the cases' responses, deleted on exit. Yields the
     address an agent's sandbox reaches it at, when allowed that host."""
     with (

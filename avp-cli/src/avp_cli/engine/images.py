@@ -117,6 +117,16 @@ def image_id(image: str) -> str:
     return client().images.get(image).id
 
 
+def exists(image: str) -> bool:
+    """Whether the engine has the image. An installed agent's can be gone,
+    removed outside avp."""
+    try:
+        client().images.get(image)
+    except NotFound:
+        return False
+    return True
+
+
 def remove(image: str) -> None:
     """Remove the image's name, and the image when no tag names it any longer.
     A pulled image otherwise stays, held by the digest it was pulled at."""
