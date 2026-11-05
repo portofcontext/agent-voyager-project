@@ -4,9 +4,7 @@ of a real one, so it needs no credential and costs nothing."""
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Any
-
-import typer
+from typing import Any
 
 from avp_cli import console
 from avp_cli._cli_common import VerboseOption
@@ -14,10 +12,9 @@ from avp_cli.agents import cli as agent_cli
 from avp_cli.agents import store
 from avp_cli.conformance import mock
 from avp_cli.conformance.cases import Response
-from avp_cli.console import Failed, err, out
+from avp_cli.console import Failed, out
 from avp_cli.engine import images
 from avp_cli.eval import cli as eval_cli
-from avp_cli.eval import share as sharing
 from avp_cli.eval.commission import EvalError
 from avp_cli.eval.config import EvalConfig
 from avp_cli.eval.report import print_scoreboard
@@ -63,17 +60,9 @@ def eval_file(agents: list[str], model: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def hello_world(
-    no_share: Annotated[
-        bool, typer.Option("--no-share", help="Don't upload the eval for a link.")
-    ] = False,
-    verbose: VerboseOption = False,
-) -> None:
-    """Run an example eval on three agents, print its scoreboard, and share it
-    on agentvoyagerproject.com for a link. A mock model answers in place of a
-    real one, so no credential is needed, nothing is billed, and the upload
-    holds only the example's text and what the built-in agents say of
-    themselves. Installs the agents that aren't installed."""
+def hello_world(verbose: VerboseOption = False) -> None:
+    """Run an example eval on three agents with a mock model. No API key, no
+    cost."""
     console.set_verbose(verbose)
     agents = list(AGENTS)
     installed = {found.name for found in store.installed() if images.exists(found.image)}
@@ -99,12 +88,8 @@ def hello_world(
             config, json.dumps(real, indent=2) + "\n", Options(env={KEY: STAND_IN}), CONCURRENCY
         )
     print_scoreboard(out, saved, directory)
-    if no_share:
-        return
-    try:
-        with err.status("Uploading"):
-            shared = sharing.share(directory, saved, sharing.SITE)
-    except Failed as failure:
-        err.print(f"Not shared: {failure}", highlight=False, soft_wrap=True)
-        return
-    out.print(f"\n{shared.url}", highlight=False, soft_wrap=True)
+    out.print(
+        f"\nPublish it to a public URL: avp eval share {saved.id}",
+        highlight=False,
+        soft_wrap=True,
+    )

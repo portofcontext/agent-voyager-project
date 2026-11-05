@@ -176,18 +176,19 @@ def share(
     site: SiteOption = sharing.SITE,
     yes: YesOption = False,
 ) -> None:
-    """Upload an eval's results and Trajectories to agentvoyagerproject.com and
-    print a link that lasts 30 days. Anyone with the link can read every run's
-    prompts, replies, and tool inputs and outputs, so avp asks first."""
+    """Publish an eval's results and Trajectories at a public URL on
+    agentvoyagerproject.com that lasts 30 days. Anyone with the URL can read
+    every run's prompts, replies, and tool inputs and outputs, so avp asks
+    first."""
     directory, saved = results.load(id)
     if not confirm(
-        f"Upload {saved.id} to {site}? Anyone with its link can read every run's prompts, "
-        "replies, and tool inputs and outputs.",
+        f"Publish {saved.id} at a public URL on {site}? Anyone with the URL can read every "
+        "run's prompts, replies, and tool inputs and outputs.",
         yes,
     ):
-        err.print("Nothing uploaded")
+        err.print("Nothing published")
         raise typer.Exit(1)
-    with err.status("Uploading"):
+    with err.status("Publishing"):
         shared = sharing.share(directory, saved, site)
     out.print(shared.url, highlight=False, soft_wrap=True)
     err.print(f"Until {shared.expires_at:%Y-%m-%d}. `avp eval unshare {saved.id}` takes it down.")

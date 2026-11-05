@@ -2,7 +2,6 @@
 container engine and the mock model."""
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,6 @@ from avp_cli.cli import app
 from avp_cli.console import Failed
 from avp_cli.eval import share as sharing
 from avp_cli.eval.config import EvalConfig
-from avp_cli.eval.results import EvalResults
 from avp_cli.eval.schemas import Eval
 
 
@@ -42,20 +40,6 @@ def test_hello_world_installs_its_agent_and_every_run_passes(
     avp_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(hello, "AGENTS", ("pydantic-ai",))
-    uploads: list[Path] = []
-
-    def share(directory: Path, results: EvalResults, site: str) -> sharing.Shared:
-        uploads.append(directory)
-        sharing.payload(directory, results)
-        return sharing.Shared(
-            id="abcdefghij",
-            url="https://site.test/eval/abcdefghij",
-            delete_token="token",
-            expires_at=datetime(2026, 2, 1, tzinfo=UTC),
-            site=site,
-        )
-
-    monkeypatch.setattr(sharing, "share", share)
     runner = CliRunner()
     result = runner.invoke(app, ["hello-world"])
     try:
@@ -71,11 +55,9 @@ def test_hello_world_installs_its_agent_and_every_run_passes(
             "id": hello.MODEL,
             "credential": {"proxy": hello.PROVIDER},
         }
-        assert uploads == [directory]
-        assert result.output.rstrip().endswith("https://site.test/eval/abcdefghij")
-        quiet = runner.invoke(app, ["hello-world", "--no-share"])
-        assert quiet.exit_code == 0, quiet.output
-        assert len(uploads) == 1
-        assert "site.test" not in quiet.output
+        assert result.output.rstrip().endswith(
+            f"Publish it to a public URL: avp eval share {directory.name}"
+        )
+        assert sharing.shared(directory) is None
     finally:
         runner.invoke(app, ["agent", "uninstall", "pydantic-ai"])

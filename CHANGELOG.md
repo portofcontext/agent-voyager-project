@@ -9,10 +9,10 @@
 ### Added
 
 - `avp hello-world` runs an example eval on three built-in agents against a
-  mock model, with no credential, and shares it for a link.
+  mock model, with no credential.
 
-- `avp eval share` uploads an eval to agentvoyagerproject.com for a link that
-  lasts 30 days, and `avp eval unshare` takes it down.
+- `avp eval share` publishes an eval at a public URL on agentvoyagerproject.com
+  that lasts 30 days, and `avp eval unshare` takes it down.
 
 - Built-in agents install from published images pinned by digest, when the CLI
   pins one. `avp agent install NAME --build` builds from the pinned source. The

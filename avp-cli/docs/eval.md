@@ -67,7 +67,7 @@ avp eval run capitals.eval.json [--agent pd] [--concurrency 4] [--env-file .env]
 avp eval show            # the latest eval's scoreboard again
 avp eval list
 avp eval delete ID       # asks first; --yes doesn't
-avp eval share           # upload the latest eval for a link; asks first
+avp eval share           # publish the latest eval at a public URL; asks first
 avp eval unshare         # take the link down
 ```
 
