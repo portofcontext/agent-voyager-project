@@ -16,6 +16,10 @@ class Agent(BaseModel):
     image: str
     """The engine's name for the image. The agent's Descriptor is never saved:
     `describe` asks the agent each time."""
+    version: str | None = None
+    """The agent's version when it was installed, which `avp agent update`
+    compares with the built-in's. None for an agent installed before avp kept
+    it."""
 
 
 def check_name(name: str) -> None:

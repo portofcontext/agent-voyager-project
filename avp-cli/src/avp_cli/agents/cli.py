@@ -110,7 +110,7 @@ def install(
                     f"expected {builtin.agent_name} {builtin.version}; the image describes "
                     f"{descriptor.agent_name} {descriptor.agent_version}"
                 )
-    store.save(store.Agent(name=name, image=image))
+    store.save(store.Agent(name=name, image=image, version=descriptor.agent_version))
     err.print(
         Text.assemble(
             "Installed ",
@@ -121,6 +121,23 @@ def install(
             (f"in {image} ({'pulled' if published else 'built'} in {took:.0f}s)", "dim"),
         )
     )
+
+
+@app.command()
+def update(verbose: VerboseOption = False) -> None:
+    """Reinstall the installed built-in agents that aren't at the versions
+    this avp lists."""
+    console.set_verbose(verbose)
+    listed = builtins.catalog().agents
+    outdated = [
+        agent.name
+        for agent in store.installed()
+        if agent.name in listed and agent.version != listed[agent.name].version
+    ]
+    for name in outdated:
+        install(name)
+    if not outdated:
+        err.print("The installed built-in agents are up to date")
 
 
 @app.command()

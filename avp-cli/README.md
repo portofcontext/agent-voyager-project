@@ -6,7 +6,7 @@ design is in [COMMANDS.md](COMMANDS.md).
 ## Install
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.6.0b2/avp_cli-0.6.0b2-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.7.0/avp_cli-0.7.0-py3-none-any.whl
 ```
 
 ## Agents

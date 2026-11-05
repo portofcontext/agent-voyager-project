@@ -53,6 +53,12 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │     nothing is billed. Installs the agents that aren't installed, and ends with
 │     the `avp eval share` command for the eval.
 │
+├── ✅ update            Install the newest avp release from GitHub with uv, then reinstall the
+│     avp update [--check] [--pre]     installed built-in agents whose versions it changed.
+│     --check only says whether a newer release exists. A prerelease counts as newer
+│     only with --pre, or when this avp is one. An avp that uv didn't install, or that
+│     runs from a checkout, is told what to install.
+│
 ├── eval              Run datasets against agents and Commissions, and score the results.
 │   ├── ✅ run  Run an eval file and print the scoreboard. Each agent is described once first,
 │   │           and each run goes in its own sandbox, as `avp run` runs it. The eval's runs,
@@ -107,6 +113,9 @@ avp                     ⬜ In a terminal, opens the TUI. Otherwise, and with --
 │   │     avp agent ping pd
 │   ├── ✅ describe   Print the agent's Agent Descriptor, from its describe in a sandbox.
 │   │     avp agent describe pd
+│   ├── ✅ update     Reinstall the installed built-in agents that aren't at the versions
+│   │                 this avp lists.
+│   │     avp agent update
 │   └── ✅ uninstall  Remove an agent and its image.
 │         avp agent uninstall pd
 │

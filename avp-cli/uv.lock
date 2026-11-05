@@ -274,7 +274,7 @@ wheels = [
 
 [[package]]
 name = "avp-cli"
-version = "0.6.0b2"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "agent-voyager-project" },
@@ -283,6 +283,7 @@ dependencies = [
     { name = "mcp" },
     { name = "opensandbox" },
     { name = "opensandbox-server" },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "questionary" },
@@ -306,6 +307,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.3" },
     { name = "opensandbox", specifier = ">=1.2" },
     { name = "opensandbox-server", specifier = ">=1.2" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "python-dotenv", specifier = ">=1.2" },
     { name = "questionary", specifier = ">=2" },
