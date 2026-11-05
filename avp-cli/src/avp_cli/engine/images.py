@@ -68,13 +68,17 @@ def build(
 
 
 def pull(reference: str, tag: str, progress: Callable[[int], None] | None = None) -> str:
-    """Pull the image at `reference`, which names a digest, and name it `tag`
-    alone. `progress` is called with the bytes downloaded so far. Returns the
+    """Pull the image at `reference`, which names a digest, and name it `tag`. `progress` is called with the bytes downloaded so far. Returns the
     engine's name for the image, as `build` does."""
     engine = client()
     layers: dict[str, int] = {}
+    # Pulled with its tag, some engines keep that tag as a name of the image.
+    repository, _, digest = reference.partition("@")
+    if ":" in repository.rsplit("/", 1)[-1]:
+        repository = repository.rsplit(":", 1)[0]
+    pinned = f"{repository}@{digest}"
     try:
-        for chunk in engine.api.pull(reference, stream=True, decode=True):
+        for chunk in engine.api.pull(pinned, stream=True, decode=True):
             if "error" in chunk:
                 raise Failed(f"couldn't pull {reference}: {chunk['error'].strip()}")
             status, layer = chunk.get("status", ""), chunk.get("id")
@@ -85,11 +89,11 @@ def pull(reference: str, tag: str, progress: Callable[[int], None] | None = None
                 layers[layer] = current
                 if progress:
                     progress(sum(layers.values()))
-        engine.images.get(reference).tag(tag)
-        engine.images.remove(reference)
+        engine.images.get(pinned).tag(tag)
     except APIError as exc:
         raise Failed(f"couldn't pull {reference}: {exc.explanation or exc}") from None
-    return engine.images.get(tag).tags[0]
+    # The image can have other names already, when its content was here before.
+    return next(name for name in engine.images.get(tag).tags if name.startswith(tag))
 
 
 def entrypoint(image: str) -> list[str]:
@@ -114,14 +118,15 @@ def image_id(image: str) -> str:
 
 
 def remove(image: str) -> None:
-    """Remove the image's name, and the image when that was its last name. A
-    pulled image otherwise stays, held by the digest it was pulled at."""
+    """Remove the image's name, and the image when no tag names it any longer.
+    A pulled image otherwise stays, held by the digest it was pulled at."""
     engine = client()
     try:
         found = engine.images.get(image).id
         engine.images.remove(image)
-        if not engine.images.get(found).tags:
-            engine.images.remove(found)
+        # Some engines list a digest reference among the tags.
+        if not [name for name in engine.images.get(found).tags if "@" not in name]:
+            engine.images.remove(found, force=True)
     except NotFound:
         # Docker raises ImageNotFound, a NotFound; podman a plain NotFound.
         pass

@@ -238,17 +238,35 @@ ALPINE = (
 )
 
 
-def test_pulled_image_has_only_its_tag_and_remove_deletes_it() -> None:
-    tag = "localhost/avp/test-pull"
-    name = images.pull(ALPINE, tag)
+def tags(image_id: str) -> list[str]:
+    """The image's tags, without the digest references some engines list with them."""
     try:
-        pulled = engine.client().images.get(name)
-        assert pulled.tags == [name]
-        assert name.startswith(tag)
+        return [name for name in engine.client().images.get(image_id).tags if "@" not in name]
+    except NotFound:
+        return []
+
+
+@pytest.mark.parametrize("already_here", [False, True])
+def test_remove_deletes_a_pulled_image_unless_another_tag_names_it(already_here: bool) -> None:
+    client = engine.client()
+    if already_here:
+        client.images.pull("docker.io/library/alpine", tag="3.20")
+    else:
+        for name in tags(ALPINE.replace(":3.20", "")):
+            client.images.remove(name)
+    name = images.pull(ALPINE, "localhost/avp/test-pull")
+    image_id = client.images.get(name).id
+    try:
+        assert name.startswith("localhost/avp/test-pull")
+        assert name in tags(image_id)
     finally:
         images.remove(name)
-    with pytest.raises(NotFound):
-        engine.client().images.get(pulled.id)
+    assert name not in tags(image_id)
+    if already_here:
+        assert tags(image_id)
+    else:
+        with pytest.raises(NotFound):
+            client.images.get(image_id)
 
 
 def test_failed_pull_names_the_reference() -> None:
