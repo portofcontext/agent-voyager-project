@@ -30,10 +30,8 @@ uv tool install https://github.com/portofcontext/agent-voyager-project/releases/
 avp hello-world
 ```
 
-`avp hello-world` installs three agents and runs an example eval on them. It
-ends on the eval's scoreboard and a link to view it on agentvoyagerproject.com.
-A mock model answers the LLM calls, so it needs no API key and costs nothing.
-It is a quick way to get a feel for working with AVP.
+`avp hello-world` runs an example eval on three agents and gives you a link to
+view it. LLM calls are mocked, so it needs no API key and costs nothing.
 
 ## Run an agent
 
