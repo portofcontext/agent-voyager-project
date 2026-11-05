@@ -1,4 +1,5 @@
-"""Built-in agents: packaged Dockerfiles and a pinned, verified source archive."""
+"""Built-in agents: a published image pinned by digest, or the packaged
+Dockerfile and a pinned, verified source archive to build one from."""
 
 import hashlib
 import json
@@ -23,6 +24,9 @@ class Agent:
     agent_name: str
     version: str
     directory: str
+    image: str | None = None
+    """The published image, pinned by digest. None when this agent's version
+    has no published image, so it installs by building from the source."""
 
 
 @dataclass(frozen=True)

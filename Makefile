@@ -23,6 +23,7 @@ help:
 	@echo "make sdk-data-check verify data links and SDK archives"
 	@echo "make build-skill    package the skill and offline specs"
 	@echo "make sync           install each Python project's locked dependencies"
+	@echo "make agent-images   pin the published built-in agent images in the CLI"
 	@echo "make release-sdk-python | release-sdk-typescript | release-cli  publish a GitHub beta"
 
 .PHONY: sync test format format-check lint schemas sdk-data sdk-data-check build-skill
@@ -166,6 +167,10 @@ deep-agents-check:
 	@cd agents/avp-deep-agents/python && $(UV) run ty check
 	@cd agents/avp-deep-agents/python && $(UV) run pytest -q
 
+
+.PHONY: agent-images
+agent-images:
+	@$(UV) run --project avp-sdk/python python scripts/agent-images.py pin
 
 .PHONY: release-check release-sdk-python release-sdk-typescript release-cli
 release-check:

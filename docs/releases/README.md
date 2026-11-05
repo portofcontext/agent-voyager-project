@@ -48,6 +48,22 @@ The GitHub Packages workflow tests the code, builds the package, installs it
 in a clean environment, then publishes the release. Existing tags are never
 overwritten. Bump the version for another release.
 
+### Built-in agent images
+
+The CLI installs built-in agents from images at
+`ghcr.io/portofcontext/<agent_name>:<version>`, pinned by digest in
+`avp-cli/src/avp_cli/agents/builtins.json`. Before a CLI release that changes
+the source commit or an agent's version there:
+
+1. Push the branch, then run the Agent images workflow on it. It builds each
+   agent from the pinned commit for amd64 and arm64, and leaves a version that
+   is already published as it is. Bump an agent's version to publish it again.
+2. A new package starts private. Make it public in the organization's package
+   settings, once per agent.
+3. Run `make agent-images` to write the digests to `builtins.json`, and commit.
+
+An agent without an `image` there installs by building from the pinned source.
+
 Tags are `sdk-python-v<version>`, `sdk-typescript-v<version>`, and `cli-v<version>`.
 Beta tags can be cut from the release branch before it merges into `main`.
 
