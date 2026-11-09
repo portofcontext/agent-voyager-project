@@ -1,10 +1,10 @@
 """ATIF wire models and document IO, using Harbor's pinned reference models."""
 
 import os
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from avp._vendor.atif import (  # noqa: F401
     Agent,
@@ -56,10 +56,14 @@ class Recording:
             asset.parent.mkdir(parents=True, exist_ok=True)
             if not asset.exists():
                 asset.write_bytes(content)
-        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        temporary = path.with_name(f".{path.name}.{uuid4()}.tmp")
+        # Use ordinary file permissions (filtered by umask), like the media files
+        # and TypeScript sink. mkstemp's 0600 prevents a host supervisor from
+        # reading snapshots written by a different user inside a container.
+        file = temporary.open("x", encoding="utf-8")
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as file:
+            with file:
                 file.write(self.trajectory.model_dump_json(exclude_none=True, indent=2) + "\n")
             os.replace(temporary, path)
         finally:
-            Path(temporary).unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)

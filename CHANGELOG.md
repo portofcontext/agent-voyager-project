@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Python ATIF snapshots respect normal file creation permissions and the process
+  umask, so host supervisors can read container-written snapshots on Linux.
 - Both SDK run plans preserve an explicitly empty system prompt.
 - Claude tool results and subagent events that arrive before the parent model
   response completes are deferred until its calls and usage are recorded.

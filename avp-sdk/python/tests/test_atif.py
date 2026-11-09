@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -20,10 +22,24 @@ from avp.reports import (
     ThinkingBlock,
     ToolUseBlock,
 )
-from avp.trajectory import avp_metadata, parse_trajectory
+from avp.trajectory import Recording, avp_metadata, parse_trajectory
 
 DATA = Path(__file__).resolve().parents[2] / "testdata/atif"
 MODEL = ModelRef(provider="test", id="model")
+
+
+@pytest.mark.parametrize("mask, expected", [(0o022, 0o644), (0o077, 0o600)])
+def test_atomic_snapshots_respect_normal_file_creation_permissions(tmp_path, mask, expected):
+    recording = Recording(parse_trajectory((DATA / "external-terminus.json").read_text()))
+    path = tmp_path / "trajectory.json"
+    previous = os.umask(mask)
+    try:
+        for _ in range(2):
+            recording.write(path)
+            assert stat.S_IMODE(path.stat().st_mode) == expected
+            assert parse_trajectory(path.read_text()) == recording.trajectory
+    finally:
+        os.umask(previous)
 
 
 def test_upstream_terminus_document_reads_without_avp_metadata():
