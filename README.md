@@ -5,7 +5,7 @@
 
 > **Status:** Draft v0.1
 
-AVP is an open standard for running and observing AI agents. Shared task and
+AVP is an open standard for running and observing AI agents. Shared task definitions and
 ATIF trajectories let you run, compare, and inspect agents across different runtimes.
 
 A supervisor sends one JSON **Commission** with the task, model, and resources.
@@ -23,15 +23,11 @@ they fit together.
 
 ## Try it
 
-Native ATIF is unreleased. From a checkout, use
-`uv run --project avp-cli avp hello-world` to try this version.
-The installation below is the latest published CLI.
-
 Install the CLI. Requires [uv](https://docs.astral.sh/uv/) and a running
 container engine with a Docker API, such as Docker or podman:
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.7.0/avp_cli-0.7.0-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
 avp hello-world
 ```
 
