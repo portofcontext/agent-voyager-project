@@ -188,3 +188,20 @@ def test_totals_add_up_the_trajectory(tmp_path):
 def test_unknown_external_usage_is_not_reported_as_measured_zero(tmp_path):
     run = run_in(tmp_path, atif())
     assert set(run.totals.unknown_metrics) == {"input_tokens", "output_tokens", "cost_usd"}
+
+
+def test_incomplete_avp_response_is_not_final_output(tmp_path):
+    doc = atif(complete=False)
+    doc["steps"].append({"step_id": 2, "source": "agent", "message": "still thinking"})
+    assert run_in(tmp_path, doc).output is None
+
+
+def test_external_multimodal_output_and_unknown_extensions(tmp_path):
+    doc = atif()
+    doc["extra"] = {"avp": {"stop_reason": "future-reason"}, "other": {"version": 3}}
+    doc["steps"][-1]["message"] = [
+        {"type": "image", "source": {"media_type": "image/png", "path": "image.png"}}
+    ]
+    run = run_in(tmp_path, doc)
+    assert run.output == doc["steps"][-1]["message"]
+    assert run.reason is None

@@ -6,11 +6,12 @@
 > **Status:** Draft v0.1
 
 AVP is an open standard for running and observing AI agents. Shared task and
-event formats let you run, compare, and inspect agents across different runtimes.
+ATIF trajectories let you run, compare, and inspect agents across different runtimes.
 
 A supervisor sends one JSON **Commission** with the task, model, and resources.
-The agent streams a **Trajectory** of model responses, tool calls, usage, cost,
-and outcome.
+The agent records a native **ATIF trajectory** of model responses, tool calls,
+usage, cost, and outcome. See the [ATIF guide](avp-sdk/docs/atif.md) for existing
+viewers and training-data tools.
 
 ```text
 Supervisor ─── Commission ──▶ Agent
@@ -21,6 +22,10 @@ See the [spec overview](spec/v0.1/README.md) for the three contracts and how
 they fit together.
 
 ## Try it
+
+Native ATIF is unreleased. From a checkout, use
+`uv run --project avp-cli avp hello-world` to try this version.
+The installation below is the latest published CLI.
 
 Install the CLI. Requires [uv](https://docs.astral.sh/uv/) and a running
 container engine with a Docker API, such as Docker or podman:

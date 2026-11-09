@@ -8,6 +8,9 @@ because `avp` on PyPI is an unrelated project.
 
 ## Install
 
+The link below installs the latest published SDK. Native ATIF is unreleased;
+use the source development instructions to try it.
+
 ```sh
 uv pip install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl
 ```

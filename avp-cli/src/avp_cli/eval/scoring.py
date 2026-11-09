@@ -209,6 +209,17 @@ def read(
     trajectory, invalid = read_trajectory(directory / paths.TRAJECTORY)
     metadata = avp_metadata(trajectory) if trajectory else {}
     replies = [s.message for s in trajectory.steps if s.source == "agent"] if trajectory else []
+    output = metadata.get("output")
+    if "complete" not in metadata and "output" not in metadata and replies:
+        message = replies[-1]
+        output = (
+            message
+            if isinstance(message, str)
+            else [part.model_dump(mode="json", exclude_none=True) for part in message]
+        )
+    reason = metadata.get("stop_reason")
+    if reason not in {"converged", "refused", "error", "interrupted", "abandoned"}:
+        reason = None
     return Run(
         id=id,
         agent=agent,
@@ -216,8 +227,8 @@ def read(
         exit_code=exit_code,
         trajectory=trajectory,
         invalid_trajectory=invalid,
-        output=metadata.get("output", replies[-1] if replies else None),
-        reason=metadata.get("stop_reason"),
+        output=output,
+        reason=reason,
         item=item,
         model=model,
         seconds=seconds,

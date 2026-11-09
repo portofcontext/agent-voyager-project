@@ -199,3 +199,108 @@ def test_upstream_semantics(case):
     else:
         with pytest.raises(ValueError):
             parse_trajectory(case["trajectory"])
+
+
+def test_provider_content_remains_interoperable_without_exposing_encrypted_reasoning():
+    from pydantic import TypeAdapter
+
+    from avp.reports import ContentBlock
+
+    snapshots = []
+
+    async def run():
+        async def sink(snapshot):
+            snapshots.append(snapshot)
+
+        rec = Recorder(sink)
+        await rec.start(RunContext(prompt="hello", model=MODEL))
+        blocks = TypeAdapter(list[ContentBlock]).validate_python(
+            [
+                {"type": "thinking", "thinking": "public thought", "signature": "signed"},
+                {"type": "thinking", "thinking": "encrypted payload", "redacted": True},
+                {
+                    "type": "text",
+                    "text": "answer",
+                    "citations": [{"type": "url_citation", "source_url": "https://example.com"}],
+                    "provider_id": "part-1",
+                },
+                {"type": "refusal", "refusal": "declined detail"},
+                {
+                    "type": "server_tool_use",
+                    "id": "search",
+                    "name": "search",
+                    "input": {"q": "test"},
+                },
+                {
+                    "type": "server_tool_result",
+                    "tool_use_id": "search",
+                    "name": "search",
+                    "content": {"found": [1, 2]},
+                },
+            ]
+        )
+        await rec.response(blocks, meta={"response_id": "provider-response"})
+        await rec.stop("converged")
+
+    asyncio.run(run())
+    step = snapshots[-1].trajectory.steps[-1]
+    assert step.reasoning_content == "public thought"
+    assert "encrypted payload" not in str(step.message)
+    assert avp_metadata(step)["reasoning_metadata"][1]["encrypted_content"] == "encrypted payload"
+    annotations = avp_metadata(step)["message_metadata"]
+    assert annotations[0]["annotations"]["citations"][0]["source_url"] == "https://example.com"
+    assert annotations[1]["annotations"]["refusal"] is True
+    assert avp_metadata(step)["annotations"]["response_id"] == "provider-response"
+    assert step.tool_calls[0].function_name == "search"
+    assert json.loads(step.observation.results[0].content) == {"found": [1, 2]}
+
+
+def test_nested_children_keep_parent_references_and_usage_once():
+    snapshots = []
+
+    async def run():
+        async def sink(snapshot):
+            snapshots.append(snapshot)
+
+        rec = Recorder(sink)
+        await rec.start(RunContext(prompt="hello", model=MODEL))
+        usage = UsageReport(input_tokens=10, output_tokens=2)
+        await rec.response(
+            [ToolUseBlock(type="tool_use", id="outer", name="delegate", input={})], usage=usage
+        )
+        await rec.subagent_invoked("outer", "researcher")
+        await rec.response(
+            [ToolUseBlock(type="tool_use", id="inner", name="delegate", input={})],
+            usage=usage,
+            subagent_invocation_id="outer",
+        )
+        await rec.subagent_invoked("inner", "helper", subagent_invocation_id="outer")
+        await rec.response(
+            [TextBlock(type="text", text="inner done")], usage=usage, subagent_invocation_id="inner"
+        )
+        await rec.subagent_returned("inner", "inner done")
+        await rec.tool_returned("inner", "inner done")
+        await rec.response(
+            [TextBlock(type="text", text="outer done")], usage=usage, subagent_invocation_id="outer"
+        )
+        await rec.subagent_returned("outer", "outer done")
+        await rec.tool_returned("outer", "outer done")
+        await rec.response([TextBlock(type="text", text="done")], usage=usage)
+        await rec.stop("converged", "done")
+
+    asyncio.run(run())
+    root = snapshots[-1].trajectory
+    child = root.subagent_trajectories[0]
+    grandchild = child.subagent_trajectories[0]
+    assert root.final_metrics.total_prompt_tokens == 50
+    assert child.final_metrics.total_prompt_tokens == 30
+    assert grandchild.final_metrics.total_prompt_tokens == 10
+    for parent, delegated in [(root, child), (child, grandchild)]:
+        references = [
+            ref.trajectory_id
+            for step in parent.steps
+            if step.observation
+            for result in step.observation.results
+            for ref in result.subagent_trajectory_ref or []
+        ]
+        assert references == [delegated.trajectory_id]

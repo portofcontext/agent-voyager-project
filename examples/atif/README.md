@@ -24,5 +24,5 @@ is a separate choice for the dataset consumer.
 
 Run `scripts/test-atif-ecosystem.py` with this same Python to check a Recorder
 fixture against the independent Harbor model, trace extractor, viewer API,
-and job scanner. AVP's ordinary `make check` stays offline and uses the pinned
-schema plus shared semantic fixtures.
+and job scanner. AVP's ordinary `make check` uses the pinned schema and shared semantic
+fixtures without installing Harbor or making model calls.

@@ -189,7 +189,7 @@ def test_the_scoreboard_shows_cost_turns_time_and_agents(tmp_path: Path) -> None
         assert column in output
     assert "anthropic/claude-haiku-4-5" in output
     assert "pd: sh-agent 1.0.0, image sha256:avp/pd" in output
-    assert "2 runs, $0.0000 in all" in output
+    assert "2 runs, $0.0000 known spend (some costs unknown)" in output
     assert "pass inline-1 / pd / paris  100%" in output
     assert "fail inline-1 / pd / tokyo  0%" in output
 

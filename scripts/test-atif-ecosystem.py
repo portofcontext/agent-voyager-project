@@ -1,7 +1,9 @@
 """Exercise unmodified upstream consumers. Run in the example's Harbor environment."""
 
+import asyncio
 import importlib.util
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -18,22 +20,48 @@ spec.loader.exec_module(example)
 
 with tempfile.TemporaryDirectory() as temporary:
     directory = Path(temporary)
-    fixtures = [
-        json.loads(path.read_text())["trajectory"]
-        for path in (ROOT / "avp-sdk/testdata/recorder").glob("*.json")
-    ]
-    document = next(
-        doc
-        for doc in fixtures
-        if len([s for s in doc["steps"] if s["source"] == "agent"]) > 1
-        and any(s.get("tool_calls") for s in doc["steps"])
-    )
     source = directory / "trajectory.json"
-    source.write_text(json.dumps(document))
+    sys.path.insert(0, str(ROOT / "avp-sdk/python/src"))
+    from avp.commission import ModelRef
+    from avp.descriptor import AgentDescriptor, Tool
+    from avp.recorder import Recorder, UsageReport
+    from avp.reports import RunContext, TextBlock, ToolUseBlock
+
+    async def record():
+        async def sink(snapshot):
+            snapshot.write(source)
+            # Validate each live snapshot using upstream's separately installed model.
+            Trajectory.model_validate_json(source.read_text())
+
+        recorder = Recorder(sink, run_id="ecosystem")
+        await recorder.begin(
+            None, AgentDescriptor(avp_version="0.1", agent_name="avp-example", agent_version="1")
+        )
+        await recorder.start(
+            RunContext(
+                prompt="What is 20 + 22?",
+                model=ModelRef(provider="test", id="fixture"),
+                tools=[Tool(name="add", inputSchema={"type": "object"})],
+            )
+        )
+        await recorder.response(
+            [ToolUseBlock(type="tool_use", id="call-1", name="add", input={"a": 20, "b": 22})],
+            usage=UsageReport(input_tokens=30, output_tokens=12),
+        )
+        await recorder.tool_returned("call-1", "42")
+        await recorder.response(
+            [TextBlock(type="text", text="The answer is 42.")],
+            usage=UsageReport(input_tokens=45, output_tokens=6),
+        )
+        await recorder.stop("converged", {"answer": 42})
+
+    asyncio.run(record())
+    document = json.loads(source.read_text())
     Trajectory.model_validate_json(source.read_text())
     rows = example.conversations(source)
     assert len(rows) == sum(s["source"] == "agent" for s in document["steps"])
-    assert any("tool" in json.dumps(row).lower() for row in rows)
+    assert "42" in json.dumps(rows[-1])
+    assert "add" in json.dumps(rows[-1])
     jobs = directory / "jobs"
     copied = example.prepare(source, jobs)
     assert copied.read_bytes() == source.read_bytes()
