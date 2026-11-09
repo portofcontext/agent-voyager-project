@@ -87,6 +87,6 @@ jobs:
           enable-cache: true
       - name: Check native recording with Harbor models, trace extraction, and viewer
         run: |
-          uv venv
+          uv venv --clear
           uv pip install 'harbor @ git+https://github.com/harbor-framework/harbor.git@9c7a39b991d7e2205019f6be0598cbd22d84bfc3' httpx
           .venv/bin/python scripts/test-atif-ecosystem.py
