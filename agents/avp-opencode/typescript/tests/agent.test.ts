@@ -1,5 +1,6 @@
 /** Drive the pinned native server and validate its Recorder Trajectory. */
 import { strict as assert } from "node:assert";
+import { randomUUID } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -88,6 +89,12 @@ async function drive(
     await work;
   } finally {
     process.chdir(previous);
+  }
+  if (process.env.AVP_ATIF_CAPTURE) {
+    writeFileSync(
+      join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.ndjson`),
+      events.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
   }
   return {
     events,

@@ -370,3 +370,108 @@ def test_subagent_responses_keep_frames_and_usage(script, tmp_path, background):
     assert returned["subagent_reason"] == "converged"
     assert "subagent_usage" not in returned
     assert events[-1]["data"]["reason"] == "converged"
+
+
+@pytest.mark.parametrize("child", [False, True])
+def test_eager_results_wait_for_complete_parent_response(script, tmp_path, child):
+    tool = {
+        "type": "tool_use",
+        "id": "eager",
+        "name": "Agent" if child else "Bash",
+        "input": {"description": "Check", "prompt": "Say DONE", "subagent_type": "general-purpose"}
+        if child
+        else {"command": "printf DONE"},
+    }
+    parent = response([tool, {"type": "text", "text": "after the call"}])
+    returned = {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "eager",
+                    "content": "DONE",
+                    "is_error": False,
+                }
+            ],
+        },
+    }
+    early = [*response(tokens=30, parent="eager"), returned] if child else [returned]
+    script.messages = [init(), *parent[:-2], *early, *parent[-2:], *response(tokens=20), result()]
+    code, events = run_cli(tmp_path)
+    assert code == 0
+    replies = [e["data"] for e in events if e["type"] == "assistant_message"]
+    assert len(replies) == (3 if child else 2)
+    assert replies[0]["usage"]["input_tokens"] == 15
+    assert replies[0]["content"][1]["text"] == "after the call"
+    assert replies[-1]["usage"]["input_tokens"] == 25
+    assert len([e for e in events if e["type"] == "tool_returned"]) == 1
+    if child:
+        assert replies[1]["subagent_invocation_id"] == "eager"
+        assert replies[1]["usage"]["input_tokens"] == 35
+        child_returned = next(e["data"] for e in events if e["type"] == "subagent_returned")
+        assert child_returned["subagent_reason"] == "converged"
+    assert events[-1]["data"]["reason"] == "converged"
+
+
+@pytest.mark.parametrize("recorded", [False, True])
+def test_native_child_usage_is_kept_only_when_its_responses_are_opaque(script, tmp_path, recorded):
+    call = {
+        "type": "tool_use",
+        "id": "opaque",
+        "name": "Agent",
+        "input": {
+            "description": "Check",
+            "prompt": "Say DONE",
+            "subagent_type": "general-purpose",
+        },
+    }
+    returned = {
+        "type": "user",
+        "tool_use_result": {
+            "resolvedModel": MODEL["id"],
+            "usage": {
+                "input_tokens": 10,
+                "cache_read_input_tokens": 20,
+                "cache_creation_input_tokens": 30,
+                "output_tokens": 8,
+                "output_tokens_details": {"thinking_tokens": 3},
+            },
+        },
+        "message": {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "opaque", "content": "DONE"}],
+        },
+    }
+    script.messages = [init(), *response([call])]
+    if recorded:
+        script.messages += response(tokens=30, parent="opaque")
+    # The live CLI notifies completion before delivering the foreground Agent
+    # result that carries input/output usage. Do not finish on that notification.
+    notification = {
+        "type": "system",
+        "subtype": "task_notification",
+        "task_id": "native-task",
+        "tool_use_id": "opaque",
+        "status": "completed",
+        "output_file": "/tmp/opaque",
+        "summary": "DONE",
+        "uuid": "notice",
+        "session_id": "session",
+        "usage": {"total_tokens": 68, "tool_uses": 0, "duration_ms": 1},
+    }
+    script.messages += [notification, returned, *response(tokens=20), result()]
+    _, events = run_cli(tmp_path)
+    assert len([e for e in events if e["type"] == "subagent_returned"]) == 1
+    child = next(e["data"] for e in events if e["type"] == "subagent_returned")
+    if recorded:
+        assert "subagent_usage" not in child
+    else:
+        usage = child["subagent_usage"]
+        assert usage["input_tokens"] == 60
+        assert usage["output_tokens"] == 8
+        assert usage["cache_read_input_tokens"] == 20
+        assert usage["cache_creation_input_tokens"] == 30
+        assert usage["reasoning_output_tokens"] == 3
+        assert usage["cost_source"] == "computed" and usage["cost_usd"] > 0

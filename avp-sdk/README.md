@@ -47,6 +47,7 @@ needs them:
 |---|---|---|
 | OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
 | CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
+| ATIF | A run as an ATIF-v1.8 document with image assets; see the [export guide](docs/atif.md) | `avp.utils.atif` |
 
 ### Shared provider data
 

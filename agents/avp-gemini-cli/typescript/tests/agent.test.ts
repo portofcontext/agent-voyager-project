@@ -1,5 +1,6 @@
 /** Real Gemini sessions, schedulers, tools, and MCP clients cross the Recorder. */
 import { strict as assert } from "node:assert";
+import { randomUUID } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -112,6 +113,12 @@ async function drive(
     listeners,
     "native scheduler listeners are disposed",
   );
+  if (process.env.AVP_ATIF_CAPTURE) {
+    writeFileSync(
+      join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.ndjson`),
+      events.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+  }
   return { events, cwd };
 }
 

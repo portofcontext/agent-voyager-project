@@ -1,6 +1,7 @@
 /** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -80,6 +81,12 @@ async function scripted(
       options.signal ?? new AbortController().signal,
       { modelRuntime: models },
     );
+    if (process.env.AVP_ATIF_CAPTURE) {
+      writeFileSync(
+        join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.ndjson`),
+        events.map((event) => JSON.stringify(event)).join("\n") + "\n",
+      );
+    }
     return { events, cwd, faux };
   } finally {
     process.chdir(before);

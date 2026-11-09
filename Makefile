@@ -11,6 +11,7 @@ OPENCODE_DIR := agents/avp-opencode/typescript
 .PHONY: help
 help:
 	@echo "make check          all free SDK, CLI, and adapter checks"
+	@echo "make atif-adapters-check  validate native adapter traces as ATIF"
 	@echo "make cli-check      CLI format, lint, types, and tests (sandboxes when available)"
 	@echo "make test           Python tests in each standalone project"
 	@echo "make test-docker    CLI integration tests against a real container engine"
@@ -185,6 +186,10 @@ release-sdk-typescript:
 release-cli:
 	@$(UV) run --project avp-sdk/python python scripts/release.py tag cli
 
+.PHONY: atif-adapters-check
+atif-adapters-check: sdk-python-check
+	@$(UV) run --project avp-sdk/python python scripts/test-atif-adapters.py
+
 .PHONY: check
-check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check pi-check gemini-cli-check opencode-check build-skill
+check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check atif-adapters-check build-skill
 	@echo "All free checks passed."

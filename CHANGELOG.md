@@ -5,8 +5,20 @@
 ### Fixed
 
 - Both SDK run plans preserve an explicitly empty system prompt.
+- Claude tool results and subagent events that arrive before the parent model
+  response completes are deferred until its calls and usage are recorded.
+  Opaque foreground children retain native aggregate usage without counting
+  individually reported child responses twice.
 
 ### Added
+
+- A Python supervisor utility exports AVP trajectories to ATIF-v1.8, including
+  tool results, subagent trajectories, usage, and image assets. Targeted ATIF
+  extensions retain final output, termination, timing, effective configuration,
+  and provider annotations. Source events and reconstruction metadata are not
+  archived. The module command converts existing NDJSON runs; the live SDK and
+  CLI migration remains separate. `make check` validates trajectories from all
+  eight adapter test suites against the ATIF schema and accounting rules.
 
 - `avp update` installs the newest CLI release, and `avp agent update`
   reinstalls the built-in agents whose versions the CLI changed.
