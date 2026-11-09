@@ -1,11 +1,11 @@
 [project]
 name = "avp-codex"
-version = "0.0.5"
+version = "0.0.6"
 description = "AVP agent over Codex: Codex runs the loop, the adapter writes the Trajectory."
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", "openai-codex==0.162.1", "jsonschema>=4"]
+dependencies = ["agent-voyager-project>=0.1.0b3", "openai-codex==0.162.1", "jsonschema>=4"]
 
 [project.scripts]
 avp-codex-cli = "avp_codex.cli:main"
@@ -21,7 +21,12 @@ build-backend = "uv_build"
 module-name = "avp_codex"
 
 [tool.ty.environment]
+extra-paths = ["../../../testing/atif"]
 python-version = "3.11"
 
 [tool.pytest.ini_options]
+pythonpath = ["../../../testing/atif"]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }

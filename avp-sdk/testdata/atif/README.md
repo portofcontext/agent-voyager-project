@@ -9,7 +9,7 @@ Source: [Harbor trajectory models](https://github.com/harbor-framework/harbor/tr
 Harbor's Apache-2.0 license is included as `LICENSE.harbor`.
 
 After installing that Harbor revision as described in the
-[export guide](../../docs/atif.md#validation), regenerate from the repository root:
+[ATIF guide](../../docs/atif.md#verification-and-upstream-updates), regenerate from the repository root:
 
 ```sh
 avp-sdk/python/.venv/bin/python - <<'PY'
@@ -28,3 +28,7 @@ When updating, change the pinned revision and license together, regenerate the
 schema, and rerun the ATIF tests and upstream validator. Do not edit schema
 fields by hand. The offline tests supplement the schema with checks for call
 references and sequential IDs, which Harbor implements as Pydantic validators.
+
+`external-terminus.json` is copied unchanged from Harbor
+`tests/golden/terminus_2/hello-world-timeout.trajectory.json` at the same revision.
+It verifies that both SDKs accept external ATIF without AVP extensions.

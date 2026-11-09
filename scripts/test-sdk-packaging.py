@@ -186,12 +186,14 @@ assert.ok(bundledPrices().models['anthropic/claude-sonnet-4-5'].output > 0);
 assert.equal(defaultBaseUrl(bundledEndpoints(), 'anthropic'), 'https://api.anthropic.com/v1');
 assert.deepEqual(providerAuth(bundledEndpoints(), 'anthropic'), {header:'x-api-key',prefix:''});
 const commission = parseCommission({avp_version:'0.1',run_id:'r',prompt:'Hi',model:{provider:'p',id:'m'}});
-const events = [];
-const rec = new Recorder(async event => { events.push(event); });
+const snapshots = [];
+const rec = new Recorder(async recording => { snapshots.push(recording.trajectory); });
 await rec.start({prompt:commission.prompt,model:commission.model});
 await rec.response([{type:'text',text:'Hi'}]);
 await rec.stop('converged');
-assert.deepEqual(events.map(event => event.type), ['agent_started','assistant_message','agent_stopped']);
+assert.equal(snapshots.at(-1).schema_version, 'ATIF-v1.8');
+assert.equal(snapshots.at(-1).steps.at(-1).message, 'Hi');
+assert.equal(snapshots.at(-1).extra.avp.complete, true);
 """,
                 ],
                 cwd=consumer,

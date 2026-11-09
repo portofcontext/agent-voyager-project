@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "agent-voyager-project"
-version = "0.1.0b2"
+version = "0.1.0b3"
 source = { editable = "../avp-sdk/python" }
 dependencies = [
     { name = "pydantic" },
@@ -275,7 +275,7 @@ wheels = [
 
 [[package]]
 name = "avp-cli"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "agent-voyager-project" },

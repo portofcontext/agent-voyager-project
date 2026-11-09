@@ -4,7 +4,7 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "agent-voyager-project"
-version = "0.1.0b2"
+version = "0.1.0b3"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },

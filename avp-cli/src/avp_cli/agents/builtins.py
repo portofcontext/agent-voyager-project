@@ -3,6 +3,7 @@ Dockerfile and a pinned, verified source archive to build one from."""
 
 import hashlib
 import json
+import posixpath
 import shutil
 import tarfile
 import tempfile
@@ -84,12 +85,26 @@ def context(name: str) -> Generator[Path]:
         build = directory / "build"
         build.mkdir()
         prefix = f"agent-voyager-project-{source.commit}/{agent.directory}"
-        _extract(archive, prefix, build)
+        _extract(archive, prefix, build / agent.directory)
+        root = f"agent-voyager-project-{source.commit}"
+        language = agent.directory.rsplit("/", 1)[-1]
+        sdk = f"avp-sdk/{language}"
+        links = {
+            f"src/{'avp/' if language == 'python' else ''}utils/data/{name}": f"{root}/avp-sdk/data/{name}"
+            for name in ("avp_endpoint_defaults.json", "avp_endpoints.json", "avp_prices.json")
+        }
+        if language == "typescript":
+            links["src/schemas/trajectory.json"] = f"{root}/spec/v0.1/trajectory.schema.json"
+        _extract(archive, f"{root}/{sdk}", build / sdk, links=links)
+        _extract(archive, f"{root}/avp-sdk/data", build / "avp-sdk/data")
+        _extract(archive, f"{root}/spec/v0.1", build / "spec/v0.1")
         shutil.copyfile(PACKAGE / "dockerfiles" / f"{name}.Dockerfile", build / "Dockerfile")
         yield build
 
 
-def _extract(archive: Path, prefix: str, destination: Path) -> None:
+def _extract(
+    archive: Path, prefix: str, destination: Path, *, links: dict[str, str] | None = None
+) -> None:
     """Copy regular files only, without following archive links or parent paths."""
     count = 0
     with tarfile.open(archive) as source:
@@ -106,6 +121,12 @@ def _extract(archive: Path, prefix: str, destination: Path) -> None:
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
+            if member.issym() and links and relative.as_posix() in links:
+                expected = links[relative.as_posix()]
+                actual = posixpath.normpath(posixpath.join(str(path.parent), member.linkname))
+                if actual != expected:
+                    raise Failed("the SDK source contains an unexpected data link")
+                member = source.getmember(expected)
             if not member.isfile():
                 raise Failed("the agent source archive contains a link or special file")
             target.parent.mkdir(parents=True, exist_ok=True)

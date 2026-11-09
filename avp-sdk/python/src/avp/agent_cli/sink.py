@@ -1,25 +1,25 @@
-"""Writing events as NDJSON."""
+"""Publish a native ATIF artifact, preserving readable partial runs."""
 
 import sys
 from pathlib import Path
 
-from avp._base import EventSink
-from avp.trajectory import Event
+from avp._base import TrajectorySink
+from avp.trajectory import Recording, avp_metadata
 
 
-def ndjson_sink(out: Path | None) -> EventSink:
-    """Write each event as one JSON line to `out`, or to stdout. Reopens the file
-    per event so a reader following it sees each event at once."""
-    if out is not None:
-        out.write_text("")
+def trajectory_sink(out: Path | None) -> TrajectorySink:
+    """Files update atomically; stdout receives one final JSON document.
 
-    async def sink(event: Event) -> None:
-        line = event.model_dump_json(exclude_none=True) + "\n"
-        if out is None:
-            sys.stdout.write(line)
+    Use a file for live monitoring and media. Stdout cannot bundle media files.
+    """
+
+    async def sink(recording: Recording) -> None:
+        if out is not None:
+            recording.write(out)
+        elif avp_metadata(recording.trajectory).get("complete"):
+            if recording.assets:
+                raise ValueError("media requires --out with a file path")
+            sys.stdout.write(recording.trajectory.model_dump_json(exclude_none=True) + "\n")
             sys.stdout.flush()
-        else:
-            with out.open("a") as file:
-                file.write(line)
 
     return sink

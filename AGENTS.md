@@ -39,8 +39,9 @@ Implement shared behavior in Python first, then TypeScript.
   An absent built-in allowlist allows all items; `[]` allows none.
 - Use secret references in Commissions. Include MCP configuration and skill
   files inline.
-- Use the event envelope defined in the Trajectory spec.
-- Record one `assistant_message` per model response, with per-response usage
+- Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
+  live in `avp.reports`; do not introduce another event wire contract.
+- Record one ATIF agent step per model response, with per-response usage
   and cost. Convert cumulative totals to deltas. Keep tool calls alongside
   assistant content and match results by call ID.
 - Test shared Recorder and run-plan behavior with `avp-sdk/testdata/`.

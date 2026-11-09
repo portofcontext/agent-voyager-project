@@ -1,6 +1,4 @@
-"""The agent's command line runs `run` end to end over the real Pydantic AI loop,
-with only the model scripted (Pydantic AI's `FunctionModel`). Every event must
-parse as a Trajectory event."""
+"The agent's command line runs `run` end to end over the real Pydantic AI loop,\nwith only the model scripted (Pydantic AI's `FunctionModel`). Every event must\nparse as a Trajectory event."
 
 import asyncio
 import json
@@ -10,9 +8,9 @@ import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+import assertions as atif
 import pytest
 from anthropic import AsyncAnthropic
-from pydantic import TypeAdapter
 from pydantic_ai import (
     FinishReason,
     ModelHTTPError,
@@ -28,7 +26,6 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from avp.agent_cli import main
 from avp.commission import Commission
-from avp.trajectory import Event
 from avp_pydantic_ai import agent
 from avp_pydantic_ai import commission as cm
 from avp_pydantic_ai.cli import describe, run
@@ -36,9 +33,8 @@ from avp_pydantic_ai.cli import describe, run
 TEST_MCP = Path(__file__).resolve().parents[4] / "testing" / "mcp" / "avp_test_mcp.py"
 USAGE = RequestUsage(input_tokens=1000, output_tokens=50, cache_read_tokens=400)
 MODEL = {"provider": "anthropic", "id": "claude-haiku-4-5"}
-EVENT = TypeAdapter(Event)
 Step = ModelResponse | Exception | Callable[[], Awaitable[ModelResponse]]
-"""A scripted model's answer: a response, an error to raise, or a coroutine."""
+"A scripted model's answer: a response, an error to raise, or a coroutine."
 
 
 @pytest.fixture
@@ -70,53 +66,45 @@ def _reply(*parts: ModelResponsePart, finish: FinishReason | None = "stop") -> M
     )
 
 
-def _run(tmp_path: Path, exit_code: int = 0, **fields: object) -> list[dict]:
+def _run(tmp_path: Path, exit_code: int = 0, **fields: object) -> dict:
     commission = {"avp_version": "0.1", "run_id": "r1", "model": MODEL, "prompt": "hi"}
     commission.update(fields)
-    out = tmp_path / "t.ndjson"
+    out = tmp_path / "trajectory.json"
     argv = ["run", "--commission", json.dumps(commission), "--out", str(out)]
     assert main(run=run, describe=describe, argv=argv) == exit_code
-    events = [json.loads(line) for line in out.read_text().splitlines()]
-    for event in events:
-        EVENT.validate_python(event)
+    events = atif.load(out)
     return events
-
-
-def _types(events: list[dict]) -> list[str]:
-    return [e["type"] for e in events]
 
 
 def test_plain_text_response(script, tmp_path: Path) -> None:
     seen = script(_reply(ThinkingPart("short", signature="sig"), TextPart("DONE")))
     events = _run(tmp_path, prompt="say DONE", system_prompt="be terse")
-    assert _types(events) == [
-        "run_requested",
-        "agent_described",
-        "agent_started",
-        "assistant_message",
-        "agent_stopped",
-    ]
-    message, stopped = events[3]["data"], events[4]["data"]
-    assert message["content"] == [
-        {"type": "thinking", "thinking": "short", "signature": "sig"},
-        {"type": "text", "text": "DONE"},
-    ]
-    usage = message["usage"]
-    assert (usage["input_tokens"], usage["output_tokens"]) == (1000, 50)
-    assert usage["cache_read_input_tokens"] == 400
-    assert usage["cost_source"] == "computed"
-    assert message["model"] == MODEL
-    assert message["response_model"] == "scripted"
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (1, 0, 0, True)
+    message, stopped = (
+        atif.responses(events)[0],
+        {"reason": atif.meta(events).get("stop_reason"), "output": atif.meta(events).get("output")},
+    )
+    assert message["message"] == "DONE"
+    assert message["reasoning_content"] == "short"
+    assert atif.meta(message)["reasoning_metadata"][0]["signature"] == "sig"
+    usage = message["metrics"]
+    assert (usage["prompt_tokens"], usage["completion_tokens"]) == (1000, 50)
+    assert usage["cached_tokens"] == 400
+    assert atif.meta(usage)["cost_source"] == "computed"
+    assert atif.meta(message)["provider"] == MODEL["provider"]
+    assert atif.meta(message)["requested_model"] == MODEL["id"]
+    assert message["model_name"] == "scripted"
     assert stopped == {"reason": "converged", "output": "DONE"}
     assert seen[0][0][0].instructions == "be terse"
 
 
-def _results(events: list[dict]) -> dict[str, dict]:
-    return {
-        e["data"]["tool_call_id"]: e["data"]["tool_result"]
-        for e in events
-        if e["type"] == "tool_returned"
-    }
+def _results(events: dict) -> dict[str, dict]:
+    return {e["source_call_id"]: e for e in atif.results(events)}
 
 
 def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
@@ -137,13 +125,17 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
     )
     server = {"id": "t", "type": "stdio", "command": [sys.executable, str(TEST_MCP)]}
     events = _run(tmp_path, mcp_servers=[server])
-    assert _types(events).count("assistant_message") == 2
-    started = events[2]["data"]
-    assert started["mcp_servers"] == [{"id": "t", "status": "connected"}]
-    add = next(t for t in started["tools"] if t["name"] == "Avptest_Add")
-    assert add["mcp_server_id"] == "t" and add["description"] and add["inputSchema"]
-    invoked = [e["data"] for e in events if e["type"] == "tool_invoked"]
-    assert {i["mcp_server_id"] for i in invoked} == {"t"}
+    assert len(atif.responses(events)) == 2
+    started = events["agent"]
+    assert atif.meta(started)["mcp_servers"] == [{"id": "t", "status": "connected"}]
+    add = next(t for t in started["tool_definitions"] if t["function"]["name"] == "Avptest_Add")
+    assert (
+        atif.meta(add)["mcp_server_id"] == "t"
+        and add["function"]["description"]
+        and add["function"]["parameters"]
+    )
+    invoked = atif.calls(events)
+    assert {atif.meta(i)["mcp_server_id"] for i in invoked} == {"t"}
     results = _results(events)
     assert set(results) == {"c_add", "c_result", "c_proto"}
     for call, text, failed in [
@@ -152,8 +144,8 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
         ("c_proto", "BAD-PROTO", True),
     ]:
         assert text in json.dumps(results[call]["content"]), call
-        assert bool(results[call].get("is_error")) is failed, call
-    assert events[-1]["data"]["reason"] == "converged"
+        assert bool(atif.meta(results[call]).get("is_error")) is failed, call
+    assert atif.meta(events)["stop_reason"] == "converged"
     assert {t.name for t in seen[0][1].function_tools} >= {"Avptest_Add", fail}
 
 
@@ -161,9 +153,14 @@ def test_a_server_that_fails_to_connect_stops_the_run(script, tmp_path: Path) ->
     seen = script()
     server = {"id": "broken", "type": "stdio", "command": [sys.executable, "-c", "exit(1)"]}
     events = _run(tmp_path, mcp_servers=[server])
-    assert _types(events) == ["run_requested", "agent_described", "error_occurred"]
-    assert events[2]["data"]["error_code"] == "mcp_connect_failed"
-    assert events[2]["data"]["error_message"].startswith("broken:")
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (0, 0, 1, True)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "mcp_connect_failed"
+    assert atif.errors(events)[-1]["message"].startswith("broken:")
     assert seen == []
 
 
@@ -171,13 +168,13 @@ def test_output_schema_ends_on_the_output_tool(script, tmp_path: Path) -> None:
     script(_reply(ToolCallPart("final_result", {"answer": 3}, tool_call_id="o1")))
     schema = {"type": "object", "properties": {"answer": {"type": "integer"}}}
     events = _run(tmp_path, output_schema=schema)
-    assert _types(events)[3:] == [
-        "assistant_message",
-        "tool_invoked",
-        "tool_returned",
-        "agent_stopped",
-    ]
-    assert events[-1]["data"]["output"] == {"answer": 3}
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (1, 1, 0, True)
+    assert atif.meta(events)["output"] == {"answer": 3}
 
 
 def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
@@ -187,16 +184,23 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
         "files": {"SKILL.md": "---\nname: greet\ndescription: Greet people.\n---\nSay hi."},
     }
     events = _run(tmp_path, system_prompt="base", skills=[skill])
-    assert events[2]["data"]["skills"] == [{"name": "greet", "description": "Greet people."}]
+    assert atif.meta(events["agent"])["skills"] == [
+        {"name": "greet", "description": "Greet people."}
+    ]
     assert "Say hi." in seen[0][0][0].instructions
 
 
 def test_rate_limit_ends_the_run(script, tmp_path: Path) -> None:
     script(ModelHTTPError(429, "claude-haiku-4-5", {"error": "slow down"}))
     events = _run(tmp_path)
-    assert _types(events)[-2:] == ["error_occurred", "agent_stopped"]
-    assert events[-2]["data"]["error_code"] == "rate_limit"
-    assert events[-1]["data"]["reason"] == "error"
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (0, 0, 1, True)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "rate_limit"
+    assert atif.meta(events)["stop_reason"] == "error"
 
 
 def test_crash_is_reported_not_raised(script, tmp_path: Path, capsys) -> None:
@@ -204,18 +208,16 @@ def test_crash_is_reported_not_raised(script, tmp_path: Path, capsys) -> None:
     traceback goes to stderr."""
     script(RuntimeError("model service unreachable"))
     events = _run(tmp_path)
-    assert events[-2]["data"] == {
-        "error_code": "agent_crash",
-        "error_message": "model service unreachable",
-    }
-    assert events[-1]["data"]["reason"] == "error"
+    assert atif.errors(events)[-1]["message"] == "model service unreachable"
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "agent_crash"
+    assert atif.meta(events)["stop_reason"] == "error"
     assert "RuntimeError: model service unreachable" in capsys.readouterr().err
 
 
 def test_content_filter_is_a_refusal(script, tmp_path: Path) -> None:
     script(_reply(TextPart("I can't help with that."), finish="content_filter"))
     events = _run(tmp_path, prompt="something bad")
-    assert events[-1]["data"]["reason"] == "refused"
+    assert atif.meta(events)["stop_reason"] == "refused"
 
 
 def test_sigterm_stops_interrupted(script, tmp_path: Path) -> None:
@@ -229,8 +231,8 @@ def test_sigterm_stops_interrupted(script, tmp_path: Path) -> None:
 
     script(hang)
     events = _run(tmp_path, exit_code=130)
-    assert _types(events)[-1] == "agent_stopped"
-    assert events[-1]["data"]["reason"] == "interrupted"
+    assert atif.meta(events)["complete"]
+    assert atif.meta(events)["stop_reason"] == "interrupted"
 
 
 @pytest.mark.parametrize(
@@ -245,15 +247,25 @@ def test_commissions_it_cannot_run_end_before_start(
 ) -> None:
     seen = script()
     events = _run(tmp_path, **fields)
-    assert _types(events) == ["run_requested", "agent_described", "error_occurred"]
-    assert events[2]["data"]["error_code"] == code
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (0, 0, 1, True)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == code
     assert seen == []
 
 
 def test_a_missing_env_credential_ends_before_start(tmp_path: Path) -> None:
     events = _run(tmp_path, model={**MODEL, "credential": {"env": "AVP_TEST_UNSET_KEY"}})
-    assert _types(events) == ["run_requested", "agent_described", "error_occurred"]
-    assert events[2]["data"]["error_code"] == "auth_error"
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (0, 0, 1, True)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
 
 
 def _commission(**fields: object) -> Commission:

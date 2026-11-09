@@ -1,6 +1,6 @@
 import type { Commission } from "../commission.js";
 import type { AgentDescriptor, Skill } from "../descriptor.js";
-import type { AgentStarted } from "../trajectory.js";
+import type { RunContext } from "../reports.js";
 import { parseDefinition } from "../validation.js";
 import { frontmatterValue } from "./skill_md.js";
 
@@ -11,7 +11,7 @@ export interface TurnedOff {
   mcp_servers: string[];
 }
 export interface RunPlan {
-  started: AgentStarted;
+  started: RunContext;
   turned_off: TurnedOff;
 }
 
@@ -51,7 +51,7 @@ export function planRun(
   );
   const { credential: _credential, ...model } = commission.model;
   return {
-    started: parseDefinition("AgentStarted", {
+    started: parseDefinition("RunContext", {
       prompt: commission.prompt,
       system_prompt: commission.system_prompt ?? descriptor.system_prompt,
       model,

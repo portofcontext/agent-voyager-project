@@ -18,48 +18,68 @@ from pydantic import (
     JsonValue,
     ValidationError,
     computed_field,
-    field_serializer,
 )
 
-from avp.trajectory import (
-    AgentStoppedEvent,
-    AssistantMessageEvent,
-    Event,
-    StopReason,
-    ToolInvokedEvent,
-    parse_trajectory_event,
-)
+from avp.reports import StopReason
+from avp.trajectory import Trajectory, avp_metadata, documents, parse_trajectory
 from avp_cli import paths
 from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
 
 
 class Totals(BaseModel):
-    """What a run used, added up from its Trajectory's events. Subagents'
-    responses and tool calls are included."""
+    """Reported usage across an ATIF document; unknown totals stay identified."""
 
     turns: int = 0
-    """Model responses: `assistant_message` events."""
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0
-    """The sum of each response's `usage.cost_usd`."""
     tool_calls: dict[str, int] = {}
-    """Calls by tool name: `tool_invoked` events."""
+    unknown_metrics: list[str] = []
 
     @classmethod
-    def of(cls, events: list[Event]) -> "Totals":
+    def of(cls, trajectory: Trajectory | None) -> "Totals":
         totals = cls()
-        for event in events:
-            if isinstance(event, AssistantMessageEvent):
-                usage = event.data.usage
-                totals.turns += 1
-                totals.input_tokens += usage.input_tokens
-                totals.output_tokens += usage.output_tokens
-                totals.cost_usd += usage.cost_usd
-            elif isinstance(event, ToolInvokedEvent):
-                name = event.data.tool_name
-                totals.tool_calls[name] = totals.tool_calls.get(name, 0) + 1
+        if trajectory is None:
+            return totals
+        unknown: set[str] = set()
+        for doc in documents(trajectory):
+            for step in doc.steps:
+                if step.source == "agent" and not step.is_copied_context:
+                    totals.turns += step.llm_call_count if step.llm_call_count is not None else 1
+                    usage = step.metrics
+                    if step.llm_call_count != 0:
+                        for source, target in (
+                            ("prompt_tokens", "input_tokens"),
+                            ("completion_tokens", "output_tokens"),
+                            ("cost_usd", "cost_usd"),
+                        ):
+                            if usage is None or getattr(usage, source) is None:
+                                unknown.add(target)
+                    if usage:
+                        totals.input_tokens += usage.prompt_tokens or 0
+                        totals.output_tokens += usage.completion_tokens or 0
+                        totals.cost_usd += usage.cost_usd or 0
+                for call in step.tool_calls or []:
+                    totals.tool_calls[call.function_name] = (
+                        totals.tool_calls.get(call.function_name, 0) + 1
+                    )
+        final = trajectory.final_metrics
+        if final:
+            known = (final.extra or {}).get("avp", {}).get("known_totals", {})
+            for source, target in (
+                ("total_prompt_tokens", "input_tokens"),
+                ("total_completion_tokens", "output_tokens"),
+                ("total_cost_usd", "cost_usd"),
+            ):
+                value = getattr(final, source)
+                if value is not None:
+                    setattr(totals, target, value)
+                    unknown.discard(target)
+                elif source in known:
+                    setattr(totals, target, known[source])
+                    unknown.add(target)
+        totals.unknown_metrics = sorted(unknown)
         return totals
 
 
@@ -75,16 +95,14 @@ class Run(BaseModel):
     exit_code: int | None
     """The agent command's exit code, or None when the command didn't exit,
     such as when its sandbox stopped first."""
-    trajectory: list[Event]
-    """The valid events, in order."""
+    trajectory: Trajectory | None
+    """The native ATIF document, including documents from external producers."""
     invalid_trajectory: list[JsonValue]
-    """The lines that aren't valid events of a type the SDK knows, left out of
-    `trajectory`: each parsed as JSON, or its text when it isn't JSON."""
+    """Invalid document contents, parsed as JSON or retained as text."""
     output: JsonValue = None
-    """`agent_stopped`'s `output`, or None when it has none or there is no
-    `agent_stopped`."""
+    """Typed AVP output, or the final root agent message for external ATIF."""
     reason: StopReason | None = None
-    """`agent_stopped`'s `reason`, or None when there is no `agent_stopped`."""
+    """The AVP stop reason, when present."""
     item: Item
     """The dataset item the run's Commission was filled from."""
     model: str | None = None
@@ -97,10 +115,6 @@ class Run(BaseModel):
     @property
     def totals(self) -> Totals:
         return Totals.of(self.trajectory)
-
-    @field_serializer("trajectory")
-    def _events(self, events: list[Event]) -> list[JsonValue]:
-        return [e.model_dump(mode="json", exclude_none=True) for e in events]
 
 
 class ScorerInput(BaseModel):
@@ -192,57 +206,38 @@ def read(
     seconds: float | None = None,
 ) -> Run:
     """The run in `directory`, from its Trajectory."""
-    events, invalid = read_trajectory(directory / paths.TRAJECTORY)
-    stopped = [e for e in events if isinstance(e, AgentStoppedEvent)]
+    trajectory, invalid = read_trajectory(directory / paths.TRAJECTORY)
+    metadata = avp_metadata(trajectory) if trajectory else {}
+    replies = [s.message for s in trajectory.steps if s.source == "agent"] if trajectory else []
     return Run(
         id=id,
         agent=agent,
         commission=commission,
         exit_code=exit_code,
-        trajectory=events,
+        trajectory=trajectory,
         invalid_trajectory=invalid,
-        output=stopped[-1].data.output if stopped else None,
-        reason=stopped[-1].data.reason if stopped else None,
+        output=metadata.get("output", replies[-1] if replies else None),
+        reason=metadata.get("stop_reason"),
         item=item,
         model=model,
         seconds=seconds,
     )
 
 
-def read_trajectory(path: Path) -> tuple[list[Event], list[JsonValue]]:
-    """The valid events, and the lines that aren't valid events of a type the
-    SDK knows: each parsed as JSON, or its text when it isn't JSON. A missing
-    file is an empty Trajectory."""
-    events: list[Event] = []
-    invalid: list[JsonValue] = []
+def read_trajectory(path: Path) -> tuple[Trajectory | None, list[JsonValue]]:
+    """Validate one ATIF document. Missing and malformed documents are distinct."""
     try:
-        lines = path.read_text().splitlines()
+        text = path.read_text()
     except FileNotFoundError:
-        return events, invalid
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError:
-            invalid.append(line)
-            continue
-        event = _parse(raw)
-        if event is None:
-            invalid.append(raw)
-        else:
-            events.append(event)
-    return events, invalid
-
-
-def _parse(raw: JsonValue) -> Event | None:
-    """The event, or None when `raw` isn't a valid event of a type the SDK knows."""
-    if not isinstance(raw, dict):
-        return None
+        return None, []
     try:
-        return parse_trajectory_event(raw)
-    except ValidationError:
-        return None
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return None, [text]
+    try:
+        return parse_trajectory(raw), []
+    except (ValidationError, TypeError, ValueError):
+        return None, [raw]
 
 
 @dataclass(frozen=True)

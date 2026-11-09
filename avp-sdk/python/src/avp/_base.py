@@ -1,24 +1,19 @@
 """Settings shared by the wire models of all three specs."""
 
-import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import (
     AfterValidator,
-    AwareDatetime,
     BaseModel,
-    BeforeValidator,
     ConfigDict,
     Field,
     JsonValue,
     StringConstraints,
-    WithJsonSchema,
 )
 
 if TYPE_CHECKING:
-    from avp.trajectory import Event
+    from avp.trajectory import Recording
 
 AVP_VERSION = "0.1"
 
@@ -63,26 +58,5 @@ class OpenWireModel(BaseModel):
     model_config = ConfigDict(**_CONFIG, extra="allow")
 
 
-# RFC 3339's `date-time`: `T` between date and time, seconds required, optional
-# fraction, and `Z` or a `+hh:mm` / `-hh:mm` offset. `T` and `Z` may be lowercase.
-_RFC3339 = r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$"
-
-
-def _rfc3339(time: object) -> object:
-    if isinstance(time, datetime):
-        return time
-    if not isinstance(time, str) or not re.match(_RFC3339, time):
-        raise ValueError("time must be an RFC 3339 timestamp, such as 2026-10-28T14:03:12.481Z")
-    return datetime.fromisoformat(time.upper())
-
-
-Timestamp = Annotated[
-    AwareDatetime,
-    BeforeValidator(_rfc3339),
-    WithJsonSchema({"type": "string", "format": "date-time", "pattern": _RFC3339}),
-]
-"""An RFC 3339 timestamp, read into a timezone-aware `datetime`."""
-
-
-EventSink = Callable[["Event"], Awaitable[None]]
-"""Takes one Trajectory event at a time: a file, a queue, a network stream."""
+TrajectorySink = Callable[["Recording"], Awaitable[None]]
+"""Receives the current ATIF document and assets after each Recorder update."""

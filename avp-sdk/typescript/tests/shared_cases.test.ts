@@ -4,7 +4,7 @@ import test from "node:test";
 import { Recorder, RecorderError } from "../src/recorder.js";
 import { parseCommission } from "../src/commission.js";
 import { parseDescriptor } from "../src/descriptor.js";
-import type { Event } from "../src/trajectory.js";
+import type { Recording } from "../src/trajectory.js";
 import { checkCommission } from "../src/utils/preflight.js";
 import { planRun } from "../src/utils/run_plan.js";
 
@@ -29,7 +29,15 @@ function same(actual: unknown, expected: unknown): void {
     assert.deepEqual(Object.keys(actual).sort(), Object.keys(expected).sort());
     for (const [key, value] of Object.entries(expected))
       same((actual as Record<string, unknown>)[key], value);
-  } else assert.deepEqual(actual, expected);
+  } else if (typeof expected === "string" && expected.startsWith("2026-01-01T"))
+    assert.equal(Date.parse(String(actual)), Date.parse(expected));
+  else if (
+    typeof expected === "string" &&
+    expected.startsWith("{") &&
+    typeof actual === "string"
+  )
+    same(JSON.parse(actual), JSON.parse(expected));
+  else assert.deepEqual(actual, expected);
 }
 async function call(rec: Recorder, c: Record<string, any>): Promise<void> {
   switch (c.call) {
@@ -92,7 +100,7 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
     const vector = JSON.parse(
       readFileSync(new URL(`recorder/${name}`, cases), "utf8"),
     );
-    const events: Event[] = [];
+    const events: Recording[] = [];
     let clock = start;
     let id = 0;
     const rec = new Recorder(
@@ -118,14 +126,7 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
         assert.equal(events.length, written);
       } else await call(rec, command);
     }
-    assert.equal(new Set(events.map((event) => event.id)).size, events.length);
-    same(
-      events.map(({ id: _id, time, ...event }) => ({
-        ...event,
-        t: Date.parse(time) - start,
-      })),
-      vector.events,
-    );
+    same(events.at(-1)!.trajectory, vector.trajectory);
   });
 }
 for (const name of readdirSync(new URL("run_plan/", cases)).filter((name) =>

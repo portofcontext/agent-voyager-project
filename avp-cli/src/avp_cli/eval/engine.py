@@ -166,7 +166,7 @@ def _not_started(case: EvalCase, error: Failed) -> Result:
         agent=case.agent,
         commission=case.commission,
         exit_code=None,
-        trajectory=[],
+        trajectory=None,
         invalid_trajectory=[],
         item=case.item,
         model=_model(case),

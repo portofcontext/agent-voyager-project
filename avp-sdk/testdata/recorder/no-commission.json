@@ -1,6 +1,6 @@
 {
   "name": "no-commission",
-  "description": "A run without a Commission: run_requested has no commission, and run_id is the one the Recorder was given.",
+  "description": "A run without a Commission: the session ID is the one the Recorder was given.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -75,82 +75,97 @@
       "reason": "converged"
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-0",
-      "type": "run_requested",
-      "data": {},
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-0",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-0",
+    "trajectory_id": "run-0/root",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "provider": "anthropic",
+          "mcp_servers": [
+            {
+              "id": "docs",
+              "name": "Docs",
+              "status": "connected"
+            }
+          ],
+          "subagents": [
+            {
+              "name": "researcher",
+              "description": "Finds things."
+            }
+          ]
         }
       },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-0",
-      "type": "agent_started",
-      "data": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
+      "tool_definitions": [
+        {
+          "type": "function",
+          "function": {
             "name": "read_file",
-            "inputSchema": {
+            "parameters": {
               "type": "object"
             }
+          }
+        },
+        {
+          "type": "function",
+          "extra": {
+            "avp": {
+              "mcp_server_id": "docs"
+            }
           },
-          {
+          "function": {
             "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
+            "parameters": {
               "type": "object"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Task",
+            "parameters": {
+              "type": "object"
+            }
           }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      },
-      "t": 1
+        }
+      ]
     },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-0",
-      "type": "agent_stopped",
-      "data": {
-        "reason": "converged"
-      },
-      "t": 2
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000Z",
+        "source": "user",
+        "message": "Do the task."
+      }
+    ],
+    "extra": {
+      "avp": {
+        "complete": true,
+        "requested_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:00.001000Z",
+        "stop_reason": "converged",
+        "stopped_at": "2026-01-01T00:00:00.002000Z"
+      }
+    },
+    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
+    "final_metrics": {
+      "total_steps": 1,
+      "total_prompt_tokens": 0,
+      "total_completion_tokens": 0,
+      "total_cached_tokens": 0,
+      "total_cost_usd": 0,
+      "extra": {
+        "avp": {
+          "usage_scope": "subtree",
+          "known_totals": {}
+        }
+      }
     }
-  ]
+  }
 }

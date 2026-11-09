@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from avp.commission import ModelRef
 from avp.recorder import Recorder, UsageReport
-from avp.trajectory import ContentBlock, SubagentUsage, ThinkingBlock, ToolUseBlock
+from avp.reports import ContentBlock, SubagentUsage, ThinkingBlock, ToolUseBlock
 from avp.utils.pricing import compute_cost, load_prices
 
 CONTENT = TypeAdapter(ContentBlock)

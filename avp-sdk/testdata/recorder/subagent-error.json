@@ -126,182 +126,208 @@
       "reason": "converged"
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "run_requested",
-      "data": {
-        "commission": {
-          "avp_version": "0.1",
-          "run_id": "run-1",
-          "model": {
-            "provider": "anthropic",
-            "id": "claude-test-1"
-          },
-          "prompt": "Do the task."
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_started",
-      "data": {
-        "prompt": "Do the task.",
-        "model": {
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1/root",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
           "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
+          "mcp_servers": [
+            {
+              "id": "docs",
+              "name": "Docs",
+              "status": "connected"
+            }
+          ],
+          "subagents": [
+            {
+              "name": "researcher",
+              "description": "Finds things."
+            }
+          ]
+        }
+      },
+      "tool_definitions": [
+        {
+          "type": "function",
+          "function": {
             "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
+            "parameters": {
               "type": "object"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      },
-      "t": 1
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "tool_use",
-            "id": "call-1",
-            "name": "Task",
-            "input": {
-              "prompt": "Find it."
-            }
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
         },
-        "duration_ms": 9,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
+        {
+          "type": "function",
+          "extra": {
+            "avp": {
+              "mcp_server_id": "docs"
+            }
+          },
+          "function": {
+            "name": "search",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "Task",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000Z",
+        "source": "user",
+        "message": "Do the task."
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.010000Z",
+        "source": "agent",
+        "message": "",
+        "model_name": "claude-test-1",
+        "llm_call_count": 1,
+        "metrics": {
+          "prompt_tokens": 1000,
+          "completion_tokens": 100,
           "cost_usd": 0.0045,
-          "cost_source": "computed"
+          "extra": {
+            "avp": {
+              "cost_source": "computed"
+            }
+          }
+        },
+        "extra": {
+          "avp": {
+            "duration_ms": 9,
+            "provider": "anthropic"
+          }
+        },
+        "tool_calls": [
+          {
+            "tool_call_id": "call-1",
+            "function_name": "Task",
+            "arguments": {
+              "prompt": "Find it."
+            },
+            "extra": {
+              "avp": {
+                "server_side": false,
+                "started_at": "2026-01-01T00:00:00.010000Z"
+              }
+            }
+          }
+        ],
+        "observation": {
+          "results": [
+            {
+              "source_call_id": "call-1",
+              "subagent_trajectory_ref": [
+                {
+                  "trajectory_id": "run-1/subagent/call-1"
+                }
+              ],
+              "content": "rate limited",
+              "extra": {
+                "avp": {
+                  "finished_at": "2026-01-01T00:00:00.021000Z",
+                  "duration_ms": 11,
+                  "is_error": true
+                }
+              }
+            }
+          ]
         }
-      },
-      "t": 10
+      }
+    ],
+    "extra": {
+      "avp": {
+        "complete": true,
+        "requested_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:00.001000Z",
+        "stop_reason": "converged",
+        "stopped_at": "2026-01-01T00:00:00.030000Z"
+      }
     },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "tool_invoked",
-      "data": {
-        "tool_call_id": "call-1",
-        "tool_name": "Task",
-        "tool_input": {
-          "prompt": "Find it."
+    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
+    "subagent_trajectories": [
+      {
+        "schema_version": "ATIF-v1.8",
+        "session_id": "run-1",
+        "trajectory_id": "run-1/subagent/call-1",
+        "agent": {
+          "name": "researcher",
+          "version": "unknown"
+        },
+        "steps": [
+          {
+            "step_id": 1,
+            "timestamp": "2026-01-01T00:00:00.011000Z",
+            "source": "user",
+            "message": "{\"prompt\": \"Find it.\"}",
+            "extra": {
+              "avp": {
+                "input_encoding": "json"
+              }
+            }
+          }
+        ],
+        "extra": {
+          "avp": {
+            "complete": true,
+            "started_at": "2026-01-01T00:00:00.011000Z",
+            "stop_reason": "error",
+            "stopped_at": "2026-01-01T00:00:00.020000Z",
+            "duration_ms": 9,
+            "usage_details": {
+              "responses": 1
+            }
+          }
+        },
+        "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
+        "final_metrics": {
+          "total_steps": 1,
+          "total_prompt_tokens": 500,
+          "total_completion_tokens": 20,
+          "extra": {
+            "avp": {
+              "usage_scope": "subtree",
+              "known_totals": {
+                "total_cached_tokens": 0,
+                "total_cost_usd": 0
+              }
+            }
+          }
         }
-      },
-      "t": 10
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "subagent_invoked",
-      "data": {
-        "subagent_name": "researcher",
-        "invocation_id": "call-1",
-        "subagent_input": {
-          "prompt": "Find it."
+      }
+    ],
+    "final_metrics": {
+      "total_steps": 2,
+      "total_prompt_tokens": 1500,
+      "total_completion_tokens": 120,
+      "extra": {
+        "avp": {
+          "usage_scope": "subtree",
+          "known_totals": {
+            "total_cached_tokens": 0,
+            "total_cost_usd": 0.0045
+          }
         }
-      },
-      "t": 11
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "subagent_returned",
-      "data": {
-        "subagent_name": "researcher",
-        "invocation_id": "call-1",
-        "duration_ms": 9,
-        "subagent_reason": "error",
-        "subagent_result_text": "rate limited",
-        "subagent_usage": {
-          "input_tokens": 500,
-          "output_tokens": 20,
-          "responses": 1
-        }
-      },
-      "t": 20
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "tool_returned",
-      "data": {
-        "tool_call_id": "call-1",
-        "tool_name": "Task",
-        "duration_ms": 11,
-        "tool_result": {
-          "type": "tool_result",
-          "tool_use_id": "call-1",
-          "content": "rate limited",
-          "is_error": true
-        }
-      },
-      "t": 21
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_stopped",
-      "data": {
-        "reason": "converged"
-      },
-      "t": 30
+      }
     }
-  ]
+  }
 }

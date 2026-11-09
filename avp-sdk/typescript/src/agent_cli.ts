@@ -1,13 +1,16 @@
-import { appendFile } from "node:fs/promises";
+import { mkdir, writeFile, rename, unlink } from "node:fs/promises";
+import { dirname, join, resolve, relative } from "node:path";
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
-import type { EventSink, JsonValue } from "./trajectory.js";
-export type { EventSink } from "./trajectory.js";
+import { avpMetadata, type TrajectorySink } from "./trajectory.js";
+import type { JsonValue } from "./reports.js";
+export type { TrajectorySink } from "./trajectory.js";
 
 export type RunFn = (
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   signal: AbortSignal,
 ) => Promise<void>;
 export type DescribeFn = () => AgentDescriptor | Promise<AgentDescriptor>;
@@ -27,12 +30,39 @@ function stdout(text: string): Promise<void> {
     process.stdout.write(text, (error) => (error ? reject(error) : resolve())),
   );
 }
-export function ndjsonSink(out?: string): EventSink {
-  if (out !== undefined) writeFileSync(out, "");
-  return async (event) => {
-    const line = `${JSON.stringify(event)}\n`;
-    if (out === undefined) await stdout(line);
-    else await appendFile(out, line);
+export function trajectorySink(out?: string): TrajectorySink {
+  return async (snapshot) => {
+    const text = `${JSON.stringify(snapshot.trajectory, undefined, 2)}\n`;
+    if (out === undefined) {
+      if (avpMetadata(snapshot.trajectory).complete) {
+        if (snapshot.assets.size)
+          throw new Error("media requires --out with a file path");
+        await stdout(text);
+      }
+      return;
+    }
+    const directory = dirname(out);
+    await mkdir(directory, { recursive: true });
+    for (const [name, bytes] of snapshot.assets) {
+      const target = resolve(directory, name);
+      if (relative(resolve(directory), target).startsWith(".."))
+        throw new Error("asset path escapes trajectory directory");
+      await mkdir(dirname(target), { recursive: true });
+      try {
+        await writeFile(target, bytes, { flag: "wx" });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+    }
+    const temporary = join(directory, `.${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, text);
+      await rename(temporary, out);
+    } finally {
+      await unlink(temporary).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
   };
 }
 async function write(out: string | undefined, text: string): Promise<void> {
@@ -75,12 +105,12 @@ export async function main({
     });
   app
     .command("run")
-    .description("Run a Commission and write its Trajectory as NDJSON.")
+    .description("Run a Commission and write its Trajectory as ATIF JSON.")
     .requiredOption("--commission <path-or-json>", "A path, or inline JSON.")
-    .requiredOption("--out <path>", "Where to write the NDJSON, or -.")
+    .requiredOption("--out <path>", "Where to write the ATIF document, or -.")
     .action(
       async ({ commission, out }: { commission: string; out: string }) => {
-        const sink = ndjsonSink(out === "-" ? undefined : out);
+        const sink = trajectorySink(out === "-" ? undefined : out);
         const received = readCommission(commission);
         const controller = new AbortController();
         const interrupt = () => {

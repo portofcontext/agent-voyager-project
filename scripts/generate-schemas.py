@@ -17,11 +17,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import Event
+from avp.reports import ContentBlock, ErrorCode, RunContext, StopReason, SubagentUsage, Usage
+from avp.trajectory import Trajectory
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "spec" / "v0.1"
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
@@ -36,9 +37,9 @@ SCHEMAS: list[tuple[str, Any, str, str]] = [
     ),
     (
         "trajectory.schema.json",
-        Event,
-        "AVP v0.1 Trajectory Event",
-        "One CloudEvents 1.0 event of the trajectory an agent emits. See trajectory.md.",
+        Trajectory,
+        "ATIF Trajectory",
+        "Harbor ATIF document. See trajectory.md.",
     ),
     (
         "agent-descriptor.schema.json",
@@ -69,13 +70,27 @@ def main() -> None:
             },
         )
 
+    class Reports(BaseModel):
+        commission: Commission
+        descriptor: AgentDescriptor
+        context: RunContext
+        usage: Usage
+        subagent_usage: SubagentUsage
+        content: list[ContentBlock]
+        stop_reason: StopReason
+        error_code: ErrorCode
+
+    inputs = Reports.model_json_schema()
+    inputs["$id"] = "https://www.agentvoyagerproject.com/sdk/reports.schema.json"
+    target = OUT_DIR.parent.parent / "avp-sdk/typescript/src/schemas/reports.json"
+    target.write_text(json.dumps(inputs, indent=2) + "\n")
     write_json(
         "avp.schema.json",
         {
             "$schema": SCHEMA_DRAFT,
             "$id": f"{SCHEMA_BASE}/avp.schema.json",
             "title": "AVP v0.1",
-            "description": "Any AVP v0.1 wire object: a Commission, a trajectory Event, or an Agent Descriptor.",
+            "description": "Any AVP v0.1 wire object: a Commission, an ATIF document, or an Agent Descriptor.",
             "oneOf": [{"$ref": name} for name, *_ in SCHEMAS],
         },
     )

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from avp.commission import AgentSettings, Commission, ModelRef
 from avp.descriptor import AgentDescriptor, McpServer, Skill
-from avp.trajectory import AgentStarted
+from avp.reports import RunContext
 from avp.utils._skill_md import frontmatter_value
 
 
@@ -32,7 +32,7 @@ class TurnedOff(BaseModel):
 
 
 class RunPlan(BaseModel):
-    started: AgentStarted
+    started: RunContext
     """What the run uses. The Commission's MCP servers have no `status` and
     their tools aren't listed: the agent adds both after connecting, and each
     added skill's `source` once it has written the skill's files."""
@@ -61,7 +61,7 @@ def plan_run(commission: Commission, descriptor: AgentDescriptor) -> RunPlan:
     def tool_on(name: str, mcp_server_id: str | None) -> bool:
         return name in tools_on if mcp_server_id is None else mcp_server_id in servers_on
 
-    started = AgentStarted(
+    started = RunContext(
         prompt=commission.prompt,
         system_prompt=commission.system_prompt
         if commission.system_prompt is not None

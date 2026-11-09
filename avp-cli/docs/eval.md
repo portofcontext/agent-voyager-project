@@ -186,8 +186,8 @@ object, fails the scorer for that run.
 | `run.agent` | name | The agent that ran. |
 | `run.commission` | name | The Commission's name. |
 | `run.exit_code` | integer | The agent command's exit code. |
-| `run.trajectory` | list of Trajectory events | The run's valid events, in order. |
-| `run.invalid_trajectory` | list | The Trajectory's lines that aren't valid events of a type the SDK knows, left out of `run.trajectory`: each parsed as JSON, or its text when it isn't JSON. |
+| `run.trajectory` | ATIF object or null | The validated run document, including external ATIF producers. |
+| `run.invalid_trajectory` | list | Invalid document contents, parsed as JSON or kept as text; `run.trajectory` is null when invalid. |
 | `run.output` | any | `agent_stopped`'s `output`, or `null`. |
 | `run.reason` | string or `null` | `agent_stopped`'s `reason`, or `null` when there is no `agent_stopped`. |
 | `run.item` | object | The item, as in the dataset. |
@@ -276,13 +276,13 @@ install the AVP SDK for it, whose types parse the Trajectory:
 import json
 import sys
 
-from avp.trajectory import ToolInvokedEvent, parse_trajectory_event
+from avp.trajectory import documents, parse_trajectory
 
 data = json.load(sys.stdin)
 run, config = data["run"], data["config"]
 
-events = [parse_trajectory_event(e) for e in run["trajectory"]]
-tool_calls = sum(isinstance(e, ToolInvokedEvent) for e in events)
+trajectory = parse_trajectory(run["trajectory"])
+tool_calls = sum(len(step.tool_calls or []) for doc in documents(trajectory) for step in doc.steps)
 output = str(run["output"] or "").lower()
 missing = [w for w in run["item"]["words"] if w.lower() not in output]
 

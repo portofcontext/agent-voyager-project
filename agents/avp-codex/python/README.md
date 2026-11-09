@@ -25,9 +25,9 @@ attribution, rather than a request to resume a thread.
   or OpenAI's default URL is used.
 - **Tools:** native shell execution and polling, patching, image viewing, and
   MCP resource and tool discovery. `describe` lists the pinned profile;
-  `agent_started` lists the tools its model and Commission actually use.
+  the ATIF effective configuration lists the tools its model and Commission actually use.
 - **MCP:** the Commission's stdio and Streamable HTTP servers run through
-  Codex's own clients. Their tools are listed before `agent_started`.
+  Codex's own clients. Their tools are listed before the ATIF effective configuration.
 - **Skills:** all commissioned files are embedded in developer instructions,
   SKILL.md first. Discovered host and workspace skills are disabled.
 - **Instructions:** `system_prompt` replaces Codex's base instructions.

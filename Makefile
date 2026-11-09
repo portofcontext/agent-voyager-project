@@ -77,7 +77,8 @@ check-agent:
 	@cd agents/$(NAME)/python && $(UV) run ruff format --check . && $(UV) run ruff check . && $(UV) run ty check && $(UV) run pytest -q
 
 .PHONY: pi-build pi-check
-pi-build:
+pi-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(PI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(PI_DIR) run build
 
@@ -87,7 +88,8 @@ pi-check: pi-build
 	@npm --prefix $(PI_DIR) test
 
 .PHONY: gemini-cli-build gemini-cli-check
-gemini-cli-build:
+gemini-cli-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(GEMINI_CLI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(GEMINI_CLI_DIR) run build
 
@@ -97,7 +99,8 @@ gemini-cli-check: gemini-cli-build
 	@npm --prefix $(GEMINI_CLI_DIR) test
 
 .PHONY: opencode-build opencode-check
-opencode-build:
+opencode-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(OPENCODE_DIR) ci --ignore-scripts --no-audit --no-fund
 	@npm --prefix $(OPENCODE_DIR) run build
 

@@ -1,6 +1,6 @@
 {
   "name": "@agent-voyager-project/sdk",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "AVP wire types and shared agent helpers",
   "license": "Apache-2.0",
   "type": "module",
@@ -53,6 +53,10 @@
     "./utils/endpoints": {
       "types": "./dist/utils/endpoints.d.ts",
       "import": "./dist/utils/endpoints.js"
+    },
+    "./reports": {
+      "types": "./dist/reports.d.ts",
+      "import": "./dist/reports.js"
     }
   },
   "scripts": {

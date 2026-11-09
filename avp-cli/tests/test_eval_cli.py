@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import atif
 from conftest import no_sandbox as fakes
 from typer.testing import CliRunner
 
@@ -26,15 +27,8 @@ def fake_dispatch(
     assert options.directory is not None
     item = commission.run_id.rsplit("-", 1)[1]
     options.directory.mkdir(parents=True)
-    event = {
-        "avp_version": "0.1",
-        "id": "1",
-        "type": "agent_stopped",
-        "time": "2026-01-01T00:00:00Z",
-        "run_id": commission.run_id,
-        "data": {"reason": "converged", "output": ANSWERS[item]},
-    }
-    (options.directory / paths.TRAJECTORY).write_text(json.dumps(event) + "\n")
+    document = atif(run_id=commission.run_id, output=ANSWERS[item])
+    (options.directory / paths.TRAJECTORY).write_text(json.dumps(document))
     return Finished(options.directory, 0, "")
 
 
@@ -85,7 +79,7 @@ def test_run_prints_the_scoreboard_and_saves_results(tmp_path: Path) -> None:
         ("tokyo", False),
     ]
     assert (eval_directory / "eval.json").read_text() == eval_file(tmp_path).read_text()
-    assert (eval_directory / saved["runs"][0]["directory"] / "trajectory.ndjson").is_file()
+    assert (eval_directory / saved["runs"][0]["directory"] / "trajectory.json").is_file()
 
 
 def test_run_json(tmp_path: Path) -> None:

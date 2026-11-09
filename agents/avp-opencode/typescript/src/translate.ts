@@ -10,7 +10,7 @@ import type {
   ToolResultBlock,
   ImageBlock,
   TextBlock,
-} from "@agent-voyager-project/sdk/trajectory";
+} from "@agent-voyager-project/sdk/reports";
 import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
 export function usage(finish: StepFinishPart): UsageReport {
   const t = finish.tokens;

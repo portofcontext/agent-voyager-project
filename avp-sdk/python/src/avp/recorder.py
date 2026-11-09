@@ -1,71 +1,50 @@
-"""Write an agent's Trajectory to the Trajectory spec's rules for agents.
+"""Record native runtime reports directly into an ATIF document.
 
-The agent reports what its runtime did; the Recorder decides which events to
-write and in what order. Using it is optional: an agent can write its events by
-hand.
-
-    rec = Recorder(sink)
-    commission = await rec.begin(received, descriptor)  # None when refused
-    await rec.start(AgentStarted(prompt=..., model=...))
-    await rec.response(content, usage=UsageReport(input_tokens=..., output_tokens=...))
-    await rec.tool_returned("toolu_01", "the result")
-    await rec.stop("converged", output="...")
-
-While a response is open, the events it led to wait and are written after its
-`assistant_message`. A response reported with no `key` closes at once. Chunks
-of one streamed response share a `key`: they merge until a different key, a
-response with no key, `close_response`, or a result for one of its tool calls.
+Adapters own the loop. The Recorder owns response boundaries, tool links,
+subagent documents, usage accounting, and publication of immutable snapshots.
 """
 
+import json
 import uuid
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
 
-from avp._base import AVP_VERSION, EventSink
+from avp._base import TrajectorySink
+from avp._recording import (
+    _content,
+    _content_metadata,
+    _document,
+    _metadata,
+    _metrics,
+    _model_metadata,
+    _observation,
+    _remaining,
+)
 from avp.commission import Commission, ModelRef
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import (
-    AgentDescribed,
-    AgentDescribedEvent,
-    AgentStarted,
-    AgentStartedEvent,
-    AgentStopped,
-    AgentStoppedEvent,
-    AssistantMessage,
-    AssistantMessageEvent,
+from avp.reports import (
     ContentBlock,
     ErrorCode,
-    ErrorOccurred,
-    ErrorOccurredEvent,
-    Event,
     ImageBlock,
-    RunRequested,
-    RunRequestedEvent,
+    RunContext,
     StopReason,
-    SubagentInvoked,
-    SubagentInvokedEvent,
-    SubagentReturned,
-    SubagentReturnedEvent,
     SubagentUsage,
     TextBlock,
-    ToolInvoked,
-    ToolInvokedEvent,
-    ToolResultBlock,
-    ToolReturned,
-    ToolReturnedEvent,
     ToolUseBlock,
     Usage,
 )
+from avp.trajectory import Recording, Trajectory
 from avp.utils.preflight import check_commission
 from avp.utils.pricing import Prices, compute_cost, load_prices
 
 ABANDONED_TEXT = "The run ended while the subagent was still running."
 UNRETURNED_TEXT = "The run ended before the tool returned."
-STOPPED_BEFORE_START_TEXT = "The run stopped before agent_started."
+STOPPED_BEFORE_START_TEXT = "The run stopped before start."
 
 
 class RecorderError(Exception):
@@ -104,6 +83,7 @@ class _Call:
     subagent_invocation_id: str | None
     time: datetime
     returned: bool = False
+    step: dict[str, Any] | None = None
 
 
 @dataclass
@@ -129,8 +109,8 @@ class _Response:
     duration_ms: int | None = None
     meta: dict[str, JsonValue] = field(default_factory=dict)
     call_ids: set[str] = field(default_factory=set)
-    waiting: list[Event] = field(default_factory=list)
-    """The events it led to, written after its `assistant_message`."""
+    waiting: list[Callable[[], None]] = field(default_factory=list)
+    """Document updates that depend on this response."""
     tool_returned: bool = False
 
 
@@ -150,16 +130,11 @@ def _refusal(error: ValidationError) -> str:
 
 
 class Recorder:
-    """Writes one run's Trajectory to `sink`.
-
-    `prices` defaults to `load_prices()`, loaded on the first response to price.
-    `run_id` is for an agent that writes `run_requested` and `agent_described`
-    itself; `begin` sets it otherwise. `now` and `new_id` make tests repeatable.
-    """
+    """Publish a current ATIF snapshot after each completed runtime report."""
 
     def __init__(
         self,
-        sink: EventSink,
+        sink: TrajectorySink,
         *,
         run_id: str | None = None,
         prices: Prices | None = None,
@@ -169,37 +144,33 @@ class Recorder:
         self._sink = sink
         self._prices = prices
         self._now = now or (lambda: datetime.now(UTC))
-        self._new_id = new_id or (lambda: str(uuid.uuid4()))
-        self.run_id = run_id or self._new_id()
+        self.run_id = run_id or (new_id or (lambda: str(uuid.uuid4())))()
         self._begun = False
-        self._started: AgentStarted | None = None
+        self._started: RunContext | None = None
         self.ended = False
-        """The Trajectory has its last event."""
         self._response: _Response | None = None
         self._calls: dict[str, _Call] = {}
         self._subagents: dict[str, _Subagent] = {}
-        self._reported_responses: set[str] = set()
-        """Subagents with responses of their own as events."""
+        self._root = _document(self.run_id, f"{self.run_id}/root", "unknown", "unknown")
+        self._documents = {None: self._root}
+        self._delegations: dict[str, dict[str, Any]] = {}
+        self._assets: dict[str, bytes] = {}
 
-    # Writing
+    def _time(self) -> str:
+        return self._now().isoformat()
 
-    def _event(self, event_type: type[Any], name: str, data: BaseModel, **extra: Any) -> Any:
-        return event_type(
-            avp_version=AVP_VERSION,
-            id=self._new_id(),
-            time=extra.pop("time", None) or self._now(),
-            run_id=self.run_id,
-            type=name,
-            data=data,
-            **extra,
+    async def _publish(self) -> None:
+        self._root.finish()
+        await self._sink(
+            Recording(Trajectory.model_validate(deepcopy(self._root.data)), self._assets.copy())
         )
 
-    async def _write(self, event: Event) -> None:
-        """Write now, or after the open response's `assistant_message`."""
+    async def _write(self, update: Callable[[], None]) -> None:
         if self._response is not None:
-            self._response.waiting.append(event)
+            self._response.waiting.append(update)
         else:
-            await self._sink(event)
+            update()
+            await self._publish()
 
     def _check(self, report: str, *, started: bool = True) -> None:
         if self.ended:
@@ -207,16 +178,13 @@ class Recorder:
         if started and self._started is None:
             raise RecorderError(f"{report}: called before start")
 
-    # The run
+    def _scope(self, invocation: str | None):
+        if invocation not in self._documents:
+            raise RecorderError(f"unknown subagent {invocation!r}")
+        return self._documents[invocation]
 
     async def begin(self, received: JsonValue, descriptor: AgentDescriptor) -> Commission | None:
-        """Write `run_requested` with the Commission exactly as received (`None`
-        when the run has none) and `agent_described`, then check the Commission.
-
-        Returns the Commission to run, or None. When the Commission doesn't match
-        the spec or fails `check_commission`, writes `error_occurred`
-        (`invalid_commission`), which ends the run (`ended` is then true).
-        """
+        """Validate the Commission and initialize the agent's ATIF document."""
         self._check("begin", started=False)
         if self._begun or self._started is not None:
             raise RecorderError("begin: called twice, or after start")
@@ -227,80 +195,99 @@ class Recorder:
                 commission = Commission.model_validate(received)
             except ValidationError as error:
                 refusal = _refusal(error)
-            run_id = commission.run_id if commission else None
-            if run_id is None and isinstance(received, dict):
-                run_id = received.get("run_id")
-            if isinstance(run_id, str):
-                self.run_id = run_id
-        await self._sink(
-            self._event(RunRequestedEvent, "run_requested", RunRequested(commission=received))
+            if isinstance(received, dict) and isinstance(received.get("run_id"), str):
+                self.run_id = str(received["run_id"])
+        self._root = _document(
+            self.run_id, f"{self.run_id}/root", descriptor.agent_name, descriptor.agent_version
         )
-        await self._sink(
-            self._event(
-                AgentDescribedEvent, "agent_described", AgentDescribed(descriptor=descriptor)
-            )
-        )
+        self._documents = {None: self._root}
+        _metadata(self._root.data)["requested_at"] = self._time()
+        self._root.step(self._time(), "system", "Run initialized.")
         if commission is not None:
             refusal = check_commission(commission, descriptor)
         if refusal is not None:
             await self.error("invalid_commission", refusal)
             return None
+        await self._publish()
         return commission
 
-    async def start(
-        self, started: AgentStarted, *, meta: dict[str, JsonValue] | None = None
-    ) -> None:
-        """Write `agent_started`. Its `tools` give each `tool_invoked` its
-        `mcp_server_id`, and its `model` is each response's default."""
+    async def start(self, started: RunContext, *, meta: dict[str, JsonValue] | None = None) -> None:
         self._check("start", started=False)
         if self._started is not None:
             raise RecorderError("start: called twice")
         self._started = started
-        await self._sink(self._event(AgentStartedEvent, "agent_started", started, meta=meta))
+        data = started.model_dump(mode="json", exclude_none=True)
+        root = self._root
+        root.data["steps"] = []
+        _metadata(root.data)["started_at"] = self._time()
+        if meta:
+            _metadata(root.data)["annotations"] = meta
+        agent = root.data["agent"]
+        agent["model_name"] = started.model.id
+        agent["extra"] = {
+            "avp": {
+                **_model_metadata(data["model"]),
+                **{k: data[k] for k in ("mcp_servers", "skills", "subagents") if k in data},
+            }
+        }
+        agent["tool_definitions"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "parameters": t["inputSchema"],
+                    **({"description": t["description"]} if "description" in t else {}),
+                },
+                **(
+                    {"extra": {"avp": _remaining(t, {"name", "description", "inputSchema"})}}
+                    if _remaining(t, {"name", "description", "inputSchema"})
+                    else {}
+                ),
+            }
+            for t in data.get("tools", [])
+        ]
+        if started.system_prompt is not None:
+            root.step(self._time(), "system", started.system_prompt)
+        root.step(self._time(), "user", started.prompt)
+        await self._publish()
 
     async def error(
         self, code: ErrorCode, message: str, *, subagent_invocation_id: str | None = None
     ) -> None:
-        """Write `error_occurred`. Before `start` it ends the run; after, it
-        doesn't, and `stop("error")` should follow when the run failed."""
         self._check("error", started=False)
-        data = ErrorOccurred(
-            error_code=code, error_message=message, subagent_invocation_id=subagent_invocation_id
-        )
-        if self._started is None:
-            self.ended = True
-            await self._sink(self._event(ErrorOccurredEvent, "error_occurred", data))
-            return
-        await self._write(self._event(ErrorOccurredEvent, "error_occurred", data))
+        timestamp = self._time()
+
+        def update():
+            doc = self._scope(subagent_invocation_id)
+            if self._started is None:
+                doc.data["steps"] = []
+                self.ended = True
+                _metadata(doc.data).update(complete=True, stop_reason="error", stopped_at=timestamp)
+            _metadata(doc.step(timestamp, "system", message))["error_code"] = code
+
+        await self._write(update)
 
     async def stop(self, reason: StopReason, output: JsonValue = None) -> None:
-        """End the run: close the open response, return every subagent still
-        running as `abandoned` and every tool call still running as an error,
-        and write `agent_stopped`. A `converged` stop with an abandoned subagent
-        becomes `abandoned`.
-
-        Before `start`, writes `error_occurred` (`agent_crash`) instead, as the
-        spec asks of a run stopped from outside. Does nothing once the run has
-        ended, so it is safe in cleanup code.
-        """
         if self.ended:
             return
         if self._started is None:
             await self.error("agent_crash", STOPPED_BEFORE_START_TEXT)
             return
         await self.close_response()
-        running = [id for id, subagent in self._subagents.items() if subagent.reason is None]
-        for invocation_id in running:
-            await self.subagent_returned(invocation_id, ABANDONED_TEXT, "abandoned")
+        running = [id for id, child in self._subagents.items() if child.reason is None]
+        for invocation in running:
+            await self.subagent_returned(invocation, ABANDONED_TEXT, "abandoned")
         for call_id in [id for id, call in self._calls.items() if not call.returned]:
             await self.tool_returned(call_id, UNRETURNED_TEXT, is_error=True)
         if running and reason == "converged":
             reason = "abandoned"
         self.ended = True
-        stopped = AgentStopped(reason=reason, output=output)
-        await self._sink(self._event(AgentStoppedEvent, "agent_stopped", stopped))
-
-    # Responses
+        _metadata(self._root.data).update(
+            complete=True, stop_reason=reason, stopped_at=self._time()
+        )
+        if output is not None:
+            _metadata(self._root.data)["output"] = output
+        await self._publish()
 
     async def response(
         self,
@@ -315,17 +302,9 @@ class Recorder:
         key: str | None = None,
         meta: dict[str, JsonValue] | None = None,
     ) -> None:
-        """Report a model response, or one chunk of a streamed response.
-
-        `model` defaults to `agent_started`'s. Chunks with the same `key` merge:
-        content appends, `response_model` keeps its first value, and the other
-        fields keep their last. `duration_ms` defaults to the time from the first
-        chunk to the last. A `tool_invoked` is written for each `tool_use` block;
-        `server_tool_use` blocks get none, as the spec says.
-        """
         self._check("response")
         assert self._started is not None
-        calls = [block for block in content if isinstance(block, ToolUseBlock)]
+        calls = [b for b in content if isinstance(b, ToolUseBlock)]
         ids = [call.id for call in calls]
         repeated = next((id for id in ids if id in self._calls or ids.count(id) > 1), None)
         if repeated is not None:
@@ -338,6 +317,7 @@ class Recorder:
             or subagent_invocation_id != open_.subagent_invocation_id
         ):
             await self.close_response()
+        self._scope(subagent_invocation_id)
         now = self._now()
         if self._response is None:
             self._response = _Response(
@@ -360,95 +340,142 @@ class Recorder:
             response.duration_ms = duration_ms
         if meta:
             response.meta.update(meta)
-        if subagent_invocation_id is not None:
-            self._reported_responses.add(subagent_invocation_id)
-        mcp_servers = {tool.name: tool.mcp_server_id for tool in self._started.tools or []}
+        servers = {t.name: t.mcp_server_id for t in self._started.tools or []}
         for call in calls:
             self._calls[call.id] = _Call(
-                name=call.name,
-                input=call.input,
-                mcp_server_id=mcp_servers.get(call.name),
-                subagent_invocation_id=subagent_invocation_id,
-                time=now,
+                call.name, call.input, servers.get(call.name), subagent_invocation_id, now
             )
             response.call_ids.add(call.id)
-            invoked = ToolInvoked(
-                tool_call_id=call.id,
-                tool_name=call.name,
-                tool_input=call.input,
-                mcp_server_id=mcp_servers.get(call.name),
-                subagent_invocation_id=subagent_invocation_id,
-            )
-            response.waiting.append(self._event(ToolInvokedEvent, "tool_invoked", invoked))
         if key is None:
             await self.close_response()
 
     async def usage(self, usage: UsageReport, *, key: str | None = None) -> None:
-        """Set the open response's usage, for a runtime that reports token counts
-        after the content. With `key`, it must be the open response's."""
         self._check("usage")
-        response = self._response
-        if response is None or (key is not None and key != response.key):
+        if self._response is None or (key is not None and key != self._response.key):
             raise RecorderError(f"usage: no open response with key {key!r}")
-        response.usage = usage
+        self._response.usage = usage
 
     async def close_response(self) -> None:
-        """Write the open response's `assistant_message`, then the events it led
-        to. A response with no content gets no `assistant_message`, as the spec
-        asks. Does nothing when no response is open."""
         response = self._response
         if response is None:
             return
         self._response = None
         if _has_content(response.content):
-            await self._sink(self._assistant_message(response))
-        for event in response.waiting:
-            await self._sink(event)
+            self._record_response(response)
+        for update in response.waiting:
+            update()
+        await self._publish()
 
-    def _assistant_message(self, response: _Response) -> Event:
-        reported = response.usage
-        if reported is None:
-            usage = Usage(input_tokens=0, output_tokens=0, cost_usd=0, cost_source="unknown")
-        else:
-            if self._prices is None and reported.cost_usd is None:
+    def _record_response(self, response: _Response) -> None:
+        report = response.usage
+        usage: dict[str, Any] = {}
+        if report is not None:
+            if self._prices is None and report.cost_usd is None:
                 self._prices = load_prices()
-            cost_usd, cost_source = compute_cost(
+            cost, source = compute_cost(
                 self._prices or Prices(fetched=self._now(), models={}),
                 response.model,
-                input_tokens=reported.input_tokens,
-                output_tokens=reported.output_tokens,
-                cache_read_input_tokens=reported.cache_read_input_tokens or 0,
-                cache_creation_input_tokens=reported.cache_creation_input_tokens or 0,
+                input_tokens=report.input_tokens,
+                output_tokens=report.output_tokens,
+                cache_read_input_tokens=report.cache_read_input_tokens or 0,
+                cache_creation_input_tokens=report.cache_creation_input_tokens or 0,
                 response_model=response.response_model,
-                reported_cost_usd=reported.cost_usd,
+                reported_cost_usd=report.cost_usd,
             )
             usage = Usage(
-                **reported.model_dump(exclude={"cost_usd"}),
-                cost_usd=cost_usd,
-                cost_source=cost_source,
-            )
-        message = AssistantMessage(
-            content=response.content,
-            model=response.model,
-            response_model=response.response_model,
-            finish_reasons=response.finish_reasons,
-            duration_ms=(
-                response.duration_ms
-                if response.duration_ms is not None
-                else _ms(response.opened, response.last)
-            ),
-            usage=usage,
-            subagent_invocation_id=response.subagent_invocation_id,
+                **report.model_dump(exclude={"cost_usd"}), cost_usd=cost, cost_source=source
+            ).model_dump(exclude_none=True)
+        doc = self._scope(response.subagent_invocation_id)
+        blocks = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
+        visible = [b for b in blocks if b["type"] in ("text", "image", "refusal")]
+        step = doc.step(response.last.isoformat(), "agent", _content(visible, self._assets))
+        step.update(
+            model_name=response.response_model or response.model.id,
+            llm_call_count=1,
+            metrics=_metrics(usage),
         )
-        return self._event(
-            AssistantMessageEvent,
-            "assistant_message",
-            message,
-            time=response.last,
-            meta=response.meta or None,
+        metadata = _metadata(step)
+        metadata.update(
+            duration_ms=response.duration_ms
+            if response.duration_ms is not None
+            else _ms(response.opened, response.last),
+            **_model_metadata(response.model.model_dump(exclude_none=True)),
         )
+        if response.response_model:
+            metadata["requested_model"] = response.model.id
+        if response.finish_reasons:
+            metadata["finish_reasons"] = response.finish_reasons
+        if response.meta:
+            metadata["annotations"] = response.meta
+        if details := _content_metadata(visible):
+            metadata["message_metadata"] = details
+        reasoning = [
+            b["thinking"] for b in blocks if b["type"] == "thinking" and not b.get("redacted")
+        ]
+        if reasoning:
+            step["reasoning_content"] = "\n".join(reasoning)
+        details, offset = [], 0
+        for block in blocks:
+            if block["type"] != "thinking":
+                continue
+            entry = _remaining(block, {"type", "thinking"})
+            if block.get("redacted"):
+                entry["encrypted_content"] = block["thinking"]
+            elif entry:
+                entry.update(start=offset, end=offset + len(block["thinking"]))
+            if not block.get("redacted"):
+                offset += len(block["thinking"]) + 1
+            if entry:
+                details.append(entry)
+        if details:
+            metadata["reasoning_metadata"] = details
+        for block in blocks:
+            if block["type"] in ("tool_use", "server_tool_use"):
+                call = {
+                    "tool_call_id": block["id"],
+                    "function_name": block["name"],
+                    "arguments": block["input"],
+                    "extra": {"avp": {"server_side": block["type"] == "server_tool_use"}},
+                }
+                if extra := _remaining(block, {"type", "id", "name", "input"}):
+                    _metadata(call)["provider_metadata"] = extra
+                if block["type"] == "tool_use":
+                    state = self._calls[block["id"]]
+                    state.step = step
+                    _metadata(call)["started_at"] = state.time.isoformat()
+                    if state.mcp_server_id:
+                        _metadata(call)["mcp_server_id"] = state.mcp_server_id
+                step.setdefault("tool_calls", []).append(call)
+        for block in blocks:
+            if block["type"] in ("tool_result", "server_tool_result"):
+                self._result(
+                    step,
+                    block["tool_use_id"],
+                    block["content"],
+                    response.last.isoformat(),
+                    block.get("is_error", False),
+                    provider_metadata=_remaining(
+                        block, {"type", "tool_use_id", "name", "content", "is_error"}
+                    ),
+                )
+        doc.usages.append(usage)
 
-    # Tools
+    def _result(self, step, call_id, content, timestamp, is_error=False, **details):
+        if not any(c["tool_call_id"] == call_id for c in step.get("tool_calls", [])):
+            raise RecorderError(f"unmatched tool result {call_id!r}")
+        result = _observation(step, call_id)
+        result.update(
+            content=_content(content, self._assets),
+            extra={
+                "avp": {
+                    "finished_at": timestamp,
+                    "is_error": bool(is_error),
+                    **{k: v for k, v in details.items() if v is not None and v != {}},
+                }
+            },
+        )
+        if annotations := _content_metadata(content):
+            _metadata(result)["content_metadata"] = annotations
 
     async def tool_returned(
         self,
@@ -458,36 +485,40 @@ class Recorder:
         is_error: bool | None = None,
         structured_content: dict[str, JsonValue] | None = None,
     ) -> None:
-        """Write the `tool_returned` for a `tool_use` block. When the call
-        started a subagent that has returned, `is_error` is set from the
-        subagent's reason, as the spec asks."""
         self._check("tool_returned")
         call = self._calls.get(call_id)
         if call is None or call.returned:
-            state = "unknown" if call is None else "already returned"
-            raise RecorderError(f"tool_returned: tool call {call_id!r} is {state}")
+            raise RecorderError(
+                f"tool_returned: tool call {call_id!r} is {'unknown' if call is None else 'already returned'}"
+            )
         call.returned = True
-        subagent = self._subagents.get(call_id)
-        if subagent is not None and subagent.reason is not None:
-            is_error = subagent.reason != "converged"
+        child = self._subagents.get(call_id)
+        if child is not None and child.reason is not None:
+            is_error = child.reason != "converged"
         if self._response is not None and call_id in self._response.call_ids:
             self._response.tool_returned = True
-        returned = ToolReturned(
-            tool_call_id=call_id,
-            tool_name=call.name,
-            duration_ms=_ms(call.time, self._now()),
-            tool_result=ToolResultBlock(
-                type="tool_result",
-                tool_use_id=call_id,
-                content=content,
-                structured_content=structured_content,
-                is_error=is_error,
-            ),
-            subagent_invocation_id=call.subagent_invocation_id,
+        timestamp = self._time()
+        duration = _ms(call.time, self._now())
+        raw = (
+            content
+            if isinstance(content, str)
+            else [b.model_dump(mode="json", exclude_none=True) for b in content]
         )
-        await self._write(self._event(ToolReturnedEvent, "tool_returned", returned))
 
-    # Subagents
+        def update():
+            if call.step is None:
+                raise RecorderError(f"tool_returned: {call_id!r} has no response")
+            self._result(
+                call.step,
+                call_id,
+                raw,
+                timestamp,
+                is_error,
+                duration_ms=duration,
+                structured_content=structured_content,
+            )
+
+        await self._write(update)
 
     async def subagent_invoked(
         self,
@@ -497,26 +528,38 @@ class Recorder:
         *,
         subagent_invocation_id: str | None = None,
     ) -> None:
-        """Write `subagent_invoked`. When a tool call started the subagent, pass
-        the call's `tool_call_id` as `invocation_id`; `subagent_input` then
-        defaults to the call's input, and `subagent_invocation_id` to the call's."""
         self._check("subagent_invoked")
         if invocation_id in self._subagents:
             raise RecorderError(f"subagent_invoked: {invocation_id!r} was already used")
         call = self._calls.get(invocation_id)
-        if call is not None:
+        if call:
             subagent_input = call.input if subagent_input is None else subagent_input
             subagent_invocation_id = subagent_invocation_id or call.subagent_invocation_id
-        self._subagents[invocation_id] = _Subagent(
-            name=name, parent=subagent_invocation_id, time=self._now()
-        )
-        invoked = SubagentInvoked(
-            subagent_name=name,
-            invocation_id=invocation_id,
-            subagent_invocation_id=subagent_invocation_id,
-            subagent_input=subagent_input or {},
-        )
-        await self._write(self._event(SubagentInvokedEvent, "subagent_invoked", invoked))
+        self._subagents[invocation_id] = _Subagent(name, subagent_invocation_id, self._now())
+        timestamp = self._time()
+
+        def update():
+            parent = self._scope(subagent_invocation_id)
+            child = _document(
+                self.run_id, f"{self.run_id}/subagent/{invocation_id}", name, "unknown"
+            )
+            self._documents[invocation_id] = child
+            parent.children.append(child)
+            parent.data.setdefault("subagent_trajectories", []).append(child.data)
+            _metadata(child.data)["started_at"] = timestamp
+            _metadata(
+                child.step(timestamp, "user", json.dumps(subagent_input or {}, ensure_ascii=False))
+            )["input_encoding"] = "json"
+            step = call.step if call else None
+            result = (
+                _observation(step, invocation_id)
+                if step is not None
+                else _observation(parent.step(timestamp, "system", f"Delegated to {name}."), None)
+            )
+            result["subagent_trajectory_ref"] = [{"trajectory_id": child.data["trajectory_id"]}]
+            self._delegations[invocation_id] = result
+
+        await self._write(update)
 
     async def subagent_returned(
         self,
@@ -526,24 +569,25 @@ class Recorder:
         *,
         usage: SubagentUsage | None = None,
     ) -> None:
-        """Write `subagent_returned`. `usage` is dropped when the subagent's
-        responses were reported as events, so a supervisor doesn't count them
-        twice."""
         self._check("subagent_returned")
-        subagent = self._subagents.get(invocation_id)
-        if subagent is None or subagent.reason is not None:
-            state = "unknown" if subagent is None else "already returned"
-            raise RecorderError(f"subagent_returned: subagent {invocation_id!r} is {state}")
-        subagent.reason = reason
-        if invocation_id in self._reported_responses:
-            usage = None
-        returned = SubagentReturned(
-            subagent_name=subagent.name,
-            invocation_id=invocation_id,
-            subagent_invocation_id=subagent.parent,
-            duration_ms=_ms(subagent.time, self._now()),
-            subagent_reason=reason,
-            subagent_result_text=text,
-            subagent_usage=usage,
-        )
-        await self._write(self._event(SubagentReturnedEvent, "subagent_returned", returned))
+        child = self._subagents.get(invocation_id)
+        if child is None or child.reason is not None:
+            raise RecorderError(
+                f"subagent_returned: subagent {invocation_id!r} is {'unknown' if child is None else 'already returned'}"
+            )
+        child.reason = reason
+        timestamp, duration = self._time(), _ms(child.time, self._now())
+
+        def update():
+            doc = self._scope(invocation_id)
+            _metadata(doc.data).update(
+                complete=True, stop_reason=reason, stopped_at=timestamp, duration_ms=duration
+            )
+            self._delegations[invocation_id].setdefault("content", text)
+            if not doc.usages:
+                counts = usage.model_dump(exclude_none=True) if usage else {}
+                doc.usages.append(counts)
+                if details := _metrics(counts).get("extra", {}).get("avp", {}):
+                    _metadata(doc.data)["usage_details"] = details
+
+        await self._write(update)

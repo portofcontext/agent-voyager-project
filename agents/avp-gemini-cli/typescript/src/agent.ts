@@ -1,3 +1,4 @@
+import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** Observe Gemini's session, scheduler, and generator; never drive its tool loop. */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,10 +10,9 @@ import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
 import type { Commission } from "@agent-voyager-project/sdk/commission";
 import type {
   ContentBlock,
-  EventSink,
   JsonValue,
   SubagentUsage,
-} from "@agent-voyager-project/sdk/trajectory";
+} from "@agent-voyager-project/sdk/reports";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import {
   computeCost,
@@ -30,7 +30,7 @@ export interface RunOptions {
 }
 export async function run(
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   options: RunOptions = {},
 ): Promise<void> {
   const prices = await loadPrices();

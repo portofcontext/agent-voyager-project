@@ -1,5 +1,4 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { isDeepStrictEqual } from "node:util";
 import { compile } from "json-schema-to-typescript";
 import { format } from "prettier";
 
@@ -7,32 +6,32 @@ const root = new URL("../../../", import.meta.url);
 const schema = JSON.parse(
   await readFile(new URL("spec/v0.1/trajectory.schema.json", root), "utf8"),
 );
-for (const [file, name, skill] of [
-  ["commission", "Commission", "avp__commission__Skill"],
-  ["agent-descriptor", "AgentDescriptor", "avp__descriptor__Skill"],
-]) {
-  const standalone = JSON.parse(
-    (
-      await readFile(new URL(`spec/v0.1/${file}.schema.json`, root), "utf8")
-    ).replaceAll("#/$defs/Skill", `#/$defs/${skill}`),
-  );
-  for (const [key, definition] of Object.entries(standalone.$defs)) {
-    if (
-      !isDeepStrictEqual(
-        definition,
-        schema.$defs[key === "Skill" ? skill : key],
-      )
-    )
-      throw new Error(`${file}: ${key} differs between schemas`);
-  }
-  const embedded = structuredClone(schema.$defs[name]);
-  for (const key of ["$schema", "$id", "$defs", "title", "description"]) {
-    delete standalone[key];
-    delete embedded[key];
-  }
-  if (!isDeepStrictEqual(standalone, embedded))
-    throw new Error(`${name} differs between schemas`);
-}
+const reports = JSON.parse(
+  await readFile(
+    new URL("../src/schemas/reports.json", import.meta.url),
+    "utf8",
+  ),
+);
+const trajectory = structuredClone(schema);
+const trajectoryRoot = trajectory.$ref
+  ? {}
+  : {
+      Trajectory: Object.fromEntries(
+        Object.entries(trajectory).filter(
+          ([k]) => !["$defs", "$id", "$schema"].includes(k),
+        ),
+      ),
+    };
+schema.$defs = {
+  ...reports.$defs,
+  Reports: Object.fromEntries(
+    Object.entries(reports).filter(
+      ([k]) => !["$defs", "$id", "$schema"].includes(k),
+    ),
+  ),
+  ...schema.$defs,
+  ...trajectoryRoot,
+};
 function prepare(node) {
   if (!node || typeof node !== "object") return;
   delete node.title;
@@ -50,23 +49,23 @@ function prepare(node) {
     for (const child of node[field] ?? []) prepare(child);
 }
 prepare(schema);
-schema.title = "Event";
+schema.title = "Trajectory";
 schema.$defs.avp__commission__Skill.title = "CommissionSkill";
 schema.$defs.avp__descriptor__Skill.title = "DescriptorSkill";
-const { $defs, $id, $schema, ...event } = schema;
+const { $defs } = schema;
 // The object wrapper makes the generator emit definitions unused by the Event union.
 const generated = await compile(
   {
     $defs,
     title: "WireTypes",
     type: "object",
-    properties: { event },
+    properties: {},
     additionalProperties: false,
   },
   "WireTypes",
   {
     bannerComment:
-      "// Generated from spec/v0.1/trajectory.schema.json. Do not edit.",
+      "// Generated from Python SDK reports and upstream ATIF schemas. Do not edit.",
     unreachableDefinitions: true,
     unknownAny: true,
     style: { printWidth: 80, bracketSpacing: true, trailingComma: "all" },
@@ -74,7 +73,7 @@ const generated = await compile(
 );
 const output = await format(
   generated
-    .replace(/export interface WireTypes \{[\s\S]*?\n\}\n/, "")
+    .replace(/export interface WireTypes \{\s*\}\n/, "")
     .replace(
       /\n \* This interface was referenced by[^\n]*\n \* via the[^\n]*/g,
       "",

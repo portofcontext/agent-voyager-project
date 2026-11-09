@@ -5,10 +5,11 @@ import signal
 
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink, main
+from avp.agent_cli import TrajectorySink, main
 from avp.descriptor import AgentDescriptor
 from avp.recorder import Recorder
-from avp.trajectory import AgentStarted, parse_trajectory_event
+from avp.reports import RunContext
+from avp.trajectory import avp_metadata, parse_trajectory
 
 DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="demo", agent_version="1.0.0")
 COMMISSION = {
@@ -19,21 +20,17 @@ COMMISSION = {
 }
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     rec = Recorder(sink)
     commission = await rec.begin(received, DESCRIPTOR)
     if commission is None:
         return
-    await rec.start(AgentStarted(prompt=commission.prompt, model=commission.model))
+    await rec.start(RunContext(prompt=commission.prompt, model=commission.model))
     await rec.stop("converged")
 
 
-def trajectory(path) -> list:
-    return [parse_trajectory_event(line) for line in path.read_text().splitlines()]
-
-
-def types(path) -> list[str]:
-    return [event.type for event in trajectory(path)]
+def trajectory(path):
+    return parse_trajectory(path.read_text())
 
 
 def cli(*argv: str) -> int:
@@ -60,32 +57,31 @@ def test_describe(tmp_path, capsys):
 def test_run_writes_the_agents_trajectory(tmp_path):
     path = tmp_path / "c.json"
     path.write_text(json.dumps(COMMISSION))
-    out = tmp_path / "t.ndjson"
+    out = tmp_path / "trajectory.json"
     assert cli("run", "--commission", str(path), "--out", str(out)) == 0
-    assert types(out) == ["run_requested", "agent_described", "agent_started", "agent_stopped"]
-    assert trajectory(out)[0].run_id == "run-1"
+    assert avp_metadata(trajectory(out))["stop_reason"] == "converged"
+    assert trajectory(out).session_id == "run-1"
 
 
 def test_run_accepts_inline_json_and_stdout(capsys):
     assert cli("run", "--commission", json.dumps(COMMISSION), "--out", "-") == 0
-    lines = capsys.readouterr().out.splitlines()
-    assert [json.loads(line)["type"] for line in lines][-1] == "agent_stopped"
+    assert avp_metadata(parse_trajectory(capsys.readouterr().out))["complete"]
 
 
-def test_text_that_isnt_json_is_recorded_as_received(tmp_path):
+def test_invalid_text_is_refused_without_archiving_the_input(tmp_path):
     path = tmp_path / "c.json"
     path.write_text("not json")
-    out = tmp_path / "t.ndjson"
+    out = tmp_path / "trajectory.json"
     assert cli("run", "--commission", str(path), "--out", str(out)) == 0
-    assert trajectory(out)[0].data.commission == "not json"
-    assert types(out)[-1] == "error_occurred"
+    assert avp_metadata(trajectory(out))["stop_reason"] == "error"
+    assert avp_metadata(trajectory(out).steps[0])["error_code"] == "invalid_commission"
 
 
 def test_sigterm_cancels_the_run_and_exits_130(tmp_path):
-    out = tmp_path / "t.ndjson"
+    out = tmp_path / "trajectory.json"
     cancelled = []
 
-    async def slow(received: JsonValue, sink: EventSink) -> None:
+    async def slow(received: JsonValue, sink: TrajectorySink) -> None:
         asyncio.get_running_loop().call_later(0.05, os.kill, os.getpid(), signal.SIGTERM)
         try:
             await asyncio.sleep(5)

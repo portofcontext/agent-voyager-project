@@ -34,7 +34,7 @@ def _failed(reason: str, value: float = 0) -> Score:
 
 def _not(kind: str, run: Run) -> Score:
     """The score of an output that isn't the kind the scorer compares."""
-    why = f"reason: {run.reason}" if run.reason else "no agent_stopped"
+    why = f"reason: {run.reason}" if run.reason else "no run outcome"
     return Score(value=0, passed=False, reasons=[f"output isn't {kind} ({why})"])
 
 

@@ -11,6 +11,7 @@ import sys
 import threading
 from pathlib import Path
 
+import assertions as atif
 import pytest
 from test_agent import MODEL, run_cli
 
@@ -90,8 +91,8 @@ def model_endpoint():
                         },
                     ]
                 events.append({"type": "response.completed", "response": response})
-                for event in events:
-                    self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
+                for e in events:
+                    self.wfile.write(("data: " + json.dumps(e) + "\n\n").encode())
                     self.wfile.flush()
 
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -105,7 +106,7 @@ def model_endpoint():
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         running.append((server, worker))
-        return f"{scheme}://127.0.0.1:{server.server_port}/v1", requests, headers
+        return (f"{scheme}://127.0.0.1:{server.server_port}/v1", requests, headers)
 
     yield start
     for server, worker in running:
@@ -137,6 +138,7 @@ def function(name, arguments, call_id="call"):
     "operation", ["mcp", "parallel", "tool_error", "shell_poll", "tool_search"]
 )
 def test_native_tool_round_trips_keep_response_boundaries(model_endpoint, tmp_path, operation):
+
     def script(request, index):
         if operation == "tool_search" and index == 1:
             return [
@@ -173,7 +175,7 @@ def test_native_tool_round_trips_keep_response_boundaries(model_endpoint, tmp_pa
             outputs = json.dumps(
                 [item for item in request["input"] if item["type"] == "function_call_output"]
             )
-            session = re.search(r"Process running with session ID (\d+)", outputs)
+            session = re.search("Process running with session ID (\\d+)", outputs)
             assert session, outputs
             return [
                 function(
@@ -203,32 +205,33 @@ def test_native_tool_round_trips_keep_response_boundaries(model_endpoint, tmp_pa
         ],
     )
     assert code == 0
-    assert events[-1]["data"] == {"reason": "converged", "output": "DONE"}
-    messages = [event["data"] for event in events if event["type"] == "assistant_message"]
-    assert [item["usage"]["input_tokens"] for item in messages] == (
+    assert {
+        "reason": atif.meta(events).get("stop_reason"),
+        "output": atif.meta(events).get("output"),
+    } == {"reason": "converged", "output": "DONE"}
+    messages = atif.responses(events)
+    assert [item["metrics"]["prompt_tokens"] for item in messages] == (
         [100, 200, 300] if operation in {"shell_poll", "tool_search"} else [100, 200]
     )
-    invoked = [event["data"] for event in events if event["type"] == "tool_invoked"]
-    returned = {
-        event["data"]["tool_call_id"]: event["data"]["tool_result"]
-        for event in events
-        if event["type"] == "tool_returned"
-    }
+    invoked = atif.calls(events)
+    returned = {e["source_call_id"]: e for e in atif.results(events)}
     assert {item["tool_call_id"] for item in invoked} == set(returned)
     if operation == "shell_poll":
-        assert [item["tool_name"] for item in invoked] == ["exec_command", "write_stdin"]
+        assert [item["function_name"] for item in invoked] == ["exec_command", "write_stdin"]
         assert "done" in str(returned["poll"]["content"])
     else:
         assert "BOUNDARY" in str(returned["call"]["content"])
         assert (
-            next(item for item in invoked if item["tool_call_id"] == "call")["mcp_server_id"]
+            atif.meta(next(item for item in invoked if item["tool_call_id"] == "call"))[
+                "mcp_server_id"
+            ]
             == "fixture"
         )
     if operation == "tool_error":
-        assert returned["failed"]["is_error"] is True
-        assert returned["call"]["is_error"] is False
+        assert atif.meta(returned["failed"])["is_error"] is True
+        assert atif.meta(returned["call"])["is_error"] is False
     if operation == "tool_search":
-        assert "Avptest_Echo" in str(returned["search"]["structured_content"])
+        assert "Avptest_Echo" in str(atif.meta(returned["search"])["structured_content"])
     assert all(
         header.get("authorization", header.get("Authorization")) == "Bearer avp-proxy-stand-in"
         for header in headers
@@ -259,10 +262,12 @@ def test_native_enabled_tools_match_the_model_request(model_endpoint, tmp_path, 
         },
         agents={"avp-codex": {"enabled_tools": allowed}},
     )
-    assert events[-1]["data"]["reason"] == "converged"
+    assert atif.meta(events)["stop_reason"] == "converged"
     assert len(requests) == 1
     assert {tool["name"] for tool in requests[0]["tools"]} == set(allowed)
-    assert {tool["name"] for tool in events[2]["data"].get("tools", [])} == set(allowed)
+    assert {
+        tool["function"]["name"] for tool in events["agent"].get("tool_definitions", [])
+    } == set(allowed)
 
 
 def test_native_http_client_trusts_the_launcher_ca(model_endpoint, tmp_path, monkeypatch):
@@ -332,5 +337,5 @@ def test_native_http_client_trusts_the_launcher_ca(model_endpoint, tmp_path, mon
     _, events = run_cli(
         tmp_path, model={**MODEL, "base_url": url, "credential": {"proxy": "openai"}}
     )
-    assert events[-1]["data"]["reason"] == "converged"
+    assert atif.meta(events)["stop_reason"] == "converged"
     assert len(requests) == 1

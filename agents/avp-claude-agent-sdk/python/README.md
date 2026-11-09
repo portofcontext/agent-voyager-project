@@ -79,7 +79,7 @@ uses the launcher's CA settings for credential-proxy connections.
 - Responses are reported when complete. Context compaction fails visibly
   because its response accounting has not been established.
 - The native default system prompt is model-dependent and is not exported;
-  only a Commission's replacement is reported in `agent_started`.
+  only a Commission's replacement is reported in the ATIF effective configuration.
 - Claude's MCP status API does not export input schemas. Those tools use the
   spec's object-schema fallback, preserving the descriptions and annotations
   the SDK does expose.

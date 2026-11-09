@@ -14,9 +14,9 @@ def pytest_runtest_teardown(item):
     temporary = item.funcargs.get("tmp_path")
     if not destination or temporary is None:
         return
-    for name in ("trajectory.ndjson", "t.ndjson"):
+    for name in ("trajectory.json", "t.json"):
         source = temporary / name
         if source.is_file():
             identity = f"{item.path}:{item.nodeid}:{name}"
-            target = Path(destination) / f"{hashlib.sha256(identity.encode()).hexdigest()}.ndjson"
+            target = Path(destination) / f"{hashlib.sha256(identity.encode()).hexdigest()}.json"
             shutil.copyfile(source, target)

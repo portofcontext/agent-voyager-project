@@ -6,7 +6,7 @@ import time
 from openai_codex.models import Notification, UnknownNotification
 
 from avp.recorder import Recorder, UsageReport
-from avp.trajectory import (
+from avp.reports import (
     ContentBlock,
     ErrorCode,
     ImageBlock,

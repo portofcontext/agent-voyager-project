@@ -9,7 +9,7 @@ import type {
   ErrorCode,
   ImageBlock,
   TextBlock,
-} from "@agent-voyager-project/sdk/trajectory";
+} from "@agent-voyager-project/sdk/reports";
 import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
 
 type PiBlock =

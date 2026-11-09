@@ -50,7 +50,7 @@ def test_the_spinner_shows_the_active_runs_dimmed(
             agent=a.agent,
             commission=a.commission,
             exit_code=0,
-            trajectory=[],
+            trajectory=None,
             invalid_trajectory=[],
             item=a.item,
         )

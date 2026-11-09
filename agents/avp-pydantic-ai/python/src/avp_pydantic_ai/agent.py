@@ -16,11 +16,11 @@ from pydantic import JsonValue
 from pydantic_ai import Agent, ModelMessage, ModelResponse
 from pydantic_ai.models import Model
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.commission import Commission
 from avp.descriptor import Tool
 from avp.recorder import Recorder
-from avp.trajectory import StopReason
+from avp.reports import StopReason
 from avp.utils.run_plan import plan_run
 from avp_pydantic_ai import commission as cm
 from avp_pydantic_ai import translate
@@ -94,7 +94,7 @@ class _History:
         self.seen = len(messages)
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     descriptor = describe()
     rec = Recorder(sink)
     commission = await rec.begin(received, descriptor)

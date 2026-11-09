@@ -7,9 +7,10 @@ import re
 from pathlib import Path
 
 import pytest
+from conftest import atif
 from pydantic import JsonValue, ValidationError
 
-from avp.trajectory import StopReason
+from avp.reports import StopReason
 from avp_cli import paths
 from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig
@@ -24,7 +25,7 @@ def run_with(output: JsonValue, reason: StopReason | None = "converged") -> Run:
         agent="pd",
         commission="inline-1",
         exit_code=0,
-        trajectory=[],
+        trajectory=None,
         invalid_trajectory=[],
         output=output,
         reason=reason,
@@ -98,9 +99,9 @@ def test_match(fields: dict, output: JsonValue, result: Score) -> None:
     assert Match.model_validate(fields).score(run_with(output)) == result
 
 
-def test_match_without_agent_stopped() -> None:
+def test_match_without_run_outcome() -> None:
     result = Match(expected="Paris").score(run_with(None, None))
-    assert result == failed("output isn't a string (no agent_stopped)")
+    assert result == failed("output isn't a string (no run outcome)")
 
 
 @pytest.mark.parametrize(
@@ -127,16 +128,7 @@ def test_match_fields_for_each_mode(fields: dict, error: str) -> None:
 
 
 def stopped(output: JsonValue) -> str:
-    return json.dumps(
-        {
-            "avp_version": "0.1",
-            "id": "1",
-            "type": "agent_stopped",
-            "time": "2026-01-01T00:00:00Z",
-            "run_id": "r",
-            "data": {"reason": "converged", "output": output},
-        }
-    )
+    return json.dumps(atif(output=output))
 
 
 def test_an_eval_scored_with_match(tmp_path: Path) -> None:

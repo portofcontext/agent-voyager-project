@@ -1,79 +1,7 @@
-// Generated from spec/v0.1/trajectory.schema.json. Do not edit.
+// Generated from Python SDK reports and upstream ATIF schemas. Do not edit.
 
-/**
- * One CloudEvents 1.0 event of the trajectory an agent emits. See trajectory.md.
- */
-export type Event =
-  | RunRequestedEvent
-  | AgentDescribedEvent
-  | AgentStartedEvent
-  | AssistantMessageEvent
-  | ToolInvokedEvent
-  | ToolReturnedEvent
-  | SubagentInvokedEvent
-  | SubagentReturnedEvent
-  | ErrorOccurredEvent
-  | AgentStoppedEvent;
 export type JsonValue = unknown;
 
-export interface RunRequestedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "run_requested";
-  data: RunRequested;
-}
-export interface RunRequested {
-  commission?: unknown;
-}
-export interface AgentDescribedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "agent_described";
-  data: AgentDescribed;
-}
-export interface AgentDescribed {
-  descriptor: AgentDescriptor;
-}
 /**
  * What an agent comes with before any Commission.
  */
@@ -235,146 +163,32 @@ export interface Subagent {
    */
   skills?: DescriptorSkill[] | null;
 }
-export interface AgentStartedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "agent_started";
-  data: AgentStarted;
-}
-export interface AgentStarted {
-  /**
-   * The prompt the run starts with.
-   */
-  prompt: string;
-  /**
-   * The system prompt the run uses.
-   */
-  system_prompt?: string | null;
-  model: ModelRef;
-  /**
-   * The tools the run uses.
-   */
-  tools?: Tool[] | null;
-  /**
-   * The MCP servers the run uses.
-   */
-  mcp_servers?: McpServer[] | null;
-  /**
-   * The skills the run uses.
-   */
-  skills?: DescriptorSkill[] | null;
-  /**
-   * The subagents the run uses.
-   */
-  subagents?: Subagent[] | null;
-}
 /**
- * A Model without its `credential`, as the Trajectory reports it.
+ * Settings for the agent whose `agent_name` is their key in `agents`.
+ *
  */
-export interface ModelRef {
+export interface AgentSettings {
   /**
-   * The service that runs the model, for example `"anthropic"`,
-   * `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls
-   * and how it authenticates.
+   * The `agent_version` the Commission was written for.
    */
-  provider: string;
+  version?: string | null;
   /**
-   * The model's ID at that service, as the agent sends it, for example
-   * `"claude-sonnet-4-6"`.
+   * The built-in tools the run may use, by name. Covers only tools without an
+   * `mcp_server_id`.
    */
-  id: string;
+  enabled_tools?: string[] | null;
   /**
-   * The URL of the service's API. Absent means the service's default.
+   * The built-in subagents the run may use, by name.
    */
-  base_url?: string | null;
-}
-export interface AssistantMessageEvent {
+  enabled_subagents?: string[] | null;
   /**
-   * The AVP version the event follows.
+   * The built-in skills the run may use, by name.
    */
-  avp_version: "0.1";
+  enabled_skills?: string[] | null;
   /**
-   * Identifies the event.
+   * The built-in MCP servers the run may use, by `id`.
    */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "assistant_message";
-  data: AssistantMessage;
-}
-export interface AssistantMessage {
-  /**
-   * What the model produced: text, reasoning, tool calls, and other blocks.
-   */
-  content: (
-    | TextBlock
-    | ThinkingBlock
-    | ImageBlock
-    | ToolUseBlock
-    | ToolResultBlock
-    | ServerToolUseBlock
-    | ServerToolResultBlock
-    | RefusalBlock
-  )[];
-  model: ModelRef;
-  /**
-   * The model ID the service says produced the response, when it differs from `model.id`.
-   */
-  response_model?: string | null;
-  /**
-   * Why the model stopped, exactly as the service reported it.
-   */
-  finish_reasons?: string[] | null;
-  /**
-   * How long the response took, ending at the event's `time`.
-   */
-  duration_ms: number;
-  usage: Usage;
-  /**
-   * When a subagent made the response, the `invocation_id` of its `subagent_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-}
-/**
- * Text from the model.
- */
-export interface TextBlock {
-  type: "text";
-  text: string;
-  citations?: Citation[] | null;
-  [k: string]: unknown;
+  enabled_mcp_servers?: string[] | null;
 }
 /**
  * A source the model cited for a text block. Keeps fields the service added.
@@ -409,459 +223,6 @@ export interface Citation {
    */
   source_title?: string | null;
   [k: string]: unknown;
-}
-/**
- * The model's reasoning.
- */
-export interface ThinkingBlock {
-  type: "thinking";
-  /**
-   * The reasoning, or the service's encrypted reasoning when `redacted` is true.
-   */
-  thinking: string;
-  /**
-   * The service's token for passing the reasoning back to it.
-   */
-  signature?: string | null;
-  redacted?: boolean | null;
-  [k: string]: unknown;
-}
-/**
- * An image.
- */
-export interface ImageBlock {
-  type: "image";
-  source: Source;
-  [k: string]: unknown;
-}
-/**
- * Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added.
- */
-export interface Source {
-  type: "base64";
-  /**
-   * The image's media type, such as `image/png`.
-   */
-  media_type: string;
-  /**
-   * The image, base64-encoded.
-   */
-  data: string;
-  [k: string]: unknown;
-}
-/**
- * A call to a tool the agent runs.
- */
-export interface ToolUseBlock {
-  type: "tool_use";
-  id: string;
-  name: string;
-  input: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
-}
-/**
- * The result of a `tool_use` call, matched by `tool_use_id`.
- */
-export interface ToolResultBlock {
-  type: "tool_result";
-  tool_use_id: string;
-  content: string | (TextBlock | ImageBlock)[];
-  /**
-   * A result meant for programs, such as MCP's `structuredContent`.
-   */
-  structured_content?: {
-    [k: string]: unknown;
-  } | null;
-  is_error?: boolean | null;
-  [k: string]: unknown;
-}
-/**
- * A call to a tool the model service runs itself, such as web search.
- */
-export interface ServerToolUseBlock {
-  type: "server_tool_use";
-  id: string;
-  name: string;
-  input: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
-}
-/**
- * The result of a `server_tool_use` call.
- */
-export interface ServerToolResultBlock {
-  type: "server_tool_result";
-  tool_use_id: string;
-  name: string;
-  content: unknown;
-  is_error?: boolean | null;
-  [k: string]: unknown;
-}
-/**
- * The model's text when it declined.
- */
-export interface RefusalBlock {
-  type: "refusal";
-  refusal: string;
-  [k: string]: unknown;
-}
-/**
- * Token counts and cost for one model response.
- */
-export interface Usage {
-  /**
-   * All input tokens, including those read from and written to the cache.
-   */
-  input_tokens: number;
-  /**
-   * All output tokens, including reasoning tokens.
-   */
-  output_tokens: number;
-  /**
-   * The input tokens read from the cache. Included in `input_tokens`.
-   */
-  cache_read_input_tokens?: number | null;
-  /**
-   * The input tokens written to the cache. Included in `input_tokens`.
-   */
-  cache_creation_input_tokens?: number | null;
-  /**
-   * The output tokens the model spent on reasoning. Included in `output_tokens`.
-   */
-  reasoning_output_tokens?: number | null;
-  /**
-   * The cost in US dollars, after any cache discount.
-   */
-  cost_usd: number;
-  /**
-   * Where `cost_usd` comes from.
-   */
-  cost_source: "computed" | "reported" | "unknown";
-}
-export interface ToolInvokedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "tool_invoked";
-  data: ToolInvoked;
-}
-export interface ToolInvoked {
-  /**
-   * Identifies the call: the `id` of its `tool_use` content block.
-   */
-  tool_call_id: string;
-  /**
-   * The name the agent called the tool by.
-   */
-  tool_name: string;
-  /**
-   * The arguments, as in the `tool_use` block's `input`.
-   */
-  tool_input: {
-    [k: string]: unknown;
-  };
-  /**
-   * The `id` of the MCP server that runs the tool.
-   */
-  mcp_server_id?: string | null;
-  /**
-   * When a subagent made the call, the `invocation_id` of its `subagent_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-}
-export interface ToolReturnedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "tool_returned";
-  data: ToolReturned;
-}
-export interface ToolReturned {
-  /**
-   * As in the matching `tool_invoked`.
-   */
-  tool_call_id: string;
-  /**
-   * As in the matching `tool_invoked`.
-   */
-  tool_name: string;
-  /**
-   * How long the tool took, ending at the event's `time`.
-   */
-  duration_ms: number;
-  tool_result: ToolResultBlock;
-  /**
-   * As in the matching `tool_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-}
-export interface SubagentInvokedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "subagent_invoked";
-  data: SubagentInvoked;
-}
-export interface SubagentInvoked {
-  /**
-   * The subagent's `name`, as in `agent_started`'s `subagents`.
-   */
-  subagent_name: string;
-  /**
-   * Identifies this run of the subagent. When a tool call started it, the call's `tool_call_id`.
-   */
-  invocation_id: string;
-  /**
-   * When another subagent started this one, the `invocation_id` of its `subagent_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-  /**
-   * The input the subagent was given.
-   */
-  subagent_input: {
-    [k: string]: unknown;
-  };
-}
-export interface SubagentReturnedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "subagent_returned";
-  data: SubagentReturned;
-}
-export interface SubagentReturned {
-  /**
-   * As in the matching `subagent_invoked`.
-   */
-  subagent_name: string;
-  /**
-   * As in the matching `subagent_invoked`.
-   */
-  invocation_id: string;
-  /**
-   * As in the matching `subagent_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-  /**
-   * How long the subagent ran, ending at the event's `time`.
-   */
-  duration_ms: number;
-  /**
-   * Why the subagent stopped.
-   */
-  subagent_reason:
-    "converged" | "refused" | "error" | "interrupted" | "abandoned";
-  /**
-   * The subagent's final text, or the error message when `subagent_reason` is `error`.
-   */
-  subagent_result_text: string;
-  /**
-   * The subagent's totals, when the agent can't record its responses as events of their own.
-   */
-  subagent_usage?: SubagentUsage | null;
-}
-/**
- * A subagent's totals. A field is absent when the agent couldn't measure it.
- */
-export interface SubagentUsage {
-  input_tokens?: number | null;
-  output_tokens?: number | null;
-  cache_read_input_tokens?: number | null;
-  cache_creation_input_tokens?: number | null;
-  reasoning_output_tokens?: number | null;
-  cost_usd?: number | null;
-  cost_source?: ("computed" | "reported" | "unknown") | null;
-  /**
-   * How many model responses the subagent made.
-   */
-  responses?: number | null;
-}
-export interface ErrorOccurredEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "error_occurred";
-  data: ErrorOccurred;
-}
-export interface ErrorOccurred {
-  /**
-   * What kind of error. A code this version doesn't know reads as `unknown`.
-   */
-  error_code:
-    | "invalid_commission"
-    | "mcp_connect_failed"
-    | "auth_error"
-    | "rate_limit"
-    | "context_limit"
-    | "output_invalid"
-    | "agent_crash"
-    | "unknown";
-  /**
-   * What went wrong, for a person to read.
-   */
-  error_message: string;
-  /**
-   * When the error happened in a subagent, the `invocation_id` of its `subagent_invoked`.
-   */
-  subagent_invocation_id?: string | null;
-}
-export interface AgentStoppedEvent {
-  /**
-   * The AVP version the event follows.
-   */
-  avp_version: "0.1";
-  /**
-   * Identifies the event.
-   */
-  id: string;
-  /**
-   * When the event happened, as an RFC 3339 timestamp.
-   */
-  time: string;
-  /**
-   * The run's ID, the same on every event of the run.
-   */
-  run_id: string;
-  /**
-   * The agent's own annotations. AVP gives them no meaning.
-   */
-  meta?: {
-    [k: string]: unknown;
-  } | null;
-  type: "agent_stopped";
-  data: AgentStopped;
-}
-export interface AgentStopped {
-  /**
-   * Why the run stopped.
-   */
-  reason: "converged" | "refused" | "error" | "interrupted" | "abandoned";
-  output?: unknown;
-}
-/**
- * Settings for the agent whose `agent_name` is their key in `agents`.
- *
- */
-export interface AgentSettings {
-  /**
-   * The `agent_version` the Commission was written for.
-   */
-  version?: string | null;
-  /**
-   * The built-in tools the run may use, by name. Covers only tools without an
-   * `mcp_server_id`.
-   */
-  enabled_tools?: string[] | null;
-  /**
-   * The built-in subagents the run may use, by name.
-   */
-  enabled_subagents?: string[] | null;
-  /**
-   * The built-in skills the run may use, by name.
-   */
-  enabled_skills?: string[] | null;
-  /**
-   * The built-in MCP servers the run may use, by `id`.
-   */
-  enabled_mcp_servers?: string[] | null;
 }
 /**
  * What one run should do: the task and the settings for the run.
@@ -1059,4 +420,612 @@ export interface CommissionSkill {
   files: {
     [k: string]: string;
   };
+}
+/**
+ * An image.
+ */
+export interface ImageBlock {
+  type: "image";
+  source: Source;
+  [k: string]: unknown;
+}
+/**
+ * Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added.
+ */
+export interface Source {
+  type: "base64";
+  /**
+   * The image's media type, such as `image/png`.
+   */
+  media_type: string;
+  /**
+   * The image, base64-encoded.
+   */
+  data: string;
+  [k: string]: unknown;
+}
+/**
+ * A Model without its `credential`, as the Trajectory reports it.
+ */
+export interface ModelRef {
+  /**
+   * The service that runs the model, for example `"anthropic"`,
+   * `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls
+   * and how it authenticates.
+   */
+  provider: string;
+  /**
+   * The model's ID at that service, as the agent sends it, for example
+   * `"claude-sonnet-4-6"`.
+   */
+  id: string;
+  /**
+   * The URL of the service's API. Absent means the service's default.
+   */
+  base_url?: string | null;
+}
+/**
+ * The model's text when it declined.
+ */
+export interface RefusalBlock {
+  type: "refusal";
+  refusal: string;
+  [k: string]: unknown;
+}
+export interface RunContext {
+  /**
+   * The prompt the run starts with.
+   */
+  prompt: string;
+  /**
+   * The system prompt the run uses.
+   */
+  system_prompt?: string | null;
+  model: ModelRef;
+  /**
+   * The tools the run uses.
+   */
+  tools?: Tool[] | null;
+  /**
+   * The MCP servers the run uses.
+   */
+  mcp_servers?: McpServer[] | null;
+  /**
+   * The skills the run uses.
+   */
+  skills?: DescriptorSkill[] | null;
+  /**
+   * The subagents the run uses.
+   */
+  subagents?: Subagent[] | null;
+}
+/**
+ * The result of a `server_tool_use` call.
+ */
+export interface ServerToolResultBlock {
+  type: "server_tool_result";
+  tool_use_id: string;
+  name: string;
+  content: unknown;
+  is_error?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * A call to a tool the model service runs itself, such as web search.
+ */
+export interface ServerToolUseBlock {
+  type: "server_tool_use";
+  id: string;
+  name: string;
+  input: {
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}
+/**
+ * A subagent's totals. A field is absent when the agent couldn't measure it.
+ */
+export interface SubagentUsage {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+  reasoning_output_tokens?: number | null;
+  cost_usd?: number | null;
+  cost_source?: ("computed" | "reported" | "unknown") | null;
+  /**
+   * How many model responses the subagent made.
+   */
+  responses?: number | null;
+}
+/**
+ * Text from the model.
+ */
+export interface TextBlock {
+  type: "text";
+  text: string;
+  citations?: Citation[] | null;
+  [k: string]: unknown;
+}
+/**
+ * The model's reasoning.
+ */
+export interface ThinkingBlock {
+  type: "thinking";
+  /**
+   * The reasoning, or the service's encrypted reasoning when `redacted` is true.
+   */
+  thinking: string;
+  /**
+   * The service's token for passing the reasoning back to it.
+   */
+  signature?: string | null;
+  redacted?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * The result of a `tool_use` call, matched by `tool_use_id`.
+ */
+export interface ToolResultBlock {
+  type: "tool_result";
+  tool_use_id: string;
+  content: string | (TextBlock | ImageBlock)[];
+  /**
+   * A result meant for programs, such as MCP's `structuredContent`.
+   */
+  structured_content?: {
+    [k: string]: unknown;
+  } | null;
+  is_error?: boolean | null;
+  [k: string]: unknown;
+}
+/**
+ * A call to a tool the agent runs.
+ */
+export interface ToolUseBlock {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: {
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}
+/**
+ * Token counts and cost for one model response.
+ */
+export interface Usage {
+  /**
+   * All input tokens, including those read from and written to the cache.
+   */
+  input_tokens: number;
+  /**
+   * All output tokens, including reasoning tokens.
+   */
+  output_tokens: number;
+  /**
+   * The input tokens read from the cache. Included in `input_tokens`.
+   */
+  cache_read_input_tokens?: number | null;
+  /**
+   * The input tokens written to the cache. Included in `input_tokens`.
+   */
+  cache_creation_input_tokens?: number | null;
+  /**
+   * The output tokens the model spent on reasoning. Included in `output_tokens`.
+   */
+  reasoning_output_tokens?: number | null;
+  /**
+   * The cost in US dollars, after any cache discount.
+   */
+  cost_usd: number;
+  /**
+   * Where `cost_usd` comes from.
+   */
+  cost_source: "computed" | "reported" | "unknown";
+}
+export interface Reports {
+  commission: Commission;
+  descriptor: AgentDescriptor;
+  context: RunContext;
+  usage: Usage;
+  subagent_usage: SubagentUsage;
+  content: (
+    | TextBlock
+    | ThinkingBlock
+    | ImageBlock
+    | ToolUseBlock
+    | ToolResultBlock
+    | ServerToolUseBlock
+    | ServerToolResultBlock
+    | RefusalBlock
+  )[];
+  stop_reason: "converged" | "refused" | "error" | "interrupted" | "abandoned";
+  error_code:
+    | "invalid_commission"
+    | "mcp_connect_failed"
+    | "auth_error"
+    | "rate_limit"
+    | "context_limit"
+    | "output_invalid"
+    | "agent_crash"
+    | "unknown";
+  [k: string]: unknown;
+}
+/**
+ * Agent configuration.
+ */
+export interface Agent {
+  /**
+   * The name of the agent system
+   */
+  name: string;
+  /**
+   * The version identifier of the agent system
+   */
+  version: string;
+  /**
+   * Default LLM model used for this trajectory
+   */
+  model_name?: string | null;
+  /**
+   * Array of tool/function definitions available to the agent. Each element follows OpenAI's function calling schema.
+   */
+  tool_definitions?:
+    | {
+        [k: string]: unknown;
+      }[]
+    | null;
+  /**
+   * Custom agent configuration details
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * Audio source specification for audio stored as files or at remote URLs.
+ *
+ * Added in ATIF-v1.8. Mirrors ``ImageSource`` so that consumers can treat any
+ * referenced media the same way, with one addition: ``duration_sec``. Duration
+ * is worth recording because several providers bill audio per second and
+ * dataset statistics need it, and unlike an image's dimensions it cannot be
+ * recovered without decoding the file.
+ */
+export interface AudioSource {
+  /**
+   * MIME type of the audio
+   */
+  media_type:
+    | "audio/wav"
+    | "audio/mpeg"
+    | "audio/mp4"
+    | "audio/aac"
+    | "audio/ogg"
+    | "audio/flac"
+    | "audio/webm"
+    | "audio/aiff";
+  /**
+   * Location of the audio. Can be a relative or absolute file path, or a URL.
+   */
+  path: string;
+  /**
+   * Optional duration of the audio in seconds. Useful for cost accounting and dataset statistics; omit when unknown.
+   */
+  duration_sec?: number | null;
+}
+/**
+ * A single content part within a multimodal message.
+ *
+ * Used when a message or observation contains mixed content types (text,
+ * images, or audio). For text-only content, a plain string can still be used
+ * instead of a ContentPart array.
+ */
+export interface ContentPart {
+  /**
+   * The type of content
+   */
+  type: "text" | "image" | "audio";
+  /**
+   * Text content. Required when type='text'.
+   */
+  text?: string | null;
+  /**
+   * Media source (file reference). Required when type='image' or type='audio', and must match that type.
+   */
+  source?: ImageSource | AudioSource | null;
+}
+/**
+ * Image source specification for images stored as files or at remote URLs.
+ */
+export interface ImageSource {
+  /**
+   * MIME type of the image
+   */
+  media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  /**
+   * Location of the image. Can be a relative or absolute file path, or a URL.
+   */
+  path: string;
+}
+/**
+ * Aggregate statistics for the entire trajectory.
+ */
+export interface FinalMetrics {
+  /**
+   * Sum of all prompt tokens across all steps, including cached tokens
+   */
+  total_prompt_tokens?: number | null;
+  /**
+   * Sum of all completion tokens across all steps
+   */
+  total_completion_tokens?: number | null;
+  /**
+   * Sum of all cached tokens across all steps
+   */
+  total_cached_tokens?: number | null;
+  /**
+   * Total real monetary cost for the entire trajectory, including cost for subagents, if any
+   */
+  total_cost_usd?: number | null;
+  /**
+   * Total number of steps. If not equivalent to the number of steps in the trajectory, must be documented in the root-level notes field.
+   */
+  total_steps?: number | null;
+  /**
+   * Custom aggregate metrics
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * LLM operational and confidence data.
+ */
+export interface Metrics {
+  /**
+   * Total input tokens including cached and non-cached
+   */
+  prompt_tokens?: number | null;
+  /**
+   * Total tokens generated by the LLM response
+   */
+  completion_tokens?: number | null;
+  /**
+   * Subset of prompt_tokens that were cache hits
+   */
+  cached_tokens?: number | null;
+  /**
+   * Monetary cost of the API call in USD
+   */
+  cost_usd?: number | null;
+  /**
+   * Token IDs for prompt (input) tokens sent to the LLM, including chat history (if applicable)
+   */
+  prompt_token_ids?: number[] | null;
+  /**
+   * Token IDs for completion (response) tokens, enabling RL training without retokenization drift
+   */
+  completion_token_ids?: number[] | null;
+  /**
+   * Log probability assigned to each generated token
+   */
+  logprobs?: number[] | null;
+  /**
+   * Other metrics
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * Environment feedback/result after actions or system events.
+ */
+export interface Observation {
+  /**
+   * Array of result objects from tool calls or actions
+   */
+  results: ObservationResult[];
+}
+/**
+ * A single result within an observation.
+ */
+export interface ObservationResult {
+  /**
+   * The `tool_call_id` from the _tool_calls_ array in _StepObject_ that this result corresponds to. If null or omitted, the result comes from an action that doesn't use the standard tool calling format (e.g., agent actions without tool calls or system-initiated operations).
+   */
+  source_call_id?: string | null;
+  /**
+   * The output or result from the tool execution. String for text-only content, or array of ContentPart for multimodal content (added in ATIF-v1.6).
+   */
+  content?: string | ContentPart[] | null;
+  /**
+   * Array of references to delegated subagent trajectories
+   */
+  subagent_trajectory_ref?: SubagentTrajectoryRef[] | null;
+  /**
+   * Custom observation-result-level metadata (e.g., confidence score, retrieval score, source document ID). Added in ATIF-v1.7.
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * Reference to a delegated subagent trajectory.
+ *
+ * A subagent reference is resolved by one of two mechanisms:
+ *
+ * 1. **Embedded form** — set `trajectory_id` to match the
+ *    `Trajectory.trajectory_id` of an entry in the parent's
+ *    `subagent_trajectories` array.
+ * 2. **File-ref form** — set `trajectory_path` to the location
+ *    (file path, S3 URL, etc.) of an external trajectory file.
+ *
+ * These two mechanisms are the only resolution keys. `session_id`, when
+ * present on the ref, is **informational only**: it records the run
+ * identity of the delegated subagent for debug / correlation / cross-
+ * trajectory search purposes, and MUST NOT be used as a matching key
+ * (it is run-scoped and MAY collide across siblings — see
+ * `Trajectory.session_id`). A ref therefore MUST set at least one of
+ * `trajectory_id` or `trajectory_path`; `session_id` alone is not a
+ * resolvable reference.
+ */
+export interface SubagentTrajectoryRef {
+  /**
+   * Canonical identifier of the delegated subagent trajectory. Matches `Trajectory.trajectory_id` of an entry in the parent's `subagent_trajectories` array and is the resolution key for embedded references. Added in ATIF-v1.7 to provide a document-unique matching key without overloading `session_id`.
+   */
+  trajectory_id?: string | null;
+  /**
+   * Run identity of the delegated subagent trajectory. Informational only: recorded so consumers can correlate this ref back to the subagent's run for debug / search / display purposes. Run-scoped (see `Trajectory.session_id`) and therefore NOT a valid resolution key — consumers MUST resolve via `trajectory_id` (embedded) or `trajectory_path` (external file).
+   */
+  session_id?: string | null;
+  /**
+   * Location of the complete subagent trajectory as an external file (file path, S3 URL, database reference, etc.). Resolution key for file-ref references. When both `trajectory_id` and `trajectory_path` are set, consumers MAY choose either; typically `trajectory_id` is preferred when the embedded trajectory is available in-memory.
+   */
+  trajectory_path?: string | null;
+  /**
+   * Custom metadata about the subagent execution
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * A single step in the trajectory.
+ */
+export interface Step {
+  /**
+   * Ordinal index of the turn (starting from 1)
+   */
+  step_id: number;
+  /**
+   * ISO 8601 timestamp indicating when this step occurred
+   */
+  timestamp?: string | null;
+  /**
+   * The originator of this step
+   */
+  source: "system" | "user" | "agent";
+  /**
+   * The specific LLM model used for this turn. Omission implies the model defined in the root-level agent config.
+   */
+  model_name?: string | null;
+  /**
+   * Qualitative or quantitative measure of effort
+   */
+  reasoning_effort?: string | number | null;
+  /**
+   * The dialogue message. String for text-only content, or array of ContentPart for multimodal content (added in ATIF-v1.6).
+   */
+  message: string | ContentPart[];
+  /**
+   * The agent's explicit internal reasoning
+   */
+  reasoning_content?: string | null;
+  /**
+   * Array of structured objects for the agent's actions
+   */
+  tool_calls?: ToolCall[] | null;
+  /**
+   * Environment feedback/result after actions or system events
+   */
+  observation?: Observation | null;
+  /**
+   * LLM operational and confidence data for this step
+   */
+  metrics?: Metrics | null;
+  /**
+   * Indicates whether this step was copied from a previous trajectory for context (e.g., during continuation after summarization). Steps marked as copied context should not be included in training data as they represent previously-trained interactions. Added in ATIF-v1.5.
+   */
+  is_copied_context?: boolean | null;
+  /**
+   * Number of LLM inferences this step represents. When >1, metrics are aggregated across multiple LLM calls. When 1, the step represents exactly one inference. When 0 on a `source: 'agent'` step, the step represents a deterministic (non-LLM) dispatch; `metrics` and `reasoning_content` MUST be absent in that case. When null, the producer did not track this (backward-compatible default). Added in ATIF-v1.7.
+   */
+  llm_call_count?: number | null;
+  /**
+   * Custom step-level metadata
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * A tool call within a step.
+ */
+export interface ToolCall {
+  /**
+   * Unique identifier for this specific tool call
+   */
+  tool_call_id: string;
+  /**
+   * The name of the function or tool being invoked
+   */
+  function_name: string;
+  /**
+   * Arguments passed to the function (can be empty dict)
+   */
+  arguments: {
+    [k: string]: unknown;
+  };
+  /**
+   * Custom tool-call-level metadata (e.g., timeout, retry count, tool version). Added in ATIF-v1.7.
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+}
+/**
+ * Agent Trajectory in ATIF (Agent Trajectory Interchange Format).
+ */
+export interface Trajectory {
+  /**
+   * String defining ATIF compatibility
+   */
+  schema_version?:
+    | "ATIF-v1.0"
+    | "ATIF-v1.1"
+    | "ATIF-v1.2"
+    | "ATIF-v1.3"
+    | "ATIF-v1.4"
+    | "ATIF-v1.5"
+    | "ATIF-v1.6"
+    | "ATIF-v1.7"
+    | "ATIF-v1.8";
+  /**
+   * Identifier for the agent run this trajectory belongs to. Scoped to the run, NOT to an individual trajectory document: multiple Trajectory objects MAY share the same `session_id` when they represent the same logical run (e.g., a parent trajectory and its embedded subagents, or a trajectory and its continuation segments linked via `continued_trajectory_ref`). Therefore `session_id`s within a parent's `subagent_trajectories` array are NOT required to be unique. Use `trajectory_id` when a per-trajectory-document unique identifier is required (e.g., for `SubagentTrajectoryRef` resolution). Optional since ATIF-v1.7; producers SHOULD set this on root trajectories for run-level traceability, and MAY omit it on embedded subagents that inherit the parent's run identity.
+   */
+  session_id?: string | null;
+  /**
+   * Canonical per-trajectory-document identifier, distinct from `session_id`. Unlike `session_id` (which is run-scoped and MAY be shared), `trajectory_id` uniquely identifies THIS trajectory object. Used to resolve `SubagentTrajectoryRef` entries against the root's `subagent_trajectories` array without overloading `session_id`'s run-scoped semantics. Optional on standalone trajectories, but REQUIRED on any trajectory embedded in a parent's `subagent_trajectories` array. `trajectory_id`s within a single parent's `subagent_trajectories` array MUST be unique. Added in ATIF-v1.7.
+   */
+  trajectory_id?: string | null;
+  agent: Agent;
+  /**
+   * Array of step objects representing the complete interaction history
+   *
+   * @minItems 1
+   */
+  steps: [Step, ...Step[]];
+  /**
+   * Custom information, design notes, or explanations
+   */
+  notes?: string | null;
+  /**
+   * Summary metrics for the entire trajectory
+   */
+  final_metrics?: FinalMetrics | null;
+  /**
+   * Reference to the continuation trajectory file if this trajectory is continued in another file
+   */
+  continued_trajectory_ref?: string | null;
+  /**
+   * Custom root-level metadata
+   */
+  extra?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Array of embedded subagent trajectories. Each element is a complete, independently-valid ATIF Trajectory with its own schema_version, agent, and step_id sequence starting at 1. Enables single-file storage of multi-agent workflows: when a SubagentTrajectoryRef.trajectory_path is null, consumers resolve the reference by matching SubagentTrajectoryRef.trajectory_id against Trajectory.trajectory_id of entries in this array. Uniqueness rules: every embedded subagent MUST set `trajectory_id`, and `trajectory_id`s within this array MUST be unique. `session_id`, by contrast, is run-scoped and MAY collide across siblings (or match the parent) when all trajectories belong to the same logical run; embedded subagents MAY also omit `session_id` entirely to inherit the parent's run identity. Added in ATIF-v1.7.
+   */
+  subagent_trajectories?: Trajectory[] | null;
 }

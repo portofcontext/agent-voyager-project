@@ -24,7 +24,7 @@ class RunResult(BaseModel):
     """The item's `id`."""
     exit_code: int | None
     reason: str | None
-    """`agent_stopped`'s `reason`, or None when there is none."""
+    """The ATIF AVP stop reason, when present."""
     score: Score | None
     """None when the scorer failed."""
     scorer_error: str | None = None

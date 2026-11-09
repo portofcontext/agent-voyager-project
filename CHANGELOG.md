@@ -12,13 +12,16 @@
 
 ### Added
 
-- A Python supervisor utility exports AVP trajectories to ATIF-v1.8, including
-  tool results, subagent trajectories, usage, and image assets. Targeted ATIF
-  extensions retain final output, termination, timing, effective configuration,
-  and provider annotations. Source events and reconstruction metadata are not
-  archived. The module command converts existing NDJSON runs; the live SDK and
-  CLI migration remains separate. `make check` validates trajectories from all
-  eight adapter test suites against the ATIF schema and accounting rules.
+- Breaking: native ATIF-v1.8 replaces AVP's trajectory event stream in both
+  SDKs, all eight adapters, and the CLI. Runs write atomic `trajectory.json`
+  snapshots; stdout emits one completed document. Python uses the pinned Harbor
+  models and TypeScript derives its types from them. Typed output, termination,
+  errors, timing, provider annotations, and opaque child accounting remain in
+  targeted extensions. Unknown usage stays unknown. The old exporter, event
+  schema, CloudEvents wrapper, and AVP-specific OpenTelemetry converter are
+  removed. Existing NDJSON runs need an older SDK to read them.
+- An ecosystem example feeds ordinary run files directly to Harbor's trace
+  extractor and packages unchanged files for its job viewer.
 
 - `avp update` installs the newest CLI release, and `avp agent update`
   reinstalls the built-in agents whose versions the CLI changed.

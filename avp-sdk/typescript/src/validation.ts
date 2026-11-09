@@ -5,7 +5,7 @@ import formats from "ajv-formats";
 export const ajv = new Ajv2020({ strict: false, allErrors: true });
 formats.default(ajv);
 const schema = JSON.parse(
-  readFileSync(new URL("./schemas/trajectory.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./schemas/reports.json", import.meta.url), "utf8"),
 );
 // Python validates AgentName map keys; patternProperties alone leaves unmatched keys open.
 const agents = schema.$defs.Commission.properties.agents.anyOf.find(
@@ -13,12 +13,6 @@ const agents = schema.$defs.Commission.properties.agents.anyOf.find(
 );
 agents.propertyNames = { pattern: Object.keys(agents.patternProperties)[0] };
 ajv.addSchema(schema);
-
-export function eventDefinition(kind: string): string | undefined {
-  return Object.hasOwn(schema.discriminator.mapping, kind)
-    ? schema.discriminator.mapping[kind].split("/").at(-1)
-    : undefined;
-}
 
 // Match model_dump(exclude_none=True), preserving nulls inside arbitrary JSON maps.
 function clean(value: unknown, node: Record<string, any>): unknown {
@@ -74,23 +68,6 @@ function clean(value: unknown, node: Record<string, any>): unknown {
 }
 
 export function parseDefinition<T>(name: string, value: unknown): T {
-  if (name === "ErrorOccurred" || name === "ErrorOccurredEvent") {
-    value = structuredClone(value);
-    const error =
-      name === "ErrorOccurred"
-        ? value
-        : (value as Record<string, unknown>)?.data;
-    if (
-      error &&
-      typeof error === "object" &&
-      "error_code" in error &&
-      typeof error.error_code === "string" &&
-      !schema.$defs.ErrorOccurred.properties.error_code.enum.includes(
-        error.error_code,
-      )
-    )
-      error.error_code = "unknown";
-  }
   const validate = ajv.getSchema(`${schema.$id}#/$defs/${name}`);
   if (!validate) throw new Error(`Unknown wire definition ${name}`);
   if (!validate(value)) throw new TypeError(ajv.errorsText(validate.errors));

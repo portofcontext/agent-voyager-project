@@ -1,3 +1,4 @@
+import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** Pi owns the loop; native events are serialized through the SDK Recorder. */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,10 +7,7 @@ import { Recorder } from "@agent-voyager-project/sdk/recorder";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import type { Commission } from "@agent-voyager-project/sdk/commission";
 import type { Tool } from "@agent-voyager-project/sdk/descriptor";
-import type {
-  EventSink,
-  JsonValue,
-} from "@agent-voyager-project/sdk/trajectory";
+import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
@@ -135,7 +133,7 @@ async function connect(
 
 export async function run(
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   signal: AbortSignal,
   options: RunOptions = {},
 ): Promise<void> {

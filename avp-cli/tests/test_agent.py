@@ -76,16 +76,16 @@ def test_install_run_uninstall(
     output = avp(
         "run", "--commission", str(tmp_path / "c.json"), "--agent", "sh-agent", "--verbose"
     )
-    assert '"error_message": "sh-agent refuses every Commission"' in output
+    assert '"message": "sh-agent refuses every Commission"' in output
     assert "Allowed hosts: api.anthropic.com (model)" in output
     assert "Running /agent.sh run --commission /io/commission.json" in output
     [run_directory] = (avp_home / "runs").iterdir()
-    events = [json.loads(line) for line in (run_directory / "trajectory.ndjson").open()]
+    trajectory = json.loads((run_directory / "trajectory.json").read_text())
     sent = json.loads((run_directory / "commission.json").read_text())
     assert sent["run_id"] != "sh-run"
     assert sent["supervisor"]["name"] == "avp-cli"
-    assert events[0]["data"]["commission"] == sent
-    assert all(e["run_id"] == sent["run_id"] for e in events)
+    assert trajectory["session_id"] == sent["run_id"]
+    assert "commission" not in trajectory
 
     # The whole saved-Commission workflow uses the installed image and a real sandbox.
     assert "Commission is valid" in avp(
@@ -133,7 +133,7 @@ def test_install_run_uninstall(
     assert len(passed) == len(outcomes) - len(skipped), outcomes
     for outcome in passed:
         assert outcome["run_directory"].startswith(str(avp_home / "conformance"))
-        assert Path(outcome["run_directory"], "trajectory.ndjson").is_file()
+        assert Path(outcome["run_directory"], "trajectory.json").is_file()
 
     # -v and --entrypoint run code from the host, for describe and for the run.
     develop = tmp_path / "develop"
@@ -159,8 +159,8 @@ def test_install_run_uninstall(
     run = Path(outcome["run_directory"])
     saved = json.loads((run.parent.parent / "agents" / "sh-agent.json").read_text())
     assert saved["descriptor"]["agent_version"] == "9.9.9"
-    described = json.loads((run / "trajectory.ndjson").read_text().splitlines()[1])
-    assert described["data"]["descriptor"]["agent_version"] == "9.9.9"
+    trajectory = json.loads((run / "trajectory.json").read_text())
+    assert trajectory["agent"]["version"] == "9.9.9"
 
     # Its refusal isn't what commission.5.4 expects, but the runs start, with
     # servers that can't connect in their Commissions.
@@ -168,7 +168,7 @@ def test_install_run_uninstall(
     assert result.exit_code == 1, result.output
     for outcome in json.loads(result.output[result.output.index("[") :]):
         assert outcome["status"] == "fail", outcome
-        assert "not mcp_connect_failed" in "\n".join(outcome["reasons"]), outcome
+        assert "no error with code mcp_connect_failed" in "\n".join(outcome["reasons"]), outcome
 
     # An eval runs each item through the same dispatch, in its own sandbox.
     eval_file = tmp_path / "hi.eval.json"
@@ -188,7 +188,7 @@ def test_install_run_uninstall(
     [run] = saved["runs"]
     assert (run["item"], run["exit_code"], run["score"]["passed"]) == ("a", 0, False)
     [eval_directory] = (avp_home / "evals").iterdir()
-    assert (eval_directory / run["directory"] / "trajectory.ndjson").is_file()
+    assert (eval_directory / run["directory"] / "trajectory.json").is_file()
     agent_record = json.loads((eval_directory / "agents" / "sh-agent.json").read_text())
     assert agent_record["descriptor"]["agent_name"] == "sh-agent"
     assert agent_record["image_id"].startswith("sha256:")

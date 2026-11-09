@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import atif
 
 from avp_cli import paths
 from avp_cli.console import Failed
@@ -22,68 +23,59 @@ PROMPT = "What is the capital of France?"
 LONG = "x" * 5000
 
 
-def event(run_id: str, number: int, type: str, data: dict[str, Any]) -> str:
-    return json.dumps(
-        {
-            "avp_version": "0.1",
-            "id": str(number),
-            "time": "2026-01-01T00:00:00Z",
-            "run_id": run_id,
-            "type": type,
-            "data": data,
-        }
-    )
-
-
 def trajectory(run_id: str) -> str:
-    usage = {"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.01, "cost_source": "computed"}
-    descriptor = {"avp_version": "0.1", "agent_name": "avp-test", "agent_version": "1.2.3"}
-    tool = {
-        "name": "read",
-        "description": "Read a file.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"path": {"type": "string", "description": "The file."}},
-            "required": ["path"],
-        },
+    doc = atif(run_id=run_id)
+    doc["agent"] = {
+        "name": "avp-test",
+        "version": "1.2.3",
+        "model_name": "gpt-test",
+        "extra": {"avp": {"provider": "openai"}},
+        "tool_definitions": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "description": "Read a file.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"path": {"type": "string", "description": "The file."}},
+                        "required": ["path"],
+                    },
+                },
+            }
+        ],
     }
-    call = {"type": "tool_use", "id": "call-1", "name": "read", "input": {"path": "/a"}}
-    events = [
-        ("run_requested", {"commission": {"anything": SECRET}}),
-        ("agent_described", {"descriptor": descriptor}),
-        (
-            "agent_started",
-            {"prompt": PROMPT, "model": MODEL | {"base_url": "http://mock"}, "tools": [tool]},
-        ),
-        (
-            "assistant_message",
-            {"content": [call], "model": MODEL, "duration_ms": 7, "usage": usage},
-        ),
-        (
-            "tool_invoked",
-            {"tool_call_id": "call-1", "tool_name": "read", "tool_input": call["input"]},
-        ),
-        (
-            "tool_returned",
-            {
-                "tool_call_id": "call-1",
-                "tool_name": "read",
-                "duration_ms": 3,
-                "tool_result": {"type": "tool_result", "tool_use_id": "call-1", "content": LONG},
+    metrics = {"prompt_tokens": 10, "completion_tokens": 5, "cost_usd": 0.01}
+    doc["steps"] = [
+        {"step_id": 1, "source": "user", "message": PROMPT},
+        {
+            "step_id": 2,
+            "source": "agent",
+            "message": "",
+            "metrics": metrics,
+            "extra": {"avp": {"duration_ms": 7}},
+            "tool_calls": [
+                {"tool_call_id": "call-1", "function_name": "read", "arguments": {"path": "/a"}}
+            ],
+            "observation": {
+                "results": [
+                    {
+                        "source_call_id": "call-1",
+                        "content": LONG,
+                        "extra": {"avp": {"duration_ms": 3}},
+                    }
+                ]
             },
-        ),
-        (
-            "assistant_message",
-            {
-                "content": [{"type": "text", "text": "Paris"}],
-                "model": MODEL,
-                "duration_ms": 9,
-                "usage": usage,
-            },
-        ),
-        ("agent_stopped", {"reason": "converged", "output": "Paris"}),
+        },
+        {
+            "step_id": 3,
+            "source": "agent",
+            "message": "Paris",
+            "metrics": metrics,
+            "extra": {"avp": {"duration_ms": 9}},
+        },
     ]
-    return "\n".join(event(run_id, n, type, data) for n, (type, data) in enumerate(events)) + "\n"
+    return json.dumps(doc)
 
 
 def eval_directory(tmp_path: Path, agents: list[str]) -> tuple[Path, EvalResults]:

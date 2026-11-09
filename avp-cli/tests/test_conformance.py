@@ -2,12 +2,12 @@
 Trajectory, so no sandbox starts. test_agent.py runs a case against a real agent."""
 
 import json
-from collections.abc import Generator, Sequence
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-from conftest import DESCRIPTOR, event, no_sandbox
+from conftest import DESCRIPTOR, atif, no_sandbox
 from typer.testing import CliRunner
 
 from avp.commission import AgentSettings, Commission, McpServerHttp, McpServerStdio
@@ -40,17 +40,15 @@ MODEL = check.model("anthropic/claude-haiku-4-5")
 CONTEXT = Context(descriptor=DESCRIPTOR, model=MODEL)
 [AGENTS_WITHOUT_ENTRY] = [c for c in CASES if c.name == "agents-without-entry"]
 
-REQUESTED = event(1, "run_requested", {})
-DESCRIBED = event(2, "agent_described", {"descriptor": DESCRIPTOR.model_dump(exclude_none=True)})
-REFUSED = event(3, "error_occurred", {"error_code": "invalid_commission", "error_message": "x"})
-REFUSAL = [REQUESTED, DESCRIBED, REFUSED]
+REFUSED = atif(error=("invalid_commission", "x"))
+REFUSAL = REFUSED
 
 
 class FakeDispatch:
     """Writes `lines` as each run's Trajectory, or raises `error`."""
 
     def __init__(self) -> None:
-        self.lines: Sequence[dict | str] | None = [*REFUSAL]
+        self.document: dict | str | None = REFUSAL
         self.exit_code = 0
         self.error: Failed | None = None
         self.commissions: list[Commission] = []
@@ -66,8 +64,8 @@ class FakeDispatch:
             raise self.error
         assert options.directory is not None
         options.directory.mkdir(parents=True)
-        if self.lines is not None:
-            text = "\n".join(e if isinstance(e, str) else json.dumps(e) for e in self.lines)
+        if self.document is not None:
+            text = self.document if isinstance(self.document, str) else json.dumps(self.document)
             (options.directory / paths.TRAJECTORY).write_text(text + "\n")
         return Finished(options.directory, self.exit_code, "")
 
@@ -244,9 +242,7 @@ def test_a_commission_without_a_real_host_can_still_be_dispatched() -> None:
 
 
 def connect_failed(message: str = f"can't connect to {SERVER_ID}") -> dict:
-    return event(
-        3, "error_occurred", {"error_code": "mcp_connect_failed", "error_message": message}
-    )
+    return atif(error=("mcp_connect_failed", message))
 
 
 def test_every_case_runs_through_the_engine(
@@ -278,32 +274,31 @@ def test_every_case_runs_through_the_engine(
         (
             connect_failed("can't connect"),
             "fail",
-            f"error_occurred's message doesn't name {SERVER_ID}",
+            f"error message doesn't name {SERVER_ID}",
         ),
-        (REFUSED, "fail", "error_occurred has the code invalid_commission, not mcp_connect_failed"),
+        (REFUSED, "fail", "no error with code mcp_connect_failed"),
     ],
 )
 def test_a_connect_failure_must_have_its_code_and_name_the_server(
     fake: FakeDispatch, error: dict, status: str, reason: str | None
 ) -> None:
-    fake.lines = [REQUESTED, DESCRIBED, error]
+    fake.document = error
     [outcome] = check.check("pd", [by_name("stdio-server-wont-start")], MODEL)
     assert outcome.status == status
     assert outcome.reasons == ([reason] if reason else [])
 
 
-def test_a_connect_failure_fails_when_the_run_started_anyway(fake: FakeDispatch) -> None:
-    model = {"provider": "anthropic", "id": "claude-haiku-4-5"}
-    fake.lines = [REQUESTED, DESCRIBED, event(3, "agent_started", {"prompt": "x", "model": model})]
+def test_a_connect_failure_fails_when_the_run_started_anyway(fake):
+    fake.document = atif()
     [outcome] = check.check("pd", [by_name("http-server-wont-connect")], MODEL)
     assert outcome.status == "fail"
-    assert outcome.reasons[0].startswith("the events are run_requested")
+    assert "before the run started" in outcome.reasons[0]
 
 
 def test_a_should_case_that_fails_exits_0(
     fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake.lines = [REQUESTED, DESCRIBED, connect_failed("issues")]
+    fake.document = connect_failed("issues")
     monkeypatch.setattr(
         command, "describe_in_sandbox", lambda agent, entrypoint, volumes=None: FULL
     )
@@ -324,28 +319,17 @@ def test_a_refusal_passes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("lines", "problem"),
+    ("document", "problem"),
     [
-        (
-            [REQUESTED, DESCRIBED, event(3, "agent_started", {"prompt": "x"})],
-            "the events are run_requested",
-        ),
-        (
-            [
-                REQUESTED,
-                DESCRIBED,
-                event(3, "error_occurred", {"error_code": "agent_crash", "error_message": "x"}),
-            ],
-            "error_occurred has the code agent_crash",
-        ),
-        ([REQUESTED, REFUSED], "the events are run_requested, error_occurred"),
-        ([*REFUSAL, "not json"], "not a valid event: not json"),
-        ([*REFUSAL, event(4, "from_the_future", {})], "not a valid event: {"),
+        (atif(), "expected a complete refusal"),
+        (atif(error=("agent_crash", "x")), "no error with code invalid_commission"),
+        ("not json", "not a valid ATIF document"),
+        ({"steps": []}, "not a valid ATIF document"),
         (None, "the agent wrote no Trajectory"),
     ],
 )
-def test_a_refusal_fails(fake: FakeDispatch, lines: list[dict | str] | None, problem: str) -> None:
-    fake.lines = lines
+def test_a_refusal_fails(fake, document, problem):
+    fake.document = document
     [outcome] = check.check("pd", [AGENTS_WITHOUT_ENTRY], MODEL)
     assert outcome.status == "fail"
     assert any(r.startswith(problem) for r in outcome.reasons), outcome.reasons
@@ -411,31 +395,7 @@ def test_runs_get_the_stand_in_and_the_url_that_never_resolves(fake: FakeDispatc
 
 
 SCRIPTED = ({"content": "x"},)
-STARTED = [
-    REQUESTED,
-    DESCRIBED,
-    event(
-        3,
-        "agent_started",
-        {"prompt": "x", "model": {"provider": "anthropic", "id": "claude-haiku-4-5"}},
-    ),
-    event(
-        4,
-        "assistant_message",
-        {
-            "content": [{"type": "text", "text": "x"}],
-            "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
-            "duration_ms": 10,
-            "usage": {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cost_usd": 0,
-                "cost_source": "unknown",
-            },
-        },
-    ),
-    event(5, "agent_stopped", {"reason": "converged"}),
-]
+STARTED = atif()
 
 
 def test_a_case_without_responses_starts_no_mock(
@@ -559,24 +519,24 @@ def test_a_model_the_agent_does_not_support_stops_the_check(
         assert fake.commissions == []
 
 
-def test_events_in_order_passes_a_run_with_a_model_response(fake: FakeDispatch) -> None:
-    fake.lines = STARTED
-    [outcome] = check.check("pd", [by_name("events-in-order")], MODEL)
+def test_atif_document_passes_a_run_with_a_model_response(fake: FakeDispatch) -> None:
+    fake.document = STARTED
+    [outcome] = check.check("pd", [by_name("atif-document")], MODEL)
     assert (outcome.status, outcome.reasons) == ("pass", [])
 
 
 @pytest.mark.parametrize(
-    ("lines", "problem"),
+    ("document", "problem"),
     [
-        ([STARTED[0], STARTED[2], *STARTED[1:2], *STARTED[3:]], "the events start"),
-        (STARTED[:-1], "agent_stopped isn't last"),
-        ([*STARTED, STARTED[3]], "agent_stopped isn't last"),
-        ([*STARTED[:3], STARTED[4]], "no assistant_message"),
+        (atif(complete=False), "incomplete"),
+        (atif(steps=[{"step_id": 1, "source": "agent", "message": "x"}]), "no user prompt"),
+        (atif(steps=[{"step_id": 1, "source": "user", "message": "x"}]), "no model response"),
+        (atif(steps=[{"step_id": 9, "source": "user", "message": "x"}]), "not a valid ATIF"),
     ],
 )
-def test_events_in_order_fails(fake: FakeDispatch, lines: list[dict], problem: str) -> None:
-    fake.lines = lines
-    [outcome] = check.check("pd", [by_name("events-in-order")], MODEL)
+def test_atif_document_fails(fake, document, problem):
+    fake.document = document
+    [outcome] = check.check("pd", [by_name("atif-document")], MODEL)
     assert outcome.status == "fail"
     assert any(problem in reason for reason in outcome.reasons), outcome.reasons
 
