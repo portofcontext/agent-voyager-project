@@ -7,7 +7,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are interpreted as
 
 ## 1. Overview
 
-An AVP run produces an **ATIF-v1.8** document. ATIF is the
+AVP v0.1 trajectories conform to **ATIF v1.8**. ATIF is the
 [Agent Trajectory Interchange Format](https://harborframework.com/docs/agents/atif).
 Its standard fields describe the conversation, model responses, tools,
 observations, subagents, and metrics. AVP uses these fields directly.
@@ -20,11 +20,15 @@ SDK generates its wire types from the same schema.
 
 AVP adds operational details in ATIF's `extra.avp` extension fields. A generic
 ATIF consumer can read the conversation without understanding these extensions.
-Full configuration, skill files, and provider details live in [run artifacts](artifacts.md).
+Full configuration, skill files, and generated files live in [run artifacts](artifacts.md).
 The trace stays focused on what happened during execution; artifacts retain
 the material needed for evaluation and improvement.
 
-## 2. Example
+## 2. Complete trajectory example
+
+This is a complete ATIF document with AVP completion fields in `extra.avp`.
+The fields outside `extra` are standard ATIF. Section 3.1 lists the other AVP
+extensions; this small example does not exercise all of them.
 
 ```json
 {
@@ -70,16 +74,20 @@ them; it does not introduce another trajectory schema.
 ### 3.1 Operational extensions
 
 Extensions live under `extra.avp` on the relevant ATIF object. Optional fields
-are omitted when unknown. They MUST NOT duplicate the original event stream.
+are omitted when unknown. Producers MUST use standard ATIF fields wherever
+they represent the information. Necessary trace metadata without a standard
+field stays in `extra.avp` alongside the relevant object; readers do not need
+separate detail files to reconstruct it. Extensions MUST NOT duplicate the
+original event stream.
 
 | Object | Fields and meaning |
 |---|---|
-| Trajectory | `complete`, `started_at`, `stopped_at`, `stop_reason`, typed JSON `output` |
+| Trajectory | `complete`, `started_at`, `stopped_at`, `stop_reason`, typed JSON `output`, runtime `annotations` |
 | Agent | Effective `provider`; full configuration is an input artifact |
-| Agent step | `duration_ms`, requested model when different, `finish_reasons`, `details_path` when response details were captured |
+| Agent step | `duration_ms`, `provider`, `base_url`, `requested_model`, `finish_reasons`, `annotations`, `message_metadata`, `reasoning_metadata` |
 | System step | `error_code`, with the error description in standard `message` |
-| Tool call | `started_at`, `mcp_server_id`, `details_path` when needed |
-| Observation result | `ended_at`, `duration_ms`, `is_error`, `structured_content`, `details_path` when needed |
+| Tool call | `started_at`, `mcp_server_id`, `server_side`, `provider_metadata` |
+| Observation result | `ended_at`, `duration_ms`, `is_error`, `structured_content`, `annotations`, `provider_metadata`, `content_metadata` |
 | Metrics | `cache_creation_input_tokens`, `reasoning_output_tokens`, `cost_source` |
 | Final metrics | Known partial totals and unknown-field indicators when complete totals cannot be established |
 | Opaque child trajectory | `usage_details` for aggregate usage the runtime exposes without individual responses |
@@ -89,11 +97,12 @@ The SDK's reporting API defines supported error codes. A refusal is represented
 by a system step with an error code and a complete document with reason `error`.
 It has no start time or model-response steps.
 
-Encrypted reasoning, signatures, citations, refusal annotations, and other
-bulky provider data are output artifacts. `extra.avp.details_path` on the
-applicable object points to a relative JSON file listed in `artifacts.json`.
-Readers resolve it from the run directory and verify its manifest hash.
-Encrypted reasoning is not presented as public reasoning text.
+Encrypted reasoning, signatures, citations, refusal annotations, and provider
+metadata remain in the relevant ATIF object's `extra.avp`. Encrypted reasoning
+is not presented as public reasoning text. Artifacts hold supporting inputs
+and outputs, including configuration snapshots, complete skill directories,
+generated files, and media; they do not split execution metadata into another
+trace format.
 
 ### 3.2 Document delivery
 

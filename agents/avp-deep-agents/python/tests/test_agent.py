@@ -194,9 +194,7 @@ def test_native_refusal(script, tmp_path):
     script(response)
     _, events = run_cli(tmp_path)
     assert atif.responses(events)[0]["message"] == "Declined"
-    assert atif.details(tmp_path, atif.responses(events)[0])["message_metadata"][0]["annotations"][
-        "refusal"
-    ]
+    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["annotations"]["refusal"]
     assert atif.meta(events)["stop_reason"] == "refused"
 
 

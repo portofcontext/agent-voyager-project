@@ -26,10 +26,6 @@ def effective(directory: Path) -> dict:
     return artifact(directory, "inputs/effective-agent.json")
 
 
-def details(directory: Path, value: dict) -> dict:
-    return artifact(directory, meta(value)["details_path"])
-
-
 def documents(root: dict):
     yield root
     for child in root.get("subagent_trajectories", []):

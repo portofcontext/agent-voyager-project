@@ -33,7 +33,7 @@ for (const c of cases)
     else assert.throws(() => parseArtifacts(c.manifest));
   });
 
-test("captures full immutable skill inputs, output files, and linked details", async (t) => {
+test("captures full immutable skill inputs and output files while trace metadata stays inline", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "avp-artifacts-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const skill = join(root, "native-skill"),
@@ -107,13 +107,17 @@ test("captures full immutable skill inputs, output files, and linked details", a
     step = final.steps.at(-1)!;
   assert.equal(avpMetadata(final.agent).skills, undefined);
   assert.deepEqual(step.tool_calls![0].arguments, arbitrary);
-  assert.match(
-    readFileSync(join(directory, avpMetadata(step).details_path), "utf8"),
-    /citations/,
+  assert.deepEqual(
+    avpMetadata(step).message_metadata[0].annotations.citations,
+    [{ type: "url", source_url: "https://example.com" }],
   );
-  assert.doesNotMatch(
-    readFileSync(join(directory, "trajectory.json"), "utf8"),
-    /citations/,
+  const trace = readFileSync(join(directory, "trajectory.json"), "utf8");
+  assert.match(trace, /citations/);
+  assert.doesNotMatch(trace, /details_path/);
+  assert.ok(
+    readArtifacts(directory).artifacts.every(
+      (a) => !a.path.startsWith("outputs/details/"),
+    ),
   );
   assert.deepEqual(
     JSON.parse(readFileSync(join(directory, "outputs/result.json"), "utf8")),

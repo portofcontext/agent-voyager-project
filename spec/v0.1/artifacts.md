@@ -48,10 +48,10 @@ uses its own directory. The SDK
 records the validated Commission and Descriptor under `inputs/`, the effective
 configuration in `inputs/effective-agent.json`, and full skill directories under
 `inputs/skills/`. Effective configuration points at the captured skill files.
-Runtime-specific response details, the final result, media, and explicitly
-reported output files are output artifacts. A trace object can reference its
-provider details through `extra.avp.details_path`. Only fields exposed by the runtime
-are recorded. A skill with an advertised source that cannot be read is a capture
+The final result, media, and explicitly reported output files are output
+artifacts. Execution and response metadata stay in the ATIF trace, using
+standard fields first and `extra.avp` where necessary. Only fields exposed by
+the runtime are recorded. A skill with an advertised source that cannot be read is a capture
 error; a metadata-only skill without a source is not claimed as captured. If a
 runtime exposes only an instruction body, the SDK saves it as `instructions.md`
 and records `instructions_path` without claiming a complete skill directory.

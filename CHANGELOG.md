@@ -4,8 +4,9 @@
 
 ### Fixed
 
-- Keep ATIF traces compact: move full configuration, skill directories, and bulky
-  provider details into ordinary run artifacts. Both SDKs write `artifacts.json`
+- Keep ATIF traces coherent: execution metadata and provider annotations stay
+  in standard ATIF fields or `extra.avp`; no generic detail files are emitted.
+  Full configuration, skill directories, and generated files are run artifacts. Both SDKs write `artifacts.json`
   with relative paths, input/output roles, and SHA-256 hashes; readers verify
   captured bytes. Eval sharing reads effective configuration from those artifacts.
 
@@ -24,7 +25,7 @@
   snapshots; stdout emits one completed document. Python uses the pinned Harbor
   models and TypeScript derives its types from them. Typed output, termination,
   errors, timing, and opaque child accounting remain in targeted extensions.
-  Bulky provider annotations are linked artifacts. Unknown usage stays unknown. The old exporter, event
+  Provider annotations stay inline. Unknown usage stays unknown. The old exporter, event
   schema, CloudEvents wrapper, and AVP-specific OpenTelemetry converter are
   removed. Existing NDJSON runs need an older SDK to read them.
 - An ecosystem example feeds ordinary run files directly to Harbor's trace

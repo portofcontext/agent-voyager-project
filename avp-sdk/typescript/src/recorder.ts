@@ -154,10 +154,8 @@ export class Recorder {
   }
   private async publish(): Promise<void> {
     this.root.finish();
-    const data = structuredClone(this.root.data);
-    this.artifacts.compact(data);
     await this.sink({
-      trajectory: parseTrajectory(data),
+      trajectory: parseTrajectory(this.root.data),
       artifacts: new Map(this.artifacts.files),
       assets: new Map(this.assets),
     });
@@ -221,10 +219,11 @@ export class Recorder {
     this.check("start", false);
     if (this.started) throw new RecorderError("start: called twice");
     const data = parseDefinition<RunContext>("RunContext", started);
-    this.artifacts.effective(data, meta);
+    this.artifacts.effective(data);
     this.started = data;
     this.root.data.steps = [];
     metadata(this.root.data).started_at = this.now().toISOString();
+    if (meta) metadata(this.root.data).annotations = structuredClone(meta);
     const agent = this.root.data.agent;
     agent.model_name = data.model.id;
     agent.extra = { avp: { provider: data.model.provider } };

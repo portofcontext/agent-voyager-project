@@ -91,7 +91,7 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
     )
     assert message["message"] == "DONE"
     assert message["reasoning_content"] == "short"
-    assert atif.details(tmp_path, message)["reasoning_metadata"][0]["signature"] == "sig"
+    assert atif.meta(message)["reasoning_metadata"][0]["signature"] == "sig"
     usage = message["metrics"]
     assert (usage["prompt_tokens"], usage["completion_tokens"]) == (1000, 50)
     assert usage["cached_tokens"] == 400

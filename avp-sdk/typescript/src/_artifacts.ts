@@ -52,7 +52,7 @@ export class ArtifactCollection {
     }
     this.json("inputs/descriptor.json", descriptor, "input");
   }
-  effective(context: any, meta?: any): void {
+  effective(context: any): void {
     const data = structuredClone(context);
     const skills = (items: any[], prefix: string) => {
       for (const skill of items) {
@@ -105,46 +105,6 @@ export class ArtifactCollection {
       );
     if (this.commission.output_schema != null)
       data.output_schema = this.commission.output_schema;
-    if (meta) data.annotations = meta;
     this.json("inputs/effective-agent.json", data, "input");
-  }
-  compact(value: any, path = "root"): void {
-    if (Array.isArray(value))
-      value.forEach((item, index) => this.compact(item, `${path}/${index}`));
-    else if (value && typeof value === "object") {
-      const meta = value.extra?.avp ?? {},
-        details: any = {};
-      for (const key of [
-        "annotations",
-        "message_metadata",
-        "reasoning_metadata",
-        "provider_metadata",
-        "content_metadata",
-        "base_url",
-      ])
-        if (Object.hasOwn(meta, key)) {
-          details[key] = meta[key];
-          delete meta[key];
-        }
-      if (Object.keys(details).length) {
-        const name = `outputs/details/${path}.json`;
-        this.json(name, details, "output");
-        meta.details_path = name;
-      }
-      for (const [key, item] of Object.entries(value))
-        if (
-          [
-            "agent",
-            "steps",
-            "tool_calls",
-            "observation",
-            "results",
-            "metrics",
-            "final_metrics",
-            "subagent_trajectories",
-          ].includes(key)
-        )
-          this.compact(item, `${path}/${key}`);
-    }
   }
 }

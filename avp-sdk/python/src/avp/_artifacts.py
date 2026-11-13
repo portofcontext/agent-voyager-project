@@ -39,7 +39,7 @@ class ArtifactCollection:
                     )
         self.json("inputs/descriptor.json", descriptor, "input")
 
-    def effective(self, context: dict[str, Any], meta: dict[str, Any] | None) -> None:
+    def effective(self, context: dict[str, Any]) -> None:
         context = deepcopy(context)
 
         def skills(items: list[dict[str, Any]], prefix: str) -> None:
@@ -75,42 +75,4 @@ class ArtifactCollection:
             )
         if "output_schema" in self.commission:
             context["output_schema"] = self.commission["output_schema"]
-        if meta:
-            context["annotations"] = meta
         self.json("inputs/effective-agent.json", context, "input")
-
-    def compact(self, value: Any, path: str = "root") -> None:
-        """Move bulky annotations into files while keeping a direct trace reference."""
-        if isinstance(value, list):
-            for index, item in enumerate(value):
-                self.compact(item, f"{path}/{index}")
-        elif isinstance(value, dict):
-            metadata = value.get("extra", {}).get("avp", {})
-            details = {
-                key: metadata.pop(key)
-                for key in (
-                    "annotations",
-                    "message_metadata",
-                    "reasoning_metadata",
-                    "provider_metadata",
-                    "content_metadata",
-                    "base_url",
-                )
-                if key in metadata
-            }
-            if details:
-                name = f"outputs/details/{path}.json"
-                self.json(name, details, "output")
-                metadata["details_path"] = name
-            for key, item in value.items():
-                if key in {
-                    "agent",
-                    "steps",
-                    "tool_calls",
-                    "observation",
-                    "results",
-                    "metrics",
-                    "final_metrics",
-                    "subagent_trajectories",
-                }:
-                    self.compact(item, f"{path}/{key}")

@@ -56,11 +56,11 @@ trace exporter rejects images; use a multimodal consumer for those runs.
 Standard ATIF fields carry messages, public reasoning, tool calls, observations,
 child trajectories, model identity, tool schemas, usage, and cost. `extra.avp`
 retains typed final output, terminal reason, errors, timing, MCP ownership, and
-cache-write/reasoning-token distinctions.
+cache-write/reasoning-token distinctions, citations, and provider annotations.
 Unknown usage is omitted. Opaque child usage is counted only when individual
 child responses are unavailable.
 
-Full configuration, skill directories, and bulky provider details are preserved
+Full configuration, complete skill directories, and generated files are preserved
 as [run artifacts](../../spec/v0.1/artifacts.md). The manifest lists only path,
 input/output role, and SHA-256. This keeps traces tight without dropping the
 inputs needed for evaluation or recursive improvement. Native runtime event
@@ -75,9 +75,9 @@ for artifact in manifest.artifacts:
 ```
 
 `read_artifacts` verifies every file and hash. TypeScript exposes the equivalent
-`readArtifacts` from `@agent-voyager-project/sdk/artifacts`. Runtime details are
-linked from the relevant trace object through `extra.avp.details_path`. The
-manifest inventories captured files; it does not promise a full workspace or
+`readArtifacts` from `@agent-voyager-project/sdk/artifacts`. Execution metadata
+remains in ATIF, so reading the trace does not require separate detail files.
+The manifest inventories captured files; it does not promise a full workspace or
 a reproducible runtime environment.
 
 ## Verification and upstream updates

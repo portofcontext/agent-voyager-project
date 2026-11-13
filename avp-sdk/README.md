@@ -142,8 +142,8 @@ are not a persisted event format. `avp.trajectory` exposes upstream wire models,
 ### Run artifacts
 
 The SDK captures the validated Commission, Descriptor, effective configuration,
-and available skill files as inputs. It saves detailed provider metadata, media,
-and final results as outputs. [The artifact spec](../spec/v0.1/artifacts.md)
+and available skill files as inputs. It saves media and final results as outputs.
+Execution and provider metadata stay alongside their ATIF steps. [The artifact spec](../spec/v0.1/artifacts.md)
 defines the small manifest and portable relative paths.
 
 Adapters can capture additional selected files without scanning the workspace:

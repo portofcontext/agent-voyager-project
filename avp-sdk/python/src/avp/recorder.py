@@ -165,7 +165,6 @@ class Recorder:
     async def _publish(self) -> None:
         self._root.finish()
         data = deepcopy(self._root.data)
-        self._artifacts.compact(data)
         await self._sink(
             Recording(
                 Trajectory.model_validate(data), self._assets.copy(), self._artifacts.files.copy()
@@ -232,11 +231,13 @@ class Recorder:
         if self._started is not None:
             raise RecorderError("start: called twice")
         data = started.model_dump(mode="json", exclude_none=True)
-        self._artifacts.effective(data, meta)
+        self._artifacts.effective(data)
         self._started = started
         root = self._root
         root.data["steps"] = []
         _metadata(root.data)["started_at"] = self._time()
+        if meta:
+            _metadata(root.data)["annotations"] = deepcopy(meta)
         agent = root.data["agent"]
         agent["model_name"] = started.model.id
         agent["extra"] = {"avp": {"provider": data["model"]["provider"]}}

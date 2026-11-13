@@ -34,7 +34,7 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
         descriptor = AgentDescriptor.model_validate(call["descriptor"])
         await rec.begin(call["received"], descriptor)
     elif name == "start":
-        await rec.start(RunContext.model_validate(call["started"]))
+        await rec.start(RunContext.model_validate(call["started"]), meta=call.get("meta"))
     elif name == "response":
         await rec.response(
             CONTENT.validate_python(call["content"]),
@@ -45,6 +45,7 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
             duration_ms=call.get("duration_ms"),
             subagent_invocation_id=call.get("subagent_invocation_id"),
             key=call.get("key"),
+            meta=call.get("meta"),
         )
     elif name == "usage":
         assert usage is not None

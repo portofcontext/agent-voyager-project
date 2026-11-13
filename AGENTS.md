@@ -41,7 +41,8 @@ Implement shared behavior in Python first, then TypeScript.
   files inline.
 - Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
   live in `avp.reports`; do not introduce another event wire contract.
-- Keep full configuration, skill files, and bulky provider details in run artifacts.
+- Use standard ATIF fields first; keep necessary execution metadata in `extra.avp`.
+- Keep full configuration, skill files, generated files, and media in run artifacts.
   Preserve exact input bytes and keep `artifacts.json` paths and hashes valid.
 - Record one ATIF agent step per model response, with per-response usage
   and cost. Convert cumulative totals to deltas. Keep tool calls alongside

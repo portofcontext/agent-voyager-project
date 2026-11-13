@@ -87,9 +87,12 @@ def test_capture_keeps_skill_bytes_and_config_out_of_trace(tmp_path):
     assert "skills" not in snapshots[-1].trajectory.agent.extra["avp"]
     step = snapshots[-1].trajectory.steps[-1]
     assert step.tool_calls[0].arguments == arbitrary
-    detail_path = step.extra["avp"]["details_path"]
-    assert "citations" in (out.parent / detail_path).read_text()
-    assert "citations" not in out.read_text()
+    assert step.extra["avp"]["message_metadata"][0]["annotations"]["citations"] == [
+        {"type": "url", "source_url": "https://example.com"}
+    ]
+    assert "citations" in out.read_text()
+    assert not any(a.path.startswith("outputs/details/") for a in manifest.artifacts)
+    assert "details_path" not in out.read_text()
     assert json.loads((out.parent / "outputs/result.json").read_text()) == {"answer": 42}
     assert {a.role for a in manifest.artifacts} == {"input", "output"}
     assert not list(out.parent.rglob("*.tmp"))
