@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- The trajectory spec shows a minimal completion fragment and a dropdown of
+  all AVP extras, grouped by their ATIF location.
+
 - Keep ATIF traces coherent: execution metadata and provider annotations stay
   in standard ATIF fields or `extra.avp`; no generic detail files are emitted.
   Full configuration, skill directories, and generated files are run artifacts. Both SDKs write `artifacts.json`

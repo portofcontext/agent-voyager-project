@@ -26,9 +26,9 @@ the material needed for evaluation and improvement.
 
 ## 2. Examples
 
-This fragment shows AVP's completion fields. `extra` is ATIF's extension
-mechanism; `avp` namespaces our additions. The [operational extensions](#31-operational-extensions)
-reference lists the other fields AVP can add.
+This minimal fragment shows only AVP's completion fields, not all extras.
+`extra` is ATIF's extension mechanism; `avp` namespaces our additions.
+Expand the dropdown below for the full field inventory.
 
 ```json
 {
@@ -43,31 +43,154 @@ reference lists the other fields AVP can add.
 ```
 
 <details>
-<summary>Complete ATIF trajectory with AVP extensions</summary>
+<summary>All AVP extras, grouped by where they appear in ATIF</summary>
 
-The fields outside `extra` are standard ATIF. This complete run shows a user
-prompt, a tool call and result, and the agent's final answer.
+This is a field inventory with example values, not a complete trajectory to
+submit. Each top-level label identifies an ATIF location; its value shows the
+fields inside that object's `extra.avp`. Fields are conditional and need not
+appear together in one run. Child trajectories also use the common trajectory
+fields shown first.
 
 ```json
 {
-  "schema_version": "ATIF-v1.8",
-  "session_id": "example-run",
-  "agent": {"name": "example-agent", "version": "1.0", "model_name": "example-model"},
-  "steps": [
-    {"step_id": 1, "source": "user", "message": "What is 20 + 22?"},
-    {
-      "step_id": 2, "source": "agent", "message": "", "llm_call_count": 1,
-      "tool_calls": [{"tool_call_id": "c1", "function_name": "add", "arguments": {"a": 20, "b": 22}}],
-      "observation": {"results": [{"source_call_id": "c1", "content": "42"}]},
-      "metrics": {"prompt_tokens": 30, "completion_tokens": 12}
+  "trajectory.extra.avp": {
+    "complete": true,
+    "started_at": "2026-01-01T00:00:00Z",
+    "stopped_at": "2026-01-01T00:00:02Z",
+    "stop_reason": "converged",
+    "output": {
+      "answer": 42
     },
-    {"step_id": 3, "source": "agent", "message": "42", "llm_call_count": 1,
-     "metrics": {"prompt_tokens": 45, "completion_tokens": 2}}
-  ],
-  "final_metrics": {"total_prompt_tokens": 75, "total_completion_tokens": 14},
-  "extra": {"avp": {"complete": true, "stop_reason": "converged", "output": "42"}}
+    "annotations": {
+      "runtime_session_id": "session-1"
+    }
+  },
+  "agent.extra.avp": {
+    "provider": "openai"
+  },
+  "agent.tool_definitions[].extra.avp": {
+    "title": "Add numbers",
+    "outputSchema": {
+      "type": "object"
+    },
+    "mcp_server_id": "math",
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  "steps[source=agent].extra.avp": {
+    "duration_ms": 800,
+    "provider": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "requested_model": "example-model",
+    "finish_reasons": [
+      "end_turn"
+    ],
+    "annotations": {
+      "response_id": "response-1"
+    },
+    "message_metadata": [
+      {
+        "part_index": 0,
+        "annotations": {
+          "citations": [
+            {
+              "type": "url_citation",
+              "source_url": "https://example.com"
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning_metadata": [
+      {
+        "signature": "provider-signature",
+        "redacted": false,
+        "start": 0,
+        "end": 12
+      },
+      {
+        "redacted": true,
+        "encrypted_content": "encrypted-reasoning"
+      }
+    ]
+  },
+  "steps[source=system].extra.avp": {
+    "error_code": "auth_error"
+  },
+  "steps[].tool_calls[].extra.avp": {
+    "started_at": "2026-01-01T00:00:01Z",
+    "mcp_server_id": "math",
+    "server_side": false,
+    "provider_metadata": {
+      "provider_call_id": "native-call-1"
+    }
+  },
+  "steps[].observation.results[].extra.avp": {
+    "finished_at": "2026-01-01T00:00:01.200Z",
+    "duration_ms": 200,
+    "is_error": false,
+    "structured_content": {
+      "answer": 42
+    },
+    "provider_metadata": {
+      "provider_result_id": "native-result-1"
+    },
+    "content_metadata": [
+      {
+        "part_index": 0,
+        "annotations": {
+          "citations": [
+            {
+              "type": "url_citation",
+              "source_url": "https://example.com"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "steps[].metrics.extra.avp": {
+    "cache_creation_input_tokens": 20,
+    "reasoning_output_tokens": 12,
+    "cost_source": "reported"
+  },
+  "final_metrics.extra.avp": {
+    "usage_scope": "subtree",
+    "known_totals": {
+      "total_prompt_tokens": 100,
+      "total_completion_tokens": 20,
+      "total_cached_tokens": 10,
+      "total_cost_usd": 0.001
+    }
+  },
+  "subagent_trajectories[].extra.avp (additional fields)": {
+    "duration_ms": 1000,
+    "usage_details": {
+      "cache_creation_input_tokens": 20,
+      "reasoning_output_tokens": 12,
+      "cost_source": "reported",
+      "responses": 2
+    }
+  }
 }
 ```
+
+- `annotations` and `provider_metadata` are open objects. Their sample keys
+  above illustrate runtime/provider data, not a fixed AVP field list.
+- Tool definitions retain `title`, `outputSchema`, `mcp_server_id`, and any
+  additional MCP fields, including MCP `annotations`.
+- `message_metadata` and `content_metadata` entries contain `part_index` and
+  `annotations`. Those annotations preserve citations, refusal flags, image
+  source metadata, and other provider content fields.
+- `reasoning_metadata` preserves `signature`, `redacted`, and other provider
+  fields. `start`/`end` locate public reasoning text; `encrypted_content` holds
+  redacted reasoning instead of exposing it as public text.
+- `known_totals` contains only measured partial sums for metrics whose full
+  totals are unknown. Complete totals use standard ATIF fields. `usage_scope`
+  is `subtree`, meaning descendants are counted once.
+- `usage_details` is only for opaque children without recorded responses.
+  `cost_source` is `computed`, `reported`, or `unknown`.
 
 </details>
 
@@ -100,17 +223,8 @@ field stays in `extra.avp` alongside the relevant object; readers do not need
 separate detail files to reconstruct it. Extensions MUST NOT duplicate the
 original event stream.
 
-| Object | Fields and meaning |
-|---|---|
-| Trajectory | `complete`, `started_at`, `stopped_at`, `stop_reason`, typed JSON `output`, runtime `annotations` |
-| Agent | Effective `provider`; full configuration is an input artifact |
-| Agent step | `duration_ms`, `provider`, `base_url`, `requested_model`, `finish_reasons`, `annotations`, `message_metadata`, `reasoning_metadata` |
-| System step | `error_code`, with the error description in standard `message` |
-| Tool call | `started_at`, `mcp_server_id`, `server_side`, `provider_metadata` |
-| Observation result | `ended_at`, `duration_ms`, `is_error`, `structured_content`, `annotations`, `provider_metadata`, `content_metadata` |
-| Metrics | `cache_creation_input_tokens`, `reasoning_output_tokens`, `cost_source` |
-| Final metrics | Known partial totals and unknown-field indicators when complete totals cannot be established |
-| Opaque child trajectory | `usage_details` for aggregate usage the runtime exposes without individual responses |
+The [All AVP extras dropdown](#2-examples) lists the complete SDK-defined
+field inventory and the open metadata objects.
 
 Stop reasons are `converged`, `refused`, `error`, `interrupted`, and `abandoned`.
 The SDK's reporting API defines supported error codes. A refusal is represented
