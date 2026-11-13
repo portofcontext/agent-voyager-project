@@ -4,12 +4,12 @@ loads only for `run`, so `ping` and `describe` stay fast."""
 
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.agent_cli import main as agent_cli_main
 from avp_pydantic_ai.descriptor import describe
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     from avp_pydantic_ai import agent
 
     await agent.run(received, sink)

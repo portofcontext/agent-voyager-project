@@ -289,8 +289,7 @@ reaches the mock model.
   avp: it writes a Commission from the agent's Descriptor, the engine runs it,
   and the case scores the run. Pass is a score of 1 and fail is 0. A skipped
   case never reaches the engine, and a run that didn't start, or that its scorer
-  couldn't score, fails with the reason. Any line that isn't a valid event of a
-  type the SDK knows fails the case. Conformance adds a rule and a level (MUST or
+  couldn't score, fails with the reason. An invalid ATIF document fails the case. Conformance adds a rule and a level (MUST or
   SHOULD) to each item and groups its report by rule. The engine settings differ:
   conformance uses a stand-in credential and a `model.base_url` that is the mock
   model's or never resolves, and prints its report; an eval uses `avp vault`
@@ -313,8 +312,8 @@ The TUI is a place to see what exists and act on it:
   Commission, starting a run or an eval, and installing or uninstalling an
   agent. The TUI calls the same code as those commands and adds no behavior of
   its own.
-- **Step through a Trajectory:** move event by event through a run, from
-  `run_requested` to `agent_stopped`: each model response with its usage and
+- **Step through a Trajectory:** move step by step through a run, from
+  the initial prompt to the terminal outcome: each model response with its usage and
   cost, each tool call next to its result, and subagents nested under the call
   that started them. Follow a run live while it streams.
 - **Step through an eval:** start from the scoreboard, open an item to compare

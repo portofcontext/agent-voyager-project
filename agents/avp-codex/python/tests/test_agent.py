@@ -1,17 +1,16 @@
-"""The installed SDK notifications cross the adapter and Recorder into wire events."""
+"The installed SDK notifications cross the adapter and Recorder into wire events."
 
 import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
+import assertions as atif
 import pytest
 from openai_codex.client import CodexClient
 from openai_codex.generated.v2_all import AskForApproval, TurnStartResponse
-from pydantic import TypeAdapter
 
 from avp.agent_cli import main
-from avp.trajectory import Event
 from avp_codex import agent, descriptor
 
 MODEL = {"provider": "openai", "id": "gpt-5-mini"}
@@ -58,7 +57,7 @@ def run_cli(tmp_path, *, raises=False, **fields):
         "prompt": "Say DONE",
         **fields,
     }
-    path = tmp_path / "trajectory.ndjson"
+    path = tmp_path / "trajectory.json"
     argv = ["run", "--commission", json.dumps(received), "--out", str(path)]
     if raises:
         with pytest.raises((ValueError, RuntimeError)):
@@ -66,15 +65,13 @@ def run_cli(tmp_path, *, raises=False, **fields):
         code = 1
     else:
         code = main(run=agent.run, describe=descriptor.describe, argv=argv)
-    events = [json.loads(line) for line in path.read_text().splitlines()]
-    parser = TypeAdapter(Event)
-    for event in events:
-        parser.validate_python(event)
-    return code, events
+    events = atif.load(path)
+    return (code, events)
 
 
 @pytest.fixture
 def script(monkeypatch):
+
     class Server:
         config: ClassVar[Any] = None
         events = []
@@ -206,22 +203,21 @@ def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_pa
         tmp_path, mcp_servers=[{"id": "echo", "type": "stdio", "command": ["echo"]}]
     )
     assert code == 0
-    assert [event["type"] for event in events] == [
-        "run_requested",
-        "agent_described",
-        "agent_started",
-        "assistant_message",
-        "tool_invoked",
-        "tool_returned",
-        "assistant_message",
-        "agent_stopped",
-    ]
-    responses = [event["data"] for event in events if event["type"] == "assistant_message"]
-    assert [item["usage"]["input_tokens"] for item in responses] == [10, 20]
-    assert responses[0]["usage"]["cache_read_input_tokens"] == 3
-    assert events[4]["data"]["mcp_server_id"] == "echo"
-    assert events[5]["data"]["tool_result"]["is_error"] is True
-    assert events[-1]["data"] == {"reason": "converged", "output": "DONE"}
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (2, 1, 0, True)
+    responses = atif.responses(events)
+    assert [item["metrics"]["prompt_tokens"] for item in responses] == [10, 20]
+    assert responses[0]["metrics"]["cached_tokens"] == 3
+    assert atif.mcp_server(tmp_path, atif.calls(events)[0]) == "echo"
+    assert atif.meta(atif.results(events)[0])["is_error"] is True
+    assert {
+        "reason": atif.meta(events).get("stop_reason"),
+        "output": atif.output(events),
+    } == {"reason": "converged", "output": "DONE"}
     assert dict(script.calls)["thread/start"]["config"]["skills.config"] == [
         {"path": "/host/secret/SKILL.md", "enabled": False}
     ]
@@ -238,13 +234,14 @@ def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_pa
 )
 def test_refusal_uses_sdk_prelude_before_starting_codex(script, tmp_path, fields, message):
     _, events = run_cli(tmp_path, **fields)
-    assert [event["type"] for event in events] == [
-        "run_requested",
-        "agent_described",
-        "error_occurred",
-    ]
-    assert events[-1]["data"]["error_code"] == "invalid_commission"
-    assert message in events[-1]["data"]["error_message"]
+    assert (
+        len(atif.responses(events)),
+        len(atif.calls(events)),
+        len(atif.errors(events)),
+        atif.meta(events)["complete"],
+    ) == (0, 0, 1, True)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "invalid_commission"
+    assert message in atif.errors(events)[-1]["message"]
     assert not script.calls
 
 
@@ -259,7 +256,7 @@ def test_refusal_uses_sdk_prelude_before_starting_codex(script, tmp_path, fields
 def test_incomplete_streams_do_not_converge(script, tmp_path, payload, raises):
     script.events = payload
     _, events = run_cli(tmp_path, raises=raises)
-    assert events[-1]["data"]["reason"] == "error"
+    assert atif.meta(events)["stop_reason"] == "error"
 
 
 def test_credentials_skills_prompt_schema_and_output_validation(script, tmp_path):
@@ -283,21 +280,21 @@ def test_credentials_skills_prompt_schema_and_output_validation(script, tmp_path
             "properties": {"answer": {"type": "integer"}},
         },
     )
-    assert events[-1]["data"]["output"] == {"answer": 42}
+    assert atif.output(events) == {"answer": 42}
     assert script.config.env == {"AVP_CODEX_API_KEY": "avp-proxy-stand-in"}
     params = dict(script.calls)["thread/start"]
     assert params["baseInstructions"] == "Be brief"
     assert "support" in params["developerInstructions"]
     script.events = [text("invalid JSON"), boundary(), completed()]
-    _, events = run_cli(tmp_path, output_schema={"type": "object"})
-    assert events[-2]["data"]["error_code"] == "output_invalid"
-    assert events[-1]["data"]["reason"] == "error"
+    _, events = run_cli(tmp_path / "invalid", output_schema={"type": "object"})
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "output_invalid"
+    assert atif.meta(events)["stop_reason"] == "error"
 
 
 def test_missing_env_secret_fails_without_starting_codex(script, tmp_path):
     _, events = run_cli(tmp_path, model={**MODEL, "credential": {"env": "MISSING_AVP_TEST_KEY"}})
-    assert events[-1]["type"] == "error_occurred"
-    assert events[-1]["data"]["error_code"] == "auth_error"
+    assert atif.meta(events)["stop_reason"] == "error"
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
     assert not script.calls
 
 
@@ -315,8 +312,8 @@ def test_disabled_tool_call_is_reported_as_failure(script, tmp_path):
         completed(),
     ]
     _, events = run_cli(tmp_path, raises=True, agents={"avp-codex": {"enabled_tools": []}})
-    assert events[-1]["data"]["reason"] == "error"
-    assert "disabled tool" in events[-2]["data"]["error_message"]
+    assert atif.meta(events)["stop_reason"] == "error"
+    assert "disabled tool" in atif.errors(events)[-1]["message"]
 
 
 def test_ping_and_describe_are_lazy_and_match_the_pinned_catalog(tmp_path):
@@ -358,7 +355,7 @@ def test_final_output_keeps_all_text_parts(script, tmp_path):
         completed(),
     ]
     _, events = run_cli(tmp_path)
-    assert events[-1]["data"]["output"] == "first second"
+    assert atif.output(events) == "first second"
 
 
 @pytest.mark.parametrize(
@@ -379,13 +376,13 @@ def test_provider_errors_keep_their_classification(script, tmp_path, info, code)
         completed("failed"),
     ]
     _, events = run_cli(tmp_path)
-    assert events[-2]["data"]["error_code"] == code
-    assert events[-1]["data"]["reason"] == "error"
-    assert not any(event["type"] == "assistant_message" for event in events)
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == code
+    assert atif.meta(events)["stop_reason"] == "error"
+    assert not atif.responses(events)
 
 
 def test_cancellation_finishes_the_trajectory_and_returns_130(script, tmp_path):
     script.events = [asyncio.CancelledError()]
     code, events = run_cli(tmp_path)
     assert code == 130
-    assert events[-1]["data"]["reason"] == "interrupted"
+    assert atif.meta(events)["stop_reason"] == "interrupted"

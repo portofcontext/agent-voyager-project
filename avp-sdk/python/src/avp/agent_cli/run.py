@@ -6,14 +6,12 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from avp._base import EventSink
+from avp._base import TrajectorySink
 from avp.descriptor import AgentDescriptor
 
-RunFn = Callable[[JsonValue, EventSink], Awaitable[None]]
-"""The agent's run: takes the Commission as received and writes every event of
-the Trajectory to the sink, through `avp.recorder.Recorder` or by hand. When
-cancelled, it ends the Trajectory (`agent_stopped` with `interrupted`) and
-re-raises `CancelledError`."""
+RunFn = Callable[[JsonValue, TrajectorySink], Awaitable[None]]
+"""The agent receives a Commission and publishes native ATIF Recording snapshots.
+On cancellation it publishes an interrupted outcome and re-raises CancelledError."""
 DescribeFn = Callable[[], AgentDescriptor | Awaitable[AgentDescriptor]]
 
 

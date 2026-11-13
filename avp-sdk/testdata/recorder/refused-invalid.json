@@ -84,46 +84,40 @@
       "raises": true
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "run_requested",
-      "data": {
-        "commission": {
-          "avp_version": "0.1",
-          "run_id": "run-1",
-          "model": {
-            "provider": "anthropic",
-            "id": "claude-test-1"
-          },
-          "prompt": 3
-        }
-      },
-      "t": 0
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1/root",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0"
     },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "system",
+        "message": "<any>",
+        "extra": {
+          "avp": {
+            "error_code": "invalid_commission"
+          }
         }
-      },
-      "t": 0
+      }
+    ],
+    "extra": {
+      "avp": {
+        "complete": true,
+        "stop_reason": "error",
+        "stopped_at": "2026-01-01T00:00:00Z"
+      }
     },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "error_occurred",
-      "data": {
-        "error_code": "invalid_commission",
-        "error_message": "<any>"
-      },
-      "t": 0
+    "final_metrics": {
+      "total_steps": 1,
+      "total_prompt_tokens": 0,
+      "total_completion_tokens": 0,
+      "total_cached_tokens": 0,
+      "total_cost_usd": 0
     }
-  ]
+  }
 }

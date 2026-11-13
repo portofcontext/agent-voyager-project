@@ -8,26 +8,35 @@ in the SDK's environment:
 Writes to `spec/v0.1/`, next to the specs they describe:
 
     commission.schema.json        the Commission
-    trajectory.schema.json        one trajectory Event
+    trajectory.schema.json        one ATIF trajectory
     agent-descriptor.schema.json  the Agent Descriptor
-    avp.schema.json               a bundle: oneOf the three above
+    agent-start.schema.json       resolved start configuration
+    avp.schema.json               a bundle: oneOf the four above
 """
 
 import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
+from avp.agent_start import AgentStart
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import Event
+from avp.reports import ContentBlock, ErrorCode, RunContext, StopReason, SubagentUsage, Usage
+from avp.trajectory import Trajectory
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "spec" / "v0.1"
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_BASE = "https://www.agentvoyagerproject.com/schema/v0.1"
 
 SCHEMAS: list[tuple[str, Any, str, str]] = [
+    (
+        "agent-start.schema.json",
+        AgentStart,
+        "AVP v0.1 Agent Start",
+        "Resolved configuration at start. See agent-start.md.",
+    ),
     (
         "commission.schema.json",
         Commission,
@@ -36,9 +45,9 @@ SCHEMAS: list[tuple[str, Any, str, str]] = [
     ),
     (
         "trajectory.schema.json",
-        Event,
-        "AVP v0.1 Trajectory Event",
-        "One CloudEvents 1.0 event of the trajectory an agent emits. See trajectory.md.",
+        Trajectory,
+        "ATIF Trajectory",
+        "Harbor ATIF document. See trajectory.md.",
     ),
     (
         "agent-descriptor.schema.json",
@@ -69,13 +78,27 @@ def main() -> None:
             },
         )
 
+    class Reports(BaseModel):
+        commission: Commission
+        descriptor: AgentDescriptor
+        context: RunContext
+        usage: Usage
+        subagent_usage: SubagentUsage
+        content: list[ContentBlock]
+        stop_reason: StopReason
+        error_code: ErrorCode
+
+    inputs = Reports.model_json_schema()
+    inputs["$id"] = "https://www.agentvoyagerproject.com/sdk/reports.schema.json"
+    target = OUT_DIR.parent.parent / "avp-sdk/typescript/src/schemas/reports.json"
+    target.write_text(json.dumps(inputs, indent=2) + "\n")
     write_json(
         "avp.schema.json",
         {
             "$schema": SCHEMA_DRAFT,
             "$id": f"{SCHEMA_BASE}/avp.schema.json",
             "title": "AVP v0.1",
-            "description": "Any AVP v0.1 wire object: a Commission, a trajectory Event, or an Agent Descriptor.",
+            "description": "Any AVP v0.1 wire object: a Commission, an ATIF document, an Agent Descriptor, or an Agent Start.",
             "oneOf": [{"$ref": name} for name, *_ in SCHEMAS],
         },
     )

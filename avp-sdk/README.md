@@ -2,8 +2,8 @@
 
 The AVP SDKs (Python and TypeScript) have two goals:
 
-- **Define the wire:** types for the Commission, the Agent Descriptor, and
-  Trajectory events, matching the specs' schemas.
+- **Define the wire:** types for the Commission, Agent Descriptor, Agent Start,
+  and ATIF trajectory, matching the specs' schemas.
 - **Share the common work:** code that every agent runner or supervisor would
   otherwise write itself, such as checking a Commission, writing a Trajectory,
   and pricing a response.
@@ -18,8 +18,8 @@ wire starts there, never in an SDK or a schema.
 
 The Python SDK comes second, because the rest is generated from it:
 
-1. Each spec's reference tables define its fields.
-2. The Python SDK's Pydantic models are written from those tables.
+1. Commission and Descriptor reference tables define their fields; Trajectory adopts the pinned upstream ATIF models.
+2. Python implements those tables and vendors the upstream ATIF models.
 3. The models generate `spec/v0.1/*.schema.json` (`make schemas`).
 4. TypeScript takes its types from those schemas.
 
@@ -32,7 +32,8 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 
 | Part | What it does | Python |
 |---|---|---|
-| Wire types | The Commission, the Agent Descriptor, and Trajectory events, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Wire types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Agent Start | Complete resolved configuration with inline skill contents | `avp.agent_start` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
@@ -40,13 +41,8 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 | Endpoints | A provider's default `base_url` and API-key header, for sandbox egress, credential proxies, and metering | `avp.utils.endpoints` |
 | Agent command line | The command line every agent answers, described below | `avp.agent_cli` |
 
-Supervisor tools, built in Python first and in the other SDKs when a supervisor
-needs them:
-
-| Part | What it does | Python |
-|---|---|---|
-| OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
-| CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
+Trajectories use ATIF directly. See the [ATIF guide](docs/atif.md) for reading
+them with the SDK and existing ecosystem tools.
 
 ### Shared provider data
 
@@ -91,9 +87,10 @@ allows none), the Commission adds its own MCP servers and skills, and its
 `system_prompt` replaces the agent's. Each legacy agent wrote this itself, in
 its own way. The run plan does it once and returns:
 
-- `started`: what the run uses, as `agent_started` data. The agent configures
-  its runtime from it, adds each MCP server's status and tools after
-  connecting, and sends it as `agent_started`.
+- `started`: a `RunContext` describing effective configuration. The adapter
+  configures its runtime, adds connected MCP tools and status, and passes it
+  to `Recorder.start` to populate the ATIF agent and prompt steps and snapshot
+  effective configuration and accessible skill directories.
 - `turned_off`: the built-in items the run may not use, which the agent hides
   from the model and refuses to run.
 
@@ -117,35 +114,47 @@ transport.
 |---|---|
 | `ping` | `{"type": "pong", "avp_version": "0.1"}`, without loading the agent: checks installation and the AVP version it speaks |
 | `describe` | The agent's Descriptor as JSON |
-| `run` | The Trajectory as NDJSON, one event per line, to a file or to stdout with `-` |
+| `run` | ATIF JSON; atomic file snapshots, or one completed document on stdout with `-` |
 
 Paths default to stdout where `--out` is optional.
 
-`run` hands the Commission, as received, and an event sink to the agent. The
-agent writes every event, through the Recorder or by hand.
+`run` hands the Commission and a `TrajectorySink` to the adapter. The Recorder
+publishes `Recording` snapshots containing the ATIF document, referenced image
+bytes, Commission, Descriptor, and Agent Start. File sinks save the input
+documents and images before the trace snapshot. Stdout retains only ATIF.
 
 Exit codes: `0` when the Trajectory is complete, a refusal included; `130` when
 SIGINT or SIGTERM interrupted the run; anything else is a crash.
 
 ## The Recorder
 
-Every agent must turn its runtime's events into a Trajectory that follows the
-Trajectory spec's rules for agents. Those rules are the same for every agent
-and easy to get wrong, so the Recorder implements them once. The agent reports
-what its runtime did; the Recorder decides which events to write and in what
-order:
+The Recorder assembles native reports into ATIF. It validates the Commission,
+records effective inputs, merges streamed response chunks, prices each response,
+attaches observations to tool calls, and records embedded child trajectories.
+It closes abandoned work and preserves typed output and terminal reasons in
+`extra.avp`. Missing usage stays unknown.
 
-- `run_requested`, `agent_described`, and refusing a Commission that doesn't
-  match the spec or fails the Commission checks.
-- One `assistant_message` per model response, merging a streamed response and
-  pricing it.
-- A `tool_invoked` for each `tool_use` block, paired with its `tool_returned`.
-- Subagents closed as `abandoned` when the run stops while they still run.
-- One `agent_stopped`, or an `error_occurred` when the run ends before it starts.
+Adapter method inputs live in `avp.reports` (TypeScript: `sdk/reports`). They
+are not a persisted event format. `avp.trajectory` exposes upstream wire models,
+`parse_trajectory`, and `Recording`. Both SDKs run the same Recorder cases in
+[`testdata/recorder/`](testdata/recorder/).
 
-Using it is optional: an agent can write its events by hand. Whether an agent
-conforms is for `avp conformance` to judge, not the Recorder. Each SDK's
-Recorder passes the shared test cases in [`testdata/recorder/`](testdata/recorder/).
+### Saved run documents
+
+File output saves `commission.json`, `descriptor.json`, `agent-start.json`, and
+`trajectory.json`. The [Agent Start spec](../spec/v0.1/agent-start.md) defines the
+resolved snapshot, including full tool metadata and inline skill contents.
+The adapter reports what its runtime actually selected; the SDK captures exposed
+skill directories, including supporting files and subagent skills.
+
+Read the snapshot with Python `AgentStart.model_validate_json(...)` from
+`avp.agent_start`, or TypeScript `parseAgentStart(...)` from `sdk/agent_start`.
+A refused run has no Agent Start; direct runs may have no Commission.
+
+The final result stays in ATIF. Python `final_output(trajectory)` and TypeScript
+`finalOutput(trajectory)` return a distinct `extra.avp.output` when present and
+otherwise use the final agent message. Generated files are ordinary files saved
+by the runtime or deployment; the SDK has no generic artifact API or manifest.
 
 ## Out of scope
 

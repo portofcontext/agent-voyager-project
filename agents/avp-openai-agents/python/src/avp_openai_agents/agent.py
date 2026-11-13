@@ -12,7 +12,7 @@ from agents.tool import get_function_tool_origin
 from openai.types.responses import ResponseCompletedEvent, ResponseIncompleteEvent
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.descriptor import Tool
 from avp.recorder import Recorder
 from avp.utils.run_plan import plan_run
@@ -26,7 +26,7 @@ def model(commission):
     return cm.model(commission)
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     descriptor = describe()
     rec = Recorder(sink)
     commission = await rec.begin(received, descriptor)

@@ -1,0 +1,146 @@
+[
+  {
+    "name": "minimal",
+    "valid": true,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      }
+    }
+  },
+  {
+    "name": "complete",
+    "valid": true,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "system_prompt": "",
+      "skills": [
+        {
+          "name": "research",
+          "description": "Research",
+          "files": {
+            "SKILL.md": "instructions",
+            "data.bin": {
+              "base64": "AP8NCg=="
+            }
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "add",
+          "inputSchema": {
+            "type": "object"
+          },
+          "outputSchema": {
+            "type": "object"
+          },
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "mcp_server_id": "math"
+        }
+      ],
+      "mcp_servers": [
+        {
+          "id": "math",
+          "type": "stdio",
+          "command": [
+            "math"
+          ],
+          "status": "connected"
+        }
+      ],
+      "subagents": [
+        {
+          "name": "helper",
+          "skills": [
+            {
+              "name": "helper-skill",
+              "description": "body only",
+              "files": {
+                "instructions.md": "body"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing-run-id",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      }
+    }
+  },
+  {
+    "name": "invalid-model",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "id": "m"
+      }
+    }
+  },
+  {
+    "name": "empty-mcp-command",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "mcp_servers": [
+        {
+          "id": "math",
+          "type": "stdio",
+          "command": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-file-content",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "SKILL.md": 42
+          }
+        }
+      ]
+    }
+  }
+]

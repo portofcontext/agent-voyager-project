@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import event
+from conftest import atif
 from pydantic import JsonValue, ValidationError
 
-from avp.trajectory import AgentStoppedEvent
+from avp.trajectory import Trajectory
 from avp_cli import paths
 from avp_cli.eval.schemas import Item
 from avp_cli.eval.scoring import (
@@ -17,6 +17,7 @@ from avp_cli.eval.scoring import (
     Score,
     ScorerError,
     ScorerInput,
+    Totals,
     call,
     read,
     score,
@@ -26,77 +27,53 @@ from avp_cli.eval.scoring import (
 ITEM = Item(id="paris", answer="Paris")
 
 
-STARTED = [
-    event(1, "run_requested", {}),
-    event(
-        2,
-        "agent_started",
-        {"prompt": "Name the city", "model": {"provider": "anthropic", "id": "claude-haiku-4-5"}},
-    ),
-]
-STOPPED = event(3, "agent_stopped", {"reason": "converged", "output": "Paris"})
-
-
-def run_in(directory: Path, *lines: dict | str) -> Run:
-    text = "\n".join(e if isinstance(e, str) else json.dumps(e) for e in lines)
-    (directory / paths.TRAJECTORY).write_text(text + "\n")
+def run_in(directory: Path, document=None) -> Run:
+    document = atif() if document is None else document
+    (directory / paths.TRAJECTORY).write_text(
+        document if isinstance(document, str) else json.dumps(document)
+    )
     return read(directory, id="r", agent="pd", commission="inline-1", item=ITEM, exit_code=0)
 
 
-def test_a_complete_run(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED, STOPPED)
-    assert [e.type for e in run.trajectory] == ["run_requested", "agent_started", "agent_stopped"]
-    assert isinstance(run.trajectory[-1], AgentStoppedEvent)
+def test_a_complete_run(tmp_path):
+    run = run_in(tmp_path)
+    assert isinstance(run.trajectory, Trajectory)
+    assert run.trajectory.schema_version == "ATIF-v1.8"
     assert run.output == "Paris"
     assert run.reason == "converged"
     assert run.invalid_trajectory == []
 
 
-def test_an_incomplete_run_has_no_output_or_reason(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED)
+def test_an_incomplete_run_has_no_output_or_reason(tmp_path):
+    run = run_in(tmp_path, atif(complete=False))
     assert (run.output, run.reason) == (None, None)
 
 
-def test_invalid_lines_and_unknown_types_are_listed(tmp_path: Path) -> None:
-    unknown = event(3, "agent_daydreamed", {})
-    broken = event(4, "agent_started", {})
-    run = run_in(tmp_path, STARTED[0], "not json", unknown, broken, STOPPED)
-    assert [e.type for e in run.trajectory] == ["run_requested", "agent_stopped"]
-    assert run.invalid_trajectory == ["not json", unknown, broken]
+@pytest.mark.parametrize("document", ["not json", "3", '"text"', {"steps": []}])
+def test_invalid_documents_are_listed(tmp_path, document):
+    run = run_in(tmp_path, document)
+    assert run.trajectory is None
+    assert run.invalid_trajectory
 
 
-def test_a_line_that_is_json_but_not_an_object_is_invalid(tmp_path: Path) -> None:
-    run = run_in(tmp_path, "3", '"text"', STOPPED)
-    assert run.invalid_trajectory == [3, "text"]
-
-
-def test_a_missing_trajectory_is_empty(tmp_path: Path) -> None:
+def test_a_missing_trajectory_is_empty(tmp_path):
     run = read(tmp_path, id="r", agent="pd", commission="c", item=ITEM, exit_code=1)
-    assert (run.trajectory, run.invalid_trajectory, run.reason) == ([], [], None)
+    assert (run.trajectory, run.invalid_trajectory, run.reason) == (None, [], None)
 
 
-def test_the_input_is_the_guides_json(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED, STOPPED)
-    dumped = ScorerInput(run=run, config={"x": 1}).model_dump(mode="json")
+def test_external_atif_without_avp_extensions(tmp_path):
+    document = atif()
+    del document["extra"]
+    run = run_in(tmp_path, document)
+    assert run.output == "Paris"
+    assert run.reason is None
+
+
+def test_the_input_is_the_guides_json(tmp_path):
+    dumped = ScorerInput(run=run_in(tmp_path), config={"x": 1}).model_dump(mode="json")
     assert dumped["config"] == {"x": 1}
-    assert set(dumped["run"]) == {
-        "id",
-        "agent",
-        "commission",
-        "exit_code",
-        "trajectory",
-        "invalid_trajectory",
-        "output",
-        "reason",
-        "item",
-        "model",
-        "seconds",
-        "totals",
-    }
     assert dumped["run"]["item"] == {"id": "paris", "answer": "Paris"}
-    assert dumped["run"]["trajectory"][2] == STOPPED
-    # An event's absent fields stay absent.
-    assert "meta" not in dumped["run"]["trajectory"][0]
+    assert dumped["run"]["trajectory"]["steps"][-1]["message"] == "Paris"
 
 
 def passing(input: ScorerInput) -> Score:
@@ -110,7 +87,7 @@ async def passing_later(input: ScorerInput) -> Score:
 
 @pytest.mark.parametrize("scorer", [passing, passing_later])
 def test_a_plain_or_async_scorer(tmp_path: Path, scorer) -> None:
-    input = ScorerInput(run=run_in(tmp_path, *STARTED, STOPPED))
+    input = ScorerInput(run=run_in(tmp_path))
     assert asyncio.run(call(scorer, input)) == Score(value=1, passed=True)
 
 
@@ -121,7 +98,7 @@ def test_a_score_outside_0_to_1_is_rejected(value: float) -> None:
 
 
 def test_a_scorer_that_returns_something_else_failed(tmp_path: Path) -> None:
-    input = ScorerInput(run=run_in(tmp_path, *STARTED, STOPPED))
+    input = ScorerInput(run=run_in(tmp_path))
     with pytest.raises(ScorerError, match="returned dict, not a Score"):
         asyncio.run(call(lambda _: {"value": 1, "passed": True}, input))  # ty: ignore[invalid-argument-type]
 
@@ -131,7 +108,7 @@ def broken(input: ScorerInput) -> Score:
 
 
 def test_a_scorer_that_raises_has_no_score_and_saves_its_traceback(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED, STOPPED)
+    run = run_in(tmp_path)
     result = asyncio.run(score(broken, {}, run, tmp_path))
     assert result.score is None
     assert result.error is not None
@@ -148,7 +125,7 @@ def test_the_config_is_filled_from_the_item_and_the_run(tmp_path: Path) -> None:
         seen.append(input.config)
         return Score(value=1, passed=True)
 
-    run = run_in(tmp_path, *STARTED, STOPPED)
+    run = run_in(tmp_path)
     config: dict[str, JsonValue] = {
         "expected": "{item.answer}",
         "got": {"$run": "output"},
@@ -159,7 +136,7 @@ def test_the_config_is_filled_from_the_item_and_the_run(tmp_path: Path) -> None:
 
 
 def test_a_placeholder_that_cannot_be_filled_fails_the_scorer(tmp_path: Path) -> None:
-    run = run_in(tmp_path, *STARTED)
+    run = run_in(tmp_path, atif(complete=False))
     result = asyncio.run(score(passing, {"city": "{run.output}"}, run, tmp_path))
     assert result.error is not None
     assert result.error.message == (
@@ -181,41 +158,172 @@ def test_a_summary_with_no_scores() -> None:
     assert (summary.accuracy, summary.pass_rate) == (None, None)
 
 
-def message(n: int, cost: float, tokens: tuple[int, int]) -> dict:
-    return event(
-        n,
-        "assistant_message",
+def test_totals_add_up_the_trajectory(tmp_path):
+    steps = [
+        {"step_id": 1, "source": "user", "message": "x"},
         {
-            "content": [{"type": "text", "text": "x"}],
-            "model": {"provider": "anthropic", "id": "claude-haiku-4-5"},
-            "duration_ms": 10,
-            "usage": {
-                "input_tokens": tokens[0],
-                "output_tokens": tokens[1],
-                "cost_usd": cost,
-                "cost_source": "computed",
-            },
+            "step_id": 2,
+            "source": "agent",
+            "message": "",
+            "metrics": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": 0.01},
+            "tool_calls": [
+                {"tool_call_id": str(n), "function_name": name, "arguments": {}}
+                for n, name in enumerate(["add", "add", "read"])
+            ],
         },
-    )
-
-
-def tool(n: int, name: str) -> dict:
-    return event(n, "tool_invoked", {"tool_call_id": str(n), "tool_name": name, "tool_input": {}})
-
-
-def test_totals_add_up_the_trajectory(tmp_path: Path) -> None:
-    run = run_in(
-        tmp_path,
-        *STARTED,
-        message(3, 0.01, (100, 20)),
-        tool(4, "add"),
-        tool(5, "add"),
-        tool(6, "read"),
-        message(7, 0.002, (150, 5)),
-        STOPPED,
-    )
+        {
+            "step_id": 3,
+            "source": "agent",
+            "message": "Paris",
+            "metrics": {"prompt_tokens": 150, "completion_tokens": 5, "cost_usd": 0.002},
+        },
+    ]
+    run = run_in(tmp_path, atif(steps=steps))
     totals = run.totals
     assert (totals.turns, totals.input_tokens, totals.output_tokens) == (2, 250, 25)
     assert totals.cost_usd == pytest.approx(0.012)
     assert totals.tool_calls == {"add": 2, "read": 1}
     assert ScorerInput(run=run).model_dump(mode="json")["run"]["totals"]["turns"] == 2
+
+
+def test_unknown_external_usage_is_not_reported_as_measured_zero(tmp_path):
+    run = run_in(tmp_path, atif())
+    assert set(run.totals.unknown_metrics) == {"input_tokens", "output_tokens", "cost_usd"}
+
+
+def test_incomplete_avp_response_is_not_final_output(tmp_path):
+    doc = atif(complete=False)
+    doc["steps"].append({"step_id": 2, "source": "agent", "message": "still thinking"})
+    assert run_in(tmp_path, doc).output is None
+
+
+def test_external_multimodal_output_and_unknown_extensions(tmp_path):
+    doc = atif()
+    doc["extra"] = {"avp": {"stop_reason": "future-reason"}, "other": {"version": 3}}
+    doc["steps"][-1]["message"] = [
+        {"type": "image", "source": {"media_type": "image/png", "path": "image.png"}}
+    ]
+    run = run_in(tmp_path, doc)
+    assert run.output == doc["steps"][-1]["message"]
+    assert run.reason is None
+
+
+@pytest.mark.parametrize(
+    "name,prompt,completion,cost,unknown",
+    [
+        ("cost-sources", 5000, 500, 0.50903, ["cost_usd", "input_tokens", "output_tokens"]),
+        ("empty-response", 1000, 100, 0.0045, []),
+        ("error-after-start", 1000, 100, 0.0045, []),
+        (
+            "interrupted-with-running-subagent",
+            0,
+            0,
+            0,
+            ["cost_usd", "input_tokens", "output_tokens"],
+        ),
+        ("model-defaults", 0, 0, 0, ["cost_usd", "input_tokens", "output_tokens"]),
+        ("no-commission", 0, 0, 0, []),
+        ("plain-response", 1000, 100, 0.0045, []),
+        ("refused-check", 0, 0, 0, []),
+        ("refused-invalid", 0, 0, 0, []),
+        ("rejected-reports", 1000, 100, 0.0045, []),
+        ("result-closes-response", 2000, 200, 0.009, []),
+        ("stop-before-start", 0, 0, 0, []),
+        (
+            "stop-with-running-work",
+            1000,
+            100,
+            0.0045,
+            ["cost_usd", "input_tokens", "output_tokens"],
+        ),
+        ("streamed-response", 2000, 200, 0.006, []),
+        ("subagent-error", 1500, 120, 0.0045, ["cost_usd"]),
+        ("subagent-from-tool", 4000, 400, 0.018, []),
+        ("tool-calls", 2000, 200, 0.009, []),
+    ],
+)
+def test_partial_totals_are_derived_without_avp_aggregate_extensions(
+    name, prompt, completion, cost, unknown
+):
+    path = Path(__file__).resolve().parents[2] / "avp-sdk/testdata/recorder" / f"{name}.json"
+    doc = Trajectory.model_validate(json.loads(path.read_text())["trajectory"])
+    totals = Totals.of(doc)
+    assert totals.input_tokens == prompt
+    assert totals.output_tokens == completion
+    assert totals.cost_usd == pytest.approx(cost)
+    assert totals.unknown_metrics == unknown
+
+
+def test_partial_totals_count_nested_aggregates_once_and_preserve_unknowns(tmp_path):
+    root = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "root",
+                "metrics": {"prompt_tokens": 10, "cost_usd": 0.1},
+            }
+        ]
+    )
+    child = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "child",
+                "metrics": {"prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.02},
+            }
+        ]
+    )
+    child["trajectory_id"] = "child"
+    grandchild = atif(steps=[{"step_id": 1, "source": "user", "message": "opaque"}])
+    grandchild["trajectory_id"] = "grandchild"
+    grandchild["final_metrics"] = {
+        "total_prompt_tokens": 30,
+        "total_completion_tokens": 6,
+        "total_cost_usd": 0.18,
+    }
+    child["subagent_trajectories"] = [grandchild]
+    child["final_metrics"] = {
+        "total_prompt_tokens": 40,
+        "total_completion_tokens": 8,
+        "total_cost_usd": 0.2,
+    }
+    opaque = atif(steps=[{"step_id": 1, "source": "user", "message": "opaque"}])
+    opaque["trajectory_id"] = "opaque"
+    opaque["final_metrics"] = {"total_completion_tokens": 4}
+    root["subagent_trajectories"] = [child, opaque]
+    run = run_in(tmp_path, root)
+    assert not run.invalid_trajectory
+    totals = run.totals
+    assert totals.input_tokens == 50
+    assert totals.output_tokens == 12
+    assert totals.cost_usd == pytest.approx(0.3)
+    assert totals.unknown_metrics == ["cost_usd", "input_tokens", "output_tokens"]
+
+
+def test_copied_context_and_deterministic_dispatch_do_not_add_usage(tmp_path):
+    root = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "copied",
+                "is_copied_context": True,
+                "metrics": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": 1},
+                "tool_calls": [{"tool_call_id": "old", "function_name": "old", "arguments": {}}],
+            },
+            {"step_id": 2, "source": "agent", "message": "dispatch", "llm_call_count": 0},
+            {
+                "step_id": 3,
+                "source": "agent",
+                "message": "new",
+                "metrics": {"prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.1},
+            },
+        ]
+    )
+    totals = run_in(tmp_path, root).totals
+    assert (totals.turns, totals.input_tokens, totals.output_tokens) == (1, 10, 2)
+    assert totals.cost_usd == pytest.approx(0.1)
+    assert totals.tool_calls == {}
+    assert totals.unknown_metrics == []

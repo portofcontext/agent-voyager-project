@@ -5,8 +5,8 @@ behavior are defined in the [SDK guide](../README.md), with Python as the refere
 
 The npm package is `@agent-voyager-project/sdk`. It uses ES modules and requires
 Node 22.12 or newer. Import wire types and parsers from the `commission`,
-`descriptor`, and `trajectory` subpaths. `parseTrajectoryEvent` skips unknown
-event types when reading a Trajectory.
+`descriptor`, and `trajectory` subpaths. `parseTrajectory` validates native
+ATIF documents. Recorder inputs are exported from `reports`.
 
 The agent CLI passes its run callback an `AbortSignal` for SIGINT and SIGTERM.
 The callback ends its Trajectory and rethrows the abort; the CLI exits with 130.
@@ -14,7 +14,7 @@ The callback ends its Trajectory and rethrows the abort; the CLI exits with 130.
 ## Install
 
 ```sh
-npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.2/agent-voyager-project-sdk-0.1.0-beta.2.tgz
+npm install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-typescript-v0.1.0-beta.3/agent-voyager-project-sdk-0.1.0-beta.3.tgz
 ```
 
 ## Development

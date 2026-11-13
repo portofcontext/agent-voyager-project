@@ -1,0 +1,3 @@
+Harbor ATIF models, Apache-2.0.
+Source: https://github.com/harbor-framework/harbor/tree/9c7a39b991d7e2205019f6be0598cbd22d84bfc3/src/harbor/models/trajectories
+Only the import namespace is changed. Refresh with scripts/vendor-atif.py.

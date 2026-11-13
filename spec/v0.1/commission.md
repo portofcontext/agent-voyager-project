@@ -12,7 +12,7 @@ A supervisor (the system that starts the run, such as a CLI or an evaluation too
 
 This spec defines the Commission's fields, the rules a supervisor follows when it writes one, and the rules an agent follows when it runs one. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
 
-The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before any Commission. For one run, a Commission can add items, replace the system prompt, and limit which built-in items are used; the Descriptor itself stays the same. The [Trajectory](./trajectory.md) spec records a copy of the Commission in [`run_requested`](./trajectory.md#33-run_requested), the first event, and records what the run actually uses in [`agent_started`](./trajectory.md#35-agent_started).
+The [Agent Descriptor](./agent-descriptor.md) lists what the agent has before any Commission. For one run, a Commission can add items, replace the system prompt, and limit which built-in items are used; the Descriptor itself stays the same. The [Trajectory](./trajectory.md) records the effective inputs in standard ATIF fields. It does not duplicate the original Commission.
 
 ## 2. Example
 
@@ -73,7 +73,7 @@ The `acme-code-agent` key refers to the agent in the [Descriptor example](./agen
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `avp_version` | string | Yes | The AVP version the Commission follows. `"0.1"` for this spec. |
-| `run_id` | string | Yes | The run's ID, chosen by the supervisor. Every [Trajectory event](./trajectory.md#31-event) carries it as `run_id`. |
+| `run_id` | string | Yes | The run's ID, chosen by the supervisor. The [ATIF document](./trajectory.md) carries it as `session_id`. |
 | `model` | [Model](#33-model) | Yes | The model to run, and the service that runs it. |
 | `prompt` | string | Yes | The first user message of the run. |
 | `supervisor` | [Supervisor](#32-supervisor) | No | The supervisor that wrote the Commission. |
@@ -203,7 +203,7 @@ These rules apply to the agent that runs a Commission. An agent conforms to this
 
 ### 5.1 The agent checks the Commission before the run starts
 
-Before its first model call, the agent MUST refuse the Commission in each case below marked MUST, and SHOULD refuse it in each case marked SHOULD. To refuse, it ends the run with an [`error_occurred`](./trajectory.md#311-error_occurred) event with the code `invalid_commission` and a message that says which case applies. The run never starts, so there is no `agent_started` or `agent_stopped`.
+Before its first model call, the agent MUST refuse the Commission in each case below marked MUST, and SHOULD refuse it in each case marked SHOULD. To refuse, it writes a complete ATIF document with a system error step whose `extra.avp.error_code` is `invalid_commission` and whose `message` identifies the case. No model-response steps or start time are recorded.
 
 | Case | Level |
 |---|---|
@@ -226,13 +226,13 @@ A tool from a built-in MCP server the run may not use is not available either.
 
 ### 5.3 Turned-off items are hidden and blocked
 
-The agent SHOULD NOT offer a built-in item the run may not use to the model. If the model calls one anyway, the agent MUST NOT run it, and MUST record the call as failed: its [`tool_returned`](./trajectory.md#38-tool_returned) event has `is_error` set to `true`.
+The agent SHOULD NOT offer a built-in item the run may not use to the model. If the model calls one anyway, the agent MUST NOT run it, and MUST record the call as failed: its ATIF observation result has `extra.avp.is_error` set to `true`.
 
 ### 5.4 Added items are used, or the run stops
 
 Before its first model call, the agent MUST connect to every MCP server and load every skill in the Commission. [Agent settings](#37-agent-settings) do not apply to them.
 
-If an MCP server in the Commission does not reach `connected` status, the agent MUST NOT start the run. It ends the run with an [`error_occurred`](./trajectory.md#311-error_occurred) event with the code `mcp_connect_failed` and a message that names the server, and sends no `agent_started` or `agent_stopped`.
+If an MCP server in the Commission does not reach `connected` status, the agent MUST NOT start the run. It writes a complete ATIF document with a system error step whose `extra.avp.error_code` is `mcp_connect_failed` and whose message names the server, without a start time or model response.
 
 ### 5.5 `system_prompt` replaces the agent's own
 
@@ -248,7 +248,7 @@ When a Commission has `output_schema` and the model gives its final answer, the 
 
 ### 5.8 Secrets stay out of the Trajectory
 
-The agent MUST NOT write a secret value it receives into any Trajectory event.
+The agent MUST NOT write a secret value it receives into the ATIF document.
 
 ### 5.9 Secrets come from the proxy or the environment
 

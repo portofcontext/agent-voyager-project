@@ -3,7 +3,7 @@
 import json
 
 from avp.recorder import UsageReport
-from avp.trajectory import ImageBlock, RefusalBlock, Source, TextBlock, ThinkingBlock, ToolUseBlock
+from avp.reports import ImageBlock, RefusalBlock, Source, TextBlock, ThinkingBlock, ToolUseBlock
 
 
 def content(items):

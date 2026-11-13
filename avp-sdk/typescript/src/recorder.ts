@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { captureStart, type AgentStart } from "./agent_start.js";
 import {
   parseCommission,
   type Commission,
@@ -6,18 +7,15 @@ import {
 } from "./commission.js";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
 import {
-  parseTrajectoryEvent,
-  type AgentStarted,
+  type RunContext,
   type ContentBlock,
   type ErrorCode,
-  type Event,
-  type EventSink,
   type JsonValue,
   type StopReason,
   type SubagentUsage,
   type ToolResultBlock,
   type Usage,
-} from "./trajectory.js";
+} from "./reports.js";
 import { parseDefinition } from "./validation.js";
 import { checkCommission } from "./utils/preflight.js";
 import { computeCost, loadPrices, type Prices } from "./utils/pricing.js";
@@ -26,8 +24,7 @@ import { repr } from "./utils/skill_md.js";
 export const ABANDONED_TEXT =
   "The run ended while the subagent was still running.";
 export const UNRETURNED_TEXT = "The run ended before the tool returned.";
-export const STOPPED_BEFORE_START_TEXT =
-  "The run stopped before agent_started.";
+export const STOPPED_BEFORE_START_TEXT = "The run stopped before start.";
 export class RecorderError extends Error {}
 export type UsageReport = Omit<Usage, "cost_source" | "cost_usd"> & {
   cost_usd?: number | null;
@@ -54,11 +51,11 @@ interface Call {
   parent?: string;
   time: number;
   returned: boolean;
+  step?: any;
 }
 interface Subagent {
   name: string;
   parent?: string;
-  time: number;
   reason?: StopReason;
 }
 interface Response {
@@ -74,7 +71,7 @@ interface Response {
   durationMs?: number;
   meta: Record<string, JsonValue>;
   callIds: Set<string>;
-  waiting: Event[];
+  waiting: (() => void)[];
   toolReturned: boolean;
 }
 function usageReport(report: UsageReport): UsageReport {
@@ -101,57 +98,75 @@ function usageReport(report: UsageReport): UsageReport {
   };
 }
 
+import { parseTrajectory, type TrajectorySink } from "./trajectory.js";
+import {
+  Document,
+  metadata,
+  remaining,
+  content,
+  contentMetadata,
+  metrics,
+  observation,
+} from "./_recording.js";
 export class Recorder {
   runId: string;
   ended = false;
   private begun = false;
-  private started?: AgentStarted;
+  private started?: RunContext;
   private openResponse?: Response;
   private calls = new Map<string, Call>();
   private subagents = new Map<string, Subagent>();
-  private reportedResponses = new Set<string>();
   private prices?: Prices;
   private now: () => Date;
-  private newId: () => string;
-
+  private root: Document;
+  private docs: Map<string | undefined, Document>;
+  private delegations = new Map<string, any>();
+  private assets = new Map<string, Uint8Array>();
+  private commission?: Commission;
+  private descriptor?: AgentDescriptor;
+  private agentStart?: AgentStart;
   constructor(
-    private sink: EventSink,
+    private sink: TrajectorySink,
     options: RecorderOptions = {},
   ) {
-    this.newId = options.newId ?? randomUUID;
+    this.runId = options.runId || (options.newId ?? randomUUID)();
     this.now = options.now ?? (() => new Date());
-    this.runId = options.runId || this.newId();
     this.prices = options.prices;
+    this.root = new Document(
+      this.runId,
+      `${this.runId}/root`,
+      "unknown",
+      "unknown",
+    );
+    this.docs = new Map([[undefined, this.root]]);
   }
   private check(report: string, started = true): void {
     if (this.ended) throw new RecorderError(`${report}: the run has ended`);
     if (started && !this.started)
       throw new RecorderError(`${report}: called before start`);
   }
-  private event<K extends Event["type"]>(
-    type: K,
-    data: Extract<Event, { type: K }>["data"],
-    time?: number,
-    meta?: Record<string, JsonValue> | null,
-  ): Event {
-    return parseTrajectoryEvent({
-      avp_version: "0.1",
-      id: this.newId(),
-      time:
-        time === undefined
-          ? this.now().toISOString()
-          : new Date(time).toISOString(),
-      run_id: this.runId,
-      type,
-      data,
-      meta,
-    })!;
+  private scope(id?: string): Document {
+    const doc = this.docs.get(id);
+    if (!doc) throw new RecorderError(`unknown subagent ${id}`);
+    return doc;
   }
-  private async write(event: Event): Promise<void> {
-    if (this.openResponse) this.openResponse.waiting.push(event);
-    else await this.sink(event);
+  private async publish(): Promise<void> {
+    this.root.finish();
+    await this.sink({
+      trajectory: parseTrajectory(this.root.data),
+      commission: structuredClone(this.commission),
+      descriptor: structuredClone(this.descriptor),
+      agentStart: structuredClone(this.agentStart),
+      assets: new Map(this.assets),
+    });
   }
-
+  private async write(update: () => void): Promise<void> {
+    if (this.openResponse) this.openResponse.waiting.push(update);
+    else {
+      update();
+      await this.publish();
+    }
+  }
   async begin(
     received: JsonValue,
     descriptor: AgentDescriptor,
@@ -161,13 +176,12 @@ export class Recorder {
       throw new RecorderError("begin: called twice, or after start");
     this.begun = true;
     descriptor = parseDescriptor(descriptor);
-    let commission: Commission | undefined;
-    let refusal: string | undefined;
+    let commission: Commission | undefined, refusal: string | undefined;
     if (received != null) {
       try {
         commission = parseCommission(received);
-      } catch (error) {
-        refusal = `the Commission doesn't match the spec: ${(error as Error).message}`;
+      } catch (e) {
+        refusal = `the Commission doesn't match the spec: ${(e as Error).message}`;
       }
       if (
         typeof received === "object" &&
@@ -176,23 +190,51 @@ export class Recorder {
       )
         this.runId = received.run_id;
     }
-    await this.sink(this.event("run_requested", { commission: received }));
-    await this.sink(this.event("agent_described", { descriptor }));
+    this.root = new Document(
+      this.runId,
+      `${this.runId}/root`,
+      descriptor.agent_name,
+      descriptor.agent_version,
+    );
+    this.docs = new Map([[undefined, this.root]]);
+    this.commission = structuredClone(commission);
+    this.descriptor = structuredClone(descriptor);
+    this.root.step(this.now().toISOString(), "system", "Run initialized.");
     if (commission) refusal = checkCommission(commission, descriptor);
     if (refusal) {
       await this.error("invalid_commission", refusal);
       return;
     }
+    await this.publish();
     return commission;
   }
   async start(
-    started: AgentStarted,
+    started: RunContext,
     { meta }: { meta?: Record<string, JsonValue> | null } = {},
   ): Promise<void> {
     this.check("start", false);
     if (this.started) throw new RecorderError("start: called twice");
-    this.started = parseDefinition<AgentStarted>("AgentStarted", started);
-    await this.sink(this.event("agent_started", this.started, undefined, meta));
+    const data = parseDefinition<RunContext>("RunContext", started);
+    this.agentStart = captureStart(data, this.commission, this.runId);
+    this.started = data;
+    this.root.data.steps = [];
+    metadata(this.root.data).started_at = this.now().toISOString();
+    if (meta) metadata(this.root.data).annotations = structuredClone(meta);
+    const agent = this.root.data.agent;
+    agent.model_name = data.model.id;
+    agent.extra = { avp: { provider: data.model.provider } };
+    agent.tool_definitions = (data.tools ?? []).map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        parameters: t.inputSchema,
+        ...(t.description != null ? { description: t.description } : {}),
+      },
+    }));
+    if (data.system_prompt != null)
+      this.root.step(this.now().toISOString(), "system", data.system_prompt);
+    this.root.step(this.now().toISOString(), "user", data.prompt);
+    await this.publish();
   }
   async error(
     code: ErrorCode,
@@ -200,15 +242,20 @@ export class Recorder {
     { subagentInvocationId }: { subagentInvocationId?: string } = {},
   ): Promise<void> {
     this.check("error", false);
-    const event = this.event("error_occurred", {
-      error_code: code,
-      error_message: message,
-      subagent_invocation_id: subagentInvocationId,
+    const timestamp = this.now().toISOString();
+    await this.write(() => {
+      const doc = this.scope(subagentInvocationId);
+      if (!this.started) {
+        doc.data.steps = [];
+        this.ended = true;
+        Object.assign(metadata(doc.data), {
+          complete: true,
+          stop_reason: "error",
+          stopped_at: timestamp,
+        });
+      }
+      metadata(doc.step(timestamp, "system", message)).error_code = code;
     });
-    if (!this.started) {
-      this.ended = true;
-      await this.sink(event);
-    } else await this.write(event);
   }
   async stop(reason: StopReason, output?: JsonValue): Promise<void> {
     if (this.ended) return;
@@ -218,7 +265,7 @@ export class Recorder {
     }
     await this.closeResponse();
     const running = [...this.subagents]
-      .filter(([, subagent]) => subagent.reason === undefined)
+      .filter(([, s]) => !s.reason)
       .map(([id]) => id);
     for (const id of running)
       await this.subagentReturned(id, ABANDONED_TEXT, "abandoned");
@@ -227,18 +274,31 @@ export class Recorder {
         await this.toolReturned(id, UNRETURNED_TEXT, { isError: true });
     if (running.length && reason === "converged") reason = "abandoned";
     this.ended = true;
-    await this.sink(this.event("agent_stopped", { reason, output }));
+    Object.assign(metadata(this.root.data), {
+      complete: true,
+      stop_reason: reason,
+      stopped_at: this.now().toISOString(),
+    });
+    const lastMessage = this.root.data.steps.findLast(
+      (step: any) => step.source === "agent",
+    )?.message;
+    if (
+      !(typeof output === "string" && output === lastMessage) &&
+      (output != null || lastMessage != null)
+    ) {
+      metadata(this.root.data).output = output ?? null;
+    }
+    await this.publish();
   }
-
   async response(
-    content: ContentBlock[],
+    blocks: ContentBlock[],
     options: ResponseOptions = {},
   ): Promise<void> {
     this.check("response");
     const usage =
       options.usage == null ? undefined : usageReport(options.usage);
-    const calls = content.filter((block) => block.type === "tool_use");
-    const ids = new Set<string>();
+    const calls = blocks.filter((b) => b.type === "tool_use"),
+      ids = new Set<string>();
     for (const call of calls) {
       if (this.calls.has(call.id) || ids.has(call.id))
         throw new RecorderError(
@@ -246,9 +306,9 @@ export class Recorder {
         );
       ids.add(call.id);
     }
-    const key = options.key ?? undefined;
-    const parent = options.subagentInvocationId ?? undefined;
-    const open = this.openResponse;
+    const key = options.key ?? undefined,
+      parent = options.subagentInvocationId ?? undefined,
+      open = this.openResponse;
     if (
       open &&
       (key === undefined ||
@@ -257,6 +317,7 @@ export class Recorder {
         parent !== open.parent)
     )
       await this.closeResponse();
+    this.scope(parent);
     const now = this.now().getTime();
     const response = (this.openResponse ??= {
       key,
@@ -271,21 +332,13 @@ export class Recorder {
       toolReturned: false,
     });
     response.last = now;
-    response.content.push(...content);
+    response.content.push(...blocks);
     if (usage) response.usage = usage;
-    if (response.responseModel === undefined)
-      response.responseModel = options.responseModel ?? undefined;
+    response.responseModel ??= options.responseModel ?? undefined;
     if (options.finishReasons != null)
       response.finishReasons = options.finishReasons;
     if (options.durationMs != null) response.durationMs = options.durationMs;
     if (options.meta) Object.assign(response.meta, options.meta);
-    if (parent !== undefined) this.reportedResponses.add(parent);
-    const servers = new Map(
-      (this.started!.tools ?? []).map((tool) => [
-        tool.name,
-        tool.mcp_server_id,
-      ]),
-    );
     for (const call of calls) {
       this.calls.set(call.id, {
         name: call.name,
@@ -295,15 +348,6 @@ export class Recorder {
         returned: false,
       });
       response.callIds.add(call.id);
-      response.waiting.push(
-        this.event("tool_invoked", {
-          tool_call_id: call.id,
-          tool_name: call.name,
-          tool_input: call.input,
-          mcp_server_id: servers.get(call.name),
-          subagent_invocation_id: parent,
-        }),
-      );
     }
     if (key === undefined) await this.closeResponse();
   }
@@ -312,75 +356,160 @@ export class Recorder {
     { key }: { key?: string | null } = {},
   ): Promise<void> {
     this.check("usage");
-    const response = this.openResponse;
-    if (!response || (key != null && key !== response.key))
-      throw new RecorderError(
-        `usage: no open response with key ${key == null ? "None" : repr(key)}`,
-      );
-    response.usage = usageReport(report);
+    if (!this.openResponse || (key != null && key !== this.openResponse.key))
+      throw new RecorderError(`usage: no open response with key ${key}`);
+    this.openResponse.usage = usageReport(report);
   }
   async closeResponse(): Promise<void> {
     const response = this.openResponse;
     if (!response) return;
     this.openResponse = undefined;
-    if (
-      response.content.some(
-        (block) => block.type !== "text" || block.text !== "",
-      )
-    ) {
-      let usage: Usage = {
-        input_tokens: 0,
-        output_tokens: 0,
-        cost_usd: 0,
-        cost_source: "unknown",
+    if (response.content.some((b) => b.type !== "text" || b.text !== ""))
+      await this.recordResponse(response);
+    for (const update of response.waiting) update();
+    await this.publish();
+  }
+  private async recordResponse(response: Response): Promise<void> {
+    const report = response.usage;
+    let usage: any = {};
+    if (report) {
+      if (!this.prices && report.cost_usd == null)
+        this.prices = await loadPrices();
+      const [cost, source] = computeCost(
+        this.prices ?? {
+          source: "https://models.dev/api.json",
+          fetched: this.now().toISOString(),
+          models: {},
+        },
+        response.model,
+        {
+          inputTokens: report.input_tokens,
+          outputTokens: report.output_tokens,
+          cacheReadInputTokens: report.cache_read_input_tokens ?? 0,
+          cacheCreationInputTokens: report.cache_creation_input_tokens ?? 0,
+          responseModel: response.responseModel,
+          reportedCostUsd: report.cost_usd,
+        },
+      );
+      usage = { ...report, cost_usd: cost, cost_source: source };
+    }
+    const doc = this.scope(response.parent),
+      blocks = response.content as any[],
+      visible = blocks.filter((b) =>
+        ["text", "image", "refusal"].includes(b.type),
+      );
+    const step = doc.step(
+      new Date(response.last).toISOString(),
+      "agent",
+      content(visible, this.assets),
+    );
+    Object.assign(step, {
+      llm_call_count: 1,
+      metrics: metrics(usage),
+    });
+    doc.recordModel(
+      step,
+      response.model,
+      response.responseModel ?? response.model.id,
+    );
+    const meta = metadata(step);
+    Object.assign(meta, {
+      duration_ms:
+        response.durationMs ?? Math.max(0, response.last - response.opened),
+    });
+    if (response.finishReasons?.length)
+      meta.finish_reasons = response.finishReasons;
+    if (Object.keys(response.meta).length) meta.annotations = response.meta;
+    const annotations = contentMetadata(visible);
+    if (annotations.length) meta.message_metadata = annotations;
+    const reasoning = blocks
+      .filter((b) => b.type === "thinking" && !b.redacted)
+      .map((b) => b.thinking);
+    if (reasoning.length) step.reasoning_content = reasoning.join("\n");
+    const details: any[] = [];
+    let offset = 0;
+    for (const b of blocks.filter((b) => b.type === "thinking")) {
+      const entry = remaining(b, ["type", "thinking"]);
+      if (b.redacted) entry.encrypted_content = b.thinking;
+      else if (Object.keys(entry).length)
+        Object.assign(entry, {
+          start: offset,
+          end: offset + b.thinking.length,
+        });
+      if (!b.redacted) offset += b.thinking.length + 1;
+      if (Object.keys(entry).length) details.push(entry);
+    }
+    if (details.length) meta.reasoning_metadata = details;
+    for (const block of blocks) {
+      if (!["tool_use", "server_tool_use"].includes(block.type)) continue;
+      const call = {
+        tool_call_id: block.id,
+        function_name: block.name,
+        arguments: block.input,
       };
-      const report = response.usage;
-      if (report) {
-        if (!this.prices && report.cost_usd == null)
-          this.prices = await loadPrices();
-        const [cost, source] = computeCost(
-          this.prices ?? {
-            source: "https://models.dev/api.json",
-            fetched: this.now().toISOString(),
-            models: {},
-          },
-          response.model,
+      if (block.type === "server_tool_use") metadata(call).server_side = true;
+      const extra = remaining(block, ["type", "id", "name", "input"]);
+      for (const alias of ["provider_call_id", "call_id", "tool_call_id"])
+        if (extra[alias] === block.id) delete extra[alias];
+      if (Object.keys(extra).length) metadata(call).provider_metadata = extra;
+      if (block.type === "tool_use") {
+        const state = this.calls.get(block.id)!;
+        state.step = step;
+        metadata(call).observed_at = new Date(state.time).toISOString();
+      }
+      (step.tool_calls ??= []).push(call);
+    }
+    for (const block of blocks)
+      if (["tool_result", "server_tool_result"].includes(block.type))
+        this.result(
+          step,
+          block.tool_use_id,
+          block.content,
+          new Date(response.last).toISOString(),
+          block.is_error,
           {
-            inputTokens: report.input_tokens,
-            outputTokens: report.output_tokens,
-            cacheReadInputTokens: report.cache_read_input_tokens ?? 0,
-            cacheCreationInputTokens: report.cache_creation_input_tokens ?? 0,
-            responseModel: response.responseModel,
-            reportedCostUsd: report.cost_usd,
+            provider_metadata: remaining(block, [
+              "type",
+              "tool_use_id",
+              "name",
+              "content",
+              "is_error",
+            ]),
           },
         );
-        usage = { ...report, cost_usd: cost, cost_source: source };
-      }
-      await this.sink(
-        this.event(
-          "assistant_message",
-          {
-            content: response.content,
-            model: response.model,
-            response_model: response.responseModel,
-            finish_reasons: response.finishReasons,
-            duration_ms:
-              response.durationMs ??
-              Math.max(0, response.last - response.opened),
-            usage,
-            subagent_invocation_id: response.parent,
-          },
-          response.last,
-          Object.keys(response.meta).length ? response.meta : undefined,
-        ),
-      );
-    }
-    for (const event of response.waiting) await this.sink(event);
+    doc.usages.push(usage);
   }
-
+  private result(
+    step: any,
+    id: string,
+    raw: any,
+    time: string,
+    isError?: boolean | null,
+    details: any = {},
+  ): void {
+    if (!step.tool_calls?.some((c: any) => c.tool_call_id === id))
+      throw new RecorderError(`unmatched tool result ${id}`);
+    const result = observation(step, id);
+    Object.assign(result, {
+      content: content(raw, this.assets),
+      extra: {
+        avp: {
+          finished_at: time,
+          is_error: !!isError,
+          ...Object.fromEntries(
+            Object.entries(details).filter(
+              ([, v]) => v != null && JSON.stringify(v) !== "{}",
+            ),
+          ),
+        },
+      },
+    });
+    const annotations = contentMetadata(raw);
+    if (annotations.length) metadata(result).content_metadata = annotations;
+  }
   async toolReturned(
     id: string,
-    content: ToolResultBlock["content"],
+    raw: ToolResultBlock["content"],
     {
       isError,
       structuredContent,
@@ -396,26 +525,17 @@ export class Recorder {
         `tool_returned: tool call ${repr(id)} is ${call ? "already returned" : "unknown"}`,
       );
     call.returned = true;
-    const subagent = this.subagents.get(id);
-    if (subagent?.reason !== undefined)
-      isError = subagent.reason !== "converged";
+    const child = this.subagents.get(id);
+    if (child?.reason) isError = child.reason !== "converged";
     if (this.openResponse?.callIds.has(id))
       this.openResponse.toolReturned = true;
-    await this.write(
-      this.event("tool_returned", {
-        tool_call_id: id,
-        tool_name: call.name,
-        duration_ms: Math.max(0, this.now().getTime() - call.time),
-        subagent_invocation_id: call.parent,
-        tool_result: {
-          type: "tool_result",
-          tool_use_id: id,
-          content,
-          structured_content: structuredContent,
-          is_error: isError,
-        },
-      }),
-    );
+    const time = this.now().toISOString();
+    await this.write(() => {
+      if (!call.step) throw new RecorderError(`tool ${id} has no response`);
+      this.result(call.step, id, raw, time, isError, {
+        structured_content: structuredContent,
+      });
+    });
   }
   async subagentInvoked(
     id: string,
@@ -434,16 +554,29 @@ export class Recorder {
     this.subagents.set(id, {
       name,
       parent: subagentInvocationId,
-      time: this.now().getTime(),
     });
-    await this.write(
-      this.event("subagent_invoked", {
-        subagent_name: name,
-        invocation_id: id,
-        subagent_input: input ?? {},
-        subagent_invocation_id: subagentInvocationId,
-      }),
-    );
+    const time = this.now().toISOString();
+    await this.write(() => {
+      const parent = this.scope(subagentInvocationId),
+        child = new Document(
+          this.runId,
+          `${this.runId}/subagent/${id}`,
+          name,
+          "unknown",
+        );
+      this.docs.set(id, child);
+      parent.children.push(child);
+      (parent.data.subagent_trajectories ??= []).push(child.data);
+      metadata(child.data).started_at = time;
+      child.step(time, "user", JSON.stringify(input ?? {}));
+      const result = call?.step
+        ? observation(call.step, id)
+        : observation(parent.step(time, "system", `Delegated to ${name}.`));
+      result.subagent_trajectory_ref = [
+        { trajectory_id: child.data.trajectory_id },
+      ];
+      this.delegations.set(id, result);
+    });
   }
   async subagentReturned(
     id: string,
@@ -452,23 +585,26 @@ export class Recorder {
     { usage }: { usage?: SubagentUsage | null } = {},
   ): Promise<void> {
     this.check("subagent_returned");
-    const subagent = this.subagents.get(id);
-    if (!subagent || subagent.reason !== undefined)
+    const child = this.subagents.get(id);
+    if (!child || child.reason)
       throw new RecorderError(
-        `subagent_returned: subagent ${repr(id)} is ${subagent ? "already returned" : "unknown"}`,
+        `subagent_returned: subagent ${repr(id)} is ${child ? "already returned" : "unknown"}`,
       );
-    subagent.reason = reason;
-    if (this.reportedResponses.has(id)) usage = undefined;
-    await this.write(
-      this.event("subagent_returned", {
-        subagent_name: subagent.name,
-        invocation_id: id,
-        subagent_invocation_id: subagent.parent,
-        duration_ms: Math.max(0, this.now().getTime() - subagent.time),
-        subagent_reason: reason,
-        subagent_result_text: text,
-        subagent_usage: usage,
-      }),
-    );
+    child.reason = reason;
+    const time = this.now().toISOString();
+    await this.write(() => {
+      const doc = this.scope(id);
+      Object.assign(metadata(doc.data), {
+        complete: true,
+        stop_reason: reason,
+        stopped_at: time,
+      });
+      const result = this.delegations.get(id);
+      result.content ??= text;
+      if (!doc.usages.length) {
+        const counts = usage ?? {};
+        doc.usages.push(counts);
+      }
+    });
   }
 }

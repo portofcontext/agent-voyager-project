@@ -1,5 +1,5 @@
 import type { ModelRef } from "../commission.js";
-import type { CostSource } from "../trajectory.js";
+import type { CostSource } from "../reports.js";
 import { ajv } from "../validation.js";
 
 import * as modelsDev from "./_models_dev.js";

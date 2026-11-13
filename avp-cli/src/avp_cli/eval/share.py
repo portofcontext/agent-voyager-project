@@ -12,18 +12,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, JsonValue, ValidationError
 
+from avp.agent_start import AgentStart
 from avp.commission import Commission
-from avp.trajectory import (
-    AgentDescribedEvent,
-    AgentStartedEvent,
-    AgentStoppedEvent,
-    AssistantMessageEvent,
-    ErrorOccurredEvent,
-    Event,
-    TextBlock,
-    ToolInvokedEvent,
-    ToolReturnedEvent,
-)
+from avp.trajectory import Trajectory, avp_metadata, documents, final_output
 from avp_cli import paths
 from avp_cli.console import Failed
 from avp_cli.eval.results import EvalResults, RunResult
@@ -52,8 +43,30 @@ class Shared(BaseModel):
     site: str
 
 
-def _cut(value: JsonValue, limit: int = TEXT) -> str:
-    text = value if isinstance(value, str) else json.dumps(value)
+def _duration(call, result):
+    """Elapsed time between SDK observations, including dispatch/reporting delays."""
+    started = avp_metadata(call).get("observed_at") if call else None
+    finished = avp_metadata(result).get("finished_at")
+    if not isinstance(started, str) or not isinstance(finished, str):
+        return None
+    try:
+        return max(
+            0,
+            round(
+                (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()
+                * 1000
+            ),
+        )
+    except (ValueError, TypeError):
+        return None
+
+
+def _cut(value: Any, limit: int = TEXT) -> str:
+    text = (
+        value
+        if isinstance(value, str)
+        else json.dumps(value, default=lambda v: v.model_dump(mode="json", exclude_none=True))
+    )
     return text if len(text) <= limit else f"{text[:limit]}… (+{len(text) - limit} chars)"
 
 
@@ -67,114 +80,129 @@ def _cut_strings(value: JsonValue) -> JsonValue:
     return value
 
 
-def _event(seq: int, event: Event) -> dict[str, Any] | None:
-    """The event as the site's viewer reads it: its type with the `avp.`
-    prefix, and its fields flat. None for an event the viewer doesn't show."""
-    shown: dict[str, Any] = {"seq": seq, "type": f"avp.{event.type}"}
-    match event:
-        case AssistantMessageEvent(data=data):
-            text = "\n".join(
-                b.text for b in data.content if isinstance(b, TextBlock) and b.text.strip()
-            )
-            shown |= {
-                "input_tokens": data.usage.input_tokens,
-                "output_tokens": data.usage.output_tokens,
-                "cost_usd": data.usage.cost_usd,
-                "duration_ms": data.duration_ms,
-                "text": _cut(text) if text else None,
-                "response_model": data.response_model,
-            }
-        case ToolInvokedEvent(data=data):
-            shown |= {
-                "tool_name": data.tool_name,
-                "call_id": data.tool_call_id,
-                "tool_input": _cut_strings(data.tool_input) if data.tool_input else None,
-            }
-        case ToolReturnedEvent(data=data):
-            content = data.tool_result.content
-            result = (
-                content
-                if isinstance(content, str)
-                else "\n".join(b.text for b in content if isinstance(b, TextBlock) and b.text)
-            )
-            shown |= {
-                "tool_name": data.tool_name,
-                "call_id": data.tool_call_id,
-                "duration_ms": data.duration_ms,
-                "result_chars": len(result),
-                "result": _cut(result) if result else None,
-                "is_error": True if data.tool_result.is_error else None,
-            }
-        case AgentStartedEvent():
-            pass
-        case AgentStoppedEvent(data=data):
-            shown |= {
-                "reason": data.reason,
-                "output": None if data.output is None else _cut(data.output),
-            }
-        case ErrorOccurredEvent(data=data):
-            shown |= {"error_code": data.error_code, "error_message": _cut(data.error_message)}
-        case _:
-            return None
-    return {k: v for k, v in shown.items() if v is not None}
+def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
+    """Cards for the hosted site's presentation API, derived from ATIF.
 
+    These are truncated display cards, not a second persisted trajectory.
+    """
+    shown = []
 
-def _parameters(schema: JsonValue) -> list[dict[str, Any]]:
-    """A tool's top-level parameters, from its input schema."""
-    properties = schema.get("properties") if isinstance(schema, dict) else None
-    if not isinstance(properties, dict):
-        return []
-    required = schema.get("required") if isinstance(schema, dict) else None
-    found = []
-    for name, spec in properties.items():
-        spec = spec if isinstance(spec, dict) else {}
-        kind = spec.get("type")
-        found.append(
+    def card(kind, **fields):
+        shown.append(
             {
-                "name": name,
-                "required": isinstance(required, list) and name in required,
-                "type": " | ".join(map(str, kind)) if isinstance(kind, list) else kind,
-                "description": _cut(spec["description"], 240) if spec.get("description") else None,
+                "seq": len(shown),
+                "type": f"avp.{kind}",
+                **{k: v for k, v in fields.items() if v is not None},
             }
         )
-    return [{k: v for k, v in p.items() if v is not None} for p in found]
+
+    if trajectory is None:
+        return shown
+    card("agent_started")
+    for doc in documents(trajectory):
+        for step in doc.steps:
+            if step.source == "agent":
+                usage = step.metrics
+                card(
+                    "assistant_message",
+                    text=_cut(step.message),
+                    input_tokens=usage.prompt_tokens if usage else None,
+                    output_tokens=usage.completion_tokens if usage else None,
+                    cost_usd=usage.cost_usd if usage else None,
+                    duration_ms=avp_metadata(step).get("duration_ms"),
+                    response_model=step.model_name or doc.agent.model_name,
+                )
+            if code := avp_metadata(step).get("error_code"):
+                card("error_occurred", error_code=code, error_message=_cut(step.message))
+            calls = {c.tool_call_id: c for c in step.tool_calls or []}
+            for call in calls.values():
+                card(
+                    "tool_invoked",
+                    tool_name=call.function_name,
+                    call_id=call.tool_call_id,
+                    tool_input=_cut_strings(call.arguments),
+                )
+            for result in step.observation.results if step.observation else []:
+                call = calls.get(result.source_call_id)
+                card(
+                    "tool_returned",
+                    tool_name=call.function_name if call else "delegation",
+                    call_id=result.source_call_id,
+                    duration_ms=_duration(call, result),
+                    result=_cut(result.content),
+                    is_error=avp_metadata(result).get("is_error"),
+                    result_chars=len(result.content) if isinstance(result.content, str) else None,
+                )
+    meta = avp_metadata(trajectory)
+    if meta.get("complete"):
+        card(
+            "agent_stopped",
+            reason=meta.get("stop_reason"),
+            output=_cut(output) if (output := final_output(trajectory)) is not None else None,
+        )
+    return shown
 
 
-def _declared(item: Any) -> dict[str, Any]:
-    """A tool, subagent, or skill the run had: its name and what describes it."""
-    shown = {
-        "name": item.name,
-        "description": _cut(item.description, 1200) if item.description else None,
-        "params": _parameters(getattr(item, "input_schema", None)) or None,
-        "mcp_server_id": getattr(item, "mcp_server_id", None),
-    }
-    return {k: v for k, v in shown.items() if v is not None}
-
-
-def _brief(events: list[Event]) -> dict[str, Any]:
-    """The run's `vessel`, the agent and what it had, and `orders`, what it
-    was asked: from `agent_described` and `agent_started`."""
-    described = next((e.data for e in events if isinstance(e, AgentDescribedEvent)), None)
-    started = next((e.data for e in events if isinstance(e, AgentStartedEvent)), None)
-    if started is None:
+def _brief(
+    trajectory: Trajectory | None, effective: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    if trajectory is None:
         return {}
+    agent = trajectory.agent
+    extra = (agent.extra or {}).get("avp", {})
+    if effective is not None:
+        extra = {**effective, **effective.get("model", {}), **extra}
+    catalog = {t["name"]: t for t in (effective or {}).get("tools", [])}
+    tools = []
+    for definition in agent.tool_definitions or []:
+        function = definition.get("function", {})
+        parameters = function.get("parameters", {})
+        params = [
+            {
+                "name": name,
+                "required": name in parameters.get("required", []),
+                **{k: value[k] for k in ("type", "description") if k in value},
+            }
+            for name, value in parameters.get("properties", {}).items()
+        ]
+        tools.append(
+            {
+                k: v
+                for k, v in {
+                    "name": function.get("name"),
+                    "description": _cut(function.get("description", ""), 1200),
+                    "params": params or None,
+                    "mcp_server_id": catalog.get(function.get("name"), {}).get("mcp_server_id"),
+                }.items()
+                if v is not None
+            }
+        )
+    model = agent.model_name
+    if model and extra.get("provider"):
+        model = f"{extra['provider']}/{model}"
     vessel = {
-        "agent": described.descriptor.agent_name if described else None,
-        "version": described.descriptor.agent_version if described else None,
-        "model": f"{started.model.provider}/{started.model.id}",
-        "tools": [_declared(t) for t in started.tools or []],
-        "subagents": [_declared(s) for s in started.subagents or []],
-        "skills": [_declared(s) for s in started.skills or []],
-        "mcp_servers": [
-            {"id": m.id} | ({"status": m.status} if m.status else {})
-            for m in started.mcp_servers or []
-        ],
+        "agent": agent.name,
+        "version": agent.version,
+        "model": model,
+        "tools": tools,
+        **{
+            key: [{k: v for k, v in item.items() if k in fields} for item in extra[key]]
+            for key, fields in (
+                ("subagents", {"name", "description"}),
+                ("skills", {"name", "description"}),
+                ("mcp_servers", {"id", "name", "description", "status"}),
+            )
+            if key in extra
+        },
+    }
+    prompts = {
+        s.source: s.message
+        for s in trajectory.steps
+        if s.source in ("user", "system") and not avp_metadata(s).get("error_code")
     }
     orders = {
-        "task": _cut(started.prompt, PROMPT),
-        "system_prompt": _cut(started.system_prompt, SYSTEM_PROMPT)
-        if started.system_prompt
-        else None,
+        "task": _cut(prompts.get("user", ""), PROMPT),
+        "system_prompt": _cut(prompts["system"], SYSTEM_PROMPT) if "system" in prompts else None,
     }
     return {
         "vessel": {k: v for k, v in vessel.items() if v not in (None, [])},
@@ -203,12 +231,20 @@ def _expected(eval: Eval | None, item: Item | None) -> str | None:
 
 
 def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) -> dict[str, Any]:
-    events, _ = read_trajectory(directory / run.directory / paths.TRAJECTORY)
+    trajectory, _ = read_trajectory(directory / run.directory / paths.TRAJECTORY)
     commission = _commission(directory / run.directory)
-    shown: list[dict[str, Any]] = []
-    for event in events:
-        if projected := _event(len(shown), event):
-            shown.append(projected)
+    shown = _presentation(trajectory)
+    effective = None
+    run_directory = directory / run.directory
+    start_path = run_directory / paths.AGENT_START
+    if start_path.exists():
+        try:
+            started = AgentStart.model_validate_json(start_path.read_bytes())
+            if started.run_id != run.run_id:
+                raise ValueError("Agent Start belongs to a different run")
+            effective = started.model_dump(mode="json", exclude_none=True)
+        except (OSError, ValueError) as exc:
+            raise Failed(f"invalid Agent Start: {exc}") from None
     verdict = run.scorer_error or "; ".join(run.score.reasons if run.score else [])
     return {
         "row_id": run.item,
@@ -216,11 +252,16 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
         "passed": run.score.passed if run.score else None,
         "score": run.score.value if run.score else None,
         "stop_reason": run.reason,
-        "total_cost_usd": run.totals.cost_usd if events else None,
-        "total_turns": run.totals.turns if events else None,
-        "total_tokens": run.totals.input_tokens + run.totals.output_tokens if events else None,
+        "total_cost_usd": run.totals.cost_usd
+        if trajectory and "cost_usd" not in run.totals.unknown_metrics
+        else None,
+        "total_turns": run.totals.turns if trajectory else None,
+        "total_tokens": run.totals.input_tokens + run.totals.output_tokens
+        if trajectory
+        and not {"input_tokens", "output_tokens"}.intersection(run.totals.unknown_metrics)
+        else None,
         "elapsed_s": run.seconds,
-        **_brief(events),
+        **_brief(trajectory, effective),
         **({"question": _cut(commission.prompt, PROMPT)} if commission else {}),
         **({"expected": expected} if (expected := _expected(eval, item)) else {}),
         **({"verdict": _cut(verdict, SYSTEM_PROMPT)} if verdict else {}),

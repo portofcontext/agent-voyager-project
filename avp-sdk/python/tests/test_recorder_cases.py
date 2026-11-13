@@ -2,7 +2,6 @@
 Recorder passes. See the README there for the format."""
 
 import asyncio
-import itertools
 import json
 import math
 from datetime import UTC, datetime, timedelta
@@ -15,7 +14,8 @@ from pydantic import TypeAdapter
 from avp.commission import ModelRef
 from avp.descriptor import AgentDescriptor
 from avp.recorder import Recorder, RecorderError, UsageReport
-from avp.trajectory import AgentStarted, ContentBlock, Event, SubagentUsage
+from avp.reports import ContentBlock, RunContext, SubagentUsage
+from avp.trajectory import Recording, final_output, parse_trajectory
 from avp.utils.pricing import Prices
 
 CASES = Path(__file__).resolve().parents[2] / "testdata" / "recorder"
@@ -34,7 +34,7 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
         descriptor = AgentDescriptor.model_validate(call["descriptor"])
         await rec.begin(call["received"], descriptor)
     elif name == "start":
-        await rec.start(AgentStarted.model_validate(call["started"]))
+        await rec.start(RunContext.model_validate(call["started"]), meta=call.get("meta"))
     elif name == "response":
         await rec.response(
             CONTENT.validate_python(call["content"]),
@@ -45,6 +45,7 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
             duration_ms=call.get("duration_ms"),
             subagent_invocation_id=call.get("subagent_invocation_id"),
             key=call.get("key"),
+            meta=call.get("meta"),
         )
     elif name == "usage":
         assert usage is not None
@@ -71,46 +72,43 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
         raise AssertionError(f"unknown call {name!r}")
 
 
-def run_case(case: dict[str, Any]) -> list[dict[str, Any]]:
-    """The events the Recorder writes for the case's calls, each with `t` (ms
-    since the start) in place of `time` and without `id`."""
-    events: list[Event] = []
+def run_case(case: dict[str, Any]) -> dict[str, Any]:
+    snapshots: list[Recording] = []
     clock = [START]
-    counter = itertools.count(1)
 
-    async def sink(event: Event) -> None:
-        events.append(event)
+    async def sink(snapshot: Recording) -> None:
+        snapshots.append(snapshot)
 
     rec = Recorder(
         sink,
         run_id="run-0",
         prices=Prices(fetched=START, models=case.get("prices", {})),
         now=lambda: clock[0],
-        new_id=lambda: f"event-{next(counter)}",
     )
 
     async def calls() -> None:
         for call in case["calls"]:
             clock[0] = START + timedelta(milliseconds=call["t"])
-            written = len(events)
+            written = len(snapshots)
             if call.get("raises"):
                 with pytest.raises(RecorderError):
                     await _call(rec, call)
-                assert len(events) == written, f"a rejected {call['call']} wrote events"
+                assert len(snapshots) == written, f"a rejected {call['call']} published a snapshot"
             else:
                 await _call(rec, call)
 
     asyncio.run(calls())
-    ids = [event.id for event in events]
-    assert len(set(ids)) == len(ids), "two events share an id"
-    out = []
-    for event in events:
-        dumped = event.model_dump(mode="json", exclude_none=True, by_alias=True)
-        del dumped["id"]
-        dumped["t"] = round((event.time - START).total_seconds() * 1000)
-        del dumped["time"]
-        out.append(dumped)
-    return out
+    started = next(
+        (c["started"] for c in case["calls"] if c["call"] == "start" and not c.get("raises")),
+        None,
+    )
+    if started and "tools" in started:
+        assert snapshots[-1].agent_start is not None
+        assert (
+            snapshots[-1].agent_start.model_dump(mode="json", exclude_none=True)["tools"]
+            == started["tools"]
+        )
+    return snapshots[-1].trajectory.to_json_dict()
 
 
 def _same(actual: Any, expected: Any, where: str = "") -> None:
@@ -126,6 +124,8 @@ def _same(actual: Any, expected: Any, where: str = "") -> None:
         assert isinstance(actual, list) and len(actual) == len(expected), where
         for i, (a, e) in enumerate(zip(actual, expected, strict=True)):
             _same(a, e, f"{where}[{i}]")
+    elif isinstance(expected, str) and expected.startswith("2026-01-01T"):
+        assert datetime.fromisoformat(actual) == datetime.fromisoformat(expected), where
     else:
         assert actual == expected, where
 
@@ -134,5 +134,8 @@ def _same(actual: Any, expected: Any, where: str = "") -> None:
 def test_case(path: Path) -> None:
     case = json.loads(path.read_text())
     actual = run_case(case)
-    assert [e["type"] for e in actual] == [e["type"] for e in case["events"]]
-    _same(actual, case["events"], "events")
+    _same(actual, case["trajectory"], "trajectory")
+
+    stop = next((c for c in reversed(case["calls"]) if c["call"] == "stop"), None)
+    if stop and any(c["call"] == "start" and not c.get("raises") for c in case["calls"]):
+        assert final_output(parse_trajectory(actual)) == stop.get("output")

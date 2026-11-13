@@ -7,18 +7,21 @@ Every SDK's Recorder passes these cases. Each file is one case:
 | `name`, `description` | What the case shows. |
 | `prices` | The models.dev prices to compute costs with, keyed `<provider>/<model id>`. |
 | `calls` | The Recorder calls to make, in order. |
-| `events` | The events the Recorder must write. |
+| `trajectory` | The completed native ATIF document. |
 
 Each call has `call`, the Recorder method in snake_case, and its arguments by
 name. `t` is the clock, in milliseconds after the start, while the call runs.
 `raises: true` means the call must raise the Recorder's error and write nothing.
 
-Run each case with a Recorder whose `run_id` is `run-0`. Compare the events it
-writes, in order, after these changes:
+Run each case with a Recorder whose `run_id` is `run-0`. Validate every
+published snapshot as ATIF, then compare the final document to `trajectory`:
 
-- Drop `id`, after checking that no two events share one.
-- Replace `time` with `t`, in milliseconds after the start.
-- Leave out fields that are absent or null.
-- Compare numbers as numbers, with a relative tolerance of 1e-9.
-- `"<any>"` matches any string. It stands for text an SDK words its own way,
-  such as why a Commission doesn't match the spec.
+- Compare timestamps as instants, independent of UTC spelling.
+- Omit unset optional ATIF fields; preserve explicit nulls in open JSON objects.
+- Compare numbers with a relative tolerance of 1e-9.
+- `"<any>"` matches text whose wording may differ between SDKs.
+
+The expected documents were captured independently from the previous ATIF
+converter before replacing it with native recording. They cover streaming,
+parallel tools, nested children, opaque child accounting, partial usage,
+interruption, invalid input, and structured output.

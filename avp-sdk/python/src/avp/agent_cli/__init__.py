@@ -11,9 +11,9 @@ defines one.
     raise SystemExit(main(run=run, describe=describe))
 """
 
-from avp._base import EventSink
+from avp._base import TrajectorySink
 from avp.agent_cli.cli import main
 from avp.agent_cli.run import DescribeFn, RunFn
-from avp.agent_cli.sink import ndjson_sink
+from avp.agent_cli.sink import trajectory_sink
 
-__all__ = ["DescribeFn", "EventSink", "RunFn", "main", "ndjson_sink"]
+__all__ = ["DescribeFn", "RunFn", "TrajectorySink", "main", "trajectory_sink"]

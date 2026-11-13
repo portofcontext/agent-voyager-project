@@ -7,7 +7,7 @@ from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import ToolMessage
 from langchain_core.outputs import ChatGeneration
 
-from avp.trajectory import ToolUseBlock
+from avp.reports import ToolUseBlock
 from avp_deep_agents import translate
 
 

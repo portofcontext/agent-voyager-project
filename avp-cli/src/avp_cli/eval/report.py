@@ -56,7 +56,11 @@ def scoreboard(results: EvalResults, directory: Path) -> RenderableType:
             str(summary.runs),
             _percent(summary.accuracy),
             _percent(summary.pass_rate),
-            _money(_mean([r.totals.cost_usd for r in started])),
+            _money(
+                _mean([r.totals.cost_usd for r in started])
+                if not any("cost_usd" in r.totals.unknown_metrics for r in started)
+                else None
+            ),
             "-" if not started else f"{_mean([r.totals.turns for r in started]):.1f}",
             _seconds(_mean([r.seconds or 0 for r in started])),
             str(summary.scorer_failures) if summary.scorer_failures else "-",
@@ -66,7 +70,15 @@ def scoreboard(results: EvalResults, directory: Path) -> RenderableType:
         Text(f"{results.name} ({results.id})", style="bold"),
         *_agents(directory),
         board,
-        Text(f"{len(runs)} runs, {_money(spend)} in all", style="dim"),
+        Text(
+            f"{len(runs)} runs, {_money(spend)} "
+            + (
+                "known spend (some costs unknown)"
+                if any("cost_usd" in r.totals.unknown_metrics for r in runs)
+                else "in all"
+            ),
+            style="dim",
+        ),
     ]
     failed = [r for r in runs if r.score is None or not r.score.passed]
     if failed:
@@ -108,7 +120,7 @@ def run_line(run: RunResult) -> Text:
     if run.seconds is not None:
         totals = run.totals
         line.append(
-            f"  {_money(totals.cost_usd)}  {totals.turns} turns  {_seconds(run.seconds)}",
+            f"  {_money(totals.cost_usd if 'cost_usd' not in totals.unknown_metrics else None)}  {totals.turns} turns  {_seconds(run.seconds)}",
             style="dim",
         )
     return line

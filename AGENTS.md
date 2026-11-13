@@ -1,6 +1,6 @@
 # Working on AVP
 
-AVP defines Commission, Agent Descriptor, and Trajectory specs. A supervisor sends
+AVP defines Commission, Agent Descriptor, Agent Start, and ATIF Trajectory specs. A supervisor sends
 one Commission; the agent runs it and records a Trajectory. The supervisor cannot
 send instructions during a run.
 
@@ -32,15 +32,21 @@ The reference tables in `spec/v0.1/` define the wire contracts. Implement them i
 `make bindings` for TypeScript types. Do not edit generated files by hand.
 Implement shared behavior in Python first, then TypeScript.
 
-- Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`.
+- Import wire types from `avp.commission`, `avp.descriptor`, `avp.agent_start`,
+  and `avp.trajectory`.
 - A Commission requires `avp_version`, `run_id`, `model`, and `prompt`. Its model
   has `provider` and `id`, plus optional `base_url` and `credential` fields.
 - Agent settings live under `agents`, keyed by the Descriptor's `agent_name`.
   An absent built-in allowlist allows all items; `[]` allows none.
 - Use secret references in Commissions. Include MCP configuration and skill
   files inline.
-- Use the event envelope defined in the Trajectory spec.
-- Record one `assistant_message` per model response, with per-response usage
+- Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
+  live in `avp.reports`; do not introduce another event wire contract.
+- Use standard ATIF fields first; keep necessary execution metadata in `extra.avp`.
+- Save complete resolved configuration and inline skill contents in Agent Start.
+  File runs contain `commission.json`, `descriptor.json`, `agent-start.json`, and
+  `trajectory.json`. Ordinary generated files and ATIF images need no manifest.
+- Record one ATIF agent step per model response, with per-response usage
   and cost. Convert cumulative totals to deltas. Keep tool calls alongside
   assistant content and match results by call ID.
 - Test shared Recorder and run-plan behavior with `avp-sdk/testdata/`.

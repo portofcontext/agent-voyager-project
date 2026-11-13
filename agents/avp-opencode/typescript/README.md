@@ -28,7 +28,7 @@ avp run --agent opencode --commission commission.json
 
 The Descriptor surveys native tool catalogs for both editing implementations,
 its built-in skill, native subagents, and providers whose SDKs are compiled into
-the binary. `agent_started` records the actual model's tool catalog and each
+the binary. the ATIF effective configuration records the actual model's tool catalog and each
 subagent's own selected items. The SDK run plan limits those built-ins through
 native tool switches and permissions. OpenCode's shared edit permission needs
 a native wildcard allowance to leave `write` or `apply_patch` usable when
@@ -49,7 +49,7 @@ The launcher owns the working directory, OS confinement, and credentials.
 
 A bundled plugin observes OpenCode's assembled system prompt through its native
 `experimental.chat.system.transform` hook. The adapter records that prompt in
-`agent_started` before allowing the model request. An explicit `system_prompt`
+the ATIF effective configuration before allowing the model request. An explicit `system_prompt`
 replaces the entire parent prompt, including native environment and skill
 instructions; an empty override sends no system instructions. Child sessions
 keep their native prompts. The hook communicates over an authenticated private

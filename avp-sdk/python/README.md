@@ -9,7 +9,7 @@ because `avp` on PyPI is an unrelated project.
 ## Install
 
 ```sh
-uv pip install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl
+uv pip install https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b3/agent_voyager_project-0.1.0b3-py3-none-any.whl
 ```
 
 ## Development

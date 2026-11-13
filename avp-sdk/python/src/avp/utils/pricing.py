@@ -15,7 +15,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from avp.commission import ModelRef
-from avp.trajectory import CostSource
+from avp.reports import CostSource
 from avp.utils import _models_dev
 from avp.utils._models_dev import Snapshot
 

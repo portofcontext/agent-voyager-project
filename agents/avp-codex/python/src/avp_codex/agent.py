@@ -11,11 +11,11 @@ from openai_codex.async_client import AsyncCodexClient
 from openai_codex.generated.v2_all import ListMcpServerStatusResponse, SkillsListResponse
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.commission import Commission
 from avp.descriptor import Tool
 from avp.recorder import Recorder
-from avp.trajectory import StopReason
+from avp.reports import StopReason
 from avp.utils.run_plan import plan_run
 from avp_codex import commission as cm
 from avp_codex import descriptor, translate
@@ -67,7 +67,7 @@ async def mcp_tools(server: AsyncCodexClient, thread: str, commission: Commissio
     return result
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     declared = descriptor.describe()
     rec = Recorder(sink)
     commission = await rec.begin(received, declared)

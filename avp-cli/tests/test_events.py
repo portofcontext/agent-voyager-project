@@ -1,102 +1,75 @@
-"""Following a Trajectory while the agent writes it."""
+"""Follow native ATIF snapshots, including results attached to existing steps."""
 
 import json
-from pathlib import Path
 
 import pytest
+from conftest import atif
 
 from avp_cli import console
-from avp_cli.runs import events
+from avp_cli.runs.events import Follower
 
 
-def event(type: str, data: dict, time: str = "2026-01-01T00:00:00Z") -> bytes:
-    line = {
-        "avp_version": "0.1",
-        "id": type,
-        "time": time,
-        "run_id": "r",
-        "type": type,
-        "data": data,
+def test_updates_print_once(tmp_path, capsys):
+    path = tmp_path / "trajectory.json"
+    follower = Follower(path)
+    follower.poll()
+    assert capsys.readouterr().err == ""
+    doc = atif(complete=False)
+    path.write_text(json.dumps(doc))
+    follower.poll()
+    step = {
+        "step_id": 2,
+        "source": "agent",
+        "message": "",
+        "tool_calls": [{"tool_call_id": "c", "function_name": "read", "arguments": {}}],
     }
-    return json.dumps(line).encode()
-
-
-SHOWN = "error_occurred - invalid_commission: went wrong - 0.0s\n"
-ERROR = event("error_occurred", {"error_code": "invalid_commission", "error_message": "went wrong"})
-
-
-def test_each_line_prints_once_after_its_newline(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    trajectory = tmp_path / "trajectory.ndjson"
-    follower = events.Follower(trajectory)
+    doc["steps"].append(step)
+    path.write_text(json.dumps(doc))
     follower.poll()
-    assert capsys.readouterr().err == ""
-
-    trajectory.write_bytes(ERROR + b"\n" + ERROR[:20])
+    assert "tool call - read (c)" in capsys.readouterr().err
+    step["observation"] = {
+        "results": [
+            {"source_call_id": "c", "content": "failed", "extra": {"avp": {"is_error": True}}}
+        ]
+    }
+    path.write_text(json.dumps(doc))
     follower.poll()
-    assert capsys.readouterr().err == SHOWN
-
-    with trajectory.open("ab") as file:
-        file.write(ERROR[20:] + b"\n")
+    assert capsys.readouterr().err == "tool result - c - error\n"
     follower.poll()
-    follower.poll()
-    assert capsys.readouterr().err == SHOWN
-
-
-def test_finish_prints_a_last_line_without_a_newline(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    trajectory = tmp_path / "trajectory.ndjson"
-    trajectory.write_bytes(ERROR)
-    follower = events.Follower(trajectory)
-    follower.poll()
-    assert capsys.readouterr().err == ""
     follower.finish()
-    assert capsys.readouterr().err == SHOWN
+    assert capsys.readouterr().err == ""
 
 
-def test_unknown_and_invalid_events(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    trajectory = tmp_path / "trajectory.ndjson"
-    unknown = event("future_event", {})
-    invalid = event("error_occurred", {})
-    trajectory.write_bytes(unknown + b"\n" + invalid + b"\n")
-    events.Follower(trajectory).finish()
-    assert capsys.readouterr().err.startswith("not a valid event: ")
-
-
-def test_tool_calls_show_their_id_and_name_and_the_time_between(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    trajectory = tmp_path / "trajectory.ndjson"
-    invoked = event(
-        "tool_invoked",
-        {"tool_call_id": "call-1", "tool_name": "read", "tool_input": {}},
-        "2026-01-01T00:00:00Z",
+def test_preflight_error_replaces_initial_placeholder(tmp_path, capsys):
+    path = tmp_path / "trajectory.json"
+    path.write_text(
+        json.dumps(
+            atif(
+                steps=[{"step_id": 1, "source": "system", "message": "Run initialized."}],
+                complete=False,
+            )
+        )
     )
-    result = {"type": "tool_result", "tool_use_id": "call-1", "content": [], "is_error": True}
-    returned = event(
-        "tool_returned",
-        {"tool_call_id": "call-1", "tool_name": "read", "duration_ms": 2500, "tool_result": result},
-        "2026-01-01T00:00:02.5Z",
-    )
-    trajectory.write_bytes(invoked + b"\n" + returned + b"\n")
-    events.Follower(trajectory).finish()
-    assert capsys.readouterr().err.splitlines() == [
-        "tool_invoked - call-1 read - 0.0s",
-        "tool_returned - call-1 read, an error - 2.5s",
-    ]
-
-
-def test_verbose_shows_the_type_and_the_whole_event(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    trajectory = tmp_path / "trajectory.ndjson"
-    trajectory.write_bytes(ERROR + b"\n" + event("future_event", {"x": 1}) + b"\n")
-    console.set_verbose(True)
-    events.Follower(trajectory).finish()
+    follower = Follower(path)
+    follower.poll()
+    path.write_text(json.dumps(atif(error=("invalid_commission", "went wrong"))))
+    follower.finish()
     printed = capsys.readouterr().err
-    assert printed.startswith("error_occurred\n{\n")
-    assert '"error_message": "went wrong"' in printed
-    assert "future_event\n{\n" in printed
-    assert " - 0.0s" not in printed
+    assert "invalid_commission: went wrong" in printed
+    assert "sh-agent: error" in printed
+
+
+@pytest.mark.parametrize("text", ["not json", "{}"])
+def test_invalid_document(tmp_path, capsys, text):
+    path = tmp_path / "trajectory.json"
+    path.write_text(text)
+    Follower(path).finish()
+    assert capsys.readouterr().err == "not a valid ATIF document\n"
+
+
+def test_verbose_shows_whole_document(tmp_path, capsys):
+    path = tmp_path / "trajectory.json"
+    path.write_text(json.dumps(atif()))
+    console.set_verbose(True)
+    Follower(path).finish()
+    assert '"schema_version": "ATIF-v1.8"' in capsys.readouterr().err

@@ -5,19 +5,21 @@
 
 > **Status:** Draft v0.1
 
-AVP is an open standard for running and observing AI agents. Shared task and
-event formats let you run, compare, and inspect agents across different runtimes.
+AVP is an open standard for running and observing AI agents. Shared task definitions and
+ATIF trajectories let you run, compare, and inspect agents across different runtimes.
 
 A supervisor sends one JSON **Commission** with the task, model, and resources.
-The agent streams a **Trajectory** of model responses, tool calls, usage, cost,
-and outcome.
+The agent records a native **ATIF trajectory** of model responses, tool calls,
+usage, cost, and outcome. An [Agent Start](spec/v0.1/agent-start.md) snapshot
+preserves the resolved configuration and full skill contents beside the trace.
+See the [ATIF guide](avp-sdk/docs/atif.md) for existing viewers and training-data tools.
 
 ```text
 Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
-See the [spec overview](spec/v0.1/README.md) for the three contracts and how
+See the [spec overview](spec/v0.1/README.md) for the four contracts and how
 they fit together.
 
 ## Try it
@@ -26,7 +28,7 @@ Install the CLI. Requires [uv](https://docs.astral.sh/uv/) and a running
 container engine with a Docker API, such as Docker or podman:
 
 ```sh
-uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.7.0/avp_cli-0.7.0-py3-none-any.whl
+uv tool install https://github.com/portofcontext/agent-voyager-project/releases/download/cli-v0.8.0/avp_cli-0.8.0-py3-none-any.whl
 avp hello-world
 ```
 
@@ -98,7 +100,7 @@ To integrate another runtime, start with the [SDK guide](avp-sdk/README.md),
 SDKs: [Python](avp-sdk/python/) and [TypeScript](avp-sdk/typescript/).
 Specs: [Commission](spec/v0.1/commission.md),
 [Agent Descriptor](spec/v0.1/agent-descriptor.md), and
-[Trajectory](spec/v0.1/trajectory.md).
+[Agent Start](spec/v0.1/agent-start.md), and [Trajectory](spec/v0.1/trajectory.md).
 The CLI's `avp conformance` checks agents against the spec's rules.
 
 ## Develop

@@ -1,6 +1,9 @@
+import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
+import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 /** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -8,9 +11,10 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import {
-  parseTrajectoryEvent,
-  type Event,
-  type JsonValue,
+  parseTrajectory,
+  finalOutput,
+  type Trajectory,
+  type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
 import {
   getSystemMessageText,
@@ -24,6 +28,17 @@ import {
 import { run } from "../src/agent.js";
 import { describe, runtime } from "../src/descriptor.js";
 
+const recordings = new WeakMap<Trajectory, Recording>();
+function capture(recording: Recording): Trajectory {
+  const trajectory = parseTrajectory(recording.trajectory);
+  recordings.set(trajectory, recording);
+  return trajectory;
+}
+function effective(snapshots: Trajectory[]): any {
+  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
+  assert.ok(started);
+  return started;
+}
 const MODEL = "claude-haiku-4-5";
 const fixture = fileURLToPath(
   new URL("../../../../../testing/mcp/avp_test_mcp.py", import.meta.url),
@@ -37,15 +52,44 @@ function received(extra = {}): JsonValue {
     ...extra,
   };
 }
-type DataByType = { [E in Event as E["type"]]: E["data"] };
-function data<K extends keyof DataByType>(
-  events: Event[],
-  kind: K,
-): DataByType[K][] {
-  return events
-    .filter((e) => e.type === kind)
-    .map((e) => e.data) as DataByType[K][];
+
+function latest(snapshots: Trajectory[]): any {
+  return snapshots.at(-1)!;
 }
+function meta(value: any): any {
+  return value?.extra?.avp ?? {};
+}
+function docs(root: any): any[] {
+  return [root, ...(root.subagent_trajectories ?? []).flatMap(docs)];
+}
+function atifResponses(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots))
+    .flatMap((d) => d.steps.filter((s: any) => s.source === "agent"))
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+function atifCalls(snapshots: Trajectory[]): any[] {
+  return atifResponses(snapshots).flatMap((s) => s.tool_calls ?? []);
+}
+function mcpServer(snapshots: Trajectory[], call: any): string | undefined {
+  assert.equal(meta(call).mcp_server_id, undefined);
+  return effective(snapshots).tools.find(
+    (t: any) => t.name === call.function_name,
+  )?.mcp_server_id;
+}
+function atifResults(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots))
+    .flatMap((d) => d.steps.flatMap((s: any) => s.observation?.results ?? []))
+    .filter((r) => r.content !== undefined);
+}
+function atifErrors(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots)).flatMap((d) =>
+    d.steps.filter((s: any) => meta(s).error_code),
+  );
+}
+function atifChildren(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots)).slice(1);
+}
+
 async function scripted(
   commission: JsonValue,
   responses: FauxResponseStep[],
@@ -65,7 +109,7 @@ async function scripted(
   faux.setResponses(responses);
   models.registerNativeProvider(faux.provider);
   await models.setRuntimeApiKey("anthropic", "fixture-stand-in");
-  const events: Event[] = [];
+  const snapshots: Trajectory[] = [];
   const before = process.cwd();
   process.chdir(cwd);
   try {
@@ -73,14 +117,19 @@ async function scripted(
       commission,
       async (event) => {
         if (options.slowSink) await delay(5);
-        const parsed = parseTrajectoryEvent(event);
+        const parsed = capture(event);
         assert.ok(parsed);
-        events.push(parsed);
+        snapshots.push(parsed);
       },
       options.signal ?? new AbortController().signal,
       { modelRuntime: models },
     );
-    return { events, cwd, faux };
+    if (process.env.AVP_ATIF_CAPTURE) {
+      await trajectorySink(
+        join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
+      )(recordings.get(latest(snapshots))!);
+    }
+    return { snapshots, cwd, faux };
   } finally {
     process.chdir(before);
     rmSync(cwd, { force: true, recursive: true });
@@ -90,7 +139,7 @@ const text = (value = "DONE") => fauxAssistantMessage([fauxText(value)]);
 
 test("native responses retain reasoning, skills, replacement instructions, and per-response usage", async () => {
   let system: string | undefined;
-  const { events } = await scripted(
+  const { snapshots } = await scripted(
     received({
       system_prompt: "SYSTEM",
       skills: [
@@ -117,33 +166,29 @@ test("native responses retain reasoning, skills, replacement instructions, and p
       },
     ],
   );
-  assert.deepEqual(
-    events.map((e) => e.type),
-    [
-      "run_requested",
-      "agent_described",
-      "agent_started",
-      "assistant_message",
-      "agent_stopped",
-    ],
-  );
+  assert.equal(atifResponses(snapshots).length, 1);
+  assert.equal(meta(latest(snapshots)).complete, true);
   assert.ok(system?.startsWith("SYSTEM"));
   assert.ok(system?.includes("<available_skills>"));
   assert.ok(system?.includes("<name>greeting</name>"));
   assert.ok(!system?.includes("GREETING"));
   assert.ok(!system?.includes("SUPPORT"));
   assert.ok(!system?.includes("You are an expert coding assistant"));
-  assert.equal(data(events, "agent_started")[0]!.system_prompt, system);
-  const response = data(events, "assistant_message")[0]!;
-  assert.equal(response.content[0]!.type, "thinking");
-  assert.ok(
-    response.usage.input_tokens > 0 && response.usage.output_tokens > 0,
+  assert.equal(
+    latest(snapshots).steps.find((s: any) => s.source === "system")?.message,
+    system,
   );
-  assert.equal(data(events, "agent_stopped")[0]!.output, "DONE");
+  const response = atifResponses(snapshots)[0]!;
+  assert.equal(response.reasoning_content, "THOUGHT");
+  assert.ok(
+    response.metrics.prompt_tokens > 0 &&
+      response.metrics.completion_tokens > 0,
+  );
+  assert.equal(finalOutput(latest(snapshots)), "DONE");
 });
 
 test("native filesystem and bash tools complete with ordered asynchronous sink writes", async () => {
-  const { events } = await scripted(
+  const { snapshots } = await scripted(
     received(),
     [
       fauxAssistantMessage(
@@ -164,31 +209,27 @@ test("native filesystem and bash tools complete with ordered asynchronous sink w
     ],
     { slowSink: true },
   );
-  assert.equal(data(events, "assistant_message").length, 3);
-  const returns = data(events, "tool_returned");
+  assert.equal(atifResponses(snapshots).length, 3);
+  const returns = atifResults(snapshots);
   assert.deepEqual(
-    returns.map((e) => e.tool_call_id),
+    returns.map((e) => e.source_call_id),
     ["write", "read"],
   );
-  assert.match(JSON.stringify(returns[1]!.tool_result.content), /BOUNDARY/);
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
-  for (const result of returns)
-    assert.ok(
-      events.findIndex(
-        (e) =>
-          e.type === "tool_invoked" &&
-          e.data.tool_call_id === result.tool_call_id,
-      ) <
-        events.findIndex(
-          (e) =>
-            e.type === "tool_returned" &&
-            e.data.tool_call_id === result.tool_call_id,
-        ),
+  assert.match(JSON.stringify(returns[1]!.content), /BOUNDARY/);
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
+  for (const result of returns) {
+    const called = snapshots.findIndex((s) =>
+      atifCalls([s]).some((c) => c.tool_call_id === result.source_call_id),
     );
+    const returned = snapshots.findIndex((s) =>
+      atifResults([s]).some((r) => r.source_call_id === result.source_call_id),
+    );
+    assert.ok(called >= 0 && returned > called);
+  }
 });
 
 test("disabled built-ins are absent from the model and refused if called", async () => {
-  const { events } = await scripted(
+  const { snapshots } = await scripted(
     received({ agents: { "avp-pi": { enabled_tools: [] } } }),
     [
       fauxAssistantMessage(
@@ -204,9 +245,9 @@ test("disabled built-ins are absent from the model and refused if called", async
       text(),
     ],
   );
-  assert.equal(data(events, "agent_started")[0]!.tools, undefined);
-  assert.equal(data(events, "tool_returned")[0]!.tool_result.is_error, true);
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.deepEqual(latest(snapshots).agent.tool_definitions, []);
+  assert.equal(meta(atifResults(snapshots)[0]!).is_error, true);
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
 for (const mode of ["parallel", "errors"] as const)
@@ -239,7 +280,7 @@ for (const mode of ["parallel", "errors"] as const)
           { id: "protocol" },
         ),
       );
-    const { events } = await scripted(
+    const { snapshots } = await scripted(
       received({
         agents: { "avp-pi": { enabled_tools: [] } },
         mcp_servers: [
@@ -248,30 +289,29 @@ for (const mode of ["parallel", "errors"] as const)
       }),
       [fauxAssistantMessage(calls, { stopReason: "toolUse" }), text()],
     );
-    const invoked = data(events, "tool_invoked");
-    const returned = data(events, "tool_returned");
+    const invoked = atifCalls(snapshots);
+    const returned = atifResults(snapshots);
     assert.equal(invoked.length, calls.length);
     assert.equal(returned.length, calls.length);
-    assert.ok(invoked.every((e) => e.mcp_server_id === "fixture"));
+    assert.ok(invoked.every((e) => mcpServer(snapshots, e) === "fixture"));
     assert.match(
       JSON.stringify(
-        returned.find((e) => e.tool_call_id === "echo")!.tool_result.content,
+        returned.find((e) => e.source_call_id === "echo")!.content,
       ),
       /BOUNDARY/,
     );
     if (mode === "errors") {
       assert.equal(
-        returned.find((e) => e.tool_call_id === "result")!.tool_result.is_error,
+        meta(returned.find((e) => e.source_call_id === "result")!).is_error,
         true,
       );
       assert.equal(
-        returned.find((e) => e.tool_call_id === "protocol")!.tool_result
-          .is_error,
+        meta(returned.find((e) => e.source_call_id === "protocol")!).is_error,
         true,
       );
     }
-    assert.equal(data(events, "assistant_message").length, 2);
-    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+    assert.equal(atifResponses(snapshots).length, 2);
+    assert.equal(meta(latest(snapshots)).stop_reason, "converged");
   });
 
 for (const fields of [
@@ -281,13 +321,11 @@ for (const fields of [
   { model: { provider: "missing", id: "missing" } },
 ])
   test(`unusable Commission stops before any model call: ${JSON.stringify(fields)}`, async () => {
-    const { events, faux } = await scripted(received(fields), []);
-    assert.deepEqual(
-      events.map((e) => e.type),
-      ["run_requested", "agent_described", "error_occurred"],
-    );
+    const { snapshots, faux } = await scripted(received(fields), []);
+    assert.equal(atifResponses(snapshots).length, 0);
+    assert.equal(meta(latest(snapshots)).complete, true);
     assert.equal(
-      data(events, "error_occurred")[0]!.error_code,
+      meta(atifErrors(snapshots)[0]!).error_code,
       "invalid_commission",
     );
     assert.equal(faux.state.callCount, 0);
@@ -295,7 +333,7 @@ for (const fields of [
 
 test("missing environment credentials stop as auth_error", async () => {
   delete process.env.MISSING_AVP_PI_KEY;
-  const { events } = await scripted(
+  const { snapshots } = await scripted(
     received({
       model: {
         provider: "anthropic",
@@ -305,11 +343,11 @@ test("missing environment credentials stop as auth_error", async () => {
     }),
     [],
   );
-  assert.equal(data(events, "error_occurred")[0]!.error_code, "auth_error");
+  assert.equal(meta(atifErrors(snapshots)[0]!).error_code, "auth_error");
 });
 
 test("unreachable MCP server stops before model execution", async () => {
-  const { events, faux } = await scripted(
+  const { snapshots, faux } = await scripted(
     received({
       mcp_servers: [
         { type: "stdio", id: "bad", command: ["/nonexistent/mcp"] },
@@ -318,34 +356,34 @@ test("unreachable MCP server stops before model execution", async () => {
     [],
   );
   assert.equal(
-    data(events, "error_occurred")[0]!.error_code,
+    meta(atifErrors(snapshots)[0]!).error_code,
     "mcp_connect_failed",
   );
   assert.equal(faux.state.callCount, 0);
 });
 
 test("provider errors are terminal errors rather than synthetic model responses", async () => {
-  const { events } = await scripted(received(), [
+  const { snapshots } = await scripted(received(), [
     fauxAssistantMessage([], {
       stopReason: "error",
       errorMessage: "401 authentication failed",
     }),
   ]);
-  assert.equal(data(events, "assistant_message").length, 0);
-  assert.equal(data(events, "error_occurred")[0]!.error_code, "auth_error");
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "error");
+  assert.equal(atifResponses(snapshots).length, 0);
+  assert.equal(meta(atifErrors(snapshots)[0]!).error_code, "auth_error");
+  assert.equal(meta(latest(snapshots)).stop_reason, "error");
 });
 
 test("cancelling a native streamed response closes the run as interrupted", async () => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 150);
   try {
-    const { events } = await scripted(
+    const { snapshots } = await scripted(
       received(),
       [text("A long streamed response to interrupt")],
       { signal: controller.signal, tokensPerSecond: 2 },
     );
-    assert.equal(data(events, "agent_stopped")[0]!.reason, "interrupted");
+    assert.equal(meta(latest(snapshots)).stop_reason, "interrupted");
   } finally {
     clearTimeout(timer);
   }
@@ -378,7 +416,7 @@ test("native MCP structured output, environment references, and colliding names 
       new URL("../../tests/fixtures/mcp.mjs", import.meta.url),
     );
     let names: string[] = [];
-    const { events } = await scripted(
+    const { snapshots } = await scripted(
       received({
         agents: { "avp-pi": { enabled_tools: [] } },
         mcp_servers: ["same-name", "same_name"].map((id) => ({
@@ -406,19 +444,19 @@ test("native MCP structured output, environment references, and colliding names 
     assert.equal(names.length, 2);
     assert.equal(new Set(names).size, 2);
     assert.ok(names.every((name) => name.length <= 64));
-    const results = data(events, "tool_returned");
+    const results = atifResults(snapshots);
     assert.equal(results.length, 2);
     assert.ok(
       results.every(
         (result) =>
-          result.tool_result.structured_content?.value === "fixture-env-value",
+          meta(result).structured_content?.value === "fixture-env-value",
       ),
     );
     assert.deepEqual(
-      new Set(data(events, "tool_invoked").map((call) => call.mcp_server_id)),
+      new Set(atifCalls(snapshots).map((call) => mcpServer(snapshots, call))),
       new Set(["same-name", "same_name"]),
     );
-    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+    assert.equal(meta(latest(snapshots)).stop_reason, "converged");
   } finally {
     if (before === undefined) delete process.env.AVP_TEST_PI_CREDENTIAL;
     else process.env.AVP_TEST_PI_CREDENTIAL = before;
@@ -480,7 +518,7 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address === "object");
-  const events: Event[] = [];
+  const snapshots: Trajectory[] = [];
   try {
     await run(
       received({
@@ -493,19 +531,22 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
         agents: { "avp-pi": { enabled_tools: [] } },
       }),
       async (event) => {
-        events.push(event);
+        snapshots.push(capture(event));
       },
       new AbortController().signal,
     );
     assert.equal(key, "avp-proxy-stand-in");
-    const response = data(events, "assistant_message")[0]!;
-    assert.equal(response.usage.input_tokens, 1000);
-    assert.equal(response.usage.output_tokens, 50);
-    assert.equal(response.usage.cache_read_input_tokens, 300);
-    assert.equal(response.usage.cache_creation_input_tokens, 100);
-    assert.equal(response.response_model, "claude-haiku-4-5-20251001");
-    assert.deepEqual(response.finish_reasons, ["end_turn"]);
-    assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+    const response = atifResponses(snapshots)[0]!;
+    assert.equal(response.metrics.prompt_tokens, 1000);
+    assert.equal(response.metrics.completion_tokens, 50);
+    assert.equal(response.metrics.cached_tokens, 300);
+    assert.equal(meta(response.metrics).cache_creation_input_tokens, 100);
+    assert.equal(
+      latest(snapshots).agent.model_name,
+      "claude-haiku-4-5-20251001",
+    );
+    assert.deepEqual(meta(response).finish_reasons, ["end_turn"]);
+    assert.equal(meta(latest(snapshots)).stop_reason, "converged");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
@@ -516,7 +557,7 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
 
 test("Pi loads commissioned skills and support files on demand through its native reader", async () => {
   let skillPath = "";
-  const { events } = await scripted(
+  const { snapshots } = await scripted(
     received({
       system_prompt: "Use the matching skill.",
       skills: [
@@ -571,15 +612,15 @@ test("Pi loads commissioned skills and support files on demand through its nativ
     ],
   );
   assert.deepEqual(
-    data(events, "tool_returned").map((result) => result.tool_call_id),
+    atifResults(snapshots).map((result) => result.source_call_id),
     ["skill", "support"],
   );
-  assert.equal(data(events, "agent_started")[0]!.skills?.[0]?.name, "greeting");
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.equal(effective(snapshots).skills?.[0]?.name, "greeting");
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
 test("commissioned skills without a native file reader are refused", async () => {
-  const { events, faux } = await scripted(
+  const { snapshots, faux } = await scripted(
     received({
       agents: { "avp-pi": { enabled_tools: [] } },
       skills: [
@@ -595,7 +636,7 @@ test("commissioned skills without a native file reader are refused", async () =>
     [],
   );
   assert.equal(
-    data(events, "error_occurred")[0]!.error_code,
+    meta(atifErrors(snapshots)[0]!).error_code,
     "invalid_commission",
   );
   assert.equal(faux.state.callCount, 0);

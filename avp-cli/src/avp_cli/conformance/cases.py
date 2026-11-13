@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from avp.commission import AgentSettings, Commission, McpServerHttp, McpServerStdio, Model, Skill
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import ErrorOccurredEvent
+from avp.trajectory import avp_metadata
 from avp_cli.eval.scoring import Run
 
 Level = Literal["MUST", "SHOULD"]
@@ -76,21 +76,24 @@ RUN_ID = "set-by-the-engine"
 
 
 def _ended_before_start(code: str, message_names: str | None = None) -> Callable[[Run], list[str]]:
-    """The run never started: `run_requested`, `agent_described`, then
-    `error_occurred` with `code`, and nothing else."""
+    """A refusal is a complete document with no model responses or start time."""
 
     def check(run: Run) -> list[str]:
-        expected = ["run_requested", "agent_described", "error_occurred"]
-        types = [e.type for e in run.trajectory]
-        if types != expected:
-            return [f"the events are {', '.join(types) or 'none'}; expected {', '.join(expected)}"]
-        error = run.trajectory[2]
-        if not isinstance(error, ErrorOccurredEvent):
-            return []
-        if error.data.error_code != code:
-            return [f"error_occurred has the code {error.data.error_code}, not {code}"]
-        if message_names and message_names not in error.data.error_message:
-            return [f"error_occurred's message doesn't name {message_names}"]
+        doc = run.trajectory
+        if doc is None:
+            return ["the agent wrote no ATIF document"]
+        meta = avp_metadata(doc)
+        if (
+            not meta.get("complete")
+            or meta.get("started_at")
+            or any(s.source == "agent" for s in doc.steps)
+        ):
+            return ["expected a complete refusal before the run started"]
+        errors = [s for s in doc.steps if avp_metadata(s).get("error_code") == code]
+        if not errors:
+            return [f"no error with code {code}"]
+        if message_names and message_names not in str(errors[-1].message):
+            return [f"error message doesn't name {message_names}"]
         return []
 
     return check
@@ -220,34 +223,28 @@ def _connect_failure(name: str, about: str, commission: Callable[[Context], Comm
     )
 
 
-def _events_in_order(run: Run) -> list[str]:
-    """A run that started: `run_requested`, `agent_described`, `agent_started`,
-    the run's other events with at least one `assistant_message`, and
-    `agent_stopped` last and only once."""
-    types = [e.type for e in run.trajectory]
-    start = ["run_requested", "agent_described", "agent_started"]
+def _complete_document(run: Run) -> list[str]:
+    doc = run.trajectory
+    if doc is None:
+        return ["the agent wrote no ATIF document"]
     problems = []
-    if types[:3] != start:
-        problems.append(
-            f"the events start {', '.join(types[:3]) or 'with none'}; expected {', '.join(start)}"
-        )
-    if not types or types[-1] != "agent_stopped" or types.count("agent_stopped") != 1:
-        problems.append(
-            f"agent_stopped isn't last and only once in {', '.join(types) or 'no events'}"
-        )
-    if "assistant_message" not in types:
-        problems.append(f"no assistant_message in {', '.join(types) or 'no events'}")
+    if not avp_metadata(doc).get("complete"):
+        problems.append("the ATIF document is incomplete")
+    if not any(s.source == "user" for s in doc.steps):
+        problems.append("no user prompt")
+    if not any(s.source == "agent" for s in doc.steps):
+        problems.append("no model response")
     return problems
 
 
 CASES: list[Case] = [
     Case(
-        name="events-in-order",
+        name="atif-document",
         rule="trajectory.4.1",
         level="MUST",
-        about="A run with one model response sends its events in the fixed order",
+        about="A run produces a complete, valid ATIF document",
         commission=_commission,
-        check=_events_in_order,
+        check=_complete_document,
         responses=({"content": "A scripted reply."},),
     ),
     _refusal("agents-without-entry", "`agents` has no entry for the agent", _agents_without_entry),

@@ -27,26 +27,19 @@ CLI versions keep their pins.
 
 ## Local SDK development
 
-For Python, run from the agent's `python/` directory:
+Adapters use the SDK source from this repository. Python's `tool.uv.sources`
+links the matching SDK; TypeScript uses a relative file dependency. Built-in
+Docker builds use the repository root and bundle the SDK at the same source pin.
+This avoids mixing a new adapter wire contract with an older published SDK.
+
+For Python, run `uv sync --locked` and `uv run pytest` in the adapter's `python/`
+directory. For TypeScript, build the SDK first, then the adapter:
 
 ```sh
-uv sync --locked
-uv run --with-editable ../../../avp-sdk/python pytest
+npm --prefix avp-sdk/typescript ci
+npm --prefix avp-sdk/typescript run build
+npm --prefix agents/avp-pi/typescript ci
+npm --prefix agents/avp-pi/typescript test
 ```
 
-The temporary override uses the local SDK without changing the package file or
-lockfile. Run `uv run pytest` to use the released SDK again.
-
-For TypeScript, build the local SDK, then install it temporarily from the agent's
-`typescript/` directory:
-
-```sh
-npm --prefix ../../../avp-sdk/typescript ci
-npm --prefix ../../../avp-sdk/typescript run build
-npm ci
-npm install --no-save --package-lock=false ../../../avp-sdk/typescript
-npm test
-```
-
-Run `npm ci` to restore the released SDK. Commit dependencies on published
-packages; keep local overrides out of package files and lockfiles.
+The `make` adapter targets build their SDK dependency automatically.

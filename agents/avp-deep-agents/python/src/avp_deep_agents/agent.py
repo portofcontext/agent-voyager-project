@@ -11,7 +11,7 @@ from langsmith import tracing_context
 from mcp.shared.exceptions import McpError
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.recorder import Recorder
 from avp.utils.run_plan import plan_run
 from avp_deep_agents import commission as cm
@@ -38,7 +38,7 @@ def recover_protocol_errors(tool):
     tool.handle_tool_error = True
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     descriptor = describe()
     rec = Recorder(sink)
     commission = await rec.begin(received, descriptor)

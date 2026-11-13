@@ -5,7 +5,7 @@ import type {
   ErrorCode,
   TextBlock,
   ImageBlock,
-} from "@agent-voyager-project/sdk/trajectory";
+} from "@agent-voyager-project/sdk/reports";
 import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
 export interface GeminiUsage {
   promptTokenCount?: number;

@@ -30,7 +30,7 @@ registries. Each subagent explicitly declares its own native tools, including
 its completion tool. The SDK run plan applies built-in allowlists through
 Gemini's native configuration. MCP servers connect once; a connection failure
 stops the run before a model call. Actual native tool names and schemas, with
-MCP ownership, appear in `agent_started`.
+MCP ownership, appear in the ATIF effective configuration.
 
 Models use provider `google`. Proxy stand-ins and environment credentials go to
 Gemini's API-key client; `model.base_url` overrides its endpoint. HTTP MCP proxy
@@ -48,7 +48,7 @@ Commissioned files go through its native skill loader and `activate_skill`
 tool, with support files available to native filesystem tools. Skill bodies are
 not embedded in the initial system prompt.
 
-Each main model response produces one `assistant_message`, preserving native
+Each main model response produces one ATIF agent step, preserving native
 tool-call IDs and per-response usage. Input includes cached and tool-use prompt
 tokens; output includes reasoning. Shared SDK prices supply costs. The native
 scheduler supplies tool results, and all Recorder writes are awaited in order.

@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import atif
 
 from avp_cli import paths
 from avp_cli.console import Failed
@@ -22,68 +23,64 @@ PROMPT = "What is the capital of France?"
 LONG = "x" * 5000
 
 
-def event(run_id: str, number: int, type: str, data: dict[str, Any]) -> str:
-    return json.dumps(
-        {
-            "avp_version": "0.1",
-            "id": str(number),
-            "time": "2026-01-01T00:00:00Z",
-            "run_id": run_id,
-            "type": type,
-            "data": data,
-        }
-    )
-
-
 def trajectory(run_id: str) -> str:
-    usage = {"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.01, "cost_source": "computed"}
-    descriptor = {"avp_version": "0.1", "agent_name": "avp-test", "agent_version": "1.2.3"}
-    tool = {
-        "name": "read",
-        "description": "Read a file.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"path": {"type": "string", "description": "The file."}},
-            "required": ["path"],
-        },
+    doc = atif(run_id=run_id)
+    doc["agent"] = {
+        "name": "avp-test",
+        "version": "1.2.3",
+        "model_name": "gpt-test",
+        "extra": {"avp": {"provider": "openai"}},
+        "tool_definitions": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "description": "Read a file.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"path": {"type": "string", "description": "The file."}},
+                        "required": ["path"],
+                    },
+                },
+            }
+        ],
     }
-    call = {"type": "tool_use", "id": "call-1", "name": "read", "input": {"path": "/a"}}
-    events = [
-        ("run_requested", {"commission": {"anything": SECRET}}),
-        ("agent_described", {"descriptor": descriptor}),
-        (
-            "agent_started",
-            {"prompt": PROMPT, "model": MODEL | {"base_url": "http://mock"}, "tools": [tool]},
-        ),
-        (
-            "assistant_message",
-            {"content": [call], "model": MODEL, "duration_ms": 7, "usage": usage},
-        ),
-        (
-            "tool_invoked",
-            {"tool_call_id": "call-1", "tool_name": "read", "tool_input": call["input"]},
-        ),
-        (
-            "tool_returned",
-            {
-                "tool_call_id": "call-1",
-                "tool_name": "read",
-                "duration_ms": 3,
-                "tool_result": {"type": "tool_result", "tool_use_id": "call-1", "content": LONG},
+    metrics = {"prompt_tokens": 10, "completion_tokens": 5, "cost_usd": 0.01}
+    doc["steps"] = [
+        {"step_id": 1, "source": "user", "message": PROMPT},
+        {
+            "step_id": 2,
+            "source": "agent",
+            "message": "",
+            "metrics": metrics,
+            "extra": {"avp": {"duration_ms": 7}},
+            "tool_calls": [
+                {
+                    "tool_call_id": "call-1",
+                    "function_name": "read",
+                    "arguments": {"path": "/a"},
+                    "extra": {"avp": {"observed_at": "2026-01-01T00:00:00Z"}},
+                }
+            ],
+            "observation": {
+                "results": [
+                    {
+                        "source_call_id": "call-1",
+                        "content": LONG,
+                        "extra": {"avp": {"finished_at": "2026-01-01T00:00:00.003Z"}},
+                    }
+                ]
             },
-        ),
-        (
-            "assistant_message",
-            {
-                "content": [{"type": "text", "text": "Paris"}],
-                "model": MODEL,
-                "duration_ms": 9,
-                "usage": usage,
-            },
-        ),
-        ("agent_stopped", {"reason": "converged", "output": "Paris"}),
+        },
+        {
+            "step_id": 3,
+            "source": "agent",
+            "message": "Paris",
+            "metrics": metrics,
+            "extra": {"avp": {"duration_ms": 9}},
+        },
     ]
-    return "\n".join(event(run_id, n, type, data) for n, (type, data) in enumerate(events)) + "\n"
+    return json.dumps(doc)
 
 
 def eval_directory(tmp_path: Path, agents: list[str]) -> tuple[Path, EvalResults]:
@@ -183,6 +180,8 @@ def test_a_run_is_what_the_sites_viewer_reads(tmp_path: Path) -> None:
     assert [e["seq"] for e in events] == list(range(6))
     assert events[1]["input_tokens"] == 10 and events[1]["cost_usd"] == 0.01
     assert events[2]["call_id"] == events[3]["call_id"] == "call-1"
+    assert events[1]["response_model"] == "gpt-test"
+    assert events[3]["duration_ms"] == 3
     assert events[3]["result_chars"] == len(LONG)
     assert events[3]["result"].endswith(f"(+{len(LONG) - share.TEXT} chars)")
     assert events[4]["text"] == "Paris"
@@ -265,3 +264,38 @@ def test_a_refusal_says_why(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(Failed, match="run too large"):
         share.share(directory, results, "https://site.test")
     assert share.shared(directory) is None
+
+
+def test_agent_start_is_validated_and_supplies_the_full_configuration(tmp_path: Path) -> None:
+    directory, results = eval_directory(tmp_path, ["one"])
+    run = results.runs[0]
+    run_directory = directory / run.directory
+    effective = {
+        "avp_version": "0.1",
+        "run_id": run.run_id,
+        "prompt": "research",
+        "model": {"provider": "test", "id": "m"},
+        "skills": [
+            {
+                "name": "research",
+                "description": "Research.",
+                "files": {"SKILL.md": "Research instructions"},
+            }
+        ],
+        "mcp_servers": [{"id": "docs", "status": "connected"}],
+        "tools": [{"name": "read", "inputSchema": {"type": "object"}, "mcp_server_id": "docs"}],
+    }
+    (run_directory / "agent-start.json").write_text(json.dumps(effective))
+    [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
+    assert shown["vessel"]["tools"][0]["mcp_server_id"] == "docs"
+    assert shown["vessel"]["skills"] == [{"name": "research", "description": "Research."}]
+    assert "Research instructions" not in json.dumps(shown)
+    assert shown["vessel"]["mcp_servers"] == effective["mcp_servers"]
+    (run_directory / "agent-start.json").write_text("{}")
+    with pytest.raises(Failed, match="invalid Agent Start"):
+        share.payload(directory, results)
+
+    effective["run_id"] = "another-run"
+    (run_directory / "agent-start.json").write_text(json.dumps(effective))
+    with pytest.raises(Failed, match="different run"):
+        share.payload(directory, results)

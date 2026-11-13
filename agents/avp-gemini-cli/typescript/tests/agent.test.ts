@@ -1,5 +1,8 @@
+import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
+import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 /** Real Gemini sessions, schedulers, tools, and MCP clients cross the Recorder. */
 import { strict as assert } from "node:assert";
+import { randomUUID } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -21,12 +24,24 @@ import {
   type ContentGenerator,
 } from "@google/gemini-cli-core";
 import {
-  parseTrajectoryEvent,
-  type Event,
-  type JsonValue,
+  parseTrajectory,
+  finalOutput,
+  type Trajectory,
+  type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
 import { run } from "../src/agent.js";
 import { describe } from "../src/descriptor.js";
+const recordings = new WeakMap<Trajectory, Recording>();
+function capture(recording: Recording): Trajectory {
+  const trajectory = parseTrajectory(recording.trajectory);
+  recordings.set(trajectory, recording);
+  return trajectory;
+}
+function effective(snapshots: Trajectory[]): any {
+  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
+  assert.ok(started);
+  return started;
+}
 const MODEL = "gemini-2.5-flash";
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = fileURLToPath(
@@ -73,15 +88,38 @@ const fake = (responses: ReturnType<typeof response>[]): ContentGenerator =>
       response: r,
     })) as never,
   );
-type DataByType = { [E in Event as E["type"]]: E["data"] };
-function data<K extends keyof DataByType>(
-  events: Event[],
-  type: K,
-): DataByType[K][] {
-  return events
-    .filter((event) => event.type === type)
-    .map((event) => event.data) as DataByType[K][];
+
+function latest(snapshots: Trajectory[]): any {
+  return snapshots.at(-1)!;
 }
+function meta(value: any): any {
+  return value.extra?.avp ?? {};
+}
+function docs(root: any): any[] {
+  return [root, ...(root.subagent_trajectories ?? []).flatMap(docs)];
+}
+function atifResponses(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots))
+    .flatMap((d) => d.steps.filter((s: any) => s.source === "agent"))
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+function atifCalls(snapshots: Trajectory[]): any[] {
+  return atifResponses(snapshots).flatMap((s) => s.tool_calls ?? []);
+}
+function atifResults(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots))
+    .flatMap((d) => d.steps.flatMap((s: any) => s.observation?.results ?? []))
+    .filter((r) => r.content !== undefined);
+}
+function atifErrors(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots)).flatMap((d) =>
+    d.steps.filter((s: any) => meta(s).error_code),
+  );
+}
+function atifChildren(snapshots: Trajectory[]): any[] {
+  return docs(latest(snapshots)).slice(1);
+}
+
 async function drive(
   t: TestContext,
   commission: JsonValue,
@@ -92,7 +130,7 @@ async function drive(
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   options.setup?.(cwd);
   const previous = process.cwd();
-  const events: Event[] = [];
+  const snapshots: Trajectory[] = [];
   const listeners = coreEvents.listenerCount(CoreEvent.McpProgress);
   process.chdir(cwd);
   try {
@@ -100,7 +138,7 @@ async function drive(
       commission,
       async (event) => {
         await delay(1);
-        events.push(parseTrajectoryEvent(JSON.parse(JSON.stringify(event)))!);
+        snapshots.push(capture(event)!);
       },
       { contentGenerator: generator, signal: options.signal },
     );
@@ -112,7 +150,12 @@ async function drive(
     listeners,
     "native scheduler listeners are disposed",
   );
-  return { events, cwd };
+  if (process.env.AVP_ATIF_CAPTURE) {
+    await trajectorySink(
+      join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
+    )(recordings.get(latest(snapshots))!);
+  }
+  return { snapshots, cwd };
 }
 
 test("installed CLI ping stays independent of the native runtime", () => {
@@ -128,20 +171,22 @@ test("installed CLI ping stays independent of the native runtime", () => {
 test("Descriptor reads built-in catalogs and explicitly declares subagent tools", async () => {
   const descriptor = await describe();
   assert.equal(descriptor.agent_name, "avp-gemini-cli");
-  assert.ok(descriptor.tools?.some((tool) => tool.name === "write_file"));
-  assert.ok(!descriptor.tools?.some((tool) => tool.name === "ask_user"));
-  assert.deepEqual(descriptor.subagents?.map((a) => a.name).sort(), [
+  assert.ok(descriptor.tools?.some((tool: any) => tool.name === "write_file"));
+  assert.ok(!descriptor.tools?.some((tool: any) => tool.name === "ask_user"));
+  assert.deepEqual(descriptor.subagents?.map((a: any) => a.name).sort(), [
     "cli_help",
     "codebase_investigator",
     "generalist",
   ]);
   for (const agent of descriptor.subagents ?? [])
-    assert.ok(agent.tools?.some((tool) => tool.name === "complete_task"));
-  assert.ok(descriptor.skills?.some((skill) => skill.name === "skill-creator"));
+    assert.ok(agent.tools?.some((tool: any) => tool.name === "complete_task"));
+  assert.ok(
+    descriptor.skills?.some((skill: any) => skill.name === "skill-creator"),
+  );
 });
 
-test("native filesystem loop keeps response usage, thoughts, tool IDs, and async event order", async (t) => {
-  const { events, cwd } = await drive(
+test("native filesystem loop keeps response usage, thoughts, tool IDs, and async event order", async (t: any) => {
+  const { snapshots, cwd } = await drive(
     t,
     received(),
     fake([
@@ -160,35 +205,21 @@ test("native filesystem loop keeps response usage, thoughts, tool IDs, and async
     ]),
   );
   assert.equal(readFileSync(join(cwd, "out.txt"), "utf8"), "OK");
-  assert.deepEqual(
-    events.map((event) => event.type),
-    [
-      "run_requested",
-      "agent_described",
-      "agent_started",
-      "assistant_message",
-      "tool_invoked",
-      "tool_returned",
-      "assistant_message",
-      "agent_stopped",
-    ],
-  );
-  const first = data(events, "assistant_message")[0]!;
-  assert.equal(first.usage.input_tokens, 125);
-  assert.equal(first.usage.output_tokens, 38);
-  assert.equal(first.usage.cache_read_input_tokens, 100);
-  assert.equal(first.usage.reasoning_output_tokens, 30);
-  assert.equal(first.usage.cost_source, "computed");
-  assert.equal(first.response_model, MODEL);
-  const invoked = data(events, "tool_invoked")[0]!;
-  assert.equal(
-    data(events, "tool_returned")[0]!.tool_call_id,
-    invoked.tool_call_id,
-  );
-  assert.equal(data(events, "agent_stopped")[0]!.output, "DONE");
+  assert.equal(atifResponses(snapshots).length, 2);
+  assert.equal(meta(latest(snapshots)).complete, true);
+  const first = atifResponses(snapshots)[0]!;
+  assert.equal(first.metrics.prompt_tokens, 125);
+  assert.equal(first.metrics.completion_tokens, 38);
+  assert.equal(first.metrics.cached_tokens, 100);
+  assert.equal(meta(first.metrics).reasoning_output_tokens, 30);
+  assert.equal(meta(first.metrics).cost_source, "computed");
+  assert.equal(latest(snapshots).agent.model_name, MODEL);
+  const invoked = atifCalls(snapshots)[0]!;
+  assert.equal(atifResults(snapshots)[0]!.source_call_id, invoked.tool_call_id);
+  assert.equal(finalOutput(latest(snapshots)), "DONE");
 });
 
-test("native tool allowlists and custom system prompt replace the defaults", async (t) => {
+test("native tool allowlists and custom system prompt replace the defaults", async (t: any) => {
   const generator = fake([response([{ text: "OK" }])]);
   let system = "";
   const stream = generator.generateContentStream.bind(generator);
@@ -196,7 +227,7 @@ test("native tool allowlists and custom system prompt replace the defaults", asy
     system = JSON.stringify(args[0].config?.systemInstruction);
     return stream(...args);
   };
-  const { events } = await drive(
+  const { snapshots } = await drive(
     t,
     received({
       system_prompt: "ONLY_SYSTEM",
@@ -210,33 +241,33 @@ test("native tool allowlists and custom system prompt replace the defaults", asy
     }),
     generator,
   );
-  const started = data(events, "agent_started")[0]!;
-  assert.deepEqual(started.tools, []);
-  assert.deepEqual(started.skills, []);
-  assert.deepEqual(started.subagents, []);
+  const started = latest(snapshots).agent;
+  assert.deepEqual(started.tool_definitions, []);
+  assert.deepEqual(effective(snapshots).skills, []);
+  assert.deepEqual(effective(snapshots).subagents, []);
   assert.ok(system.includes("ONLY_SYSTEM"));
   assert.ok(!system.includes("You are an interactive"));
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("invalid Commission and unsupported structured output refuse before native generation", async (t) => {
+test("invalid Commission and unsupported structured output refuse before native generation", async (t: any) => {
   for (const c of [
     received({ output_schema: { type: "object" } }),
     received({
       agents: { "avp-gemini-cli": { enabled_tools: ["imaginary"] } },
     }),
   ]) {
-    const { events } = await drive(t, c, fake([]));
+    const { snapshots } = await drive(t, c, fake([]));
     assert.equal(
-      data(events, "error_occurred")[0]!.error_code,
+      meta(atifErrors(snapshots)[0]!).error_code,
       "invalid_commission",
     );
-    assert.equal(data(events, "agent_started").length, 0);
+    assert.equal(meta(latest(snapshots)).started_at ? 1 : 0, 0);
   }
 });
 
-test("native skill activation loads commissioned files and does not discover workspace skills", async (t) => {
-  const { events } = await drive(
+test("native skill activation loads commissioned files and does not discover workspace skills", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received({
       skills: [
@@ -265,19 +296,24 @@ test("native skill activation loads commissioned files and does not discover wor
       },
     },
   );
-  const started = data(events, "agent_started")[0]!;
-  assert.ok(started.skills?.some((skill) => skill.name === "migration-check"));
-  assert.ok(!started.skills?.some((skill) => skill.name === "ambient"));
-  assert.ok(!started.system_prompt?.includes("NATIVE_SKILL_BODY"));
-  assert.match(
-    JSON.stringify(data(events, "tool_returned")),
-    /NATIVE_SKILL_BODY/,
+  const started = latest(snapshots).agent;
+  assert.ok(
+    effective(snapshots).skills?.some(
+      (skill: any) => skill.name === "migration-check",
+    ),
   );
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.ok(
+    !effective(snapshots).skills?.some(
+      (skill: any) => skill.name === "ambient",
+    ),
+  );
+  assert.ok(!started.system_prompt?.includes("NATIVE_SKILL_BODY"));
+  assert.match(JSON.stringify(atifResults(snapshots)), /NATIVE_SKILL_BODY/);
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("native MCP connection and parallel tools preserve ownership and both error forms", async (t) => {
-  const { events } = await drive(
+test("native MCP connection and parallel tools preserve ownership and both error forms", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received({
       mcp_servers: [
@@ -300,22 +336,27 @@ test("native MCP connection and parallel tools preserve ownership and both error
       response([{ text: "DONE" }]),
     ]),
   );
-  const started = data(events, "agent_started")[0]!;
-  assert.equal(started.mcp_servers?.[0]?.status, "connected");
+  assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
-    started.tools?.find((tool) => tool.name.endsWith("Avptest_Echo"))
-      ?.mcp_server_id,
+    effective(snapshots).tools.find((tool: any) =>
+      tool.name.endsWith("Avptest_Echo"),
+    )?.mcp_server_id,
     "avptest",
   );
-  const returned = data(events, "tool_returned");
+  assert.ok(
+    latest(snapshots).agent.tool_definitions.every(
+      (tool: any) => meta(tool).mcp_server_id === undefined,
+    ),
+  );
+  const returned = atifResults(snapshots);
   assert.equal(returned.length, 3);
-  assert.equal(returned.filter((r) => r.tool_result.is_error).length, 2);
+  assert.equal(returned.filter((r) => meta(r).is_error).length, 2);
   assert.match(JSON.stringify(returned), /MCP_OK/);
-  assert.equal(new Set(returned.map((r) => r.tool_call_id)).size, 3);
+  assert.equal(new Set(returned.map((r) => r.source_call_id)).size, 3);
 });
 
-test("native subagent model calls roll up exactly once on their invocation", async (t) => {
-  const { events } = await drive(
+test("native subagent model calls roll up exactly once on their invocation", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received(),
     fake([
@@ -337,17 +378,17 @@ test("native subagent model calls roll up exactly once on their invocation", asy
       response([{ text: "DONE" }]),
     ]),
   );
-  assert.equal(data(events, "subagent_invoked").length, 1);
-  const returned = data(events, "subagent_returned")[0]!;
-  assert.equal(returned.subagent_usage?.responses, 1);
-  assert.equal(returned.subagent_usage?.input_tokens, 120);
-  assert.equal(returned.subagent_usage?.output_tokens, 8);
-  assert.equal(data(events, "assistant_message").length, 2);
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.equal(atifChildren(snapshots).length, 1);
+  const returned = atifChildren(snapshots)[0]!;
+  assert.equal(meta(returned).usage_details, undefined);
+  assert.equal(returned.final_metrics?.total_prompt_tokens, 120);
+  assert.equal(returned.final_metrics?.total_completion_tokens, 8);
+  assert.equal(atifResponses(snapshots).length, 2);
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("missing model environment credentials refuse before a model request", async (t) => {
-  const { events } = await drive(
+test("missing model environment credentials refuse before a model request", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received({
       model: {
@@ -358,12 +399,12 @@ test("missing model environment credentials refuse before a model request", asyn
     }),
     fake([]),
   );
-  assert.equal(data(events, "error_occurred")[0]!.error_code, "auth_error");
-  assert.equal(data(events, "agent_started").length, 0);
+  assert.equal(meta(atifErrors(snapshots)[0]!).error_code, "auth_error");
+  assert.equal(meta(latest(snapshots)).started_at ? 1 : 0, 0);
 });
 
-test("failed MCP discovery stops before a model call", async (t) => {
-  const { events } = await drive(
+test("failed MCP discovery stops before a model call", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received({
       mcp_servers: [
@@ -373,39 +414,36 @@ test("failed MCP discovery stops before a model call", async (t) => {
     fake([]),
   );
   assert.equal(
-    data(events, "error_occurred")[0]!.error_code,
+    meta(atifErrors(snapshots)[0]!).error_code,
     "mcp_connect_failed",
   );
-  assert.equal(data(events, "assistant_message").length, 0);
+  assert.equal(atifResponses(snapshots).length, 0);
 });
 
-test("missing native response usage fails visibly", async (t) => {
+test("missing native response usage fails visibly", async (t: any) => {
   const chunk = response([{ text: "UNACCOUNTED" }])[0]!;
   const { usageMetadata: _, ...withoutUsage } = chunk;
   const generator = new FakeContentGenerator([
     { method: "generateContentStream", response: [withoutUsage] },
   ] as never);
-  const { events } = await drive(t, received(), generator);
-  assert.equal(data(events, "assistant_message").length, 0);
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "error");
-  assert.match(
-    JSON.stringify(data(events, "error_occurred")),
-    /usage metadata/,
-  );
+  const { snapshots } = await drive(t, received(), generator);
+  assert.equal(atifResponses(snapshots).length, 0);
+  assert.equal(meta(latest(snapshots)).stop_reason, "error");
+  assert.match(JSON.stringify(atifErrors(snapshots)), /usage metadata/);
 });
 
-test("native cancellation closes the started run as interrupted", async (t) => {
+test("native cancellation closes the started run as interrupted", async (t: any) => {
   const controller = new AbortController();
   controller.abort();
-  const { events } = await drive(t, received(), fake([]), {
+  const { snapshots } = await drive(t, received(), fake([]), {
     signal: controller.signal,
   });
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "interrupted");
-  assert.equal(data(events, "assistant_message").length, 0);
+  assert.equal(meta(latest(snapshots)).stop_reason, "interrupted");
+  assert.equal(atifResponses(snapshots).length, 0);
 });
 
-test("unknown subagent requests remain native tool errors without fabricated frames", async (t) => {
-  const { events } = await drive(
+test("unknown subagent requests remain native tool errors without fabricated frames", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received(),
     fake([
@@ -418,11 +456,11 @@ test("unknown subagent requests remain native tool errors without fabricated fra
       response([{ text: "DONE" }]),
     ]),
   );
-  assert.equal(data(events, "subagent_invoked").length, 0);
-  assert.equal(data(events, "tool_returned")[0]!.tool_result.is_error, true);
+  assert.equal(atifChildren(snapshots).length, 0);
+  assert.equal(meta(atifResults(snapshots)[0]!).is_error, true);
 });
 
-test("native Google HTTP client sends the proxy stand-in and records served model and cache usage", async (t) => {
+test("native Google HTTP client sends the proxy stand-in and records served model and cache usage", async (t: any) => {
   const requests: { path: string; key: string | undefined; body: string }[] =
     [];
   const server = createServer(async (request, response_) => {
@@ -448,7 +486,7 @@ test("native Google HTTP client sends the proxy stand-in and records served mode
   );
   const address = server.address();
   assert.ok(address && typeof address === "object");
-  const { events } = await drive(
+  const { snapshots } = await drive(
     t,
     received({
       model: {
@@ -466,23 +504,19 @@ test("native Google HTTP client sends the proxy stand-in and records served mode
       },
     }),
   );
-  assert.equal(
-    requests.length,
-    1,
-    JSON.stringify(data(events, "error_occurred")),
-  );
+  assert.equal(requests.length, 1, JSON.stringify(atifErrors(snapshots)));
   assert.equal(requests[0]!.key, "standin-only");
   assert.match(requests[0]!.path, /gemini-2.5-flash:streamGenerateContent/);
-  const message = data(events, "assistant_message")[0]!;
-  assert.equal(message.response_model, "gemini-2.5-flash-001");
-  assert.equal(message.usage.input_tokens, 120);
-  assert.equal(message.usage.output_tokens, 11);
-  assert.equal(message.usage.cache_read_input_tokens, 80);
-  assert.equal(data(events, "agent_stopped")[0]!.output, "HTTP_OK");
+  const message = atifResponses(snapshots)[0]!;
+  assert.equal(latest(snapshots).agent.model_name, "gemini-2.5-flash-001");
+  assert.equal(message.metrics.prompt_tokens, 120);
+  assert.equal(message.metrics.completion_tokens, 11);
+  assert.equal(message.metrics.cached_tokens, 80);
+  assert.equal(finalOutput(latest(snapshots)), "HTTP_OK");
 });
 
-test("parallel native subagents keep usage attached to their own invocation", async (t) => {
-  const { events } = await drive(
+test("parallel native subagents keep usage attached to their own invocation", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received(),
     fake([
@@ -523,33 +557,34 @@ test("parallel native subagents keep usage attached to their own invocation", as
       response([{ text: "DONE" }]),
     ]),
   );
-  const children = data(events, "subagent_returned");
+  const children = atifChildren(snapshots);
   assert.equal(children.length, 2);
   assert.deepEqual(
     children
-      .map((child) => child.subagent_usage?.input_tokens)
+      .map((child) => child.final_metrics?.total_prompt_tokens)
       .sort((a, b) => a! - b!),
     [150, 250],
   );
   assert.ok(
     children.every(
       (child) =>
-        child.subagent_usage?.responses === 1 &&
-        child.subagent_reason === "converged",
+        meta(child).usage_details === undefined &&
+        meta(child).stop_reason === "converged",
     ),
   );
-  assert.equal(data(events, "assistant_message").length, 2);
-  const generalist = data(events, "agent_started")[0]!.subagents?.find(
-    (agent) => agent.name === "generalist",
+  assert.equal(atifResponses(snapshots).length, 2);
+  const generalist = effective(snapshots).subagents?.find(
+    (agent: any) => agent.name === "generalist",
   );
   assert.ok(
     !generalist?.tools?.some(
-      (tool) => tool.name === "invoke_agent" || tool.name === "update_topic",
+      (tool: any) =>
+        tool.name === "invoke_agent" || tool.name === "update_topic",
     ),
   );
 });
 
-test("native child failures stay failures even when the parent recovers", async (t) => {
+test("native child failures stay failures even when the parent recovers", async (t: any) => {
   const generator = fake([
     response([
       call("child", "invoke_agent", {
@@ -564,16 +599,16 @@ test("native child failures stay failures even when the parent recovers", async 
     if (args[2] === "subagent") throw new Error("invalid API key (401)");
     return stream(...args);
   };
-  const { events } = await drive(t, received(), generator);
-  const child = data(events, "subagent_returned")[0]!;
-  assert.equal(child.subagent_reason, "error");
+  const { snapshots } = await drive(t, received(), generator);
+  const child = atifChildren(snapshots)[0]!;
+  assert.equal(meta(child).stop_reason, "error");
   assert.equal(child.subagent_usage, undefined);
-  assert.equal(data(events, "tool_returned")[0]!.tool_result.is_error, true);
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.equal(meta(atifResults(snapshots)[0]!).is_error, true);
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("native shell execution uses the launcher's workspace", async (t) => {
-  const { events, cwd } = await drive(
+test("native shell execution uses the launcher's workspace", async (t: any) => {
+  const { snapshots, cwd } = await drive(
     t,
     received(),
     fake([
@@ -590,13 +625,13 @@ test("native shell execution uses the launcher's workspace", async (t) => {
     readFileSync(join(cwd, "native-shell.txt"), "utf8"),
     "NATIVE_SHELL",
   );
-  const result = data(events, "tool_returned")[0]!.tool_result;
-  assert.equal(result.is_error, false, JSON.stringify(result));
+  const result = atifResults(snapshots)[0]!;
+  assert.equal(meta(result).is_error, false, JSON.stringify(result));
   assert.match(JSON.stringify(result.content), /NATIVE_SHELL/);
 });
 
-test("an explicit empty system prompt keeps the native base empty", async (t) => {
-  const { events } = await drive(
+test("an explicit empty system prompt keeps the native base empty", async (t: any) => {
+  const { snapshots } = await drive(
     t,
     received({
       system_prompt: "",
@@ -610,11 +645,14 @@ test("an explicit empty system prompt keeps the native base empty", async (t) =>
     }),
     fake([response([{ text: "OK" }])]),
   );
-  assert.equal(data(events, "agent_started")[0]!.system_prompt, "");
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "converged");
+  assert.equal(
+    latest(snapshots).steps.find((s: any) => s.source === "system")?.message,
+    "",
+  );
+  assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
-test("native main-model promotion is refused before any provider request", async (t) => {
+test("native main-model promotion is refused before any provider request", async (t: any) => {
   const generator = fake([]);
   let calls = 0;
   const stream = generator.generateContentStream.bind(generator);
@@ -622,7 +660,7 @@ test("native main-model promotion is refused before any provider request", async
     calls++;
     return stream(...args);
   };
-  const { events } = await drive(
+  const { snapshots } = await drive(
     t,
     received({
       model: {
@@ -634,10 +672,10 @@ test("native main-model promotion is refused before any provider request", async
     generator,
   );
   assert.equal(calls, 0);
-  assert.equal(data(events, "assistant_message").length, 0);
+  assert.equal(atifResponses(snapshots).length, 0);
   assert.match(
-    data(events, "error_occurred")[0]!.error_message,
+    atifErrors(snapshots)[0]!.message,
     /changed the commissioned model to gemini-3.5-flash-lite/,
   );
-  assert.equal(data(events, "agent_stopped")[0]!.reason, "error");
+  assert.equal(meta(latest(snapshots)).stop_reason, "error");
 });

@@ -33,7 +33,7 @@ jobs:
     env:
       IMAGE: ${{ matrix.image }}
       DOCKERFILE: avp-cli/src/avp_cli/agents/dockerfiles/${{ matrix.name }}.Dockerfile
-      CONTEXT: source/${{ matrix.directory }}
+      CONTEXT: source
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4

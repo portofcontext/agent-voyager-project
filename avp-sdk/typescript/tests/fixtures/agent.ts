@@ -20,6 +20,7 @@ process.exitCode = await main({
     await rec.start(planRun(commission, descriptor).started);
     if (commission.prompt === "crash") throw new Error("fixture crash");
     if (commission.prompt === "wait") {
+      process.stderr.write("ready\n");
       try {
         await setTimeout(60_000, undefined, { signal });
       } catch (error) {

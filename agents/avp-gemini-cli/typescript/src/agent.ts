@@ -1,3 +1,4 @@
+import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** Observe Gemini's session, scheduler, and generator; never drive its tool loop. */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,10 +10,9 @@ import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
 import type { Commission } from "@agent-voyager-project/sdk/commission";
 import type {
   ContentBlock,
-  EventSink,
   JsonValue,
   SubagentUsage,
-} from "@agent-voyager-project/sdk/trajectory";
+} from "@agent-voyager-project/sdk/reports";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import {
   computeCost,
@@ -30,7 +30,7 @@ export interface RunOptions {
 }
 export async function run(
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   options: RunOptions = {},
 ): Promise<void> {
   const prices = await loadPrices();
@@ -104,6 +104,20 @@ export async function run(
             );
             return;
           }
+          const capturedSkills = skills(config, true).map((skill) => {
+            const native = config
+              .getSkillManager()
+              .getSkills()
+              .find((item) => item.name === skill.name)!;
+            return {
+              ...skill,
+              ...(!skill.source
+                ? {
+                    files: { "instructions.md": native.body ?? "" },
+                  }
+                : {}),
+            };
+          });
           await rec.start({
             ...plan.started,
             system_prompt: core.getCoreSystemPrompt(
@@ -111,7 +125,7 @@ export async function run(
               config.getSystemInstructionMemory(),
             ),
             tools: declared,
-            skills: skills(config),
+            skills: capturedSkills,
             subagents: subagents(config, commission.model.id),
             mcp_servers: plan.started.mcp_servers?.map((server) => ({
               ...server,

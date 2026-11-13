@@ -36,8 +36,8 @@ from pydantic_ai.messages import (
 from pydantic_core import to_jsonable_python
 
 from avp.recorder import UsageReport
-from avp.trajectory import Citation as AVPCitation
-from avp.trajectory import (
+from avp.reports import Citation as AVPCitation
+from avp.reports import (
     ContentBlock,
     ErrorCode,
     ImageBlock,

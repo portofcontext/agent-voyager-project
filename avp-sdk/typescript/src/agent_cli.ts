@@ -1,13 +1,17 @@
-import { appendFile } from "node:fs/promises";
-import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, basename } from "node:path";
+import { parseCommission } from "./commission.js";
+import { parseAgentStart } from "./agent_start.js";
+import { atomicWrite, localPath, writeDocument } from "./_files.js";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
-import type { EventSink, JsonValue } from "./trajectory.js";
-export type { EventSink } from "./trajectory.js";
+import { avpMetadata, type TrajectorySink } from "./trajectory.js";
+import type { JsonValue } from "./reports.js";
+export type { TrajectorySink } from "./trajectory.js";
 
 export type RunFn = (
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   signal: AbortSignal,
 ) => Promise<void>;
 export type DescribeFn = () => AgentDescriptor | Promise<AgentDescriptor>;
@@ -27,12 +31,40 @@ function stdout(text: string): Promise<void> {
     process.stdout.write(text, (error) => (error ? reject(error) : resolve())),
   );
 }
-export function ndjsonSink(out?: string): EventSink {
-  if (out !== undefined) writeFileSync(out, "");
-  return async (event) => {
-    const line = `${JSON.stringify(event)}\n`;
-    if (out === undefined) await stdout(line);
-    else await appendFile(out, line);
+export function trajectorySink(out?: string): TrajectorySink {
+  return async (snapshot) => {
+    const text = `${JSON.stringify(snapshot.trajectory, undefined, 2)}\n`;
+    if (out === undefined) {
+      if (avpMetadata(snapshot.trajectory).complete) {
+        if (snapshot.assets.size)
+          throw new Error("media requires --out with a file path");
+        await stdout(text);
+      }
+      return;
+    }
+    if (
+      ["commission.json", "descriptor.json", "agent-start.json"].includes(
+        basename(out),
+      )
+    )
+      throw new Error("trajectory path conflicts with a run document");
+    const directory = dirname(out);
+    mkdirSync(directory, { recursive: true });
+    for (const [name, document, parse] of [
+      ["commission.json", snapshot.commission, parseCommission],
+      ["descriptor.json", snapshot.descriptor, parseDescriptor],
+      ["agent-start.json", snapshot.agentStart, parseAgentStart],
+    ] as const)
+      if (document != null) writeDocument(directory, name, document, parse);
+    for (const [name, bytes] of snapshot.assets) {
+      const path = localPath(directory, name);
+      if (path === localPath(directory, basename(out)))
+        throw new Error("an image cannot replace the trajectory");
+      if (!existsSync(path)) atomicWrite(path, bytes);
+      else if (!readFileSync(path).equals(Buffer.from(bytes)))
+        throw new Error(`image already exists with different content: ${name}`);
+    }
+    atomicWrite(out, Buffer.from(text));
   };
 }
 async function write(out: string | undefined, text: string): Promise<void> {
@@ -75,12 +107,12 @@ export async function main({
     });
   app
     .command("run")
-    .description("Run a Commission and write its Trajectory as NDJSON.")
+    .description("Run a Commission and write its Trajectory as ATIF JSON.")
     .requiredOption("--commission <path-or-json>", "A path, or inline JSON.")
-    .requiredOption("--out <path>", "Where to write the NDJSON, or -.")
+    .requiredOption("--out <path>", "Where to write the ATIF document, or -.")
     .action(
       async ({ commission, out }: { commission: string; out: string }) => {
-        const sink = ndjsonSink(out === "-" ? undefined : out);
+        const sink = trajectorySink(out === "-" ? undefined : out);
         const received = readCommission(commission);
         const controller = new AbortController();
         const interrupt = () => {

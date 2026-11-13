@@ -7,7 +7,7 @@ import type {
   ToolPart,
 } from "@opencode-ai/sdk/v2/client";
 import type { Recorder } from "@agent-voyager-project/sdk/recorder";
-import type { JsonValue } from "@agent-voyager-project/sdk/trajectory";
+import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 import * as translate from "./translate.js";
 interface Message {
   session: string;

@@ -7,6 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
+import assertions as atif
 import pytest
 from test_agent import MODEL, run_cli
 
@@ -85,14 +86,14 @@ def endpoint(tmp_path, monkeypatch):
             self.send_response(200)
             self.send_header("content-type", "text/event-stream")
             self.end_headers()
-            for event in events:
-                self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
+            for e in events:
+                self.wfile.write(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n".encode())
                 self.wfile.flush()
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
-    yield f"http://127.0.0.1:{server.server_port}", requests, headers, calls
+    yield (f"http://127.0.0.1:{server.server_port}", requests, headers, calls)
     server.shutdown()
     server.server_close()
     worker.join()
@@ -140,19 +141,20 @@ def test_native_round_trip(endpoint, tmp_path, operation):
     _, events = run_cli(
         tmp_path, model={**MODEL, "base_url": url, "credential": {"proxy": "anthropic"}}, **fields
     )
-    assert events[-1]["data"] == {"reason": "converged", "output": "DONE"}
-    responses = [e["data"] for e in events if e["type"] == "assistant_message"]
-    assert [e["usage"]["input_tokens"] for e in responses] == (
+    assert {
+        "reason": atif.meta(events).get("stop_reason"),
+        "output": atif.output(events),
+    } == {"reason": "converged", "output": "DONE"}
+    responses = atif.responses(events)
+    assert [e["metrics"]["prompt_tokens"] for e in responses] == (
         [15] if operation == "text" else [15, 25]
     )
     assert all(h.get("x-api-key") == "avp-proxy-stand-in" for h in headers)
     if operation != "text":
-        result = next(e["data"] for e in events if e["type"] == "tool_returned")
-        assert result["tool_call_id"] == "call"
-        assert result["tool_result"].get("is_error", False) == (operation == "mcp_error")
-        assert ("EXPECTED" if operation == "mcp_error" else "BOUNDARY") in str(
-            result["tool_result"]["content"]
-        )
+        result = atif.results(events)[0]
+        assert result["source_call_id"] == "call"
+        assert atif.meta(result).get("is_error", False) == (operation == "mcp_error")
+        assert ("EXPECTED" if operation == "mcp_error" else "BOUNDARY") in str(result["content"])
     assert len(requests) == len(responses)
 
 
@@ -161,7 +163,7 @@ def test_native_gateway_bearer_auth_is_launcher_owned(endpoint, tmp_path, monkey
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "avp-gateway-token")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     _, events = run_cli(tmp_path, model={**MODEL, "base_url": url})
-    assert events[-1]["data"]["reason"] == "converged"
+    assert atif.meta(events)["stop_reason"] == "converged"
     assert (
         headers[0].get("authorization", headers[0].get("Authorization"))
         == "Bearer avp-gateway-token"
