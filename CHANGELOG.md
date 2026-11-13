@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- Remove custom partial totals and opaque-child usage summaries from ATIF.
+  Eval readers reconstruct partial sums without double-counting child totals.
+  Keep MCP ownership in the effective-configuration artifact and omit duplicate
+  tool-call ID aliases. Rename tool-call `started_at` to `observed_at` to distinguish
+  report timing from actual execution start.
+
 - Remove repeated response model metadata, tool ownership, derived timing,
   default flags, accounting boilerplate, and the automatic result artifact.
   Reuse the final agent message when it exactly matches the returned text.

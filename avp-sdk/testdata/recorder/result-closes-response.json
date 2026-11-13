@@ -146,11 +146,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {
@@ -204,7 +199,7 @@
             "arguments": {},
             "extra": {
               "avp": {
-                "started_at": "2026-01-01T00:00:00.010000Z"
+                "observed_at": "2026-01-01T00:00:00.010000Z"
               }
             }
           }
@@ -260,14 +255,7 @@
       "total_steps": 3,
       "total_prompt_tokens": 2000,
       "total_completion_tokens": 200,
-      "total_cost_usd": 0.009,
-      "extra": {
-        "avp": {
-          "known_totals": {
-            "total_cached_tokens": 0
-          }
-        }
-      }
+      "total_cost_usd": 0.009
     }
   }
 }

@@ -338,15 +338,17 @@ test("native MCP connection and parallel tools preserve ownership and both error
       response([{ text: "DONE" }]),
     ]),
   );
-  const started = latest(snapshots).agent;
   assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
-    meta(
-      started.tool_definitions?.find((tool: any) =>
-        tool.function.name.endsWith("Avptest_Echo"),
-      ),
-    ).mcp_server_id,
+    effective(snapshots).tools.find((tool: any) =>
+      tool.name.endsWith("Avptest_Echo"),
+    )?.mcp_server_id,
     "avptest",
+  );
+  assert.ok(
+    latest(snapshots).agent.tool_definitions.every(
+      (tool: any) => meta(tool).mcp_server_id === undefined,
+    ),
   );
   const returned = atifResults(snapshots);
   assert.equal(returned.length, 3);
@@ -380,7 +382,7 @@ test("native subagent model calls roll up exactly once on their invocation", asy
   );
   assert.equal(atifChildren(snapshots).length, 1);
   const returned = atifChildren(snapshots)[0]!;
-  assert.equal(meta(returned).usage_details?.responses, 1);
+  assert.equal(meta(returned).usage_details, undefined);
   assert.equal(returned.final_metrics?.total_prompt_tokens, 120);
   assert.equal(returned.final_metrics?.total_completion_tokens, 8);
   assert.equal(atifResponses(snapshots).length, 2);
@@ -568,7 +570,7 @@ test("parallel native subagents keep usage attached to their own invocation", as
   assert.ok(
     children.every(
       (child) =>
-        meta(child).usage_details?.responses === 1 &&
+        meta(child).usage_details === undefined &&
         meta(child).stop_reason === "converged",
     ),
   );

@@ -56,10 +56,12 @@ trace exporter rejects images; use a multimodal consumer for those runs.
 
 Standard ATIF fields carry messages, public reasoning, tool calls, observations,
 child trajectories, model identity, tool schemas, usage, and cost. `extra.avp`
-retains typed final output, terminal reason, errors, timing, MCP ownership, and
+retains typed final output, terminal reason, errors, observed timing,
 cache-write/reasoning-token distinctions, citations, and provider annotations.
 Unknown usage is omitted. Opaque child usage is counted only when individual
-child responses are unavailable.
+child responses are unavailable. Partial sums are calculated by readers from
+recorded metrics; missing measurements remain unknown. MCP ownership is read
+from the full tool catalog in `inputs/effective-agent.json`.
 
 Full configuration, complete skill directories, and generated files are preserved
 as [run artifacts](../../spec/v0.1/artifacts.md). The manifest lists only path,

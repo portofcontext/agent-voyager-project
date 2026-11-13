@@ -223,7 +223,7 @@ def test_native_tool_round_trips_keep_response_boundaries(model_endpoint, tmp_pa
         assert "BOUNDARY" in str(returned["call"]["content"])
         assert (
             atif.mcp_server(
-                events, next(item for item in invoked if item["tool_call_id"] == "call")
+                tmp_path, next(item for item in invoked if item["tool_call_id"] == "call")
             )
             == "fixture"
         )

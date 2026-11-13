@@ -53,7 +53,6 @@ interface Call {
   time: number;
   returned: boolean;
   step?: any;
-  server?: string;
 }
 interface Subagent {
   name: string;
@@ -232,11 +231,17 @@ export class Recorder {
         parameters: t.inputSchema,
         ...(t.description != null ? { description: t.description } : {}),
       },
-      ...(Object.keys(remaining(t, ["name", "description", "inputSchema"]))
-        .length
+      ...(Object.keys(
+        remaining(t, ["name", "description", "inputSchema", "mcp_server_id"]),
+      ).length
         ? {
             extra: {
-              avp: remaining(t, ["name", "description", "inputSchema"]),
+              avp: remaining(t, [
+                "name",
+                "description",
+                "inputSchema",
+                "mcp_server_id",
+              ]),
             },
           }
         : {}),
@@ -356,9 +361,6 @@ export class Recorder {
         parent,
         time: now,
         returned: false,
-        server:
-          this.started!.tools?.find((t) => t.name === call.name)
-            ?.mcp_server_id ?? undefined,
       });
       response.callIds.add(call.id);
     }
@@ -462,16 +464,13 @@ export class Recorder {
       };
       if (block.type === "server_tool_use") metadata(call).server_side = true;
       const extra = remaining(block, ["type", "id", "name", "input"]);
+      for (const alias of ["provider_call_id", "call_id", "tool_call_id"])
+        if (extra[alias] === block.id) delete extra[alias];
       if (Object.keys(extra).length) metadata(call).provider_metadata = extra;
       if (block.type === "tool_use") {
         const state = this.calls.get(block.id)!;
         state.step = step;
-        metadata(call).started_at = new Date(state.time).toISOString();
-        const declaredServer = doc.data.agent.tool_definitions?.find(
-          (t: any) => t.function.name === block.name,
-        )?.extra?.avp?.mcp_server_id;
-        if (state.server && state.server !== declaredServer)
-          metadata(call).mcp_server_id = state.server;
+        metadata(call).observed_at = new Date(state.time).toISOString();
       }
       (step.tool_calls ??= []).push(call);
     }
@@ -620,9 +619,6 @@ export class Recorder {
       if (!doc.usages.length) {
         const counts = usage ?? {};
         doc.usages.push(counts);
-        const details = metrics(counts).extra?.avp;
-        if (details && Object.keys(details).length)
-          metadata(doc.data).usage_details = details;
       }
     });
   }

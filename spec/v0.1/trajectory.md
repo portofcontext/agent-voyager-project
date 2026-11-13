@@ -75,16 +75,15 @@ fields shown first.
     "outputSchema": {
       "type": "object"
     },
-    "mcp_server_id": "math",
     "annotations": {
       "readOnlyHint": true
     }
   },
   "steps[source=agent].extra.avp": {
     "duration_ms": 800,
-    "provider": "openai",
-    "base_url": "https://api.openai.com/v1",
-    "requested_model": "example-model",
+    "provider": "anthropic",
+    "base_url": "https://proxy.example/v1",
+    "requested_model": "alternate-model",
     "finish_reasons": [
       "end_turn"
     ],
@@ -121,12 +120,11 @@ fields shown first.
     "error_code": "auth_error"
   },
   "steps[].tool_calls[].extra.avp": {
-    "started_at": "2026-01-01T00:00:01Z",
-    "mcp_server_id": "math",
     "server_side": true,
     "provider_metadata": {
-      "provider_call_id": "native-call-1"
-    }
+      "provider_call_id": "distinct-provider-id"
+    },
+    "observed_at": "2026-01-01T00:00:01Z"
   },
   "steps[].observation.results[].extra.avp": {
     "finished_at": "2026-01-01T00:00:01.200Z",
@@ -155,22 +153,6 @@ fields shown first.
     "cache_creation_input_tokens": 20,
     "reasoning_output_tokens": 12,
     "cost_source": "reported"
-  },
-  "final_metrics.extra.avp": {
-    "known_totals": {
-      "total_prompt_tokens": 100,
-      "total_completion_tokens": 20,
-      "total_cached_tokens": 10,
-      "total_cost_usd": 0.001
-    }
-  },
-  "subagent_trajectories[].extra.avp (additional fields)": {
-    "usage_details": {
-      "cache_creation_input_tokens": 20,
-      "reasoning_output_tokens": 12,
-      "cost_source": "reported",
-      "responses": 2
-    }
   }
 }
 ```
@@ -182,10 +164,14 @@ fields shown first.
 - To read a response, use its `model_name` or `agent.model_name`. For provider
   and endpoint, use a step override or the agent default. A step's `base_url: null` explicitly clears an inherited endpoint. For the requested model, use
   a step override, then `agent.extra.avp.requested_model`, then `agent.model_name`.
-- Calls inherit `mcp_server_id` from the matching tool definition in their
-  document; a call only records it when the declaration does not supply it.
-  `server_side` is present only when true. Tool and child durations are derived
-  from their start and finish timestamps.
+- MCP ownership lives in the tool catalog in `inputs/effective-agent.json`.
+  Match recorded calls to that catalog by `function_name`; the trace does not
+  repeat `mcp_server_id` on definitions or calls.
+- `observed_at` records when the Recorder receives a runtime-executed tool call.
+  It is not a guaranteed execution-start time. The interval to the result's
+  `finished_at` includes any dispatch, queueing, and reporting delays.
+  `server_side` is present only for provider-executed tools; these calls do not
+  receive an SDK-observed start timestamp.
 - `output` is present only when the returned value differs from the last root
   agent message or has a different JSON type. When absent on a complete run,
   use that message. An explicit `output: null` means no returned result, even
@@ -193,19 +179,22 @@ fields shown first.
   result. The SDK does not copy the result into an artifact.
 - `annotations` and `provider_metadata` are open objects. Their sample keys
   above illustrate runtime/provider data, not a fixed AVP field list.
-- Tool definitions retain `title`, `outputSchema`, `mcp_server_id`, and any
-  additional MCP fields, including MCP `annotations`.
+- Tool definitions retain `title`, `outputSchema`, and additional MCP fields,
+  including MCP `annotations`; MCP server ownership stays in the artifact catalog.
+- A tool's standard `tool_call_id` is canonical. Matching `provider_call_id`,
+  `call_id`, and `tool_call_id` aliases are omitted from `provider_metadata`.
+  A distinct provider identifier is preserved when supplied.
 - `message_metadata` and `content_metadata` entries contain `part_index` and
   `annotations`. Those annotations preserve citations, refusal flags, image
   source metadata, and other provider content fields.
 - `reasoning_metadata` preserves `signature`, `redacted`, and other provider
   fields. `start`/`end` locate public reasoning text; `encrypted_content` holds
   redacted reasoning instead of exposing it as public text.
-- `known_totals` contains only measured partial sums for metrics whose full
-  totals are unknown. Complete totals use standard ATIF fields. Both count
-  descendants once. Empty extension objects are omitted.
-- `usage_details` is only for opaque children without recorded responses.
-  `cost_source` is `computed`, `reported`, or `unknown`.
+- Complete usage totals use standard ATIF `final_metrics`. Unknown totals stay
+  absent. Readers may calculate partial sums from step metrics and opaque-child
+  totals, counting each descendant once; no partial-total extension is stored.
+- Opaque children retain standard aggregate metrics without a second usage
+  summary. Per-response `cost_source` is `computed`, `reported`, or `unknown`.
 
 </details>
 

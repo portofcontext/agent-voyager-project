@@ -91,7 +91,10 @@
           "name": "read_file",
           "input": {
             "path": "a.py"
-          }
+          },
+          "provider_call_id": "call-1",
+          "call_id": "call-1",
+          "tool_call_id": "call-1"
         },
         {
           "type": "tool_use",
@@ -99,7 +102,8 @@
           "name": "search",
           "input": {
             "q": "x"
-          }
+          },
+          "provider_call_id": "distinct-native-id"
         }
       ],
       "usage": {
@@ -167,11 +171,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {
@@ -227,7 +226,7 @@
             },
             "extra": {
               "avp": {
-                "started_at": "2026-01-01T00:00:00.010000Z"
+                "observed_at": "2026-01-01T00:00:00.010000Z"
               }
             }
           },
@@ -239,7 +238,10 @@
             },
             "extra": {
               "avp": {
-                "started_at": "2026-01-01T00:00:00.010000Z"
+                "observed_at": "2026-01-01T00:00:00.010000Z",
+                "provider_metadata": {
+                  "provider_call_id": "distinct-native-id"
+                }
               }
             }
           }
@@ -305,14 +307,7 @@
       "total_steps": 3,
       "total_prompt_tokens": 2000,
       "total_completion_tokens": 200,
-      "total_cost_usd": 0.009,
-      "extra": {
-        "avp": {
-          "known_totals": {
-            "total_cached_tokens": 0
-          }
-        }
-      }
+      "total_cost_usd": 0.009
     }
   }
 }

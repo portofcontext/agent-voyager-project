@@ -73,17 +73,10 @@ function atifCalls(snapshots: Trajectory[]): any[] {
   return atifResponses(snapshots).flatMap((s) => s.tool_calls ?? []);
 }
 function mcpServer(snapshots: Trajectory[], call: any): string | undefined {
-  const doc = docs(latest(snapshots)).find((d) =>
-    d.steps.some((s: any) => s.tool_calls?.includes(call)),
-  );
-  return (
-    meta(call).mcp_server_id ??
-    meta(
-      doc.agent.tool_definitions?.find(
-        (t: any) => t.function.name === call.function_name,
-      ),
-    ).mcp_server_id
-  );
+  assert.equal(meta(call).mcp_server_id, undefined);
+  return effective(snapshots).tools.find(
+    (t: any) => t.name === call.function_name,
+  )?.mcp_server_id;
 }
 function atifResults(snapshots: Trajectory[]): any[] {
   return docs(latest(snapshots))

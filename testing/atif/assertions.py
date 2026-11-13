@@ -61,19 +61,12 @@ def errors(root: dict) -> list[dict]:
     return [s for d in documents(root) for s in d["steps"] if meta(s).get("error_code")]
 
 
-def mcp_server(root: dict, call: dict) -> str | None:
-    for doc in documents(root):
-        if any(call is c for step in doc["steps"] for c in step.get("tool_calls", [])):
-            declared = next(
-                (
-                    meta(t).get("mcp_server_id")
-                    for t in doc["agent"].get("tool_definitions", [])
-                    if t["function"]["name"] == call["function_name"]
-                ),
-                None,
-            )
-            return meta(call).get("mcp_server_id", declared)
-    raise AssertionError("call missing from trajectory")
+def mcp_server(directory: Path, call: dict) -> str | None:
+    assert "mcp_server_id" not in meta(call)
+    tool = next(
+        t for t in effective(directory).get("tools", []) if t["name"] == call["function_name"]
+    )
+    return tool.get("mcp_server_id")
 
 
 def output(root: dict):

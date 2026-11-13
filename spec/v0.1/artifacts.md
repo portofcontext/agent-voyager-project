@@ -47,7 +47,8 @@ File sinks write `artifacts.json` beside the requested trajectory file. Each run
 uses its own directory. The SDK
 records the validated Commission and Descriptor under `inputs/`, the effective
 configuration in `inputs/effective-agent.json`, and full skill directories under
-`inputs/skills/`. Effective configuration points at the captured skill files.
+`inputs/skills/`. Effective configuration points at the captured skill files and
+retains the full tool catalog, including MCP server ownership.
 Media and explicitly reported output files are output artifacts. The returned
 result stays in ATIF, using `extra.avp.output` only when it differs from the
 final agent message; the SDK does not copy it into a file. Execution and response metadata stay in the ATIF trace, using

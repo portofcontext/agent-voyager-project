@@ -212,7 +212,7 @@ def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_pa
     responses = atif.responses(events)
     assert [item["metrics"]["prompt_tokens"] for item in responses] == [10, 20]
     assert responses[0]["metrics"]["cached_tokens"] == 3
-    assert atif.mcp_server(events, atif.calls(events)[0]) == "echo"
+    assert atif.mcp_server(tmp_path, atif.calls(events)[0]) == "echo"
     assert atif.meta(atif.results(events)[0])["is_error"] is True
     assert {
         "reason": atif.meta(events).get("stop_reason"),

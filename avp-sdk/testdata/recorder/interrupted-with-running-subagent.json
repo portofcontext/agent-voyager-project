@@ -122,11 +122,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {
@@ -205,32 +200,12 @@
           }
         },
         "final_metrics": {
-          "total_steps": 1,
-          "extra": {
-            "avp": {
-              "known_totals": {
-                "total_prompt_tokens": 0,
-                "total_completion_tokens": 0,
-                "total_cached_tokens": 0,
-                "total_cost_usd": 0
-              }
-            }
-          }
+          "total_steps": 1
         }
       }
     ],
     "final_metrics": {
-      "total_steps": 2,
-      "extra": {
-        "avp": {
-          "known_totals": {
-            "total_prompt_tokens": 0,
-            "total_completion_tokens": 0,
-            "total_cached_tokens": 0,
-            "total_cost_usd": 0
-          }
-        }
-      }
+      "total_steps": 2
     }
   }
 }

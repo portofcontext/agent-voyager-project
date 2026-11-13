@@ -131,12 +131,12 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
         t for t in events["agent"]["tool_definitions"] if t["function"]["name"] == "Avptest_Add"
     )
     assert (
-        atif.meta(add)["mcp_server_id"] == "t"
+        "mcp_server_id" not in atif.meta(add)
         and add["function"]["description"]
         and add["function"]["parameters"]
     )
     invoked = atif.calls(events)
-    assert {atif.mcp_server(events, i) for i in invoked} == {"t"}
+    assert {atif.mcp_server(tmp_path, i) for i in invoked} == {"t"}
     results = _results(events)
     assert set(results) == {"c_add", "c_result", "c_proto"}
     for call, text, failed in [

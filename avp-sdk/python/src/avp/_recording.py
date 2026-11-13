@@ -158,7 +158,6 @@ class _Document:
         for child in self.children:
             usages.extend(child.finish())
         totals: dict[str, Any] = {"total_steps": len(self.data["steps"])}
-        known: dict[str, Any] = {}
         for source, target in (
             ("input_tokens", "total_prompt_tokens"),
             ("output_tokens", "total_completion_tokens"),
@@ -172,10 +171,6 @@ class _Document:
             ]
             if len(measured) == len(usages):
                 totals[target] = sum(measured)
-            else:
-                known[target] = sum(measured)
-        if known:
-            totals["extra"] = _extra(known_totals=known)
         self.data["final_metrics"] = totals
         return usages
 

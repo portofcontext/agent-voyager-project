@@ -406,15 +406,17 @@ test("native MCP tools retain server ownership, parallel call IDs, and both erro
       { text: "DONE" },
     ],
   );
-  const started = latest(snapshots).agent;
   assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
-    meta(
-      started.tool_definitions?.find(
-        (t: any) => t.function.name === "avptest_Avptest_Echo",
-      ),
-    ).mcp_server_id,
+    effective(snapshots).tools.find((tool: any) =>
+      tool.name.endsWith("Avptest_Echo"),
+    )?.mcp_server_id,
     "avptest",
+  );
+  assert.ok(
+    latest(snapshots).agent.tool_definitions.every(
+      (tool: any) => meta(tool).mcp_server_id === undefined,
+    ),
   );
   const returns = atifResults(snapshots);
   assert.equal(returns.length, 3);

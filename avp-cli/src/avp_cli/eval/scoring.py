@@ -42,43 +42,48 @@ class Totals(BaseModel):
         totals = cls()
         if trajectory is None:
             return totals
-        unknown: set[str] = set()
         for doc in documents(trajectory):
             for step in doc.steps:
-                if step.source == "agent" and not step.is_copied_context:
+                if step.is_copied_context:
+                    continue
+                if step.source == "agent":
                     totals.turns += step.llm_call_count if step.llm_call_count is not None else 1
-                    usage = step.metrics
-                    if step.llm_call_count != 0:
-                        for source, target in (
-                            ("prompt_tokens", "input_tokens"),
-                            ("completion_tokens", "output_tokens"),
-                            ("cost_usd", "cost_usd"),
-                        ):
-                            if usage is None or getattr(usage, source) is None:
-                                unknown.add(target)
-                    if usage:
-                        totals.input_tokens += usage.prompt_tokens or 0
-                        totals.output_tokens += usage.completion_tokens or 0
-                        totals.cost_usd += usage.cost_usd or 0
                 for call in step.tool_calls or []:
                     totals.tool_calls[call.function_name] = (
                         totals.tool_calls.get(call.function_name, 0) + 1
                     )
-        final = trajectory.final_metrics
-        if final:
-            known = (final.extra or {}).get("avp", {}).get("known_totals", {})
-            for source, target in (
-                ("total_prompt_tokens", "input_tokens"),
-                ("total_completion_tokens", "output_tokens"),
-                ("total_cost_usd", "cost_usd"),
-            ):
-                value = getattr(final, source)
-                if value is not None:
-                    setattr(totals, target, value)
-                    unknown.discard(target)
-                elif source in known:
-                    setattr(totals, target, known[source])
-                    unknown.add(target)
+
+        def measured(doc: Trajectory, field: str, aggregate: str) -> tuple[int | float, bool]:
+            # A document's reported total already includes its descendants.
+            value = getattr(doc.final_metrics, aggregate) if doc.final_metrics else None
+            if value is not None:
+                return value, True
+            amount: int | float = 0
+            complete = any(s.source == "agent" for s in doc.steps)
+            for step in doc.steps:
+                if step.source != "agent" or step.is_copied_context or step.llm_call_count == 0:
+                    continue
+                value = getattr(step.metrics, field) if step.metrics else None
+                if value is None:
+                    complete = False
+                else:
+                    amount += value
+            for child in doc.subagent_trajectories or []:
+                partial, child_complete = measured(child, field, aggregate)
+                amount += partial
+                complete = complete and child_complete
+            return amount, complete
+
+        unknown: set[str] = set()
+        for field, aggregate, target in (
+            ("prompt_tokens", "total_prompt_tokens", "input_tokens"),
+            ("completion_tokens", "total_completion_tokens", "output_tokens"),
+            ("cost_usd", "total_cost_usd", "cost_usd"),
+        ):
+            value, complete = measured(trajectory, field, aggregate)
+            setattr(totals, target, value if target == "cost_usd" else int(value))
+            if not complete:
+                unknown.add(target)
         totals.unknown_metrics = sorted(unknown)
         return totals
 

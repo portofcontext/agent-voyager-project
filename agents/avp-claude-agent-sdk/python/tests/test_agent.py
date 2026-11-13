@@ -463,9 +463,5 @@ def test_native_child_usage_is_kept_only_when_its_responses_are_opaque(script, t
         assert usage["total_prompt_tokens"] == 60
         assert usage["total_completion_tokens"] == 8
         assert usage["total_cached_tokens"] == 20
-        assert atif.meta(child)["usage_details"]["cache_creation_input_tokens"] == 30
-        assert atif.meta(child)["usage_details"]["reasoning_output_tokens"] == 3
-        assert (
-            atif.meta(child)["usage_details"]["cost_source"] == "computed"
-            and usage["total_cost_usd"] > 0
-        )
+        assert "usage_details" not in atif.meta(child)
+        assert usage["total_cost_usd"] > 0

@@ -80,7 +80,6 @@ class UsageReport(BaseModel):
 class _Call:
     name: str
     input: dict[str, JsonValue]
-    mcp_server_id: str | None
     subagent_invocation_id: str | None
     time: datetime
     returned: bool = False
@@ -248,8 +247,14 @@ class Recorder:
                     **({"description": t["description"]} if "description" in t else {}),
                 },
                 **(
-                    {"extra": {"avp": _remaining(t, {"name", "description", "inputSchema"})}}
-                    if _remaining(t, {"name", "description", "inputSchema"})
+                    {
+                        "extra": {
+                            "avp": _remaining(
+                                t, {"name", "description", "inputSchema", "mcp_server_id"}
+                            )
+                        }
+                    }
+                    if _remaining(t, {"name", "description", "inputSchema", "mcp_server_id"})
                     else {}
                 ),
             }
@@ -359,11 +364,8 @@ class Recorder:
             response.duration_ms = duration_ms
         if meta:
             response.meta.update(meta)
-        servers = {t.name: t.mcp_server_id for t in self._started.tools or []}
         for call in calls:
-            self._calls[call.id] = _Call(
-                call.name, call.input, servers.get(call.name), subagent_invocation_id, now
-            )
+            self._calls[call.id] = _Call(call.name, call.input, subagent_invocation_id, now)
             response.call_ids.add(call.id)
         if key is None:
             await self.close_response()
@@ -458,22 +460,16 @@ class Recorder:
                 }
                 if block["type"] == "server_tool_use":
                     _metadata(call)["server_side"] = True
-                if extra := _remaining(block, {"type", "id", "name", "input"}):
+                extra = _remaining(block, {"type", "id", "name", "input"})
+                for alias in ("provider_call_id", "call_id", "tool_call_id"):
+                    if extra.get(alias) == block["id"]:
+                        extra.pop(alias)
+                if extra:
                     _metadata(call)["provider_metadata"] = extra
                 if block["type"] == "tool_use":
                     state = self._calls[block["id"]]
                     state.step = step
-                    _metadata(call)["started_at"] = state.time.isoformat()
-                    declared_server = next(
-                        (
-                            t.get("extra", {}).get("avp", {}).get("mcp_server_id")
-                            for t in doc.data["agent"].get("tool_definitions", [])
-                            if t["function"]["name"] == block["name"]
-                        ),
-                        None,
-                    )
-                    if state.mcp_server_id and state.mcp_server_id != declared_server:
-                        _metadata(call)["mcp_server_id"] = state.mcp_server_id
+                    _metadata(call)["observed_at"] = state.time.isoformat()
                 step.setdefault("tool_calls", []).append(call)
         for block in blocks:
             if block["type"] in ("tool_result", "server_tool_result"):
@@ -610,7 +606,5 @@ class Recorder:
             if not doc.usages:
                 counts = usage.model_dump(exclude_none=True) if usage else {}
                 doc.usages.append(counts)
-                if details := _metrics(counts).get("extra", {}).get("avp", {}):
-                    _metadata(doc.data)["usage_details"] = details
 
         await self._write(update)

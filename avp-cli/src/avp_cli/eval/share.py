@@ -44,7 +44,8 @@ class Shared(BaseModel):
 
 
 def _duration(call, result):
-    started = avp_metadata(call).get("started_at") if call else None
+    """Elapsed time between SDK observations, including dispatch/reporting delays."""
+    started = avp_metadata(call).get("observed_at") if call else None
     finished = avp_metadata(result).get("finished_at")
     if not isinstance(started, str) or not isinstance(finished, str):
         return None
@@ -151,6 +152,7 @@ def _brief(
     extra = (agent.extra or {}).get("avp", {})
     if effective is not None:
         extra = {**effective, **effective.get("model", {}), **extra}
+    catalog = {t["name"]: t for t in (effective or {}).get("tools", [])}
     tools = []
     for definition in agent.tool_definitions or []:
         function = definition.get("function", {})
@@ -170,9 +172,7 @@ def _brief(
                     "name": function.get("name"),
                     "description": _cut(function.get("description", ""), 1200),
                     "params": params or None,
-                    "mcp_server_id": definition.get("extra", {})
-                    .get("avp", {})
-                    .get("mcp_server_id"),
+                    "mcp_server_id": catalog.get(function.get("name"), {}).get("mcp_server_id"),
                 }.items()
                 if v is not None
             }

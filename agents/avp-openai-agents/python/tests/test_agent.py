@@ -142,7 +142,7 @@ def test_native_mcp_tools_and_error_results_pair(script, tmp_path, mode):
     results = {e["source_call_id"]: e for e in atif.results(events)}
     invoked = {e["tool_call_id"]: e for e in atif.calls(events)}
     assert set(results) == set(invoked)
-    assert all(atif.mcp_server(events, e) == "fixture" for e in invoked.values())
+    assert all(atif.mcp_server(tmp_path, e) == "fixture" for e in invoked.values())
     assert "BOUNDARY" in str(results["one"]["content"])
     if mode == "parallel":
         assert "SECOND" in str(results["two"]["content"])

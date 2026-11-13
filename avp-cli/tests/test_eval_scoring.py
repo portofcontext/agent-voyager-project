@@ -17,6 +17,7 @@ from avp_cli.eval.scoring import (
     Score,
     ScorerError,
     ScorerInput,
+    Totals,
     call,
     read,
     score,
@@ -205,3 +206,124 @@ def test_external_multimodal_output_and_unknown_extensions(tmp_path):
     run = run_in(tmp_path, doc)
     assert run.output == doc["steps"][-1]["message"]
     assert run.reason is None
+
+
+@pytest.mark.parametrize(
+    "name,prompt,completion,cost,unknown",
+    [
+        ("cost-sources", 5000, 500, 0.50903, ["cost_usd", "input_tokens", "output_tokens"]),
+        ("empty-response", 1000, 100, 0.0045, []),
+        ("error-after-start", 1000, 100, 0.0045, []),
+        (
+            "interrupted-with-running-subagent",
+            0,
+            0,
+            0,
+            ["cost_usd", "input_tokens", "output_tokens"],
+        ),
+        ("model-defaults", 0, 0, 0, ["cost_usd", "input_tokens", "output_tokens"]),
+        ("no-commission", 0, 0, 0, []),
+        ("plain-response", 1000, 100, 0.0045, []),
+        ("refused-check", 0, 0, 0, []),
+        ("refused-invalid", 0, 0, 0, []),
+        ("rejected-reports", 1000, 100, 0.0045, []),
+        ("result-closes-response", 2000, 200, 0.009, []),
+        ("stop-before-start", 0, 0, 0, []),
+        (
+            "stop-with-running-work",
+            1000,
+            100,
+            0.0045,
+            ["cost_usd", "input_tokens", "output_tokens"],
+        ),
+        ("streamed-response", 2000, 200, 0.006, []),
+        ("subagent-error", 1500, 120, 0.0045, ["cost_usd"]),
+        ("subagent-from-tool", 4000, 400, 0.018, []),
+        ("tool-calls", 2000, 200, 0.009, []),
+    ],
+)
+def test_partial_totals_are_derived_without_avp_aggregate_extensions(
+    name, prompt, completion, cost, unknown
+):
+    path = Path(__file__).resolve().parents[2] / "avp-sdk/testdata/recorder" / f"{name}.json"
+    doc = Trajectory.model_validate(json.loads(path.read_text())["trajectory"])
+    totals = Totals.of(doc)
+    assert totals.input_tokens == prompt
+    assert totals.output_tokens == completion
+    assert totals.cost_usd == pytest.approx(cost)
+    assert totals.unknown_metrics == unknown
+
+
+def test_partial_totals_count_nested_aggregates_once_and_preserve_unknowns(tmp_path):
+    root = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "root",
+                "metrics": {"prompt_tokens": 10, "cost_usd": 0.1},
+            }
+        ]
+    )
+    child = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "child",
+                "metrics": {"prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.02},
+            }
+        ]
+    )
+    child["trajectory_id"] = "child"
+    grandchild = atif(steps=[{"step_id": 1, "source": "user", "message": "opaque"}])
+    grandchild["trajectory_id"] = "grandchild"
+    grandchild["final_metrics"] = {
+        "total_prompt_tokens": 30,
+        "total_completion_tokens": 6,
+        "total_cost_usd": 0.18,
+    }
+    child["subagent_trajectories"] = [grandchild]
+    child["final_metrics"] = {
+        "total_prompt_tokens": 40,
+        "total_completion_tokens": 8,
+        "total_cost_usd": 0.2,
+    }
+    opaque = atif(steps=[{"step_id": 1, "source": "user", "message": "opaque"}])
+    opaque["trajectory_id"] = "opaque"
+    opaque["final_metrics"] = {"total_completion_tokens": 4}
+    root["subagent_trajectories"] = [child, opaque]
+    run = run_in(tmp_path, root)
+    assert not run.invalid_trajectory
+    totals = run.totals
+    assert totals.input_tokens == 50
+    assert totals.output_tokens == 12
+    assert totals.cost_usd == pytest.approx(0.3)
+    assert totals.unknown_metrics == ["cost_usd", "input_tokens", "output_tokens"]
+
+
+def test_copied_context_and_deterministic_dispatch_do_not_add_usage(tmp_path):
+    root = atif(
+        steps=[
+            {
+                "step_id": 1,
+                "source": "agent",
+                "message": "copied",
+                "is_copied_context": True,
+                "metrics": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": 1},
+                "tool_calls": [{"tool_call_id": "old", "function_name": "old", "arguments": {}}],
+            },
+            {"step_id": 2, "source": "agent", "message": "dispatch", "llm_call_count": 0},
+            {
+                "step_id": 3,
+                "source": "agent",
+                "message": "new",
+                "metrics": {"prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.1},
+            },
+        ]
+    )
+    totals = run_in(tmp_path, root).totals
+    assert (totals.turns, totals.input_tokens, totals.output_tokens) == (1, 10, 2)
+    assert totals.cost_usd == pytest.approx(0.1)
+    assert totals.tool_calls == {}
+    assert totals.unknown_metrics == []

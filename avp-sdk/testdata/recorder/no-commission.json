@@ -100,11 +100,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {

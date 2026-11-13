@@ -60,7 +60,7 @@ def trajectory(run_id: str) -> str:
                     "tool_call_id": "call-1",
                     "function_name": "read",
                     "arguments": {"path": "/a"},
-                    "extra": {"avp": {"started_at": "2026-01-01T00:00:00Z"}},
+                    "extra": {"avp": {"observed_at": "2026-01-01T00:00:00Z"}},
                 }
             ],
             "observation": {
@@ -280,6 +280,7 @@ def test_effective_configuration_is_read_from_verified_artifacts(tmp_path: Path)
             }
         ],
         "mcp_servers": [{"id": "docs", "status": "connected"}],
+        "tools": [{"name": "read", "inputSchema": {}, "mcp_server_id": "docs"}],
     }
     write_artifacts(
         run_directory,
@@ -289,6 +290,7 @@ def test_effective_configuration_is_read_from_verified_artifacts(tmp_path: Path)
         },
     )
     [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
+    assert shown["vessel"]["tools"][0]["mcp_server_id"] == "docs"
     assert shown["vessel"]["skills"] == effective["skills"]
     assert shown["vessel"]["mcp_servers"] == effective["mcp_servers"]
     (run_directory / "inputs/effective-agent.json").write_text("{}")

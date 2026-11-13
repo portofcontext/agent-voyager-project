@@ -136,8 +136,7 @@ export class Document {
       ...this.usages,
       ...this.children.flatMap((c) => c.finish()),
     ];
-    const totals: any = { total_steps: this.data.steps.length },
-      known: any = {};
+    const totals: any = { total_steps: this.data.steps.length };
     for (const [source, target] of [
       ["input_tokens", "total_prompt_tokens"],
       ["output_tokens", "total_completion_tokens"],
@@ -149,11 +148,9 @@ export class Document {
           u[source] != null &&
           !(source === "cost_usd" && u.cost_source === "unknown"),
       );
-      (measured.length === usages.length ? totals : known)[target] =
-        measured.reduce((n, u) => n + u[source], 0);
+      if (measured.length === usages.length)
+        totals[target] = measured.reduce((n, u) => n + u[source], 0);
     }
-    if (Object.keys(known).length)
-      totals.extra = { avp: { known_totals: known } };
     this.data.final_metrics = totals;
     return usages;
   }

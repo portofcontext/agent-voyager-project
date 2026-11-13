@@ -140,11 +140,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {
@@ -228,14 +223,7 @@
       "total_steps": 2,
       "total_prompt_tokens": 1000,
       "total_completion_tokens": 100,
-      "total_cost_usd": 0.0045,
-      "extra": {
-        "avp": {
-          "known_totals": {
-            "total_cached_tokens": 0
-          }
-        }
-      }
+      "total_cost_usd": 0.0045
     }
   }
 }

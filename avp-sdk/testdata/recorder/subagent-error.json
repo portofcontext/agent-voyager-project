@@ -151,11 +151,6 @@
         },
         {
           "type": "function",
-          "extra": {
-            "avp": {
-              "mcp_server_id": "docs"
-            }
-          },
           "function": {
             "name": "search",
             "parameters": {
@@ -211,7 +206,7 @@
             },
             "extra": {
               "avp": {
-                "started_at": "2026-01-01T00:00:00.010000Z"
+                "observed_at": "2026-01-01T00:00:00.010000Z"
               }
             }
           }
@@ -268,39 +263,20 @@
             "complete": true,
             "started_at": "2026-01-01T00:00:00.011000Z",
             "stop_reason": "error",
-            "stopped_at": "2026-01-01T00:00:00.020000Z",
-            "usage_details": {
-              "responses": 1
-            }
+            "stopped_at": "2026-01-01T00:00:00.020000Z"
           }
         },
         "final_metrics": {
           "total_steps": 1,
           "total_prompt_tokens": 500,
-          "total_completion_tokens": 20,
-          "extra": {
-            "avp": {
-              "known_totals": {
-                "total_cached_tokens": 0,
-                "total_cost_usd": 0
-              }
-            }
-          }
+          "total_completion_tokens": 20
         }
       }
     ],
     "final_metrics": {
       "total_steps": 2,
       "total_prompt_tokens": 1500,
-      "total_completion_tokens": 120,
-      "extra": {
-        "avp": {
-          "known_totals": {
-            "total_cached_tokens": 0,
-            "total_cost_usd": 0.0045
-          }
-        }
-      }
+      "total_completion_tokens": 120
     }
   }
 }
