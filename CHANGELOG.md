@@ -4,46 +4,19 @@
 
 ### Fixed
 
-- Remove custom partial totals and opaque-child usage summaries from ATIF.
-  Eval readers reconstruct partial sums without double-counting child totals.
-  Keep MCP ownership in the effective-configuration artifact and omit duplicate
-  tool-call ID aliases. Rename tool-call `started_at` to `observed_at` to distinguish
-  report timing from actual execution start.
+- Claude records parent calls before applying early tool results and subagent
+  events, and avoids double-counting aggregate and per-response child usage.
 
-- Remove repeated response model metadata, tool ownership, derived timing,
-  default flags, accounting boilerplate, and the automatic result artifact.
-  Reuse the final agent message when it exactly matches the returned text.
-  Preserve model switches and requested-model aliases through document defaults.
-
-- The trajectory spec shows a minimal completion fragment and a dropdown of
-  all AVP extras, grouped by their ATIF location.
-
-- Keep ATIF traces coherent: execution metadata and provider annotations stay
-  in standard ATIF fields or `extra.avp`; no generic detail files are emitted.
-  Full configuration, skill directories, and generated files are run artifacts. Both SDKs write `artifacts.json`
-  with relative paths, input/output roles, and SHA-256 hashes; readers verify
-  captured bytes. Eval sharing reads effective configuration from those artifacts.
-
-- Python ATIF snapshots respect normal file creation permissions and the process
-  umask, so host supervisors can read container-written snapshots on Linux.
 - Both SDK run plans preserve an explicitly empty system prompt.
-- Claude tool results and subagent events that arrive before the parent model
-  response completes are deferred until its calls and usage are recorded.
-  Opaque foreground children retain native aggregate usage without counting
-  individually reported child responses twice.
 
 ### Added
 
-- Breaking: native ATIF-v1.8 replaces AVP's trajectory event stream in both
-  SDKs, all eight adapters, and the CLI. Runs write atomic `trajectory.json`
-  snapshots; stdout emits one completed document. Python uses the pinned Harbor
-  models and TypeScript derives its types from them. Typed output, termination,
-  errors, timing, and opaque child accounting remain in targeted extensions.
-  Provider annotations stay inline. Unknown usage stays unknown. The old exporter, event
-  schema, CloudEvents wrapper, and AVP-specific OpenTelemetry converter are
-  removed. Existing NDJSON runs need an older SDK to read them.
-- An ecosystem example feeds ordinary run files directly to Harbor's trace
-  extractor and packages unchanged files for its job viewer.
+- Run artifacts preserve full Commission and Descriptor snapshots, effective
+  configuration, complete skill directories, media, and explicitly captured
+  output files. Both SDKs write an `artifacts.json` manifest with relative paths,
+  input/output roles, and SHA-256 hashes; readers verify captured bytes.
+- A Harbor integration example uses saved ATIF runs directly for training
+  extraction and the job viewer.
 
 - `avp update` installs the newest CLI release, and `avp agent update`
   reinstalls the built-in agents whose versions the CLI changed.
@@ -80,6 +53,18 @@
   and the single price snapshot, bundled in its npm package.
 
 ### Changed
+
+- Breaking: native ATIF-v1.8 replaces AVP's trajectory event stream in both SDKs,
+  all eight adapters, and the CLI. File output uses atomic `trajectory.json`
+  snapshots; stdout emits one completed document. Python uses pinned Harbor
+  models, and TypeScript derives its wire types from them. The legacy event
+  schema, exporter, CloudEvents wrapper, and AVP-specific OpenTelemetry
+  converter are removed. Existing NDJSON runs require an older SDK to read.
+- Traces use standard ATIF messages, tool calls, observations, reasoning, usage,
+  and child trajectories, with AVP extensions for run outcomes and execution
+  metadata. SDK output readers recover the final answer or a distinct typed
+  result. CLI evaluation and sharing read ATIF plus verified artifacts, derive
+  partial usage without counting children twice, and preserve unknown values.
 
 - Agents install the published SDK betas and build from their own directories.
 
