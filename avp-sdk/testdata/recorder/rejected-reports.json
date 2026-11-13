@@ -296,7 +296,6 @@
         "timestamp": "2026-01-01T00:00:00.010000Z",
         "source": "agent",
         "message": "",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -310,8 +309,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic"
+            "duration_ms": 1
           }
         },
         "tool_calls": [
@@ -321,7 +319,6 @@
             "arguments": {},
             "extra": {
               "avp": {
-                "server_side": false,
                 "started_at": "2026-01-01T00:00:00.010000Z"
               }
             }
@@ -335,7 +332,6 @@
               "extra": {
                 "avp": {
                   "finished_at": "2026-01-01T00:00:00.013000Z",
-                  "duration_ms": 3,
                   "is_error": false
                 }
               }
@@ -349,10 +345,10 @@
         "complete": true,
         "started_at": "2026-01-01T00:00:00.002000Z",
         "stop_reason": "converged",
-        "stopped_at": "2026-01-01T00:00:00.020000Z"
+        "stopped_at": "2026-01-01T00:00:00.020000Z",
+        "output": null
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "final_metrics": {
       "total_steps": 2,
       "total_prompt_tokens": 1000,
@@ -360,7 +356,6 @@
       "total_cost_usd": 0.0045,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_cached_tokens": 0
           }

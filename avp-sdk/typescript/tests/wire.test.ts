@@ -3,7 +3,11 @@ import test from "node:test";
 import { parseCommission } from "../src/commission.js";
 import { parseDescriptor } from "../src/descriptor.js";
 import { Recorder, type UsageReport } from "../src/recorder.js";
-import { parseTrajectory, type Recording } from "../src/trajectory.js";
+import {
+  finalOutput,
+  parseTrajectory,
+  type Recording,
+} from "../src/trajectory.js";
 
 const commission = () => ({
   avp_version: "0.1",
@@ -143,5 +147,21 @@ test("upstream semantics match Python reference models", async () => {
     if (item.valid)
       assert.doesNotThrow(() => parseTrajectory(item.trajectory), item.name);
     else assert.throws(() => parseTrajectory(item.trajectory), item.name);
+  }
+});
+
+test("final output preserves explicit null and falsey values and excludes partial replies", () => {
+  const doc = parseTrajectory({
+    schema_version: "ATIF-v1.8",
+    session_id: "r",
+    agent: { name: "test", version: "1" },
+    steps: [{ step_id: 1, source: "agent", message: "42" }],
+  });
+  assert.equal(finalOutput(doc), "42");
+  doc.extra = { avp: { complete: false } };
+  assert.equal(finalOutput(doc), null);
+  for (const value of [null, false, 0, "", { answer: 42 }]) {
+    doc.extra = { avp: { complete: true, output: value } };
+    assert.deepEqual(finalOutput(parseTrajectory(doc)), value);
   }
 });

@@ -91,7 +91,7 @@ def test_native_text_response_and_instructions(script, tmp_path):
     assert "SUPPORT" in model.first_call.system_instructions
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
 
 
@@ -142,7 +142,7 @@ def test_native_mcp_tools_and_error_results_pair(script, tmp_path, mode):
     results = {e["source_call_id"]: e for e in atif.results(events)}
     invoked = {e["tool_call_id"]: e for e in atif.calls(events)}
     assert set(results) == set(invoked)
-    assert all(atif.meta(e)["mcp_server_id"] == "fixture" for e in invoked.values())
+    assert all(atif.mcp_server(events, e) == "fixture" for e in invoked.values())
     assert "BOUNDARY" in str(results["one"]["content"])
     if mode == "parallel":
         assert "SECOND" in str(results["two"]["content"])
@@ -169,7 +169,7 @@ def test_schema_validation_crosses_native_runner(script, tmp_path):
         "properties": {"answer": {"type": "integer"}},
     }
     _, events = run_cli(tmp_path, output_schema=schema)
-    assert atif.meta(events)["output"] == {"answer": 42}
+    assert atif.output(events) == {"answer": 42}
     script([assistant_message('{"answer":"wrong"}')])
     _, events = run_cli(tmp_path / "invalid", output_schema=schema)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "output_invalid"

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   parseTrajectory,
+  finalOutput,
   type Trajectory,
   type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
@@ -58,7 +59,7 @@ function latest(snapshots: Trajectory[]): any {
   return snapshots.at(-1)!;
 }
 function meta(value: any): any {
-  return value.extra?.avp ?? {};
+  return value?.extra?.avp ?? {};
 }
 function docs(root: any): any[] {
   return [root, ...(root.subagent_trajectories ?? []).flatMap(docs)];
@@ -70,6 +71,19 @@ function atifResponses(snapshots: Trajectory[]): any[] {
 }
 function atifCalls(snapshots: Trajectory[]): any[] {
   return atifResponses(snapshots).flatMap((s) => s.tool_calls ?? []);
+}
+function mcpServer(snapshots: Trajectory[], call: any): string | undefined {
+  const doc = docs(latest(snapshots)).find((d) =>
+    d.steps.some((s: any) => s.tool_calls?.includes(call)),
+  );
+  return (
+    meta(call).mcp_server_id ??
+    meta(
+      doc.agent.tool_definitions?.find(
+        (t: any) => t.function.name === call.function_name,
+      ),
+    ).mcp_server_id
+  );
 }
 function atifResults(snapshots: Trajectory[]): any[] {
   return docs(latest(snapshots))
@@ -179,7 +193,7 @@ test("native responses retain reasoning, skills, replacement instructions, and p
     response.metrics.prompt_tokens > 0 &&
       response.metrics.completion_tokens > 0,
   );
-  assert.equal(meta(latest(snapshots)).output, "DONE");
+  assert.equal(finalOutput(latest(snapshots)), "DONE");
 });
 
 test("native filesystem and bash tools complete with ordered asynchronous sink writes", async () => {
@@ -288,7 +302,7 @@ for (const mode of ["parallel", "errors"] as const)
     const returned = atifResults(snapshots);
     assert.equal(invoked.length, calls.length);
     assert.equal(returned.length, calls.length);
-    assert.ok(invoked.every((e) => meta(e).mcp_server_id === "fixture"));
+    assert.ok(invoked.every((e) => mcpServer(snapshots, e) === "fixture"));
     assert.match(
       JSON.stringify(
         returned.find((e) => e.source_call_id === "echo")!.content,
@@ -448,7 +462,7 @@ test("native MCP structured output, environment references, and colliding names 
       ),
     );
     assert.deepEqual(
-      new Set(atifCalls(snapshots).map((call) => meta(call).mcp_server_id)),
+      new Set(atifCalls(snapshots).map((call) => mcpServer(snapshots, call))),
       new Set(["same-name", "same_name"]),
     );
     assert.equal(meta(latest(snapshots)).stop_reason, "converged");
@@ -536,7 +550,10 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
     assert.equal(response.metrics.completion_tokens, 50);
     assert.equal(response.metrics.cached_tokens, 300);
     assert.equal(meta(response.metrics).cache_creation_input_tokens, 100);
-    assert.equal(response.model_name, "claude-haiku-4-5-20251001");
+    assert.equal(
+      latest(snapshots).agent.model_name,
+      "claude-haiku-4-5-20251001",
+    );
     assert.deepEqual(meta(response).finish_reasons, ["end_turn"]);
     assert.equal(meta(latest(snapshots)).stop_reason, "converged");
   } finally {

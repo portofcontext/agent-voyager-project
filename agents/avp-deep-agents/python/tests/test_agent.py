@@ -67,10 +67,10 @@ def test_text_usage_and_commission_replaces_prompt(script, tmp_path):
     assert message["metrics"]["cached_tokens"] == 400
     assert message["metrics"]["completion_tokens"] == 50
     assert atif.meta(message["metrics"])["reasoning_output_tokens"] == 10
-    assert message["model_name"] == "gpt-4o-mini-2024-07-18"
+    assert events["agent"]["model_name"] == "gpt-4o-mini-2024-07-18"
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
 
 
@@ -142,7 +142,7 @@ def test_native_mcp_success_and_both_error_forms(script, tmp_path, mode):
     invoked = {item["tool_call_id"]: item for item in atif.calls(events)}
     returned = {item["source_call_id"]: item for item in atif.results(events)}
     assert set(invoked) == set(returned) == {call[0] for call in calls}
-    assert all(atif.meta(item)["mcp_server_id"] == "fixture" for item in invoked.values())
+    assert all(atif.mcp_server(events, item) == "fixture" for item in invoked.values())
     assert "BOUNDARY" in str(returned["one"]["content"])
     if mode == "errors":
         assert atif.meta(returned["result"])["is_error"] is True
@@ -183,7 +183,7 @@ def test_native_structured_output(script, tmp_path):
     )
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": {"answer": 42}}
     assert len(atif.responses(events)) == 1
 

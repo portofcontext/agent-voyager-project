@@ -56,14 +56,19 @@ def trajectory(run_id: str) -> str:
             "metrics": metrics,
             "extra": {"avp": {"duration_ms": 7}},
             "tool_calls": [
-                {"tool_call_id": "call-1", "function_name": "read", "arguments": {"path": "/a"}}
+                {
+                    "tool_call_id": "call-1",
+                    "function_name": "read",
+                    "arguments": {"path": "/a"},
+                    "extra": {"avp": {"started_at": "2026-01-01T00:00:00Z"}},
+                }
             ],
             "observation": {
                 "results": [
                     {
                         "source_call_id": "call-1",
                         "content": LONG,
-                        "extra": {"avp": {"duration_ms": 3}},
+                        "extra": {"avp": {"finished_at": "2026-01-01T00:00:00.003Z"}},
                     }
                 ]
             },
@@ -176,6 +181,8 @@ def test_a_run_is_what_the_sites_viewer_reads(tmp_path: Path) -> None:
     assert [e["seq"] for e in events] == list(range(6))
     assert events[1]["input_tokens"] == 10 and events[1]["cost_usd"] == 0.01
     assert events[2]["call_id"] == events[3]["call_id"] == "call-1"
+    assert events[1]["response_model"] == "gpt-test"
+    assert events[3]["duration_ms"] == 3
     assert events[3]["result_chars"] == len(LONG)
     assert events[3]["result"].endswith(f"(+{len(LONG) - share.TEXT} chars)")
     assert events[4]["text"] == "Paris"

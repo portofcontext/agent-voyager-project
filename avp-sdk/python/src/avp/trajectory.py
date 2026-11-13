@@ -38,6 +38,23 @@ def avp_metadata(value: Trajectory | Step | ToolCall | ObservationResult) -> dic
     return (value.extra or {}).get("avp", {})
 
 
+def final_output(trajectory: Trajectory) -> Any:
+    """Returned value, falling back to the final root agent message in ATIF."""
+    meta = avp_metadata(trajectory)
+    if "output" in meta:
+        return meta["output"]
+    if meta.get("complete") is False:
+        return None
+    for step in reversed(trajectory.steps):
+        if step.source == "agent":
+            return (
+                step.message
+                if isinstance(step.message, str)
+                else [part.model_dump(mode="json", exclude_none=True) for part in step.message]
+            )
+    return None
+
+
 @dataclass(frozen=True)
 class Recording:
     """A snapshot of the current ATIF document and referenced media bytes."""

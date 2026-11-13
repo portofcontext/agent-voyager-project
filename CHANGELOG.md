@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Remove repeated response model metadata, tool ownership, derived timing,
+  default flags, accounting boilerplate, and the automatic result artifact.
+  Reuse the final agent message when it exactly matches the returned text.
+  Preserve model switches and requested-model aliases through document defaults.
+
 - The trajectory spec shows a minimal completion fragment and a dropdown of
   all AVP extras, grouped by their ATIF location.
 

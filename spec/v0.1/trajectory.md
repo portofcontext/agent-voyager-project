@@ -36,7 +36,7 @@ Expand the dropdown below for the full field inventory.
     "avp": {
       "complete": true,
       "stop_reason": "converged",
-      "output": "42"
+      "output": {"answer": 42}
     }
   }
 }
@@ -66,7 +66,9 @@ fields shown first.
     }
   },
   "agent.extra.avp": {
-    "provider": "openai"
+    "provider": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "requested_model": "example-model"
   },
   "agent.tool_definitions[].extra.avp": {
     "title": "Add numbers",
@@ -121,14 +123,13 @@ fields shown first.
   "steps[].tool_calls[].extra.avp": {
     "started_at": "2026-01-01T00:00:01Z",
     "mcp_server_id": "math",
-    "server_side": false,
+    "server_side": true,
     "provider_metadata": {
       "provider_call_id": "native-call-1"
     }
   },
   "steps[].observation.results[].extra.avp": {
     "finished_at": "2026-01-01T00:00:01.200Z",
-    "duration_ms": 200,
     "is_error": false,
     "structured_content": {
       "answer": 42
@@ -156,7 +157,6 @@ fields shown first.
     "cost_source": "reported"
   },
   "final_metrics.extra.avp": {
-    "usage_scope": "subtree",
     "known_totals": {
       "total_prompt_tokens": 100,
       "total_completion_tokens": 20,
@@ -165,7 +165,6 @@ fields shown first.
     }
   },
   "subagent_trajectories[].extra.avp (additional fields)": {
-    "duration_ms": 1000,
     "usage_details": {
       "cache_creation_input_tokens": 20,
       "reasoning_output_tokens": 12,
@@ -176,6 +175,22 @@ fields shown first.
 }
 ```
 
+- The first response establishes `agent.model_name` and the agent's provider,
+  endpoint, and requested-model defaults. Steps only record differences from
+  those defaults. `requested_model` is omitted on the agent when it matches
+  `agent.model_name`. Each child has independent defaults.
+- To read a response, use its `model_name` or `agent.model_name`. For provider
+  and endpoint, use a step override or the agent default. A step's `base_url: null` explicitly clears an inherited endpoint. For the requested model, use
+  a step override, then `agent.extra.avp.requested_model`, then `agent.model_name`.
+- Calls inherit `mcp_server_id` from the matching tool definition in their
+  document; a call only records it when the declaration does not supply it.
+  `server_side` is present only when true. Tool and child durations are derived
+  from their start and finish timestamps.
+- `output` is present only when the returned value differs from the last root
+  agent message or has a different JSON type. When absent on a complete run,
+  use that message. An explicit `output: null` means no returned result, even
+  if the trace contains agent messages. Incomplete AVP runs have no inferred
+  result. The SDK does not copy the result into an artifact.
 - `annotations` and `provider_metadata` are open objects. Their sample keys
   above illustrate runtime/provider data, not a fixed AVP field list.
 - Tool definitions retain `title`, `outputSchema`, `mcp_server_id`, and any
@@ -187,8 +202,8 @@ fields shown first.
   fields. `start`/`end` locate public reasoning text; `encrypted_content` holds
   redacted reasoning instead of exposing it as public text.
 - `known_totals` contains only measured partial sums for metrics whose full
-  totals are unknown. Complete totals use standard ATIF fields. `usage_scope`
-  is `subtree`, meaning descendants are counted once.
+  totals are unknown. Complete totals use standard ATIF fields. Both count
+  descendants once. Empty extension objects are omitted.
 - `usage_details` is only for opaque children without recorded responses.
   `cost_source` is `computed`, `reported`, or `unknown`.
 

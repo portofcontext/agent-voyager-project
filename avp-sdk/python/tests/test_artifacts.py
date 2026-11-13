@@ -93,7 +93,8 @@ def test_capture_keeps_skill_bytes_and_config_out_of_trace(tmp_path):
     assert "citations" in out.read_text()
     assert not any(a.path.startswith("outputs/details/") for a in manifest.artifacts)
     assert "details_path" not in out.read_text()
-    assert json.loads((out.parent / "outputs/result.json").read_text()) == {"answer": 42}
+    assert snapshots[-1].trajectory.extra["avp"]["output"] == {"answer": 42}
+    assert not (out.parent / "outputs/result.json").exists()
     assert {a.role for a in manifest.artifacts} == {"input", "output"}
     assert not list(out.parent.rglob("*.tmp"))
 

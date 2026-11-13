@@ -17,7 +17,7 @@ Run each case with a Recorder whose `run_id` is `run-0`. Validate every
 published snapshot as ATIF, then compare the final document to `trajectory`:
 
 - Compare timestamps as instants, independent of UTC spelling.
-- Leave out fields that are absent or null.
+- Omit unset optional ATIF fields; preserve explicit nulls in open JSON objects.
 - Compare numbers with a relative tolerance of 1e-9.
 - `"<any>"` matches text whose wording may differ between SDKs.
 

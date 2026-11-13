@@ -25,6 +25,7 @@ import {
 } from "@google/gemini-cli-core";
 import {
   parseTrajectory,
+  finalOutput,
   type Trajectory,
   type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
@@ -214,10 +215,10 @@ test("native filesystem loop keeps response usage, thoughts, tool IDs, and async
   assert.equal(first.metrics.cached_tokens, 100);
   assert.equal(meta(first.metrics).reasoning_output_tokens, 30);
   assert.equal(meta(first.metrics).cost_source, "computed");
-  assert.equal(first.model_name, MODEL);
+  assert.equal(latest(snapshots).agent.model_name, MODEL);
   const invoked = atifCalls(snapshots)[0]!;
   assert.equal(atifResults(snapshots)[0]!.source_call_id, invoked.tool_call_id);
-  assert.equal(meta(latest(snapshots)).output, "DONE");
+  assert.equal(finalOutput(latest(snapshots)), "DONE");
 });
 
 test("native tool allowlists and custom system prompt replace the defaults", async (t: any) => {
@@ -507,11 +508,11 @@ test("native Google HTTP client sends the proxy stand-in and records served mode
   assert.equal(requests[0]!.key, "standin-only");
   assert.match(requests[0]!.path, /gemini-2.5-flash:streamGenerateContent/);
   const message = atifResponses(snapshots)[0]!;
-  assert.equal(message.model_name, "gemini-2.5-flash-001");
+  assert.equal(latest(snapshots).agent.model_name, "gemini-2.5-flash-001");
   assert.equal(message.metrics.prompt_tokens, 120);
   assert.equal(message.metrics.completion_tokens, 11);
   assert.equal(message.metrics.cached_tokens, 80);
-  assert.equal(meta(latest(snapshots)).output, "HTTP_OK");
+  assert.equal(finalOutput(latest(snapshots)), "HTTP_OK");
 });
 
 test("parallel native subagents keep usage attached to their own invocation", async (t: any) => {

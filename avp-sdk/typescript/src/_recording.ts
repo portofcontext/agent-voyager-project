@@ -8,12 +8,6 @@ export function remaining(value: any, keys: string[]): any {
     Object.entries(value).filter(([k]) => !keys.includes(k)),
   );
 }
-export function modelMetadata(model: any): any {
-  return {
-    provider: model.provider,
-    ...(model.base_url ? { base_url: model.base_url } : {}),
-  };
-}
 export function contentMetadata(value: any): any[] {
   if (!Array.isArray(value)) return [];
   const out: any[] = [];
@@ -96,6 +90,7 @@ export class Document {
   usages: any[] = [];
   children: Document[] = [];
   data: any;
+  private modelDefaults?: Record<string, any>;
   constructor(run: string, id: string, name: string, version: string) {
     this.data = {
       schema_version: "ATIF-v1.8",
@@ -104,9 +99,27 @@ export class Document {
       agent: { name, version },
       steps: [],
       extra: { avp: { complete: false } },
-      notes:
-        "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     };
+  }
+  recordModel(step: any, model: any, actual: string): void {
+    const values: Record<string, any> = {
+      provider: model.provider,
+      base_url: model.base_url ?? null,
+      requested_model: model.id,
+    };
+    const agent = this.data.agent;
+    if (!this.modelDefaults) {
+      this.modelDefaults = values;
+      agent.model_name = actual;
+      const defaults = metadata(agent);
+      for (const [key, value] of Object.entries(values))
+        if (value !== null) defaults[key] = value;
+      if (model.id === actual) delete defaults.requested_model;
+    } else {
+      if (actual !== agent.model_name) step.model_name = actual;
+      for (const [key, value] of Object.entries(values))
+        if (value !== this.modelDefaults[key]) metadata(step)[key] = value;
+    }
   }
   step(timestamp: string, source: string, message: any): any {
     const step = {
@@ -139,7 +152,8 @@ export class Document {
       (measured.length === usages.length ? totals : known)[target] =
         measured.reduce((n, u) => n + u[source], 0);
     }
-    totals.extra = { avp: { usage_scope: "subtree", known_totals: known } };
+    if (Object.keys(known).length)
+      totals.extra = { avp: { known_totals: known } };
     this.data.final_metrics = totals;
     return usages;
   }

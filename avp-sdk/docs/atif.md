@@ -19,16 +19,17 @@ with the trajectory to preserve the complete run.
 
 ```python
 from pathlib import Path
-from avp.trajectory import parse_trajectory
+from avp.trajectory import final_output, parse_trajectory
 
 trajectory = parse_trajectory(Path("trajectory.json").read_text())
 for step in trajectory.steps:
     if step.source == "agent":
         print(step.message, step.metrics)
+print(final_output(trajectory))
 ```
 
 Python uses Harbor's vendored upstream Pydantic models. TypeScript exports the
-same wire shape and `parseTrajectory` from `@agent-voyager-project/sdk/trajectory`.
+same wire shape, `parseTrajectory`, and `finalOutput` from `@agent-voyager-project/sdk/trajectory`.
 `avp.reports` and `@agent-voyager-project/sdk/reports` define Recorder method inputs
 for adapter authors; these inputs are not another persisted wire format.
 

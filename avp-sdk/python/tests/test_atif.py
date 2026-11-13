@@ -22,7 +22,7 @@ from avp.reports import (
     ThinkingBlock,
     ToolUseBlock,
 )
-from avp.trajectory import Recording, avp_metadata, parse_trajectory
+from avp.trajectory import Recording, avp_metadata, final_output, parse_trajectory
 
 DATA = Path(__file__).resolve().parents[2] / "testdata/atif"
 MODEL = ModelRef(provider="test", id="model")
@@ -321,3 +321,15 @@ def test_nested_children_keep_parent_references_and_usage_once():
             for ref in result.subagent_trajectory_ref or []
         ]
         assert references == [delegated.trajectory_id]
+
+
+@pytest.mark.parametrize("override", [None, False, 0, "", {"answer": 42}])
+def test_final_output_preserves_explicit_values_and_never_infers_partial_output(override):
+    raw = json.loads((DATA / "external-terminus.json").read_text())
+    raw["steps"][-1]["source"] = "agent"
+    raw["steps"][-1]["message"] = "42"
+    assert final_output(parse_trajectory(raw)) == "42"
+    raw["extra"] = {"avp": {"complete": False}}
+    assert final_output(parse_trajectory(raw)) is None
+    raw["extra"] = {"avp": {"complete": True, "output": override}}
+    assert final_output(parse_trajectory(raw)) == override

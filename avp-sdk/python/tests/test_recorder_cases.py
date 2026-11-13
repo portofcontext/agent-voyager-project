@@ -15,7 +15,7 @@ from avp.commission import ModelRef
 from avp.descriptor import AgentDescriptor
 from avp.recorder import Recorder, RecorderError, UsageReport
 from avp.reports import ContentBlock, RunContext, SubagentUsage
-from avp.trajectory import Recording
+from avp.trajectory import Recording, final_output, parse_trajectory
 from avp.utils.pricing import Prices
 
 CASES = Path(__file__).resolve().parents[2] / "testdata" / "recorder"
@@ -125,3 +125,7 @@ def test_case(path: Path) -> None:
     case = json.loads(path.read_text())
     actual = run_case(case)
     _same(actual, case["trajectory"], "trajectory")
+
+    stop = next((c for c in reversed(case["calls"]) if c["call"] == "stop"), None)
+    if stop and any(c["call"] == "start" and not c.get("raises") for c in case["calls"]):
+        assert final_output(parse_trajectory(actual)) == stop.get("output")

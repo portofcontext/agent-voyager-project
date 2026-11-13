@@ -239,7 +239,6 @@
         "timestamp": "2026-01-01T00:00:00.010000Z",
         "source": "agent",
         "message": "a",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -253,8 +252,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic"
+            "duration_ms": 1
           }
         }
       },
@@ -277,9 +275,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic",
-            "requested_model": "claude-test-1"
+            "duration_ms": 1
           }
         }
       },
@@ -302,9 +298,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic",
-            "requested_model": "claude-test-1"
+            "duration_ms": 1
           }
         }
       },
@@ -313,7 +307,6 @@
         "timestamp": "2026-01-01T00:00:00.013000Z",
         "source": "agent",
         "message": "d",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -330,8 +323,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic"
+            "duration_ms": 1
           }
         }
       },
@@ -354,7 +346,7 @@
         "extra": {
           "avp": {
             "duration_ms": 1,
-            "provider": "anthropic"
+            "requested_model": "unpriced"
           }
         }
       },
@@ -363,13 +355,11 @@
         "timestamp": "2026-01-01T00:00:00.015000Z",
         "source": "agent",
         "message": "f",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {},
         "extra": {
           "avp": {
-            "duration_ms": 1,
-            "provider": "anthropic"
+            "duration_ms": 1
           }
         }
       }
@@ -379,15 +369,14 @@
         "complete": true,
         "started_at": "2026-01-01T00:00:00.001000Z",
         "stop_reason": "converged",
-        "stopped_at": "2026-01-01T00:00:00.016000Z"
+        "stopped_at": "2026-01-01T00:00:00.016000Z",
+        "output": null
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "final_metrics": {
       "total_steps": 7,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_cached_tokens": 600,
             "total_cost_usd": 0.50903,

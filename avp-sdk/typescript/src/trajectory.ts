@@ -139,3 +139,13 @@ export function avpMetadata(value: {
 }): Record<string, any> {
   return value.extra?.avp ?? {};
 }
+
+export function finalOutput(trajectory: Trajectory): any {
+  const meta = avpMetadata(trajectory);
+  if (Object.hasOwn(meta, "output")) return meta.output;
+  if (meta.complete === false) return null;
+  return (
+    [...trajectory.steps].reverse().find((step) => step.source === "agent")
+      ?.message ?? null
+  );
+}

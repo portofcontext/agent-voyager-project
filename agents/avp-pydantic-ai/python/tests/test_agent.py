@@ -87,7 +87,7 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
     ) == (1, 0, 0, True)
     message, stopped = (
         atif.responses(events)[0],
-        {"reason": atif.meta(events).get("stop_reason"), "output": atif.meta(events).get("output")},
+        {"reason": atif.meta(events).get("stop_reason"), "output": atif.output(events)},
     )
     assert message["message"] == "DONE"
     assert message["reasoning_content"] == "short"
@@ -96,9 +96,9 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
     assert (usage["prompt_tokens"], usage["completion_tokens"]) == (1000, 50)
     assert usage["cached_tokens"] == 400
     assert atif.meta(usage)["cost_source"] == "computed"
-    assert atif.meta(message)["provider"] == MODEL["provider"]
-    assert atif.meta(message)["requested_model"] == MODEL["id"]
-    assert message["model_name"] == "scripted"
+    assert atif.meta(events["agent"])["provider"] == MODEL["provider"]
+    assert atif.meta(events["agent"])["requested_model"] == MODEL["id"]
+    assert events["agent"]["model_name"] == "scripted"
     assert stopped == {"reason": "converged", "output": "DONE"}
     assert seen[0][0][0].instructions == "be terse"
 
@@ -136,7 +136,7 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
         and add["function"]["parameters"]
     )
     invoked = atif.calls(events)
-    assert {atif.meta(i)["mcp_server_id"] for i in invoked} == {"t"}
+    assert {atif.mcp_server(events, i) for i in invoked} == {"t"}
     results = _results(events)
     assert set(results) == {"c_add", "c_result", "c_proto"}
     for call, text, failed in [
@@ -175,7 +175,7 @@ def test_output_schema_ends_on_the_output_tool(script, tmp_path: Path) -> None:
         len(atif.errors(events)),
         atif.meta(events)["complete"],
     ) == (1, 1, 0, True)
-    assert atif.meta(events)["output"] == {"answer": 3}
+    assert atif.output(events) == {"answer": 3}
 
 
 def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:

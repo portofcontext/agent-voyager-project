@@ -14,7 +14,7 @@ from pydantic import BaseModel, JsonValue, ValidationError
 
 from avp.artifacts import artifact_path, read_artifacts
 from avp.commission import Commission
-from avp.trajectory import Trajectory, avp_metadata, documents
+from avp.trajectory import Trajectory, avp_metadata, documents, final_output
 from avp_cli import paths
 from avp_cli.console import Failed
 from avp_cli.eval.results import EvalResults, RunResult
@@ -41,6 +41,23 @@ class Shared(BaseModel):
     delete_token: str
     expires_at: datetime
     site: str
+
+
+def _duration(call, result):
+    started = avp_metadata(call).get("started_at") if call else None
+    finished = avp_metadata(result).get("finished_at")
+    if not isinstance(started, str) or not isinstance(finished, str):
+        return None
+    try:
+        return max(
+            0,
+            round(
+                (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()
+                * 1000
+            ),
+        )
+    except (ValueError, TypeError):
+        return None
 
 
 def _cut(value: Any, limit: int = TEXT) -> str:
@@ -92,7 +109,7 @@ def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
                     output_tokens=usage.completion_tokens if usage else None,
                     cost_usd=usage.cost_usd if usage else None,
                     duration_ms=avp_metadata(step).get("duration_ms"),
-                    response_model=step.model_name,
+                    response_model=step.model_name or doc.agent.model_name,
                 )
             if code := avp_metadata(step).get("error_code"):
                 card("error_occurred", error_code=code, error_message=_cut(step.message))
@@ -110,7 +127,7 @@ def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
                     "tool_returned",
                     tool_name=call.function_name if call else "delegation",
                     call_id=result.source_call_id,
-                    duration_ms=avp_metadata(result).get("duration_ms"),
+                    duration_ms=_duration(call, result),
                     result=_cut(result.content),
                     is_error=avp_metadata(result).get("is_error"),
                     result_chars=len(result.content) if isinstance(result.content, str) else None,
@@ -120,7 +137,7 @@ def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
         card(
             "agent_stopped",
             reason=meta.get("stop_reason"),
-            output=_cut(meta["output"]) if "output" in meta else None,
+            output=_cut(output) if (output := final_output(trajectory)) is not None else None,
         )
     return shown
 
@@ -133,7 +150,7 @@ def _brief(
     agent = trajectory.agent
     extra = (agent.extra or {}).get("avp", {})
     if effective is not None:
-        extra = {**extra, **effective, **effective.get("model", {})}
+        extra = {**effective, **effective.get("model", {}), **extra}
     tools = []
     for definition in agent.tool_definitions or []:
         function = definition.get("function", {})

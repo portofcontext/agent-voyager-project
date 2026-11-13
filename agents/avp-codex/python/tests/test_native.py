@@ -207,7 +207,7 @@ def test_native_tool_round_trips_keep_response_boundaries(model_endpoint, tmp_pa
     assert code == 0
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
     messages = atif.responses(events)
     assert [item["metrics"]["prompt_tokens"] for item in messages] == (

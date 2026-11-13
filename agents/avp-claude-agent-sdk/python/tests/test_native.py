@@ -143,7 +143,7 @@ def test_native_round_trip(endpoint, tmp_path, operation):
     )
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
     responses = atif.responses(events)
     assert [e["metrics"]["prompt_tokens"] for e in responses] == (

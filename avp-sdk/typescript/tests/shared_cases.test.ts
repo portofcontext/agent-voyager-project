@@ -4,7 +4,7 @@ import test from "node:test";
 import { Recorder, RecorderError } from "../src/recorder.js";
 import { parseCommission } from "../src/commission.js";
 import { parseDescriptor } from "../src/descriptor.js";
-import type { Recording } from "../src/trajectory.js";
+import { finalOutput, type Recording } from "../src/trajectory.js";
 import { checkCommission } from "../src/utils/preflight.js";
 import { planRun } from "../src/utils/run_plan.js";
 
@@ -127,6 +127,12 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
       } else await call(rec, command);
     }
     same(events.at(-1)!.trajectory, vector.trajectory);
+    const stop = [...vector.calls].reverse().find((c) => c.call === "stop");
+    if (stop && vector.calls.some((c: any) => c.call === "start" && !c.raises))
+      assert.deepEqual(
+        finalOutput(events.at(-1)!.trajectory),
+        stop.output ?? null,
+      );
   });
 }
 for (const name of readdirSync(new URL("run_plan/", cases)).filter((name) =>

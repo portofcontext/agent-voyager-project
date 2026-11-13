@@ -1,0 +1,218 @@
+{
+  "name": "model-defaults",
+  "description": "Document defaults preserve model aliases and provider/endpoint switches without repeating unchanged response metadata. Null explicitly clears an inherited endpoint.",
+  "calls": [
+    {
+      "t": 0,
+      "call": "begin",
+      "received": {
+        "avp_version": "0.1",
+        "run_id": "model-defaults",
+        "model": {
+          "provider": "openai",
+          "id": "alias",
+          "base_url": "https://proxy.example/v1"
+        },
+        "prompt": "Go"
+      },
+      "descriptor": {
+        "avp_version": "0.1",
+        "agent_name": "case-agent",
+        "agent_version": "1"
+      }
+    },
+    {
+      "t": 1,
+      "call": "start",
+      "started": {
+        "prompt": "Go",
+        "model": {
+          "provider": "openai",
+          "id": "alias",
+          "base_url": "https://proxy.example/v1"
+        }
+      }
+    },
+    {
+      "t": 2,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "2"
+        }
+      ],
+      "model": {
+        "provider": "openai",
+        "id": "alias",
+        "base_url": "https://proxy.example/v1"
+      },
+      "response_model": "resolved",
+      "key": "2"
+    },
+    {
+      "t": 3,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "3"
+        }
+      ],
+      "model": {
+        "provider": "openai",
+        "id": "alias",
+        "base_url": "https://proxy.example/v1"
+      },
+      "response_model": "resolved",
+      "key": "3"
+    },
+    {
+      "t": 4,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "4"
+        }
+      ],
+      "model": {
+        "provider": "anthropic",
+        "id": "other"
+      },
+      "response_model": "other",
+      "key": "4"
+    },
+    {
+      "t": 5,
+      "call": "response",
+      "content": [
+        {
+          "type": "text",
+          "text": "5"
+        }
+      ],
+      "model": {
+        "provider": "openai",
+        "id": "alias",
+        "base_url": "https://proxy.example/v1"
+      },
+      "response_model": "resolved",
+      "key": "5"
+    },
+    {
+      "t": 6,
+      "call": "stop",
+      "reason": "converged",
+      "output": {
+        "answer": 5
+      }
+    }
+  ],
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "model-defaults",
+    "trajectory_id": "model-defaults/root",
+    "agent": {
+      "name": "case-agent",
+      "version": "1",
+      "model_name": "resolved",
+      "extra": {
+        "avp": {
+          "provider": "openai",
+          "base_url": "https://proxy.example/v1",
+          "requested_model": "alias"
+        }
+      },
+      "tool_definitions": []
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001Z",
+        "source": "user",
+        "message": "Go"
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.002Z",
+        "source": "agent",
+        "message": "2",
+        "llm_call_count": 1,
+        "metrics": {},
+        "extra": {
+          "avp": {
+            "duration_ms": 0
+          }
+        }
+      },
+      {
+        "step_id": 3,
+        "timestamp": "2026-01-01T00:00:00.003Z",
+        "source": "agent",
+        "message": "3",
+        "llm_call_count": 1,
+        "metrics": {},
+        "extra": {
+          "avp": {
+            "duration_ms": 0
+          }
+        }
+      },
+      {
+        "step_id": 4,
+        "timestamp": "2026-01-01T00:00:00.004Z",
+        "source": "agent",
+        "message": "4",
+        "llm_call_count": 1,
+        "metrics": {},
+        "extra": {
+          "avp": {
+            "duration_ms": 0,
+            "provider": "anthropic",
+            "base_url": null,
+            "requested_model": "other"
+          }
+        },
+        "model_name": "other"
+      },
+      {
+        "step_id": 5,
+        "timestamp": "2026-01-01T00:00:00.005Z",
+        "source": "agent",
+        "message": "5",
+        "llm_call_count": 1,
+        "metrics": {},
+        "extra": {
+          "avp": {
+            "duration_ms": 0
+          }
+        }
+      }
+    ],
+    "extra": {
+      "avp": {
+        "complete": true,
+        "started_at": "2026-01-01T00:00:00.001Z",
+        "stopped_at": "2026-01-01T00:00:00.006Z",
+        "stop_reason": "converged",
+        "output": {
+          "answer": 5
+        }
+      }
+    },
+    "final_metrics": {
+      "total_steps": 5,
+      "extra": {
+        "avp": {
+          "known_totals": {
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_cached_tokens": 0,
+            "total_cost_usd": 0
+          }
+        }
+      }
+    }
+  }
+}

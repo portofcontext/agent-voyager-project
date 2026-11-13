@@ -240,7 +240,6 @@
         "timestamp": "2026-01-01T00:00:00.010000Z",
         "source": "agent",
         "message": "",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -254,8 +253,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 9,
-            "provider": "anthropic"
+            "duration_ms": 9
           }
         },
         "tool_calls": [
@@ -267,7 +265,6 @@
             },
             "extra": {
               "avp": {
-                "server_side": false,
                 "started_at": "2026-01-01T00:00:00.010000Z"
               }
             }
@@ -286,7 +283,6 @@
               "extra": {
                 "avp": {
                   "finished_at": "2026-01-01T00:00:00.032000Z",
-                  "duration_ms": 22,
                   "is_error": false
                 }
               }
@@ -299,7 +295,6 @@
         "timestamp": "2026-01-01T00:00:00.040000Z",
         "source": "agent",
         "message": "Done.",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -313,8 +308,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 7,
-            "provider": "anthropic"
+            "duration_ms": 7
           }
         }
       }
@@ -324,10 +318,10 @@
         "complete": true,
         "started_at": "2026-01-01T00:00:00.001000Z",
         "stop_reason": "converged",
-        "stopped_at": "2026-01-01T00:00:00.041000Z"
+        "stopped_at": "2026-01-01T00:00:00.041000Z",
+        "output": null
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "subagent_trajectories": [
       {
         "schema_version": "ATIF-v1.8",
@@ -335,7 +329,13 @@
         "trajectory_id": "run-1/subagent/call-1",
         "agent": {
           "name": "researcher",
-          "version": "unknown"
+          "version": "unknown",
+          "model_name": "claude-test-1",
+          "extra": {
+            "avp": {
+              "provider": "anthropic"
+            }
+          }
         },
         "steps": [
           {
@@ -349,7 +349,6 @@
             "timestamp": "2026-01-01T00:00:00.020000Z",
             "source": "agent",
             "message": "",
-            "model_name": "claude-test-1",
             "llm_call_count": 1,
             "metrics": {
               "prompt_tokens": 1000,
@@ -363,8 +362,7 @@
             },
             "extra": {
               "avp": {
-                "duration_ms": 8,
-                "provider": "anthropic"
+                "duration_ms": 8
               }
             },
             "tool_calls": [
@@ -374,7 +372,6 @@
                 "arguments": {},
                 "extra": {
                   "avp": {
-                    "server_side": false,
                     "started_at": "2026-01-01T00:00:00.020000Z"
                   }
                 }
@@ -388,7 +385,6 @@
                   "extra": {
                     "avp": {
                       "finished_at": "2026-01-01T00:00:00.025000Z",
-                      "duration_ms": 5,
                       "is_error": false
                     }
                   }
@@ -401,7 +397,6 @@
             "timestamp": "2026-01-01T00:00:00.030000Z",
             "source": "agent",
             "message": "Found it.",
-            "model_name": "claude-test-1",
             "llm_call_count": 1,
             "metrics": {
               "prompt_tokens": 1000,
@@ -415,8 +410,7 @@
             },
             "extra": {
               "avp": {
-                "duration_ms": 4,
-                "provider": "anthropic"
+                "duration_ms": 4
               }
             }
           }
@@ -426,11 +420,9 @@
             "complete": true,
             "started_at": "2026-01-01T00:00:00.011000Z",
             "stop_reason": "converged",
-            "stopped_at": "2026-01-01T00:00:00.031000Z",
-            "duration_ms": 20
+            "stopped_at": "2026-01-01T00:00:00.031000Z"
           }
         },
-        "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
         "final_metrics": {
           "total_steps": 3,
           "total_prompt_tokens": 2000,
@@ -438,7 +430,6 @@
           "total_cost_usd": 0.009,
           "extra": {
             "avp": {
-              "usage_scope": "subtree",
               "known_totals": {
                 "total_cached_tokens": 0
               }
@@ -454,7 +445,6 @@
       "total_cost_usd": 0.018,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_cached_tokens": 0
           }

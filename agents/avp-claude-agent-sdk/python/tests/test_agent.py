@@ -170,7 +170,7 @@ def test_native_response_usage_and_tool_pairing(script, tmp_path):
     assert [e["metrics"]["prompt_tokens"] for e in atif.responses(events)] == [15, 25]
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
 
 
@@ -222,7 +222,7 @@ def test_proxy_credentials_skills_allowlists_and_schema(script, tmp_path):
             "properties": {"answer": {"type": "integer"}},
         },
     )
-    assert atif.meta(events)["output"] == {"answer": 42}
+    assert atif.output(events) == {"answer": 42}
     assert script.options.env["ANTHROPIC_API_KEY"] == "avp-proxy-stand-in"
     assert script.options.tools == []
     assert "SUPPORT" in script.options.system_prompt

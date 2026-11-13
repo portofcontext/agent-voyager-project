@@ -153,10 +153,11 @@
     "agent": {
       "name": "case-agent",
       "version": "1.0.0",
-      "model_name": "claude-test-1",
+      "model_name": "claude-test-1-20260101",
       "extra": {
         "avp": {
-          "provider": "anthropic"
+          "provider": "anthropic",
+          "requested_model": "claude-test-1"
         }
       },
       "tool_definitions": [
@@ -215,7 +216,6 @@
             "text": "lo."
           }
         ],
-        "model_name": "claude-test-1-20260101",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -229,9 +229,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 2,
-            "provider": "anthropic",
-            "requested_model": "claude-test-1"
+            "duration_ms": 2
           }
         },
         "tool_calls": [
@@ -241,7 +239,6 @@
             "arguments": {},
             "extra": {
               "avp": {
-                "server_side": false,
                 "started_at": "2026-01-01T00:00:00.012000Z"
               }
             }
@@ -255,7 +252,6 @@
               "extra": {
                 "avp": {
                   "finished_at": "2026-01-01T00:00:00.025000Z",
-                  "duration_ms": 13,
                   "is_error": false
                 }
               }
@@ -282,8 +278,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 0,
-            "provider": "anthropic"
+            "duration_ms": 0
           }
         }
       }
@@ -293,10 +288,10 @@
         "complete": true,
         "started_at": "2026-01-01T00:00:00.001000Z",
         "stop_reason": "converged",
-        "stopped_at": "2026-01-01T00:00:00.031000Z"
+        "stopped_at": "2026-01-01T00:00:00.031000Z",
+        "output": null
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "final_metrics": {
       "total_steps": 3,
       "total_prompt_tokens": 2000,
@@ -304,7 +299,6 @@
       "total_cost_usd": 0.006,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_cached_tokens": 0
           }

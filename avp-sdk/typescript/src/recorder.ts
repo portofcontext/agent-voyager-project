@@ -58,7 +58,6 @@ interface Call {
 interface Subagent {
   name: string;
   parent?: string;
-  time: number;
   reason?: StopReason;
 }
 interface Response {
@@ -106,7 +105,6 @@ import {
   Document,
   metadata,
   remaining,
-  modelMetadata,
   content,
   contentMetadata,
   metrics,
@@ -291,9 +289,14 @@ export class Recorder {
       stop_reason: reason,
       stopped_at: this.now().toISOString(),
     });
-    if (output != null) {
-      metadata(this.root.data).output = output;
-      this.artifacts.json("outputs/result.json", output, "output");
+    const lastMessage = this.root.data.steps.findLast(
+      (step: any) => step.source === "agent",
+    )?.message;
+    if (
+      !(typeof output === "string" && output === lastMessage) &&
+      (output != null || lastMessage != null)
+    ) {
+      metadata(this.root.data).output = output ?? null;
     }
     await this.publish();
   }
@@ -414,17 +417,19 @@ export class Recorder {
       content(visible, this.assets),
     );
     Object.assign(step, {
-      model_name: response.responseModel ?? response.model.id,
       llm_call_count: 1,
       metrics: metrics(usage),
     });
+    doc.recordModel(
+      step,
+      response.model,
+      response.responseModel ?? response.model.id,
+    );
     const meta = metadata(step);
     Object.assign(meta, {
       duration_ms:
         response.durationMs ?? Math.max(0, response.last - response.opened),
-      ...modelMetadata(response.model),
     });
-    if (response.responseModel) meta.requested_model = response.model.id;
     if (response.finishReasons?.length)
       meta.finish_reasons = response.finishReasons;
     if (Object.keys(response.meta).length) meta.annotations = response.meta;
@@ -454,15 +459,19 @@ export class Recorder {
         tool_call_id: block.id,
         function_name: block.name,
         arguments: block.input,
-        extra: { avp: { server_side: block.type === "server_tool_use" } },
       };
+      if (block.type === "server_tool_use") metadata(call).server_side = true;
       const extra = remaining(block, ["type", "id", "name", "input"]);
       if (Object.keys(extra).length) metadata(call).provider_metadata = extra;
       if (block.type === "tool_use") {
         const state = this.calls.get(block.id)!;
         state.step = step;
         metadata(call).started_at = new Date(state.time).toISOString();
-        if (state.server) metadata(call).mcp_server_id = state.server;
+        const declaredServer = doc.data.agent.tool_definitions?.find(
+          (t: any) => t.function.name === block.name,
+        )?.extra?.avp?.mcp_server_id;
+        if (state.server && state.server !== declaredServer)
+          metadata(call).mcp_server_id = state.server;
       }
       (step.tool_calls ??= []).push(call);
     }
@@ -536,12 +545,10 @@ export class Recorder {
     if (child?.reason) isError = child.reason !== "converged";
     if (this.openResponse?.callIds.has(id))
       this.openResponse.toolReturned = true;
-    const time = this.now().toISOString(),
-      duration = Math.max(0, this.now().getTime() - call.time);
+    const time = this.now().toISOString();
     await this.write(() => {
       if (!call.step) throw new RecorderError(`tool ${id} has no response`);
       this.result(call.step, id, raw, time, isError, {
-        duration_ms: duration,
         structured_content: structuredContent,
       });
     });
@@ -563,7 +570,6 @@ export class Recorder {
     this.subagents.set(id, {
       name,
       parent: subagentInvocationId,
-      time: this.now().getTime(),
     });
     const time = this.now().toISOString();
     await this.write(() => {
@@ -601,15 +607,13 @@ export class Recorder {
         `subagent_returned: subagent ${repr(id)} is ${child ? "already returned" : "unknown"}`,
       );
     child.reason = reason;
-    const time = this.now().toISOString(),
-      duration = Math.max(0, this.now().getTime() - child.time);
+    const time = this.now().toISOString();
     await this.write(() => {
       const doc = this.scope(id);
       Object.assign(metadata(doc.data), {
         complete: true,
         stop_reason: reason,
         stopped_at: time,
-        duration_ms: duration,
       });
       const result = this.delegations.get(id);
       result.content ??= text;

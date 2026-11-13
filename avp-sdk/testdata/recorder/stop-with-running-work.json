@@ -175,7 +175,6 @@
         "timestamp": "2026-01-01T00:00:00.010000Z",
         "source": "agent",
         "message": "",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -189,8 +188,7 @@
         },
         "extra": {
           "avp": {
-            "duration_ms": 9,
-            "provider": "anthropic"
+            "duration_ms": 9
           }
         },
         "tool_calls": [
@@ -202,7 +200,6 @@
             },
             "extra": {
               "avp": {
-                "server_side": false,
                 "started_at": "2026-01-01T00:00:00.010000Z"
               }
             }
@@ -213,7 +210,6 @@
             "arguments": {},
             "extra": {
               "avp": {
-                "server_side": false,
                 "started_at": "2026-01-01T00:00:00.010000Z"
               }
             }
@@ -232,7 +228,6 @@
               "extra": {
                 "avp": {
                   "finished_at": "2026-01-01T00:00:00.050000Z",
-                  "duration_ms": 40,
                   "is_error": true
                 }
               }
@@ -243,7 +238,6 @@
               "extra": {
                 "avp": {
                   "finished_at": "2026-01-01T00:00:00.050000Z",
-                  "duration_ms": 40,
                   "is_error": true
                 }
               }
@@ -261,7 +255,6 @@
         "output": "partial"
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "subagent_trajectories": [
       {
         "schema_version": "ATIF-v1.8",
@@ -284,16 +277,13 @@
             "complete": true,
             "started_at": "2026-01-01T00:00:00.011000Z",
             "stop_reason": "abandoned",
-            "stopped_at": "2026-01-01T00:00:00.050000Z",
-            "duration_ms": 39
+            "stopped_at": "2026-01-01T00:00:00.050000Z"
           }
         },
-        "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
         "final_metrics": {
           "total_steps": 1,
           "extra": {
             "avp": {
-              "usage_scope": "subtree",
               "known_totals": {
                 "total_prompt_tokens": 0,
                 "total_completion_tokens": 0,
@@ -309,7 +299,6 @@
       "total_steps": 2,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_prompt_tokens": 1000,
             "total_completion_tokens": 100,

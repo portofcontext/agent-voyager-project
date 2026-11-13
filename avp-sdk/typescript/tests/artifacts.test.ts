@@ -119,9 +119,11 @@ test("captures full immutable skill inputs and output files while trace metadata
       (a) => !a.path.startsWith("outputs/details/"),
     ),
   );
-  assert.deepEqual(
-    JSON.parse(readFileSync(join(directory, "outputs/result.json"), "utf8")),
-    { answer: 42 },
+  assert.deepEqual(avpMetadata(final).output, { answer: 42 });
+  assert.ok(
+    readArtifacts(directory).artifacts.every(
+      (a) => a.path !== "outputs/result.json",
+    ),
   );
 });
 

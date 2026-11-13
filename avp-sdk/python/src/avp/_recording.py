@@ -27,13 +27,6 @@ def _remaining(value: dict[str, Any], represented: set[str]) -> dict[str, Any]:
     return {k: v for k, v in value.items() if k not in represented}
 
 
-def _model_metadata(model: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "provider": model["provider"],
-        **({"base_url": model["base_url"]} if "base_url" in model else {}),
-    }
-
-
 def _content_metadata(content: Any) -> list[dict[str, Any]]:
     """Attach citations, refusals, and provider annotations to visible parts."""
     if not isinstance(content, list):
@@ -126,6 +119,28 @@ class _Document:
     data: dict[str, Any]
     usages: list[dict[str, Any]] = field(default_factory=list)
     children: list["_Document"] = field(default_factory=list)
+    model_defaults: dict[str, Any] | None = None
+
+    def record_model(self, step: dict[str, Any], model: dict[str, Any], actual: str) -> None:
+        values = {
+            "provider": model["provider"],
+            "base_url": model.get("base_url"),
+            "requested_model": model["id"],
+        }
+        agent = self.data["agent"]
+        if self.model_defaults is None:
+            self.model_defaults = values
+            agent["model_name"] = actual
+            defaults = _metadata(agent)
+            defaults.update({k: v for k, v in values.items() if v is not None})
+            if model["id"] == actual:
+                defaults.pop("requested_model", None)
+        else:
+            if actual != agent["model_name"]:
+                step["model_name"] = actual
+            for key, value in values.items():
+                if value != self.model_defaults[key]:
+                    _metadata(step)[key] = value
 
     def step(self, timestamp: str, source: str, message: Any) -> dict[str, Any]:
         steps = self.data["steps"]
@@ -159,7 +174,8 @@ class _Document:
                 totals[target] = sum(measured)
             else:
                 known[target] = sum(measured)
-        totals["extra"] = _extra(usage_scope="subtree", known_totals=known)
+        if known:
+            totals["extra"] = _extra(known_totals=known)
         self.data["final_metrics"] = totals
         return usages
 
@@ -173,8 +189,6 @@ def _document(run_id: str, trajectory_id: str, name: str, version: str) -> _Docu
             "agent": {"name": name, "version": version},
             "steps": [],
             "extra": _extra(complete=False),
-            "notes": "Usage totals include descendants once; total_steps counts this document's "
-            "steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
         }
     )
 

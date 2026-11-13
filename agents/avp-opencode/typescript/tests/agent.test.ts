@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   parseTrajectory,
+  finalOutput,
   type Trajectory,
   type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
@@ -215,7 +216,7 @@ test("native tool loop preserves response deltas, reported cost, and awaited sin
   );
   assert.equal(atifResults(snapshots)[0]!.source_call_id, "write1");
   assert.equal(meta(atifResults(snapshots)[0]!).is_error, false);
-  assert.equal(meta(latest(snapshots)).output, "DONE");
+  assert.equal(finalOutput(latest(snapshots)), "DONE");
   assert.equal(requests.length, 2);
 });
 
@@ -486,7 +487,7 @@ test("native structured output is returned and its actual tool schema declared",
       (t: any) => t.function.name === "StructuredOutput",
     ),
   );
-  assert.deepEqual(meta(latest(snapshots)).output, { answer: "OK" });
+  assert.deepEqual(finalOutput(latest(snapshots)), { answer: "OK" });
 });
 
 test("invalid Commission and missing environment credentials refuse before a provider request", async (t: any) => {

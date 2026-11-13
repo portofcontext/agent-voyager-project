@@ -175,7 +175,6 @@
         "timestamp": "2026-01-01T00:00:00.010000Z",
         "source": "agent",
         "message": "Done.",
-        "model_name": "claude-test-1",
         "llm_call_count": 1,
         "metrics": {
           "prompt_tokens": 1000,
@@ -190,7 +189,6 @@
         "extra": {
           "avp": {
             "duration_ms": 9,
-            "provider": "anthropic",
             "finish_reasons": [
               "end_turn"
             ],
@@ -221,13 +219,11 @@
         "started_at": "2026-01-01T00:00:00.001000Z",
         "stop_reason": "converged",
         "stopped_at": "2026-01-01T00:00:00.011000Z",
-        "output": "Done.",
         "annotations": {
           "runtime_session_id": "native-session"
         }
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "final_metrics": {
       "total_steps": 2,
       "total_prompt_tokens": 1000,
@@ -235,7 +231,6 @@
       "total_cost_usd": 0.0045,
       "extra": {
         "avp": {
-          "usage_scope": "subtree",
           "known_totals": {
             "total_cached_tokens": 0
           }

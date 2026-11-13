@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from avp.artifacts import artifact_path, read_artifacts
-from avp.trajectory import parse_trajectory
+from avp.trajectory import final_output, parse_trajectory
 
 
 def load(path: Path) -> dict:
@@ -59,3 +59,22 @@ def children(root: dict) -> list[dict]:
 
 def errors(root: dict) -> list[dict]:
     return [s for d in documents(root) for s in d["steps"] if meta(s).get("error_code")]
+
+
+def mcp_server(root: dict, call: dict) -> str | None:
+    for doc in documents(root):
+        if any(call is c for step in doc["steps"] for c in step.get("tool_calls", [])):
+            declared = next(
+                (
+                    meta(t).get("mcp_server_id")
+                    for t in doc["agent"].get("tool_definitions", [])
+                    if t["function"]["name"] == call["function_name"]
+                ),
+                None,
+            )
+            return meta(call).get("mcp_server_id", declared)
+    raise AssertionError("call missing from trajectory")
+
+
+def output(root: dict):
+    return final_output(parse_trajectory(root))

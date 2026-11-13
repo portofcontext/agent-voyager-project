@@ -21,7 +21,7 @@ from pydantic import (
 )
 
 from avp.reports import StopReason
-from avp.trajectory import Trajectory, avp_metadata, documents, parse_trajectory
+from avp.trajectory import Trajectory, avp_metadata, documents, final_output, parse_trajectory
 from avp_cli import paths
 from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
@@ -100,7 +100,7 @@ class Run(BaseModel):
     invalid_trajectory: list[JsonValue]
     """Invalid document contents, parsed as JSON or retained as text."""
     output: JsonValue = None
-    """Typed AVP output, or the final root agent message for external ATIF."""
+    """Typed returned output, or the final root agent message."""
     reason: StopReason | None = None
     """The AVP stop reason, when present."""
     item: Item
@@ -208,15 +208,7 @@ def read(
     """The run in `directory`, from its Trajectory."""
     trajectory, invalid = read_trajectory(directory / paths.TRAJECTORY)
     metadata = avp_metadata(trajectory) if trajectory else {}
-    replies = [s.message for s in trajectory.steps if s.source == "agent"] if trajectory else []
-    output = metadata.get("output")
-    if "complete" not in metadata and "output" not in metadata and replies:
-        message = replies[-1]
-        output = (
-            message
-            if isinstance(message, str)
-            else [part.model_dump(mode="json", exclude_none=True) for part in message]
-        )
+    output = final_output(trajectory) if trajectory else None
     reason = metadata.get("stop_reason")
     if reason not in {"converged", "refused", "error", "interrupted", "abandoned"}:
         reason = None

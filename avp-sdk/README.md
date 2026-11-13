@@ -142,7 +142,10 @@ are not a persisted event format. `avp.trajectory` exposes upstream wire models,
 ### Run artifacts
 
 The SDK captures the validated Commission, Descriptor, effective configuration,
-and available skill files as inputs. It saves media and final results as outputs.
+and available skill files as inputs. It saves media and explicitly reported files as outputs. The returned result
+stays in ATIF. Read it with Python `final_output(trajectory)` or TypeScript
+`finalOutput(trajectory)` from the trajectory module. These prefer a distinct
+`extra.avp.output` and otherwise use the final agent message.
 Execution and provider metadata stay alongside their ATIF steps. [The artifact spec](../spec/v0.1/artifacts.md)
 defines the small manifest and portable relative paths.
 

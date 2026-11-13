@@ -212,11 +212,11 @@ def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_pa
     responses = atif.responses(events)
     assert [item["metrics"]["prompt_tokens"] for item in responses] == [10, 20]
     assert responses[0]["metrics"]["cached_tokens"] == 3
-    assert atif.meta(atif.calls(events)[0])["mcp_server_id"] == "echo"
+    assert atif.mcp_server(events, atif.calls(events)[0]) == "echo"
     assert atif.meta(atif.results(events)[0])["is_error"] is True
     assert {
         "reason": atif.meta(events).get("stop_reason"),
-        "output": atif.meta(events).get("output"),
+        "output": atif.output(events),
     } == {"reason": "converged", "output": "DONE"}
     assert dict(script.calls)["thread/start"]["config"]["skills.config"] == [
         {"path": "/host/secret/SKILL.md", "enabled": False}
@@ -280,7 +280,7 @@ def test_credentials_skills_prompt_schema_and_output_validation(script, tmp_path
             "properties": {"answer": {"type": "integer"}},
         },
     )
-    assert atif.meta(events)["output"] == {"answer": 42}
+    assert atif.output(events) == {"answer": 42}
     assert script.config.env == {"AVP_CODEX_API_KEY": "avp-proxy-stand-in"}
     params = dict(script.calls)["thread/start"]
     assert params["baseInstructions"] == "Be brief"
@@ -355,7 +355,7 @@ def test_final_output_keeps_all_text_parts(script, tmp_path):
         completed(),
     ]
     _, events = run_cli(tmp_path)
-    assert atif.meta(events)["output"] == "first second"
+    assert atif.output(events) == "first second"
 
 
 @pytest.mark.parametrize(

@@ -22,7 +22,6 @@ from avp._recording import (
     _document,
     _metadata,
     _metrics,
-    _model_metadata,
     _observation,
     _remaining,
 )
@@ -92,7 +91,6 @@ class _Call:
 class _Subagent:
     name: str
     parent: str | None
-    time: datetime
     reason: StopReason | None = None
     """Set when it returns."""
 
@@ -296,9 +294,18 @@ class Recorder:
         _metadata(self._root.data).update(
             complete=True, stop_reason=reason, stopped_at=self._time()
         )
-        if output is not None:
+        last_message = next(
+            (
+                step["message"]
+                for step in reversed(self._root.data["steps"])
+                if step["source"] == "agent"
+            ),
+            None,
+        )
+        if not (isinstance(output, str) and output == last_message) and (
+            output is not None or last_message is not None
+        ):
             _metadata(self._root.data)["output"] = output
-            self._artifacts.json("outputs/result.json", output, "output")
         await self._publish()
 
     async def response(
@@ -402,19 +409,20 @@ class Recorder:
         visible = [b for b in blocks if b["type"] in ("text", "image", "refusal")]
         step = doc.step(response.last.isoformat(), "agent", _content(visible, self._assets))
         step.update(
-            model_name=response.response_model or response.model.id,
             llm_call_count=1,
             metrics=_metrics(usage),
+        )
+        doc.record_model(
+            step,
+            response.model.model_dump(exclude_none=True),
+            response.response_model or response.model.id,
         )
         metadata = _metadata(step)
         metadata.update(
             duration_ms=response.duration_ms
             if response.duration_ms is not None
             else _ms(response.opened, response.last),
-            **_model_metadata(response.model.model_dump(exclude_none=True)),
         )
-        if response.response_model:
-            metadata["requested_model"] = response.model.id
         if response.finish_reasons:
             metadata["finish_reasons"] = response.finish_reasons
         if response.meta:
@@ -447,15 +455,24 @@ class Recorder:
                     "tool_call_id": block["id"],
                     "function_name": block["name"],
                     "arguments": block["input"],
-                    "extra": {"avp": {"server_side": block["type"] == "server_tool_use"}},
                 }
+                if block["type"] == "server_tool_use":
+                    _metadata(call)["server_side"] = True
                 if extra := _remaining(block, {"type", "id", "name", "input"}):
                     _metadata(call)["provider_metadata"] = extra
                 if block["type"] == "tool_use":
                     state = self._calls[block["id"]]
                     state.step = step
                     _metadata(call)["started_at"] = state.time.isoformat()
-                    if state.mcp_server_id:
+                    declared_server = next(
+                        (
+                            t.get("extra", {}).get("avp", {}).get("mcp_server_id")
+                            for t in doc.data["agent"].get("tool_definitions", [])
+                            if t["function"]["name"] == block["name"]
+                        ),
+                        None,
+                    )
+                    if state.mcp_server_id and state.mcp_server_id != declared_server:
                         _metadata(call)["mcp_server_id"] = state.mcp_server_id
                 step.setdefault("tool_calls", []).append(call)
         for block in blocks:
@@ -510,7 +527,6 @@ class Recorder:
         if self._response is not None and call_id in self._response.call_ids:
             self._response.tool_returned = True
         timestamp = self._time()
-        duration = _ms(call.time, self._now())
         raw = (
             content
             if isinstance(content, str)
@@ -526,7 +542,6 @@ class Recorder:
                 raw,
                 timestamp,
                 is_error,
-                duration_ms=duration,
                 structured_content=structured_content,
             )
 
@@ -547,7 +562,7 @@ class Recorder:
         if call:
             subagent_input = call.input if subagent_input is None else subagent_input
             subagent_invocation_id = subagent_invocation_id or call.subagent_invocation_id
-        self._subagents[invocation_id] = _Subagent(name, subagent_invocation_id, self._now())
+        self._subagents[invocation_id] = _Subagent(name, subagent_invocation_id)
         timestamp = self._time()
 
         def update():
@@ -586,13 +601,11 @@ class Recorder:
                 f"subagent_returned: subagent {invocation_id!r} is {'unknown' if child is None else 'already returned'}"
             )
         child.reason = reason
-        timestamp, duration = self._time(), _ms(child.time, self._now())
+        timestamp = self._time()
 
         def update():
             doc = self._scope(invocation_id)
-            _metadata(doc.data).update(
-                complete=True, stop_reason=reason, stopped_at=timestamp, duration_ms=duration
-            )
+            _metadata(doc.data).update(complete=True, stop_reason=reason, stopped_at=timestamp)
             self._delegations[invocation_id].setdefault("content", text)
             if not doc.usages:
                 counts = usage.model_dump(exclude_none=True) if usage else {}

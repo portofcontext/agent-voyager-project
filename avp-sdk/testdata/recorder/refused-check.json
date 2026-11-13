@@ -64,19 +64,12 @@
         "stopped_at": "2026-01-01T00:00:00Z"
       }
     },
-    "notes": "Usage totals include descendants once; total_steps counts this document's steps only. Missing metrics are unknown. Unrecorded context is not reconstructed.",
     "final_metrics": {
       "total_steps": 1,
       "total_prompt_tokens": 0,
       "total_completion_tokens": 0,
       "total_cached_tokens": 0,
-      "total_cost_usd": 0,
-      "extra": {
-        "avp": {
-          "usage_scope": "subtree",
-          "known_totals": {}
-        }
-      }
+      "total_cost_usd": 0
     }
   }
 }
