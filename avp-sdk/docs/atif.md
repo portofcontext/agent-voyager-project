@@ -11,8 +11,9 @@ avp-pydantic-ai-cli run --commission commission.json --out trajectory.json
 File output is an atomically replaced JSON snapshot. Tools first appear in a
 model-response step's `tool_calls`; their results are attached to that step's
 `observation`. The CLI follows these updates without replaying previous output.
-Stdout output is one completed document. Images are deduplicated files beside
-the document, so move the referenced assets with it.
+Stdout output is one completed document. File output also writes `artifacts.json`
+and captured files beside the trace. Move the manifest and all listed files
+with the trajectory to preserve the complete run.
 
 ## Read a trajectory
 
@@ -54,13 +55,30 @@ trace exporter rejects images; use a multimodal consumer for those runs.
 
 Standard ATIF fields carry messages, public reasoning, tool calls, observations,
 child trajectories, model identity, tool schemas, usage, and cost. `extra.avp`
-retains typed final output, terminal reason, errors, timing, effective settings,
-MCP ownership, cache-write/reasoning-token distinctions, and provider annotations.
+retains typed final output, terminal reason, errors, timing, MCP ownership, and
+cache-write/reasoning-token distinctions.
 Unknown usage is omitted. Opaque child usage is counted only when individual
 child responses are unavailable.
 
-The original Commission and full Descriptor are not duplicated. The CLI stores
-the Commission separately. No copy of native runtime events is required.
+Full configuration, skill directories, and bulky provider details are preserved
+as [run artifacts](../../spec/v0.1/artifacts.md). The manifest lists only path,
+input/output role, and SHA-256. This keeps traces tight without dropping the
+inputs needed for evaluation or recursive improvement. Native runtime event
+archives are not required.
+
+```python
+from avp.artifacts import read_artifacts
+
+manifest = read_artifacts(Path("."), run_id=trajectory.session_id)
+for artifact in manifest.artifacts:
+    print(artifact.role, artifact.path)
+```
+
+`read_artifacts` verifies every file and hash. TypeScript exposes the equivalent
+`readArtifacts` from `@agent-voyager-project/sdk/artifacts`. Runtime details are
+linked from the relevant trace object through `extra.avp.details_path`. The
+manifest inventories captured files; it does not promise a full workspace or
+a reproducible runtime environment.
 
 ## Verification and upstream updates
 

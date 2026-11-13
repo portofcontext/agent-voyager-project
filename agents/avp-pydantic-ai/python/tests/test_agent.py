@@ -91,7 +91,7 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
     )
     assert message["message"] == "DONE"
     assert message["reasoning_content"] == "short"
-    assert atif.meta(message)["reasoning_metadata"][0]["signature"] == "sig"
+    assert atif.details(tmp_path, message)["reasoning_metadata"][0]["signature"] == "sig"
     usage = message["metrics"]
     assert (usage["prompt_tokens"], usage["completion_tokens"]) == (1000, 50)
     assert usage["cached_tokens"] == 400
@@ -126,9 +126,10 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
     server = {"id": "t", "type": "stdio", "command": [sys.executable, str(TEST_MCP)]}
     events = _run(tmp_path, mcp_servers=[server])
     assert len(atif.responses(events)) == 2
-    started = events["agent"]
-    assert atif.meta(started)["mcp_servers"] == [{"id": "t", "status": "connected"}]
-    add = next(t for t in started["tool_definitions"] if t["function"]["name"] == "Avptest_Add")
+    assert atif.effective(tmp_path)["mcp_servers"] == [{"id": "t", "status": "connected"}]
+    add = next(
+        t for t in events["agent"]["tool_definitions"] if t["function"]["name"] == "Avptest_Add"
+    )
     assert (
         atif.meta(add)["mcp_server_id"] == "t"
         and add["function"]["description"]
@@ -184,8 +185,8 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
         "files": {"SKILL.md": "---\nname: greet\ndescription: Greet people.\n---\nSay hi."},
     }
     events = _run(tmp_path, system_prompt="base", skills=[skill])
-    assert atif.meta(events["agent"])["skills"] == [
-        {"name": "greet", "description": "Greet people."}
+    assert atif.effective(tmp_path)["skills"] == [
+        {"name": "greet", "description": "Greet people.", "source": "file:inputs/skills/greet"}
     ]
     assert "Say hi." in seen[0][0][0].instructions
 

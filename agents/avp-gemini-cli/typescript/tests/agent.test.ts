@@ -1,3 +1,4 @@
+import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
 import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 /** Real Gemini sessions, schedulers, tools, and MCP clients cross the Recorder. */
 import { strict as assert } from "node:assert";
@@ -25,9 +26,23 @@ import {
 import {
   parseTrajectory,
   type Trajectory,
+  type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
 import { run } from "../src/agent.js";
 import { describe } from "../src/descriptor.js";
+const artifactFiles = new WeakMap<Trajectory, Recording>();
+function capture(recording: Recording): Trajectory {
+  const trajectory = parseTrajectory(recording.trajectory);
+  artifactFiles.set(trajectory, recording);
+  return trajectory;
+}
+function effective(snapshots: Trajectory[]): any {
+  const file = artifactFiles
+    .get(snapshots.at(-1)!)
+    ?.artifacts?.get("inputs/effective-agent.json");
+  assert.ok(file);
+  return JSON.parse(Buffer.from(file.content).toString("utf8"));
+}
 const MODEL = "gemini-2.5-flash";
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = fileURLToPath(
@@ -124,7 +139,7 @@ async function drive(
       commission,
       async (event) => {
         await delay(1);
-        snapshots.push(parseTrajectory(event.trajectory)!);
+        snapshots.push(capture(event)!);
       },
       { contentGenerator: generator, signal: options.signal },
     );
@@ -137,10 +152,9 @@ async function drive(
     "native scheduler listeners are disposed",
   );
   if (process.env.AVP_ATIF_CAPTURE) {
-    writeFileSync(
-      join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.json`),
-      JSON.stringify(latest(snapshots)) + "\n",
-    );
+    await trajectorySink(
+      join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
+    )(artifactFiles.get(latest(snapshots))!);
   }
   return { snapshots, cwd };
 }
@@ -230,8 +244,8 @@ test("native tool allowlists and custom system prompt replace the defaults", asy
   );
   const started = latest(snapshots).agent;
   assert.deepEqual(started.tool_definitions, []);
-  assert.deepEqual(meta(started).skills, []);
-  assert.deepEqual(meta(started).subagents, []);
+  assert.deepEqual(effective(snapshots).skills, []);
+  assert.deepEqual(effective(snapshots).subagents, []);
   assert.ok(system.includes("ONLY_SYSTEM"));
   assert.ok(!system.includes("You are an interactive"));
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
@@ -285,12 +299,14 @@ test("native skill activation loads commissioned files and does not discover wor
   );
   const started = latest(snapshots).agent;
   assert.ok(
-    meta(started).skills?.some(
+    effective(snapshots).skills?.some(
       (skill: any) => skill.name === "migration-check",
     ),
   );
   assert.ok(
-    !meta(started).skills?.some((skill: any) => skill.name === "ambient"),
+    !effective(snapshots).skills?.some(
+      (skill: any) => skill.name === "ambient",
+    ),
   );
   assert.ok(!started.system_prompt?.includes("NATIVE_SKILL_BODY"));
   assert.match(JSON.stringify(atifResults(snapshots)), /NATIVE_SKILL_BODY/);
@@ -322,7 +338,7 @@ test("native MCP connection and parallel tools preserve ownership and both error
     ]),
   );
   const started = latest(snapshots).agent;
-  assert.equal(meta(started).mcp_servers?.[0]?.status, "connected");
+  assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
     meta(
       started.tool_definitions?.find((tool: any) =>
@@ -556,7 +572,7 @@ test("parallel native subagents keep usage attached to their own invocation", as
     ),
   );
   assert.equal(atifResponses(snapshots).length, 2);
-  const generalist = meta(latest(snapshots).agent).subagents?.find(
+  const generalist = effective(snapshots).subagents?.find(
     (agent: any) => agent.name === "generalist",
   );
   assert.ok(

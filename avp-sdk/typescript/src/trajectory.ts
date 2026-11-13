@@ -1,5 +1,6 @@
 /** ATIF documents. Accepts upstream producers without AVP extensions. */
 import { readFileSync } from "node:fs";
+import type { ArtifactFile } from "./artifacts.js";
 import { ajv } from "./validation.js";
 import type { Trajectory } from "./wire.js";
 export type {
@@ -15,6 +16,7 @@ export type {
 export interface Recording {
   trajectory: Trajectory;
   assets: Map<string, Uint8Array>;
+  artifacts?: Map<string, ArtifactFile>;
 }
 export type TrajectorySink = (snapshot: Recording) => Promise<void>;
 const schema = JSON.parse(

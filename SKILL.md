@@ -49,7 +49,10 @@ and inspect results. Saved Commissions and the TUI are not implemented yet.
 Compare correctness, cost, and response counts separately. Preserve the run's
 Commission and Trajectory as evidence. Reduce per-response usage and cost once;
 do not add runtime totals or count subagent usage twice. See the
-[Trajectory spec](spec/v0.1/trajectory.md).
+[Trajectory spec](spec/v0.1/trajectory.md). File runs also contain
+[artifacts](spec/v0.1/artifacts.md): captured configuration, skill files, and
+outputs listed by path, role, and SHA-256. Keep the manifest and all listed
+files with the trajectory when moving a complete run.
 
 ## Integrate a runtime
 

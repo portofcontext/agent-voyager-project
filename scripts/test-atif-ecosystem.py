@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory() as temporary:
     directory = Path(temporary)
     source = directory / "trajectory.json"
     sys.path.insert(0, str(ROOT / "avp-sdk/python/src"))
+    from avp.artifacts import read_artifacts
     from avp.commission import ModelRef
     from avp.descriptor import AgentDescriptor, Tool
     from avp.recorder import Recorder, UsageReport
@@ -65,6 +66,7 @@ with tempfile.TemporaryDirectory() as temporary:
     jobs = directory / "jobs"
     copied = example.prepare(source, jobs)
     assert copied.read_bytes() == source.read_bytes()
+    assert read_artifacts(copied.parent, run_id="ecosystem") == read_artifacts(directory)
     scanner = JobScanner(jobs)
     assert scanner.list_jobs() == ["avp-import"]
     assert scanner.list_trials("avp-import") == ["run"]

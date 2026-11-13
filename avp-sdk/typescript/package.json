@@ -57,6 +57,10 @@
     "./reports": {
       "types": "./dist/reports.d.ts",
       "import": "./dist/reports.js"
+    },
+    "./artifacts": {
+      "types": "./dist/artifacts.d.ts",
+      "import": "./dist/artifacts.js"
     }
   },
   "scripts": {

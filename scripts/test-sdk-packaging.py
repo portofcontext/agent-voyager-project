@@ -129,11 +129,13 @@ class PackagingTests(unittest.TestCase):
                     f"""
 import sys
 sys.path.insert(0, {str(consumer)!r})
+from avp.artifacts import ArtifactManifest
 from avp.utils.endpoints import bundled_endpoints, default_base_url, provider_auth
 from avp.utils.pricing import bundled_prices
 assert default_base_url(bundled_endpoints(), 'anthropic') == 'https://api.anthropic.com/v1'
 assert provider_auth(bundled_endpoints(), 'anthropic').header == 'x-api-key'
 assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
+assert ArtifactManifest(avp_version='0.1', run_id='r', artifacts=[]).run_id == 'r'
 """,
                 ],
                 cwd=out,
@@ -182,6 +184,8 @@ import { bundledPrices } from '@agent-voyager-project/sdk/utils/pricing';
 import { bundledEndpoints, defaultBaseUrl, providerAuth } from '@agent-voyager-project/sdk/utils/endpoints';
 import { parseCommission } from '@agent-voyager-project/sdk/commission';
 import { Recorder } from '@agent-voyager-project/sdk/recorder';
+import { parseArtifacts } from '@agent-voyager-project/sdk/artifacts';
+assert.equal(parseArtifacts({avp_version:'0.1',run_id:'r',artifacts:[]}).run_id, 'r');
 assert.ok(bundledPrices().models['anthropic/claude-sonnet-4-5'].output > 0);
 assert.equal(defaultBaseUrl(bundledEndpoints(), 'anthropic'), 'https://api.anthropic.com/v1');
 assert.deepEqual(providerAuth(bundledEndpoints(), 'anthropic'), {header:'x-api-key',prefix:''});

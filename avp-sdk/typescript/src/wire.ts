@@ -2,6 +2,19 @@
 
 export type JsonValue = unknown;
 
+export interface Artifact {
+  path: string;
+  role: "input" | "output";
+  sha256: string;
+}
+/**
+ * Captured run files. See artifacts.md.
+ */
+export interface ArtifactManifest {
+  avp_version: "0.1";
+  run_id: string;
+  artifacts: Artifact[];
+}
 /**
  * What an agent comes with before any Commission.
  */

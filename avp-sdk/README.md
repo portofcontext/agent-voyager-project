@@ -3,7 +3,7 @@
 The AVP SDKs (Python and TypeScript) have two goals:
 
 - **Define the wire:** types for the Commission, the Agent Descriptor, and
-  ATIF trajectories, matching the specs' schemas.
+  ATIF trajectories and run artifact manifests, matching the specs' schemas.
 - **Share the common work:** code that every agent runner or supervisor would
   otherwise write itself, such as checking a Commission, writing a Trajectory,
   and pricing a response.
@@ -33,6 +33,7 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 | Part | What it does | Python |
 |---|---|---|
 | Wire types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Artifacts | Capture immutable files, publish a small manifest, and verify hashes | `avp.artifacts` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
@@ -88,7 +89,8 @@ its own way. The run plan does it once and returns:
 
 - `started`: a `RunContext` describing effective configuration. The adapter
   configures its runtime, adds connected MCP tools and status, and passes it
-  to `Recorder.start` to populate the ATIF agent and prompt steps.
+  to `Recorder.start` to populate the ATIF agent and prompt steps and snapshot
+  effective configuration and accessible skill directories.
 - `turned_off`: the built-in items the run may not use, which the agent hides
   from the model and refuses to run.
 
@@ -117,7 +119,9 @@ transport.
 Paths default to stdout where `--out` is optional.
 
 `run` hands the Commission and a `TrajectorySink` to the adapter. The Recorder
-publishes `Recording` snapshots containing the ATIF document and binary assets.
+publishes `Recording` snapshots containing the ATIF document, binary assets,
+and captured artifact files. File sinks publish those files and `artifacts.json`
+before the trace snapshot. Stdout retains only the ATIF document.
 
 Exit codes: `0` when the Trajectory is complete, a refusal included; `130` when
 SIGINT or SIGTERM interrupted the run; anything else is a crash.
@@ -134,6 +138,27 @@ Adapter method inputs live in `avp.reports` (TypeScript: `sdk/reports`). They
 are not a persisted event format. `avp.trajectory` exposes upstream wire models,
 `parse_trajectory`, and `Recording`. Both SDKs run the same Recorder cases in
 [`testdata/recorder/`](testdata/recorder/).
+
+### Run artifacts
+
+The SDK captures the validated Commission, Descriptor, effective configuration,
+and available skill files as inputs. It saves detailed provider metadata, media,
+and final results as outputs. [The artifact spec](../spec/v0.1/artifacts.md)
+defines the small manifest and portable relative paths.
+
+Adapters can capture additional selected files without scanning the workspace:
+
+```python
+await recorder.artifact("outputs/report.md", report_bytes, role="output")
+```
+
+```typescript
+await recorder.artifact("outputs/report.md", reportBytes, "output");
+```
+
+Call this before stopping. Captured paths are immutable: save revisions under
+new output paths. Secret references are retained; secret values must never be
+passed as artifact content.
 
 ## Out of scope
 

@@ -11,6 +11,7 @@ import httpx
 import pytest
 from conftest import atif
 
+from avp.artifacts import ArtifactFile, write_artifacts
 from avp_cli import paths
 from avp_cli.console import Failed
 from avp_cli.eval import share
@@ -257,3 +258,32 @@ def test_a_refusal_says_why(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(Failed, match="run too large"):
         share.share(directory, results, "https://site.test")
     assert share.shared(directory) is None
+
+
+def test_effective_configuration_is_read_from_verified_artifacts(tmp_path: Path) -> None:
+    directory, results = eval_directory(tmp_path, ["one"])
+    run = results.runs[0]
+    run_directory = directory / run.directory
+    effective = {
+        "skills": [
+            {
+                "name": "research",
+                "description": "Research.",
+                "source": "file:inputs/skills/research",
+            }
+        ],
+        "mcp_servers": [{"id": "docs", "status": "connected"}],
+    }
+    write_artifacts(
+        run_directory,
+        run.run_id,
+        {
+            "inputs/effective-agent.json": ArtifactFile(json.dumps(effective).encode(), "input"),
+        },
+    )
+    [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
+    assert shown["vessel"]["skills"] == effective["skills"]
+    assert shown["vessel"]["mcp_servers"] == effective["mcp_servers"]
+    (run_directory / "inputs/effective-agent.json").write_text("{}")
+    with pytest.raises(Failed, match="hash mismatch"):
+        share.payload(directory, results)

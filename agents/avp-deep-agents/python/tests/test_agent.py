@@ -194,7 +194,9 @@ def test_native_refusal(script, tmp_path):
     script(response)
     _, events = run_cli(tmp_path)
     assert atif.responses(events)[0]["message"] == "Declined"
-    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["annotations"]["refusal"]
+    assert atif.details(tmp_path, atif.responses(events)[0])["message_metadata"][0]["annotations"][
+        "refusal"
+    ]
     assert atif.meta(events)["stop_reason"] == "refused"
 
 
@@ -253,7 +255,7 @@ def test_subagent_tools_remain_scoped_when_parent_disables_them(script, tmp_path
     _, events = run_cli(tmp_path, agents={"avp-deep-agents": {"enabled_tools": ["task"]}})
     started = events["agent"]
     assert [t["function"]["name"] for t in started["tool_definitions"]] == ["task"]
-    assert "read_file" in {t["name"] for t in atif.meta(started)["subagents"][0]["tools"]}
+    assert "read_file" in {t["name"] for t in atif.effective(tmp_path)["subagents"][0]["tools"]}
     call = next(c for c in atif.calls(events) if c["tool_call_id"] == "read")
     result = next(c for c in atif.results(events) if c["source_call_id"] == "read")
     child = atif.children(events)[0]

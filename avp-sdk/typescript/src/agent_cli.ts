@@ -1,6 +1,5 @@
-import { mkdir, writeFile, rename, unlink } from "node:fs/promises";
-import { dirname, join, resolve, relative } from "node:path";
-import { randomUUID } from "node:crypto";
+import { dirname, basename } from "node:path";
+import { atomicWrite, writeArtifacts } from "./artifacts.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
@@ -42,27 +41,25 @@ export function trajectorySink(out?: string): TrajectorySink {
       return;
     }
     const directory = dirname(out);
-    await mkdir(directory, { recursive: true });
+    const files = new Map(snapshot.artifacts ?? []);
     for (const [name, bytes] of snapshot.assets) {
-      const target = resolve(directory, name);
-      if (relative(resolve(directory), target).startsWith(".."))
-        throw new Error("asset path escapes trajectory directory");
-      await mkdir(dirname(target), { recursive: true });
-      try {
-        await writeFile(target, bytes, { flag: "wx" });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      }
+      const old = files.get(name);
+      if (
+        old &&
+        (old.role !== "output" ||
+          !Buffer.from(old.content).equals(Buffer.from(bytes)))
+      )
+        throw new Error(`conflicting media artifact: ${name}`);
+      files.set(name, { content: bytes, role: "output" });
     }
-    const temporary = join(directory, `.${randomUUID()}.tmp`);
-    try {
-      await writeFile(temporary, text);
-      await rename(temporary, out);
-    } finally {
-      await unlink(temporary).catch((error) => {
-        if (error.code !== "ENOENT") throw error;
-      });
-    }
+    if (basename(out) === "artifacts.json" || files.has(basename(out)))
+      throw new Error("an artifact cannot replace the trajectory");
+    writeArtifacts(
+      directory,
+      snapshot.trajectory.session_id ?? "unknown",
+      files,
+    );
+    atomicWrite(out, Buffer.from(text));
   };
 }
 async function write(out: string | undefined, text: string): Promise<void> {

@@ -25,7 +25,10 @@ A run directory, under `runs/` or in an eval's `runs/`, is mounted in the
 sandbox at `/io`:
 
     commission.json                      the dispatched Commission, with fresh run identity
-    trajectory.json                    the Trajectory the agent writes
+    trajectory.json                      the ATIF trace the agent writes
+    artifacts.json                       captured files, roles, and hashes
+    inputs/                              immutable configuration and skill snapshots
+    outputs/                             results, media, and reported output files
     agent.stderr                         what the agent printed to stderr, when anything
     scorer-error.txt                     in an eval, why its scorer failed
 
@@ -49,6 +52,7 @@ from pathlib import Path
 
 COMMISSION = "commission.json"
 TRAJECTORY = "trajectory.json"
+ARTIFACTS = "artifacts.json"
 STDERR = "agent.stderr"
 SCORER_ERROR = "scorer-error.txt"
 

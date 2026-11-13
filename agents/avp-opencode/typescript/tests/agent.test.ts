@@ -1,3 +1,4 @@
+import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
 import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 /** Drive the pinned native server and validate its Recorder Trajectory. */
 import { strict as assert } from "node:assert";
@@ -19,10 +20,24 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   parseTrajectory,
   type Trajectory,
+  type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
 import { run } from "../src/agent.js";
 import { describe } from "../src/descriptor.js";
 import { ScriptedModel, type Step } from "./scripted.js";
+const artifactFiles = new WeakMap<Trajectory, Recording>();
+function capture(recording: Recording): Trajectory {
+  const trajectory = parseTrajectory(recording.trajectory);
+  artifactFiles.set(trajectory, recording);
+  return trajectory;
+}
+function effective(snapshots: Trajectory[]): any {
+  const file = artifactFiles
+    .get(snapshots.at(-1)!)
+    ?.artifacts?.get("inputs/effective-agent.json");
+  assert.ok(file);
+  return JSON.parse(Buffer.from(file.content).toString("utf8"));
+}
 const MODEL = "gpt-4.1";
 const fixture = fileURLToPath(
   new URL("../../../../../testing/mcp/avp_test_mcp.py", import.meta.url),
@@ -100,7 +115,7 @@ async function drive(
         await delay(1);
         if (meta(event.trajectory).started_at && requestsAtStart === undefined)
           requestsAtStart = model.requests.length;
-        snapshots.push(parseTrajectory(event.trajectory)!);
+        snapshots.push(capture(event)!);
       },
       { signal: options.signal, env: options.env },
     );
@@ -114,10 +129,9 @@ async function drive(
     process.chdir(previous);
   }
   if (process.env.AVP_ATIF_CAPTURE) {
-    writeFileSync(
-      join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.json`),
-      JSON.stringify(latest(snapshots)) + "\n",
-    );
+    await trajectorySink(
+      join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
+    )(artifactFiles.get(latest(snapshots))!);
   }
   return {
     snapshots,
@@ -221,8 +235,8 @@ test("native allowlists expose no tools or child agents when disabled", async (t
   );
   const started = latest(snapshots).agent;
   assert.deepEqual(started.tool_definitions, []);
-  assert.deepEqual(meta(started).subagents, []);
-  assert.deepEqual(meta(started).skills, []);
+  assert.deepEqual(effective(snapshots).subagents, []);
+  assert.deepEqual(effective(snapshots).skills, []);
   assert.ok(!requests[0]!.tools?.length);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
@@ -357,7 +371,7 @@ test("native skill activation uses commissioned SKILL.md and hides ambient skill
       },
     },
   );
-  const skills = meta(latest(snapshots).agent).skills ?? [];
+  const skills = effective(snapshots).skills ?? [];
   assert.ok(skills.some((s: any) => s.name === "migration-check"));
   assert.ok(!skills.some((s: any) => s.name === "ambient"));
   assert.match(JSON.stringify(atifResults(snapshots)), /NATIVE_SKILL_BODY/);
@@ -392,7 +406,7 @@ test("native MCP tools retain server ownership, parallel call IDs, and both erro
     ],
   );
   const started = latest(snapshots).agent;
-  assert.equal(meta(started).mcp_servers?.[0]?.status, "connected");
+  assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
     meta(
       started.tool_definitions?.find(
@@ -549,7 +563,7 @@ test("declared child tools match the native request when parent tools are restri
       { text: "DONE" },
     ],
   );
-  const child = meta(latest(snapshots).agent).subagents?.find(
+  const child = effective(snapshots).subagents?.find(
     (a: any) => a.name === "general",
   );
   const native = (requests[1]!.tools ?? [])
@@ -725,7 +739,7 @@ test("each declared native child catalog matches the actual model tools", async 
       { text: "CHILD_DONE" },
       { text: "DONE" },
     ]);
-    const child = meta(latest(snapshots).agent).subagents?.find(
+    const child = effective(snapshots).subagents?.find(
       (agent: any) => agent.name === subagent_type,
     );
     const actual = (requests[1]!.tools ?? [])

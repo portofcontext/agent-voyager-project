@@ -1,3 +1,4 @@
+import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
 import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 /** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
@@ -12,6 +13,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   parseTrajectory,
   type Trajectory,
+  type Recording,
 } from "@agent-voyager-project/sdk/trajectory";
 import {
   getSystemMessageText,
@@ -25,6 +27,19 @@ import {
 import { run } from "../src/agent.js";
 import { describe, runtime } from "../src/descriptor.js";
 
+const artifactFiles = new WeakMap<Trajectory, Recording>();
+function capture(recording: Recording): Trajectory {
+  const trajectory = parseTrajectory(recording.trajectory);
+  artifactFiles.set(trajectory, recording);
+  return trajectory;
+}
+function effective(snapshots: Trajectory[]): any {
+  const file = artifactFiles
+    .get(snapshots.at(-1)!)
+    ?.artifacts?.get("inputs/effective-agent.json");
+  assert.ok(file);
+  return JSON.parse(Buffer.from(file.content).toString("utf8"));
+}
 const MODEL = "claude-haiku-4-5";
 const fixture = fileURLToPath(
   new URL("../../../../../testing/mcp/avp_test_mcp.py", import.meta.url),
@@ -97,7 +112,7 @@ async function scripted(
       commission,
       async (event) => {
         if (options.slowSink) await delay(5);
-        const parsed = parseTrajectory(event.trajectory);
+        const parsed = capture(event);
         assert.ok(parsed);
         snapshots.push(parsed);
       },
@@ -105,10 +120,9 @@ async function scripted(
       { modelRuntime: models },
     );
     if (process.env.AVP_ATIF_CAPTURE) {
-      writeFileSync(
-        join(process.env.AVP_ATIF_CAPTURE, `${randomUUID()}.json`),
-        JSON.stringify(latest(snapshots)) + "\n",
-      );
+      await trajectorySink(
+        join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
+      )(artifactFiles.get(latest(snapshots))!);
     }
     return { snapshots, cwd, faux };
   } finally {
@@ -512,7 +526,7 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
         agents: { "avp-pi": { enabled_tools: [] } },
       }),
       async (event) => {
-        snapshots.push(parseTrajectory(event.trajectory));
+        snapshots.push(capture(event));
       },
       new AbortController().signal,
     );
@@ -593,7 +607,7 @@ test("Pi loads commissioned skills and support files on demand through its nativ
     atifResults(snapshots).map((result) => result.source_call_id),
     ["skill", "support"],
   );
-  assert.equal(meta(latest(snapshots).agent).skills?.[0]?.name, "greeting");
+  assert.equal(effective(snapshots).skills?.[0]?.name, "greeting");
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 

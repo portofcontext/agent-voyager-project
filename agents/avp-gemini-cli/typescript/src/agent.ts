@@ -104,6 +104,29 @@ export async function run(
             );
             return;
           }
+          const capturedSkills = skills(config, true).map((skill) => {
+            const native = config
+              .getSkillManager()
+              .getSkills()
+              .find((item) => item.name === skill.name)!;
+            return {
+              ...skill,
+              ...(!skill.source
+                ? {
+                    instructions_path: `inputs/skills/${encodeURIComponent(skill.name)}/instructions.md`,
+                    body: native.body,
+                  }
+                : {}),
+            };
+          });
+          for (const skill of capturedSkills) {
+            if (skill.instructions_path !== undefined)
+              await rec.artifact(
+                skill.instructions_path,
+                Buffer.from(skill.body ?? ""),
+                "input",
+              );
+          }
           await rec.start({
             ...plan.started,
             system_prompt: core.getCoreSystemPrompt(
@@ -111,7 +134,7 @@ export async function run(
               config.getSystemInstructionMemory(),
             ),
             tools: declared,
-            skills: skills(config),
+            skills: capturedSkills.map(({ body: _body, ...skill }) => skill),
             subagents: subagents(config, commission.model.id),
             mcp_servers: plan.started.mcp_servers?.map((server) => ({
               ...server,

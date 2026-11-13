@@ -108,7 +108,6 @@
     "extra": {
       "avp": {
         "complete": true,
-        "requested_at": "2026-01-01T00:00:00Z",
         "stop_reason": "error",
         "stopped_at": "2026-01-01T00:00:00Z"
       }

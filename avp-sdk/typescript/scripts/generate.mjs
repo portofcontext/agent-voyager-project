@@ -13,6 +13,9 @@ const reports = JSON.parse(
   ),
 );
 const trajectory = structuredClone(schema);
+const artifacts = JSON.parse(
+  await readFile(new URL("spec/v0.1/artifacts.schema.json", root), "utf8"),
+);
 const trajectoryRoot = trajectory.$ref
   ? {}
   : {
@@ -23,6 +26,12 @@ const trajectoryRoot = trajectory.$ref
       ),
     };
 schema.$defs = {
+  ...artifacts.$defs,
+  ArtifactManifest: Object.fromEntries(
+    Object.entries(artifacts).filter(
+      ([k]) => !["$defs", "$id", "$schema"].includes(k),
+    ),
+  ),
   ...reports.$defs,
   Reports: Object.fromEntries(
     Object.entries(reports).filter(

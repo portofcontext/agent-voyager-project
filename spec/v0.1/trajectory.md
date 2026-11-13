@@ -20,8 +20,9 @@ SDK generates its wire types from the same schema.
 
 AVP adds operational details in ATIF's `extra.avp` extension fields. A generic
 ATIF consumer can read the conversation without understanding these extensions.
-The original Commission, full Descriptor, and runtime source events are not
-archived in the document. The deployment may store the Commission separately.
+Full configuration, skill files, and provider details live in [run artifacts](artifacts.md).
+The trace stays focused on what happened during execution; artifacts retain
+the material needed for evaluation and improvement.
 
 ## 2. Example
 
@@ -73,12 +74,12 @@ are omitted when unknown. They MUST NOT duplicate the original event stream.
 
 | Object | Fields and meaning |
 |---|---|
-| Trajectory | `complete`, `requested_at`, `started_at`, `stopped_at`, `stop_reason`, typed JSON `output` |
-| Agent | Effective `provider`, `base_url`, `mcp_servers`, `skills`, `subagents`, `output_schema` |
-| Agent step | `duration_ms`, requested model when different, `finish_reasons`, response annotations |
+| Trajectory | `complete`, `started_at`, `stopped_at`, `stop_reason`, typed JSON `output` |
+| Agent | Effective `provider`; full configuration is an input artifact |
+| Agent step | `duration_ms`, requested model when different, `finish_reasons`, `details_path` when response details were captured |
 | System step | `error_code`, with the error description in standard `message` |
-| Tool call | `started_at`, `mcp_server_id`, runtime annotations |
-| Observation result | `ended_at`, `duration_ms`, `is_error`, `structured_content`, runtime annotations |
+| Tool call | `started_at`, `mcp_server_id`, `details_path` when needed |
+| Observation result | `ended_at`, `duration_ms`, `is_error`, `structured_content`, `details_path` when needed |
 | Metrics | `cache_creation_input_tokens`, `reasoning_output_tokens`, `cost_source` |
 | Final metrics | Known partial totals and unknown-field indicators when complete totals cannot be established |
 | Opaque child trajectory | `usage_details` for aggregate usage the runtime exposes without individual responses |
@@ -89,7 +90,9 @@ by a system step with an error code and a complete document with reason `error`.
 It has no start time or model-response steps.
 
 Encrypted reasoning, signatures, citations, refusal annotations, and other
-provider data remain attached to the applicable content or step extension.
+bulky provider data are output artifacts. `extra.avp.details_path` on the
+applicable object points to a relative JSON file listed in `artifacts.json`.
+Readers resolve it from the run directory and verify its manifest hash.
 Encrypted reasoning is not presented as public reasoning text.
 
 ### 3.2 Document delivery
@@ -102,10 +105,12 @@ their observations appear when results arrive.
 
 Image content uses ATIF references to files beside the document. The sink writes
 assets before publishing the snapshot and deduplicates identical content.
-Moving a trajectory with images requires moving its referenced assets too.
+Moving a complete run requires moving its manifest and every listed artifact,
+including images, alongside the trajectory.
 
 `--out -` writes one completed JSON document to stdout. It does not stream
-snapshots. Runs with binary assets require a file output path. Diagnostics use
+snapshots or artifact files. Use file output to retain the complete run record;
+runs with binary assets require it. Diagnostics use
 stderr. A hard-killed process may leave the latest incomplete file snapshot.
 
 ## 4. Rules for agents

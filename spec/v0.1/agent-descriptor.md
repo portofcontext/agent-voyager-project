@@ -14,7 +14,7 @@ A Descriptor describes one version of an agent, identified by `agent_name` and `
 
 The Descriptor is read before a run to choose and configure an agent. The
 [ATIF trajectory](./trajectory.md) records the effective identity and tools for
-that run, without embedding another copy of the full Descriptor.
+that run. The full Descriptor is saved once as an input [artifact](artifacts.md).
 
 ## 2. Example
 

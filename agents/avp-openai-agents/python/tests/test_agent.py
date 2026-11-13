@@ -171,7 +171,7 @@ def test_schema_validation_crosses_native_runner(script, tmp_path):
     _, events = run_cli(tmp_path, output_schema=schema)
     assert atif.meta(events)["output"] == {"answer": 42}
     script([assistant_message('{"answer":"wrong"}')])
-    _, events = run_cli(tmp_path, output_schema=schema)
+    _, events = run_cli(tmp_path / "invalid", output_schema=schema)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "output_invalid"
     assert atif.meta(events)["stop_reason"] == "error"
 
@@ -199,7 +199,9 @@ def test_native_refusal_stops_refused(script, tmp_path):
     _, events = run_cli(tmp_path)
     assert atif.meta(events)["stop_reason"] == "refused"
     assert atif.responses(events)[0]["message"] == "Declined"
-    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["annotations"]["refusal"]
+    assert atif.details(tmp_path, atif.responses(events)[0])["message_metadata"][0]["annotations"][
+        "refusal"
+    ]
 
 
 def test_provider_quota_error_is_reported(script, tmp_path):

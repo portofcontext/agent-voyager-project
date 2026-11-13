@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from avp.artifacts import read_artifacts
+
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_teardown(item):
@@ -18,5 +20,12 @@ def pytest_runtest_teardown(item):
         source = temporary / name
         if source.is_file():
             identity = f"{item.path}:{item.nodeid}:{name}"
-            target = Path(destination) / f"{hashlib.sha256(identity.encode()).hexdigest()}.json"
-            shutil.copyfile(source, target)
+            target = Path(destination) / hashlib.sha256(identity.encode()).hexdigest()
+            target.mkdir()
+            manifest = read_artifacts(source.parent)
+            for entry in manifest.artifacts:
+                copied = target / entry.path
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source.parent / entry.path, copied)
+            shutil.copyfile(source.parent / "artifacts.json", target / "artifacts.json")
+            shutil.copyfile(source, target / "trajectory.json")

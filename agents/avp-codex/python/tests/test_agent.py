@@ -286,7 +286,7 @@ def test_credentials_skills_prompt_schema_and_output_validation(script, tmp_path
     assert params["baseInstructions"] == "Be brief"
     assert "support" in params["developerInstructions"]
     script.events = [text("invalid JSON"), boundary(), completed()]
-    _, events = run_cli(tmp_path, output_schema={"type": "object"})
+    _, events = run_cli(tmp_path / "invalid", output_schema={"type": "object"})
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "output_invalid"
     assert atif.meta(events)["stop_reason"] == "error"
 

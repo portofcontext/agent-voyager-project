@@ -14,6 +14,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
 
+from avp._artifacts import ArtifactCollection
 from avp._base import TrajectorySink
 from avp._recording import (
     _content,
@@ -25,6 +26,7 @@ from avp._recording import (
     _observation,
     _remaining,
 )
+from avp.artifacts import Role
 from avp.commission import Commission, ModelRef
 from avp.descriptor import AgentDescriptor
 from avp.reports import (
@@ -155,15 +157,26 @@ class Recorder:
         self._documents = {None: self._root}
         self._delegations: dict[str, dict[str, Any]] = {}
         self._assets: dict[str, bytes] = {}
+        self._artifacts = ArtifactCollection()
 
     def _time(self) -> str:
         return self._now().isoformat()
 
     async def _publish(self) -> None:
         self._root.finish()
+        data = deepcopy(self._root.data)
+        self._artifacts.compact(data)
         await self._sink(
-            Recording(Trajectory.model_validate(deepcopy(self._root.data)), self._assets.copy())
+            Recording(
+                Trajectory.model_validate(data), self._assets.copy(), self._artifacts.files.copy()
+            )
         )
+
+    async def artifact(self, path: str, content: bytes, *, role: Role) -> None:
+        """Capture a selected file; inputs are immutable and paths are run-relative."""
+        self._check("artifact", started=False)
+        self._artifacts.add(path, content, role)
+        await self._publish()
 
     async def _write(self, update: Callable[[], None]) -> None:
         if self._response is not None:
@@ -201,7 +214,10 @@ class Recorder:
             self.run_id, f"{self.run_id}/root", descriptor.agent_name, descriptor.agent_version
         )
         self._documents = {None: self._root}
-        _metadata(self._root.data)["requested_at"] = self._time()
+        self._artifacts.begin(
+            commission.model_dump(mode="json", exclude_none=True) if commission else None,
+            descriptor.model_dump(mode="json", exclude_none=True),
+        )
         self._root.step(self._time(), "system", "Run initialized.")
         if commission is not None:
             refusal = check_commission(commission, descriptor)
@@ -215,21 +231,15 @@ class Recorder:
         self._check("start", started=False)
         if self._started is not None:
             raise RecorderError("start: called twice")
-        self._started = started
         data = started.model_dump(mode="json", exclude_none=True)
+        self._artifacts.effective(data, meta)
+        self._started = started
         root = self._root
         root.data["steps"] = []
         _metadata(root.data)["started_at"] = self._time()
-        if meta:
-            _metadata(root.data)["annotations"] = meta
         agent = root.data["agent"]
         agent["model_name"] = started.model.id
-        agent["extra"] = {
-            "avp": {
-                **_model_metadata(data["model"]),
-                **{k: data[k] for k in ("mcp_servers", "skills", "subagents") if k in data},
-            }
-        }
+        agent["extra"] = {"avp": {"provider": data["model"]["provider"]}}
         agent["tool_definitions"] = [
             {
                 "type": "function",
@@ -287,6 +297,7 @@ class Recorder:
         )
         if output is not None:
             _metadata(self._root.data)["output"] = output
+            self._artifacts.json("outputs/result.json", output, "output")
         await self._publish()
 
     async def response(
@@ -547,9 +558,7 @@ class Recorder:
             parent.children.append(child)
             parent.data.setdefault("subagent_trajectories", []).append(child.data)
             _metadata(child.data)["started_at"] = timestamp
-            _metadata(
-                child.step(timestamp, "user", json.dumps(subagent_input or {}, ensure_ascii=False))
-            )["input_encoding"] = "json"
+            child.step(timestamp, "user", json.dumps(subagent_input or {}, ensure_ascii=False))
             step = call.step if call else None
             result = (
                 _observation(step, invocation_id)

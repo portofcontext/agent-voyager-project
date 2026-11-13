@@ -244,7 +244,8 @@ def test_missing_secret_and_mcp_failure_happen_before_started(script, tmp_path):
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
     script.messages = [init()]
     _, events = run_cli(
-        tmp_path, mcp_servers=[{"id": "missing", "type": "stdio", "command": ["missing"]}]
+        tmp_path / "mcp-failure",
+        mcp_servers=[{"id": "missing", "type": "stdio", "command": ["missing"]}],
     )
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "mcp_connect_failed"
     assert "started_at" not in atif.meta(events)
@@ -287,7 +288,7 @@ def test_incomplete_response_and_disabled_tool_fail(script, tmp_path):
         result(),
     ]
     _, events = run_cli(
-        tmp_path, raises=True, agents={"avp-claude-agent-sdk": {"enabled_tools": []}}
+        tmp_path / "disabled", raises=True, agents={"avp-claude-agent-sdk": {"enabled_tools": []}}
     )
     assert "disabled" in atif.errors(events)[-1]["message"]
 

@@ -90,7 +90,12 @@ def test_native_tools_images_reasoning_and_partial_snapshots(tmp_path):
     final = snapshots[-1]
     step = final.trajectory.steps[-1]
     assert step.reasoning_content == "reason"
-    assert avp_metadata(step)["reasoning_metadata"][0]["signature"] == "sig"
+    assert (
+        json.loads(final.artifacts[avp_metadata(step)["details_path"]].content)[
+            "reasoning_metadata"
+        ][0]["signature"]
+        == "sig"
+    )
     result = step.observation.results[0]
     assert result.source_call_id == "call" and avp_metadata(result)["structured_content"] == {
         "ok": True
@@ -260,13 +265,14 @@ def test_provider_content_remains_interoperable_without_exposing_encrypted_reaso
 
     asyncio.run(run())
     step = snapshots[-1].trajectory.steps[-1]
+    details = json.loads(snapshots[-1].artifacts[avp_metadata(step)["details_path"]].content)
     assert step.reasoning_content == "public thought"
     assert "encrypted payload" not in str(step.message)
-    assert avp_metadata(step)["reasoning_metadata"][1]["encrypted_content"] == "encrypted payload"
-    annotations = avp_metadata(step)["message_metadata"]
+    assert details["reasoning_metadata"][1]["encrypted_content"] == "encrypted payload"
+    annotations = details["message_metadata"]
     assert annotations[0]["annotations"]["citations"][0]["source_url"] == "https://example.com"
     assert annotations[1]["annotations"]["refusal"] is True
-    assert avp_metadata(step)["annotations"]["response_id"] == "provider-response"
+    assert details["annotations"]["response_id"] == "provider-response"
     assert step.tool_calls[0].function_name == "search"
     assert json.loads(step.observation.results[0].content) == {"found": [1, 2]}
 

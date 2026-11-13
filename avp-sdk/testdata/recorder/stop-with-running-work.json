@@ -125,20 +125,7 @@
       "model_name": "claude-test-1",
       "extra": {
         "avp": {
-          "provider": "anthropic",
-          "mcp_servers": [
-            {
-              "id": "docs",
-              "name": "Docs",
-              "status": "connected"
-            }
-          ],
-          "subagents": [
-            {
-              "name": "researcher",
-              "description": "Finds things."
-            }
-          ]
+          "provider": "anthropic"
         }
       },
       "tool_definitions": [
@@ -268,7 +255,6 @@
     "extra": {
       "avp": {
         "complete": true,
-        "requested_at": "2026-01-01T00:00:00Z",
         "started_at": "2026-01-01T00:00:00.001000Z",
         "stop_reason": "abandoned",
         "stopped_at": "2026-01-01T00:00:00.050000Z",
@@ -290,12 +276,7 @@
             "step_id": 1,
             "timestamp": "2026-01-01T00:00:00.011000Z",
             "source": "user",
-            "message": "{\"prompt\": \"Find it.\"}",
-            "extra": {
-              "avp": {
-                "input_encoding": "json"
-              }
-            }
+            "message": "{\"prompt\": \"Find it.\"}"
           }
         ],
         "extra": {

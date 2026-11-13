@@ -1,6 +1,6 @@
 # Working on AVP
 
-AVP defines Commission, Agent Descriptor, and Trajectory specs. A supervisor sends
+AVP defines Commission, Agent Descriptor, Trajectory, and run artifact specs. A supervisor sends
 one Commission; the agent runs it and records a Trajectory. The supervisor cannot
 send instructions during a run.
 
@@ -41,6 +41,8 @@ Implement shared behavior in Python first, then TypeScript.
   files inline.
 - Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
   live in `avp.reports`; do not introduce another event wire contract.
+- Keep full configuration, skill files, and bulky provider details in run artifacts.
+  Preserve exact input bytes and keep `artifacts.json` paths and hashes valid.
 - Record one ATIF agent step per model response, with per-response usage
   and cost. Convert cumulative totals to deltas. Keep tool calls alongside
   assistant content and match results by call ID.

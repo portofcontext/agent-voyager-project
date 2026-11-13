@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Keep ATIF traces compact: move full configuration, skill directories, and bulky
+  provider details into ordinary run artifacts. Both SDKs write `artifacts.json`
+  with relative paths, input/output roles, and SHA-256 hashes; readers verify
+  captured bytes. Eval sharing reads effective configuration from those artifacts.
+
 - Python ATIF snapshots respect normal file creation permissions and the process
   umask, so host supervisors can read container-written snapshots on Linux.
 - Both SDK run plans preserve an explicitly empty system prompt.
@@ -18,8 +23,8 @@
   SDKs, all eight adapters, and the CLI. Runs write atomic `trajectory.json`
   snapshots; stdout emits one completed document. Python uses the pinned Harbor
   models and TypeScript derives its types from them. Typed output, termination,
-  errors, timing, provider annotations, and opaque child accounting remain in
-  targeted extensions. Unknown usage stays unknown. The old exporter, event
+  errors, timing, and opaque child accounting remain in targeted extensions.
+  Bulky provider annotations are linked artifacts. Unknown usage stays unknown. The old exporter, event
   schema, CloudEvents wrapper, and AVP-specific OpenTelemetry converter are
   removed. Existing NDJSON runs need an older SDK to read them.
 - An ecosystem example feeds ordinary run files directly to Harbor's trace

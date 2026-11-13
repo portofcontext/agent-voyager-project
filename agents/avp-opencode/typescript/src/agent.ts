@@ -1,8 +1,9 @@
+import { pathToFileURL } from "node:url";
 import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** The native OpenCode server owns model calls, tools, and the loop. */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
 import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
 import type { JsonValue } from "@agent-voyager-project/sdk/reports";
 import { loadPrices } from "@agent-voyager-project/sdk/utils/pricing";
@@ -138,12 +139,26 @@ export async function run(
       env,
       new Set(offered.map((t) => t.name)),
     );
-    const skills = (await nativeSkills(client))
-      .filter((s) => plan.started.skills?.some((item) => item.name === s.name))
-      .map(({ name, description }) => ({
-        name,
-        description: description ?? "",
-      }));
+    const selectedSkills = (await nativeSkills(client)).filter((s) =>
+      plan.started.skills?.some((item) => item.name === s.name),
+    );
+    for (const skill of selectedSkills) {
+      if (!isAbsolute(skill.location))
+        await rec.artifact(
+          `inputs/skills/${encodeURIComponent(skill.name)}/instructions.md`,
+          Buffer.from(skill.content),
+          "input",
+        );
+    }
+    const skills = selectedSkills.map(({ name, description, location }) => ({
+      name,
+      description: description ?? "",
+      ...(isAbsolute(location)
+        ? { source: pathToFileURL(dirname(location)).href }
+        : {
+            instructions_path: `inputs/skills/${encodeURIComponent(name)}/instructions.md`,
+          }),
+    }));
     if (
       commission.skills?.some((s) => !skills.some((n) => n.name === s.name))
     ) {

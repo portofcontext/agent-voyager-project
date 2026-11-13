@@ -9,6 +9,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from avp.artifacts import read_artifacts
 from avp.trajectory import parse_trajectory
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +45,7 @@ def documents(root):
 def check(source: Path) -> str:
     root = parse_trajectory(source.read_text()).to_json_dict()
     SCHEMA.validate(root)
+    read_artifacts(source.parent, run_id=root["session_id"])
     for doc in documents(root):
         assert [s["step_id"] for s in doc["steps"]] == list(range(1, len(doc["steps"]) + 1))
         for step in doc["steps"]:
@@ -72,7 +74,7 @@ def main() -> None:
         env.pop("VIRTUAL_ENV", None)  # Each adapter owns its environment.
         subprocess.run(["make", *TARGETS], cwd=ROOT, env=env, check=True)
         counts = Counter()
-        for source in sorted(Path(directory).glob("*.json")):
+        for source in sorted(Path(directory).glob("*/trajectory.json")):
             try:
                 counts[check(source)] += 1
             except Exception as error:
@@ -81,7 +83,7 @@ def main() -> None:
                 ) from error
         assert counts.keys() == AGENTS, f"Missing adapter outputs: {AGENTS - counts.keys()}"
         for name, count in sorted(counts.items()):
-            print(f"ATIF {name}: {count} native test trajectories passed")
+            print(f"ATIF {name}: {count} native test trajectories and artifact manifests passed")
 
 
 if __name__ == "__main__":

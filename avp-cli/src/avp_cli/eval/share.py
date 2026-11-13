@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, JsonValue, ValidationError
 
+from avp.artifacts import artifact_path, read_artifacts
 from avp.commission import Commission
 from avp.trajectory import Trajectory, avp_metadata, documents
 from avp_cli import paths
@@ -124,11 +125,15 @@ def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
     return shown
 
 
-def _brief(trajectory: Trajectory | None) -> dict[str, Any]:
+def _brief(
+    trajectory: Trajectory | None, effective: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if trajectory is None:
         return {}
     agent = trajectory.agent
     extra = (agent.extra or {}).get("avp", {})
+    if effective is not None:
+        extra = {**extra, **effective, **effective.get("model", {})}
     tools = []
     for definition in agent.tool_definitions or []:
         function = definition.get("function", {})
@@ -204,6 +209,20 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
     trajectory, _ = read_trajectory(directory / run.directory / paths.TRAJECTORY)
     commission = _commission(directory / run.directory)
     shown = _presentation(trajectory)
+    effective = None
+    run_directory = directory / run.directory
+    if (run_directory / paths.ARTIFACTS).exists():
+        try:
+            manifest = read_artifacts(run_directory, run_id=run.run_id)
+            if any(
+                a.path == "inputs/effective-agent.json" and a.role == "input"
+                for a in manifest.artifacts
+            ):
+                effective = json.loads(
+                    artifact_path(run_directory, "inputs/effective-agent.json").read_text()
+                )
+        except (OSError, ValueError) as exc:
+            raise Failed(f"invalid run artifacts: {exc}") from None
     verdict = run.scorer_error or "; ".join(run.score.reasons if run.score else [])
     return {
         "row_id": run.item,
@@ -220,7 +239,7 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
         and not {"input_tokens", "output_tokens"}.intersection(run.totals.unknown_metrics)
         else None,
         "elapsed_s": run.seconds,
-        **_brief(trajectory),
+        **_brief(trajectory, effective),
         **({"question": _cut(commission.prompt, PROMPT)} if commission else {}),
         **({"expected": expected} if (expected := _expected(eval, item)) else {}),
         **({"verdict": _cut(verdict, SYSTEM_PROMPT)} if verdict else {}),

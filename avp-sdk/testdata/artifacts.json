@@ -1,0 +1,242 @@
+[
+  {
+    "name": "empty",
+    "valid": true,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": []
+    }
+  },
+  {
+    "name": "file",
+    "valid": true,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-absolute",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "/etc/passwd",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-parent",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "../escape",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-nested-parent",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/../escape",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-dot",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "./input",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-empty-segment",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs//x",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-backslash",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs\\x",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-drive",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "C:/x",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-trailing-slash",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-control",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/\u0000x",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-empty",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-role",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "other",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-hash",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "input",
+          "sha256": "BAD"
+        }
+      ]
+    }
+  },
+  {
+    "name": "reject-extra-field",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "duplicate-path",
+    "valid": false,
+    "manifest": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "artifacts": [
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "path": "inputs/skills/a/SKILL.md",
+          "role": "input",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  }
+]

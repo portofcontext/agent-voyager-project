@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { ArtifactCollection } from "./_artifacts.js";
+import type { Role } from "./artifacts.js";
 import {
   parseCommission,
   type Commission,
@@ -124,6 +126,7 @@ export class Recorder {
   private docs: Map<string | undefined, Document>;
   private delegations = new Map<string, any>();
   private assets = new Map<string, Uint8Array>();
+  private artifacts = new ArtifactCollection();
   constructor(
     private sink: TrajectorySink,
     options: RecorderOptions = {},
@@ -151,10 +154,18 @@ export class Recorder {
   }
   private async publish(): Promise<void> {
     this.root.finish();
+    const data = structuredClone(this.root.data);
+    this.artifacts.compact(data);
     await this.sink({
-      trajectory: parseTrajectory(this.root.data),
+      trajectory: parseTrajectory(data),
+      artifacts: new Map(this.artifacts.files),
       assets: new Map(this.assets),
     });
+  }
+  async artifact(path: string, content: Uint8Array, role: Role): Promise<void> {
+    this.check("artifact", false);
+    this.artifacts.add(path, content, role);
+    await this.publish();
   }
   private async write(update: () => void): Promise<void> {
     if (this.openResponse) this.openResponse.waiting.push(update);
@@ -193,7 +204,7 @@ export class Recorder {
       descriptor.agent_version,
     );
     this.docs = new Map([[undefined, this.root]]);
-    metadata(this.root.data).requested_at = this.now().toISOString();
+    this.artifacts.begin(commission, descriptor);
     this.root.step(this.now().toISOString(), "system", "Run initialized.");
     if (commission) refusal = checkCommission(commission, descriptor);
     if (refusal) {
@@ -209,16 +220,14 @@ export class Recorder {
   ): Promise<void> {
     this.check("start", false);
     if (this.started) throw new RecorderError("start: called twice");
-    this.started = parseDefinition<RunContext>("RunContext", started);
-    const data = this.started;
+    const data = parseDefinition<RunContext>("RunContext", started);
+    this.artifacts.effective(data, meta);
+    this.started = data;
     this.root.data.steps = [];
     metadata(this.root.data).started_at = this.now().toISOString();
-    if (meta) metadata(this.root.data).annotations = meta;
     const agent = this.root.data.agent;
     agent.model_name = data.model.id;
-    agent.extra = { avp: modelMetadata(data.model) };
-    for (const key of ["mcp_servers", "skills", "subagents"] as const)
-      if (data[key] != null) agent.extra.avp[key] = data[key];
+    agent.extra = { avp: { provider: data.model.provider } };
     agent.tool_definitions = (data.tools ?? []).map((t) => ({
       type: "function",
       function: {
@@ -283,7 +292,10 @@ export class Recorder {
       stop_reason: reason,
       stopped_at: this.now().toISOString(),
     });
-    if (output != null) metadata(this.root.data).output = output;
+    if (output != null) {
+      metadata(this.root.data).output = output;
+      this.artifacts.json("outputs/result.json", output, "output");
+    }
     await this.publish();
   }
   async response(
@@ -567,9 +579,7 @@ export class Recorder {
       parent.children.push(child);
       (parent.data.subagent_trajectories ??= []).push(child.data);
       metadata(child.data).started_at = time;
-      metadata(
-        child.step(time, "user", JSON.stringify(input ?? {})),
-      ).input_encoding = "json";
+      child.step(time, "user", JSON.stringify(input ?? {}));
       const result = call?.step
         ? observation(call.step, id)
         : observation(parent.step(time, "system", `Delegated to ${name}.`));
