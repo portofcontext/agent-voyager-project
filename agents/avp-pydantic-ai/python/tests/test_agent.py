@@ -126,7 +126,7 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
     server = {"id": "t", "type": "stdio", "command": [sys.executable, str(TEST_MCP)]}
     events = _run(tmp_path, mcp_servers=[server])
     assert len(atif.responses(events)) == 2
-    assert atif.effective(tmp_path)["mcp_servers"] == [{"id": "t", "status": "connected"}]
+    assert atif.effective(tmp_path)["mcp_servers"] == [{**server, "status": "connected"}]
     add = next(
         t for t in events["agent"]["tool_definitions"] if t["function"]["name"] == "Avptest_Add"
     )
@@ -185,9 +185,9 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
         "files": {"SKILL.md": "---\nname: greet\ndescription: Greet people.\n---\nSay hi."},
     }
     events = _run(tmp_path, system_prompt="base", skills=[skill])
-    assert atif.effective(tmp_path)["skills"] == [
-        {"name": "greet", "description": "Greet people.", "source": "file:inputs/skills/greet"}
-    ]
+    [captured] = atif.effective(tmp_path)["skills"]
+    assert captured["name"] == "greet"
+    assert captured["files"] == skill["files"]
     assert "Say hi." in seen[0][0][0].instructions
 
 

@@ -26,18 +26,16 @@ import {
 import { run } from "../src/agent.js";
 import { describe } from "../src/descriptor.js";
 import { ScriptedModel, type Step } from "./scripted.js";
-const artifactFiles = new WeakMap<Trajectory, Recording>();
+const recordings = new WeakMap<Trajectory, Recording>();
 function capture(recording: Recording): Trajectory {
   const trajectory = parseTrajectory(recording.trajectory);
-  artifactFiles.set(trajectory, recording);
+  recordings.set(trajectory, recording);
   return trajectory;
 }
 function effective(snapshots: Trajectory[]): any {
-  const file = artifactFiles
-    .get(snapshots.at(-1)!)
-    ?.artifacts?.get("inputs/effective-agent.json");
-  assert.ok(file);
-  return JSON.parse(Buffer.from(file.content).toString("utf8"));
+  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
+  assert.ok(started);
+  return started;
 }
 const MODEL = "gpt-4.1";
 const fixture = fileURLToPath(
@@ -132,7 +130,7 @@ async function drive(
   if (process.env.AVP_ATIF_CAPTURE) {
     await trajectorySink(
       join(process.env.AVP_ATIF_CAPTURE, randomUUID(), "trajectory.json"),
-    )(artifactFiles.get(latest(snapshots))!);
+    )(recordings.get(latest(snapshots))!);
   }
   return {
     snapshots,

@@ -13,8 +13,8 @@ const reports = JSON.parse(
   ),
 );
 const trajectory = structuredClone(schema);
-const artifacts = JSON.parse(
-  await readFile(new URL("spec/v0.1/artifacts.schema.json", root), "utf8"),
+const agentStart = JSON.parse(
+  await readFile(new URL("spec/v0.1/agent-start.schema.json", root), "utf8"),
 );
 const trajectoryRoot = trajectory.$ref
   ? {}
@@ -26,9 +26,9 @@ const trajectoryRoot = trajectory.$ref
       ),
     };
 schema.$defs = {
-  ...artifacts.$defs,
-  ArtifactManifest: Object.fromEntries(
-    Object.entries(artifacts).filter(
+  ...agentStart.$defs,
+  AgentStart: Object.fromEntries(
+    Object.entries(agentStart).filter(
       ([k]) => !["$defs", "$id", "$schema"].includes(k),
     ),
   ),

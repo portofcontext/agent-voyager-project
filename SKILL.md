@@ -49,10 +49,10 @@ and inspect results. Saved Commissions and the TUI are not implemented yet.
 Compare correctness, cost, and response counts separately. Preserve the run's
 Commission and Trajectory as evidence. Reduce per-response usage and cost once;
 do not add runtime totals or count subagent usage twice. See the
-[Trajectory spec](spec/v0.1/trajectory.md). File runs also contain
-[artifacts](spec/v0.1/artifacts.md): captured configuration, skill files, and
-outputs listed by path, role, and SHA-256. Keep the manifest and all listed
-files with the trajectory when moving a complete run.
+[Trajectory spec](spec/v0.1/trajectory.md). File runs save Commission, Descriptor,
+and [Agent Start](spec/v0.1/agent-start.md) alongside the ATIF trace. Agent Start
+contains resolved configuration and full skill contents. Keep the four documents
+and any ATIF-referenced image files together when moving a run.
 
 ## Integrate a runtime
 

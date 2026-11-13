@@ -1,6 +1,8 @@
 import { dirname, basename } from "node:path";
-import { atomicWrite, writeArtifacts } from "./artifacts.js";
-import { readFileSync, writeFileSync } from "node:fs";
+import { parseCommission } from "./commission.js";
+import { parseAgentStart } from "./agent_start.js";
+import { atomicWrite, localPath, writeDocument } from "./_files.js";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
 import { avpMetadata, type TrajectorySink } from "./trajectory.js";
@@ -40,25 +42,28 @@ export function trajectorySink(out?: string): TrajectorySink {
       }
       return;
     }
-    const directory = dirname(out);
-    const files = new Map(snapshot.artifacts ?? []);
-    for (const [name, bytes] of snapshot.assets) {
-      const old = files.get(name);
-      if (
-        old &&
-        (old.role !== "output" ||
-          !Buffer.from(old.content).equals(Buffer.from(bytes)))
+    if (
+      ["commission.json", "descriptor.json", "agent-start.json"].includes(
+        basename(out),
       )
-        throw new Error(`conflicting media artifact: ${name}`);
-      files.set(name, { content: bytes, role: "output" });
+    )
+      throw new Error("trajectory path conflicts with a run document");
+    const directory = dirname(out);
+    mkdirSync(directory, { recursive: true });
+    for (const [name, document, parse] of [
+      ["commission.json", snapshot.commission, parseCommission],
+      ["descriptor.json", snapshot.descriptor, parseDescriptor],
+      ["agent-start.json", snapshot.agentStart, parseAgentStart],
+    ] as const)
+      if (document != null) writeDocument(directory, name, document, parse);
+    for (const [name, bytes] of snapshot.assets) {
+      const path = localPath(directory, name);
+      if (path === localPath(directory, basename(out)))
+        throw new Error("an image cannot replace the trajectory");
+      if (!existsSync(path)) atomicWrite(path, bytes);
+      else if (!readFileSync(path).equals(Buffer.from(bytes)))
+        throw new Error(`image already exists with different content: ${name}`);
     }
-    if (basename(out) === "artifacts.json" || files.has(basename(out)))
-      throw new Error("an artifact cannot replace the trajectory");
-    writeArtifacts(
-      directory,
-      snapshot.trajectory.session_id ?? "unknown",
-      files,
-    );
     atomicWrite(out, Buffer.from(text));
   };
 }

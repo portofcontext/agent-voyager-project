@@ -4,4 +4,4 @@ export * as trajectory from "./trajectory.js";
 export * as recorder from "./recorder.js";
 export * as agentCli from "./agent_cli.js";
 export * as reports from "./reports.js";
-export * as artifacts from "./artifacts.js";
+export * as agentStart from "./agent_start.js";

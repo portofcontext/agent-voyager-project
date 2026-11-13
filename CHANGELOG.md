@@ -11,10 +11,11 @@
 
 ### Added
 
-- Run artifacts preserve full Commission and Descriptor snapshots, effective
-  configuration with full tool catalogs, complete skill directories, media, and
-  explicitly captured output files. Both SDKs write an `artifacts.json` manifest with relative paths,
-  input/output roles, and SHA-256 hashes; readers verify captured bytes.
+- An Agent Start contract records the resolved prompts, model, full tool catalog,
+  MCP configuration, subagents, and selected skills with their file contents.
+  File runs save Commission, Descriptor, Agent Start, and ATIF trajectory as four
+  JSON documents. Runtime-exposed skill directories include supporting files;
+  binary skill content is preserved as base64.
 - A Harbor integration example uses saved ATIF runs directly for training
   extraction and the job viewer.
 
@@ -63,8 +64,8 @@
 - Traces use standard ATIF messages, tool calls, observations, reasoning, usage,
   and child trajectories, with AVP extensions for run outcomes and execution
   metadata. SDK output readers recover the final answer or a distinct typed
-  result. CLI evaluation and sharing read ATIF plus verified artifacts, derive
-  partial usage without counting children twice, and preserve unknown values.
+  result. CLI evaluation and sharing read ATIF and Agent Start, derive partial
+  usage without counting children twice, and preserve unknown values.
 
 - Agents install the published SDK betas and build from their own directories.
 

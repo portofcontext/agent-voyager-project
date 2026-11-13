@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from avp.artifacts import read_artifacts
+from avp.agent_start import AgentStart
 from avp.trajectory import parse_trajectory
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,7 +45,9 @@ def documents(root):
 def check(source: Path) -> str:
     root = parse_trajectory(source.read_text()).to_json_dict()
     SCHEMA.validate(root)
-    read_artifacts(source.parent, run_id=root["session_id"])
+    start = source.parent / "agent-start.json"
+    if start.exists():
+        assert AgentStart.model_validate_json(start.read_bytes()).run_id == root["session_id"]
     for doc in documents(root):
         assert [s["step_id"] for s in doc["steps"]] == list(range(1, len(doc["steps"]) + 1))
         for step in doc["steps"]:
@@ -83,7 +85,7 @@ def main() -> None:
                 ) from error
         assert counts.keys() == AGENTS, f"Missing adapter outputs: {AGENTS - counts.keys()}"
         for name, count in sorted(counts.items()):
-            print(f"ATIF {name}: {count} native test trajectories and artifact manifests passed")
+            print(f"ATIF {name}: {count} native test trajectories and Agent Start documents passed")
 
 
 if __name__ == "__main__":

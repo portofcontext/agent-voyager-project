@@ -11,7 +11,6 @@ import httpx
 import pytest
 from conftest import atif
 
-from avp.artifacts import ArtifactFile, write_artifacts
 from avp_cli import paths
 from avp_cli.console import Failed
 from avp_cli.eval import share
@@ -267,32 +266,36 @@ def test_a_refusal_says_why(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert share.shared(directory) is None
 
 
-def test_effective_configuration_is_read_from_verified_artifacts(tmp_path: Path) -> None:
+def test_agent_start_is_validated_and_supplies_the_full_configuration(tmp_path: Path) -> None:
     directory, results = eval_directory(tmp_path, ["one"])
     run = results.runs[0]
     run_directory = directory / run.directory
     effective = {
+        "avp_version": "0.1",
+        "run_id": run.run_id,
+        "prompt": "research",
+        "model": {"provider": "test", "id": "m"},
         "skills": [
             {
                 "name": "research",
                 "description": "Research.",
-                "source": "file:inputs/skills/research",
+                "files": {"SKILL.md": "Research instructions"},
             }
         ],
         "mcp_servers": [{"id": "docs", "status": "connected"}],
-        "tools": [{"name": "read", "inputSchema": {}, "mcp_server_id": "docs"}],
+        "tools": [{"name": "read", "inputSchema": {"type": "object"}, "mcp_server_id": "docs"}],
     }
-    write_artifacts(
-        run_directory,
-        run.run_id,
-        {
-            "inputs/effective-agent.json": ArtifactFile(json.dumps(effective).encode(), "input"),
-        },
-    )
+    (run_directory / "agent-start.json").write_text(json.dumps(effective))
     [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
     assert shown["vessel"]["tools"][0]["mcp_server_id"] == "docs"
-    assert shown["vessel"]["skills"] == effective["skills"]
+    assert shown["vessel"]["skills"] == [{"name": "research", "description": "Research."}]
+    assert "Research instructions" not in json.dumps(shown)
     assert shown["vessel"]["mcp_servers"] == effective["mcp_servers"]
-    (run_directory / "inputs/effective-agent.json").write_text("{}")
-    with pytest.raises(Failed, match="hash mismatch"):
+    (run_directory / "agent-start.json").write_text("{}")
+    with pytest.raises(Failed, match="invalid Agent Start"):
+        share.payload(directory, results)
+
+    effective["run_id"] = "another-run"
+    (run_directory / "agent-start.json").write_text(json.dumps(effective))
+    with pytest.raises(Failed, match="different run"):
         share.payload(directory, results)

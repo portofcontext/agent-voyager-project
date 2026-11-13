@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ArtifactCollection } from "./_artifacts.js";
-import type { Role } from "./artifacts.js";
+import { captureStart, type AgentStart } from "./agent_start.js";
 import {
   parseCommission,
   type Commission,
@@ -123,7 +122,9 @@ export class Recorder {
   private docs: Map<string | undefined, Document>;
   private delegations = new Map<string, any>();
   private assets = new Map<string, Uint8Array>();
-  private artifacts = new ArtifactCollection();
+  private commission?: Commission;
+  private descriptor?: AgentDescriptor;
+  private agentStart?: AgentStart;
   constructor(
     private sink: TrajectorySink,
     options: RecorderOptions = {},
@@ -153,14 +154,11 @@ export class Recorder {
     this.root.finish();
     await this.sink({
       trajectory: parseTrajectory(this.root.data),
-      artifacts: new Map(this.artifacts.files),
+      commission: structuredClone(this.commission),
+      descriptor: structuredClone(this.descriptor),
+      agentStart: structuredClone(this.agentStart),
       assets: new Map(this.assets),
     });
-  }
-  async artifact(path: string, content: Uint8Array, role: Role): Promise<void> {
-    this.check("artifact", false);
-    this.artifacts.add(path, content, role);
-    await this.publish();
   }
   private async write(update: () => void): Promise<void> {
     if (this.openResponse) this.openResponse.waiting.push(update);
@@ -199,7 +197,8 @@ export class Recorder {
       descriptor.agent_version,
     );
     this.docs = new Map([[undefined, this.root]]);
-    this.artifacts.begin(commission, descriptor);
+    this.commission = structuredClone(commission);
+    this.descriptor = structuredClone(descriptor);
     this.root.step(this.now().toISOString(), "system", "Run initialized.");
     if (commission) refusal = checkCommission(commission, descriptor);
     if (refusal) {
@@ -216,7 +215,7 @@ export class Recorder {
     this.check("start", false);
     if (this.started) throw new RecorderError("start: called twice");
     const data = parseDefinition<RunContext>("RunContext", started);
-    this.artifacts.effective(data);
+    this.agentStart = captureStart(data, this.commission, this.runId);
     this.started = data;
     this.root.data.steps = [];
     metadata(this.root.data).started_at = this.now().toISOString();

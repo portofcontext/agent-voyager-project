@@ -113,20 +113,11 @@ export async function run(
               ...skill,
               ...(!skill.source
                 ? {
-                    instructions_path: `inputs/skills/${encodeURIComponent(skill.name)}/instructions.md`,
-                    body: native.body,
+                    files: { "instructions.md": native.body ?? "" },
                   }
                 : {}),
             };
           });
-          for (const skill of capturedSkills) {
-            if (skill.instructions_path !== undefined)
-              await rec.artifact(
-                skill.instructions_path,
-                Buffer.from(skill.body ?? ""),
-                "input",
-              );
-          }
           await rec.start({
             ...plan.started,
             system_prompt: core.getCoreSystemPrompt(
@@ -134,7 +125,7 @@ export async function run(
               config.getSystemInstructionMemory(),
             ),
             tools: declared,
-            skills: capturedSkills.map(({ body: _body, ...skill }) => skill),
+            skills: capturedSkills,
             subagents: subagents(config, commission.model.id),
             mcp_servers: plan.started.mcp_servers?.map((server) => ({
               ...server,

@@ -2,8 +2,8 @@
 
 The AVP SDKs (Python and TypeScript) have two goals:
 
-- **Define the wire:** types for the Commission, the Agent Descriptor, and
-  ATIF trajectories and run artifact manifests, matching the specs' schemas.
+- **Define the wire:** types for the Commission, Agent Descriptor, Agent Start,
+  and ATIF trajectory, matching the specs' schemas.
 - **Share the common work:** code that every agent runner or supervisor would
   otherwise write itself, such as checking a Commission, writing a Trajectory,
   and pricing a response.
@@ -33,7 +33,7 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 | Part | What it does | Python |
 |---|---|---|
 | Wire types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
-| Artifacts | Capture immutable files, publish a small manifest, and verify hashes | `avp.artifacts` |
+| Agent Start | Complete resolved configuration with inline skill contents | `avp.agent_start` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
@@ -119,9 +119,9 @@ transport.
 Paths default to stdout where `--out` is optional.
 
 `run` hands the Commission and a `TrajectorySink` to the adapter. The Recorder
-publishes `Recording` snapshots containing the ATIF document, binary assets,
-and captured artifact files. File sinks publish those files and `artifacts.json`
-before the trace snapshot. Stdout retains only the ATIF document.
+publishes `Recording` snapshots containing the ATIF document, referenced image
+bytes, Commission, Descriptor, and Agent Start. File sinks save the input
+documents and images before the trace snapshot. Stdout retains only ATIF.
 
 Exit codes: `0` when the Trajectory is complete, a refusal included; `130` when
 SIGINT or SIGTERM interrupted the run; anything else is a crash.
@@ -139,29 +139,22 @@ are not a persisted event format. `avp.trajectory` exposes upstream wire models,
 `parse_trajectory`, and `Recording`. Both SDKs run the same Recorder cases in
 [`testdata/recorder/`](testdata/recorder/).
 
-### Run artifacts
+### Saved run documents
 
-The SDK captures the validated Commission, Descriptor, effective configuration,
-and available skill files as inputs. It saves media and explicitly reported files as outputs. The returned result
-stays in ATIF. Read it with Python `final_output(trajectory)` or TypeScript
-`finalOutput(trajectory)` from the trajectory module. These prefer a distinct
-`extra.avp.output` and otherwise use the final agent message.
-Execution and provider metadata stay alongside their ATIF steps. [The artifact spec](../spec/v0.1/artifacts.md)
-defines the small manifest and portable relative paths.
+File output saves `commission.json`, `descriptor.json`, `agent-start.json`, and
+`trajectory.json`. The [Agent Start spec](../spec/v0.1/agent-start.md) defines the
+resolved snapshot, including full tool metadata and inline skill contents.
+The adapter reports what its runtime actually selected; the SDK captures exposed
+skill directories, including supporting files and subagent skills.
 
-Adapters can capture additional selected files without scanning the workspace:
+Read the snapshot with Python `AgentStart.model_validate_json(...)` from
+`avp.agent_start`, or TypeScript `parseAgentStart(...)` from `sdk/agent_start`.
+A refused run has no Agent Start; direct runs may have no Commission.
 
-```python
-await recorder.artifact("outputs/report.md", report_bytes, role="output")
-```
-
-```typescript
-await recorder.artifact("outputs/report.md", reportBytes, "output");
-```
-
-Call this before stopping. Captured paths are immutable: save revisions under
-new output paths. Secret references are retained; secret values must never be
-passed as artifact content.
+The final result stays in ATIF. Python `final_output(trajectory)` and TypeScript
+`finalOutput(trajectory)` return a distinct `extra.avp.output` when present and
+otherwise use the final agent message. Generated files are ordinary files saved
+by the runtime or deployment; the SDK has no generic artifact API or manifest.
 
 ## Out of scope
 

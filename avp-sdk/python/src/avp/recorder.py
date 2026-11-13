@@ -14,7 +14,6 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
 
-from avp._artifacts import ArtifactCollection
 from avp._base import TrajectorySink
 from avp._recording import (
     _content,
@@ -25,7 +24,7 @@ from avp._recording import (
     _observation,
     _remaining,
 )
-from avp.artifacts import Role
+from avp.agent_start import AgentStart, capture_start
 from avp.commission import Commission, ModelRef
 from avp.descriptor import AgentDescriptor
 from avp.reports import (
@@ -154,7 +153,9 @@ class Recorder:
         self._documents = {None: self._root}
         self._delegations: dict[str, dict[str, Any]] = {}
         self._assets: dict[str, bytes] = {}
-        self._artifacts = ArtifactCollection()
+        self._commission: Commission | None = None
+        self._descriptor: AgentDescriptor | None = None
+        self._agent_start: AgentStart | None = None
 
     def _time(self) -> str:
         return self._now().isoformat()
@@ -164,15 +165,13 @@ class Recorder:
         data = deepcopy(self._root.data)
         await self._sink(
             Recording(
-                Trajectory.model_validate(data), self._assets.copy(), self._artifacts.files.copy()
+                Trajectory.model_validate(data),
+                self._assets.copy(),
+                self._commission,
+                self._descriptor,
+                self._agent_start,
             )
         )
-
-    async def artifact(self, path: str, content: bytes, *, role: Role) -> None:
-        """Capture a selected file; inputs are immutable and paths are run-relative."""
-        self._check("artifact", started=False)
-        self._artifacts.add(path, content, role)
-        await self._publish()
 
     async def _write(self, update: Callable[[], None]) -> None:
         if self._response is not None:
@@ -210,10 +209,8 @@ class Recorder:
             self.run_id, f"{self.run_id}/root", descriptor.agent_name, descriptor.agent_version
         )
         self._documents = {None: self._root}
-        self._artifacts.begin(
-            commission.model_dump(mode="json", exclude_none=True) if commission else None,
-            descriptor.model_dump(mode="json", exclude_none=True),
-        )
+        self._commission = commission.model_copy(deep=True) if commission else None
+        self._descriptor = descriptor.model_copy(deep=True)
         self._root.step(self._time(), "system", "Run initialized.")
         if commission is not None:
             refusal = check_commission(commission, descriptor)
@@ -228,7 +225,7 @@ class Recorder:
         if self._started is not None:
             raise RecorderError("start: called twice")
         data = started.model_dump(mode="json", exclude_none=True)
-        self._artifacts.effective(data)
+        self._agent_start = capture_start(data, self._commission, self.run_id)
         self._started = started
         root = self._root
         root.data["steps"] = []

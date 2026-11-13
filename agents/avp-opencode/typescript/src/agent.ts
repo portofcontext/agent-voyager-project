@@ -142,23 +142,17 @@ export async function run(
     const selectedSkills = (await nativeSkills(client)).filter((s) =>
       plan.started.skills?.some((item) => item.name === s.name),
     );
-    for (const skill of selectedSkills) {
-      if (!isAbsolute(skill.location))
-        await rec.artifact(
-          `inputs/skills/${encodeURIComponent(skill.name)}/instructions.md`,
-          Buffer.from(skill.content),
-          "input",
-        );
-    }
-    const skills = selectedSkills.map(({ name, description, location }) => ({
-      name,
-      description: description ?? "",
-      ...(isAbsolute(location)
-        ? { source: pathToFileURL(dirname(location)).href }
-        : {
-            instructions_path: `inputs/skills/${encodeURIComponent(name)}/instructions.md`,
-          }),
-    }));
+    const skills = selectedSkills.map(
+      ({ name, description, location, content }) => ({
+        name,
+        description: description ?? "",
+        ...(isAbsolute(location)
+          ? { source: pathToFileURL(dirname(location)).href }
+          : {
+              files: { "instructions.md": content },
+            }),
+      }),
+    );
     if (
       commission.skills?.some((s) => !skills.some((n) => n.name === s.name))
     ) {

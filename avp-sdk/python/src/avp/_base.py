@@ -1,4 +1,4 @@
-"""Settings shared by the wire models of all three specs."""
+"""Settings shared by the wire models of the AVP specs."""
 
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Annotated

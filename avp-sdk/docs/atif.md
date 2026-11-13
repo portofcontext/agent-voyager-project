@@ -11,9 +11,9 @@ avp-pydantic-ai-cli run --commission commission.json --out trajectory.json
 File output is an atomically replaced JSON snapshot. Tools first appear in a
 model-response step's `tool_calls`; their results are attached to that step's
 `observation`. The CLI follows these updates without replaying previous output.
-Stdout output is one completed document. File output also writes `artifacts.json`
-and captured files beside the trace. Move the manifest and all listed files
-with the trajectory to preserve the complete run.
+Stdout output is one completed document. File output also saves `commission.json`,
+`descriptor.json`, and `agent-start.json` beside the trace. Keep those documents
+and any ATIF-referenced image files together when moving a complete run.
 
 ## Read a trajectory
 
@@ -62,27 +62,23 @@ Unknown usage is omitted. Opaque child usage is counted only when individual
 child responses are unavailable. Partial sums are calculated by readers from
 recorded metrics; missing measurements remain unknown. Full tool metadata,
 including titles, output schemas, MCP annotations, and server ownership, lives in
-`inputs/effective-agent.json`; trace definitions use only standard ATIF fields.
+`agent-start.json`; trace definitions use only standard ATIF fields.
 
-Full configuration, complete skill directories, and generated files are preserved
-as [run artifacts](../../spec/v0.1/artifacts.md). The manifest lists only path,
-input/output role, and SHA-256. This keeps traces tight without dropping the
-inputs needed for evaluation or recursive improvement. Native runtime event
-archives are not required.
+[Agent Start](../../spec/v0.1/agent-start.md) contains the complete resolved
+configuration and inline skill contents, including supporting files. It keeps
+evaluation inputs available without inflating the trace.
 
 ```python
-from avp.artifacts import read_artifacts
+from avp.agent_start import AgentStart
 
-manifest = read_artifacts(Path("."), run_id=trajectory.session_id)
-for artifact in manifest.artifacts:
-    print(artifact.role, artifact.path)
+started = AgentStart.model_validate_json(Path("agent-start.json").read_bytes())
+assert started.run_id == trajectory.session_id
+for skill in started.skills or []:
+    print(skill.name, skill.files)
 ```
 
-`read_artifacts` verifies every file and hash. TypeScript exposes the equivalent
-`readArtifacts` from `@agent-voyager-project/sdk/artifacts`. Execution metadata
-remains in ATIF, so reading the trace does not require separate detail files.
-The manifest inventories captured files; it does not promise a full workspace or
-a reproducible runtime environment.
+TypeScript exposes `parseAgentStart` from `@agent-voyager-project/sdk/agent_start`.
+No manifest or separate execution-detail files are required.
 
 ## Verification and upstream updates
 

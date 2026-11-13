@@ -2,18 +2,208 @@
 
 export type JsonValue = unknown;
 
-export interface Artifact {
-  path: string;
-  role: "input" | "output";
-  sha256: string;
+export interface BinaryFile {
+  base64: string;
 }
 /**
- * Captured run files. See artifacts.md.
+ * A secret in a variable of the agent's environment.
  */
-export interface ArtifactManifest {
+export interface EnvSecret {
+  /**
+   * The name of a variable in the agent's environment that holds the secret,
+   * for example `"TEST_DB_PASSWORD"`.
+   */
+  env: string;
+}
+/**
+ * An MCP server the agent comes with. Connection details stay inside the agent.
+ */
+export interface McpServer {
+  /**
+   * Identifies the server. A Tool's `mcp_server_id` refers to it.
+   */
+  id: string;
+  /**
+   * A display name, when it differs from `id`.
+   */
+  name?: string | null;
+  /**
+   * What the server provides.
+   */
+  description?: string | null;
+  /**
+   * The result of the agent's attempt to connect.
+   */
+  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
+}
+/**
+ * A Model without its `credential`, as the Trajectory reports it.
+ */
+export interface ModelRef {
+  /**
+   * The service that runs the model, for example `"anthropic"`,
+   * `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls
+   * and how it authenticates.
+   */
+  provider: string;
+  /**
+   * The model's ID at that service, as the agent sends it, for example
+   * `"claude-sonnet-4-6"`.
+   */
+  id: string;
+  /**
+   * The URL of the service's API. Absent means the service's default.
+   */
+  base_url?: string | null;
+}
+/**
+ * A secret that a proxy outside the agent holds and adds to its requests.
+ */
+export interface ProxySecret {
+  /**
+   * The name of a credential that a proxy outside the agent holds. The proxy
+   * adds it to the agent's matching requests, so the agent never receives its
+   * value.
+   */
+  proxy: string;
+}
+export interface StartedMcpHttp {
+  /**
+   * Identifies the server.
+   */
+  id: string;
+  /**
+   * A display name, when it differs from `id`.
+   */
+  name?: string | null;
+  /**
+   * What the server provides.
+   */
+  description?: string | null;
+  type: "http";
+  /**
+   * The server's URL.
+   */
+  url: string;
+  /**
+   * HTTP headers to send with each request. A Secret reference's secret is
+   * the header's entire value.
+   */
+  headers?: {
+    [k: string]: string | ProxySecret | EnvSecret;
+  } | null;
+  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
+}
+export interface StartedMcpStdio {
+  /**
+   * Identifies the server.
+   */
+  id: string;
+  /**
+   * A display name, when it differs from `id`.
+   */
+  name?: string | null;
+  /**
+   * What the server provides.
+   */
+  description?: string | null;
+  type: "stdio";
+  /**
+   * The program and its arguments, for example `["npx", "-y", "@example/db-mcp"]`.
+   *
+   * @minItems 1
+   */
+  command: [string, ...string[]];
+  /**
+   * Environment variables to set for the program, on top of those the
+   * agent's MCP client gives it.
+   */
+  env?: {
+    [k: string]: string | EnvSecret;
+  } | null;
+  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
+}
+export interface StartedSkill {
+  /**
+   * The skill's name.
+   */
+  name: string;
+  /**
+   * What the skill does and when to use it.
+   */
+  description: string;
+  /**
+   * A `file:` URI for the directory that contains the skill's `SKILL.md`, as
+   * the path appears inside the agent's environment.
+   */
+  source?: string | null;
+  files?: {
+    [k: string]: string | BinaryFile;
+  } | null;
+  [k: string]: unknown;
+}
+export interface StartedSubagent {
+  name: string;
+  description?: string | null;
+  system_prompt?: string | null;
+  tools?: Tool[] | null;
+  skills?: StartedSkill[] | null;
+  mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
+}
+/**
+ * An MCP `Tool` object, with one added field. Other MCP fields are kept.
+ */
+export interface Tool {
+  /**
+   * The tool's name, as the model calls it.
+   */
+  name: string;
+  /**
+   * A display name.
+   */
+  title?: string | null;
+  /**
+   * What the tool does, as the model sees it.
+   */
+  description?: string | null;
+  /**
+   * A JSON Schema for the tool's input, as the model sees it.
+   */
+  inputSchema: {
+    type: "object";
+    [k: string]: unknown;
+  };
+  /**
+   * A JSON Schema for the tool's structured output.
+   */
+  outputSchema?: {
+    type: "object";
+    [k: string]: unknown;
+  } | null;
+  /**
+   * The `id` of the MCP server the tool comes from. Absent for any tool that
+   * does not come from an MCP server.
+   */
+  mcp_server_id?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * Resolved configuration at start. See agent-start.md.
+ */
+export interface AgentStart {
   avp_version: "0.1";
   run_id: string;
-  artifacts: Artifact[];
+  prompt: string;
+  system_prompt?: string | null;
+  model: ModelRef;
+  tools?: Tool[] | null;
+  mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
+  skills?: StartedSkill[] | null;
+  subagents?: StartedSubagent[] | null;
+  output_schema?: {
+    type: "object";
+    [k: string]: unknown;
+  } | null;
 }
 /**
  * What an agent comes with before any Commission.
@@ -68,64 +258,6 @@ export interface ModelPattern {
    * A pattern for the model's `id`, for example `"claude-*"`.
    */
   id: string;
-}
-/**
- * An MCP `Tool` object, with one added field. Other MCP fields are kept.
- */
-export interface Tool {
-  /**
-   * The tool's name, as the model calls it.
-   */
-  name: string;
-  /**
-   * A display name.
-   */
-  title?: string | null;
-  /**
-   * What the tool does, as the model sees it.
-   */
-  description?: string | null;
-  /**
-   * A JSON Schema for the tool's input, as the model sees it.
-   */
-  inputSchema: {
-    type: "object";
-    [k: string]: unknown;
-  };
-  /**
-   * A JSON Schema for the tool's structured output.
-   */
-  outputSchema?: {
-    type: "object";
-    [k: string]: unknown;
-  } | null;
-  /**
-   * The `id` of the MCP server the tool comes from. Absent for any tool that
-   * does not come from an MCP server.
-   */
-  mcp_server_id?: string | null;
-  [k: string]: unknown;
-}
-/**
- * An MCP server the agent comes with. Connection details stay inside the agent.
- */
-export interface McpServer {
-  /**
-   * Identifies the server. A Tool's `mcp_server_id` refers to it.
-   */
-  id: string;
-  /**
-   * A display name, when it differs from `id`.
-   */
-  name?: string | null;
-  /**
-   * What the server provides.
-   */
-  description?: string | null;
-  /**
-   * The result of the agent's attempt to connect.
-   */
-  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
 }
 /**
  * The frontmatter of a skill's `SKILL.md`, as defined by Agent Skills, with
@@ -325,27 +457,6 @@ export interface Model {
   credential?: ProxySecret | EnvSecret | null;
 }
 /**
- * A secret that a proxy outside the agent holds and adds to its requests.
- */
-export interface ProxySecret {
-  /**
-   * The name of a credential that a proxy outside the agent holds. The proxy
-   * adds it to the agent's matching requests, so the agent never receives its
-   * value.
-   */
-  proxy: string;
-}
-/**
- * A secret in a variable of the agent's environment.
- */
-export interface EnvSecret {
-  /**
-   * The name of a variable in the agent's environment that holds the secret,
-   * for example `"TEST_DB_PASSWORD"`.
-   */
-  env: string;
-}
-/**
  * The supervisor that wrote the Commission.
  */
 export interface Supervisor {
@@ -456,26 +567,6 @@ export interface Source {
    */
   data: string;
   [k: string]: unknown;
-}
-/**
- * A Model without its `credential`, as the Trajectory reports it.
- */
-export interface ModelRef {
-  /**
-   * The service that runs the model, for example `"anthropic"`,
-   * `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls
-   * and how it authenticates.
-   */
-  provider: string;
-  /**
-   * The model's ID at that service, as the agent sends it, for example
-   * `"claude-sonnet-4-6"`.
-   */
-  id: string;
-  /**
-   * The URL of the service's API. Absent means the service's default.
-   */
-  base_url?: string | null;
 }
 /**
  * The model's text when it declined.

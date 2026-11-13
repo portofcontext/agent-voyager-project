@@ -1,10 +1,9 @@
 """Small ATIF queries for runtime integration tests. No AVP event projection."""
 
-import json
 from datetime import datetime
 from pathlib import Path
 
-from avp.artifacts import artifact_path, read_artifacts
+from avp.agent_start import AgentStart
 from avp.trajectory import final_output, parse_trajectory
 
 
@@ -16,14 +15,10 @@ def meta(value: dict) -> dict:
     return value.get("extra", {}).get("avp", {})
 
 
-def artifact(directory: Path, name: str) -> dict:
-    manifest = read_artifacts(directory)
-    assert any(a.path == name for a in manifest.artifacts), name
-    return json.loads(artifact_path(directory, name).read_text())
-
-
 def effective(directory: Path) -> dict:
-    return artifact(directory, "inputs/effective-agent.json")
+    return AgentStart.model_validate_json((directory / "agent-start.json").read_bytes()).model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 def documents(root: dict):

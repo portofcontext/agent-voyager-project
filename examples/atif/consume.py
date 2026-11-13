@@ -6,7 +6,6 @@ Run with the pinned Harbor environment described in README.md. No AVP dependency
 import argparse
 import hashlib
 import json
-import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,33 +46,12 @@ def prepare(source: Path, destination: Path) -> Path:
                 assets(child)
 
     assets(trajectory.to_json_dict())
-    manifest_path = source.parent / "artifacts.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_bytes())
-        if manifest["avp_version"] != "0.1" or manifest["run_id"] != trajectory.session_id:
-            raise ValueError("Artifact manifest version or run identity does not match")
-        seen = set()
-        for entry in manifest["artifacts"]:
-            name = entry["path"]
-            if (
-                name in seen
-                or name in {"trajectory.json", "artifacts.json"}
-                or any(part in {"", ".", ".."} for part in name.split("/"))
-                or re.search(r"[\\:\x00-\x1f]", name)
-                or entry["role"] not in {"input", "output"}
-            ):
-                raise ValueError(f"Invalid artifact: {name}")
-            seen.add(name)
-            asset = (source.parent / name).resolve()
-            if not asset.is_relative_to(source.parent.resolve()):
-                raise ValueError(f"Artifact path escapes the run directory: {name}")
-            content = asset.read_bytes()
-            if hashlib.sha256(content).hexdigest() != entry["sha256"]:
-                raise ValueError(f"Artifact hash mismatch: {name}")
-            target = agent_dir / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-        shutil.copyfile(manifest_path, agent_dir / "artifacts.json")
+    for name in ("commission.json", "descriptor.json", "agent-start.json"):
+        path = source.parent / name
+        if path.exists():
+            if not path.resolve().is_relative_to(source.parent.resolve()):
+                raise ValueError(f"Run document escapes the run directory: {name}")
+            shutil.copyfile(path, agent_dir / name)
     agent = AgentConfig(name=trajectory.agent.name, model_name=trajectory.agent.model_name)
     task = TaskConfig(path=source.resolve())
     config = TrialConfig(task=task, trial_name="run", agent=agent)

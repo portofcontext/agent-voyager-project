@@ -11,7 +11,7 @@ export async function copyData(root, output) {
   for (const file of [
     ...files.map((name) => `utils/data/${name}`),
     "schemas/trajectory.json",
-    "schemas/artifacts.json",
+    "schemas/agent-start.json",
     "schemas/reports.json",
   ]) {
     const target = new URL(`${output}/${file}`, root);

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from avp._files import atomic_write, local_path, write_document
 from avp._vendor.atif import (  # noqa: F401
     Agent,
     ContentPart,
@@ -16,7 +17,9 @@ from avp._vendor.atif import (  # noqa: F401
     ToolCall,
     Trajectory,
 )
-from avp.artifacts import ArtifactFile, atomic_write, write_artifacts
+from avp.agent_start import AgentStart
+from avp.commission import Commission
+from avp.descriptor import AgentDescriptor
 
 
 def parse_trajectory(value: dict[str, Any] | str | bytes) -> Trajectory:
@@ -61,20 +64,30 @@ class Recording:
 
     trajectory: Trajectory
     assets: dict[str, bytes] = field(default_factory=dict)
-    artifacts: dict[str, ArtifactFile] = field(default_factory=dict)
+    commission: Commission | None = None
+    descriptor: AgentDescriptor | None = None
+    agent_start: AgentStart | None = None
 
     def write(self, path: Path) -> None:
-        """Publish assets first, then atomically replace the readable document."""
+        """Publish start documents and referenced images before the ATIF snapshot."""
+        if path.name in {"commission.json", "descriptor.json", "agent-start.json"}:
+            raise ValueError("trajectory path conflicts with a run document")
         path.parent.mkdir(parents=True, exist_ok=True)
-        files = self.artifacts.copy()
+        for name, document in (
+            ("commission.json", self.commission),
+            ("descriptor.json", self.descriptor),
+            ("agent-start.json", self.agent_start),
+        ):
+            if document is not None:
+                write_document(path.parent, name, document)
         for name, content in self.assets.items():
-            file = ArtifactFile(content, "output")
-            if name in files and files[name] != file:
-                raise ValueError(f"conflicting media artifact: {name}")
-            files[name] = file
-        if path.name == "artifacts.json" or path.name in files:
-            raise ValueError("an artifact cannot replace the trajectory")
-        write_artifacts(path.parent, self.trajectory.session_id or "unknown", files)
+            target = local_path(path.parent, name)
+            if target.resolve() == path.resolve():
+                raise ValueError("an image cannot replace the trajectory")
+            if not target.exists():
+                atomic_write(target, content)
+            elif target.read_bytes() != content:
+                raise ValueError(f"image already exists with different content: {name}")
         atomic_write(
             path, (self.trajectory.model_dump_json(exclude_none=True, indent=2) + "\n").encode()
         )

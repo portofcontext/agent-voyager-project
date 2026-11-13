@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from avp.artifacts import artifact_path, read_artifacts
+from avp.agent_start import AgentStart
 from avp.commission import Commission
 from avp.trajectory import Trajectory, avp_metadata, documents, final_output
 from avp_cli import paths
@@ -185,7 +185,15 @@ def _brief(
         "version": agent.version,
         "model": model,
         "tools": tools,
-        **{k: extra[k] for k in ("subagents", "skills", "mcp_servers") if k in extra},
+        **{
+            key: [{k: v for k, v in item.items() if k in fields} for item in extra[key]]
+            for key, fields in (
+                ("subagents", {"name", "description"}),
+                ("skills", {"name", "description"}),
+                ("mcp_servers", {"id", "name", "description", "status"}),
+            )
+            if key in extra
+        },
     }
     prompts = {
         s.source: s.message
@@ -228,18 +236,15 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
     shown = _presentation(trajectory)
     effective = None
     run_directory = directory / run.directory
-    if (run_directory / paths.ARTIFACTS).exists():
+    start_path = run_directory / paths.AGENT_START
+    if start_path.exists():
         try:
-            manifest = read_artifacts(run_directory, run_id=run.run_id)
-            if any(
-                a.path == "inputs/effective-agent.json" and a.role == "input"
-                for a in manifest.artifacts
-            ):
-                effective = json.loads(
-                    artifact_path(run_directory, "inputs/effective-agent.json").read_text()
-                )
+            started = AgentStart.model_validate_json(start_path.read_bytes())
+            if started.run_id != run.run_id:
+                raise ValueError("Agent Start belongs to a different run")
+            effective = started.model_dump(mode="json", exclude_none=True)
         except (OSError, ValueError) as exc:
-            raise Failed(f"invalid run artifacts: {exc}") from None
+            raise Failed(f"invalid Agent Start: {exc}") from None
     verdict = run.scorer_error or "; ".join(run.score.reasons if run.score else [])
     return {
         "row_id": run.item,

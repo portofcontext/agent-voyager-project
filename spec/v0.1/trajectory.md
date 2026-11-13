@@ -20,9 +20,8 @@ SDK generates its wire types from the same schema.
 
 AVP adds operational details in ATIF's `extra.avp` extension fields. A generic
 ATIF consumer can read the conversation without understanding these extensions.
-Full configuration, skill files, and generated files live in [run artifacts](artifacts.md).
-The trace stays focused on what happened during execution; artifacts retain
-the material needed for evaluation and improvement.
+Full resolved configuration and skill contents live in [Agent Start](agent-start.md).
+The trace records execution and uses extensions only for trace-related information.
 
 ## 2. Examples
 
@@ -155,7 +154,7 @@ fields shown first.
 - To read a response, use its `model_name` or `agent.model_name`. For provider
   and endpoint, use a step override or the agent default. A step's `base_url: null` explicitly clears an inherited endpoint. For the requested model, use
   a step override, then `agent.extra.avp.requested_model`, then `agent.model_name`.
-- MCP ownership lives in the tool catalog in `inputs/effective-agent.json`.
+- MCP ownership lives in the tool catalog in `agent-start.json`.
   Match recorded calls to that catalog by `function_name`; the trace does not
   repeat `mcp_server_id` on definitions or calls.
 - `observed_at` records when the Recorder receives a runtime-executed tool call.
@@ -167,12 +166,12 @@ fields shown first.
   agent message or has a different JSON type. When absent on a complete run,
   use that message. An explicit `output: null` means no returned result, even
   if the trace contains agent messages. Incomplete AVP runs have no inferred
-  result. The SDK does not copy the result into an artifact.
+  result.
 - `annotations` and `provider_metadata` are open objects. Their sample keys
   above illustrate runtime/provider data, not a fixed AVP field list.
 - Tool definitions use standard ATIF fields only. The full catalog, including
   `title`, `outputSchema`, MCP `annotations`, and server ownership, lives in
-  `inputs/effective-agent.json`.
+  `agent-start.json`.
 - A tool's standard `tool_call_id` is canonical. Matching `provider_call_id`,
   `call_id`, and `tool_call_id` aliases are omitted from `provider_metadata`.
   A distinct provider identifier is preserved when supplied.
@@ -229,10 +228,8 @@ It has no start time or model-response steps.
 
 Encrypted reasoning, signatures, citations, refusal annotations, and provider
 metadata remain in the relevant ATIF object's `extra.avp`. Encrypted reasoning
-is not presented as public reasoning text. Artifacts hold supporting inputs
-and outputs, including configuration snapshots, complete skill directories,
-generated files, and media; they do not split execution metadata into another
-trace format.
+is not presented as public reasoning text. Agent Start holds full resolved
+configuration and skill contents. Execution metadata remains in the trace.
 
 ### 3.2 Document delivery
 
@@ -244,11 +241,11 @@ their observations appear when results arrive.
 
 Image content uses ATIF references to files beside the document. The sink writes
 assets before publishing the snapshot and deduplicates identical content.
-Moving a complete run requires moving its manifest and every listed artifact,
-including images, alongside the trajectory.
+Keep referenced image files beside the trajectory when moving a run. Keep
+`commission.json`, `descriptor.json`, and `agent-start.json` to retain its inputs.
 
 `--out -` writes one completed JSON document to stdout. It does not stream
-snapshots or artifact files. Use file output to retain the complete run record;
+snapshots or the other run documents. Use file output to retain the complete run record;
 runs with binary assets require it. Diagnostics use
 stderr. A hard-killed process may leave the latest incomplete file snapshot.
 

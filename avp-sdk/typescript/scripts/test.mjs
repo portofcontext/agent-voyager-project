@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { copyData } from "./copy-data.mjs";
 
 const root = new URL("../", import.meta.url);
+await rm(new URL("dist-test/", root), { recursive: true, force: true });
 execFileSync(
   process.execPath,
   [

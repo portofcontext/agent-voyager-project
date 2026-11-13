@@ -58,9 +58,9 @@
       "types": "./dist/reports.d.ts",
       "import": "./dist/reports.js"
     },
-    "./artifacts": {
-      "types": "./dist/artifacts.d.ts",
-      "import": "./dist/artifacts.js"
+    "./agent_start": {
+      "types": "./dist/agent_start.d.ts",
+      "import": "./dist/agent_start.js"
     }
   },
   "scripts": {

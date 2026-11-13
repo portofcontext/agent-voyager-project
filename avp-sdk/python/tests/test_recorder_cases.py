@@ -103,8 +103,11 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
         None,
     )
     if started and "tools" in started:
-        effective = json.loads(snapshots[-1].artifacts["inputs/effective-agent.json"].content)
-        assert effective["tools"] == started["tools"]
+        assert snapshots[-1].agent_start is not None
+        assert (
+            snapshots[-1].agent_start.model_dump(mode="json", exclude_none=True)["tools"]
+            == started["tools"]
+        )
     return snapshots[-1].trajectory.to_json_dict()
 
 
