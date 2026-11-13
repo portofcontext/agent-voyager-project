@@ -24,11 +24,29 @@ Full configuration, skill files, and generated files live in [run artifacts](art
 The trace stays focused on what happened during execution; artifacts retain
 the material needed for evaluation and improvement.
 
-## 2. Complete trajectory example
+## 2. Examples
 
-This is a complete ATIF document with AVP completion fields in `extra.avp`.
-The fields outside `extra` are standard ATIF. Section 3.1 lists the other AVP
-extensions; this small example does not exercise all of them.
+This fragment shows AVP's completion fields. `extra` is ATIF's extension
+mechanism; `avp` namespaces our additions. The [operational extensions](#31-operational-extensions)
+reference lists the other fields AVP can add.
+
+```json
+{
+  "extra": {
+    "avp": {
+      "complete": true,
+      "stop_reason": "converged",
+      "output": "42"
+    }
+  }
+}
+```
+
+<details>
+<summary>Complete ATIF trajectory with AVP extensions</summary>
+
+The fields outside `extra` are standard ATIF. This complete run shows a user
+prompt, a tool call and result, and the agent's final answer.
 
 ```json
 {
@@ -50,6 +68,8 @@ extensions; this small example does not exercise all of them.
   "extra": {"avp": {"complete": true, "stop_reason": "converged", "output": "42"}}
 }
 ```
+
+</details>
 
 ## 3. Reference
 
