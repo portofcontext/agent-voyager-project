@@ -12,8 +12,8 @@
 ### Added
 
 - Run artifacts preserve full Commission and Descriptor snapshots, effective
-  configuration, complete skill directories, media, and explicitly captured
-  output files. Both SDKs write an `artifacts.json` manifest with relative paths,
+  configuration with full tool catalogs, complete skill directories, media, and
+  explicitly captured output files. Both SDKs write an `artifacts.json` manifest with relative paths,
   input/output roles, and SHA-256 hashes; readers verify captured bytes.
 - A Harbor integration example uses saved ATIF runs directly for training
   extraction and the job viewer.

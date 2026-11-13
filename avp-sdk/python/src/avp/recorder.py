@@ -246,17 +246,6 @@ class Recorder:
                     "parameters": t["inputSchema"],
                     **({"description": t["description"]} if "description" in t else {}),
                 },
-                **(
-                    {
-                        "extra": {
-                            "avp": _remaining(
-                                t, {"name", "description", "inputSchema", "mcp_server_id"}
-                            )
-                        }
-                    }
-                    if _remaining(t, {"name", "description", "inputSchema", "mcp_server_id"})
-                    else {}
-                ),
             }
             for t in data.get("tools", [])
         ]

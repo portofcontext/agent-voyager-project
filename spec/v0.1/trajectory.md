@@ -70,15 +70,6 @@ fields shown first.
     "base_url": "https://api.openai.com/v1",
     "requested_model": "example-model"
   },
-  "agent.tool_definitions[].extra.avp": {
-    "title": "Add numbers",
-    "outputSchema": {
-      "type": "object"
-    },
-    "annotations": {
-      "readOnlyHint": true
-    }
-  },
   "steps[source=agent].extra.avp": {
     "duration_ms": 800,
     "provider": "anthropic",
@@ -179,8 +170,9 @@ fields shown first.
   result. The SDK does not copy the result into an artifact.
 - `annotations` and `provider_metadata` are open objects. Their sample keys
   above illustrate runtime/provider data, not a fixed AVP field list.
-- Tool definitions retain `title`, `outputSchema`, and additional MCP fields,
-  including MCP `annotations`; MCP server ownership stays in the artifact catalog.
+- Tool definitions use standard ATIF fields only. The full catalog, including
+  `title`, `outputSchema`, MCP `annotations`, and server ownership, lives in
+  `inputs/effective-agent.json`.
 - A tool's standard `tool_call_id` is canonical. Matching `provider_call_id`,
   `call_id`, and `tool_call_id` aliases are omitted from `provider_metadata`.
   A distinct provider identifier is preserved when supplied.

@@ -127,6 +127,17 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
       } else await call(rec, command);
     }
     same(events.at(-1)!.trajectory, vector.trajectory);
+    const started = vector.calls.find(
+      (c: any) => c.call === "start" && !c.raises,
+    )?.started;
+    if (started?.tools) {
+      const effective = JSON.parse(
+        Buffer.from(
+          events.at(-1)!.artifacts!.get("inputs/effective-agent.json")!.content,
+        ).toString("utf8"),
+      );
+      assert.deepEqual(effective.tools, started.tools);
+    }
     const stop = [...vector.calls].reverse().find((c) => c.call === "stop");
     if (stop && vector.calls.some((c: any) => c.call === "start" && !c.raises))
       assert.deepEqual(

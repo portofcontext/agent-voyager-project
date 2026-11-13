@@ -231,20 +231,6 @@ export class Recorder {
         parameters: t.inputSchema,
         ...(t.description != null ? { description: t.description } : {}),
       },
-      ...(Object.keys(
-        remaining(t, ["name", "description", "inputSchema", "mcp_server_id"]),
-      ).length
-        ? {
-            extra: {
-              avp: remaining(t, [
-                "name",
-                "description",
-                "inputSchema",
-                "mcp_server_id",
-              ]),
-            },
-          }
-        : {}),
     }));
     if (data.system_prompt != null)
       this.root.step(this.now().toISOString(), "system", data.system_prompt);

@@ -60,8 +60,9 @@ retains typed final output, terminal reason, errors, observed timing,
 cache-write/reasoning-token distinctions, citations, and provider annotations.
 Unknown usage is omitted. Opaque child usage is counted only when individual
 child responses are unavailable. Partial sums are calculated by readers from
-recorded metrics; missing measurements remain unknown. MCP ownership is read
-from the full tool catalog in `inputs/effective-agent.json`.
+recorded metrics; missing measurements remain unknown. Full tool metadata,
+including titles, output schemas, MCP annotations, and server ownership, lives in
+`inputs/effective-agent.json`; trace definitions use only standard ATIF fields.
 
 Full configuration, complete skill directories, and generated files are preserved
 as [run artifacts](../../spec/v0.1/artifacts.md). The manifest lists only path,

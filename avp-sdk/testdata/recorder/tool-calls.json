@@ -53,7 +53,25 @@
             "inputSchema": {
               "type": "object"
             },
-            "mcp_server_id": "docs"
+            "mcp_server_id": "docs",
+            "title": "Search documents",
+            "outputSchema": {
+              "type": "object",
+              "properties": {
+                "matches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "_meta": {
+              "source": "catalog"
+            }
           },
           {
             "name": "Task",
