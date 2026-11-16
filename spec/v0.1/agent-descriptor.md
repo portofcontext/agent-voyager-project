@@ -92,6 +92,9 @@ A Tool is an [MCP `Tool`](https://modelcontextprotocol.io/specification/latest/s
 |---|---|---|---|
 | `mcp_server_id` | string | No | The `id` of the [MCP server](#33-mcp-server) the tool comes from. Absent for any tool that does not come from an MCP server. |
 
+This identifies MCP ownership, not execution location. Native tools omit it;
+MCP tools include it whether the server runs locally over stdio or over HTTP.
+
 ### 3.3 MCP server
 
 Unlike an MCP server entry in a [Commission](./commission.md), this entry has no connection details such as a URL, command, or credentials; those stay inside the agent.

@@ -40,6 +40,9 @@ credential. A StartedMcpServer uses Descriptor server fields plus the Commission
 references; resolved credential values MUST NOT be included. A server's absence
 of connection fields means those internals were not exposed by the runtime.
 
+A tool's optional `mcp_server_id` identifies its entry in `mcp_servers`. Native
+tools omit it; MCP tools include it for both local and remote servers.
+
 A StartedSkill adds `path`: a skill directory relative to `agent-start.json`.
 Readers MUST resolve it within the saved run directory. Paths MUST use `/`
 separators and MUST NOT be absolute or contain empty, `.` or `..` segments,
