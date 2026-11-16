@@ -30,7 +30,7 @@ CLI versions keep their pins.
 Adapters use the SDK source from this repository. Python's `tool.uv.sources`
 links the matching SDK; TypeScript uses a relative file dependency. Built-in
 Docker builds use the repository root and bundle the SDK at the same source pin.
-This avoids mixing a new adapter wire contract with an older published SDK.
+This keeps each adapter and SDK on the same data format.
 
 For Python, run `uv sync --locked` and `uv run pytest` in the adapter's `python/`
 directory. For TypeScript, build the SDK first, then the adapter:

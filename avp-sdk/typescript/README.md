@@ -4,7 +4,7 @@ The TypeScript SDK for the [AVP v0.1 specs](../../spec/v0.1/). Its scope and
 behavior are defined in the [SDK guide](../README.md), with Python as the reference.
 
 The npm package is `@agent-voyager-project/sdk`. It uses ES modules and requires
-Node 22.12 or newer. Import wire types and parsers from the `commission`,
+Node 22.12 or newer. Import data types and parsers from the `commission`,
 `descriptor`, and `trajectory` subpaths. `parseTrajectory` validates native
 ATIF documents. Recorder inputs are exported from `reports`.
 

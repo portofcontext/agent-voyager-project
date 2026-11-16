@@ -25,7 +25,7 @@ trajectory records what the run actually did.
 | [Commission](./commission.md) | The task the supervisor sends: prompt, model, MCP servers, skills, and which built-in items to switch off. | Written by a person or a tool. The supervisor fills in per-run details such as the run ID and sends it to the agent to start a run. |
 | [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. |
 | [Agent Start](./agent-start.md) | The resolved prompts, model, tools, MCP servers, skills with paths to captured contents, and subagents. | Saved once at start for evaluation and comparison with the requested configuration. |
-| [Trajectory](./trajectory.md) | Native ATIF steps, observations, metrics, and operational extensions. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. |
+| [Trajectory](./trajectory.md) | ATIF steps, tool results, metrics, and AVP execution details. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. |
 
 This document is an overview. The requirements are in the specs above.
 
@@ -56,7 +56,7 @@ AVP reuses existing specs wherever one already fits:
 - **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
 - **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
 - **[models.dev](https://models.dev)**: the provider and model IDs that name a model, and the prices AVP uses to compute each response's cost.
-- **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: the machine-readable form of AVP wire contracts.
+- **[JSON Schema 2020-12](https://json-schema.org/draft/2020-12)**: schemas for validating AVP documents.
 
 ## Out of scope
 
@@ -72,7 +72,7 @@ AVP defines the shape of the Commission, the Agent Descriptor, Agent Start, and 
 ## Versioning
 
 The AVP contracts share version v0.1. The Commission, Agent Descriptor, and
-Agent Start declare it in `avp_version`; ATIF retains its upstream
+Agent Start declare it in `avp_version`; ATIF uses its own
 `schema_version`.
 
 While v0.1 is a draft, it may change in incompatible ways. After it is final:

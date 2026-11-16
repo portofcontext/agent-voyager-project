@@ -2,7 +2,7 @@
 
 The AVP SDKs (Python and TypeScript) have two goals:
 
-- **Define the wire:** types for the Commission, Agent Descriptor, Agent Start,
+- **Define the data formats:** types for the Commission, Agent Descriptor, Agent Start,
   and ATIF trajectory, matching the specs' schemas.
 - **Share the common work:** code that every agent runner or supervisor would
   otherwise write itself, such as checking a Commission, writing a Trajectory,
@@ -14,12 +14,12 @@ in either language.
 ## Source of truth
 
 The spec documents in [`spec/v0.1/`](../spec/v0.1/) come first. A change to the
-wire starts there, never in an SDK or a schema.
+data format starts there, never in an SDK or a schema.
 
 The Python SDK comes second, because the rest is generated from it:
 
-1. Commission and Descriptor reference tables define their fields; Trajectory adopts the pinned upstream ATIF models.
-2. Python implements those tables and vendors the upstream ATIF models.
+1. Commission, Descriptor, and Agent Start reference tables define their fields. Trajectory uses the pinned Harbor ATIF models.
+2. Python implements those tables and includes a copy of the Harbor ATIF models.
 3. The models generate `spec/v0.1/*.schema.json` (`make schemas`).
 4. TypeScript takes its types from those schemas.
 
@@ -32,7 +32,7 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 
 | Part | What it does | Python |
 |---|---|---|
-| Wire types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Data types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
 | Agent Start | Resolved configuration with paths to captured skills | `avp.agent_start` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
@@ -131,11 +131,11 @@ SIGINT or SIGTERM interrupted the run; anything else is a crash.
 The Recorder assembles native reports into ATIF. It validates the Commission,
 records effective inputs, merges streamed response chunks, prices each response,
 attaches observations to tool calls, and records embedded child trajectories.
-It closes abandoned work and preserves typed output and terminal reasons in
+It closes abandoned work and preserves the output's JSON type and stop reasons in
 `extra.avp`. Missing usage stays unknown.
 
 Adapter method inputs live in `avp.reports` (TypeScript: `sdk/reports`). They
-are not a persisted event format. `avp.trajectory` exposes upstream wire models,
+are not saved as an event format. `avp.trajectory` exports the Harbor ATIF models,
 `parse_trajectory`, and `Recording`. Both SDKs run the same Recorder cases in
 [`testdata/recorder/`](testdata/recorder/).
 

@@ -23,5 +23,6 @@ published snapshot as ATIF, then compare the final document to `trajectory`:
 
 The expected documents were captured independently from the previous ATIF
 converter before replacing it with native recording. They cover streaming,
-parallel tools, nested children, opaque child accounting, partial usage,
+parallel tools, nested children, usage totals for children whose responses are
+unavailable, partial usage,
 interruption, invalid input, and structured output.

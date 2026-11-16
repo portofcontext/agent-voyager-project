@@ -28,10 +28,10 @@ for step in trajectory.steps:
 print(final_output(trajectory))
 ```
 
-Python uses Harbor's vendored upstream Pydantic models. TypeScript exports the
-same wire shape, `parseTrajectory`, and `finalOutput` from `@agent-voyager-project/sdk/trajectory`.
+Python includes a copy of Harbor's Pydantic models. TypeScript exports the
+same data types, `parseTrajectory`, and `finalOutput` from `@agent-voyager-project/sdk/trajectory`.
 `avp.reports` and `@agent-voyager-project/sdk/reports` define Recorder method inputs
-for adapter authors; these inputs are not another persisted wire format.
+for adapter authors; these inputs are not saved as a separate event format.
 
 ## Use existing ATIF tools
 
@@ -48,18 +48,18 @@ training-data extraction. Harbor's viewer expects a job/trial directory with
 from ATIF. See the [ecosystem example](../../examples/atif/README.md) for viewing
 and extracting conversations without changing the trajectory document.
 
-ATIF interoperability covers data the runtime actually exposes. It does not
-make every runtime support resuming another runtime's session. Harbor's text
+ATIF tools can read the data a runtime reports. This doesn't mean one runtime
+can resume another runtime's session. Harbor's text
 trace exporter rejects images; use a multimodal consumer for those runs.
 
 ## Information retained
 
-Standard ATIF fields carry messages, public reasoning, tool calls, observations,
+Standard ATIF fields contain messages, public reasoning, tool calls, observations,
 child trajectories, model identity, tool schemas, usage, and cost. `extra.avp`
-retains typed final output, terminal reason, errors, observed timing,
+records the final output with its JSON type, stop reason, errors, tool timing,
 cache-write/reasoning-token distinctions, citations, and provider annotations.
-Unknown usage is omitted. Opaque child usage is counted only when individual
-child responses are unavailable. Partial sums are calculated by readers from
+Unknown usage is omitted. A child's reported total is used only when its
+individual responses are unavailable. Partial sums are calculated by readers from
 recorded metrics; missing measurements remain unknown. Full tool metadata,
 including titles, output schemas, MCP annotations, and server ownership, lives in
 `agent-start.json`; trace definitions use only standard ATIF fields.
@@ -81,14 +81,14 @@ for skill in started.skills or []:
 TypeScript exposes `parseAgentStart` from `@agent-voyager-project/sdk/agent_start`.
 No manifest or separate execution-detail files are required.
 
-## Verification and upstream updates
+## Tests and Harbor updates
 
-`make check` exercises shared Recorder fixtures, Python and TypeScript semantic
-validation, and all eight adapter suites. It also checks that external Harbor
+`make check` runs shared Recorder cases, Python and TypeScript validation tests,
+and all eight adapter suites. It also checks that external Harbor
 trajectories load without AVP extensions. Native CLI integration jobs and live
 provider checks exercise runtime-specific behavior.
 
-Upstream models and licenses live in `avp/_vendor/atif`. Run
+The copied Harbor models and their license are in `avp/_vendor/atif`. Run
 `scripts/vendor-atif.py` with the pinned Harbor checkout, then `make schemas
-bindings` when updating them. The upstream golden fixture and schema provenance
+bindings` when updating them. The Harbor example trajectory and schema source
 are documented in [`testdata/atif`](../testdata/atif/README.md).

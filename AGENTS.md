@@ -40,7 +40,7 @@ Implement shared behavior in Python first, then TypeScript.
   An absent built-in allowlist allows all items; `[]` allows none.
 - Use secret references in Commissions. Include MCP configuration and skill
   files inline.
-- Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
+- Use native ATIF-v1.8 from the pinned Harbor models. Recorder input types
   live in `avp.reports`; do not introduce another event wire contract.
 - Use standard ATIF fields first; keep necessary execution metadata in `extra.avp`.
 - Save the resolved configuration exposed by the runtime in Agent Start, with paths to captured skill directories.

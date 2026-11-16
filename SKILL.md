@@ -11,7 +11,7 @@ description: >
 
 A supervisor sends one Commission; the agent's existing runtime does the work
 and streams its Trajectory. There is no mid-run supervisor push channel.
-Read the [spec overview](spec/v0.1/README.md) before constructing wire objects.
+Read the [spec overview](spec/v0.1/README.md) before creating AVP documents.
 
 ## Run an agent
 

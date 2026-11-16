@@ -5,11 +5,10 @@
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are interpreted as
 [BCP 14](https://www.rfc-editor.org/rfc/rfc8174) when capitalized.
 
-Agent Start records the resolved configuration exposed by the runtime after
-applying the Commission to the agent's capabilities and defaults.
-It describes the start of execution; the ATIF trajectory records what follows.
-The runtime still owns the merge, model calls, tools, and loop. The snapshot
-records what the adapter can observe; it does not guarantee exact replay.
+Agent Start records the configuration the runtime reports after applying the
+Commission and its own defaults. The ATIF trajectory records what happens next.
+The runtime handles setup, model calls, tools, and the loop. Agent Start saves
+what the adapter can observe; it doesn't guarantee that a run can be replayed exactly.
 
 ## Reference
 
@@ -29,16 +28,16 @@ records what the adapter can observe; it does not guarantee exact replay.
 For `system_prompt`, `tools`, `mcp_servers`, `skills`, and `subagents`, absent and
 `null` both mean not reported. An empty list means no items. An empty
 `system_prompt` is an explicit empty prompt. These meanings also apply within
-subagents, whose fields do not implicitly inherit from the parent. Producers
-SHOULD omit unreported fields. Reused MCP and Descriptor fields retain their
+subagents, whose missing fields do not inherit values from the parent. Agents
+SHOULD omit fields they cannot report. MCP and Descriptor fields keep their
 own documented defaults.
 
 `Tool`, skill metadata, and subagent metadata reuse the
 [Descriptor](agent-descriptor.md). `ModelRef` is the Commission model without its
-credential. A StartedMcpServer uses Descriptor server fields plus the Commission's
-`http` or `stdio` connection fields when exposed. Secret references remain
-references; resolved credential values MUST NOT be included. A server's absence
-of connection fields means those internals were not exposed by the runtime.
+credential. A StartedMcpServer uses Descriptor server fields and adds the
+Commission's `http` or `stdio` connection fields when available. Secrets MUST
+remain references, without their actual values. Missing connection fields mean
+the runtime did not report them.
 
 A tool's optional `mcp_server_id` identifies its entry in `mcp_servers`. Native
 tools omit it; MCP tools include it for both local and remote servers.
@@ -55,10 +54,10 @@ does not claim a complete skill. Absent or null `path` means no files were
 captured. The inherited `source`, when present, is the original runtime location;
 readers use `path` to access the saved copy.
 
-A reported local source that cannot be captured is an error. Symlinks within
-skill directories are rejected during capture. StartedSubagent uses the same
-skill and server shapes for its nested lists. Capturing a skill records what
-was available, not whether every file was used.
+If the runtime reports a local skill directory, the SDK must be able to read it.
+The SDK rejects symlinks inside skill directories. StartedSubagent uses the same
+skill and server fields. Saving a skill shows what was available; it doesn't
+mean the agent read every file.
 
 ## Example
 
@@ -103,19 +102,19 @@ once start succeeds, and is absent for a run refused before start. Readers must
 validate Agent Start and its run identity before using it. The initial snapshot
 does not change when the runtime switches models later; the trace records that.
 
-Skill files are saved before Agent Start publishes their paths. Copies are
-immutable start snapshots, independent of the runtime's temporary directories.
+The SDK saves skill files before writing Agent Start with their paths. These
+copies stay unchanged even if the runtime edits or removes the original files.
 The SDK uses separate directories for root and subagent skills; directory names
 are a storage convention, and readers MUST follow the recorded `path`.
 
 Keep or move the saved run directory as a unit, including referenced skill and
 image files. These references need no separate manifest or base64 encoding.
-Commission and Descriptor remain unchanged source contracts; a Commission still
-carries supplied skill text inline. Their overlap with the resolved snapshot lets
-a reader compare requested, offered, and effective configuration.
+Commission still includes supplied skill text inline. Saving Commission,
+Descriptor, and Agent Start lets you compare what was requested, what the agent
+offered, and what it actually configured.
 
 Generated files can be saved beside the run by the runtime or deployment.
-ATIF-referenced image files are written by the SDK. Stdout emits only the ATIF
+The SDK saves image files referenced by ATIF. Stdout contains only the ATIF
 document; use file output to retain the other documents and captured skill files.
 
 The [schema](agent-start.schema.json) is generated from `avp.agent_start`.
