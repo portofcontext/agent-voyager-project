@@ -13,7 +13,7 @@ model-response step's `tool_calls`; their results are attached to that step's
 `observation`. The CLI follows these updates without replaying previous output.
 Stdout output is one completed document. File output also saves `commission.json`,
 `descriptor.json`, and `agent-start.json` beside the trace. Keep those documents
-and any ATIF-referenced image files together when moving a complete run.
+and referenced skill directories and image files together when moving a complete run.
 
 ## Read a trajectory
 
@@ -65,7 +65,8 @@ including titles, output schemas, MCP annotations, and server ownership, lives i
 `agent-start.json`; trace definitions use only standard ATIF fields.
 
 [Agent Start](../../spec/v0.1/agent-start.md) contains the resolved configuration
-exposed by the runtime and inline skill contents, including supporting files. It keeps
+exposed by the runtime and paths to captured skill directories, including supporting
+files. Keep these directories with the run when moving or sharing it. This keeps
 evaluation inputs available without inflating the trace.
 
 ```python
@@ -74,7 +75,7 @@ from avp.agent_start import AgentStart
 started = AgentStart.model_validate_json(Path("agent-start.json").read_bytes())
 assert started.run_id == trajectory.session_id
 for skill in started.skills or []:
-    print(skill.name, skill.files)
+    print(skill.name, Path("agent-start.json").parent / skill.path if skill.path else None)
 ```
 
 TypeScript exposes `parseAgentStart` from `@agent-voyager-project/sdk/agent_start`.

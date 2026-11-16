@@ -23,6 +23,7 @@ def pytest_runtest_teardown(item):
             for name in ("commission.json", "descriptor.json", "agent-start.json"):
                 if (source.parent / name).exists():
                     shutil.copyfile(source.parent / name, target / name)
-            if (source.parent / "images").exists():
-                shutil.copytree(source.parent / "images", target / "images")
+            for directory in ("images", "skills"):
+                if (source.parent / directory).exists():
+                    shutil.copytree(source.parent / directory, target / directory)
             shutil.copyfile(source, target / "trajectory.json")

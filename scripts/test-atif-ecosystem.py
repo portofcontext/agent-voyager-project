@@ -43,6 +43,13 @@ with tempfile.TemporaryDirectory() as temporary:
                 prompt="What is 20 + 22?",
                 model=ModelRef(provider="test", id="fixture"),
                 tools=[Tool(name="add", inputSchema={"type": "object"})],
+                skills=[
+                    {
+                        "name": "math",
+                        "description": "Add numbers",
+                        "files": {"instructions.md": "Use add."},
+                    }
+                ],
             )
         )
         await recorder.response(
@@ -73,6 +80,7 @@ with tempfile.TemporaryDirectory() as temporary:
     assert (copied.parent / "agent-start.json").read_bytes() == (
         directory / "agent-start.json"
     ).read_bytes()
+    assert (copied.parent / "skills/0-math/instructions.md").read_text() == "Use add."
     scanner = JobScanner(jobs)
     assert scanner.list_jobs() == ["avp-import"]
     assert scanner.list_trials("avp-import") == ["run"]

@@ -1,13 +1,12 @@
-"""Resolved start configuration, with skill contents inline."""
+"""Resolved start configuration, with references to saved skill directories."""
 
-import base64
 import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import unquote, urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from avp._base import ObjectSchema, WireModel
 from avp.commission import Commission, McpServerHttp, McpServerStdio, ModelRef
@@ -21,34 +20,16 @@ _FILE_PATH = (
     r"(?!.*//)(?!.*/$)"  # No empty segments.
     r"[^\\:\x00-\x1f]+(?![\s\S])"  # Portable separators and no control characters.
 )
-# Compile to use Python's regex engine, which supports lookahead.
-_BASE64 = re.compile(r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![\s\S])")
-
-
-class BinaryFile(WireModel):
-    """Binary skill-file content encoded with the standard base64 alphabet."""
-
-    base64: str = Field(pattern=_BASE64, json_schema_extra={"contentEncoding": "base64"})
-    """Base64 content, padded when necessary, with no whitespace."""
 
 
 class StartedSkill(Skill):
-    """Skill metadata and the file contents exposed at start."""
+    """Skill metadata and a reference to its saved files."""
 
-    files: dict[str, str | BinaryFile] | None = Field(
-        default=None, json_schema_extra={"propertyNames": {"pattern": _FILE_PATH}}
-    )
-    """Paths relative to the skill directory, mapped to UTF-8 text or base64.
-    Absent or null means contents were not exposed. An empty map means no files.
+    path: str | None = Field(default=None, pattern=re.compile(_FILE_PATH))
+    """Skill directory relative to agent-start.json, using / separators.
+    Absent or null means no files were captured. The original source, when
+    present, identifies the runtime directory and is not a portable reference.
     """
-
-    @field_validator("files")
-    @classmethod
-    def _relative_paths(cls, files: dict[str, str | BinaryFile] | None):
-        for path in files or {}:
-            if re.fullmatch(_FILE_PATH, path) is None:
-                raise ValueError("skill file paths must be relative, without traversal")
-        return files
 
 
 class StartedMcpHttp(McpServerHttp):
@@ -80,7 +61,7 @@ class StartedSubagent(WireModel):
     tools: list[Tool] | None = None
     """Resolved tools. Absent or null means not exposed; [] means none."""
     skills: list[StartedSkill] | None = None
-    """Selected skills with exposed file contents. Absent or null means not exposed; [] means none."""
+    """Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none."""
     mcp_servers: list[StartedMcpServer] | None = None
     """Resolved MCP servers. Absent or null means not exposed; [] means none."""
 
@@ -107,7 +88,7 @@ class AgentStart(WireModel):
     Absent or null means not exposed; [] means none.
     """
     skills: list[StartedSkill] | None = None
-    """Selected skills with exposed file contents. Absent or null means not exposed; [] means none."""
+    """Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none."""
     subagents: list[StartedSubagent] | None = None
     """Selected subagents and their exposed configuration. Absent or null means not exposed; [] means none."""
     output_schema: ObjectSchema | None = None
@@ -115,10 +96,14 @@ class AgentStart(WireModel):
 
 
 def capture_start(
-    context: dict[str, Any], commission: Commission | None, run_id: str
+    context: dict[str, Any],
+    commission: Commission | None,
+    run_id: str,
+    assets: dict[str, bytes],
 ) -> AgentStart:
     """Capture only selected skills; do not crawl the workspace."""
     data = deepcopy(context)
+    captured: dict[str, bytes] = {}
     supplied = {s.name: s.files for s in commission.skills or []} if commission else {}
     connections = (
         {s.id: s.model_dump(mode="json", exclude_none=True) for s in commission.mcp_servers or []}
@@ -126,8 +111,14 @@ def capture_start(
         else {}
     )
 
-    def capture(items: list[dict[str, Any]], *, supplied_skills: bool = False) -> None:
-        for skill in items:
+    def capture(items: list[dict[str, Any]], prefix: str, *, supplied_skills: bool = False) -> None:
+        for index, skill in enumerate(items):
+            # Ordinals keep repeated names and subagent scopes separate.
+            name = re.sub(r"[^A-Za-z0-9._-]", "-", skill["name"])
+            directory = f"{prefix}/{index}-{name}"
+            inline = skill.pop("files", None)
+            skill.pop("path", None)
+            files: dict[str, bytes] = {}
             if source := skill.get("source"):
                 uri = urlsplit(source)
                 if uri.scheme != "file" or uri.netloc not in {"", "localhost"}:
@@ -135,31 +126,35 @@ def capture_start(
                 root = Path(unquote(uri.path)).resolve(strict=True)
                 if not (root / "SKILL.md").is_file():
                     raise ValueError(f"skill source has no SKILL.md: {source}")
-                files: dict[str, Any] = {}
                 for path in sorted(root.rglob("*")):
                     if path.is_symlink():
                         raise ValueError(f"skill capture requires regular files: {path}")
                     if path.is_file():
-                        content = path.read_bytes()
-                        try:
-                            value: Any = content.decode("utf-8")
-                        except UnicodeDecodeError:
-                            value = {"base64": base64.b64encode(content).decode("ascii")}
-                        files[path.relative_to(root).as_posix()] = value
-                skill["files"] = files
-            elif "files" not in skill and supplied_skills and skill["name"] in supplied:
-                skill["files"] = deepcopy(supplied[skill["name"]])
+                        files[path.relative_to(root).as_posix()] = path.read_bytes()
+            else:
+                if inline is None and supplied_skills:
+                    inline = supplied.get(skill["name"])
+                for path, content in (inline or {}).items():
+                    files[path] = content.encode("utf-8")
+            for path, content in files.items():
+                if re.fullmatch(_FILE_PATH, path) is None:
+                    raise ValueError("skill file paths must be relative, without traversal")
+                captured[f"{directory}/{path}"] = content
+            if files:
+                skill["path"] = directory
 
     def servers(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [{**connections.get(s["id"], {}), **s} for s in items]
 
-    capture(data.get("skills", []), supplied_skills=True)
+    capture(data.get("skills", []), "skills", supplied_skills=True)
     if "mcp_servers" in data:
         data["mcp_servers"] = servers(data["mcp_servers"])
-    for child in data.get("subagents", []):
-        capture(child.get("skills", []))
+    for index, child in enumerate(data.get("subagents", [])):
+        capture(child.get("skills", []), f"skills/subagent-{index}")
         if "mcp_servers" in child:
             child["mcp_servers"] = servers(child["mcp_servers"])
     if commission and commission.output_schema is not None:
         data["output_schema"] = commission.output_schema
-    return AgentStart(avp_version="0.1", run_id=run_id, **data)
+    started = AgentStart(avp_version="0.1", run_id=run_id, **data)
+    assets.update(captured)
+    return started

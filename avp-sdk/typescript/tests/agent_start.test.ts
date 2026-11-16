@@ -7,6 +7,7 @@ import {
   rmSync,
   readdirSync,
   symlinkSync,
+  renameSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +31,7 @@ for (const c of cases)
     else assert.throws(() => parseAgentStart(c.document));
   });
 
-test("four documents preserve complete start configuration without extracting skill copies", async (t) => {
+test("four documents reference immutable skill files", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "avp-start-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const skill = join(root, "skill"),
@@ -96,6 +97,7 @@ test("four documents preserve complete start configuration without extracting sk
     "agent-start.json",
     "commission.json",
     "descriptor.json",
+    "skills",
     "trajectory.json",
   ]);
   const start = parseAgentStart(
@@ -104,14 +106,25 @@ test("four documents preserve complete start configuration without extracting sk
   assert.equal(start.model.id, "resolved");
   assert.equal(start.system_prompt, "");
   assert.deepEqual(start.output_schema, { type: "object" });
-  assert.equal(start.skills![0].files!["SKILL.md"], original);
-  const captured = start.skills![0].files!["references/data.bin"];
-  assert.ok(typeof captured === "object");
-  assert.deepEqual(Buffer.from(captured.base64, "base64"), binary);
-  assert.deepEqual(
-    start.subagents![0].skills![0].files,
-    start.skills![0].files,
+  assert.equal(start.skills![0].path, "skills/0-research");
+  const captured = join(directory, start.skills![0].path!);
+  assert.equal(readFileSync(join(captured, "SKILL.md"), "utf8"), original);
+  assert.deepEqual(readFileSync(join(captured, "references/data.bin")), binary);
+  assert.equal(
+    start.subagents![0].skills![0].path,
+    "skills/subagent-0/0-research",
   );
+  assert.deepEqual(
+    readFileSync(
+      join(
+        directory,
+        start.subagents![0].skills![0].path!,
+        "references/data.bin",
+      ),
+    ),
+    binary,
+  );
+  assert.equal(start.skills![0].files, undefined);
   assert.deepEqual(start.mcp_servers![0], {
     id: "math",
     type: "stdio",
@@ -147,6 +160,7 @@ test("selected inline, body-only, and metadata-only skills retain their distinct
       { name: "unused", files: { "SKILL.md": "unused" } },
     ],
   };
+  const assets = new Map<string, Uint8Array>();
   const start = captureStart(
     {
       prompt: "task",
@@ -163,10 +177,18 @@ test("selected inline, body-only, and metadata-only skills retain their distinct
     },
     commission,
     "r",
+    assets,
   );
-  assert.deepEqual(start.skills![0].files, commission.skills![0].files);
-  assert.deepEqual(start.skills![1].files, { "instructions.md": "body" });
-  assert.equal(start.skills![2].files, undefined);
+  assert.equal(start.skills![0].path, "skills/0-supplied");
+  assert.deepEqual(
+    assets.get("skills/0-supplied/support.txt"),
+    Buffer.from("support"),
+  );
+  assert.deepEqual(
+    assets.get("skills/1-body/instructions.md"),
+    Buffer.from("body"),
+  );
+  assert.equal(start.skills![2].path, undefined);
   assert.equal(start.skills!.length, 3);
 });
 
@@ -178,10 +200,16 @@ test("unreadable and symlinked skill directories fail capture", (t) => {
     model: { provider: "test", id: "m" },
     skills: [{ name: "s", description: "s", source: pathToFileURL(root).href }],
   };
-  assert.throws(() => captureStart(context, undefined, "r"), /SKILL.md/);
+  assert.throws(
+    () => captureStart(context, undefined, "r", new Map()),
+    /SKILL.md/,
+  );
   writeFileSync(join(root, "SKILL.md"), "skill");
   symlinkSync(join(root, "SKILL.md"), join(root, "link"));
-  assert.throws(() => captureStart(context, undefined, "r"), /regular files/);
+  assert.throws(
+    () => captureStart(context, undefined, "r", new Map()),
+    /regular files/,
+  );
 });
 
 test("images remain ATIF files and cannot overwrite run documents or escape", async (t) => {
@@ -221,5 +249,61 @@ test("images remain ATIF files and cannot overwrite run documents or escape", as
   snapshot.assets.set("../escape", Buffer.from("no"));
   await assert.rejects(
     trajectorySink(join(root, "other/trajectory.json"))(snapshot),
+  );
+});
+
+test("invalid inline paths do not publish partial assets", () => {
+  const assets = new Map<string, Uint8Array>();
+  assert.throws(() =>
+    captureStart(
+      {
+        prompt: "task",
+        model: { provider: "test", id: "m" },
+        skills: [
+          {
+            name: "s",
+            description: "d",
+            files: { "instructions.md": "body", "../escape": "bad" },
+          },
+        ],
+      },
+      undefined,
+      "r",
+      assets,
+    ),
+  );
+  assert.equal(assets.size, 0);
+});
+
+test("skill paths survive moving the saved run", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "avp-start-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const snapshots: Recording[] = [];
+  const rec = new Recorder(
+    async (snapshot) => {
+      snapshots.push(snapshot);
+    },
+    { runId: "r" },
+  );
+  await rec.start({
+    prompt: "task",
+    model: { provider: "test", id: "m" },
+    skills: [
+      { name: "s", description: "d", files: { "instructions.md": "body" } },
+    ],
+  });
+  await rec.stop("converged", "done");
+  const snapshot = snapshots.at(-1)!;
+  await trajectorySink(join(root, "run/trajectory.json"))(snapshot);
+  renameSync(join(root, "run"), join(root, "moved"));
+  const started = parseAgentStart(
+    readFileSync(join(root, "moved/agent-start.json"), "utf8"),
+  );
+  const file = join(root, "moved", started.skills![0].path!, "instructions.md");
+  assert.equal(readFileSync(file, "utf8"), "body");
+  writeFileSync(file, "changed");
+  await assert.rejects(
+    trajectorySink(join(root, "moved/trajectory.json"))(snapshot),
+    /different content/,
   );
 });

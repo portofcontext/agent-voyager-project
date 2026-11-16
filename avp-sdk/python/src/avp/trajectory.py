@@ -60,7 +60,7 @@ def final_output(trajectory: Trajectory) -> Any:
 
 @dataclass(frozen=True)
 class Recording:
-    """A snapshot of the current ATIF document and referenced media bytes."""
+    """A snapshot of the current ATIF document and referenced file bytes."""
 
     trajectory: Trajectory
     assets: dict[str, bytes] = field(default_factory=dict)
@@ -69,25 +69,26 @@ class Recording:
     agent_start: AgentStart | None = None
 
     def write(self, path: Path) -> None:
-        """Publish start documents and referenced images before the ATIF snapshot."""
+        """Publish referenced files before Agent Start and the ATIF snapshot."""
         if path.name in {"commission.json", "descriptor.json", "agent-start.json"}:
             raise ValueError("trajectory path conflicts with a run document")
         path.parent.mkdir(parents=True, exist_ok=True)
         for name, document in (
             ("commission.json", self.commission),
             ("descriptor.json", self.descriptor),
-            ("agent-start.json", self.agent_start),
         ):
             if document is not None:
                 write_document(path.parent, name, document)
         for name, content in self.assets.items():
             target = local_path(path.parent, name)
             if target.resolve() == path.resolve():
-                raise ValueError("an image cannot replace the trajectory")
+                raise ValueError("a referenced file cannot replace the trajectory")
             if not target.exists():
                 atomic_write(target, content)
             elif target.read_bytes() != content:
-                raise ValueError(f"image already exists with different content: {name}")
+                raise ValueError(f"referenced file already exists with different content: {name}")
+        if self.agent_start is not None:
+            write_document(path.parent, "agent-start.json", self.agent_start)
         atomic_write(
             path, (self.trajectory.model_dump_json(exclude_none=True, indent=2) + "\n").encode()
         )

@@ -279,12 +279,15 @@ def test_agent_start_is_validated_and_supplies_the_full_configuration(tmp_path: 
             {
                 "name": "research",
                 "description": "Research.",
-                "files": {"SKILL.md": "Research instructions"},
+                "path": "skills/0-research",
             }
         ],
         "mcp_servers": [{"id": "docs", "status": "connected"}],
         "tools": [{"name": "read", "inputSchema": {"type": "object"}, "mcp_server_id": "docs"}],
     }
+    skill_directory = run_directory / "skills/0-research"
+    skill_directory.mkdir(parents=True)
+    (skill_directory / "SKILL.md").write_text("Research instructions")
     (run_directory / "agent-start.json").write_text(json.dumps(effective))
     [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
     assert shown["vessel"]["tools"][0]["mcp_server_id"] == "docs"

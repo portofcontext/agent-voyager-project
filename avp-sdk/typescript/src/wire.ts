@@ -3,15 +3,6 @@
 export type JsonValue = unknown;
 
 /**
- * Binary skill-file content encoded with the standard base64 alphabet.
- */
-export interface BinaryFile {
-  /**
-   * Base64 content, padded when necessary, with no whitespace.
-   */
-  base64: string;
-}
-/**
  * A secret in a variable of the agent's environment.
  */
 export interface EnvSecret {
@@ -142,7 +133,7 @@ export interface StartedMcpStdio {
   status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
 }
 /**
- * Skill metadata and the file contents exposed at start.
+ * Skill metadata and a reference to its saved files.
  */
 export interface StartedSkill {
   /**
@@ -159,12 +150,11 @@ export interface StartedSkill {
    */
   source?: string | null;
   /**
-   * Paths relative to the skill directory, mapped to UTF-8 text or base64.
-   * Absent or null means contents were not exposed. An empty map means no files.
+   * Skill directory relative to agent-start.json, using / separators.
+   * Absent or null means no files were captured. The original source, when
+   * present, identifies the runtime directory and is not a portable reference.
    */
-  files?: {
-    [k: string]: string | BinaryFile;
-  } | null;
+  path?: string | null;
   [k: string]: unknown;
 }
 /**
@@ -188,7 +178,7 @@ export interface StartedSubagent {
    */
   tools?: Tool[] | null;
   /**
-   * Selected skills with exposed file contents. Absent or null means not exposed; [] means none.
+   * Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.
    */
   skills?: StartedSkill[] | null;
   /**
@@ -265,7 +255,7 @@ export interface AgentStart {
    */
   mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
   /**
-   * Selected skills with exposed file contents. Absent or null means not exposed; [] means none.
+   * Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.
    */
   skills?: StartedSkill[] | null;
   /**

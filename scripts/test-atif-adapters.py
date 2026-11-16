@@ -47,7 +47,14 @@ def check(source: Path) -> str:
     SCHEMA.validate(root)
     start = source.parent / "agent-start.json"
     if start.exists():
-        assert AgentStart.model_validate_json(start.read_bytes()).run_id == root["session_id"]
+        started = AgentStart.model_validate_json(start.read_bytes())
+        assert started.run_id == root["session_id"]
+        for scope in [started, *(started.subagents or [])]:
+            for skill in scope.skills or []:
+                if skill.path:
+                    directory = (source.parent / skill.path).resolve()
+                    assert directory.is_relative_to(source.parent.resolve())
+                    assert directory.is_dir(), f"missing skill directory: {skill.path}"
     for doc in documents(root):
         assert [s["step_id"] for s in doc["steps"]] == list(range(1, len(doc["steps"]) + 1))
         for step in doc["steps"]:

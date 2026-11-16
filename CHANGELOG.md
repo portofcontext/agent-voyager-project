@@ -13,11 +13,11 @@
 
 - An Agent Start contract records the resolved configuration exposed by the
   runtime: prompts, model, full tool catalog, MCP configuration, subagents, and
-  selected skills with their file contents.
+  selected skills with paths to captured directories.
   File runs save Commission, Descriptor, Agent Start, and ATIF trajectory as four
-  JSON documents. Runtime-exposed skill directories include supporting files;
-  binary skill content is preserved as base64. SDKs validate relative skill file
-  paths and base64 content; unreported values remain distinct from empty lists.
+  JSON documents, with referenced skill and image files alongside them. Captured
+  skill directories preserve supporting text and binary files byte for byte. SDKs
+  validate relative paths; unreported values remain distinct from empty lists.
 - A Harbor integration example uses saved ATIF runs directly for training
   extraction and the job viewer.
 

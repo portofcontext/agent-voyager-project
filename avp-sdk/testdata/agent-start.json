@@ -28,12 +28,7 @@
         {
           "name": "research",
           "description": "Research",
-          "files": {
-            "SKILL.md": "instructions",
-            "data.bin": {
-              "base64": "AP8NCg=="
-            }
-          }
+          "path": "skills/research"
         }
       ],
       "tools": [
@@ -68,9 +63,7 @@
             {
               "name": "helper-skill",
               "description": "body only",
-              "files": {
-                "instructions.md": "body"
-              }
+              "path": "skills/helper-skill"
             }
           ]
         }
@@ -122,28 +115,6 @@
     }
   },
   {
-    "name": "invalid-file-content",
-    "valid": false,
-    "document": {
-      "avp_version": "0.1",
-      "run_id": "r",
-      "prompt": "task",
-      "model": {
-        "provider": "test",
-        "id": "m"
-      },
-      "skills": [
-        {
-          "name": "s",
-          "description": "d",
-          "files": {
-            "SKILL.md": 42
-          }
-        }
-      ]
-    }
-  },
-  {
     "name": "empty-run-id",
     "valid": false,
     "document": {
@@ -173,8 +144,7 @@
       "skills": [
         {
           "name": "s",
-          "description": "d",
-          "files": {}
+          "description": "d"
         }
       ]
     }
@@ -194,9 +164,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "/secret": "text"
-          }
+          "path": "/secret"
         }
       ]
     }
@@ -216,9 +184,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "../secret": "text"
-          }
+          "path": "../secret"
         }
       ]
     }
@@ -238,9 +204,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "a/../secret": "text"
-          }
+          "path": "a/../secret"
         }
       ]
     }
@@ -260,9 +224,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "./file": "text"
-          }
+          "path": "./file"
         }
       ]
     }
@@ -282,9 +244,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "a//file": "text"
-          }
+          "path": "a//file"
         }
       ]
     }
@@ -304,9 +264,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "a/": "text"
-          }
+          "path": "a/"
         }
       ]
     }
@@ -326,9 +284,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "a\\file": "text"
-          }
+          "path": "a\\file"
         }
       ]
     }
@@ -348,9 +304,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "C:/file": "text"
-          }
+          "path": "C:/file"
         }
       ]
     }
@@ -370,9 +324,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "": "text"
-          }
+          "path": ""
         }
       ]
     }
@@ -392,116 +344,7 @@
         {
           "name": "s",
           "description": "d",
-          "files": {
-            "file\n": "text"
-          }
-        }
-      ]
-    }
-  },
-  {
-    "name": "invalid-base64-alphabet",
-    "valid": false,
-    "document": {
-      "avp_version": "0.1",
-      "run_id": "r",
-      "prompt": "task",
-      "model": {
-        "provider": "test",
-        "id": "m"
-      },
-      "skills": [
-        {
-          "name": "s",
-          "description": "d",
-          "files": {
-            "data.bin": {
-              "base64": "!not-base64!"
-            }
-          }
-        }
-      ]
-    }
-  },
-  {
-    "name": "invalid-base64-padding",
-    "valid": false,
-    "document": {
-      "avp_version": "0.1",
-      "run_id": "r",
-      "prompt": "task",
-      "model": {
-        "provider": "test",
-        "id": "m"
-      },
-      "skills": [
-        {
-          "name": "s",
-          "description": "d",
-          "files": {
-            "data.bin": {
-              "base64": "YQ="
-            }
-          }
-        }
-      ]
-    }
-  },
-  {
-    "name": "invalid-base64-whitespace",
-    "valid": false,
-    "document": {
-      "avp_version": "0.1",
-      "run_id": "r",
-      "prompt": "task",
-      "model": {
-        "provider": "test",
-        "id": "m"
-      },
-      "skills": [
-        {
-          "name": "s",
-          "description": "d",
-          "files": {
-            "data.bin": {
-              "base64": "YQ==\n"
-            }
-          }
-        }
-      ]
-    }
-  },
-  {
-    "name": "portable-files",
-    "valid": true,
-    "document": {
-      "avp_version": "0.1",
-      "run_id": "r",
-      "prompt": "task",
-      "model": {
-        "provider": "test",
-        "id": "m"
-      },
-      "skills": [
-        {
-          "name": "s",
-          "description": "d",
-          "files": {
-            ".config": "",
-            "references/café.txt": "text",
-            "empty.bin": {
-              "base64": ""
-            },
-            "one.bin": {
-              "base64": "YQ=="
-            },
-            "two.bin": {
-              "base64": "YWI="
-            },
-            "three.bin": {
-              "base64": "YWJj"
-            }
-          }
+          "path": "file\n"
         }
       ]
     }
@@ -524,11 +367,29 @@
             {
               "name": "s",
               "description": "d",
-              "files": {
-                "../file": "text"
-              }
+              "path": "../file"
             }
           ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unicode-and-hidden-path",
+    "valid": true,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "path": "skills/.café"
         }
       ]
     }

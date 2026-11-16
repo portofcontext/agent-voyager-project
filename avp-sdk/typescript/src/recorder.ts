@@ -215,7 +215,12 @@ export class Recorder {
     this.check("start", false);
     if (this.started) throw new RecorderError("start: called twice");
     const data = parseDefinition<RunContext>("RunContext", started);
-    this.agentStart = captureStart(data, this.commission, this.runId);
+    this.agentStart = captureStart(
+      data,
+      this.commission,
+      this.runId,
+      this.assets,
+    );
     this.started = data;
     this.root.data.steps = [];
     metadata(this.root.data).started_at = this.now().toISOString();

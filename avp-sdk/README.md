@@ -33,7 +33,7 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 | Part | What it does | Python |
 |---|---|---|
 | Wire types | The Commission, the Agent Descriptor, and ATIF trajectories, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
-| Agent Start | Complete resolved configuration with inline skill contents | `avp.agent_start` |
+| Agent Start | Resolved configuration with paths to captured skills | `avp.agent_start` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
@@ -143,7 +143,7 @@ are not a persisted event format. `avp.trajectory` exposes upstream wire models,
 
 File output saves `commission.json`, `descriptor.json`, `agent-start.json`, and
 `trajectory.json`. The [Agent Start spec](../spec/v0.1/agent-start.md) defines the
-resolved snapshot, including full tool metadata and inline skill contents.
+resolved snapshot, including full tool metadata and paths to captured skill directories.
 The adapter reports what its runtime actually selected; the SDK captures exposed
 skill directories, including supporting files and subagent skills.
 

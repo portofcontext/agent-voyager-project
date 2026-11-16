@@ -30,7 +30,7 @@ def test_shared_start_schema(case):
             AgentStart.model_validate(case["document"])
 
 
-def test_four_documents_keep_complete_start_without_extracted_skill_copies(tmp_path):
+def test_four_documents_reference_immutable_skill_files(tmp_path):
     skill = tmp_path / "native-skill"
     skill.mkdir()
     original = "---\nname: research\ndescription: Research.\n---\nRead references.\r\n"
@@ -98,19 +98,23 @@ def test_four_documents_keep_complete_start_without_extracted_skill_copies(tmp_p
         "descriptor.json",
         "agent-start.json",
         "trajectory.json",
+        "skills",
     }
     started = AgentStart.model_validate_json((out.parent / "agent-start.json").read_bytes())
     assert started.model.id == "resolved"
     assert started.system_prompt == ""
     assert started.output_schema == {"type": "object"}
-    assert started.skills and started.skills[0].files
+    assert started.skills and started.skills[0].path
     assert started.subagents and started.subagents[0].skills
     assert started.mcp_servers
-    assert started.skills[0].files["SKILL.md"] == original
-    captured = started.skills[0].files["references/data.bin"]
-    assert not isinstance(captured, str)
-    assert base64.b64decode(captured.base64) == binary
-    assert started.subagents[0].skills[0].files == started.skills[0].files
+    assert started.skills[0].path == "skills/0-research"
+    captured = out.parent / started.skills[0].path
+    assert (captured / "SKILL.md").read_bytes() == original.encode()
+    assert (captured / "references/data.bin").read_bytes() == binary
+    child = started.subagents[0].skills[0]
+    assert child.path == "skills/subagent-0/0-research"
+    assert (out.parent / child.path / "references/data.bin").read_bytes() == binary
+    assert "files" not in started.skills[0].model_dump()
     assert started.mcp_servers[0].model_dump()["command"] == ["math-server"]
     assert started.mcp_servers[0].status == "connected"
     assert json.loads((out.parent / "commission.json").read_bytes()) == supplied_json
@@ -136,6 +140,7 @@ def test_selected_inline_body_only_and_metadata_only_skills():
             ],
         }
     )
+    assets: dict[str, bytes] = {}
     started = capture_start(
         {
             "prompt": "task",
@@ -148,11 +153,13 @@ def test_selected_inline_body_only_and_metadata_only_skills():
         },
         commission,
         "r",
+        assets,
     )
     assert started.skills and commission.skills
-    assert started.skills[0].files == commission.skills[0].files
-    assert started.skills[1].files == {"instructions.md": "body"}
-    assert started.skills[2].files is None
+    assert started.skills[0].path == "skills/0-supplied"
+    assert assets["skills/0-supplied/support.txt"] == b"support"
+    assert assets["skills/1-body/instructions.md"] == b"body"
+    assert started.skills[2].path is None
     assert len(started.skills) == 3
 
 
@@ -163,11 +170,11 @@ def test_unreadable_or_symlinked_skill_fails_capture(tmp_path):
         "skills": [{"name": "s", "description": "s", "source": tmp_path.as_uri()}],
     }
     with pytest.raises(ValueError, match=r"SKILL\.md"):
-        capture_start(context, None, "r")
+        capture_start(context, None, "r", {})
     (tmp_path / "SKILL.md").write_text("skill")
     (tmp_path / "link").symlink_to(tmp_path / "SKILL.md")
     with pytest.raises(ValueError, match="regular files"):
-        capture_start(context, None, "r")
+        capture_start(context, None, "r", {})
 
 
 def test_images_remain_atif_files_and_run_documents_cannot_be_overwritten(tmp_path):
@@ -206,3 +213,67 @@ def test_images_remain_atif_files_and_run_documents_cannot_be_overwritten(tmp_pa
     snapshot.assets["../escape"] = b"no"
     with pytest.raises(ValueError):
         snapshot.write(tmp_path / "other/trajectory.json")
+
+
+def test_skill_paths_survive_moving_the_run_and_stdout_stays_trace_only(tmp_path, capsys):
+    from avp.agent_cli.sink import trajectory_sink
+
+    snapshots = []
+
+    async def run():
+        async def sink(snapshot):
+            snapshots.append(snapshot)
+
+        rec = Recorder(sink, run_id="r")
+        await rec.start(
+            RunContext.model_validate(
+                {
+                    "prompt": "task",
+                    "model": {"provider": "test", "id": "m"},
+                    "skills": [
+                        {"name": "s", "description": "d", "files": {"instructions.md": "body"}}
+                    ],
+                }
+            )
+        )
+        await rec.stop("converged", "done")
+        await trajectory_sink(None)(snapshots[-1])
+
+    asyncio.run(run())
+    assert json.loads(capsys.readouterr().out)["session_id"] == "r"
+    out = tmp_path / "run/trajectory.json"
+    snapshots[-1].write(out)
+    out.parent.rename(tmp_path / "moved")
+    moved = tmp_path / "moved"
+    started = AgentStart.model_validate_json((moved / "agent-start.json").read_bytes())
+    assert started.skills and started.skills[0].path
+    assert (moved / started.skills[0].path / "instructions.md").read_text() == "body"
+    # Saved bytes cannot silently be changed by a later publication.
+    (moved / started.skills[0].path / "instructions.md").write_text("changed")
+    with pytest.raises(ValueError, match="different content"):
+        snapshots[-1].write(moved / "trajectory.json")
+
+
+def test_invalid_inline_paths_do_not_publish_partial_assets():
+    assets = {}
+    with pytest.raises(ValueError, match="relative"):
+        capture_start(
+            {
+                "prompt": "task",
+                "model": {"provider": "test", "id": "m"},
+                "skills": [
+                    {
+                        "name": "s",
+                        "description": "d",
+                        "files": {
+                            "instructions.md": "body",
+                            "../escape": "bad",
+                        },
+                    }
+                ],
+            },
+            None,
+            "r",
+            assets,
+        )
+    assert assets == {}

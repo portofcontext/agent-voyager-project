@@ -2,24 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://www.agentvoyagerproject.com/schema/v0.1/agent-start.schema.json",
   "$defs": {
-    "BinaryFile": {
-      "additionalProperties": false,
-      "description": "Binary skill-file content encoded with the standard base64 alphabet.",
-      "properties": {
-        "base64": {
-          "contentEncoding": "base64",
-          "description": "Base64 content, padded when necessary, with no whitespace.",
-          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![\\s\\S])",
-          "title": "Base64",
-          "type": "string"
-        }
-      },
-      "required": [
-        "base64"
-      ],
-      "title": "BinaryFile",
-      "type": "object"
-    },
     "EnvSecret": {
       "additionalProperties": false,
       "description": "A secret in a variable of the agent's environment.",
@@ -355,7 +337,7 @@
     },
     "StartedSkill": {
       "additionalProperties": true,
-      "description": "Skill metadata and the file contents exposed at start.",
+      "description": "Skill metadata and a reference to its saved files.",
       "properties": {
         "name": {
           "description": "The skill's name.",
@@ -381,31 +363,19 @@
           "description": "A `file:` URI for the directory that contains the skill's `SKILL.md`, as\nthe path appears inside the agent's environment.",
           "title": "Source"
         },
-        "files": {
+        "path": {
           "anyOf": [
             {
-              "additionalProperties": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "$ref": "#/$defs/BinaryFile"
-                  }
-                ]
-              },
-              "type": "object"
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*/$)[^\\\\:\\x00-\\x1f]+(?![\\s\\S])",
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Paths relative to the skill directory, mapped to UTF-8 text or base64.\nAbsent or null means contents were not exposed. An empty map means no files.",
-          "propertyNames": {
-            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*/$)[^\\\\:\\x00-\\x1f]+(?![\\s\\S])"
-          },
-          "title": "Files"
+          "description": "Skill directory relative to agent-start.json, using / separators.\nAbsent or null means no files were captured. The original source, when\npresent, identifies the runtime directory and is not a portable reference.",
+          "title": "Path"
         }
       },
       "required": [
@@ -479,7 +449,7 @@
             }
           ],
           "default": null,
-          "description": "Selected skills with exposed file contents. Absent or null means not exposed; [] means none.",
+          "description": "Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.",
           "title": "Skills"
         },
         "mcp_servers": {
@@ -704,7 +674,7 @@
         }
       ],
       "default": null,
-      "description": "Selected skills with exposed file contents. Absent or null means not exposed; [] means none.",
+      "description": "Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.",
       "title": "Skills"
     },
     "subagents": {

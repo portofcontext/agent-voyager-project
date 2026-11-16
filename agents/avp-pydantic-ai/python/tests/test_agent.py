@@ -187,7 +187,7 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
     events = _run(tmp_path, system_prompt="base", skills=[skill])
     [captured] = atif.effective(tmp_path)["skills"]
     assert captured["name"] == "greet"
-    assert captured["files"] == skill["files"]
+    assert (tmp_path / captured["path"] / "SKILL.md").read_text() == skill["files"]["SKILL.md"]
     assert "Say hi." in seen[0][0][0].instructions
 
 

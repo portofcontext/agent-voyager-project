@@ -225,7 +225,7 @@ class Recorder:
         if self._started is not None:
             raise RecorderError("start: called twice")
         data = started.model_dump(mode="json", exclude_none=True)
-        self._agent_start = capture_start(data, self._commission, self.run_id)
+        self._agent_start = capture_start(data, self._commission, self.run_id, self._assets)
         self._started = started
         root = self._root
         root.data["steps"] = []

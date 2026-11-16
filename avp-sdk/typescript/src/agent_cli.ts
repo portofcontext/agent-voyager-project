@@ -36,7 +36,9 @@ export function trajectorySink(out?: string): TrajectorySink {
     const text = `${JSON.stringify(snapshot.trajectory, undefined, 2)}\n`;
     if (out === undefined) {
       if (avpMetadata(snapshot.trajectory).complete) {
-        if (snapshot.assets.size)
+        if (
+          [...snapshot.assets.keys()].some((name) => name.startsWith("images/"))
+        )
           throw new Error("media requires --out with a file path");
         await stdout(text);
       }
@@ -53,17 +55,25 @@ export function trajectorySink(out?: string): TrajectorySink {
     for (const [name, document, parse] of [
       ["commission.json", snapshot.commission, parseCommission],
       ["descriptor.json", snapshot.descriptor, parseDescriptor],
-      ["agent-start.json", snapshot.agentStart, parseAgentStart],
     ] as const)
       if (document != null) writeDocument(directory, name, document, parse);
     for (const [name, bytes] of snapshot.assets) {
       const path = localPath(directory, name);
       if (path === localPath(directory, basename(out)))
-        throw new Error("an image cannot replace the trajectory");
+        throw new Error("a referenced file cannot replace the trajectory");
       if (!existsSync(path)) atomicWrite(path, bytes);
       else if (!readFileSync(path).equals(Buffer.from(bytes)))
-        throw new Error(`image already exists with different content: ${name}`);
+        throw new Error(
+          `referenced file already exists with different content: ${name}`,
+        );
     }
+    if (snapshot.agentStart)
+      writeDocument(
+        directory,
+        "agent-start.json",
+        snapshot.agentStart,
+        parseAgentStart,
+      );
     atomicWrite(out, Buffer.from(text));
   };
 }

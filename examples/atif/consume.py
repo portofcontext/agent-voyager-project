@@ -52,6 +52,31 @@ def prepare(source: Path, destination: Path) -> Path:
             if not path.resolve().is_relative_to(source.parent.resolve()):
                 raise ValueError(f"Run document escapes the run directory: {name}")
             shutil.copyfile(path, agent_dir / name)
+            if name == "agent-start.json":
+                started = json.loads(path.read_text())
+                for scope in [started, *(started.get("subagents") or [])]:
+                    for skill in scope.get("skills") or []:
+                        if not skill.get("path"):
+                            continue
+                        name = skill["path"]
+                        if (
+                            not isinstance(name, str)
+                            or any(p in {"", ".", ".."} for p in name.split("/"))
+                            or any(c in name for c in "\\:\x00")
+                        ):
+                            raise ValueError("Skill path must be relative to the run directory")
+                        relative = Path(name)
+                        directory = (source.parent / relative).resolve()
+                        if relative.is_absolute() or not directory.is_relative_to(
+                            source.parent.resolve()
+                        ):
+                            raise ValueError("Skill path escapes the run directory")
+                        if not directory.is_dir():
+                            raise ValueError(f"Missing skill directory: {relative}")
+                        for entry in directory.rglob("*"):
+                            if entry.is_symlink():
+                                raise ValueError("Skill directories cannot contain symlinks")
+                        shutil.copytree(directory, agent_dir / relative, dirs_exist_ok=True)
     agent = AgentConfig(name=trajectory.agent.name, model_name=trajectory.agent.model_name)
     task = TaskConfig(path=source.resolve())
     config = TrialConfig(task=task, trial_name="run", agent=agent)

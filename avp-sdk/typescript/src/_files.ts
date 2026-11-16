@@ -1,4 +1,4 @@
-/** Publish run documents and ATIF-referenced files. */
+/** Publish run documents and referenced skill and image files. */
 import {
   readFileSync,
   existsSync,

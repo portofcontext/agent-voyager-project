@@ -22,8 +22,8 @@ records what the adapter can observe; it does not guarantee exact replay.
 | `model` | ModelRef | Yes | Effective provider, model ID, and optional API base URL. No credential value. |
 | `tools` | Tool[] | No | Full resolved tool definitions, including input/output schemas, MCP annotations, and server ownership. |
 | `mcp_servers` | StartedMcpServer[] | No | Resolved server identities and status; connection configuration when available. |
-| `skills` | StartedSkill[] | No | Selected skills, including their actual file contents when available. |
-| `subagents` | StartedSubagent[] | No | Selected subagent definitions, prompts, tools, servers, and full skills. |
+| `skills` | StartedSkill[] | No | Selected skills, with paths to their captured files when available. |
+| `subagents` | StartedSubagent[] | No | Selected subagent definitions, prompts, tools, servers, and captured skills. |
 | `output_schema` | object | No | The requested structured-output schema. |
 
 For `system_prompt`, `tools`, `mcp_servers`, `skills`, and `subagents`, absent and
@@ -40,19 +40,22 @@ credential. A StartedMcpServer uses Descriptor server fields plus the Commission
 references; resolved credential values MUST NOT be included. A server's absence
 of connection fields means those internals were not exposed by the runtime.
 
-A StartedSkill adds `files`: a map from relative file paths to exact content.
-Paths MUST use `/` separators and MUST NOT be absolute or contain empty, `.` or
-`..` segments, backslashes, colons, or control characters (U+0000–U+001F).
-UTF-8 files are JSON strings; binary files use `{"base64": "..."}` with the
-standard base64 alphabet, padding when needed, and no whitespace. A complete
-skill includes `SKILL.md` and its supporting files. When only an instruction body
-is exposed, `files` contains `instructions.md`; this does not claim a full skill
-directory. Absent or null `files` means content was not exposed; `{}` means no
-files. A reported local source
-that cannot be captured is an error. Symlinks within a skill directory are
-rejected during capture.
-StartedSubagent uses the same full skill and server shapes for its nested lists.
-Capturing files records what was available, not whether every file was used.
+A StartedSkill adds `path`: a skill directory relative to `agent-start.json`.
+Readers MUST resolve it within the saved run directory. Paths MUST use `/`
+separators and MUST NOT be absolute or contain empty, `.` or `..` segments,
+backslashes, colons, or control characters (U+0000–U+001F).
+
+The SDK copies exposed skill files into that directory, preserving their bytes.
+A complete skill includes `SKILL.md` and its supporting files. When only an
+instruction body is exposed, the directory contains `instructions.md`; this
+does not claim a complete skill. Absent or null `path` means no files were
+captured. The inherited `source`, when present, is the original runtime location;
+readers use `path` to access the saved copy.
+
+A reported local source that cannot be captured is an error. Symlinks within
+skill directories are rejected during capture. StartedSubagent uses the same
+skill and server shapes for its nested lists. Capturing a skill records what
+was available, not whether every file was used.
 
 ## Example
 
@@ -67,13 +70,14 @@ Capturing files records what was available, not whether every file was used.
     {
       "name": "summarize",
       "description": "Summarize reports",
-      "files": {"instructions.md": "Keep the summary under 100 words."}
+      "path": "skills/0-summarize"
     }
   ]
 }
 ```
 
-This example has no tools and one body-only skill. Omitted fields are not reported.
+This example has no tools and one captured skill. Its files are under
+`skills/0-summarize/` beside `agent-start.json`. Omitted fields are not reported.
 
 ## Saved run
 
@@ -83,6 +87,11 @@ run/
   descriptor.json
   agent-start.json
   trajectory.json
+  skills/
+    0-summarize/
+      SKILL.md
+      references/
+        example.pdf
 ```
 
 The SDK file sink saves these documents beside the requested trajectory path.
@@ -91,12 +100,19 @@ once start succeeds, and is absent for a run refused before start. Readers must
 validate Agent Start and its run identity before using it. The initial snapshot
 does not change when the runtime switches models later; the trace records that.
 
-Skill contents are inline in Agent Start. Commission and Descriptor remain
-unchanged source contracts; overlap with the resolved snapshot lets a reader
-compare requested, offered, and effective configuration.
+Skill files are saved before Agent Start publishes their paths. Copies are
+immutable start snapshots, independent of the runtime's temporary directories.
+The SDK uses separate directories for root and subagent skills; directory names
+are a storage convention, and readers MUST follow the recorded `path`.
+
+Keep or move the saved run directory as a unit, including referenced skill and
+image files. These references need no separate manifest or base64 encoding.
+Commission and Descriptor remain unchanged source contracts; a Commission still
+carries supplied skill text inline. Their overlap with the resolved snapshot lets
+a reader compare requested, offered, and effective configuration.
 
 Generated files can be saved beside the run by the runtime or deployment.
 ATIF-referenced image files are written by the SDK. Stdout emits only the ATIF
-document; use file output to retain the other documents.
+document; use file output to retain the other documents and captured skill files.
 
 The [schema](agent-start.schema.json) is generated from `avp.agent_start`.

@@ -15,7 +15,7 @@ inspect it afterward.
 
 The Descriptor lists built-in tools, skills, and subagents before the run. The
 Commission selects and configures them. Agent Start records the resolved
-configuration exposed by the runtime, including full tool definitions and skill contents. The ATIF
+configuration exposed by the runtime, including full tool definitions and paths to captured skill directories. The ATIF
 trajectory records what the run actually did.
 
 ## Contracts
@@ -24,7 +24,7 @@ trajectory records what the run actually did.
 |---|---|---|
 | [Commission](./commission.md) | The task the supervisor sends: prompt, model, MCP servers, skills, and which built-in items to switch off. | Written by a person or a tool. The supervisor fills in per-run details such as the run ID and sends it to the agent to start a run. |
 | [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. |
-| [Agent Start](./agent-start.md) | The resolved prompts, model, tools, MCP servers, skills with contents, and subagents. | Saved once at start for evaluation and comparison with the requested configuration. |
+| [Agent Start](./agent-start.md) | The resolved prompts, model, tools, MCP servers, skills with paths to captured contents, and subagents. | Saved once at start for evaluation and comparison with the requested configuration. |
 | [Trajectory](./trajectory.md) | Native ATIF steps, observations, metrics, and operational extensions. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. |
 
 This document is an overview. The requirements are in the specs above.
