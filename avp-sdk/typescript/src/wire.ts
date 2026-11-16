@@ -2,7 +2,13 @@
 
 export type JsonValue = unknown;
 
+/**
+ * Binary skill-file content encoded with the standard base64 alphabet.
+ */
 export interface BinaryFile {
+  /**
+   * Base64 content, padded when necessary, with no whitespace.
+   */
   base64: string;
 }
 /**
@@ -67,6 +73,9 @@ export interface ProxySecret {
    */
   proxy: string;
 }
+/**
+ * An HTTP MCP connection and its status at start; secrets remain references.
+ */
 export interface StartedMcpHttp {
   /**
    * Identifies the server.
@@ -92,8 +101,14 @@ export interface StartedMcpHttp {
   headers?: {
     [k: string]: string | ProxySecret | EnvSecret;
   } | null;
+  /**
+   * The reported connection status. Absent or null means not reported.
+   */
   status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
 }
+/**
+ * A stdio MCP connection and its status at start; secrets remain references.
+ */
 export interface StartedMcpStdio {
   /**
    * Identifies the server.
@@ -121,8 +136,14 @@ export interface StartedMcpStdio {
   env?: {
     [k: string]: string | EnvSecret;
   } | null;
+  /**
+   * The reported connection status. Absent or null means not reported.
+   */
   status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
 }
+/**
+ * Skill metadata and the file contents exposed at start.
+ */
 export interface StartedSkill {
   /**
    * The skill's name.
@@ -137,17 +158,42 @@ export interface StartedSkill {
    * the path appears inside the agent's environment.
    */
   source?: string | null;
+  /**
+   * Paths relative to the skill directory, mapped to UTF-8 text or base64.
+   * Absent or null means contents were not exposed. An empty map means no files.
+   */
   files?: {
     [k: string]: string | BinaryFile;
   } | null;
   [k: string]: unknown;
 }
+/**
+ * A selected subagent's exposed configuration. No implicit inheritance.
+ */
 export interface StartedSubagent {
+  /**
+   * The subagent's name.
+   */
   name: string;
+  /**
+   * What the subagent does.
+   */
   description?: string | null;
+  /**
+   * The effective system prompt; an empty string is an explicit empty prompt.
+   */
   system_prompt?: string | null;
+  /**
+   * Resolved tools. Absent or null means not exposed; [] means none.
+   */
   tools?: Tool[] | null;
+  /**
+   * Selected skills with exposed file contents. Absent or null means not exposed; [] means none.
+   */
   skills?: StartedSkill[] | null;
+  /**
+   * Resolved MCP servers. Absent or null means not exposed; [] means none.
+   */
   mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
 }
 /**
@@ -191,15 +237,44 @@ export interface Tool {
  * Resolved configuration at start. See agent-start.md.
  */
 export interface AgentStart {
+  /**
+   * The AVP version this document follows.
+   */
   avp_version: "0.1";
+  /**
+   * The run's nonempty ID, matching the ATIF session_id.
+   */
   run_id: string;
+  /**
+   * The effective user prompt.
+   */
   prompt: string;
+  /**
+   * The effective system prompt; an empty string is an explicit empty prompt.
+   */
   system_prompt?: string | null;
   model: ModelRef;
+  /**
+   * Full resolved tool definitions using MCP fields.
+   * Absent or null means not exposed; [] means none.
+   */
   tools?: Tool[] | null;
+  /**
+   * Resolved MCP servers, with connection fields when exposed. Secrets remain references.
+   * Absent or null means not exposed; [] means none.
+   */
   mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
+  /**
+   * Selected skills with exposed file contents. Absent or null means not exposed; [] means none.
+   */
   skills?: StartedSkill[] | null;
+  /**
+   * Selected subagents and their exposed configuration. Absent or null means not exposed; [] means none.
+   */
   subagents?: StartedSubagent[] | null;
+  /**
+   * The requested JSON Schema for structured output, when supplied.
+   */
   output_schema?: {
     type: "object";
     [k: string]: unknown;

@@ -142,5 +142,395 @@
         }
       ]
     }
+  },
+  {
+    "name": "empty-run-id",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      }
+    }
+  },
+  {
+    "name": "unreported-and-empty-fields",
+    "valid": true,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "system_prompt": "",
+      "tools": [],
+      "mcp_servers": null,
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {}
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-absolute",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "/secret": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-traversal",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "../secret": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-nested-traversal",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "a/../secret": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-dot",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "./file": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-empty-segment",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "a//file": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-trailing-slash",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "a/": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-backslash",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "a\\file": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-drive",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "C:/file": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-empty",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-path-control",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "file\n": "text"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-base64-alphabet",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "data.bin": {
+              "base64": "!not-base64!"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-base64-padding",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "data.bin": {
+              "base64": "YQ="
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-base64-whitespace",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            "data.bin": {
+              "base64": "YQ==\n"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "portable-files",
+    "valid": true,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "skills": [
+        {
+          "name": "s",
+          "description": "d",
+          "files": {
+            ".config": "",
+            "references/café.txt": "text",
+            "empty.bin": {
+              "base64": ""
+            },
+            "one.bin": {
+              "base64": "YQ=="
+            },
+            "two.bin": {
+              "base64": "YWI="
+            },
+            "three.bin": {
+              "base64": "YWJj"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid-child-file",
+    "valid": false,
+    "document": {
+      "avp_version": "0.1",
+      "run_id": "r",
+      "prompt": "task",
+      "model": {
+        "provider": "test",
+        "id": "m"
+      },
+      "subagents": [
+        {
+          "name": "child",
+          "skills": [
+            {
+              "name": "s",
+              "description": "d",
+              "files": {
+                "../file": "text"
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

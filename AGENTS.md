@@ -43,7 +43,8 @@ Implement shared behavior in Python first, then TypeScript.
 - Use native ATIF-v1.8 from the pinned upstream models. Recorder input types
   live in `avp.reports`; do not introduce another event wire contract.
 - Use standard ATIF fields first; keep necessary execution metadata in `extra.avp`.
-- Save complete resolved configuration and inline skill contents in Agent Start.
+- Save the resolved configuration exposed by the runtime and inline skill
+  contents in Agent Start.
   File runs contain `commission.json`, `descriptor.json`, `agent-start.json`, and
   `trajectory.json`. Ordinary generated files and ATIF images need no manifest.
 - Record one ATIF agent step per model response, with per-response usage

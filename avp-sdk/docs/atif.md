@@ -64,8 +64,8 @@ recorded metrics; missing measurements remain unknown. Full tool metadata,
 including titles, output schemas, MCP annotations, and server ownership, lives in
 `agent-start.json`; trace definitions use only standard ATIF fields.
 
-[Agent Start](../../spec/v0.1/agent-start.md) contains the complete resolved
-configuration and inline skill contents, including supporting files. It keeps
+[Agent Start](../../spec/v0.1/agent-start.md) contains the resolved configuration
+exposed by the runtime and inline skill contents, including supporting files. It keeps
 evaluation inputs available without inflating the trace.
 
 ```python

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from avp.agent_start import AgentStart, capture_start
 from avp.commission import Commission, ModelRef
@@ -15,10 +16,13 @@ from avp.recorder import Recorder
 from avp.reports import ImageBlock, RunContext, Source, TextBlock
 
 CASES = Path(__file__).parents[2] / "testdata/agent-start.json"
+SCHEMA = Path(__file__).parents[3] / "spec/v0.1/agent-start.schema.json"
 
 
 @pytest.mark.parametrize("case", json.loads(CASES.read_text()), ids=lambda c: c["name"])
 def test_shared_start_schema(case):
+    validator = Draft202012Validator(json.loads(SCHEMA.read_text()))
+    assert validator.is_valid(case["document"]) == case["valid"]
     if case["valid"]:
         AgentStart.model_validate(case["document"])
     else:

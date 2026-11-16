@@ -14,8 +14,8 @@ into ATIF and publishes document snapshots, so readers can follow the run or
 inspect it afterward.
 
 The Descriptor lists built-in tools, skills, and subagents before the run. The
-Commission selects and configures them. Agent Start records the complete resolved
-configuration, including full tool definitions and skill contents. The ATIF
+Commission selects and configures them. Agent Start records the resolved
+configuration exposed by the runtime, including full tool definitions and skill contents. The ATIF
 trajectory records what the run actually did.
 
 ## Contracts
