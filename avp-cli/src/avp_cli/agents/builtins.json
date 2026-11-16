@@ -1,6 +1,6 @@
 {
-  "commit": "2521d36ff3207f9dd7f71a4d51804857ca91334a",
-  "sha256": "1a516138ef9e50660e312f6d997bf4838d54bfc3fbfd9c6a5014f671b523c041",
+  "commit": "67f25b0fe81935e880c50454d061682b5da3013a",
+  "sha256": "adb74504d8db9a0723de8d5ae5d2a16aada0aab4926f47145f618257a41dd795",
   "agents": {
     "claude-code": {
       "agent_name": "avp-claude-agent-sdk",
