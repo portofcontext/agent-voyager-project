@@ -161,7 +161,13 @@ The [Tool](./agent-descriptor.md#32-tool) fields that ATIF's OpenAI-style tool d
 
 ### 3.3 Step
 
-TBD.
+At `steps[].extra.avp`. The step's `model_name` is the model that produced the response; when absent, it is `agent.model_name`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `duration_ms` | integer | Yes, on agent steps | How long the model response took, in milliseconds, ending at the step's `timestamp`. 0 or more. |
+| `finish_reasons` | string[] | No | On agent steps, why the model stopped, exactly as the service reported it, for example `"end_turn"` or `"length"`. |
+| `error_code` | [Error code](#39-error-code) | Yes, on system steps that record an error | What kind of error. The step's `message` says what happened. |
 
 ### 3.4 Tool call
 
