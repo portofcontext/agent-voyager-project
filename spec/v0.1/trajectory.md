@@ -178,6 +178,7 @@ At `steps[].extra.avp`. The step's `model_name` is the model that produced the r
 | `duration_ms` | integer | Yes, on agent steps | How long the model response took, in milliseconds, ending at the step's `timestamp`. 0 or more. |
 | `finish_reasons` | string[] | No | On agent steps, why the model stopped, exactly as the service reported it, for example `"end_turn"` or `"length"`. |
 | `message_metadata` | [Content metadata](#38-content-metadata)[] | No | On agent steps, data for parts of `message`. |
+| `reasoning_metadata` | [Reasoning metadata](#39-reasoning-metadata)[] | No | On agent steps, data for blocks of the model's reasoning. |
 | `error_code` | [Error code](#331-error-code) | Yes, on system steps that record an error | What kind of error. The step's `message` says what happened. |
 
 #### 3.3.1 Error code
@@ -262,7 +263,14 @@ A source the model cited. Can hold fields the service added, such as Anthropic's
 
 ### 3.9 Reasoning metadata
 
-TBD.
+At `steps[].extra.avp.reasoning_metadata`, a list with an entry for each block of the model's reasoning. ATIF's `reasoning_content` holds the readable text of all blocks. Entries can hold fields the model service added.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `start` | integer | No | Where the block's text starts in `reasoning_content`. |
+| `end` | integer | No | Where it ends. When `start` and `end` are absent, the block is all of `reasoning_content`. |
+| `signature` | string | No | The service's token for passing the reasoning back to it. |
+| `encrypted_content` | string | No | The service's encrypted reasoning, when it returned the block encrypted. It is not readable, so it is never copied into `reasoning_content`. |
 
 ## 4. Rules for agents
 
