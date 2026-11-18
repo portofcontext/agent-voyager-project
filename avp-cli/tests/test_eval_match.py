@@ -10,7 +10,7 @@ import pytest
 from conftest import atif
 from pydantic import JsonValue, ValidationError
 
-from avp.reports import StopReason
+from avp.trajectory import StopReason
 from avp_cli import paths
 from avp_cli.eval.commission import load
 from avp_cli.eval.config import EvalConfig

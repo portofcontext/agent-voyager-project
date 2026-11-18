@@ -12,7 +12,6 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from avp.agent_start import AgentStart
 from avp.commission import Commission
 from avp.trajectory import Trajectory, avp_metadata, documents, final_output
 from avp_cli import paths
@@ -41,24 +40,6 @@ class Shared(BaseModel):
     delete_token: str
     expires_at: datetime
     site: str
-
-
-def _duration(call, result):
-    """Elapsed time between SDK observations, including dispatch/reporting delays."""
-    started = avp_metadata(call).get("observed_at") if call else None
-    finished = avp_metadata(result).get("finished_at")
-    if not isinstance(started, str) or not isinstance(finished, str):
-        return None
-    try:
-        return max(
-            0,
-            round(
-                (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()
-                * 1000
-            ),
-        )
-    except (ValueError, TypeError):
-        return None
 
 
 def _cut(value: Any, limit: int = TEXT) -> str:
@@ -128,31 +109,26 @@ def _presentation(trajectory: Trajectory | None) -> list[dict[str, Any]]:
                     "tool_returned",
                     tool_name=call.function_name if call else "delegation",
                     call_id=result.source_call_id,
-                    duration_ms=_duration(call, result),
+                    duration_ms=avp_metadata(result).get("duration_ms"),
                     result=_cut(result.content),
                     is_error=avp_metadata(result).get("is_error"),
                     result_chars=len(result.content) if isinstance(result.content, str) else None,
                 )
-    meta = avp_metadata(trajectory)
-    if meta.get("complete"):
+    if reason := avp_metadata(trajectory).get("stop_reason"):
         card(
             "agent_stopped",
-            reason=meta.get("stop_reason"),
+            reason=reason,
             output=_cut(output) if (output := final_output(trajectory)) is not None else None,
         )
     return shown
 
 
-def _brief(
-    trajectory: Trajectory | None, effective: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def _brief(trajectory: Trajectory | None) -> dict[str, Any]:
     if trajectory is None:
         return {}
     agent = trajectory.agent
-    extra = (agent.extra or {}).get("avp", {})
-    if effective is not None:
-        extra = {**effective, **effective.get("model", {}), **extra}
-    catalog = {t["name"]: t for t in (effective or {}).get("tools", [])}
+    extra = avp_metadata(agent)
+    catalog = extra.get("tools", {})
     tools = []
     for definition in agent.tool_definitions or []:
         function = definition.get("function", {})
@@ -178,8 +154,8 @@ def _brief(
             }
         )
     model = agent.model_name
-    if model and extra.get("provider"):
-        model = f"{extra['provider']}/{model}"
+    if model and (provider := extra.get("model", {}).get("provider")):
+        model = f"{provider}/{model}"
     vessel = {
         "agent": agent.name,
         "version": agent.version,
@@ -234,17 +210,6 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
     trajectory, _ = read_trajectory(directory / run.directory / paths.TRAJECTORY)
     commission = _commission(directory / run.directory)
     shown = _presentation(trajectory)
-    effective = None
-    run_directory = directory / run.directory
-    start_path = run_directory / paths.AGENT_START
-    if start_path.exists():
-        try:
-            started = AgentStart.model_validate_json(start_path.read_bytes())
-            if started.run_id != run.run_id:
-                raise ValueError("Agent Start belongs to a different run")
-            effective = started.model_dump(mode="json", exclude_none=True)
-        except (OSError, ValueError) as exc:
-            raise Failed(f"invalid Agent Start: {exc}") from None
     verdict = run.scorer_error or "; ".join(run.score.reasons if run.score else [])
     return {
         "row_id": run.item,
@@ -261,7 +226,7 @@ def _run(run: RunResult, directory: Path, eval: Eval | None, item: Item | None) 
         and not {"input_tokens", "output_tokens"}.intersection(run.totals.unknown_metrics)
         else None,
         "elapsed_s": run.seconds,
-        **_brief(trajectory, effective),
+        **_brief(trajectory),
         **({"question": _cut(commission.prompt, PROMPT)} if commission else {}),
         **({"expected": expected} if (expected := _expected(eval, item)) else {}),
         **({"verdict": _cut(verdict, SYSTEM_PROMPT)} if verdict else {}),

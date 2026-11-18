@@ -253,12 +253,12 @@ with `match` or `command`.
 `avp conformance check` shows whether an agent follows the spec's rules for
 agents, with no real model calls. The cases are in
 `src/avp_cli/conformance/cases.py`. ⬜ Most cases so far end before a model call,
-in `commission.5.1` and `commission.5.4`; `trajectory.4.1` has the first that
-reaches the mock model.
+in `commission.5.1` and `commission.5.4`; `trajectory.4`, `trajectory.4.2.1`,
+and `trajectory.4.2.2` reach the mock model.
 
 - **Cases by rule.** A rule's ID is its spec and section number:
   `commission.5.3` is "Turned-off items are hidden and blocked", and
-  `trajectory.4.5` is "Every tool call has a result". A rule can have several
+  `trajectory.4.2.4` is "Every tool call gets a result". A rule can have several
   cases, since a section can hold several requirements. The cases cover the
   rules for agents: section 5 of the Commission spec, and section 4 of the
   Trajectory and Agent Descriptor specs. Rules for supervisors are avp's own,

@@ -292,7 +292,7 @@ def test_a_connect_failure_fails_when_the_run_started_anyway(fake):
     fake.document = atif()
     [outcome] = check.check("pd", [by_name("http-server-wont-connect")], MODEL)
     assert outcome.status == "fail"
-    assert "before the run started" in outcome.reasons[0]
+    assert "before it started" in outcome.reasons[0]
 
 
 def test_a_should_case_that_fails_exits_0(
@@ -321,7 +321,35 @@ def test_a_refusal_passes() -> None:
 @pytest.mark.parametrize(
     ("document", "problem"),
     [
-        (atif(), "expected a complete refusal"),
+        (atif(), "expected the run to end with `error` before it started"),
+        (
+            atif(
+                steps=[
+                    {
+                        "step_id": 1,
+                        "source": "system",
+                        "message": "x",
+                        "extra": {"avp": {"error_code": "invalid_commission"}},
+                    },
+                    {"step_id": 2, "source": "system", "message": "y"},
+                ],
+                stop_reason="error",
+            )
+            | {
+                "extra": {
+                    "avp": {
+                        "avp_version": "0.1",
+                        "stopped_at": "2026-01-01T00:00:00Z",
+                        "stop_reason": "error",
+                    }
+                }
+            },
+            "expected one system step",
+        ),
+        (
+            {k: v for k, v in atif(error=("invalid_commission", "x")).items() if k != "extra"},
+            "the document has no extra.avp",
+        ),
         (atif(error=("agent_crash", "x")), "no error with code invalid_commission"),
         ("not json", "not a valid ATIF document"),
         ({"steps": []}, "not a valid ATIF document"),
@@ -519,26 +547,88 @@ def test_a_model_the_agent_does_not_support_stops_the_check(
         assert fake.commissions == []
 
 
-def test_atif_document_passes_a_run_with_a_model_response(fake: FakeDispatch) -> None:
+def test_avp_document_passes_a_run_that_converged(fake: FakeDispatch) -> None:
     fake.document = STARTED
-    [outcome] = check.check("pd", [by_name("atif-document")], MODEL)
+    [outcome] = check.check("pd", [by_name("avp-document")], MODEL)
     assert (outcome.status, outcome.reasons) == ("pass", [])
 
 
 @pytest.mark.parametrize(
     ("document", "problem"),
     [
-        (atif(complete=False), "incomplete"),
-        (atif(steps=[{"step_id": 1, "source": "agent", "message": "x"}]), "no user prompt"),
-        (atif(steps=[{"step_id": 1, "source": "user", "message": "x"}]), "no model response"),
+        (atif(stop_reason="interrupted"), "expected `stop_reason` `converged`"),
+        (atif(error=("agent_crash", "x"), stop_reason="converged"), "no `started_at`"),
+        (
+            atif() | {"agent": {"name": "sh-agent", "version": "1.0.0"}},
+            "no `agent.extra.avp.model`",
+        ),
         (atif(steps=[{"step_id": 9, "source": "user", "message": "x"}]), "not a valid ATIF"),
     ],
 )
-def test_atif_document_fails(fake, document, problem):
+def test_avp_document_fails(fake, document, problem):
     fake.document = document
-    [outcome] = check.check("pd", [by_name("atif-document")], MODEL)
+    [outcome] = check.check("pd", [by_name("avp-document")], MODEL)
     assert outcome.status == "fail"
     assert any(problem in reason for reason in outcome.reasons), outcome.reasons
+
+
+PROMPT = "[avp-conformance prompts-first]"
+
+
+@pytest.mark.parametrize(
+    ("steps", "problem"),
+    [
+        (
+            [
+                {"step_id": 1, "source": "system", "message": "Be brief."},
+                {"step_id": 2, "source": "user", "message": PROMPT},
+            ],
+            None,
+        ),
+        ([{"step_id": 1, "source": "user", "message": PROMPT}], None),
+        (
+            [
+                {"step_id": 1, "source": "user", "message": PROMPT},
+                {"step_id": 2, "source": "system", "message": "Be brief."},
+            ],
+            "a system prompt step comes after the prompt",
+        ),
+        (
+            [
+                {"step_id": 1, "source": "agent", "message": "hi"},
+                {"step_id": 2, "source": "user", "message": PROMPT},
+            ],
+            "the prompt isn't the first `user` step",
+        ),
+        (
+            [{"step_id": 1, "source": "user", "message": "other"}],
+            "the first `user` step isn't the Commission's prompt",
+        ),
+    ],
+)
+def test_prompts_first(fake, steps, problem):
+    fake.document = atif(steps=steps)
+    [outcome] = check.check("pd", [by_name("prompts-first")], MODEL)
+    assert outcome.reasons == ([problem] if problem else []), outcome.reasons
+
+
+def _agent_step(step_id: int, calls: int | None = 1) -> dict:
+    step = {"step_id": step_id, "source": "agent", "message": "x"}
+    return step | ({"llm_call_count": calls} if calls is not None else {})
+
+
+@pytest.mark.parametrize(
+    ("steps", "problem"),
+    [
+        ([_agent_step(2), _agent_step(3)], None),
+        ([_agent_step(2)], "expected 2 agent steps for 2 model responses, found 1"),
+        ([_agent_step(2), _agent_step(3, None)], "step 3 has `llm_call_count` None, not 1"),
+    ],
+)
+def test_one_step_per_response(fake, steps, problem):
+    fake.document = atif(steps=[{"step_id": 1, "source": "user", "message": "x"}, *steps])
+    [outcome] = check.check("pd", [by_name("one-step-per-response")], MODEL)
+    assert outcome.reasons == ([problem] if problem else []), outcome.reasons
 
 
 def test_mock_image_reaches_the_check(fake: FakeDispatch, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -617,7 +707,7 @@ def test_list_shows_each_rule_and_its_cases() -> None:
     result = CliRunner().invoke(app, ["conformance", "list", "--rule", "commission.5.1"])
     assert result.exit_code == 0, result.output
     assert "agents-without-entry" in result.output
-    assert "trajectory.4.5" not in result.output
+    assert "trajectory.4.2.4" not in result.output
 
 
 def test_unknown_rule_fails() -> None:

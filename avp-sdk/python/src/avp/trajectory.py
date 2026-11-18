@@ -59,7 +59,9 @@ def documents(trajectory: Trajectory):
         yield from documents(child)
 
 
-def avp_metadata(value: Trajectory | Step | ToolCall | ObservationResult) -> dict[str, Any]:
+def avp_metadata(
+    value: Trajectory | Agent | Step | ToolCall | ObservationResult,
+) -> dict[str, Any]:
     """The object's `extra.avp` as JSON, or `{}` when it has none, as plain ATIF may not."""
     avp = value.extra.avp if value.extra is not None else None
     return avp.model_dump(mode="json", by_alias=True, exclude_unset=True) if avp else {}

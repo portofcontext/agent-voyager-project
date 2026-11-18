@@ -6,7 +6,7 @@ case "$1" in
   describe) echo "$DESCRIPTOR" ;;
   run)
     RUN_ID=$(sed -n 's/.*"run_id":[[:space:]]*"\([^" ]*\)".*/\1/p' "$3")
-    printf '{"schema_version":"ATIF-v1.8","session_id":"%s","agent":{"name":"sh-agent","version":"1.0.0"},"steps":[{"step_id":1,"source":"system","message":"sh-agent refuses every Commission","extra":{"avp":{"error_code":"invalid_commission"}}}],"extra":{"avp":{"complete":true,"stop_reason":"refused"}}}\n' "$RUN_ID" > "$5"
+    printf '{"schema_version":"ATIF-v1.8","session_id":"%s","agent":{"name":"sh-agent","version":"1.0.0"},"steps":[{"step_id":1,"source":"system","message":"sh-agent refuses every Commission","extra":{"avp":{"error_code":"invalid_commission"}}}],"extra":{"avp":{"avp_version":"0.1","stopped_at":"2026-01-01T00:00:00Z","stop_reason":"error"}}}\n' "$RUN_ID" > "$5"
     ;;
   *) exit 2 ;;
 esac

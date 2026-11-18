@@ -27,8 +27,8 @@ sandbox at `/io`:
     commission.json                      the dispatched Commission, with fresh run identity
     trajectory.json                      the ATIF trace the agent writes
     descriptor.json                      advertised agent capabilities
-    agent-start.json                     resolved configuration with full skill contents
     images/                              image files referenced by ATIF
+    skills/                              skill directories the run used, referenced by the Trajectory
     agent.stderr                         what the agent printed to stderr, when anything
     scorer-error.txt                     in an eval, why its scorer failed
 
@@ -52,7 +52,6 @@ from pathlib import Path
 
 COMMISSION = "commission.json"
 TRAJECTORY = "trajectory.json"
-AGENT_START = "agent-start.json"
 DESCRIPTOR = "descriptor.json"
 STDERR = "agent.stderr"
 SCORER_ERROR = "scorer-error.txt"

@@ -20,8 +20,7 @@ from pydantic import (
     computed_field,
 )
 
-from avp.reports import StopReason
-from avp.trajectory import Trajectory, avp_metadata, documents, final_output, parse_trajectory
+from avp.trajectory import StopReason, Trajectory, documents, final_output, parse_trajectory
 from avp_cli import paths
 from avp_cli.eval.schemas import Item, JsonObject
 from avp_cli.eval.template import TemplateError, render
@@ -107,7 +106,7 @@ class Run(BaseModel):
     output: JsonValue = None
     """Typed returned output, or the final root agent message."""
     reason: StopReason | None = None
-    """The AVP stop reason, when present."""
+    """The AVP stop reason. None for ATIF from other producers."""
     item: Item
     """The dataset item the run's Commission was filled from."""
     model: str | None = None
@@ -212,11 +211,9 @@ def read(
 ) -> Run:
     """The run in `directory`, from its Trajectory."""
     trajectory, invalid = read_trajectory(directory / paths.TRAJECTORY)
-    metadata = avp_metadata(trajectory) if trajectory else {}
+    avp = trajectory.extra.avp if trajectory and trajectory.extra else None
     output = final_output(trajectory) if trajectory else None
-    reason = metadata.get("stop_reason")
-    if reason not in {"converged", "refused", "error", "interrupted", "abandoned"}:
-        reason = None
+    reason = avp.stop_reason if avp else None
     return Run(
         id=id,
         agent=agent,

@@ -95,7 +95,6 @@ def context(name: str) -> Generator[Path]:
         }
         if language == "typescript":
             links["src/schemas/trajectory.json"] = f"{root}/spec/v0.1/trajectory.schema.json"
-            links["src/schemas/agent-start.json"] = f"{root}/spec/v0.1/agent-start.schema.json"
         _extract(archive, f"{root}/{sdk}", build / sdk, links=links)
         _extract(archive, f"{root}/avp-sdk/data", build / "avp-sdk/data")
         _extract(archive, f"{root}/spec/v0.1", build / "spec/v0.1")

@@ -1,4 +1,5 @@
-"""The spec's rules for agents. A rule's ID is its spec and section number."""
+"""The spec's rules for agents. A rule's ID is its spec and section number;
+`trajectory.4` is the conformance sentence that opens that section."""
 
 RULES: dict[str, str] = {
     "commission.5.1": "The agent checks the Commission before the run starts",
@@ -16,12 +17,17 @@ RULES: dict[str, str] = {
     "agent-descriptor.4.4": "Tools from MCP servers",
     "agent-descriptor.4.5": "Tools match what the model sees",
     "agent-descriptor.4.6": "The Descriptor is the same for every run of a version",
-    "trajectory.4.1": "Produce valid ATIF",
-    "trajectory.4.2": "Record effective inputs",
-    "trajectory.4.3": "One agent step per model response",
-    "trajectory.4.4": "Usage is per response",
-    "trajectory.4.5": "Every tool call has a result",
-    "trajectory.4.6": "Subagents",
-    "trajectory.4.7": "Errors and stops",
+    "trajectory.4": "Every Trajectory is valid ATIF and matches the reference",
+    "trajectory.4.1.1": "Every error is a system step with an error code",
+    "trajectory.4.1.2": "A refused run has no model responses",
+    "trajectory.4.1.3": "The agent lists what the run can use",
+    "trajectory.4.1.4": "Cost says where it came from",
+    "trajectory.4.1.5": "A subagent still running at the end is abandoned",
+    "trajectory.4.1.6": "Structured output keeps its type",
+    "trajectory.4.2.1": "The prompts come first",
+    "trajectory.4.2.2": "One agent step per model response",
+    "trajectory.4.2.3": "Usage is per response",
+    "trajectory.4.2.4": "Every tool call gets a result",
+    "trajectory.4.2.5": "Each subagent has its own trajectory",
 }
 """agent-descriptor.4.7 only points to the Commission spec, so it isn't listed."""

@@ -16,13 +16,13 @@ from avp_cli.commissions.check import check, require_valid
 from avp_cli.commissions.prepare import prepare
 from avp_cli.console import Failed, err, line, out
 from avp_cli.engine import images
-from avp_cli.runs import environment, events, volumes
+from avp_cli.runs import environment, summary, volumes
 from avp_cli.runs.dispatch import Options, dispatch
 from avp_cli.sandbox import sandboxes
 
 STDERR_LINES = 5
-POLL_S = 0.1
-"""How often avp looks for new events."""
+TICK_S = 0.1
+"""How often avp updates the elapsed time."""
 
 
 def run(
@@ -72,23 +72,19 @@ def run(
     environment.check(parsed, options.env)
     descriptor = command.describe_in_sandbox(installed, entrypoint, options.volumes)
     require_valid(check(value, descriptor))
-    followers: list[events.Follower] = []
     with err.status(line("Starting a sandbox for ", (agent, "bold"))) as status:
 
         def watch(trajectory: Path, run: Callable[[], sandboxes.Result]) -> sandboxes.Result:
-            followers.append(events.Follower(trajectory))
-            return _following(
-                followers[0],
+            return _timed(
                 run,
                 lambda seconds: status.update(
-                    line("Running ", (agent, "bold"), " - ", (events.elapsed(seconds), "dim"))
+                    line("Running ", (agent, "bold"), " - ", (summary.elapsed(seconds), "dim"))
                 ),
             )
 
         finished = dispatch(installed, entrypoint, parsed, options, watch=watch)
-    for follower in followers:
-        follower.finish()
-    # Shown even when the agent crashed, since its events up to then are there.
+    # The agent writes its Trajectory once, when the run ends.
+    summary.show(finished.trajectory)
     if finished.trajectory.is_file():
         out.print(f"\nTrajectory: {finished.trajectory}", highlight=False, soft_wrap=True)
     if finished.exit_code != 0:
@@ -103,15 +99,10 @@ def run(
         )
 
 
-def _following(
-    follower: events.Follower,
-    run: Callable[[], sandboxes.Result],
-    tick: Callable[[float], None],
-) -> sandboxes.Result:
-    """Run the agent in a thread and print its events as they arrive, calling
-    `tick` with the seconds it has run each time avp looks. On
-    Ctrl-C, the sandbox is deleted, which ends the agent's command; the thread
-    is a daemon, so it doesn't hold avp open."""
+def _timed(run: Callable[[], sandboxes.Result], tick: Callable[[float], None]) -> sandboxes.Result:
+    """Run the agent in a thread, calling `tick` with the seconds it has run.
+    On Ctrl-C, the sandbox is deleted, which ends the agent's command; the
+    thread is a daemon, so it doesn't hold avp open."""
     outcome: list[sandboxes.Result | BaseException] = []
 
     def target() -> None:
@@ -124,9 +115,8 @@ def _following(
     began = time.monotonic()
     thread.start()
     while thread.is_alive():
-        follower.poll()
         tick(time.monotonic() - began)
-        thread.join(POLL_S)
+        thread.join(TICK_S)
     if isinstance(outcome[0], BaseException):
         raise outcome[0]
     return outcome[0]

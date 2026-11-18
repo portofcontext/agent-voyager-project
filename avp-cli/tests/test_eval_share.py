@@ -29,7 +29,20 @@ def trajectory(run_id: str) -> str:
         "name": "avp-test",
         "version": "1.2.3",
         "model_name": "gpt-test",
-        "extra": {"avp": {"provider": "openai"}},
+        "extra": {
+            "avp": {
+                "model": {"provider": "openai"},
+                "tools": {"read": {"mcp_server_id": "docs"}},
+                "mcp_servers": [{"id": "docs", "status": "connected"}],
+                "skills": [
+                    {
+                        "name": "research",
+                        "description": "Research.",
+                        "source": "file:skills/0-research",
+                    }
+                ],
+            }
+        },
         "tool_definitions": [
             {
                 "type": "function",
@@ -59,7 +72,6 @@ def trajectory(run_id: str) -> str:
                     "tool_call_id": "call-1",
                     "function_name": "read",
                     "arguments": {"path": "/a"},
-                    "extra": {"avp": {"observed_at": "2026-01-01T00:00:00Z"}},
                 }
             ],
             "observation": {
@@ -67,7 +79,9 @@ def trajectory(run_id: str) -> str:
                     {
                         "source_call_id": "call-1",
                         "content": LONG,
-                        "extra": {"avp": {"finished_at": "2026-01-01T00:00:00.003Z"}},
+                        "extra": {
+                            "avp": {"finished_at": "2026-01-01T00:00:00.003Z", "duration_ms": 3}
+                        },
                     }
                 ]
             },
@@ -165,8 +179,11 @@ def test_a_run_is_what_the_sites_viewer_reads(tmp_path: Path) -> None:
                 "params": [
                     {"name": "path", "required": True, "type": "string", "description": "The file."}
                 ],
+                "mcp_server_id": "docs",
             }
         ],
+        "skills": [{"name": "research", "description": "Research."}],
+        "mcp_servers": [{"id": "docs", "status": "connected"}],
     }
     events = run["events"]
     assert [e["type"] for e in events] == [
@@ -264,41 +281,3 @@ def test_a_refusal_says_why(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(Failed, match="run too large"):
         share.share(directory, results, "https://site.test")
     assert share.shared(directory) is None
-
-
-def test_agent_start_is_validated_and_supplies_the_full_configuration(tmp_path: Path) -> None:
-    directory, results = eval_directory(tmp_path, ["one"])
-    run = results.runs[0]
-    run_directory = directory / run.directory
-    effective = {
-        "avp_version": "0.1",
-        "run_id": run.run_id,
-        "prompt": "research",
-        "model": {"provider": "test", "id": "m"},
-        "skills": [
-            {
-                "name": "research",
-                "description": "Research.",
-                "path": "skills/0-research",
-            }
-        ],
-        "mcp_servers": [{"id": "docs", "status": "connected"}],
-        "tools": [{"name": "read", "inputSchema": {"type": "object"}, "mcp_server_id": "docs"}],
-    }
-    skill_directory = run_directory / "skills/0-research"
-    skill_directory.mkdir(parents=True)
-    (skill_directory / "SKILL.md").write_text("Research instructions")
-    (run_directory / "agent-start.json").write_text(json.dumps(effective))
-    [shown] = share.payload(directory, results)["by_commission"]["inline-1"]
-    assert shown["vessel"]["tools"][0]["mcp_server_id"] == "docs"
-    assert shown["vessel"]["skills"] == [{"name": "research", "description": "Research."}]
-    assert "Research instructions" not in json.dumps(shown)
-    assert shown["vessel"]["mcp_servers"] == effective["mcp_servers"]
-    (run_directory / "agent-start.json").write_text("{}")
-    with pytest.raises(Failed, match="invalid Agent Start"):
-        share.payload(directory, results)
-
-    effective["run_id"] = "another-run"
-    (run_directory / "agent-start.json").write_text(json.dumps(effective))
-    with pytest.raises(Failed, match="different run"):
-        share.payload(directory, results)

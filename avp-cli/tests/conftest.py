@@ -47,13 +47,14 @@ def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> Described:
     return described
 
 
-def atif(*, steps=None, complete=True, output="Paris", run_id="r", error=None):
-    """A native ATIF document, including AVP's optional run outcome."""
-    meta = {"complete": complete}
-    if complete:
-        meta.update(stop_reason="error" if error else "converged")
-        if output is not None and not error:
-            meta["output"] = output
+def atif(*, steps=None, output="Paris", run_id="r", error=None, stop_reason=None):
+    """An AVP Trajectory: the prompt and, without `error`, an answer of
+    `output`. With `error`, a refusal before the run started."""
+    meta = {
+        "avp_version": "0.1",
+        "stopped_at": "2026-01-01T00:00:02Z",
+        "stop_reason": stop_reason or ("error" if error else "converged"),
+    }
     if error:
         steps = [
             {
@@ -63,14 +64,21 @@ def atif(*, steps=None, complete=True, output="Paris", run_id="r", error=None):
                 "extra": {"avp": {"error_code": error[0]}},
             }
         ]
+    else:
+        meta["started_at"] = "2026-01-01T00:00:00Z"
     if steps is None:
         steps = [{"step_id": 1, "source": "user", "message": "Name the city"}]
-        if complete and output is not None:
+        if output is not None:
             steps.append({"step_id": 2, "source": "agent", "message": output})
     return {
         "schema_version": "ATIF-v1.8",
         "session_id": run_id,
-        "agent": {"name": "sh-agent", "version": "1.0.0"},
+        "agent": {
+            "name": "sh-agent",
+            "version": "1.0.0",
+            "model_name": "claude-haiku-4-5",
+            "extra": {"avp": {"model": {"provider": "anthropic"}}},
+        },
         "steps": steps,
         "extra": {"avp": meta},
     }

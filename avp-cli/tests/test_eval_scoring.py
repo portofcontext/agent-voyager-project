@@ -44,11 +44,6 @@ def test_a_complete_run(tmp_path):
     assert run.invalid_trajectory == []
 
 
-def test_an_incomplete_run_has_no_output_or_reason(tmp_path):
-    run = run_in(tmp_path, atif(complete=False))
-    assert (run.output, run.reason) == (None, None)
-
-
 @pytest.mark.parametrize("document", ["not json", "3", '"text"', {"steps": []}])
 def test_invalid_documents_are_listed(tmp_path, document):
     run = run_in(tmp_path, document)
@@ -136,7 +131,7 @@ def test_the_config_is_filled_from_the_item_and_the_run(tmp_path: Path) -> None:
 
 
 def test_a_placeholder_that_cannot_be_filled_fails_the_scorer(tmp_path: Path) -> None:
-    run = run_in(tmp_path, atif(complete=False))
+    run = run_in(tmp_path, atif(output=None))
     result = asyncio.run(score(passing, {"city": "{run.output}"}, run, tmp_path))
     assert result.error is not None
     assert result.error.message == (
@@ -191,55 +186,27 @@ def test_unknown_external_usage_is_not_reported_as_measured_zero(tmp_path):
     assert set(run.totals.unknown_metrics) == {"input_tokens", "output_tokens", "cost_usd"}
 
 
-def test_incomplete_avp_response_is_not_final_output(tmp_path):
-    doc = atif(complete=False)
-    doc["steps"].append({"step_id": 2, "source": "agent", "message": "still thinking"})
-    assert run_in(tmp_path, doc).output is None
-
-
-def test_external_multimodal_output_and_unknown_extensions(tmp_path):
+def test_multimodal_output_and_unknown_extra_keys(tmp_path):
     doc = atif()
-    doc["extra"] = {"avp": {"stop_reason": "future-reason"}, "other": {"version": 3}}
+    doc["extra"]["avp"]["future_key"] = 1
+    doc["extra"]["other"] = {"version": 3}
     doc["steps"][-1]["message"] = [
         {"type": "image", "source": {"media_type": "image/png", "path": "image.png"}}
     ]
     run = run_in(tmp_path, doc)
     assert run.output == doc["steps"][-1]["message"]
-    assert run.reason is None
+    assert run.reason == "converged"
 
 
 @pytest.mark.parametrize(
     "name,prompt,completion,cost,unknown",
     [
-        ("cost-sources", 5000, 500, 0.50903, ["cost_usd", "input_tokens", "output_tokens"]),
-        ("empty-response", 1000, 100, 0.0045, []),
-        ("error-after-start", 1000, 100, 0.0045, []),
-        (
-            "interrupted-with-running-subagent",
-            0,
-            0,
-            0,
-            ["cost_usd", "input_tokens", "output_tokens"],
-        ),
-        ("model-defaults", 0, 0, 0, ["cost_usd", "input_tokens", "output_tokens"]),
-        ("no-commission", 0, 0, 0, []),
-        ("plain-response", 1000, 100, 0.0045, []),
-        ("refused-check", 0, 0, 0, []),
-        ("refused-invalid", 0, 0, 0, []),
-        ("rejected-reports", 1000, 100, 0.0045, []),
-        ("result-closes-response", 2000, 200, 0.009, []),
-        ("stop-before-start", 0, 0, 0, []),
-        (
-            "stop-with-running-work",
-            1000,
-            100,
-            0.0045,
-            ["cost_usd", "input_tokens", "output_tokens"],
-        ),
-        ("streamed-response", 2000, 200, 0.006, []),
-        ("subagent-error", 1500, 120, 0.0045, ["cost_usd"]),
-        ("subagent-from-tool", 4000, 400, 0.018, []),
-        ("tool-calls", 2000, 200, 0.009, []),
+        ("cost-sources", 3100, 310, 0.50453, ["input_tokens", "output_tokens"]),
+        ("error-after-start", 10, 2, 0.00006, []),
+        ("plain-response", 120, 30, 0.00081, []),
+        ("tool-calls", 250, 30, 0.0012, []),
+        ("subagent-from-tool", 430, 43, 0.001935, []),
+        ("refused-invalid", 0, 0, 0, ["cost_usd", "input_tokens", "output_tokens"]),
     ],
 )
 def test_partial_totals_are_derived_without_avp_aggregate_extensions(

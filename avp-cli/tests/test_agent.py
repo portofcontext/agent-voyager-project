@@ -46,7 +46,7 @@ def test_install_builtin_without_checkout(
         assert descriptor["agent_name"] == expected.agent_name
         assert descriptor["agent_version"] == expected.version
         checked = avp(
-            "conformance", "check", "--agent", "pydantic-ai", "--rule", "trajectory.4.1", "--json"
+            "conformance", "check", "--agent", "pydantic-ai", "--rule", "trajectory.4", "--json"
         )
         [outcome] = json.loads(checked[checked.index("[") :])
         assert outcome["status"] == "pass", outcome
