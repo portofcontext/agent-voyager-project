@@ -32,13 +32,18 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
           "description": "Read a file in the workspace.",
           "parameters": {
             "type": "object",
-            "properties": { "path": { "type": "string" } },
-            "required": ["path"]
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
           }
         }
       }
-    ],
-    "extra": { "avp": { "provider": "anthropic" } }
+    ]
   },
   "steps": [
     {
@@ -57,27 +62,25 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
         {
           "tool_call_id": "call-1",
           "function_name": "read_file",
-          "arguments": { "path": "src/login.py" },
-          "extra": { "avp": { "observed_at": "2026-01-01T00:00:01.100Z" } }
+          "arguments": {
+            "path": "src/login.py"
+          }
         }
       ],
       "observation": {
         "results": [
           {
             "source_call_id": "call-1",
-            "content": "def login(): ...",
-            "extra": { "avp": { "finished_at": "2026-01-01T00:00:01.200Z" } }
+            "content": "def login(): ..."
           }
         ]
       },
       "metrics": {
         "prompt_tokens": 1200,
         "completion_tokens": 40,
-        "cost_usd": 0.0042,
-        "extra": { "avp": { "cost_source": "computed" } }
+        "cost_usd": 0.0042
       },
-      "llm_call_count": 1,
-      "extra": { "avp": { "duration_ms": 800, "finish_reasons": ["tool_use"] } }
+      "llm_call_count": 1
     },
     {
       "step_id": 3,
@@ -85,28 +88,22 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
       "source": "agent",
       "model_name": "claude-sonnet-4-6",
       "message": "Fixed: the timeout now reads from settings.",
-      "metrics": { "prompt_tokens": 1300, "completion_tokens": 12 },
-      "llm_call_count": 1,
-      "extra": { "avp": { "duration_ms": 500, "finish_reasons": ["end_turn"] } }
+      "metrics": {
+        "prompt_tokens": 1300,
+        "completion_tokens": 12
+      },
+      "llm_call_count": 1
     }
   ],
   "final_metrics": {
     "total_prompt_tokens": 2500,
     "total_completion_tokens": 52,
     "total_steps": 3
-  },
-  "extra": {
-    "avp": {
-      "complete": true,
-      "started_at": "2026-01-01T00:00:00Z",
-      "stopped_at": "2026-01-01T00:00:02Z",
-      "stop_reason": "converged"
-    }
   }
 }
 ```
 
-The run's `session_id` is the Commission's `run_id`. The trajectory's `extra.avp` has no `output`, so the run's result is the last agent message. The second response has no `cost_usd`, so its cost is unknown, and `final_metrics` leaves the total cost out.
+The run's `session_id` is the Commission's `run_id`. The second response has no `cost_usd`, so its cost is unknown, and `final_metrics` leaves the total cost out.
 
 ## 3. Reference
 
@@ -120,120 +117,52 @@ At the trajectory's top-level `extra.avp`, and on each embedded subagent traject
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `complete` | boolean | Yes | `true` when the agent finished writing the Trajectory. |
-| `started_at` | string | No | When the run started, as an ISO 8601 timestamp. Absent when the agent [refused](#45-a-refused-run-has-no-model-responses) the Commission. |
-| `stopped_at` | string | No | When the run stopped, as an ISO 8601 timestamp. |
+| `avp_version` | string | Yes | The AVP version the Trajectory follows. `"0.1"` for this spec. |
+| `commission` | [Commission](./commission.md#31-commission), or any | No | The Commission as the agent received it. When what it received doesn't match the Commission spec, the JSON value it received, or the text when it isn't JSON. Absent when the run has no Commission. |
+| `started_at` | string | No | When the run started, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. It can be earlier than the first step, since the agent can do work before it records one. Absent when the agent [refused](#45-a-refused-run-has-no-model-responses) the Commission. |
+| `stopped_at` | string | No | When the run stopped, as an RFC 3339 timestamp. |
 | `stop_reason` | [Stop reason](#38-stop-reason) | Yes | Why the run stopped. |
 | `output` | any | No | The run's result, when it differs from the last agent message or has a different JSON type, for example structured output. `null` means the run returned no result. Absent means the result is the last agent message. |
-| `annotations` | map<string, any> | No | Runtime data with no standard field, for example the runtime's own session ID. |
 
 ### 3.2 Agent
 
-At `agent.extra.avp`. These are the defaults for every agent step in the same trajectory. An embedded subagent trajectory has its own.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `provider` | string | No | The service that ran the model, as in the Commission's [Model](./commission.md#33-model). |
-| `base_url` | string | No | The URL of the service's API. |
-| `requested_model` | string | No | The model ID the agent asked for, when it differs from `agent.model_name`, the model that answered. |
+TBD.
 
 ### 3.3 Step
 
-At `steps[].extra.avp`. Agent steps use every field but `error_code`; system steps use only `error_code`.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `duration_ms` | integer | No | How long the model response took, in milliseconds. |
-| `provider` | string | No | As in [Agent](#32-agent), when this response's value differs. |
-| `base_url` | string \| null | No | As in [Agent](#32-agent), when this response's value differs. `null` means this response used the service's default URL. |
-| `requested_model` | string | No | As in [Agent](#32-agent), when this response's value differs. |
-| `finish_reasons` | string[] | No | Why the model stopped generating, as the service reports it, for example `"end_turn"`. |
-| `annotations` | map<string, any> | No | Response data with no standard field, for example the service's response ID. |
-| `message_metadata` | [Content metadata](#310-content-metadata)[] | No | Data for parts of `message` that ATIF content parts cannot hold. |
-| `reasoning_metadata` | [Reasoning metadata](#311-reasoning-metadata)[] | No | Data for the response's reasoning. |
-| `error_code` | [Error code](#39-error-code) | No | On a system step that records an error, what kind of error. The step's `message` says what happened. |
-
-To find a response's provider, URL, or requested model, a reader uses the step's value when it is present, then the agent's. For the requested model, it then uses `agent.model_name`.
+TBD.
 
 ### 3.4 Tool call
 
-At `steps[].tool_calls[].extra.avp`.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `observed_at` | string | No | When the agent saw the call, as an ISO 8601 timestamp. Not always when the tool started: the time to `finished_at` can include dispatch and queueing. Absent when `server_side` is `true`. |
-| `server_side` | boolean | No | `true` when the model service ran the tool, not the agent. |
-| `provider_metadata` | map<string, any> | No | Call data from the service with no standard field, for example the service's own call ID when it differs from `tool_call_id`. |
+TBD.
 
 ### 3.5 Observation result
 
-At `steps[].observation.results[].extra.avp`.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `finished_at` | string | No | When the result arrived, as an ISO 8601 timestamp. |
-| `is_error` | boolean | No | `true` when the call failed. |
-| `structured_content` | map<string, any> | No | A result meant for programs, such as MCP's `structuredContent`, given beside `content`. |
-| `provider_metadata` | map<string, any> | No | Result data from the service with no standard field. |
-| `content_metadata` | [Content metadata](#310-content-metadata)[] | No | Data for parts of `content` that ATIF content parts cannot hold. |
+TBD.
 
 ### 3.6 Metrics
 
-At `steps[].metrics.extra.avp`.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `cache_creation_input_tokens` | integer | No | Input tokens written to the service's prompt cache. |
-| `reasoning_output_tokens` | integer | No | Output tokens spent on reasoning. They are also counted in `completion_tokens`. |
-| `cost_source` | string | No | Where `cost_usd` comes from: `computed` from token prices, `reported` by the service, or `unknown`. |
+TBD.
 
 ### 3.7 Final metrics and subagent references
 
-`final_metrics.extra.avp` and `subagent_trajectory_ref[].extra.avp` have no AVP fields in this version.
+TBD.
 
 ### 3.8 Stop reason
 
-| Value | Meaning |
-|---|---|
-| `converged` | The model gave its final answer. |
-| `refused` | The model declined the task. |
-| `error` | The run failed. A system step with an `error_code` says why. |
-| `interrupted` | Someone stopped the run from outside, for example with SIGINT or SIGTERM. |
-| `abandoned` | The run ended while a subagent it started was still running, so the run has no complete answer. On a subagent trajectory: the run ended while the subagent was still running. |
+TBD.
 
 ### 3.9 Error code
 
-| Code | Meaning |
-|---|---|
-| `invalid_commission` | The agent refused the Commission, as the Commission spec's [rules for agents](./commission.md#51-the-agent-checks-the-commission-before-the-run-starts) require. The message says which rule. |
-| `mcp_connect_failed` | An MCP server the Commission added didn't connect, so the run [didn't start](./commission.md#54-added-items-are-used-or-the-run-stops). The message names the server. |
-| `auth_error` | The model service rejected the agent's credentials. |
-| `rate_limit` | The model service refused a request because of a rate or usage limit. |
-| `context_limit` | A request was longer than the model's context window. |
-| `output_invalid` | The final output didn't match the Commission's `output_schema`. The output is in the trajectory's `extra.avp.output`. |
-| `agent_crash` | The agent failed, or the model service failed. Also used when someone stops the run from outside before it starts. |
-| `unknown` | Any other error. |
+TBD.
 
 ### 3.10 Content metadata
 
-Data for one part of a message or result.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `part_index` | integer | Yes | The index of the part in `message` or `content`. `0` when the value is a string. |
-| `annotations` | map<string, any> | Yes | The part's data with no standard field, for example citations, refusal flags, or image source details. |
+TBD.
 
 ### 3.11 Reasoning metadata
 
-Data for one block of the model's reasoning. Extra keys from the service are kept.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `signature` | string | No | The service's token for passing the reasoning back to it. |
-| `redacted` | boolean | No | `true` when the service returned the reasoning encrypted. |
-| `start` | integer | No | Where the block starts in the step's `reasoning_content`. |
-| `end` | integer | No | Where the block ends in the step's `reasoning_content`. |
-| `encrypted_content` | string | No | The encrypted reasoning, when `redacted` is `true`. It is not copied into `reasoning_content`. |
+TBD.
 
 ## 4. Rules for agents
 
@@ -241,7 +170,7 @@ These rules apply to the agent that writes a Trajectory. An agent conforms to th
 
 ### 4.1 The agent writes one Trajectory when the run ends
 
-The agent MUST write exactly one Trajectory per run, once, when the run ends: when it stops for any [stop reason](#38-stop-reason), or when a fatal error ends it. The Trajectory MUST be valid ATIF v1.8 with `extra.avp.complete` set to `true`. The agent MUST NOT write partial Trajectories while the run is going.
+The agent MUST write exactly one Trajectory per run, once, when the run ends: when it stops for any [stop reason](#38-stop-reason), or when a fatal error ends it. The Trajectory MUST be valid ATIF v1.8. The agent MUST NOT write partial Trajectories while the run is going.
 
 With `--out <path>`, the agent writes the Trajectory to that path. With `--out -`, it writes it to standard output. Diagnostics go to standard error. A process killed before it can write leaves no Trajectory.
 
