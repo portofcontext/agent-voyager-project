@@ -2,12 +2,11 @@
 
 Pydantic AI runs the loop (`Agent.iter`). After each graph node the agent reads
 what the node added to the run's message history: each `ModelResponse` is one
-model response, and each tool return or retry prompt in the following
-`ModelRequest` is the result of the call it answers.
+agent step, and each tool return in the following `ModelRequest` is the result
+of the call it answers.
 """
 
 import asyncio
-import time
 import traceback
 from contextlib import AsyncExitStack
 
@@ -20,7 +19,7 @@ from avp.agent_cli import TrajectorySink
 from avp.commission import Commission
 from avp.descriptor import Tool
 from avp.recorder import Recorder
-from avp.reports import StopReason
+from avp.trajectory import StopReason
 from avp.utils.run_plan import plan_run
 from avp_pydantic_ai import commission as cm
 from avp_pydantic_ai import translate
@@ -68,29 +67,24 @@ async def _connect(commission: Commission, stack: AsyncExitStack) -> tuple[list,
 class _History:
     """Reports the messages a run adds to its history, in order."""
 
-    def __init__(self, rec: Recorder, model_id: str) -> None:
+    def __init__(self, rec: Recorder) -> None:
         self.rec = rec
-        self.model_id = model_id
         self.seen = 0
-        self.started = time.monotonic()
         self.finish: str | None = None
 
     async def report(self, messages: list[ModelMessage]) -> None:
         for message in messages[self.seen :]:
             if isinstance(message, ModelResponse):
                 self.finish = message.finish_reason
-                await self.rec.response(
-                    translate.content(message.parts),
+                await self.rec.step(
+                    translate.parts(message, self.rec.image),
                     usage=translate.usage(message.usage),
-                    response_model=message.model_name
-                    if message.model_name != self.model_id
-                    else None,
+                    model_name=message.model_name,
                     finish_reasons=translate.finish_reasons(message),
-                    duration_ms=int((time.monotonic() - self.started) * 1000),
                 )
             else:
-                for call_id, output, is_error in translate.tool_results(message.parts):
-                    await self.rec.tool_returned(call_id, output, is_error=is_error)
+                for call_id, content, is_error in translate.results(message.parts):
+                    await self.rec.result(call_id, content, is_error=is_error)
         self.seen = len(messages)
 
 
@@ -106,7 +100,7 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
 
     instructions = cm.instructions(commission)
     plan = plan_run(commission, descriptor)
-    history = _History(rec, commission.model.id)
+    history = _History(rec)
     async with AsyncExitStack() as stack:
         try:
             try:
@@ -119,19 +113,7 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
             except _ConnectFailed as exc:
                 await rec.error("mcp_connect_failed", str(exc))
                 return
-            servers = [
-                server.model_copy(update={"status": "connected"})
-                for server in plan.started.mcp_servers or []
-            ]
-            await rec.start(
-                plan.started.model_copy(
-                    update={
-                        "system_prompt": instructions,
-                        "tools": tools or None,
-                        "mcp_servers": servers or None,
-                    }
-                )
-            )
+            await rec.start(plan.connected(tools), plan.prompt, system_prompt=instructions)
             agent = Agent(
                 run_model,
                 name=AGENT_NAME,
@@ -140,10 +122,8 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
                 toolsets=toolsets,
             )
             async with agent.iter(commission.prompt) as agent_run:
-                async for node in agent_run:
+                async for _ in agent_run:
                     await history.report(agent_run.ctx.state.message_history)
-                    if Agent.is_model_request_node(node):
-                        history.started = time.monotonic()
                 await history.report(agent_run.ctx.state.message_history)
                 output = agent_run.result.output if agent_run.result else None
             reason: StopReason = "refused" if history.finish == "content_filter" else "converged"

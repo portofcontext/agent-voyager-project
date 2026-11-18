@@ -44,7 +44,12 @@
     {
       "t": 100,
       "call": "step",
-      "message": "Hi."
+      "parts": [
+        {
+          "type": "text",
+          "text": "Hi."
+        }
+      ]
     },
     {
       "t": 200,

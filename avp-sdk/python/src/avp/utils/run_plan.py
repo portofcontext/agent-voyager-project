@@ -7,16 +7,20 @@ own. Call it on a Commission that passed `check_commission`.
 
     plan = plan_run(commission, descriptor)
     # configure the runtime from plan.agent; hide and block plan.turned_off.
-    # After connecting, add each MCP server's status and tools to plan.agent.
-    await rec.start(plan.agent, plan.prompt, system_prompt=plan.system_prompt)
+    # connect the MCP servers and list their tools, then:
+    await rec.start(plan.connected(tools), plan.prompt, system_prompt=plan.system_prompt)
 """
+
+from typing import Literal
 
 from pydantic import BaseModel
 
 from avp.commission import AgentSettings, Commission
-from avp.descriptor import AgentDescriptor, McpServer, Skill
+from avp.descriptor import AgentDescriptor, McpServer, Skill, Tool
 from avp.trajectory import Agent, AgentAvpExtra, AgentExtra, AgentModel, tool_definitions
 from avp.utils._skill_md import frontmatter_value
+
+McpStatus = Literal["connected", "failed", "needs-auth", "disabled"]
 
 
 class TurnedOff(BaseModel):
@@ -43,6 +47,30 @@ class RunPlan(BaseModel):
     after connecting, and each added skill's `source` once it has written the
     skill's files."""
     turned_off: TurnedOff
+
+    def connected(self, tools: list[Tool], status: dict[str, McpStatus] | None = None) -> Agent:
+        """`agent` once the MCP servers are connected: with the servers' `tools`
+        and each server's status, by id (`connected` when not given)."""
+        avp = self.agent.extra.avp if self.agent.extra else None
+        if avp is None:
+            raise ValueError("the plan's agent has no extra.avp")
+        definitions, details = tool_definitions(tools)
+        avp = avp.model_copy(
+            update={
+                "tools": {**(avp.tools or {}), **details} or None,
+                "mcp_servers": [
+                    server.model_copy(update={"status": (status or {}).get(server.id, "connected")})
+                    for server in avp.mcp_servers or []
+                ]
+                or None,
+            }
+        )
+        return self.agent.model_copy(
+            update={
+                "tool_definitions": [*(self.agent.tool_definitions or []), *definitions] or None,
+                "extra": AgentExtra(avp=avp),
+            }
+        )
 
 
 def _allowed(names: list[str], enabled: list[str] | None) -> set[str]:

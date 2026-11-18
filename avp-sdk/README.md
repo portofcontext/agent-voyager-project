@@ -87,8 +87,9 @@ allows none), the Commission adds its own MCP servers and skills, and its
 
 - `prompt` and `system_prompt`: what the run starts with.
 - `agent`: the Trajectory's ATIF `agent`, with the model, tool definitions, and
-  `extra.avp`. The adapter configures its runtime from it, adds each MCP
-  server's status and tools after connecting, and passes it to `Recorder.start`.
+  `extra.avp`. The adapter configures its runtime from it, connects the MCP
+  servers, and passes `plan.connected(tools)` to `Recorder.start`, which adds
+  the servers' tools and statuses.
 - `turned_off`: the built-in items the run may not use, which the agent hides
   from the model and refuses to run.
 
@@ -129,11 +130,14 @@ SIGINT or SIGTERM interrupted the run; anything else is a crash.
 
 The Recorder builds a run's Trajectory from the ATIF objects the adapter
 reports, and writes it once when the run ends. The adapter reports an ATIF
-`Agent` at start, one agent step per model response, and one
-`ObservationResult` per tool result. The Recorder adds what the adapter
-shouldn't track: step IDs, timestamps, durations, computed costs, results
-placed on the step that holds their call, subagent trajectories, totals, and
-error results for work still running at the end. It also checks the
+`Agent` at start, then each model response as its parts in order (`Text`,
+`Image`, `Reasoning`, `Call`, `ServerResult`) with its `Usage`, and each tool
+result by its call ID. The Recorder builds the ATIF step from them: the
+message, the reasoning joined with each block's offsets, citations placed on
+their part, and the metrics. It adds what the adapter shouldn't track: step
+IDs, timestamps, durations, computed costs, results placed on the step that
+holds their call, subagent trajectories, totals, and error results for work
+still running at the end. It also checks the
 Commission and records it, with the Descriptor, in `extra.avp`.
 
 `avp.recorder` holds the Recorder, and `avp.trajectory` the ATIF models with

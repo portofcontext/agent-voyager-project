@@ -52,16 +52,17 @@
     {
       "t": 100,
       "call": "step",
-      "message": "",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "task-1",
-          "function_name": "Task",
+          "type": "call",
+          "id": "task-1",
+          "name": "Task",
           "arguments": {}
         },
         {
-          "tool_call_id": "c1",
-          "function_name": "read_file",
+          "type": "call",
+          "id": "c1",
+          "name": "read_file",
           "arguments": {}
         }
       ]

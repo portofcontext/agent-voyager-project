@@ -9,23 +9,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import TypeAdapter
 
 from avp.descriptor import AgentDescriptor
-from avp.recorder import Recorder, RecorderError
-from avp.trajectory import (
-    Agent,
-    FinalMetrics,
-    Metrics,
-    ObservationResult,
-    Recording,
-    ToolCall,
-    final_output,
-    parse_trajectory,
-)
+from avp.recorder import Part, Recorder, RecorderError, Usage
+from avp.trajectory import Agent, FinalMetrics, Recording, final_output, parse_trajectory
 from avp.utils.pricing import Prices
 
 CASES = Path(__file__).resolve().parents[2] / "testdata" / "recorder"
 START = datetime(2026, 1, 1, tzinfo=UTC)
+PARTS = TypeAdapter(list[Part])
 
 
 async def _call(rec: Recorder, call: dict[str, Any]) -> None:
@@ -40,20 +33,19 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
         )
     elif name == "step":
         await rec.step(
-            call["message"],
-            reasoning_content=call.get("reasoning_content"),
-            tool_calls=[ToolCall.model_validate(c) for c in call.get("tool_calls", [])] or None,
-            observation_results=[
-                ObservationResult.model_validate(r) for r in call.get("observation_results", [])
-            ]
-            or None,
-            metrics=Metrics.model_validate(call["metrics"]) if "metrics" in call else None,
+            PARTS.validate_python(call["parts"]),
+            usage=Usage.model_validate(call["usage"]) if "usage" in call else None,
             model_name=call.get("model_name"),
-            extra=call.get("extra"),
+            finish_reasons=call.get("finish_reasons"),
             subagent=call.get("subagent"),
         )
     elif name == "result":
-        await rec.result(ObservationResult.model_validate(call["result"]))
+        await rec.result(
+            call["call_id"],
+            call["content"],
+            is_error=call.get("is_error", False),
+            structured_content=call.get("structured_content"),
+        )
     elif name == "subagent_started":
         await rec.subagent_started(call["call_id"], call["name"], call["prompt"])
     elif name == "subagent_stopped":

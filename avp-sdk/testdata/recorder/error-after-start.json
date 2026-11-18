@@ -58,8 +58,13 @@
     {
       "t": 900,
       "call": "step",
-      "message": "Done after retry.",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "Done after retry."
+        }
+      ],
+      "usage": {
         "prompt_tokens": 10,
         "completion_tokens": 2
       }

@@ -3,7 +3,6 @@
 from datetime import datetime
 from pathlib import Path
 
-from avp.agent_start import AgentStart
 from avp.trajectory import final_output, parse_trajectory
 
 
@@ -13,12 +12,6 @@ def load(path: Path) -> dict:
 
 def meta(value: dict) -> dict:
     return value.get("extra", {}).get("avp", {})
-
-
-def effective(directory: Path) -> dict:
-    return AgentStart.model_validate_json((directory / "agent-start.json").read_bytes()).model_dump(
-        mode="json", exclude_none=True
-    )
 
 
 def documents(root: dict):
@@ -56,12 +49,10 @@ def errors(root: dict) -> list[dict]:
     return [s for d in documents(root) for s in d["steps"] if meta(s).get("error_code")]
 
 
-def mcp_server(directory: Path, call: dict) -> str | None:
+def mcp_server(root: dict, call: dict) -> str | None:
+    """The MCP server of a call's tool, from `agent.extra.avp.tools`."""
     assert "mcp_server_id" not in meta(call)
-    tool = next(
-        t for t in effective(directory).get("tools", []) if t["name"] == call["function_name"]
-    )
-    return tool.get("mcp_server_id")
+    return meta(root["agent"]).get("tools", {}).get(call["function_name"], {}).get("mcp_server_id")
 
 
 def output(root: dict):

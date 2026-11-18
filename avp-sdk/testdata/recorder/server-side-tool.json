@@ -52,24 +52,23 @@
     {
       "t": 400,
       "call": "step",
-      "message": "Found it.",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "s1",
-          "function_name": "web_search",
+          "type": "text",
+          "text": "Found it."
+        },
+        {
+          "type": "call",
+          "id": "s1",
+          "name": "web_search",
           "arguments": {
             "query": "x"
           },
-          "extra": {
-            "avp": {
-              "server_side": true
-            }
-          }
-        }
-      ],
-      "observation_results": [
+          "server_side": true
+        },
         {
-          "source_call_id": "s1",
+          "type": "server_result",
+          "call_id": "s1",
           "content": "3 results"
         }
       ]

@@ -52,17 +52,17 @@
     {
       "t": 100,
       "call": "step",
-      "message": "",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "task-1",
-          "function_name": "Task",
+          "type": "call",
+          "id": "task-1",
+          "name": "Task",
           "arguments": {
             "prompt": "Try."
           }
         }
       ],
-      "metrics": {
+      "usage": {
         "prompt_tokens": 100,
         "completion_tokens": 10
       }
@@ -92,16 +92,19 @@
     {
       "t": 410,
       "call": "result",
-      "result": {
-        "source_call_id": "task-1",
-        "content": "The worker failed."
-      }
+      "call_id": "task-1",
+      "content": "The worker failed."
     },
     {
       "t": 600,
       "call": "step",
-      "message": "It failed.",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "It failed."
+        }
+      ],
+      "usage": {
         "prompt_tokens": 120,
         "completion_tokens": 12
       }

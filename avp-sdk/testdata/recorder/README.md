@@ -11,8 +11,9 @@ Every SDK's Recorder passes these cases. Each file is one case:
 | `files` | The paths of the files written beside it, when there are any. |
 
 Each call has `call`, the Recorder method in snake_case, and its arguments by
-name. ATIF arguments (`agent`, `tool_calls`, `observation_results`, `metrics`,
-`result`, `final_metrics`) are ATIF JSON. `t` is the clock, in milliseconds
+name. `agent` and `final_metrics` are ATIF JSON. A step's `parts` are the
+Recorder's part types as JSON, each with its `type`: `text`, `reasoning`,
+`call`, or `server_result`. `usage` is the Recorder's usage type as JSON. `t` is the clock, in milliseconds
 after the start, while the call runs. `raises: true` means the call must raise
 the Recorder's error and record nothing.
 

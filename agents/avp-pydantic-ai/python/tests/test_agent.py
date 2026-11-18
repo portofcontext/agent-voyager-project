@@ -1,4 +1,6 @@
-"The agent's command line runs `run` end to end over the real Pydantic AI loop,\nwith only the model scripted (Pydantic AI's `FunctionModel`). Every event must\nparse as a Trajectory event."
+"""The agent's command line runs `run` end to end over the real Pydantic AI loop,
+with only the model scripted (Pydantic AI's `FunctionModel`). Each run writes one
+Trajectory, which must parse."""
 
 import asyncio
 import json
@@ -54,7 +56,9 @@ def script(monkeypatch: pytest.MonkeyPatch):
                 return step
             return await step()
 
-        monkeypatch.setattr(agent, "model", lambda c: FunctionModel(respond, model_name="scripted"))
+        monkeypatch.setattr(
+            agent, "model", lambda c: FunctionModel(respond, model_name=MODEL["id"])
+        )
         return seen
 
     return install
@@ -62,7 +66,7 @@ def script(monkeypatch: pytest.MonkeyPatch):
 
 def _reply(*parts: ModelResponsePart, finish: FinishReason | None = "stop") -> ModelResponse:
     return ModelResponse(
-        parts=list(parts), usage=USAGE, model_name="scripted", finish_reason=finish
+        parts=list(parts), usage=USAGE, model_name=MODEL["id"], finish_reason=finish
     )
 
 
@@ -72,8 +76,7 @@ def _run(tmp_path: Path, exit_code: int = 0, **fields: object) -> dict:
     out = tmp_path / "trajectory.json"
     argv = ["run", "--commission", json.dumps(commission), "--out", str(out)]
     assert main(run=run, describe=describe, argv=argv) == exit_code
-    events = atif.load(out)
-    return events
+    return atif.load(out)
 
 
 def test_plain_text_response(script, tmp_path: Path) -> None:
@@ -83,22 +86,22 @@ def test_plain_text_response(script, tmp_path: Path) -> None:
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (1, 0, 0, True)
+    ) == (1, 0, 0)
     message, stopped = (
         atif.responses(events)[0],
         {"reason": atif.meta(events).get("stop_reason"), "output": atif.output(events)},
     )
     assert message["message"] == "DONE"
     assert message["reasoning_content"] == "short"
-    assert atif.meta(message)["reasoning_metadata"][0]["signature"] == "sig"
+    assert atif.meta(message)["reasoning_metadata"] == [{"signature": "sig"}]
     usage = message["metrics"]
     assert (usage["prompt_tokens"], usage["completion_tokens"]) == (1000, 50)
     assert usage["cached_tokens"] == 400
     assert atif.meta(usage)["cost_source"] == "computed"
-    assert atif.meta(events["agent"])["provider"] == MODEL["provider"]
-    assert atif.meta(events["agent"])["requested_model"] == MODEL["id"]
-    assert events["agent"]["model_name"] == "scripted"
+    assert atif.meta(events["agent"])["model"] == {"provider": MODEL["provider"]}
+    assert events["agent"]["model_name"] == MODEL["id"]
+    assert "model_name" not in message
+    assert events["steps"][0] == {**events["steps"][0], "source": "system", "message": "be terse"}
     assert stopped == {"reason": "converged", "output": "DONE"}
     assert seen[0][0][0].instructions == "be terse"
 
@@ -126,7 +129,7 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
     server = {"id": "t", "type": "stdio", "command": [sys.executable, str(TEST_MCP)]}
     events = _run(tmp_path, mcp_servers=[server])
     assert len(atif.responses(events)) == 2
-    assert atif.effective(tmp_path)["mcp_servers"] == [{**server, "status": "connected"}]
+    assert atif.meta(events["agent"])["mcp_servers"] == [{"id": "t", "status": "connected"}]
     add = next(
         t for t in events["agent"]["tool_definitions"] if t["function"]["name"] == "Avptest_Add"
     )
@@ -136,7 +139,7 @@ def test_mcp_calls_each_carry_their_own_result(script, tmp_path: Path) -> None:
         and add["function"]["parameters"]
     )
     invoked = atif.calls(events)
-    assert {atif.mcp_server(tmp_path, i) for i in invoked} == {"t"}
+    assert {atif.mcp_server(events, i) for i in invoked} == {"t"}
     results = _results(events)
     assert set(results) == {"c_add", "c_result", "c_proto"}
     for call, text, failed in [
@@ -158,8 +161,7 @@ def test_a_server_that_fails_to_connect_stops_the_run(script, tmp_path: Path) ->
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "mcp_connect_failed"
     assert atif.errors(events)[-1]["message"].startswith("broken:")
     assert seen == []
@@ -173,8 +175,7 @@ def test_output_schema_ends_on_the_output_tool(script, tmp_path: Path) -> None:
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (1, 1, 0, True)
+    ) == (1, 1, 0)
     assert atif.output(events) == {"answer": 3}
 
 
@@ -185,9 +186,13 @@ def test_skills_reach_the_instructions(script, tmp_path: Path) -> None:
         "files": {"SKILL.md": "---\nname: greet\ndescription: Greet people.\n---\nSay hi."},
     }
     events = _run(tmp_path, system_prompt="base", skills=[skill])
-    [captured] = atif.effective(tmp_path)["skills"]
-    assert captured["name"] == "greet"
-    assert (tmp_path / captured["path"] / "SKILL.md").read_text() == skill["files"]["SKILL.md"]
+    [captured] = atif.meta(events["agent"])["skills"]
+    assert captured == {
+        "name": "greet",
+        "description": "Greet people.",
+        "source": "file:skills/0-greet",
+    }
+    assert (tmp_path / "skills/0-greet/SKILL.md").read_text() == skill["files"]["SKILL.md"]
     assert "Say hi." in seen[0][0][0].instructions
 
 
@@ -198,8 +203,7 @@ def test_rate_limit_ends_the_run(script, tmp_path: Path) -> None:
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "rate_limit"
     assert atif.meta(events)["stop_reason"] == "error"
 
@@ -232,7 +236,6 @@ def test_sigterm_stops_interrupted(script, tmp_path: Path) -> None:
 
     script(hang)
     events = _run(tmp_path, exit_code=130)
-    assert atif.meta(events)["complete"]
     assert atif.meta(events)["stop_reason"] == "interrupted"
 
 
@@ -252,8 +255,7 @@ def test_commissions_it_cannot_run_end_before_start(
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == code
     assert seen == []
 
@@ -264,8 +266,7 @@ def test_a_missing_env_credential_ends_before_start(tmp_path: Path) -> None:
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
 
 

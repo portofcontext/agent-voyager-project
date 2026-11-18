@@ -3,31 +3,28 @@ an adapter reports, and writes it once when the run ends."""
 
 import base64
 import hashlib
-import json
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 from urllib.parse import unquote, urlsplit
 
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, NonNegativeInt, ValidationError
 
 from avp._base import AVP_VERSION, TrajectorySink
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.trajectory import (
     Agent,
-    ContentPart,
+    Citation,
     ErrorCode,
     FinalMetrics,
     Metrics,
-    ObservationResult,
     Recording,
     StopReason,
-    ToolCall,
     Trajectory,
 )
 from avp.utils.preflight import check_commission
@@ -37,6 +34,7 @@ SCHEMA_VERSION = "ATIF-v1.8"
 ABANDONED_TEXT = "The run ended while the subagent was still running."
 UNRETURNED_TEXT = "The run ended before the tool returned."
 STOPPED_BEFORE_START_TEXT = "The run stopped before it started."
+_REASONING_SEPARATOR = "\n\n"
 _IMAGE_EXTENSIONS = {
     "image/png": "png",
     "image/jpeg": "jpg",
@@ -44,6 +42,79 @@ _IMAGE_EXTENSIONS = {
     "image/webp": "webp",
 }
 _SKILL_FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.?(?:/|$))(?!.*//)(?!.*/$)[^\\:\x00-\x1f]+\Z")
+
+
+# What an adapter reports
+
+
+class _Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class Text(_Input):
+    """Text from the model or a tool."""
+
+    type: Literal["text"] = "text"
+    text: str
+    citations: list[Citation] | None = None
+    """Sources the model cited in the text."""
+
+
+class Image(_Input):
+    """An image saved beside the Trajectory. Made by `Recorder.image`."""
+
+    type: Literal["image"] = "image"
+    path: str
+    media_type: Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+
+class Reasoning(_Input):
+    """A block of the model's reasoning: readable `text`, or `encrypted_content`
+    when the service returned it encrypted."""
+
+    type: Literal["reasoning"] = "reasoning"
+    text: str = ""
+    signature: str | None = None
+    """The service's token for passing the reasoning back to it."""
+    encrypted_content: str | None = None
+
+
+class Call(_Input):
+    """A tool call. `server_side` when the model service runs the tool and
+    returns its result in the same response, as a `ServerResult`."""
+
+    type: Literal["call"] = "call"
+    id: str
+    name: str
+    arguments: dict[str, Any]
+    server_side: bool = False
+
+
+class ServerResult(_Input):
+    """The result of a server-side `Call`, from the same response."""
+
+    type: Literal["server_result"] = "server_result"
+    call_id: str
+    content: str | list[Text | Image]
+    is_error: bool = False
+    structured_content: JsonValue = None
+
+
+Part = Annotated[Text | Image | Reasoning | Call | ServerResult, Field(discriminator="type")]
+"""One part of a model response, in the order the service returned it."""
+
+
+class Usage(_Input):
+    """One model response's usage. `prompt_tokens` includes cached and
+    cache-creation tokens; `completion_tokens` includes reasoning tokens.
+    Without `cost_usd`, the Recorder prices the response."""
+
+    prompt_tokens: NonNegativeInt
+    completion_tokens: NonNegativeInt
+    cached_tokens: NonNegativeInt | None = None
+    cache_creation_input_tokens: NonNegativeInt | None = None
+    reasoning_output_tokens: NonNegativeInt | None = None
+    cost_usd: float | None = None
 
 
 class RecorderError(Exception):
@@ -142,6 +213,51 @@ _TOTALS = (
 
 def _get(value: dict[str, Any], key: str, in_extra: bool) -> Any:
     return (value.get("extra", {}).get("avp", {}) if in_extra else value).get(key)
+
+
+def _tool_call(call: Call) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "tool_call_id": call.id,
+        "function_name": call.name,
+        "arguments": call.arguments,
+    }
+    if call.server_side:
+        data["extra"] = {"avp": {"server_side": True}}
+    return data
+
+
+def _reasoning(blocks: list[Reasoning]) -> tuple[str | None, list[dict[str, Any]]]:
+    """`reasoning_content` and `reasoning_metadata`. Offsets are left out when
+    one readable block is all of `reasoning_content`."""
+    readable = [b for b in blocks if b.text]
+    texts, metadata, start = [], [], 0
+    for block in blocks:
+        entry: dict[str, Any] = {}
+        if block.text:
+            if len(readable) > 1:
+                entry.update(start=start, end=start + len(block.text))
+            start += len(block.text) + len(_REASONING_SEPARATOR)
+            texts.append(block.text)
+        if block.signature is not None:
+            entry["signature"] = block.signature
+        if block.encrypted_content is not None:
+            entry["encrypted_content"] = block.encrypted_content
+        metadata.append(entry)
+    if not any(metadata):
+        metadata = []
+    return (_REASONING_SEPARATOR.join(texts) if texts else None), metadata
+
+
+def _metrics(usage: Usage) -> dict[str, Any]:
+    data = usage.model_dump(
+        exclude_none=True, exclude={"cache_creation_input_tokens", "reasoning_output_tokens"}
+    )
+    avp = usage.model_dump(
+        exclude_none=True, include={"cache_creation_input_tokens", "reasoning_output_tokens"}
+    )
+    if avp:
+        data["extra"] = {"avp": avp}
+    return data
 
 
 @dataclass
@@ -342,13 +458,7 @@ class Recorder:
             await self.subagent_stopped(invocation, "abandoned")
         for call_id, call in self._calls.items():
             if not call.returned:
-                await self.result(
-                    ObservationResult(
-                        source_call_id=call_id,
-                        content=UNRETURNED_TEXT,
-                        extra={"avp": {"is_error": True}},
-                    )
-                )
+                await self.result(call_id, UNRETURNED_TEXT, is_error=True)
         if running and reason == "converged":
             reason = "abandoned"
         self._root.stopped(reason, self._now())
@@ -365,78 +475,113 @@ class Recorder:
 
     # Model responses and tools
 
-    def image(self, data: bytes, media_type: str) -> ContentPart:
-        """An image content part. The image is written beside the Trajectory."""
+    def image(self, data: bytes, media_type: str) -> Image:
+        """An image part. The image is written beside the Trajectory."""
         if media_type not in _IMAGE_EXTENSIONS:
             raise ValueError(f"ATIF does not support image media type {media_type!r}")
         name = f"images/{hashlib.sha256(data).hexdigest()}.{_IMAGE_EXTENSIONS[media_type]}"
         self._assets[name] = data
-        return ContentPart.model_validate(
-            {"type": "image", "source": {"media_type": media_type, "path": name}}
-        )
+        return Image.model_validate({"path": name, "media_type": media_type})
 
-    def image_base64(self, data: str, media_type: str) -> ContentPart:
+    def image_base64(self, data: str, media_type: str) -> Image:
         """`image`, for base64 data as model services return it."""
         return self.image(base64.b64decode(data, validate=True), media_type)
 
     async def step(
         self,
-        message: str | list[ContentPart],
+        parts: Sequence[Part],
         *,
-        reasoning_content: str | None = None,
-        tool_calls: list[ToolCall] | None = None,
-        observation_results: list[ObservationResult] | None = None,
-        metrics: Metrics | None = None,
+        usage: Usage | None = None,
         model_name: str | None = None,
-        extra: dict[str, Any] | None = None,
+        finish_reasons: list[str] | None = None,
         subagent: str | None = None,
     ) -> None:
-        """Record one complete model response as an agent step.
-
-        `observation_results` are results the model service returned in the
-        response, for its server-side tools. `extra` is the step's ATIF
-        `extra`; `extra.avp.duration_ms` defaults to the time since the previous
-        step or result. Without `metrics.cost_usd`, the Recorder prices the
-        response from models.dev."""
+        """Record one complete model response as an agent step. `parts` are its
+        text, images, reasoning, and tool calls, in order. `model_name` is the
+        model that answered, when the service reports it."""
         self._check("step")
         document = self._scope(subagent)
-        calls = [_json(c) for c in tool_calls or []]
-        ids = [c["tool_call_id"] for c in calls]
+        calls = [p for p in parts if isinstance(p, Call)]
+        ids = [c.id for c in calls]
         repeated = next((i for i in ids if i in self._calls or ids.count(i) > 1), None)
         if repeated is not None:
-            raise RecorderError(f"step: tool_call_id {repeated!r} was already used")
-        results = [_json(r) for r in observation_results or []]
-        unmatched = next((r for r in results if r.get("source_call_id") not in ids), None)
+            raise RecorderError(f"step: tool call {repeated!r} was already used")
+        server = {c.id for c in calls if c.server_side}
+        results = [p for p in parts if isinstance(p, ServerResult)]
+        unmatched = next((r for r in results if r.call_id not in server), None)
         if unmatched is not None:
-            raise RecorderError(
-                f"step: result for unknown call {unmatched.get('source_call_id')!r}"
-            )
+            raise RecorderError(f"step: result for unknown server-side call {unmatched.call_id!r}")
+        message, message_metadata = self._content([p for p in parts if isinstance(p, Text | Image)])
+        reasoning, reasoning_metadata = _reasoning([p for p in parts if isinstance(p, Reasoning)])
         now = self._now()
-        step = document.step(
-            now, "agent", message if isinstance(message, str) else [_json(p) for p in message]
-        )
+        step = document.step(now, "agent", message)
         agent_model = document.data["agent"].get("model_name")
         if model_name is not None and model_name != agent_model:
             step["model_name"] = model_name
-        if reasoning_content is not None:
-            step["reasoning_content"] = reasoning_content
+        if reasoning is not None:
+            step["reasoning_content"] = reasoning
         if calls:
-            step["tool_calls"] = calls
+            step["tool_calls"] = [_tool_call(c) for c in calls]
         if results:
-            step["observation"] = {"results": results}
+            step["observation"] = {"results": [self._result(r) for r in results]}
         step["llm_call_count"] = 1
-        if extra:
-            step["extra"] = json.loads(json.dumps(extra))
         avp = _avp(step)
-        if "duration_ms" not in avp:
-            avp["duration_ms"] = _ms(document.last or now, now)
-        if metrics is not None:
-            step["metrics"] = self._priced(_json(metrics), document, model_name or agent_model)
+        avp["duration_ms"] = _ms(document.last or now, now)
+        if finish_reasons:
+            avp["finish_reasons"] = finish_reasons
+        if message_metadata:
+            avp["message_metadata"] = message_metadata
+        if reasoning_metadata:
+            avp["reasoning_metadata"] = reasoning_metadata
+        if usage is not None:
+            step["metrics"] = self._priced(_metrics(usage), document, model_name or agent_model)
         document.last = now
         for call in calls:
-            server_side = call.get("extra", {}).get("avp", {}).get("server_side")
-            if not server_side:
-                self._calls[call["tool_call_id"]] = _Call(document, step, now)
+            if not call.server_side:
+                self._calls[call.id] = _Call(document, step, now)
+
+    def _content(
+        self, parts: list[Text | Image]
+    ) -> tuple[str | list[dict[str, Any]], list[dict[str, Any]]]:
+        """ATIF content for text and image parts, and the metadata of their
+        citations. One text part is a string."""
+        metadata = [
+            {"part_index": i, "citations": [_json(c) for c in p.citations]}
+            for i, p in enumerate(parts)
+            if isinstance(p, Text) and p.citations
+        ]
+        if not parts:
+            return "", metadata
+        if len(parts) == 1 and isinstance(parts[0], Text):
+            return parts[0].text, metadata
+        content = []
+        for part in parts:
+            if isinstance(part, Text):
+                content.append({"type": "text", "text": part.text})
+            else:
+                if part.path not in self._assets:
+                    raise RecorderError(f"image {part.path!r} was not made by this Recorder")
+                content.append(
+                    {"type": "image", "source": {"media_type": part.media_type, "path": part.path}}
+                )
+        return content, metadata
+
+    def _result(self, result: ServerResult) -> dict[str, Any]:
+        content, metadata = (
+            (result.content, [])
+            if isinstance(result.content, str)
+            else self._content(list(result.content))
+        )
+        data: dict[str, Any] = {"source_call_id": result.call_id, "content": content}
+        avp = {
+            "is_error": result.is_error or None,
+            "structured_content": result.structured_content,
+            "content_metadata": metadata or None,
+        }
+        avp = {k: v for k, v in avp.items() if v is not None}
+        if avp:
+            data["extra"] = {"avp": avp}
+        return data
 
     def _priced(
         self, metrics: dict[str, Any], document: _Document, model: str | None
@@ -458,23 +603,35 @@ class Recorder:
             _avp(metrics)["cost_source"] = "computed"
         return metrics
 
-    async def result(self, result: ObservationResult) -> None:
-        """Record a tool call's result on the step that holds the call.
-        `finished_at` and `duration_ms` default to now and the time since the
-        call. A call that started a subagent is an error exactly when the
-        subagent didn't converge."""
+    async def result(
+        self,
+        call_id: str,
+        content: str | list[Text | Image],
+        *,
+        is_error: bool = False,
+        structured_content: JsonValue = None,
+    ) -> None:
+        """Record a tool call's result on the step that holds the call. A call
+        that started a subagent is an error exactly when the subagent didn't
+        converge."""
         self._check("result")
-        data = _json(result)
-        call_id = data.get("source_call_id")
-        call = self._calls.get(call_id) if call_id is not None else None
+        call = self._calls.get(call_id)
         if call is None or call.returned:
             state = "unknown" if call is None else "already returned"
             raise RecorderError(f"result: tool call {call_id!r} is {state}")
+        data = self._result(
+            ServerResult(
+                call_id=call_id,
+                content=content,
+                is_error=is_error,
+                structured_content=structured_content,
+            )
+        )
         call.returned = True
         now = self._now()
         avp = _avp(data)
-        avp.setdefault("finished_at", now.isoformat())
-        avp.setdefault("duration_ms", _ms(call.time, now))
+        avp["finished_at"] = now.isoformat()
+        avp["duration_ms"] = _ms(call.time, now)
         child = self._subagents.get(call_id)
         if child is not None:
             if child.stop_reason is not None:

@@ -11,14 +11,11 @@ from pydantic import ValidationError
 
 from avp.agent_cli import trajectory_sink
 from avp.descriptor import AgentDescriptor
-from avp.recorder import Recorder
+from avp.recorder import Call, Recorder, Text, Usage
 from avp.trajectory import (
     Agent,
     FinalMetrics,
-    Metrics,
-    ObservationResult,
     Recording,
-    ToolCall,
     avp_metadata,
     final_output,
     parse_trajectory,
@@ -75,10 +72,8 @@ def test_upstream_terminus_document_reads_without_avp_metadata():
 def test_images_are_files_beside_the_trajectory(tmp_path):
     async def steps(rec):
         image = rec.image(b"image fixture", "image/png")
-        await rec.step(
-            [image], tool_calls=[ToolCall(tool_call_id="c", function_name="look", arguments={})]
-        )
-        await rec.result(ObservationResult(source_call_id="c", content=[image]))
+        await rec.step([image, Call(id="c", name="look", arguments={})])
+        await rec.result("c", [image])
         await rec.stop("converged", {"ok": True})
 
     recording = record(steps)
@@ -96,20 +91,19 @@ def test_images_are_files_beside_the_trajectory(tmp_path):
 def test_reported_subagent_totals_count_only_when_its_responses_are_hidden(hidden):
     async def steps(rec):
         await rec.step(
-            "",
-            tool_calls=[ToolCall(tool_call_id="child", function_name="delegate", arguments={})],
-            metrics=Metrics(prompt_tokens=10, completion_tokens=2, cost_usd=0.1),
+            [Call(id="child", name="delegate", arguments={})],
+            usage=Usage(prompt_tokens=10, completion_tokens=2, cost_usd=0.1),
         )
         await rec.subagent_started("child", "helper", "go")
         if not hidden:
             await rec.step(
-                "done",
+                [Text(text="done")],
                 subagent="child",
-                metrics=Metrics(prompt_tokens=20, completion_tokens=3, cost_usd=0.2),
+                usage=Usage(prompt_tokens=20, completion_tokens=3, cost_usd=0.2),
             )
         totals = FinalMetrics(total_prompt_tokens=20, total_completion_tokens=3, total_cost_usd=0.2)
         await rec.subagent_stopped("child", final_metrics=totals)
-        await rec.result(ObservationResult(source_call_id="child", content="done"))
+        await rec.result("child", "done")
         await rec.stop("converged")
 
     root = record(steps).trajectory
@@ -175,22 +169,21 @@ def test_upstream_semantics(case):
 
 
 def test_nested_subagents_are_referenced_by_their_parents_and_counted_once():
-    metrics = Metrics(prompt_tokens=10, completion_tokens=2)
+    usage = Usage(prompt_tokens=10, completion_tokens=2)
 
     async def steps(rec):
-        delegate = ToolCall(tool_call_id="outer", function_name="delegate", arguments={})
-        await rec.step("", tool_calls=[delegate], metrics=metrics)
+        await rec.step([Call(id="outer", name="delegate", arguments={})], usage=usage)
         await rec.subagent_started("outer", "researcher", "look")
-        inner = ToolCall(tool_call_id="inner", function_name="delegate", arguments={})
-        await rec.step("", tool_calls=[inner], metrics=metrics, subagent="outer")
+        inner = Call(id="inner", name="delegate", arguments={})
+        await rec.step([inner], usage=usage, subagent="outer")
         await rec.subagent_started("inner", "helper", "look closer")
-        await rec.step("inner done", metrics=metrics, subagent="inner")
+        await rec.step([Text(text="inner done")], usage=usage, subagent="inner")
         await rec.subagent_stopped("inner")
-        await rec.result(ObservationResult(source_call_id="inner", content="inner done"))
-        await rec.step("outer done", metrics=metrics, subagent="outer")
+        await rec.result("inner", "inner done")
+        await rec.step([Text(text="outer done")], usage=usage, subagent="outer")
         await rec.subagent_stopped("outer")
-        await rec.result(ObservationResult(source_call_id="outer", content="outer done"))
-        await rec.step("done", metrics=metrics)
+        await rec.result("outer", "outer done")
+        await rec.step([Text(text="done")], usage=usage)
         await rec.stop("converged", "done")
 
     root = record(steps).trajectory

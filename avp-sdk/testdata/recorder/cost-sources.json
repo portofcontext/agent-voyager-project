@@ -52,8 +52,13 @@
     {
       "t": 100,
       "call": "step",
-      "message": "a",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "a"
+        }
+      ],
+      "usage": {
         "prompt_tokens": 100,
         "completion_tokens": 10,
         "cost_usd": 0.5
@@ -62,42 +67,58 @@
     {
       "t": 200,
       "call": "step",
-      "message": "b",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "b"
+        }
+      ],
+      "usage": {
         "prompt_tokens": 1000,
         "completion_tokens": 100,
         "cached_tokens": 600,
-        "extra": {
-          "avp": {
-            "cache_creation_input_tokens": 200
-          }
-        }
+        "cache_creation_input_tokens": 200
       }
     },
     {
       "t": 300,
       "call": "step",
-      "message": "c",
-      "model_name": "claude-test-1-20260101",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "c"
+        }
+      ],
+      "usage": {
         "prompt_tokens": 1000,
         "completion_tokens": 100
-      }
+      },
+      "model_name": "claude-test-1-20260101"
     },
     {
       "t": 400,
       "call": "step",
-      "message": "d",
-      "model_name": "claude-unlisted",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "d"
+        }
+      ],
+      "usage": {
         "prompt_tokens": 1000,
         "completion_tokens": 100
-      }
+      },
+      "model_name": "claude-unlisted"
     },
     {
       "t": 500,
       "call": "step",
-      "message": "e"
+      "parts": [
+        {
+          "type": "text",
+          "text": "e"
+        }
+      ]
     },
     {
       "t": 600,

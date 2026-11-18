@@ -52,17 +52,17 @@
     {
       "t": 100,
       "call": "step",
-      "message": "",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "task-1",
-          "function_name": "Task",
+          "type": "call",
+          "id": "task-1",
+          "name": "Task",
           "arguments": {
             "prompt": "Look."
           }
         }
       ],
-      "metrics": {
+      "usage": {
         "prompt_tokens": 100,
         "completion_tokens": 10
       }
@@ -77,39 +77,42 @@
     {
       "t": 300,
       "call": "step",
-      "subagent": "task-1",
-      "message": "",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "c1",
-          "function_name": "read_file",
+          "type": "call",
+          "id": "c1",
+          "name": "read_file",
           "arguments": {
             "path": "a"
           }
         }
       ],
-      "metrics": {
+      "usage": {
         "prompt_tokens": 50,
         "completion_tokens": 5
-      }
+      },
+      "subagent": "task-1"
     },
     {
       "t": 350,
       "call": "result",
-      "result": {
-        "source_call_id": "c1",
-        "content": "contents"
-      }
+      "call_id": "c1",
+      "content": "contents"
     },
     {
       "t": 500,
       "call": "step",
-      "subagent": "task-1",
-      "message": "Found it.",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "Found it."
+        }
+      ],
+      "usage": {
         "prompt_tokens": 80,
         "completion_tokens": 8
-      }
+      },
+      "subagent": "task-1"
     },
     {
       "t": 510,
@@ -119,16 +122,19 @@
     {
       "t": 520,
       "call": "result",
-      "result": {
-        "source_call_id": "task-1",
-        "content": "Found it."
-      }
+      "call_id": "task-1",
+      "content": "Found it."
     },
     {
       "t": 700,
       "call": "step",
-      "message": "All done.",
-      "metrics": {
+      "parts": [
+        {
+          "type": "text",
+          "text": "All done."
+        }
+      ],
+      "usage": {
         "prompt_tokens": 200,
         "completion_tokens": 20
       }

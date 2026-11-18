@@ -20,7 +20,7 @@ def pytest_runtest_teardown(item):
             identity = f"{item.path}:{item.nodeid}:{name}"
             target = Path(destination) / hashlib.sha256(identity.encode()).hexdigest()
             target.mkdir()
-            for name in ("commission.json", "descriptor.json", "agent-start.json"):
+            for name in ("commission.json", "descriptor.json"):
                 if (source.parent / name).exists():
                     shutil.copyfile(source.parent / name, target / name)
             for directory in ("images", "skills"):

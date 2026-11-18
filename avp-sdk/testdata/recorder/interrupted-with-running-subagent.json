@@ -52,11 +52,11 @@
     {
       "t": 100,
       "call": "step",
-      "message": "",
-      "tool_calls": [
+      "parts": [
         {
-          "tool_call_id": "task-1",
-          "function_name": "Task",
+          "type": "call",
+          "id": "task-1",
+          "name": "Task",
           "arguments": {}
         }
       ]

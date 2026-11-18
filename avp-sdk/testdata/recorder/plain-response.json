@@ -53,40 +53,31 @@
     {
       "t": 1201,
       "call": "step",
-      "message": "Done.",
-      "reasoning_content": "The task is small.",
-      "metrics": {
-        "prompt_tokens": 120,
-        "completion_tokens": 30,
-        "extra": {
-          "avp": {
-            "reasoning_output_tokens": 10
-          }
-        }
-      },
-      "extra": {
-        "avp": {
-          "finish_reasons": [
-            "end_turn"
-          ],
-          "message_metadata": [
+      "parts": [
+        {
+          "type": "reasoning",
+          "text": "The task is small.",
+          "signature": "sig-1"
+        },
+        {
+          "type": "text",
+          "text": "Done.",
+          "citations": [
             {
-              "part_index": 0,
-              "citations": [
-                {
-                  "type": "url_citation",
-                  "source_url": "https://example.com"
-                }
-              ]
-            }
-          ],
-          "reasoning_metadata": [
-            {
-              "signature": "sig-1"
+              "type": "url_citation",
+              "source_url": "https://example.com"
             }
           ]
         }
-      }
+      ],
+      "usage": {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "reasoning_output_tokens": 10
+      },
+      "finish_reasons": [
+        "end_turn"
+      ]
     },
     {
       "t": 1300,
