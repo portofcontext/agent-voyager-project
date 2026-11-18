@@ -207,12 +207,12 @@ def test_native_responses_pair_tool_results_and_keep_usage_deltas(script, tmp_pa
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (2, 1, 0, True)
+        atif.meta(events)["stop_reason"],
+    ) == (2, 1, 0, "converged")
     responses = atif.responses(events)
     assert [item["metrics"]["prompt_tokens"] for item in responses] == [10, 20]
     assert responses[0]["metrics"]["cached_tokens"] == 3
-    assert atif.mcp_server(tmp_path, atif.calls(events)[0]) == "echo"
+    assert atif.mcp_server(events, atif.calls(events)[0]) == "echo"
     assert atif.meta(atif.results(events)[0])["is_error"] is True
     assert {
         "reason": atif.meta(events).get("stop_reason"),
@@ -238,8 +238,8 @@ def test_refusal_uses_sdk_prelude_before_starting_codex(script, tmp_path, fields
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+        atif.meta(events)["stop_reason"],
+    ) == (0, 0, 1, "error")
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "invalid_commission"
     assert message in atif.errors(events)[-1]["message"]
     assert not script.calls
@@ -298,7 +298,7 @@ def test_missing_env_secret_fails_without_starting_codex(script, tmp_path):
     assert not script.calls
 
 
-def test_disabled_tool_call_is_reported_as_failure(script, tmp_path):
+def test_a_call_to_a_disabled_tool_records_codexs_refusal(script, tmp_path):
     script.events = [
         raw(
             {
@@ -309,11 +309,40 @@ def test_disabled_tool_call_is_reported_as_failure(script, tmp_path):
             }
         ),
         boundary(),
+        raw(
+            {
+                "type": "function_call_output",
+                "call_id": "call",
+                "output": "unsupported call: exec_command",
+            }
+        ),
+        text(),
+        boundary(),
         completed(),
     ]
-    _, events = run_cli(tmp_path, raises=True, agents={"avp-codex": {"enabled_tools": []}})
-    assert atif.meta(events)["stop_reason"] == "error"
-    assert "disabled tool" in atif.errors(events)[-1]["message"]
+    code, events = run_cli(tmp_path, agents={"avp-codex": {"enabled_tools": []}})
+    assert code == 0
+    [returned] = atif.results(events)
+    assert returned["content"] == "unsupported call: exec_command"
+    assert (len(atif.responses(events)), atif.meta(events)["stop_reason"]) == (2, "converged")
+
+
+def test_refusal_text_stops_the_run_as_refused(script, tmp_path):
+    script.events = [
+        raw(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "refusal", "refusal": "I can't help with that."}],
+            }
+        ),
+        boundary(),
+        completed(),
+    ]
+    _, events = run_cli(tmp_path)
+    [step] = atif.responses(events)
+    assert atif.meta(step)["message_metadata"] == [{"part_index": 0, "refusal": True}]
+    assert atif.meta(events)["stop_reason"] == "refused"
 
 
 def test_ping_and_describe_are_lazy_and_match_the_pinned_catalog(tmp_path):

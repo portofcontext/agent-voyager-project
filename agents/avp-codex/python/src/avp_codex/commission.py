@@ -24,7 +24,7 @@ def env_secret(secret: EnvSecret) -> str:
 def refusal(commission: Commission, plan: RunPlan) -> str | None:
     if commission.model.provider != "openai":
         return f"{AGENT_NAME} runs models at openai through the Responses API"
-    allowed = {tool.name for tool in plan.started.tools or []}
+    allowed = set(tool_names(plan))
     settings = (commission.agents or {}).get(AGENT_NAME)
     if (
         settings
@@ -58,7 +58,7 @@ def configuration(commission: Commission, plan: RunPlan) -> tuple[tuple[str, ...
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise MissingSecret("the agent's environment has no OPENAI_API_KEY")
-    allowed = {tool.name for tool in plan.started.tools or []}
+    allowed = set(tool_names(plan))
     servers = {}
     for server in commission.mcp_servers or []:
         entry = {"default_tools_approval_mode": "approve"}
@@ -124,6 +124,11 @@ def configuration(commission: Commission, plan: RunPlan) -> tuple[tuple[str, ...
     return tuple(f"{name}={toml(value)}" for name, value in config.items()), {
         "AVP_CODEX_API_KEY": key
     }
+
+
+def tool_names(plan: RunPlan) -> list[str]:
+    """The built-in tools the run uses, in the Descriptor's order."""
+    return [d["function"]["name"] for d in plan.agent.tool_definitions or []]
 
 
 def skill_instructions(commission: Commission) -> str | None:

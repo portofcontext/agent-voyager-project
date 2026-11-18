@@ -15,7 +15,7 @@ from avp.agent_cli import TrajectorySink
 from avp.commission import Commission
 from avp.descriptor import Tool
 from avp.recorder import Recorder
-from avp.reports import StopReason
+from avp.trajectory import StopReason
 from avp.utils.run_plan import plan_run
 from avp_codex import commission as cm
 from avp_codex import descriptor, translate
@@ -114,11 +114,11 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
                 "config": {"skills.config": disabled},
                 "allowProviderModelFallback": False,
             }
-            names = [tool.name for tool in plan.started.tools or []]
+            names = cm.tool_names(plan)
             if not set(names) & descriptor.ENVIRONMENT_TOOLS:
                 params["environments"] = []
-            if commission.system_prompt is not None:
-                params["baseInstructions"] = commission.system_prompt
+            if plan.system_prompt is not None:
+                params["baseInstructions"] = plan.system_prompt
             if instructions := cm.skill_instructions(commission):
                 params["developerInstructions"] = instructions
             started = await server.thread_start(params)
@@ -145,24 +145,23 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
                 names = [name for name in names if name != "tool_search"]
             if commission.model.id == "gpt-5-mini":
                 names = [name for name in names if name != "apply_patch"]
-            tools = descriptor.tools(names, commission.model.id) + managed
-            servers = [
-                entry.model_copy(update={"status": "connected"})
-                for entry in plan.started.mcp_servers or []
-            ]
+            # Codex shows each model its own built-in tools and definitions.
+            shown = plan.model_copy(
+                update={"agent": plan.agent.model_copy(update={"tool_definitions": None})}
+            )
             await rec.start(
-                plan.started.model_copy(
-                    update={"tools": tools or None, "mcp_servers": servers or None}
-                )
+                shown.connected(descriptor.tools(names, commission.model.id) + managed),
+                plan.prompt,
+                system_prompt=plan.system_prompt,
             )
             turn_params: dict[str, Any] = {
                 "threadId": thread,
-                "input": [{"type": "text", "text": commission.prompt}],
+                "input": [{"type": "text", "text": plan.prompt}],
             }
             if commission.output_schema is not None:
                 turn_params["outputSchema"] = commission.output_schema
-            turn = await server.turn_start(thread, commission.prompt, params=turn_params)
-            responses = translate.Responses(rec, commission.model.id, plan.turned_off.tools)
+            turn = await server.turn_start(thread, plan.prompt, params=turn_params)
+            responses = translate.Responses(rec)
             terminal_error = False
             try:
                 while True:

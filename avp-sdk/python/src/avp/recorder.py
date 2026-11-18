@@ -57,6 +57,8 @@ class Text(_Input):
     text: str
     citations: list[Citation] | None = None
     """Sources the model cited in the text."""
+    refusal: bool = False
+    """The text is the model declining the task."""
 
 
 class Image(_Input):
@@ -558,13 +560,17 @@ class Recorder:
     def _content(
         self, parts: list[Text | Image]
     ) -> tuple[str | list[dict[str, Any]], list[dict[str, Any]]]:
-        """ATIF content for text and image parts, and the metadata of their
-        citations. One text part is a string."""
-        metadata = [
-            {"part_index": i, "citations": [_json(c) for c in p.citations]}
-            for i, p in enumerate(parts)
-            if isinstance(p, Text) and p.citations
-        ]
+        """ATIF content for text and image parts, and their metadata. One text
+        part is a string."""
+        metadata = []
+        for i, part in enumerate(parts):
+            entry: dict[str, Any] = {}
+            if isinstance(part, Text) and part.citations:
+                entry["citations"] = [_json(c) for c in part.citations]
+            if isinstance(part, Text) and part.refusal:
+                entry["refusal"] = True
+            if entry:
+                metadata.append({"part_index": i, **entry})
         if not parts:
             return "", metadata
         if len(parts) == 1 and isinstance(parts[0], Text):
