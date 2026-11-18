@@ -211,9 +211,13 @@ Image content uses ATIF references to files beside the Trajectory. The agent wri
 
 The agent MUST record each error as a system step with an `error_code`. An error that does not end the run, for example a failed retry, is recorded and the run goes on. When an error ends the run, the agent writes the Trajectory with `stop_reason` set to `error`.
 
-### 4.3 Inputs are recorded in standard fields
+### 4.3 The run's inputs are recorded
 
-The agent MUST record the model in `agent.model_name`, the tools the model sees in `agent.tool_definitions`, the prompt as the first `user` step, and the system prompt, when it knows it, as a `system` step. The Trajectory MUST NOT contain a secret value from the Commission.
+The [agent](#32-agent) MUST list what the run can use: the built-in items the Commission doesn't turn off, plus the items it adds. `mcp_servers` lists every server the agent tried to connect to, following the Descriptor's [rules for MCP servers](./agent-descriptor.md#44-tools-from-mcp-servers). The prompt MUST be the first `user` step.
+
+When the agent knows the system prompt, it MUST be the first step: a `system` step without an `error_code`. An empty `message` means the Commission set an empty system prompt. Every `system` step that records an error MUST have an `error_code`.
+
+The Trajectory MUST NOT contain a secret value from the Commission.
 
 ### 4.4 One agent step per model response
 
