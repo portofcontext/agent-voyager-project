@@ -32,18 +32,34 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
           "description": "Read a file in the workspace.",
           "parameters": {
             "type": "object",
-            "properties": {
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "path"
-            ]
+            "properties": { "path": { "type": "string" } },
+            "required": ["path"]
           }
         }
       }
-    ]
+    ],
+    "extra": {
+      "avp": {
+        "descriptor": {
+          "avp_version": "0.1",
+          "agent_name": "acme-code-agent",
+          "agent_version": "1.2.0",
+          "tools": [
+            {
+              "name": "read_file",
+              "description": "Read a file in the workspace.",
+              "inputSchema": {
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"]
+              }
+            },
+            { "name": "bash", "inputSchema": { "type": "object" } }
+          ]
+        },
+        "model": { "provider": "anthropic" }
+      }
+    }
   },
   "steps": [
     {
@@ -62,25 +78,33 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
         {
           "tool_call_id": "call-1",
           "function_name": "read_file",
-          "arguments": {
-            "path": "src/login.py"
-          }
+          "arguments": { "path": "src/login.py" }
         }
       ],
       "observation": {
         "results": [
           {
             "source_call_id": "call-1",
-            "content": "def login(): ..."
+            "content": "def login(): ...",
+            "extra": {
+              "avp": {
+                "duration_ms": 40,
+                "finished_at": "2026-01-01T00:00:01.040Z"
+              }
+            }
           }
         ]
       },
       "metrics": {
         "prompt_tokens": 1200,
         "completion_tokens": 40,
-        "cost_usd": 0.0042
+        "cost_usd": 0.0042,
+        "extra": { "avp": { "cost_source": "reported" } }
       },
-      "llm_call_count": 1
+      "llm_call_count": 1,
+      "extra": {
+        "avp": { "duration_ms": 900, "finish_reasons": ["tool_use"] }
+      }
     },
     {
       "step_id": 3,
@@ -92,18 +116,46 @@ A Trajectory records what one run did, not what the [Commission](./commission.md
         "prompt_tokens": 1300,
         "completion_tokens": 12
       },
-      "llm_call_count": 1
+      "llm_call_count": 1,
+      "extra": {
+        "avp": { "duration_ms": 850, "finish_reasons": ["end_turn"] }
+      }
     }
   ],
   "final_metrics": {
     "total_prompt_tokens": 2500,
     "total_completion_tokens": 52,
-    "total_steps": 3
+    "total_cost_usd": 0.0042,
+    "total_steps": 3,
+    "extra": {
+      "avp": { "total_responses": 2, "cost_complete": false }
+    }
+  },
+  "extra": {
+    "avp": {
+      "avp_version": "0.1",
+      "commission": {
+        "avp_version": "0.1",
+        "run_id": "fix-login-bug-0412",
+        "prompt": "Fix the login timeout bug described in issue #212.",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-sonnet-4-6",
+          "credential": { "proxy": "anthropic-key" }
+        },
+        "agents": {
+          "acme-code-agent": { "version": "1.2.0", "enabled_tools": ["read_file"] }
+        }
+      },
+      "started_at": "2026-01-01T00:00:00Z",
+      "stopped_at": "2026-01-01T00:00:02Z",
+      "stop_reason": "converged"
+    }
   }
 }
 ```
 
-The run's `session_id` is the Commission's `run_id`. The second response has no `cost_usd`, so its cost is unknown, and `final_metrics` leaves the total cost out.
+The run's `session_id` is the Commission's `run_id`. The Commission turns off the Descriptor's `bash` tool, so `tool_definitions` lists only `read_file`. Neither sets a system prompt, so the Trajectory has no `system` step. The second response has no `cost_usd`, so its cost is unknown: `total_cost_usd` counts only the first response, and `cost_complete` is `false`.
 
 ## 3. Reference
 
