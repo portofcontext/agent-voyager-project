@@ -198,9 +198,16 @@ At `steps[].metrics.extra.avp`. A step's `metrics` are the usage of that one mod
 | `reasoning_output_tokens` | integer | No | The output tokens the model spent on reasoning. Included in `completion_tokens`. |
 | `cost_source` | string | Yes, when `cost_usd` is present | Where `cost_usd` comes from: `reported` by the service or the agent's runtime, or `computed` from the token counts and [models.dev](https://models.dev) prices. |
 
-### 3.7 Final metrics and subagent references
+### 3.7 Final metrics
 
-TBD.
+At `final_metrics.extra.avp`, on the root trajectory and on each subagent trajectory. Totals count the trajectory and every subagent trajectory inside it, each once. `subagent_trajectory_ref` has no AVP fields.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `total_cache_creation_input_tokens` | integer | No | The total of [`cache_creation_input_tokens`](#36-metrics). |
+| `total_reasoning_output_tokens` | integer | No | The total of [`reasoning_output_tokens`](#36-metrics). |
+| `total_responses` | integer | No | How many model responses were made. Differs from `total_steps`, which also counts system and user steps. |
+| `cost_complete` | boolean | No | `false` when `total_cost_usd` leaves out responses whose cost is unknown, so the real cost is higher. Absent means the total is complete. |
 
 ### 3.8 Stop reason
 
@@ -256,7 +263,7 @@ Each step's `metrics` MUST be that response's own usage, never a running total. 
 
 When the service or the agent's runtime reports a response's cost, the agent MUST use it, with `cost_source` `reported`. Otherwise it prices the response from the models.dev entry for the provider and the step's `model_name`, with `cost_source` `computed`, so a reader with the same prices gets the same cost. When models.dev doesn't list the model, `cost_usd` is left out.
 
-`final_metrics` MUST count every subagent trajectory, including nested ones, once. When a subagent reports only its total, the agent MAY record that total in the subagent's metrics, and MUST NOT also count the subagent's responses.
+`final_metrics` MUST count every subagent trajectory, including nested ones, once. When the runtime reports only a subagent's totals, not its responses, the agent records them in that subagent trajectory's `final_metrics`.
 
 ### 4.7 Every tool call gets a result
 
@@ -265,6 +272,8 @@ Each tool call's result MUST be an observation result on the step that holds the
 ### 4.8 Subagents have their own trajectories
 
 Each subagent the run starts MUST have its own trajectory in `subagent_trajectories`, with a stable `trajectory_id`, and the observation of the call that started it MUST reference it in `subagent_trajectory_ref`. The subagent's trajectory records its own responses and tool calls. Nested subagents follow the same rule. The agent MUST NOT invent responses its runtime does not show it.
+
+The result of the call that started a subagent MUST have `is_error` set to `true` exactly when the subagent's `stop_reason` isn't `converged`.
 
 If the run ends while a subagent is still running, that subagent's trajectory gets `stop_reason` `abandoned`, and the run's `stop_reason` MUST NOT be `converged`.
 
