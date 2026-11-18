@@ -171,7 +171,11 @@ At `steps[].extra.avp`. The step's `model_name` is the model that produced the r
 
 ### 3.4 Tool call
 
-TBD.
+At `steps[].tool_calls[].extra.avp`. A call's MCP server is in `agent.extra.avp.tools`, under the call's `function_name`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `server_side` | boolean | No | `true` when the model service ran the tool, for example web search, not the agent. |
 
 ### 3.5 Observation result
 
