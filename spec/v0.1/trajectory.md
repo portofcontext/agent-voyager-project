@@ -190,7 +190,13 @@ At `steps[].observation.results[].extra.avp`.
 
 ### 3.6 Metrics
 
-TBD.
+At `steps[].metrics.extra.avp`. A step's `metrics` are the usage of that one model response.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cache_creation_input_tokens` | integer | No | The input tokens written to the cache. Included in `prompt_tokens`. |
+| `reasoning_output_tokens` | integer | No | The output tokens the model spent on reasoning. Included in `completion_tokens`. |
+| `cost_source` | string | Yes, when `cost_usd` is present | Where `cost_usd` comes from: `reported` by the service or the agent's runtime, or `computed` from the token counts and [models.dev](https://models.dev) prices. |
 
 ### 3.7 Final metrics and subagent references
 
@@ -246,7 +252,9 @@ When the agent [refuses the Commission](./commission.md#51-the-agent-checks-the-
 
 ### 4.6 Usage is per response
 
-Each step's `metrics` MUST be that response's own usage, never a running total. Cached input counts in `prompt_tokens`, and reasoning output counts in `completion_tokens`. Usage or cost the agent does not know MUST be left out, not set to zero.
+Each step's `metrics` MUST be that response's own usage, never a running total. Cached input counts in `prompt_tokens`, and reasoning output counts in `completion_tokens`. Usage or cost the agent does not know MUST be left out, not set to zero. `cached_tokens` plus `cache_creation_input_tokens` MUST NOT exceed `prompt_tokens`.
+
+When the service or the agent's runtime reports a response's cost, the agent MUST use it, with `cost_source` `reported`. Otherwise it prices the response from the models.dev entry for the provider and the step's `model_name`, with `cost_source` `computed`, so a reader with the same prices gets the same cost. When models.dev doesn't list the model, `cost_usd` is left out.
 
 `final_metrics` MUST count every subagent trajectory, including nested ones, once. When a subagent reports only its total, the agent MAY record that total in the subagent's metrics, and MUST NOT also count the subagent's responses.
 
