@@ -12,7 +12,7 @@ A Trajectory is an [ATIF v1.8](https://github.com/harbor-framework/harbor/blob/9
 
 This spec defines the `extra.avp` fields, the rules an agent follows when it writes a Trajectory, and the rules a reader follows. [Out of scope](#6-out-of-scope) lists what it leaves to implementations.
 
-A Trajectory records what one run did, not what the [Commission](./commission.md) asked for or the [Agent Descriptor](./agent-descriptor.md) offered. [Agent Start](agent-start.md) records the resolved configuration used by the run.
+A Trajectory records what one run did, not what the [Commission](./commission.md) asked for or the [Agent Descriptor](./agent-descriptor.md) offered.
 
 ## 2. Example
 

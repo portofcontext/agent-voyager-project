@@ -13,9 +13,8 @@ runtime owns model calls, tools, and its loop. Its adapter records native report
 into ATIF and writes one document when the run ends.
 
 The Descriptor lists built-in tools, skills, and subagents before the run. The
-Commission selects and configures them. Agent Start records the resolved
-configuration exposed by the runtime, including full tool definitions and paths to captured skill directories. The ATIF
-trajectory records what the run actually did.
+Commission selects and configures them. The ATIF trajectory records the
+configuration the run used and what the run did.
 
 ## Contracts
 
@@ -23,8 +22,7 @@ trajectory records what the run actually did.
 |---|---|---|
 | [Commission](./commission.md) | The task the supervisor sends: prompt, model, MCP servers, skills, and which built-in items to switch off. | Written by a person or a tool. The supervisor fills in per-run details such as the run ID and sends it to the agent to start a run. |
 | [Agent Descriptor](./agent-descriptor.md) | What an agent comes with: its tools, skills, subagents, MCP servers, and supported models. | Read before a run to choose an agent and write a valid Commission. |
-| [Agent Start](./agent-start.md) | The resolved prompts, model, tools, MCP servers, skills with paths to captured contents, and subagents. | Saved once at start for evaluation and comparison with the requested configuration. |
-| [Trajectory](./trajectory.md) | ATIF steps, tool results, metrics, and AVP execution details. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. |
+| [Trajectory](./trajectory.md) | ATIF steps, tool results, metrics, the configuration the run used, and AVP execution details. | The supervisor uses it to follow a run, total its cost, score it, or rebuild the conversation. |
 
 This document is an overview. The requirements are in the specs above.
 
@@ -59,7 +57,7 @@ AVP reuses existing specs wherever one already fits:
 
 ## Out of scope
 
-AVP defines the shape of the Commission, the Agent Descriptor, Agent Start, and its ATIF profile. Everything else about running an agent is up to the deployment:
+AVP defines the shape of the Commission, the Agent Descriptor, and its ATIF profile. Everything else about running an agent is up to the deployment:
 
 - **Transport.** How the Commission reaches the agent and how trajectory updates come back: a file, a pipe, HTTP, a message queue, or an in-process call.
 - **Workspace.** Which folder the agent works in, what files are in it before the run, and how it is cleaned up afterward.
@@ -71,7 +69,7 @@ AVP defines the shape of the Commission, the Agent Descriptor, Agent Start, and 
 ## Versioning
 
 The AVP contracts share version v0.1. The Commission, Agent Descriptor, and
-Agent Start declare it in `avp_version`; ATIF uses its own
+the trajectory's `extra.avp` declare it in `avp_version`; ATIF uses its own
 `schema_version`.
 
 While v0.1 is a draft, it may change in incompatible ways. After it is final:

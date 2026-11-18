@@ -13,9 +13,8 @@ This spec defines the Descriptor's fields and the rules an agent follows when it
 A Descriptor describes one version of an agent, identified by `agent_name` and `agent_version`. Anything a supervisor sets for one run belongs on the [Commission](./commission.md) instead.
 
 The Descriptor is read before a run to choose and configure an agent. The
-[ATIF trajectory](./trajectory.md) records the effective identity and tools for
-that run. The full Descriptor is saved as `descriptor.json`; [Agent Start](agent-start.md)
-records the resolved configuration used by the run.
+[Trajectory](./trajectory.md) records the Descriptor and the configuration the
+run used.
 
 ## 2. Example
 
