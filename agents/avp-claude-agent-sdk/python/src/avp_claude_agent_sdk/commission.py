@@ -75,6 +75,8 @@ def options(commission: Commission, plan: RunPlan) -> ClaudeAgentOptions:
         prompt = "\n\n".join(part for part in [prompt, appended] if part)
     else:
         prompt = SystemPromptPreset(type="preset", preset="claude_code", append=appended)
+    avp = plan.agent.extra.avp if plan.agent.extra else None
+    added = {s.name for s in commission.skills or []}
     disallowed = list(plan.turned_off.tools) + [
         f"Agent({name})" for name in plan.turned_off.subagents
     ]
@@ -83,9 +85,9 @@ def options(commission: Commission, plan: RunPlan) -> ClaudeAgentOptions:
         model=commission.model.id,
         cwd=str(Path.cwd()),
         system_prompt=prompt,
-        tools=[t.name for t in plan.started.tools or []],
+        tools=[d["function"]["name"] for d in plan.agent.tool_definitions or []],
         disallowed_tools=disallowed,
-        skills=[s.name for s in plan.started.skills or [] if s.source is None],
+        skills=[s.name for s in (avp.skills if avp else None) or [] if s.name not in added],
         mcp_servers=servers,
         strict_mcp_config=True,
         setting_sources=[],

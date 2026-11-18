@@ -13,7 +13,7 @@ from pydantic import TypeAdapter
 
 from avp.descriptor import AgentDescriptor
 from avp.recorder import Part, Recorder, RecorderError, Usage
-from avp.trajectory import Agent, FinalMetrics, Recording, final_output, parse_trajectory
+from avp.trajectory import Agent, Recording, final_output, parse_trajectory
 from avp.utils.pricing import Prices
 
 CASES = Path(__file__).resolve().parents[2] / "testdata" / "recorder"
@@ -49,11 +49,12 @@ async def _call(rec: Recorder, call: dict[str, Any]) -> None:
     elif name == "subagent_started":
         await rec.subagent_started(call["call_id"], call["name"], call["prompt"])
     elif name == "subagent_stopped":
-        final_metrics = call.get("final_metrics")
+        usage = call.get("usage")
         await rec.subagent_stopped(
             call["call_id"],
             call.get("reason", "converged"),
-            final_metrics=FinalMetrics.model_validate(final_metrics) if final_metrics else None,
+            usage=Usage.model_validate(usage) if usage else None,
+            model_name=call.get("model_name"),
         )
     elif name == "error":
         await rec.error(call["code"], call["message"], subagent=call.get("subagent"))

@@ -45,38 +45,38 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
                         )
                     statuses = (await client.get_mcp_status())["mcpServers"]
                     by_name = {s["name"]: s for s in statuses}
-                    managed = []
-                    servers = []
-                    for server in plan.started.mcp_servers or []:
+                    tools = []
+                    for server in commission.mcp_servers or []:
                         status = by_name.get(server.id, {})
                         if status.get("status") != "connected":
                             await rec.error(
                                 "mcp_connect_failed", f"{server.id}: MCP startup failed"
                             )
                             return
-                        servers.append(server.model_copy(update={"status": "connected"}))
-                        for native in status.get("tools", []):
-                            prefix = re.sub(r"[^A-Za-z0-9_]", "_", server.id)
-                            managed.append(
-                                Tool.model_validate(
-                                    {
-                                        **native,
-                                        "name": f"mcp__{prefix}__{native['name']}",
-                                        "mcp_server_id": server.id,
-                                        "inputSchema": native.get(
-                                            "inputSchema",
-                                            native.get("input_schema", {"type": "object"}),
-                                        ),
-                                    }
-                                )
+                        prefix = re.sub(r"[^A-Za-z0-9_]", "_", server.id)
+                        tools += [
+                            Tool.model_validate(
+                                {
+                                    **native,
+                                    "name": f"mcp__{prefix}__{native['name']}",
+                                    "mcp_server_id": server.id,
+                                    "inputSchema": native.get(
+                                        "inputSchema",
+                                        native.get("input_schema", {"type": "object"}),
+                                    ),
+                                }
                             )
-                    tools = list(plan.started.tools or []) + managed
+                            for native in status.get("tools", [])
+                        ]
+                    started = plan.connected(tools)
+                    system_prompt = options.system_prompt
                     await rec.start(
-                        plan.started.model_copy(
-                            update={"tools": tools or None, "mcp_servers": servers or None}
-                        )
+                        started,
+                        plan.prompt,
+                        system_prompt=system_prompt if isinstance(system_prompt, str) else None,
                     )
-                    responses = Responses(rec, commission.model.id, {t.name for t in tools})
+                    allowed = {d["function"]["name"] for d in started.tool_definitions or []}
+                    responses = Responses(rec, allowed)
                 elif isinstance(message, ResultMessage):
                     result = message
                 elif responses is not None:

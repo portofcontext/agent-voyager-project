@@ -14,7 +14,6 @@ from avp.descriptor import AgentDescriptor
 from avp.recorder import Call, Recorder, Text, Usage
 from avp.trajectory import (
     Agent,
-    FinalMetrics,
     Recording,
     avp_metadata,
     final_output,
@@ -101,8 +100,8 @@ def test_reported_subagent_totals_count_only_when_its_responses_are_hidden(hidde
                 subagent="child",
                 usage=Usage(prompt_tokens=20, completion_tokens=3, cost_usd=0.2),
             )
-        totals = FinalMetrics(total_prompt_tokens=20, total_completion_tokens=3, total_cost_usd=0.2)
-        await rec.subagent_stopped("child", final_metrics=totals)
+        totals = Usage(prompt_tokens=20, completion_tokens=3, cost_usd=0.2)
+        await rec.subagent_stopped("child", usage=totals)
         await rec.result("child", "done")
         await rec.stop("converged")
 

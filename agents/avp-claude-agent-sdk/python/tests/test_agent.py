@@ -165,8 +165,8 @@ def test_native_response_usage_and_tool_pairing(script, tmp_path):
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (2, 1, 0, True)
+        atif.meta(events)["stop_reason"],
+    ) == (2, 1, 0, "converged")
     assert [e["metrics"]["prompt_tokens"] for e in atif.responses(events)] == [15, 25]
     assert {
         "reason": atif.meta(events).get("stop_reason"),
@@ -188,8 +188,8 @@ def test_invalid_commission_is_refused_before_sdk_start(script, tmp_path, fields
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+        atif.meta(events)["stop_reason"],
+    ) == (0, 0, 1, "error")
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "invalid_commission"
     assert script.options is None
 
@@ -228,6 +228,8 @@ def test_proxy_credentials_skills_allowlists_and_schema(script, tmp_path):
     assert "SUPPORT" in script.options.system_prompt
     assert "SYSTEM" in script.options.system_prompt
     assert script.options.output_format["schema"]["type"] == "object"
+    [system, user] = [s["message"] for s in events["steps"][:2]]
+    assert (system, user) == (script.options.system_prompt, "Reply DONE")
 
 
 def test_invalid_structured_output_never_converges(script, tmp_path):

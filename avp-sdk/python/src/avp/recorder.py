@@ -21,7 +21,6 @@ from avp.trajectory import (
     Agent,
     Citation,
     ErrorCode,
-    FinalMetrics,
     Metrics,
     Recording,
     StopReason,
@@ -180,7 +179,7 @@ class _Document:
             self.data["final_metrics"] = totals
             return totals
         counted = [c for c in children if _get(c, "total_responses", True) != 0]
-        responses = len(own) + sum(_get(c, "total_responses", True) or 0 for c in counted)
+        responses = [_get(c, "total_responses", True) for c in counted]
         avp: dict[str, Any] = {}
         for key, total, in_extra in _TOTALS:
             values = [_get(m, key, in_extra) for m in own]
@@ -195,8 +194,10 @@ class _Document:
                 _get(c, "cost_complete", True) is False for c in counted
             ):
                 avp["cost_complete"] = False
-        avp["total_responses"] = responses
-        totals["extra"] = {"avp": avp}
+        if None not in responses:
+            avp["total_responses"] = len(own) + sum(responses)
+        if avp:
+            totals["extra"] = {"avp": avp}
         self.data["final_metrics"] = totals
         return totals
 
@@ -258,6 +259,20 @@ def _metrics(usage: Usage) -> dict[str, Any]:
     if avp:
         data["extra"] = {"avp": avp}
     return data
+
+
+def _totals(metrics: dict[str, Any]) -> dict[str, Any]:
+    """One usage's metrics as `final_metrics` totals."""
+    totals = {
+        total: metrics[key] for key, total, in_extra in _TOTALS if not in_extra and key in metrics
+    }
+    if "cost_usd" in metrics:
+        totals["total_cost_usd"] = metrics["cost_usd"]
+    avp = metrics.get("extra", {}).get("avp", {})
+    extra = {total: avp[key] for key, total, in_extra in _TOTALS if in_extra and key in avp}
+    if extra:
+        totals["extra"] = {"avp": extra}
+    return totals
 
 
 @dataclass
@@ -679,10 +694,12 @@ class Recorder:
         call_id: str,
         reason: StopReason = "converged",
         *,
-        final_metrics: FinalMetrics | None = None,
+        usage: Usage | None = None,
+        model_name: str | None = None,
     ) -> None:
-        """End a subagent's trajectory. `final_metrics` holds totals the runtime
-        reports when it doesn't show the subagent's responses."""
+        """End a subagent's trajectory. `usage` is the total the runtime reports
+        when it doesn't show the subagent's responses, and `model_name` the
+        model that used it, when not the subagent's own."""
         self._check("subagent_stopped")
         child = self._subagents.get(call_id)
         if child is None or child.stop_reason is not None:
@@ -692,5 +709,6 @@ class Recorder:
             if grandchild.stop_reason is None and grandchild in child.children:
                 await self.subagent_stopped(grandchild_id, "abandoned")
         child.stopped(reason, self._now())
-        if final_metrics is not None:
-            child.reported = _json(final_metrics)
+        if usage is not None:
+            model = model_name or child.data["agent"].get("model_name")
+            child.reported = _totals(self._priced(_metrics(usage), child, model))

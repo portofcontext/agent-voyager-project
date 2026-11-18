@@ -79,14 +79,9 @@
       "call": "subagent_stopped",
       "call_id": "task-1",
       "reason": "error",
-      "final_metrics": {
-        "total_prompt_tokens": 70,
-        "total_completion_tokens": 7,
-        "extra": {
-          "avp": {
-            "total_responses": 2
-          }
-        }
+      "usage": {
+        "prompt_tokens": 70,
+        "completion_tokens": 7
       }
     },
     {
@@ -221,14 +216,8 @@
     "final_metrics": {
       "total_prompt_tokens": 290,
       "total_completion_tokens": 29,
-      "total_cost_usd": 0.00099,
-      "total_steps": 3,
-      "extra": {
-        "avp": {
-          "total_responses": 4,
-          "cost_complete": false
-        }
-      }
+      "total_cost_usd": 0.001305,
+      "total_steps": 3
     },
     "extra": {
       "avp": {
@@ -275,12 +264,8 @@
         "final_metrics": {
           "total_prompt_tokens": 70,
           "total_completion_tokens": 7,
-          "total_steps": 1,
-          "extra": {
-            "avp": {
-              "total_responses": 2
-            }
-          }
+          "total_cost_usd": 0.000315,
+          "total_steps": 1
         },
         "extra": {
           "avp": {
