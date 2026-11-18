@@ -5,6 +5,31 @@ from pathlib import Path
 from typing import Any
 
 from avp._files import atomic_write, local_path, write_document
+from avp._trajectory_extra import (  # noqa: F401
+    AgentAvpExtra,
+    AgentExtra,
+    AgentModel,
+    AgentTool,
+    Citation,
+    ContentMetadata,
+    CostSource,
+    ErrorCode,
+    Extra,
+    FinalMetricsAvpExtra,
+    FinalMetricsExtra,
+    MetricsAvpExtra,
+    MetricsExtra,
+    ObservationResultAvpExtra,
+    ObservationResultExtra,
+    ReasoningMetadata,
+    StepAvpExtra,
+    StepExtra,
+    StopReason,
+    ToolCallAvpExtra,
+    ToolCallExtra,
+    TrajectoryAvpExtra,
+    TrajectoryExtra,
+)
 from avp._vendor.atif import (  # noqa: F401
     Agent,
     ContentPart,
@@ -37,8 +62,9 @@ def documents(trajectory: Trajectory):
 
 
 def avp_metadata(value: Trajectory | Step | ToolCall | ObservationResult) -> dict[str, Any]:
-    """Optional AVP operational metadata; external ATIF need not supply it."""
-    return (value.extra or {}).get("avp", {})
+    """The object's `extra.avp` as JSON, or `{}` when it has none, as plain ATIF may not."""
+    avp = value.extra.avp if value.extra is not None else None
+    return avp.model_dump(mode="json", by_alias=True, exclude_unset=True) if avp else {}
 
 
 def final_output(trajectory: Trajectory) -> Any:
@@ -46,8 +72,6 @@ def final_output(trajectory: Trajectory) -> Any:
     meta = avp_metadata(trajectory)
     if "output" in meta:
         return meta["output"]
-    if meta.get("complete") is False:
-        return None
     for step in reversed(trajectory.steps):
         if step.source == "agent":
             return (

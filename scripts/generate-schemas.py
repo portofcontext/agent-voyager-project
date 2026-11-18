@@ -10,8 +10,7 @@ Writes to `spec/v0.1/`, next to the specs they describe:
     commission.schema.json        the Commission
     trajectory.schema.json        one ATIF trajectory
     agent-descriptor.schema.json  the Agent Descriptor
-    agent-start.schema.json       resolved start configuration
-    avp.schema.json               a bundle: oneOf the four above
+    avp.schema.json               a bundle: oneOf the three above
 """
 
 import json
@@ -20,7 +19,6 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter
 
-from avp.agent_start import AgentStart
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
 from avp.reports import ContentBlock, ErrorCode, RunContext, StopReason, SubagentUsage, Usage
@@ -31,12 +29,6 @@ SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_BASE = "https://www.agentvoyagerproject.com/schema/v0.1"
 
 SCHEMAS: list[tuple[str, Any, str, str]] = [
-    (
-        "agent-start.schema.json",
-        AgentStart,
-        "AVP v0.1 Agent Start",
-        "Resolved configuration at start. See agent-start.md.",
-    ),
     (
         "commission.schema.json",
         Commission,
@@ -98,7 +90,7 @@ def main() -> None:
             "$schema": SCHEMA_DRAFT,
             "$id": f"{SCHEMA_BASE}/avp.schema.json",
             "title": "AVP v0.1",
-            "description": "Any AVP v0.1 wire object: a Commission, an ATIF document, an Agent Descriptor, or an Agent Start.",
+            "description": "Any AVP v0.1 wire object: a Commission, an ATIF document, or an Agent Descriptor.",
             "oneOf": [{"$ref": name} for name, *_ in SCHEMAS],
         },
     )

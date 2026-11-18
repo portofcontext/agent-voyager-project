@@ -49,16 +49,14 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/AgentExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom agent configuration details",
-          "title": "Extra"
+          "description": "Custom agent configuration details"
         }
       },
       "required": [
@@ -66,6 +64,431 @@
         "version"
       ],
       "title": "Agent",
+      "type": "object"
+    },
+    "AgentAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `agent.extra.avp`: what the run used.",
+      "properties": {
+        "descriptor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentDescriptor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's Descriptor, unchanged. Absent on subagent trajectories."
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service that runs the model in `agent.model_name`."
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/AgentTool"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For each tool in `agent.tool_definitions`, keyed by its name.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The MCP servers the run used, with their `status`.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The skills the run used. `source` points to the saved skill directory.",
+          "title": "Skills"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagents available to the run.",
+          "title": "Subagents"
+        }
+      },
+      "title": "AgentAvpExtra",
+      "type": "object"
+    },
+    "AgentDescriptor": {
+      "additionalProperties": false,
+      "description": "What an agent comes with before any Commission.",
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the Descriptor follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "agent_name": {
+          "description": "The agent's name.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "agent_version": {
+          "description": "The agent's version.",
+          "title": "Agent Version",
+          "type": "string"
+        },
+        "supported_models": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ModelPattern"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The models the agent can run. Absent means the agent does not say.",
+          "title": "Supported Models"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The system prompt the agent comes with.",
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The agent's built-in tools, including those that come from its MCP servers.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The MCP servers the agent comes with.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The skills the agent comes with.",
+          "title": "Skills"
+        },
+        "subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Subagent"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagents the agent comes with.",
+          "title": "Subagents"
+        }
+      },
+      "required": [
+        "avp_version",
+        "agent_name",
+        "agent_version"
+      ],
+      "title": "AgentDescriptor",
+      "type": "object"
+    },
+    "AgentExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AgentExtra",
+      "type": "object"
+    },
+    "AgentModel": {
+      "additionalProperties": true,
+      "description": "The service that runs the model in `agent.model_name`.",
+      "properties": {
+        "provider": {
+          "description": "The service that runs the model.",
+          "title": "Provider",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The URL of the service's API. Absent means the service's default.",
+          "title": "Base Url"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "AgentModel",
+      "type": "object"
+    },
+    "AgentSettings": {
+      "additionalProperties": false,
+      "description": "Settings for the agent whose `agent_name` is their key in `agents`.",
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `agent_version` the Commission was written for.",
+          "title": "Version"
+        },
+        "enabled_tools": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in tools the run may use, by name. Covers only tools without an\n`mcp_server_id`.",
+          "title": "Enabled Tools"
+        },
+        "enabled_subagents": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in subagents the run may use, by name.",
+          "title": "Enabled Subagents"
+        },
+        "enabled_skills": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in skills the run may use, by name.",
+          "title": "Enabled Skills"
+        },
+        "enabled_mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The built-in MCP servers the run may use, by `id`.",
+          "title": "Enabled Mcp Servers"
+        }
+      },
+      "title": "AgentSettings",
+      "type": "object"
+    },
+    "AgentTool": {
+      "additionalProperties": true,
+      "description": "The Tool fields that ATIF's OpenAI-style tool definition can't hold.",
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tool's display name.",
+          "title": "Title"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The shape of the tool's structured result.",
+          "title": "Outputschema"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tool's MCP annotations.",
+          "title": "Annotations"
+        },
+        "mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `id` of the MCP server in `mcp_servers` the tool comes from.",
+          "title": "Mcp Server Id"
+        }
+      },
+      "title": "AgentTool",
       "type": "object"
     },
     "AudioSource": {
@@ -112,6 +535,340 @@
         "path"
       ],
       "title": "AudioSource",
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": true,
+      "description": "A source the model cited. Keeps fields the service added.",
+      "properties": {
+        "type": {
+          "description": "The kind of citation, as the model service names it, such as `url_citation`.",
+          "title": "Type",
+          "type": "string"
+        },
+        "cited_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The text cited.",
+          "title": "Cited Text"
+        },
+        "start_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the cited part of the text starts.",
+          "title": "Start Index"
+        },
+        "end_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where it ends.",
+          "title": "End Index"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's ID for the source.",
+          "title": "Source Id"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The source's URL.",
+          "title": "Source Url"
+        },
+        "source_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The source's title.",
+          "title": "Source Title"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "Commission": {
+      "additionalProperties": false,
+      "description": "What one run should do: the task and the settings for the run.",
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the Commission follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The run's ID, chosen by the supervisor.",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/Model",
+          "description": "The model to run, and the service that runs it."
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The system prompt for the run. It replaces the agent's own.",
+          "title": "System Prompt"
+        },
+        "prompt": {
+          "description": "The first user message of the run.",
+          "title": "Prompt",
+          "type": "string"
+        },
+        "supervisor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Supervisor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The supervisor that wrote the Commission."
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "http": "#/$defs/McpServerHttp",
+                    "stdio": "#/$defs/McpServerStdio"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/McpServerHttp"
+                  },
+                  {
+                    "$ref": "#/$defs/McpServerStdio"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "MCP servers to add for the run.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__commission__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Skills to add for the run.",
+          "title": "Skills"
+        },
+        "agents": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[a-z0-9_-]+$": {
+                  "$ref": "#/$defs/AgentSettings"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Settings for specific agents, keyed by `agent_name`.",
+          "title": "Agents"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A JSON Schema for the agent's final output. Its `type` is `\"object\"`.",
+          "title": "Output Schema"
+        },
+        "thread_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An ID that groups related runs, such as the turns of one conversation.",
+          "title": "Thread Id"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Labels for the run.",
+          "title": "Tags"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key-value data for the supervisor's own use.",
+          "title": "Meta"
+        }
+      },
+      "required": [
+        "avp_version",
+        "run_id",
+        "model",
+        "prompt"
+      ],
+      "title": "Commission",
+      "type": "object"
+    },
+    "ContentMetadata": {
+      "additionalProperties": true,
+      "description": "Data for one part of a step's `message` or a result's `content`.",
+      "properties": {
+        "part_index": {
+          "description": "The position of the part in `message` or `content`, from 0. `0` when the value is a string.",
+          "minimum": 0,
+          "title": "Part Index",
+          "type": "integer"
+        },
+        "citations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Citation"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sources the model cited in the part.",
+          "title": "Citations"
+        },
+        "refusal": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`true` when the part is the model's text declining the task.",
+          "title": "Refusal"
+        }
+      },
+      "required": [
+        "part_index"
+      ],
+      "title": "ContentMetadata",
       "type": "object"
     },
     "ContentPart": {
@@ -162,6 +919,30 @@
         "type"
       ],
       "title": "ContentPart",
+      "type": "object"
+    },
+    "EnvSecret": {
+      "additionalProperties": false,
+      "description": "A secret in a variable of the agent's environment.",
+      "properties": {
+        "env": {
+          "description": "The name of a variable in the agent's environment that holds the secret,\nfor example `\"TEST_DB_PASSWORD\"`.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "env"
+      ],
+      "title": "EnvSecret",
+      "type": "object"
+    },
+    "Extra": {
+      "additionalProperties": true,
+      "description": "An ATIF `extra` object. Keeps keys beside `avp`, and reads like a dict.",
+      "properties": {},
+      "title": "Extra",
       "type": "object"
     },
     "FinalMetrics": {
@@ -237,19 +1018,98 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/FinalMetricsExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom aggregate metrics",
-          "title": "Extra"
+          "description": "Custom aggregate metrics"
         }
       },
       "title": "FinalMetrics",
+      "type": "object"
+    },
+    "FinalMetricsAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `final_metrics.extra.avp`.",
+      "properties": {
+        "total_cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The total of `cache_creation_input_tokens`.",
+          "title": "Total Cache Creation Input Tokens"
+        },
+        "total_reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The total of `reasoning_output_tokens`.",
+          "title": "Total Reasoning Output Tokens"
+        },
+        "total_responses": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How many model responses were made.",
+          "title": "Total Responses"
+        },
+        "cost_complete": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`false` when `total_cost_usd` leaves out responses whose cost is unknown.",
+          "title": "Cost Complete"
+        }
+      },
+      "title": "FinalMetricsAvpExtra",
+      "type": "object"
+    },
+    "FinalMetricsExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FinalMetricsAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "FinalMetricsExtra",
       "type": "object"
     },
     "ImageSource": {
@@ -278,6 +1138,231 @@
         "path"
       ],
       "title": "ImageSource",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "McpServer": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent comes with. Connection details stay inside the agent.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server. A Tool's `mcp_server_id` refers to it.",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "connected",
+                "failed",
+                "needs-auth",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The result of the agent's attempt to connect.",
+          "title": "Status"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "McpServer",
+      "type": "object"
+    },
+    "McpServerHttp": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent connects to over Streamable HTTP.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "http",
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "description": "The server's URL.",
+          "title": "Url",
+          "type": "string"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ProxySecret"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "HTTP headers to send with each request. A Secret reference's secret is\nthe header's entire value.",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "url"
+      ],
+      "title": "McpServerHttp",
+      "type": "object"
+    },
+    "McpServerStdio": {
+      "additionalProperties": false,
+      "description": "An MCP server the agent starts as a local program and talks to over stdio.",
+      "properties": {
+        "id": {
+          "description": "Identifies the server.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name, when it differs from `id`.",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the server provides.",
+          "title": "Description"
+        },
+        "type": {
+          "const": "stdio",
+          "title": "Type",
+          "type": "string"
+        },
+        "command": {
+          "description": "The program and its arguments, for example `[\"npx\", \"-y\", \"@example/db-mcp\"]`.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/EnvSecret"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Environment variables to set for the program, on top of those the\nagent's MCP client gives it.",
+          "title": "Env"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "command"
+      ],
+      "title": "McpServerStdio",
       "type": "object"
     },
     "Metrics": {
@@ -387,19 +1472,162 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/MetricsExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Other metrics",
-          "title": "Extra"
+          "description": "Other metrics"
         }
       },
       "title": "Metrics",
+      "type": "object"
+    },
+    "MetricsAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `steps[].metrics.extra.avp`: the usage of one model response.",
+      "properties": {
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The input tokens written to the cache. Included in `prompt_tokens`.",
+          "title": "Cache Creation Input Tokens"
+        },
+        "reasoning_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The output tokens the model spent on reasoning. Included in `completion_tokens`.",
+          "title": "Reasoning Output Tokens"
+        },
+        "cost_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "reported",
+                "computed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where `cost_usd` comes from.",
+          "title": "Cost Source"
+        }
+      },
+      "title": "MetricsAvpExtra",
+      "type": "object"
+    },
+    "MetricsExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricsAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "MetricsExtra",
+      "type": "object"
+    },
+    "Model": {
+      "additionalProperties": false,
+      "description": "A model as one service offers it, named with models.dev provider and model IDs.",
+      "properties": {
+        "provider": {
+          "description": "The service that runs the model, for example `\"anthropic\"`,\n`\"amazon-bedrock\"`, or `\"openrouter\"`. It decides which API the agent calls\nand how it authenticates.",
+          "pattern": "^[a-z0-9._-]+$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "The model's ID at that service, as the agent sends it, for example\n`\"claude-sonnet-4-6\"`.",
+          "title": "Id",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The URL of the service's API. Absent means the service's default.",
+          "title": "Base Url"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProxySecret"
+            },
+            {
+              "$ref": "#/$defs/EnvSecret"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The API key for the service. Absent means the agent uses whatever\ncredential its environment has for the service. A `proxy` credential is the\nkey alone; the proxy adds it as `provider`'s API expects.",
+          "title": "Credential"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "ModelPattern": {
+      "additionalProperties": false,
+      "description": "Matches the `provider` and `id` of a Commission's Model. `*` matches any characters.",
+      "properties": {
+        "provider": {
+          "description": "A pattern for the model's `provider`, for example `\"anthropic\"`.",
+          "title": "Provider",
+          "type": "string"
+        },
+        "id": {
+          "description": "A pattern for the model's `id`, for example `\"claude-*\"`.",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "title": "ModelPattern",
       "type": "object"
     },
     "Observation": {
@@ -476,19 +1704,183 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/ObservationResultExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom observation-result-level metadata (e.g., confidence score, retrieval score, source document ID). Added in ATIF-v1.7.",
-          "title": "Extra"
+          "description": "Custom observation-result-level metadata (e.g., confidence score, retrieval score, source document ID). Added in ATIF-v1.7."
         }
       },
       "title": "ObservationResult",
+      "type": "object"
+    },
+    "ObservationResultAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `steps[].observation.results[].extra.avp`.",
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How long the tool took, in milliseconds, ending at `finished_at`.",
+          "title": "Duration Ms"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the result arrived, as an RFC 3339 timestamp.",
+          "title": "Finished At"
+        },
+        "is_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`true` when the call failed.",
+          "title": "Is Error"
+        },
+        "structured_content": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null,
+          "description": "A result meant for programs, given beside `content`."
+        },
+        "content_metadata": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ContentMetadata"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data for parts of `content`.",
+          "title": "Content Metadata"
+        }
+      },
+      "title": "ObservationResultAvpExtra",
+      "type": "object"
+    },
+    "ObservationResultExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObservationResultAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ObservationResultExtra",
+      "type": "object"
+    },
+    "ProxySecret": {
+      "additionalProperties": false,
+      "description": "A secret that a proxy outside the agent holds and adds to its requests.",
+      "properties": {
+        "proxy": {
+          "description": "The name of a credential that a proxy outside the agent holds. The proxy\nadds it to the agent's matching requests, so the agent never receives its\nvalue.",
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Proxy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proxy"
+      ],
+      "title": "ProxySecret",
+      "type": "object"
+    },
+    "ReasoningMetadata": {
+      "additionalProperties": true,
+      "description": "Data for one block of the model's reasoning. Keeps fields the service added.",
+      "properties": {
+        "start": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the block's text starts in `reasoning_content`.",
+          "title": "Start"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where it ends. When `start` and `end` are absent, the block is all of `reasoning_content`.",
+          "title": "End"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's token for passing the reasoning back to it.",
+          "title": "Signature"
+        },
+        "encrypted_content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The service's encrypted reasoning, when it returned the block encrypted.",
+          "title": "Encrypted Content"
+        }
+      },
+      "title": "ReasoningMetadata",
       "type": "object"
     },
     "Step": {
@@ -651,16 +2043,14 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/StepExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom step-level metadata",
-          "title": "Extra"
+          "description": "Custom step-level metadata"
         }
       },
       "required": [
@@ -669,6 +2059,197 @@
         "message"
       ],
       "title": "Step",
+      "type": "object"
+    },
+    "StepAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `steps[].extra.avp`.",
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How long the model response took, in milliseconds.",
+          "title": "Duration Ms"
+        },
+        "finish_reasons": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the model stopped, exactly as the service reported it.",
+          "title": "Finish Reasons"
+        },
+        "message_metadata": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ContentMetadata"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data for parts of `message`.",
+          "title": "Message Metadata"
+        },
+        "reasoning_metadata": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ReasoningMetadata"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data for blocks of the model's reasoning.",
+          "title": "Reasoning Metadata"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What kind of error a system step records.",
+          "title": "Error Code"
+        }
+      },
+      "title": "StepAvpExtra",
+      "type": "object"
+    },
+    "StepExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "StepExtra",
+      "type": "object"
+    },
+    "Subagent": {
+      "additionalProperties": false,
+      "description": "A subagent that ships with the agent. It does not inherit the agent's items.",
+      "properties": {
+        "name": {
+          "description": "Identifies the subagent.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the subagent does.",
+          "title": "Description"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's system prompt.",
+          "title": "System Prompt"
+        },
+        "tools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Tool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's tools.",
+          "title": "Tools"
+        },
+        "mcp_servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/McpServer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's MCP servers.",
+          "title": "Mcp Servers"
+        },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/avp__descriptor__Skill"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The subagent's skills.",
+          "title": "Skills"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Subagent",
       "type": "object"
     },
     "SubagentTrajectoryRef": {
@@ -717,7 +2298,113 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "$ref": "#/$defs/Extra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom metadata about the subagent execution"
+        }
+      },
+      "title": "SubagentTrajectoryRef",
+      "type": "object"
+    },
+    "Supervisor": {
+      "additionalProperties": false,
+      "description": "The supervisor that wrote the Commission.",
+      "properties": {
+        "name": {
+          "description": "The supervisor's name, for example `\"avp-cli\"`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The supervisor's version.",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Supervisor",
+      "type": "object"
+    },
+    "Tool": {
+      "additionalProperties": true,
+      "description": "An MCP `Tool` object, with one added field. Other MCP fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The tool's name, as the model calls it.",
+          "title": "Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A display name.",
+          "title": "Title"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the tool does, as the model sees it.",
+          "title": "Description"
+        },
+        "inputSchema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "description": "A JSON Schema for the tool's input, as the model sees it.",
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "Inputschema",
+          "type": "object"
+        },
+        "outputSchema": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
               "type": "object"
             },
             {
@@ -725,11 +2412,28 @@
             }
           ],
           "default": null,
-          "description": "Custom metadata about the subagent execution",
-          "title": "Extra"
+          "description": "A JSON Schema for the tool's structured output.",
+          "title": "Outputschema"
+        },
+        "mcp_server_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The `id` of the MCP server the tool comes from. Absent for any tool that\ndoes not come from an MCP server.",
+          "title": "Mcp Server Id"
         }
       },
-      "title": "SubagentTrajectoryRef",
+      "required": [
+        "name",
+        "inputSchema"
+      ],
+      "title": "Tool",
       "type": "object"
     },
     "ToolCall": {
@@ -755,16 +2459,14 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/ToolCallExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom tool-call-level metadata (e.g., timeout, retry count, tool version). Added in ATIF-v1.7.",
-          "title": "Extra"
+          "description": "Custom tool-call-level metadata (e.g., timeout, retry count, tool version). Added in ATIF-v1.7."
         }
       },
       "required": [
@@ -773,6 +2475,45 @@
         "arguments"
       ],
       "title": "ToolCall",
+      "type": "object"
+    },
+    "ToolCallAvpExtra": {
+      "additionalProperties": true,
+      "description": "At `steps[].tool_calls[].extra.avp`.",
+      "properties": {
+        "server_side": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`true` when the model service ran the tool, not the agent.",
+          "title": "Server Side"
+        }
+      },
+      "title": "ToolCallAvpExtra",
+      "type": "object"
+    },
+    "ToolCallExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolCallAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ToolCallExtra",
       "type": "object"
     },
     "Trajectory": {
@@ -876,16 +2617,14 @@
         "extra": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/TrajectoryExtra"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Custom root-level metadata",
-          "title": "Extra"
+          "description": "Custom root-level metadata"
         },
         "subagent_trajectories": {
           "anyOf": [
@@ -909,6 +2648,157 @@
         "steps"
       ],
       "title": "Trajectory",
+      "type": "object"
+    },
+    "TrajectoryAvpExtra": {
+      "additionalProperties": true,
+      "description": "At the trajectory's `extra.avp`, and on each embedded subagent trajectory.",
+      "properties": {
+        "avp_version": {
+          "const": "0.1",
+          "description": "The AVP version the Trajectory follows.",
+          "title": "Avp Version",
+          "type": "string"
+        },
+        "commission": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Commission"
+            },
+            {
+              "$ref": "#/$defs/JsonValue"
+            }
+          ],
+          "default": null,
+          "description": "The Commission exactly as the agent received it. Raw JSON or text when it isn't valid.",
+          "title": "Commission"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the run started, as an RFC 3339 timestamp.",
+          "title": "Started At"
+        },
+        "stopped_at": {
+          "description": "When the run stopped, as an RFC 3339 timestamp.",
+          "title": "Stopped At",
+          "type": "string"
+        },
+        "stop_reason": {
+          "description": "Why the run stopped.",
+          "enum": [
+            "converged",
+            "refused",
+            "error",
+            "interrupted",
+            "abandoned"
+          ],
+          "title": "Stop Reason",
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null,
+          "description": "The run's result, when it differs from the last agent message. Set\nexplicitly to `null` when the run returned no result."
+        }
+      },
+      "required": [
+        "avp_version",
+        "stopped_at",
+        "stop_reason"
+      ],
+      "title": "TrajectoryAvpExtra",
+      "type": "object"
+    },
+    "TrajectoryExtra": {
+      "additionalProperties": true,
+      "properties": {
+        "avp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrajectoryAvpExtra"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TrajectoryExtra",
+      "type": "object"
+    },
+    "avp__commission__Skill": {
+      "additionalProperties": false,
+      "description": "A skill directory, as defined by Agent Skills, carried in the Commission.",
+      "properties": {
+        "name": {
+          "description": "The skill's name. Equals the `name` in the frontmatter of its `SKILL.md`.",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "files": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The skill's files: each key is a path relative to the skill directory,\nand each value is the file's UTF-8 content. Includes `\"SKILL.md\"`.",
+          "required": [
+            "SKILL.md"
+          ],
+          "title": "Files",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "files"
+      ],
+      "title": "Skill",
+      "type": "object"
+    },
+    "avp__descriptor__Skill": {
+      "additionalProperties": true,
+      "description": "The frontmatter of a skill's `SKILL.md`, as defined by Agent Skills, with\none added field. Other frontmatter fields are kept.",
+      "properties": {
+        "name": {
+          "description": "The skill's name.",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "description": "What the skill does and when to use it.",
+          "title": "Description",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "pattern": "^file:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A `file:` URI for the directory that contains the skill's `SKILL.md`, as\nthe path appears inside the agent's environment.",
+          "title": "Source"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Skill",
       "type": "object"
     }
   },

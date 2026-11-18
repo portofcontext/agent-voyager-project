@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from avp._trajectory_extra import FinalMetricsExtra
+
 
 class FinalMetrics(BaseModel):
     """Aggregate statistics for the entire trajectory."""
@@ -32,7 +34,7 @@ class FinalMetrics(BaseModel):
             "trajectory, must be documented in the root-level notes field."
         ),
     )
-    extra: dict[str, Any] | None = Field(
+    extra: FinalMetricsExtra | None = Field(
         default=None,
         description="Custom aggregate metrics",
     )

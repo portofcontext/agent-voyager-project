@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from avp._trajectory_extra import ToolCallExtra
+
 
 class ToolCall(BaseModel):
     """A tool call within a step."""
@@ -20,7 +22,7 @@ class ToolCall(BaseModel):
         default=...,
         description="Arguments passed to the function (can be empty dict)",
     )
-    extra: dict[str, Any] | None = Field(
+    extra: ToolCallExtra | None = Field(
         default=None,
         description=(
             "Custom tool-call-level metadata (e.g., timeout, retry count, tool version). "

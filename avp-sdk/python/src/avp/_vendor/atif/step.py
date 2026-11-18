@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from avp._trajectory_extra import StepExtra
+
 from avp._vendor.atif.content import ContentPart
 from avp._vendor.atif.metrics import Metrics
 from avp._vendor.atif.observation import Observation
@@ -83,7 +85,7 @@ class Step(BaseModel):
             "(backward-compatible default). Added in ATIF-v1.7."
         ),
     )
-    extra: dict[str, Any] | None = Field(
+    extra: StepExtra | None = Field(
         default=None,
         description="Custom step-level metadata",
     )

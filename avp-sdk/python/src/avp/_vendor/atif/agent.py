@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from avp._trajectory_extra import AgentExtra
+
 
 class Agent(BaseModel):
     """Agent configuration."""
@@ -24,7 +26,7 @@ class Agent(BaseModel):
         default=None,
         description="Array of tool/function definitions available to the agent. Each element follows OpenAI's function calling schema.",
     )
-    extra: dict[str, Any] | None = Field(
+    extra: AgentExtra | None = Field(
         default=None,
         description="Custom agent configuration details",
     )

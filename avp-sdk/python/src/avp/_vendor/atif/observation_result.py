@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from avp._trajectory_extra import ObservationResultExtra
+
 from avp._vendor.atif.content import ContentPart
 from avp._vendor.atif.subagent_trajectory_ref import SubagentTrajectoryRef
 
@@ -31,7 +33,7 @@ class ObservationResult(BaseModel):
         default=None,
         description="Array of references to delegated subagent trajectories",
     )
-    extra: dict[str, Any] | None = Field(
+    extra: ObservationResultExtra | None = Field(
         default=None,
         description=(
             "Custom observation-result-level metadata (e.g., confidence score, "

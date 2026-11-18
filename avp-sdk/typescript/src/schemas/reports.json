@@ -210,7 +210,7 @@
     },
     "Citation": {
       "additionalProperties": true,
-      "description": "A source the model cited for a text block. Keeps fields the service added.",
+      "description": "A source the model cited. Keeps fields the service added.",
       "properties": {
         "type": {
           "description": "The kind of citation, as the model service names it, such as `url_citation`.",
@@ -241,7 +241,7 @@
             }
           ],
           "default": null,
-          "description": "Where the cited part of the block's `text` starts.",
+          "description": "Where the cited part of the text starts.",
           "title": "Start Index"
         },
         "end_index": {

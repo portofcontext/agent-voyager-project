@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from avp._trajectory_extra import TrajectoryExtra
+
 from avp._vendor.atif.agent import Agent
 from avp._vendor.atif.final_metrics import FinalMetrics
 from avp._vendor.atif.step import Step
@@ -80,7 +82,7 @@ class Trajectory(BaseModel):
         default=None,
         description="Reference to the continuation trajectory file if this trajectory is continued in another file",
     )
-    extra: dict[str, Any] | None = Field(
+    extra: TrajectoryExtra | None = Field(
         default=None,
         description="Custom root-level metadata",
     )

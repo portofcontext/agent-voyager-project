@@ -5,50 +5,17 @@ from typing import Annotated, Literal
 from pydantic import Field, JsonValue
 
 from avp._base import OpenWireModel, WireModel
+from avp._trajectory_extra import Citation, ErrorCode, StopReason  # noqa: F401
 from avp.commission import ModelRef
 from avp.descriptor import McpServer, Skill, Subagent, Tool
 
 NonNegativeInt = Annotated[int, Field(ge=0)]
 
 
-StopReason = Literal["converged", "refused", "error", "interrupted", "abandoned"]
-"""Why a run or a subagent stopped."""
-
-ErrorCode = Literal[
-    "invalid_commission",
-    "mcp_connect_failed",
-    "auth_error",
-    "rate_limit",
-    "context_limit",
-    "output_invalid",
-    "agent_crash",
-    "unknown",
-]
-"""What kind of error an `error_occurred` reports."""
-
 CostSource = Literal["computed", "reported", "unknown"]
 """Where a response's `cost_usd` comes from."""
 
 # Content blocks
-
-
-class Citation(OpenWireModel):
-    """A source the model cited for a text block. Keeps fields the service added."""
-
-    type: str
-    """The kind of citation, as the model service names it, such as `url_citation`."""
-    cited_text: str | None = None
-    """The text cited."""
-    start_index: NonNegativeInt | None = None
-    """Where the cited part of the block's `text` starts."""
-    end_index: NonNegativeInt | None = None
-    """Where it ends."""
-    source_id: str | None = None
-    """The service's ID for the source."""
-    source_url: str | None = None
-    """The source's URL."""
-    source_title: str | None = None
-    """The source's title."""
 
 
 class Source(OpenWireModel):

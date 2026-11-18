@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from avp._trajectory_extra import MetricsExtra
+
 
 class Metrics(BaseModel):
     """LLM operational and confidence data."""
@@ -36,7 +38,7 @@ class Metrics(BaseModel):
         default=None,
         description="Log probability assigned to each generated token",
     )
-    extra: dict[str, Any] | None = Field(
+    extra: MetricsExtra | None = Field(
         default=None,
         description="Other metrics",
     )

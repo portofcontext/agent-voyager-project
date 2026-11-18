@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from avp._trajectory_extra import Extra
+
 
 class SubagentTrajectoryRef(BaseModel):
     """Reference to a delegated subagent trajectory.
@@ -58,7 +60,7 @@ class SubagentTrajectoryRef(BaseModel):
             "trajectory is available in-memory."
         ),
     )
-    extra: dict[str, Any] | None = Field(
+    extra: Extra | None = Field(
         default=None,
         description="Custom metadata about the subagent execution",
     )
