@@ -179,7 +179,14 @@ At `steps[].tool_calls[].extra.avp`. A call's MCP server is in `agent.extra.avp.
 
 ### 3.5 Observation result
 
-TBD.
+At `steps[].observation.results[].extra.avp`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `duration_ms` | integer | Yes, for tools the agent ran | How long the tool took, in milliseconds, ending at `finished_at`. 0 or more. |
+| `finished_at` | string | Yes, for tools the agent ran | When the result arrived, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. |
+| `is_error` | boolean | No | `true` when the call failed. |
+| `structured_content` | any | No | A result meant for programs, such as MCP's `structuredContent`, given beside `content`. For a tool the model service ran, a result that isn't text. |
 
 ### 3.6 Metrics
 
