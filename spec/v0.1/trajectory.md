@@ -121,8 +121,18 @@ At the trajectory's top-level `extra.avp`, and on each embedded subagent traject
 | `commission` | [Commission](./commission.md#31-commission), or any | Yes, when the run has a Commission | The Commission exactly as the agent received it, including one it then refuses. When what it received doesn't match the Commission spec, the JSON value it received, or the text when it isn't JSON. Absent when the run has no Commission. |
 | `started_at` | string | Yes, unless the run was [refused](#45-a-refused-run-has-no-model-responses) | When the run started, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. It can be earlier than the first step, since the agent can do work before it records one. |
 | `stopped_at` | string | Yes | When the run stopped, as an RFC 3339 timestamp. |
-| `stop_reason` | [Stop reason](#38-stop-reason) | Yes | Why the run stopped. |
+| `stop_reason` | [Stop reason](#311-stop-reason) | Yes | Why the run stopped. |
 | `output` | any | No | The run's result, when it differs from the last agent message or has a different JSON type, for example structured output. `null` means the run returned no result. Absent means the result is the last agent message. |
+
+#### 3.1.1 Stop reason
+
+| Value | Meaning |
+|---|---|
+| `converged` | The model gave its final answer. |
+| `refused` | The model declined the task. |
+| `error` | The run failed. A `system` step with an `error_code` says why. |
+| `interrupted` | Someone stopped the run from outside, for example with SIGINT or SIGTERM. |
+| `abandoned` | The run ended while a subagent it started was still running, so the run has no complete answer. On a subagent trajectory: the run ended while the subagent was still running. |
 
 ### 3.2 Agent
 
@@ -167,7 +177,11 @@ At `steps[].extra.avp`. The step's `model_name` is the model that produced the r
 |---|---|---|---|
 | `duration_ms` | integer | Yes, on agent steps | How long the model response took, in milliseconds, ending at the step's `timestamp`. 0 or more. |
 | `finish_reasons` | string[] | No | On agent steps, why the model stopped, exactly as the service reported it, for example `"end_turn"` or `"length"`. |
-| `error_code` | [Error code](#39-error-code) | Yes, on system steps that record an error | What kind of error. The step's `message` says what happened. |
+| `error_code` | [Error code](#331-error-code) | Yes, on system steps that record an error | What kind of error. The step's `message` says what happened. |
+
+#### 3.3.1 Error code
+
+TBD.
 
 ### 3.4 Tool call
 
@@ -209,19 +223,11 @@ At `final_metrics.extra.avp`, on the root trajectory and on each subagent trajec
 | `total_responses` | integer | No | How many model responses were made. Differs from `total_steps`, which also counts system and user steps. |
 | `cost_complete` | boolean | No | `false` when `total_cost_usd` leaves out responses whose cost is unknown, so the real cost is higher. Absent means the total is complete. |
 
-### 3.8 Stop reason
+### 3.8 Content metadata
 
 TBD.
 
-### 3.9 Error code
-
-TBD.
-
-### 3.10 Content metadata
-
-TBD.
-
-### 3.11 Reasoning metadata
+### 3.9 Reasoning metadata
 
 TBD.
 
@@ -231,7 +237,7 @@ These rules apply to the agent that writes a Trajectory. An agent conforms to th
 
 ### 4.1 The agent writes one Trajectory when the run ends
 
-The agent MUST write exactly one Trajectory per run, once, when the run ends: when it stops for any [stop reason](#38-stop-reason), or when a fatal error ends it. The Trajectory MUST be valid ATIF v1.8. The agent MUST NOT write partial Trajectories while the run is going.
+The agent MUST write exactly one Trajectory per run, once, when the run ends: when it stops for any [stop reason](#311-stop-reason), or when a fatal error ends it. The Trajectory MUST be valid ATIF v1.8. The agent MUST NOT write partial Trajectories while the run is going.
 
 With `--out <path>`, the agent writes the Trajectory to that path. With `--out -`, it writes it to standard output. Diagnostics go to standard error. A process killed before it can write leaves no Trajectory.
 

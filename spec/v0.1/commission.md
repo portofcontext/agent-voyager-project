@@ -244,7 +244,7 @@ The agent MUST send its own model calls for `model.id` to the service `model.pro
 
 ### 5.7 The agent checks its final output against `output_schema`
 
-When a Commission has `output_schema` and the model gives its final answer, the agent MUST check the final output against it. How the agent gets output that matches, for example with retries or an output tool, is up to the agent. If the output doesn't match, the agent MUST record a system step with the [error code](./trajectory.md#39-error-code) `output_invalid` and write the Trajectory with `stop_reason` `error` and the output in `extra.avp.output`. So with `output_schema`, the output of a run with `stop_reason` `converged` always matches it.
+When a Commission has `output_schema` and the model gives its final answer, the agent MUST check the final output against it. How the agent gets output that matches, for example with retries or an output tool, is up to the agent. If the output doesn't match, the agent MUST record a system step with the [error code](./trajectory.md#331-error-code) `output_invalid` and write the Trajectory with `stop_reason` `error` and the output in `extra.avp.output`. So with `output_schema`, the output of a run with `stop_reason` `converged` always matches it.
 
 ### 5.8 Secrets stay out of the Trajectory
 
