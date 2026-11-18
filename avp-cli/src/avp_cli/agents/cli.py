@@ -60,7 +60,8 @@ def install(
         raise Failed(f"{name!r} is a built-in name; choose another name for a custom Dockerfile")
     elif build:
         raise Failed("--build is for built-in agents; a custom Dockerfile is always built")
-    tag = f"localhost/avp/{name}"
+    # A built-in's image is tagged with its pinned version; a custom one is `latest`.
+    tag = f"localhost/avp/{name}" + (f":{builtin.version}" if builtin else "")
     published = builtin.image if builtin and not build else None
     getting = ("Pulling " if published else "Building ", (name, "bold"), " image")
     began = time.monotonic()
@@ -110,7 +111,11 @@ def install(
                     f"expected {builtin.agent_name} {builtin.version}; the image describes "
                     f"{descriptor.agent_name} {descriptor.agent_version}"
                 )
+    previous = next((a.image for a in store.installed() if a.name == name), None)
     store.save(store.Agent(name=name, image=image, version=descriptor.agent_version))
+    if previous and previous != image:
+        images.remove(previous)
+        detail(f"Removed {previous}")
     err.print(
         Text.assemble(
             "Installed ",
