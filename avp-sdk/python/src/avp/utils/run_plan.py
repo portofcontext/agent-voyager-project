@@ -6,16 +6,16 @@ built-in items, added items are used, and `system_prompt` replaces the agent's
 own. Call it on a Commission that passed `check_commission`.
 
     plan = plan_run(commission, descriptor)
-    # configure the runtime from plan.started; hide and block plan.turned_off
-    # after connecting, add each MCP server's status and tools:
-    await rec.start(plan.started.model_copy(update={"mcp_servers": ..., "tools": ...}))
+    # configure the runtime from plan.agent; hide and block plan.turned_off.
+    # After connecting, add each MCP server's status and tools to plan.agent.
+    await rec.start(plan.agent, plan.prompt, system_prompt=plan.system_prompt)
 """
 
 from pydantic import BaseModel
 
-from avp.commission import AgentSettings, Commission, ModelRef
+from avp.commission import AgentSettings, Commission
 from avp.descriptor import AgentDescriptor, McpServer, Skill
-from avp.reports import RunContext
+from avp.trajectory import Agent, AgentAvpExtra, AgentExtra, AgentModel, tool_definitions
 from avp.utils._skill_md import frontmatter_value
 
 
@@ -32,10 +32,16 @@ class TurnedOff(BaseModel):
 
 
 class RunPlan(BaseModel):
-    started: RunContext
-    """What the run uses. The Commission's MCP servers have no `status` and
-    their tools aren't listed: the agent adds both after connecting, and each
-    added skill's `source` once it has written the skill's files."""
+    prompt: str
+    """The prompt the run starts with."""
+    system_prompt: str | None
+    """The system prompt the run uses. None when neither the Commission nor the
+    Descriptor sets one."""
+    agent: Agent
+    """What the run uses, as the Trajectory's `agent`. The Commission's MCP
+    servers have no `status` and their tools aren't listed: the agent adds both
+    after connecting, and each added skill's `source` once it has written the
+    skill's files."""
     turned_off: TurnedOff
 
 
@@ -61,13 +67,11 @@ def plan_run(commission: Commission, descriptor: AgentDescriptor) -> RunPlan:
     def tool_on(name: str, mcp_server_id: str | None) -> bool:
         return name in tools_on if mcp_server_id is None else mcp_server_id in servers_on
 
-    started = RunContext(
-        prompt=commission.prompt,
-        system_prompt=commission.system_prompt
-        if commission.system_prompt is not None
-        else descriptor.system_prompt,
-        model=ModelRef.model_validate(commission.model.model_dump(exclude={"credential"})),
-        tools=[t for t in descriptor.tools or [] if tool_on(t.name, t.mcp_server_id)] or None,
+    tools = [t for t in descriptor.tools or [] if tool_on(t.name, t.mcp_server_id)]
+    definitions, details = tool_definitions(tools)
+    avp = AgentAvpExtra(
+        model=AgentModel(provider=commission.model.provider, base_url=commission.model.base_url),
+        tools=details or None,
         mcp_servers=[
             *(s for s in servers if s.id in servers_on),
             *(
@@ -89,10 +93,24 @@ def plan_run(commission: Commission, descriptor: AgentDescriptor) -> RunPlan:
         or None,
         subagents=[s for s in subagents if s.name in subagents_on] or None,
     )
+    agent = Agent(
+        name=descriptor.agent_name,
+        version=descriptor.agent_version,
+        model_name=commission.model.id,
+        tool_definitions=definitions or None,
+        extra=AgentExtra(avp=avp),
+    )
     turned_off = TurnedOff(
         tools=[t.name for t in descriptor.tools or [] if not tool_on(t.name, t.mcp_server_id)],
         subagents=[s.name for s in subagents if s.name not in subagents_on],
         skills=[s.name for s in skills if s.name not in skills_on],
         mcp_servers=[s.id for s in servers if s.id not in servers_on],
     )
-    return RunPlan(started=started, turned_off=turned_off)
+    system_prompt = (
+        commission.system_prompt
+        if commission.system_prompt is not None
+        else descriptor.system_prompt
+    )
+    return RunPlan(
+        prompt=commission.prompt, system_prompt=system_prompt, agent=agent, turned_off=turned_off
+    )

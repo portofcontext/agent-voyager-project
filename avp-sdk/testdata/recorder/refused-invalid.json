@@ -1,6 +1,6 @@
 {
   "name": "refused-invalid",
-  "description": "A Commission that doesn't match the spec is written as received and refused with invalid_commission; the run has ended, so a later stop writes nothing.",
+  "description": "A Commission that doesn't match the spec is kept as received and refused: one system step, stop_reason error, no started_at. Later reports raise or do nothing.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -19,11 +19,6 @@
       "call": "begin",
       "received": {
         "avp_version": "0.1",
-        "run_id": "run-1",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
         "prompt": 3
       },
       "descriptor": {
@@ -40,64 +35,45 @@
     {
       "t": 2,
       "call": "start",
-      "started": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
+        }
       },
+      "prompt": "Do the task.",
       "raises": true
     }
   ],
   "trajectory": {
     "schema_version": "ATIF-v1.8",
-    "session_id": "run-1",
-    "trajectory_id": "run-1/root",
+    "session_id": "run-0",
+    "trajectory_id": "run-0",
     "agent": {
       "name": "case-agent",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          }
+        }
+      }
     },
     "steps": [
       {
         "step_id": 1,
-        "timestamp": "2026-01-01T00:00:00Z",
+        "timestamp": "2026-01-01T00:00:00+00:00",
         "source": "system",
-        "message": "<any>",
+        "message": "the Commission doesn't match the spec: run_id: Field required; model: Field required; prompt: Input should be a valid string",
         "extra": {
           "avp": {
             "error_code": "invalid_commission"
@@ -105,19 +81,24 @@
         }
       }
     ],
-    "extra": {
-      "avp": {
-        "complete": true,
-        "stop_reason": "error",
-        "stopped_at": "2026-01-01T00:00:00Z"
-      }
-    },
     "final_metrics": {
       "total_steps": 1,
-      "total_prompt_tokens": 0,
-      "total_completion_tokens": 0,
-      "total_cached_tokens": 0,
-      "total_cost_usd": 0
+      "extra": {
+        "avp": {
+          "total_responses": 0
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
+        "commission": {
+          "avp_version": "0.1",
+          "prompt": 3
+        },
+        "stopped_at": "2026-01-01T00:00:00+00:00",
+        "stop_reason": "error"
+      }
     }
   }
 }

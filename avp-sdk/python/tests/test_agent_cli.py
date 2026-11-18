@@ -8,8 +8,7 @@ from pydantic import JsonValue
 from avp.agent_cli import TrajectorySink, main
 from avp.descriptor import AgentDescriptor
 from avp.recorder import Recorder
-from avp.reports import RunContext
-from avp.trajectory import avp_metadata, parse_trajectory
+from avp.trajectory import Agent, avp_metadata, parse_trajectory
 
 DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="demo", agent_version="1.0.0")
 COMMISSION = {
@@ -25,7 +24,13 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
     commission = await rec.begin(received, DESCRIPTOR)
     if commission is None:
         return
-    await rec.start(RunContext(prompt=commission.prompt, model=commission.model))
+    agent = Agent(
+        name="demo",
+        version="1.0.0",
+        model_name=commission.model.id,
+        extra={"avp": {"model": {"provider": commission.model.provider}}},
+    )
+    await rec.start(agent, commission.prompt)
     await rec.stop("converged")
 
 
@@ -65,16 +70,17 @@ def test_run_writes_the_agents_trajectory(tmp_path):
 
 def test_run_accepts_inline_json_and_stdout(capsys):
     assert cli("run", "--commission", json.dumps(COMMISSION), "--out", "-") == 0
-    assert avp_metadata(parse_trajectory(capsys.readouterr().out))["complete"]
+    assert avp_metadata(parse_trajectory(capsys.readouterr().out))["stop_reason"] == "converged"
 
 
-def test_invalid_text_is_refused_without_archiving_the_input(tmp_path):
+def test_invalid_text_is_refused_and_kept_as_received(tmp_path):
     path = tmp_path / "c.json"
     path.write_text("not json")
     out = tmp_path / "trajectory.json"
     assert cli("run", "--commission", str(path), "--out", str(out)) == 0
     assert avp_metadata(trajectory(out))["stop_reason"] == "error"
     assert avp_metadata(trajectory(out).steps[0])["error_code"] == "invalid_commission"
+    assert avp_metadata(trajectory(out))["commission"] == "not json"
 
 
 def test_sigterm_cancels_the_run_and_exits_130(tmp_path):

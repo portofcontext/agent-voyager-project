@@ -1,10 +1,10 @@
-"""ATIF wire models and document IO, using Harbor's pinned reference models."""
+"""ATIF models with AVP's typed extras, and document IO (`spec/v0.1/trajectory.md`)."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from avp._files import atomic_write, local_path, write_document
+from avp._files import atomic_write, local_path
 from avp._trajectory_extra import (  # noqa: F401
     AgentAvpExtra,
     AgentExtra,
@@ -42,9 +42,7 @@ from avp._vendor.atif import (  # noqa: F401
     ToolCall,
     Trajectory,
 )
-from avp.agent_start import AgentStart
-from avp.commission import Commission
-from avp.descriptor import AgentDescriptor
+from avp.descriptor import Tool
 
 
 def parse_trajectory(value: dict[str, Any] | str | bytes) -> Trajectory:
@@ -82,27 +80,40 @@ def final_output(trajectory: Trajectory) -> Any:
     return None
 
 
+def tool_definitions(tools: list[Tool]) -> tuple[list[dict[str, Any]], dict[str, AgentTool]]:
+    """`agent.tool_definitions` and `agent.extra.avp.tools` for MCP-style tools.
+    The second holds, by name, the fields the OpenAI function shape can't."""
+    definitions, details = [], {}
+    for tool in tools:
+        function: dict[str, Any] = {"name": tool.name, "parameters": tool.input_schema}
+        if tool.description is not None:
+            function["description"] = tool.description
+        definitions.append({"type": "function", "function": function})
+        rest = tool.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+            exclude={"name", "description", "input_schema"},
+        )
+        if rest:
+            details[tool.name] = AgentTool.model_validate(rest)
+    return definitions, details
+
+
 @dataclass(frozen=True)
 class Recording:
-    """A snapshot of the current ATIF document and referenced file bytes."""
+    """A finished ATIF document and the files it references, such as images
+    and skill directories, by path relative to the document."""
 
     trajectory: Trajectory
     assets: dict[str, bytes] = field(default_factory=dict)
-    commission: Commission | None = None
-    descriptor: AgentDescriptor | None = None
-    agent_start: AgentStart | None = None
+
+    def json(self, *, indent: int | None = None) -> str:
+        return self.trajectory.model_dump_json(by_alias=True, exclude_unset=True, indent=indent)
 
     def write(self, path: Path) -> None:
-        """Publish referenced files before Agent Start and the ATIF snapshot."""
-        if path.name in {"commission.json", "descriptor.json", "agent-start.json"}:
-            raise ValueError("trajectory path conflicts with a run document")
+        """Write the referenced files, then the document."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        for name, document in (
-            ("commission.json", self.commission),
-            ("descriptor.json", self.descriptor),
-        ):
-            if document is not None:
-                write_document(path.parent, name, document)
         for name, content in self.assets.items():
             target = local_path(path.parent, name)
             if target.resolve() == path.resolve():
@@ -111,8 +122,4 @@ class Recording:
                 atomic_write(target, content)
             elif target.read_bytes() != content:
                 raise ValueError(f"referenced file already exists with different content: {name}")
-        if self.agent_start is not None:
-            write_document(path.parent, "agent-start.json", self.agent_start)
-        atomic_write(
-            path, (self.trajectory.model_dump_json(exclude_none=True, indent=2) + "\n").encode()
-        )
+        atomic_write(path, (self.json(indent=2) + "\n").encode())

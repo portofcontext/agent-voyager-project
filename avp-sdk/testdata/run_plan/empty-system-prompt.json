@@ -18,13 +18,19 @@
     "system_prompt": "Default instructions"
   },
   "plan": {
-    "started": {
-      "prompt": "Hi",
-      "model": {
-        "provider": "openai",
-        "id": "test"
-      },
-      "system_prompt": ""
+    "prompt": "Hi",
+    "system_prompt": "",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "test",
+      "extra": {
+        "avp": {
+          "model": {
+            "provider": "openai"
+          }
+        }
+      }
     },
     "turned_off": {
       "tools": [],

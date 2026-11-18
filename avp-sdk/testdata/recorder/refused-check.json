@@ -1,6 +1,6 @@
 {
   "name": "refused-check",
-  "description": "A valid Commission that fails a Commission check: it has an agents map with no entry for this agent.",
+  "description": "A valid Commission that fails a Commission check: its agents map has no entry for this agent.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -26,7 +26,7 @@
         },
         "prompt": "Do the task.",
         "agents": {
-          "other": {}
+          "other-agent": {}
         }
       },
       "descriptor": {
@@ -39,15 +39,24 @@
   "trajectory": {
     "schema_version": "ATIF-v1.8",
     "session_id": "run-1",
-    "trajectory_id": "run-1/root",
+    "trajectory_id": "run-1",
     "agent": {
       "name": "case-agent",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          }
+        }
+      }
     },
     "steps": [
       {
         "step_id": 1,
-        "timestamp": "2026-01-01T00:00:00Z",
+        "timestamp": "2026-01-01T00:00:00+00:00",
         "source": "system",
         "message": "agents has no entry for 'case-agent'",
         "extra": {
@@ -57,19 +66,32 @@
         }
       }
     ],
-    "extra": {
-      "avp": {
-        "complete": true,
-        "stop_reason": "error",
-        "stopped_at": "2026-01-01T00:00:00Z"
-      }
-    },
     "final_metrics": {
       "total_steps": 1,
-      "total_prompt_tokens": 0,
-      "total_completion_tokens": 0,
-      "total_cached_tokens": 0,
-      "total_cost_usd": 0
+      "extra": {
+        "avp": {
+          "total_responses": 0
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
+        "commission": {
+          "avp_version": "0.1",
+          "run_id": "run-1",
+          "model": {
+            "provider": "anthropic",
+            "id": "claude-test-1"
+          },
+          "prompt": "Do the task.",
+          "agents": {
+            "other-agent": {}
+          }
+        },
+        "stopped_at": "2026-01-01T00:00:00+00:00",
+        "stop_reason": "error"
+      }
     }
   }
 }

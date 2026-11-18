@@ -85,12 +85,18 @@
     ]
   },
   "plan": {
-    "started": {
-      "prompt": "Do the task.",
-      "system_prompt": "You are the agent's own prompt.",
-      "model": {
-        "provider": "anthropic",
-        "id": "claude-test-1"
+    "prompt": "Do the task.",
+    "system_prompt": "You are the agent's own prompt.",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "model": {
+            "provider": "anthropic"
+          }
+        }
       }
     },
     "turned_off": {

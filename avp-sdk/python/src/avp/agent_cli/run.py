@@ -10,8 +10,8 @@ from avp._base import TrajectorySink
 from avp.descriptor import AgentDescriptor
 
 RunFn = Callable[[JsonValue, TrajectorySink], Awaitable[None]]
-"""The agent receives a Commission and publishes native ATIF Recording snapshots.
-On cancellation it publishes an interrupted outcome and re-raises CancelledError."""
+"""The agent receives a Commission and writes one Recording to the sink when the
+run ends. On cancellation it writes an interrupted run and re-raises CancelledError."""
 DescribeFn = Callable[[], AgentDescriptor | Awaitable[AgentDescriptor]]
 
 

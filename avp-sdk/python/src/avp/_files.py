@@ -1,11 +1,8 @@
-"""Publish run documents and referenced skill and image files."""
+"""Write the files a Trajectory references, and the Trajectory."""
 
-import json
 import os
 from pathlib import Path
 from uuid import uuid4
-
-from pydantic import BaseModel
 
 
 def local_path(directory: Path, name: str) -> Path:
@@ -30,14 +27,3 @@ def atomic_write(path: Path, content: bytes) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def write_document(directory: Path, name: str, document: BaseModel) -> None:
-    data = document.model_dump(mode="json", exclude_none=True)
-    path = local_path(directory, name)
-    if path.exists():
-        existing = type(document).model_validate_json(path.read_bytes())
-        if existing.model_dump(mode="json", exclude_none=True) != data:
-            raise ValueError(f"run document already exists with different content: {name}")
-    else:
-        atomic_write(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode())

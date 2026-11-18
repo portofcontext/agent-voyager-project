@@ -93,50 +93,66 @@
     ]
   },
   "plan": {
-    "started": {
-      "prompt": "Do the task.",
-      "system_prompt": "You are the agent's own prompt.",
-      "model": {
-        "provider": "anthropic",
-        "id": "claude-test-1"
-      },
-      "tools": [
+    "prompt": "Do the task.",
+    "system_prompt": "You are the agent's own prompt.",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "tool_definitions": [
         {
-          "name": "read_file",
-          "inputSchema": {
-            "type": "object"
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "parameters": {
+              "type": "object"
+            }
           }
         },
         {
-          "name": "docs_search",
-          "inputSchema": {
-            "type": "object"
+          "type": "function",
+          "function": {
+            "name": "docs_search",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "extra": {
+        "avp": {
+          "model": {
+            "provider": "anthropic"
           },
-          "mcp_server_id": "docs"
+          "tools": {
+            "docs_search": {
+              "mcp_server_id": "docs"
+            }
+          },
+          "mcp_servers": [
+            {
+              "id": "docs",
+              "name": "Docs"
+            }
+          ],
+          "skills": [
+            {
+              "name": "review",
+              "description": "How to review a change."
+            },
+            {
+              "name": "release",
+              "description": "How to release."
+            }
+          ],
+          "subagents": [
+            {
+              "name": "researcher",
+              "description": "Finds things."
+            }
+          ]
         }
-      ],
-      "mcp_servers": [
-        {
-          "id": "docs",
-          "name": "Docs"
-        }
-      ],
-      "skills": [
-        {
-          "name": "review",
-          "description": "How to review a change."
-        },
-        {
-          "name": "release",
-          "description": "How to release."
-        }
-      ],
-      "subagents": [
-        {
-          "name": "researcher",
-          "description": "Finds things."
-        }
-      ]
+      }
     },
     "turned_off": {
       "tools": [

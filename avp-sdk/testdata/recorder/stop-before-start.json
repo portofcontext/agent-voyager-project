@@ -1,6 +1,6 @@
 {
   "name": "stop-before-start",
-  "description": "A stop before agent_started writes error_occurred with agent_crash, which ends the run.",
+  "description": "A stop before start records agent_crash, which ends the run.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -33,12 +33,12 @@
       }
     },
     {
-      "t": 5,
+      "t": 1,
       "call": "stop",
       "reason": "interrupted"
     },
     {
-      "t": 6,
+      "t": 2,
       "call": "error",
       "code": "unknown",
       "message": "late",
@@ -48,17 +48,26 @@
   "trajectory": {
     "schema_version": "ATIF-v1.8",
     "session_id": "run-1",
-    "trajectory_id": "run-1/root",
+    "trajectory_id": "run-1",
     "agent": {
       "name": "case-agent",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          }
+        }
+      }
     },
     "steps": [
       {
         "step_id": 1,
-        "timestamp": "2026-01-01T00:00:00.005000Z",
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
         "source": "system",
-        "message": "The run stopped before start.",
+        "message": "The run stopped before it started.",
         "extra": {
           "avp": {
             "error_code": "agent_crash"
@@ -66,19 +75,29 @@
         }
       }
     ],
-    "extra": {
-      "avp": {
-        "complete": true,
-        "stop_reason": "error",
-        "stopped_at": "2026-01-01T00:00:00.005000Z"
-      }
-    },
     "final_metrics": {
       "total_steps": 1,
-      "total_prompt_tokens": 0,
-      "total_completion_tokens": 0,
-      "total_cached_tokens": 0,
-      "total_cost_usd": 0
+      "extra": {
+        "avp": {
+          "total_responses": 0
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
+        "commission": {
+          "avp_version": "0.1",
+          "run_id": "run-1",
+          "model": {
+            "provider": "anthropic",
+            "id": "claude-test-1"
+          },
+          "prompt": "Do the task."
+        },
+        "stopped_at": "2026-01-01T00:00:00.001000+00:00",
+        "stop_reason": "error"
+      }
     }
   }
 }

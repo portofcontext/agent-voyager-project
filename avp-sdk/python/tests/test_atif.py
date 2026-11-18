@@ -1,7 +1,6 @@
-"""Native recording, independent ATIF input, and durable document publication."""
+"""Recording runs, reading ATIF from other producers, and writing documents."""
 
 import asyncio
-import base64
 import json
 import os
 import stat
@@ -10,26 +9,48 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from avp.commission import ModelRef
+from avp.agent_cli import trajectory_sink
 from avp.descriptor import AgentDescriptor
-from avp.recorder import Recorder, UsageReport
-from avp.reports import (
-    ImageBlock,
-    RunContext,
-    Source,
-    SubagentUsage,
-    TextBlock,
-    ThinkingBlock,
-    ToolUseBlock,
+from avp.recorder import Recorder
+from avp.trajectory import (
+    Agent,
+    FinalMetrics,
+    Metrics,
+    ObservationResult,
+    Recording,
+    ToolCall,
+    avp_metadata,
+    final_output,
+    parse_trajectory,
 )
-from avp.trajectory import Recording, avp_metadata, final_output, parse_trajectory
 
 DATA = Path(__file__).resolve().parents[2] / "testdata/atif"
-MODEL = ModelRef(provider="test", id="model")
+DESCRIPTOR = AgentDescriptor(avp_version="0.1", agent_name="test", agent_version="1")
+AGENT = Agent(
+    name="test", version="1", model_name="model", extra={"avp": {"model": {"provider": "test"}}}
+)
+
+
+def record(steps):
+    """Run `steps(rec)` and return the one Recording written."""
+    written = []
+
+    async def run():
+        async def sink(recording):
+            written.append(recording)
+
+        rec = Recorder(sink, run_id="test")
+        await rec.begin(None, DESCRIPTOR)
+        await rec.start(AGENT, "go")
+        await steps(rec)
+
+    asyncio.run(run())
+    assert len(written) == 1
+    return written[0]
 
 
 @pytest.mark.parametrize("mask, expected", [(0o022, 0o644), (0o077, 0o600)])
-def test_atomic_snapshots_respect_normal_file_creation_permissions(tmp_path, mask, expected):
+def test_writes_respect_normal_file_creation_permissions(tmp_path, mask, expected):
     recording = Recording(parse_trajectory((DATA / "external-terminus.json").read_text()))
     path = tmp_path / "trajectory.json"
     previous = os.umask(mask)
@@ -51,137 +72,73 @@ def test_upstream_terminus_document_reads_without_avp_metadata():
     assert parse_trajectory(trajectory.model_dump_json()).steps == trajectory.steps
 
 
-def test_native_tools_images_reasoning_and_partial_snapshots(tmp_path):
-    snapshots = []
-    image = ImageBlock(
-        type="image",
-        source=Source(
-            type="base64", media_type="image/png", data=base64.b64encode(b"image fixture").decode()
-        ),
-    )
-
-    async def run():
-        async def sink(snapshot):
-            snapshots.append(snapshot)
-            snapshot.write(tmp_path / "trajectory.json")
-            assert (
-                parse_trajectory((tmp_path / "trajectory.json").read_text()) == snapshot.trajectory
-            )
-
-        rec = Recorder(sink, run_id="test")
-        await rec.start(RunContext(prompt="hello", model=MODEL))
-        await rec.response(
-            [
-                ThinkingBlock(type="thinking", thinking="reason", signature="sig"),
-                image,
-                ToolUseBlock(type="tool_use", id="call", name="echo", input={}),
-            ],
-            usage=UsageReport(input_tokens=10, output_tokens=4, cost_usd=0.1),
+def test_images_are_files_beside_the_trajectory(tmp_path):
+    async def steps(rec):
+        image = rec.image(b"image fixture", "image/png")
+        await rec.step(
+            [image], tool_calls=[ToolCall(tool_call_id="c", function_name="look", arguments={})]
         )
-        await rec.tool_returned(
-            "call", [image, TextBlock(type="text", text="ok")], structured_content={"ok": True}
-        )
+        await rec.result(ObservationResult(source_call_id="c", content=[image]))
         await rec.stop("converged", {"ok": True})
 
-    asyncio.run(run())
-    pending = snapshots[1].trajectory.steps[-1]
-    assert pending.tool_calls[0].tool_call_id == "call" and pending.observation is None
-    assert not avp_metadata(snapshots[1].trajectory)["complete"]
-    final = snapshots[-1]
-    step = final.trajectory.steps[-1]
-    assert step.reasoning_content == "reason"
-    assert avp_metadata(step)["reasoning_metadata"][0]["signature"] == "sig"
-    result = step.observation.results[0]
-    assert result.source_call_id == "call" and avp_metadata(result)["structured_content"] == {
-        "ok": True
-    }
-    assert len(final.assets) == 1
-    assert len(list((tmp_path / "images").iterdir())) == 1
-    assert final.trajectory.final_metrics.total_prompt_tokens == 10
-    assert avp_metadata(final.trajectory)["output"] == {"ok": True}
+    recording = record(steps)
+    (name,) = recording.assets
+    assert recording.trajectory.steps[-1].message[0].source.path == name
+    recording.write(tmp_path / "trajectory.json")
+    assert (tmp_path / name).read_bytes() == b"image fixture"
+    assert parse_trajectory((tmp_path / "trajectory.json").read_text()) == recording.trajectory
     assert not list(tmp_path.glob(".trajectory.json.*"))
+    with pytest.raises(ValueError, match="--out"):
+        asyncio.run(trajectory_sink(None)(recording))
 
 
-@pytest.mark.parametrize("reported", [False, True])
-def test_opaque_child_uses_aggregate_only_when_no_child_responses(reported):
-    snapshots = []
-
-    async def run():
-        async def sink(s):
-            snapshots.append(s)
-
-        rec = Recorder(sink, run_id="child")
-        await rec.start(RunContext(prompt="go", model=MODEL))
-        await rec.response(
-            [ToolUseBlock(type="tool_use", id="child", name="delegate", input={})],
-            usage=UsageReport(input_tokens=10, output_tokens=2, cost_usd=0.1),
+@pytest.mark.parametrize("hidden", [True, False])
+def test_reported_subagent_totals_count_only_when_its_responses_are_hidden(hidden):
+    async def steps(rec):
+        await rec.step(
+            "",
+            tool_calls=[ToolCall(tool_call_id="child", function_name="delegate", arguments={})],
+            metrics=Metrics(prompt_tokens=10, completion_tokens=2, cost_usd=0.1),
         )
-        await rec.subagent_invoked("child", "helper")
-        if reported:
-            await rec.response(
-                [TextBlock(type="text", text="done")],
-                subagent_invocation_id="child",
-                usage=UsageReport(input_tokens=20, output_tokens=3, cost_usd=0.2),
+        await rec.subagent_started("child", "helper", "go")
+        if not hidden:
+            await rec.step(
+                "done",
+                subagent="child",
+                metrics=Metrics(prompt_tokens=20, completion_tokens=3, cost_usd=0.2),
             )
-        await rec.subagent_returned(
-            "child",
-            "done",
-            usage=SubagentUsage(
-                input_tokens=20, output_tokens=3, cost_usd=0.2, cost_source="reported"
-            ),
-        )
-        await rec.tool_returned("child", "done")
+        totals = FinalMetrics(total_prompt_tokens=20, total_completion_tokens=3, total_cost_usd=0.2)
+        await rec.subagent_stopped("child", final_metrics=totals)
+        await rec.result(ObservationResult(source_call_id="child", content="done"))
         await rec.stop("converged")
 
-    asyncio.run(run())
-    root = snapshots[-1].trajectory
+    root = record(steps).trajectory
     assert root.final_metrics.total_prompt_tokens == 30
     assert root.final_metrics.total_completion_tokens == 5
     assert root.final_metrics.total_cost_usd == pytest.approx(0.3)
-    assert len(root.subagent_trajectories[0].steps) == (2 if reported else 1)
+    assert len(root.subagent_trajectories[0].steps) == (1 if hidden else 2)
 
 
-def test_unknown_usage_is_not_zero_and_abandoned_work_is_closed():
-    snapshots = []
-
-    async def run():
-        async def sink(s):
-            snapshots.append(s)
-
-        rec = Recorder(sink)
-        await rec.start(RunContext(prompt="go", model=MODEL))
-        await rec.response([ToolUseBlock(type="tool_use", id="c", name="delegate", input={})])
-        await rec.subagent_invoked("c", "helper")
-        await rec.stop("converged")
-
-    asyncio.run(run())
-    root = snapshots[-1].trajectory
-    assert avp_metadata(root)["stop_reason"] == "abandoned"
-    assert root.final_metrics.total_prompt_tokens is None
-    assert avp_metadata(root.steps[-1].observation.results[0])["is_error"]
-
-
-def test_secret_commission_is_not_embedded_in_the_document():
-    snapshots = []
+def test_secret_values_are_not_in_the_document(monkeypatch):
+    monkeypatch.setenv("TEST_SECRET", "s3cret-value")
+    written = []
 
     async def run():
-        async def sink(s):
-            snapshots.append(s)
+        async def sink(recording):
+            written.append(recording)
 
         rec = Recorder(sink)
-        await rec.begin(
-            {
-                "avp_version": "0.1",
-                "run_id": "r",
-                "prompt": "hi",
-                "model": {"provider": "test", "id": "m", "credential": {"env": "SECRET_NAME"}},
-            },
-            AgentDescriptor(avp_version="0.1", agent_name="test", agent_version="1"),
-        )
+        commission = {
+            "avp_version": "0.1",
+            "run_id": "r",
+            "prompt": "hi",
+            "model": {"provider": "test", "id": "m", "credential": {"env": "TEST_SECRET"}},
+        }
+        await rec.begin(commission, DESCRIPTOR)
         await rec.stop("error")
 
     asyncio.run(run())
-    assert "SECRET_NAME" not in snapshots[-1].trajectory.model_dump_json()
+    assert "s3cret-value" not in written[0].json()
 
 
 def test_invalid_call_references_fail_upstream_validation():
@@ -217,96 +174,26 @@ def test_upstream_semantics(case):
             parse_trajectory(case["trajectory"])
 
 
-def test_provider_content_remains_interoperable_without_exposing_encrypted_reasoning():
-    from pydantic import TypeAdapter
+def test_nested_subagents_are_referenced_by_their_parents_and_counted_once():
+    metrics = Metrics(prompt_tokens=10, completion_tokens=2)
 
-    from avp.reports import ContentBlock
-
-    snapshots = []
-
-    async def run():
-        async def sink(snapshot):
-            snapshots.append(snapshot)
-
-        rec = Recorder(sink)
-        await rec.start(RunContext(prompt="hello", model=MODEL))
-        blocks = TypeAdapter(list[ContentBlock]).validate_python(
-            [
-                {"type": "thinking", "thinking": "public thought", "signature": "signed"},
-                {"type": "thinking", "thinking": "encrypted payload", "redacted": True},
-                {
-                    "type": "text",
-                    "text": "answer",
-                    "citations": [{"type": "url_citation", "source_url": "https://example.com"}],
-                    "provider_id": "part-1",
-                },
-                {"type": "refusal", "refusal": "declined detail"},
-                {
-                    "type": "server_tool_use",
-                    "id": "search",
-                    "name": "search",
-                    "input": {"q": "test"},
-                },
-                {
-                    "type": "server_tool_result",
-                    "tool_use_id": "search",
-                    "name": "search",
-                    "content": {"found": [1, 2]},
-                },
-            ]
-        )
-        await rec.response(blocks, meta={"response_id": "provider-response"})
-        await rec.stop("converged")
-
-    asyncio.run(run())
-    step = snapshots[-1].trajectory.steps[-1]
-    details = avp_metadata(step)
-    assert step.reasoning_content == "public thought"
-    assert "encrypted payload" not in str(step.message)
-    assert details["reasoning_metadata"][1]["encrypted_content"] == "encrypted payload"
-    annotations = details["message_metadata"]
-    assert annotations[0]["annotations"]["citations"][0]["source_url"] == "https://example.com"
-    assert annotations[1]["annotations"]["refusal"] is True
-    assert details["annotations"]["response_id"] == "provider-response"
-    assert step.tool_calls[0].function_name == "search"
-    assert json.loads(step.observation.results[0].content) == {"found": [1, 2]}
-
-
-def test_nested_children_keep_parent_references_and_usage_once():
-    snapshots = []
-
-    async def run():
-        async def sink(snapshot):
-            snapshots.append(snapshot)
-
-        rec = Recorder(sink)
-        await rec.start(RunContext(prompt="hello", model=MODEL))
-        usage = UsageReport(input_tokens=10, output_tokens=2)
-        await rec.response(
-            [ToolUseBlock(type="tool_use", id="outer", name="delegate", input={})], usage=usage
-        )
-        await rec.subagent_invoked("outer", "researcher")
-        await rec.response(
-            [ToolUseBlock(type="tool_use", id="inner", name="delegate", input={})],
-            usage=usage,
-            subagent_invocation_id="outer",
-        )
-        await rec.subagent_invoked("inner", "helper", subagent_invocation_id="outer")
-        await rec.response(
-            [TextBlock(type="text", text="inner done")], usage=usage, subagent_invocation_id="inner"
-        )
-        await rec.subagent_returned("inner", "inner done")
-        await rec.tool_returned("inner", "inner done")
-        await rec.response(
-            [TextBlock(type="text", text="outer done")], usage=usage, subagent_invocation_id="outer"
-        )
-        await rec.subagent_returned("outer", "outer done")
-        await rec.tool_returned("outer", "outer done")
-        await rec.response([TextBlock(type="text", text="done")], usage=usage)
+    async def steps(rec):
+        delegate = ToolCall(tool_call_id="outer", function_name="delegate", arguments={})
+        await rec.step("", tool_calls=[delegate], metrics=metrics)
+        await rec.subagent_started("outer", "researcher", "look")
+        inner = ToolCall(tool_call_id="inner", function_name="delegate", arguments={})
+        await rec.step("", tool_calls=[inner], metrics=metrics, subagent="outer")
+        await rec.subagent_started("inner", "helper", "look closer")
+        await rec.step("inner done", metrics=metrics, subagent="inner")
+        await rec.subagent_stopped("inner")
+        await rec.result(ObservationResult(source_call_id="inner", content="inner done"))
+        await rec.step("outer done", metrics=metrics, subagent="outer")
+        await rec.subagent_stopped("outer")
+        await rec.result(ObservationResult(source_call_id="outer", content="outer done"))
+        await rec.step("done", metrics=metrics)
         await rec.stop("converged", "done")
 
-    asyncio.run(run())
-    root = snapshots[-1].trajectory
+    root = record(steps).trajectory
     child = root.subagent_trajectories[0]
     grandchild = child.subagent_trajectories[0]
     assert root.final_metrics.total_prompt_tokens == 50
@@ -323,13 +210,18 @@ def test_nested_children_keep_parent_references_and_usage_once():
         assert references == [delegated.trajectory_id]
 
 
-@pytest.mark.parametrize("override", [None, False, 0, "", {"answer": 42}])
-def test_final_output_preserves_explicit_values_and_never_infers_partial_output(override):
+@pytest.mark.parametrize("output", [None, False, 0, "", {"answer": 42}])
+def test_final_output_prefers_extra_avp_output(output):
     raw = json.loads((DATA / "external-terminus.json").read_text())
     raw["steps"][-1]["source"] = "agent"
     raw["steps"][-1]["message"] = "42"
     assert final_output(parse_trajectory(raw)) == "42"
-    raw["extra"] = {"avp": {"complete": False}}
-    assert final_output(parse_trajectory(raw)) is None
-    raw["extra"] = {"avp": {"complete": True, "output": override}}
-    assert final_output(parse_trajectory(raw)) == override
+    raw["extra"] = {
+        "avp": {
+            "avp_version": "0.1",
+            "stopped_at": "2026-01-01T00:00:00Z",
+            "stop_reason": "converged",
+            "output": output,
+        }
+    }
+    assert final_output(parse_trajectory(raw)) == output

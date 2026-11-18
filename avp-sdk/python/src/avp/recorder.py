@@ -1,119 +1,62 @@
-"""Record native runtime reports directly into an ATIF document.
+"""Builds a run's Trajectory (`spec/v0.1/trajectory.md`) from the ATIF objects
+an adapter reports, and writes it once when the run ends."""
 
-Adapters own the loop. The Recorder owns response boundaries, tool links,
-subagent documents, usage accounting, and publication of immutable snapshots.
-"""
-
+import base64
+import hashlib
 import json
+import re
 import uuid
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Self
+from pathlib import Path
+from typing import Any
+from urllib.parse import unquote, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, model_validator
+from pydantic import BaseModel, JsonValue, ValidationError
 
-from avp._base import TrajectorySink
-from avp._recording import (
-    _content,
-    _content_metadata,
-    _document,
-    _metadata,
-    _metrics,
-    _observation,
-    _remaining,
-)
-from avp.agent_start import AgentStart, capture_start
-from avp.commission import Commission, ModelRef
+from avp._base import AVP_VERSION, TrajectorySink
+from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp.reports import (
-    ContentBlock,
+from avp.trajectory import (
+    Agent,
+    ContentPart,
     ErrorCode,
-    ImageBlock,
-    RunContext,
+    FinalMetrics,
+    Metrics,
+    ObservationResult,
+    Recording,
     StopReason,
-    SubagentUsage,
-    TextBlock,
-    ToolUseBlock,
-    Usage,
+    ToolCall,
+    Trajectory,
 )
-from avp.trajectory import Recording, Trajectory
 from avp.utils.preflight import check_commission
 from avp.utils.pricing import Prices, compute_cost, load_prices
 
+SCHEMA_VERSION = "ATIF-v1.8"
 ABANDONED_TEXT = "The run ended while the subagent was still running."
 UNRETURNED_TEXT = "The run ended before the tool returned."
-STOPPED_BEFORE_START_TEXT = "The run stopped before start."
+STOPPED_BEFORE_START_TEXT = "The run stopped before it started."
+_IMAGE_EXTENSIONS = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+_SKILL_FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.?(?:/|$))(?!.*//)(?!.*/$)[^\\:\x00-\x1f]+\Z")
 
 
 class RecorderError(Exception):
     """A report the Recorder can't place: an unknown or repeated ID, or a report
-    the run's state doesn't allow. The Recorder writes nothing for it and keeps
-    its state."""
+    the run's state doesn't allow. The Recorder records nothing for it."""
 
 
-class UsageReport(BaseModel):
-    """A response's token counts as the runtime reports them, for one response
-    only. The Recorder adds `cost_usd` and `cost_source`."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
-    cache_read_input_tokens: int | None = Field(default=None, ge=0)
-    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
-    reasoning_output_tokens: int | None = Field(default=None, ge=0)
-    cost_usd: float | None = Field(default=None, ge=0)
-    """The cost the service or runtime reported, if any."""
-
-    @model_validator(mode="after")
-    def _cache_within_input(self) -> Self:
-        cached = (self.cache_read_input_tokens or 0) + (self.cache_creation_input_tokens or 0)
-        if cached > self.input_tokens:
-            raise ValueError("cache read and creation tokens exceed input_tokens")
-        return self
+def _json(value: BaseModel) -> dict[str, Any]:
+    return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-@dataclass
-class _Call:
-    name: str
-    input: dict[str, JsonValue]
-    subagent_invocation_id: str | None
-    time: datetime
-    returned: bool = False
-    step: dict[str, Any] | None = None
-
-
-@dataclass
-class _Subagent:
-    name: str
-    parent: str | None
-    reason: StopReason | None = None
-    """Set when it returns."""
-
-
-@dataclass
-class _Response:
-    key: str | None
-    model: ModelRef
-    subagent_invocation_id: str | None
-    opened: datetime
-    last: datetime
-    content: list[ContentBlock] = field(default_factory=list)
-    usage: UsageReport | None = None
-    response_model: str | None = None
-    finish_reasons: list[str] | None = None
-    duration_ms: int | None = None
-    meta: dict[str, JsonValue] = field(default_factory=dict)
-    call_ids: set[str] = field(default_factory=set)
-    waiting: list[Callable[[], None]] = field(default_factory=list)
-    """Document updates that depend on this response."""
-    tool_returned: bool = False
-
-
-def _has_content(content: list[ContentBlock]) -> bool:
-    return any(not (isinstance(block, TextBlock) and not block.text) for block in content)
+def _avp(value: dict[str, Any]) -> dict[str, Any]:
+    return value.setdefault("extra", {}).setdefault("avp", {})
 
 
 def _ms(start: datetime, end: datetime) -> int:
@@ -127,8 +70,90 @@ def _refusal(error: ValidationError) -> str:
     return f"the Commission doesn't match the spec: {problems}"
 
 
+@dataclass
+class _Document:
+    """One trajectory: the root, or a subagent's."""
+
+    data: dict[str, Any]
+    provider: str | None = None
+    last: datetime | None = None
+    """When the latest step or result was recorded, for default durations."""
+    children: list["_Document"] = field(default_factory=list)
+    reported: dict[str, Any] | None = None
+    """Totals the runtime reported for a subagent whose responses it hides."""
+    stop_reason: StopReason | None = None
+
+    def step(self, timestamp: datetime, source: str, message: Any) -> dict[str, Any]:
+        steps = self.data["steps"]
+        step = {
+            "step_id": len(steps) + 1,
+            "timestamp": timestamp.isoformat(),
+            "source": source,
+            "message": message,
+        }
+        steps.append(step)
+        return step
+
+    def stopped(self, reason: StopReason, timestamp: datetime) -> None:
+        self.stop_reason = reason
+        _avp(self.data).update(stop_reason=reason, stopped_at=timestamp.isoformat())
+
+    def final(self) -> dict[str, Any]:
+        """Write `final_metrics` for this trajectory and its subagents, each
+        counted once, and return it."""
+        children = [child.final() for child in self.children]
+        own = [s.get("metrics", {}) for s in self.data["steps"] if s["source"] == "agent"]
+        totals: dict[str, Any] = {"total_steps": len(self.data["steps"])}
+        if self.reported is not None and not own:
+            totals.update({k: v for k, v in self.reported.items() if k != "total_steps"})
+            self.data["final_metrics"] = totals
+            return totals
+        counted = [c for c in children if _get(c, "total_responses", True) != 0]
+        responses = len(own) + sum(_get(c, "total_responses", True) or 0 for c in counted)
+        avp: dict[str, Any] = {}
+        for key, total, in_extra in _TOTALS:
+            values = [_get(m, key, in_extra) for m in own]
+            values += [_get(c, total, in_extra) for c in counted]
+            if values and all(v is not None for v in values):
+                (avp if in_extra else totals)[total] = sum(values)
+        costs = [m.get("cost_usd") for m in own] + [c.get("total_cost_usd") for c in counted]
+        known = [c for c in costs if c is not None]
+        if known:
+            totals["total_cost_usd"] = sum(known)
+            if len(known) < len(costs) or any(
+                _get(c, "cost_complete", True) is False for c in counted
+            ):
+                avp["cost_complete"] = False
+        avp["total_responses"] = responses
+        totals["extra"] = {"avp": avp}
+        self.data["final_metrics"] = totals
+        return totals
+
+
+_TOTALS = (
+    ("prompt_tokens", "total_prompt_tokens", False),
+    ("completion_tokens", "total_completion_tokens", False),
+    ("cached_tokens", "total_cached_tokens", False),
+    ("cache_creation_input_tokens", "total_cache_creation_input_tokens", True),
+    ("reasoning_output_tokens", "total_reasoning_output_tokens", True),
+)
+"""Each response metric, its total in `final_metrics`, and whether both are in `extra.avp`."""
+
+
+def _get(value: dict[str, Any], key: str, in_extra: bool) -> Any:
+    return (value.get("extra", {}).get("avp", {}) if in_extra else value).get(key)
+
+
+@dataclass
+class _Call:
+    document: _Document
+    step: dict[str, Any]
+    time: datetime
+    returned: bool = False
+
+
 class Recorder:
-    """Publish a current ATIF snapshot after each completed runtime report."""
+    """Builds one run's ATIF document and writes it to `sink` when the run ends."""
 
     def __init__(
         self,
@@ -144,453 +169,371 @@ class Recorder:
         self._now = now or (lambda: datetime.now(UTC))
         self.run_id = run_id or (new_id or (lambda: str(uuid.uuid4())))()
         self._begun = False
-        self._started: RunContext | None = None
+        self._started = False
         self.ended = False
-        self._response: _Response | None = None
+        self._root = self._document(self.run_id, "unknown", "unknown")
+        self._subagents: dict[str, _Document] = {}
         self._calls: dict[str, _Call] = {}
-        self._subagents: dict[str, _Subagent] = {}
-        self._root = _document(self.run_id, f"{self.run_id}/root", "unknown", "unknown")
-        self._documents = {None: self._root}
-        self._delegations: dict[str, dict[str, Any]] = {}
         self._assets: dict[str, bytes] = {}
         self._commission: Commission | None = None
-        self._descriptor: AgentDescriptor | None = None
-        self._agent_start: AgentStart | None = None
 
-    def _time(self) -> str:
-        return self._now().isoformat()
-
-    async def _publish(self) -> None:
-        self._root.finish()
-        data = deepcopy(self._root.data)
-        await self._sink(
-            Recording(
-                Trajectory.model_validate(data),
-                self._assets.copy(),
-                self._commission,
-                self._descriptor,
-                self._agent_start,
-            )
+    def _document(self, trajectory_id: str, name: str, version: str) -> _Document:
+        return _Document(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "session_id": self.run_id,
+                "trajectory_id": trajectory_id,
+                "agent": {"name": name, "version": version},
+                "steps": [],
+                "extra": {"avp": {"avp_version": AVP_VERSION}},
+            }
         )
-
-    async def _write(self, update: Callable[[], None]) -> None:
-        if self._response is not None:
-            self._response.waiting.append(update)
-        else:
-            update()
-            await self._publish()
 
     def _check(self, report: str, *, started: bool = True) -> None:
         if self.ended:
             raise RecorderError(f"{report}: the run has ended")
-        if started and self._started is None:
+        if started and not self._started:
             raise RecorderError(f"{report}: called before start")
 
-    def _scope(self, invocation: str | None):
-        if invocation not in self._documents:
-            raise RecorderError(f"unknown subagent {invocation!r}")
-        return self._documents[invocation]
+    def _scope(self, subagent: str | None) -> _Document:
+        if subagent is None:
+            return self._root
+        document = self._subagents.get(subagent)
+        if document is None:
+            raise RecorderError(f"unknown subagent {subagent!r}")
+        if document.stop_reason is not None:
+            raise RecorderError(f"subagent {subagent!r} has stopped")
+        return document
+
+    async def _write(self) -> None:
+        self._root.final()
+        trajectory = Trajectory.model_validate(self._root.data)
+        await self._sink(Recording(trajectory, self._assets.copy()))
+
+    # The run
 
     async def begin(self, received: JsonValue, descriptor: AgentDescriptor) -> Commission | None:
-        """Validate the Commission and initialize the agent's ATIF document."""
+        """Check the Commission and return it. `received` is None for a run
+        without one. When the agent refuses it, the Trajectory is written and
+        `ended` is true."""
         self._check("begin", started=False)
-        if self._begun or self._started is not None:
-            raise RecorderError("begin: called twice, or after start")
+        if self._begun:
+            raise RecorderError("begin: called twice")
         self._begun = True
-        commission, refusal = None, None
-        if received is not None:
-            try:
-                commission = Commission.model_validate(received)
-            except ValidationError as error:
-                refusal = _refusal(error)
-            if isinstance(received, dict) and isinstance(received.get("run_id"), str):
-                self.run_id = str(received["run_id"])
-        self._root = _document(
-            self.run_id, f"{self.run_id}/root", descriptor.agent_name, descriptor.agent_version
-        )
-        self._documents = {None: self._root}
-        self._commission = commission.model_copy(deep=True) if commission else None
-        self._descriptor = descriptor.model_copy(deep=True)
-        self._root.step(self._time(), "system", "Run initialized.")
-        if commission is not None:
-            refusal = check_commission(commission, descriptor)
+        if isinstance(received, dict) and isinstance(received.get("run_id"), str):
+            self.run_id = str(received["run_id"])
+        self._root = self._document(self.run_id, descriptor.agent_name, descriptor.agent_version)
+        _avp(self._root.data["agent"])["descriptor"] = _json(descriptor)
+        if received is None:
+            return None
+        _avp(self._root.data)["commission"] = received
+        try:
+            commission = Commission.model_validate(received)
+        except ValidationError as error:
+            await self.error("invalid_commission", _refusal(error))
+            return None
+        refusal = check_commission(commission, descriptor)
         if refusal is not None:
             await self.error("invalid_commission", refusal)
             return None
-        await self._publish()
+        self._commission = commission
         return commission
 
-    async def start(self, started: RunContext, *, meta: dict[str, JsonValue] | None = None) -> None:
+    async def start(self, agent: Agent, prompt: str, *, system_prompt: str | None = None) -> None:
+        """Record what the run uses and its first steps. `agent` holds the
+        model, tool definitions, and `extra.avp`; the Recorder keeps the name,
+        version, and Descriptor from `begin`. Skill files are copied beside the
+        Trajectory, and each skill's `source` points to the copy."""
         self._check("start", started=False)
-        if self._started is not None:
+        if self._started:
             raise RecorderError("start: called twice")
-        data = started.model_dump(mode="json", exclude_none=True)
-        self._agent_start = capture_start(data, self._commission, self.run_id, self._assets)
-        self._started = started
+        given = _json(agent)
+        avp = given.get("extra", {}).get("avp", {})
+        if "model" not in avp:
+            raise RecorderError("start: agent.extra.avp.model is required")
+        self._capture_skills(avp)
         root = self._root
-        root.data["steps"] = []
-        _metadata(root.data)["started_at"] = self._time()
-        if meta:
-            _metadata(root.data)["annotations"] = deepcopy(meta)
-        agent = root.data["agent"]
-        agent["model_name"] = started.model.id
-        agent["extra"] = {"avp": {"provider": data["model"]["provider"]}}
-        agent["tool_definitions"] = [
-            {
-                "type": "function",
-                "function": {
-                    "name": t["name"],
-                    "parameters": t["inputSchema"],
-                    **({"description": t["description"]} if "description" in t else {}),
-                },
-            }
-            for t in data.get("tools", [])
+        root.data["agent"] = {
+            **given,
+            "name": root.data["agent"]["name"],
+            "version": root.data["agent"]["version"],
+            "extra": {
+                **given.get("extra", {}),
+                "avp": {**avp, **root.data["agent"].get("extra", {}).get("avp", {})},
+            },
+        }
+        root.provider = avp["model"]["provider"]
+        self._started = True
+        now = self._now()
+        root.last = now
+        _avp(root.data)["started_at"] = now.isoformat()
+        if system_prompt is not None:
+            root.step(now, "system", system_prompt)
+        root.step(now, "user", prompt)
+
+    def _capture_skills(self, avp: dict[str, Any]) -> None:
+        supplied = (
+            {s.name: s.files for s in (self._commission.skills or [])} if self._commission else {}
+        )
+        scopes = [("skills", avp.get("skills", []))] + [
+            (f"skills/subagent-{i}", child.get("skills", []))
+            for i, child in enumerate(avp.get("subagents", []))
         ]
-        if started.system_prompt is not None:
-            root.step(self._time(), "system", started.system_prompt)
-        root.step(self._time(), "user", started.prompt)
-        await self._publish()
+        for prefix, skills in scopes:
+            for index, skill in enumerate(skills):
+                files = self._skill_files(
+                    skill, supplied.get(skill["name"], {}) if prefix == "skills" else {}
+                )
+                if not files:
+                    skill.pop("source", None)
+                    continue
+                directory = f"{prefix}/{index}-{re.sub(r'[^A-Za-z0-9._-]', '-', skill['name'])}"
+                for path, content in files.items():
+                    if _SKILL_FILE.match(path) is None:
+                        raise ValueError("skill file paths must be relative, without traversal")
+                    self._assets[f"{directory}/{path}"] = content
+                skill["source"] = f"file:{directory}"
 
-    async def error(
-        self, code: ErrorCode, message: str, *, subagent_invocation_id: str | None = None
-    ) -> None:
+    @staticmethod
+    def _skill_files(skill: dict[str, Any], inline: dict[str, str]) -> dict[str, bytes]:
+        source = skill.get("source")
+        if source is None:
+            return {path: text.encode() for path, text in inline.items()}
+        uri = urlsplit(source)
+        if uri.scheme != "file" or uri.netloc not in {"", "localhost"}:
+            raise ValueError(f"skill source must be a local file URI: {source}")
+        root = Path(unquote(uri.path)).resolve(strict=True)
+        if not (root / "SKILL.md").is_file():
+            raise ValueError(f"skill source has no SKILL.md: {source}")
+        files = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_symlink():
+                raise ValueError(f"skill capture requires regular files: {path}")
+            if path.is_file():
+                files[path.relative_to(root).as_posix()] = path.read_bytes()
+        return files
+
+    async def error(self, code: ErrorCode, message: str, *, subagent: str | None = None) -> None:
+        """Record an error as a system step. Before `start`, the error ends the
+        run and the Trajectory is written."""
         self._check("error", started=False)
-        timestamp = self._time()
-
-        def update():
-            doc = self._scope(subagent_invocation_id)
-            if self._started is None:
-                doc.data["steps"] = []
-                self.ended = True
-                _metadata(doc.data).update(complete=True, stop_reason="error", stopped_at=timestamp)
-            _metadata(doc.step(timestamp, "system", message))["error_code"] = code
-
-        await self._write(update)
+        now = self._now()
+        if not self._started:
+            self._root.data["steps"] = []
+            _avp(self._root.step(now, "system", message))["error_code"] = code
+            self._root.stopped("error", now)
+            self.ended = True
+            await self._write()
+            return
+        document = self._scope(subagent)
+        _avp(document.step(now, "system", message))["error_code"] = code
 
     async def stop(self, reason: StopReason, output: JsonValue = None) -> None:
+        """End the run and write the Trajectory. `output` is the run's result;
+        None means the run returned none. Running tool calls get an error
+        result, and running subagents are abandoned."""
         if self.ended:
             return
-        if self._started is None:
+        if not self._started:
             await self.error("agent_crash", STOPPED_BEFORE_START_TEXT)
             return
-        await self.close_response()
-        running = [id for id, child in self._subagents.items() if child.reason is None]
-        for invocation in running:
-            await self.subagent_returned(invocation, ABANDONED_TEXT, "abandoned")
-        for call_id in [id for id, call in self._calls.items() if not call.returned]:
-            await self.tool_returned(call_id, UNRETURNED_TEXT, is_error=True)
+        running = [id for id, child in self._subagents.items() if child.stop_reason is None]
+        for invocation in reversed(running):
+            await self.subagent_stopped(invocation, "abandoned")
+        for call_id, call in self._calls.items():
+            if not call.returned:
+                await self.result(
+                    ObservationResult(
+                        source_call_id=call_id,
+                        content=UNRETURNED_TEXT,
+                        extra={"avp": {"is_error": True}},
+                    )
+                )
         if running and reason == "converged":
             reason = "abandoned"
-        self.ended = True
-        _metadata(self._root.data).update(
-            complete=True, stop_reason=reason, stopped_at=self._time()
-        )
-        last_message = next(
-            (
-                step["message"]
-                for step in reversed(self._root.data["steps"])
-                if step["source"] == "agent"
-            ),
+        self._root.stopped(reason, self._now())
+        last = next(
+            (s["message"] for s in reversed(self._root.data["steps"]) if s["source"] == "agent"),
             None,
         )
-        if not (isinstance(output, str) and output == last_message) and (
-            output is not None or last_message is not None
+        if not (isinstance(output, str) and output == last) and (
+            output is not None or last is not None
         ):
-            _metadata(self._root.data)["output"] = output
-        await self._publish()
+            _avp(self._root.data)["output"] = output
+        self.ended = True
+        await self._write()
 
-    async def response(
+    # Model responses and tools
+
+    def image(self, data: bytes, media_type: str) -> ContentPart:
+        """An image content part. The image is written beside the Trajectory."""
+        if media_type not in _IMAGE_EXTENSIONS:
+            raise ValueError(f"ATIF does not support image media type {media_type!r}")
+        name = f"images/{hashlib.sha256(data).hexdigest()}.{_IMAGE_EXTENSIONS[media_type]}"
+        self._assets[name] = data
+        return ContentPart.model_validate(
+            {"type": "image", "source": {"media_type": media_type, "path": name}}
+        )
+
+    def image_base64(self, data: str, media_type: str) -> ContentPart:
+        """`image`, for base64 data as model services return it."""
+        return self.image(base64.b64decode(data, validate=True), media_type)
+
+    async def step(
         self,
-        content: list[ContentBlock],
+        message: str | list[ContentPart],
         *,
-        usage: UsageReport | None = None,
-        model: ModelRef | None = None,
-        response_model: str | None = None,
-        finish_reasons: list[str] | None = None,
-        duration_ms: int | None = None,
-        subagent_invocation_id: str | None = None,
-        key: str | None = None,
-        meta: dict[str, JsonValue] | None = None,
+        reasoning_content: str | None = None,
+        tool_calls: list[ToolCall] | None = None,
+        observation_results: list[ObservationResult] | None = None,
+        metrics: Metrics | None = None,
+        model_name: str | None = None,
+        extra: dict[str, Any] | None = None,
+        subagent: str | None = None,
     ) -> None:
-        self._check("response")
-        assert self._started is not None
-        calls = [b for b in content if isinstance(b, ToolUseBlock)]
-        ids = [call.id for call in calls]
-        repeated = next((id for id in ids if id in self._calls or ids.count(id) > 1), None)
+        """Record one complete model response as an agent step.
+
+        `observation_results` are results the model service returned in the
+        response, for its server-side tools. `extra` is the step's ATIF
+        `extra`; `extra.avp.duration_ms` defaults to the time since the previous
+        step or result. Without `metrics.cost_usd`, the Recorder prices the
+        response from models.dev."""
+        self._check("step")
+        document = self._scope(subagent)
+        calls = [_json(c) for c in tool_calls or []]
+        ids = [c["tool_call_id"] for c in calls]
+        repeated = next((i for i in ids if i in self._calls or ids.count(i) > 1), None)
         if repeated is not None:
-            raise RecorderError(f"response: tool_use id {repeated!r} was already used")
-        open_ = self._response
-        if open_ is not None and (
-            key is None
-            or key != open_.key
-            or open_.tool_returned
-            or subagent_invocation_id != open_.subagent_invocation_id
-        ):
-            await self.close_response()
-        self._scope(subagent_invocation_id)
+            raise RecorderError(f"step: tool_call_id {repeated!r} was already used")
+        results = [_json(r) for r in observation_results or []]
+        unmatched = next((r for r in results if r.get("source_call_id") not in ids), None)
+        if unmatched is not None:
+            raise RecorderError(
+                f"step: result for unknown call {unmatched.get('source_call_id')!r}"
+            )
         now = self._now()
-        if self._response is None:
-            self._response = _Response(
-                key=key,
-                model=model or self._started.model,
-                subagent_invocation_id=subagent_invocation_id,
-                opened=now,
-                last=now,
-            )
-        response = self._response
-        response.last = now
-        response.content.extend(content)
-        if usage is not None:
-            response.usage = usage
-        if response.response_model is None:
-            response.response_model = response_model
-        if finish_reasons is not None:
-            response.finish_reasons = finish_reasons
-        if duration_ms is not None:
-            response.duration_ms = duration_ms
-        if meta:
-            response.meta.update(meta)
+        step = document.step(
+            now, "agent", message if isinstance(message, str) else [_json(p) for p in message]
+        )
+        agent_model = document.data["agent"].get("model_name")
+        if model_name is not None and model_name != agent_model:
+            step["model_name"] = model_name
+        if reasoning_content is not None:
+            step["reasoning_content"] = reasoning_content
+        if calls:
+            step["tool_calls"] = calls
+        if results:
+            step["observation"] = {"results": results}
+        step["llm_call_count"] = 1
+        if extra:
+            step["extra"] = json.loads(json.dumps(extra))
+        avp = _avp(step)
+        if "duration_ms" not in avp:
+            avp["duration_ms"] = _ms(document.last or now, now)
+        if metrics is not None:
+            step["metrics"] = self._priced(_json(metrics), document, model_name or agent_model)
+        document.last = now
         for call in calls:
-            self._calls[call.id] = _Call(call.name, call.input, subagent_invocation_id, now)
-            response.call_ids.add(call.id)
-        if key is None:
-            await self.close_response()
+            server_side = call.get("extra", {}).get("avp", {}).get("server_side")
+            if not server_side:
+                self._calls[call["tool_call_id"]] = _Call(document, step, now)
 
-    async def usage(self, usage: UsageReport, *, key: str | None = None) -> None:
-        self._check("usage")
-        if self._response is None or (key is not None and key != self._response.key):
-            raise RecorderError(f"usage: no open response with key {key!r}")
-        self._response.usage = usage
+    def _priced(
+        self, metrics: dict[str, Any], document: _Document, model: str | None
+    ) -> dict[str, Any]:
+        avp = metrics.get("extra", {}).get("avp", {})
+        cached = metrics.get("cached_tokens", 0) + avp.get("cache_creation_input_tokens", 0)
+        if cached > metrics.get("prompt_tokens", cached):
+            raise RecorderError("step: cached and cache creation tokens exceed prompt_tokens")
+        if "cost_usd" in metrics:
+            _avp(metrics).setdefault("cost_source", "reported")
+            return metrics
+        if document.provider is None or model is None or "prompt_tokens" not in metrics:
+            return metrics
+        if self._prices is None:
+            self._prices = load_prices()
+        cost = compute_cost(self._prices, document.provider, model, Metrics.model_validate(metrics))
+        if cost is not None:
+            metrics["cost_usd"] = cost
+            _avp(metrics)["cost_source"] = "computed"
+        return metrics
 
-    async def close_response(self) -> None:
-        response = self._response
-        if response is None:
-            return
-        self._response = None
-        if _has_content(response.content):
-            self._record_response(response)
-        for update in response.waiting:
-            update()
-        await self._publish()
+    async def result(self, result: ObservationResult) -> None:
+        """Record a tool call's result on the step that holds the call.
+        `finished_at` and `duration_ms` default to now and the time since the
+        call. A call that started a subagent is an error exactly when the
+        subagent didn't converge."""
+        self._check("result")
+        data = _json(result)
+        call_id = data.get("source_call_id")
+        call = self._calls.get(call_id) if call_id is not None else None
+        if call is None or call.returned:
+            state = "unknown" if call is None else "already returned"
+            raise RecorderError(f"result: tool call {call_id!r} is {state}")
+        call.returned = True
+        now = self._now()
+        avp = _avp(data)
+        avp.setdefault("finished_at", now.isoformat())
+        avp.setdefault("duration_ms", _ms(call.time, now))
+        child = self._subagents.get(call_id)
+        if child is not None:
+            if child.stop_reason is not None:
+                avp["is_error"] = child.stop_reason != "converged"
+            data["subagent_trajectory_ref"] = [{"trajectory_id": child.data["trajectory_id"]}]
+        results = call.step.setdefault("observation", {"results": []})["results"]
+        results.append(data)
+        call.document.last = now
 
-    def _record_response(self, response: _Response) -> None:
-        report = response.usage
-        usage: dict[str, Any] = {}
-        if report is not None:
-            if self._prices is None and report.cost_usd is None:
-                self._prices = load_prices()
-            cost, source = compute_cost(
-                self._prices or Prices(fetched=self._now(), models={}),
-                response.model,
-                input_tokens=report.input_tokens,
-                output_tokens=report.output_tokens,
-                cache_read_input_tokens=report.cache_read_input_tokens or 0,
-                cache_creation_input_tokens=report.cache_creation_input_tokens or 0,
-                response_model=response.response_model,
-                reported_cost_usd=report.cost_usd,
-            )
-            usage = Usage(
-                **report.model_dump(exclude={"cost_usd"}), cost_usd=cost, cost_source=source
-            ).model_dump(exclude_none=True)
-        doc = self._scope(response.subagent_invocation_id)
-        blocks = [b.model_dump(mode="json", exclude_none=True) for b in response.content]
-        visible = [b for b in blocks if b["type"] in ("text", "image", "refusal")]
-        step = doc.step(response.last.isoformat(), "agent", _content(visible, self._assets))
-        step.update(
-            llm_call_count=1,
-            metrics=_metrics(usage),
-        )
-        doc.record_model(
-            step,
-            response.model.model_dump(exclude_none=True),
-            response.response_model or response.model.id,
-        )
-        metadata = _metadata(step)
-        metadata.update(
-            duration_ms=response.duration_ms
-            if response.duration_ms is not None
-            else _ms(response.opened, response.last),
-        )
-        if response.finish_reasons:
-            metadata["finish_reasons"] = response.finish_reasons
-        if response.meta:
-            metadata["annotations"] = response.meta
-        if details := _content_metadata(visible):
-            metadata["message_metadata"] = details
-        reasoning = [
-            b["thinking"] for b in blocks if b["type"] == "thinking" and not b.get("redacted")
-        ]
-        if reasoning:
-            step["reasoning_content"] = "\n".join(reasoning)
-        details, offset = [], 0
-        for block in blocks:
-            if block["type"] != "thinking":
-                continue
-            entry = _remaining(block, {"type", "thinking"})
-            if block.get("redacted"):
-                entry["encrypted_content"] = block["thinking"]
-            elif entry:
-                entry.update(start=offset, end=offset + len(block["thinking"]))
-            if not block.get("redacted"):
-                offset += len(block["thinking"]) + 1
-            if entry:
-                details.append(entry)
-        if details:
-            metadata["reasoning_metadata"] = details
-        for block in blocks:
-            if block["type"] in ("tool_use", "server_tool_use"):
-                call = {
-                    "tool_call_id": block["id"],
-                    "function_name": block["name"],
-                    "arguments": block["input"],
-                }
-                if block["type"] == "server_tool_use":
-                    _metadata(call)["server_side"] = True
-                extra = _remaining(block, {"type", "id", "name", "input"})
-                for alias in ("provider_call_id", "call_id", "tool_call_id"):
-                    if extra.get(alias) == block["id"]:
-                        extra.pop(alias)
-                if extra:
-                    _metadata(call)["provider_metadata"] = extra
-                if block["type"] == "tool_use":
-                    state = self._calls[block["id"]]
-                    state.step = step
-                    _metadata(call)["observed_at"] = state.time.isoformat()
-                step.setdefault("tool_calls", []).append(call)
-        for block in blocks:
-            if block["type"] in ("tool_result", "server_tool_result"):
-                self._result(
-                    step,
-                    block["tool_use_id"],
-                    block["content"],
-                    response.last.isoformat(),
-                    block.get("is_error", False),
-                    provider_metadata=_remaining(
-                        block, {"type", "tool_use_id", "name", "content", "is_error"}
-                    ),
-                )
-        doc.usages.append(usage)
+    # Subagents
 
-    def _result(self, step, call_id, content, timestamp, is_error=False, **details):
-        if not any(c["tool_call_id"] == call_id for c in step.get("tool_calls", [])):
-            raise RecorderError(f"unmatched tool result {call_id!r}")
-        result = _observation(step, call_id)
-        result.update(
-            content=_content(content, self._assets),
-            extra={
-                "avp": {
-                    "finished_at": timestamp,
-                    "is_error": bool(is_error),
-                    **{k: v for k, v in details.items() if v is not None and v != {}},
-                }
-            },
-        )
-        if annotations := _content_metadata(content):
-            _metadata(result)["content_metadata"] = annotations
-
-    async def tool_returned(
-        self,
-        call_id: str,
-        content: str | list[TextBlock | ImageBlock],
-        *,
-        is_error: bool | None = None,
-        structured_content: dict[str, JsonValue] | None = None,
+    async def subagent_started(
+        self, call_id: str, name: str, prompt: str, *, agent: Agent | None = None
     ) -> None:
-        self._check("tool_returned")
+        """Start a subagent's trajectory for the tool call that started it.
+        Report its steps with `subagent=call_id`. `agent` is what the subagent
+        uses, as in `start`; its name is `name`. Without it, the subagent uses
+        the parent's model."""
+        self._check("subagent_started")
         call = self._calls.get(call_id)
         if call is None or call.returned:
-            raise RecorderError(
-                f"tool_returned: tool call {call_id!r} is {'unknown' if call is None else 'already returned'}"
-            )
-        call.returned = True
-        child = self._subagents.get(call_id)
-        if child is not None and child.reason is not None:
-            is_error = child.reason != "converged"
-        if self._response is not None and call_id in self._response.call_ids:
-            self._response.tool_returned = True
-        timestamp = self._time()
-        raw = (
-            content
-            if isinstance(content, str)
-            else [b.model_dump(mode="json", exclude_none=True) for b in content]
-        )
+            raise RecorderError(f"subagent_started: tool call {call_id!r} is unknown or returned")
+        if call_id in self._subagents:
+            raise RecorderError(f"subagent_started: {call_id!r} was already used")
+        child = self._document(f"{self.run_id}/subagent/{call_id}", name, "unknown")
+        if agent is not None:
+            given = _json(agent)
+        else:
+            parent = call.document.data["agent"]
+            given = {k: v for k, v in parent.items() if k == "model_name"}
+            if model := _get(parent, "model", True):
+                given["extra"] = {"avp": {"model": model}}
+        child.data["agent"] = {**given, "name": name, "version": "unknown"}
+        child.provider = (_get(given, "model", True) or {}).get("provider")
+        now = self._now()
+        child.last = now
+        _avp(child.data)["started_at"] = now.isoformat()
+        child.step(now, "user", prompt)
+        self._subagents[call_id] = child
+        call.document.children.append(child)
+        call.document.data.setdefault("subagent_trajectories", []).append(child.data)
 
-        def update():
-            if call.step is None:
-                raise RecorderError(f"tool_returned: {call_id!r} has no response")
-            self._result(
-                call.step,
-                call_id,
-                raw,
-                timestamp,
-                is_error,
-                structured_content=structured_content,
-            )
-
-        await self._write(update)
-
-    async def subagent_invoked(
+    async def subagent_stopped(
         self,
-        invocation_id: str,
-        name: str,
-        subagent_input: dict[str, JsonValue] | None = None,
-        *,
-        subagent_invocation_id: str | None = None,
-    ) -> None:
-        self._check("subagent_invoked")
-        if invocation_id in self._subagents:
-            raise RecorderError(f"subagent_invoked: {invocation_id!r} was already used")
-        call = self._calls.get(invocation_id)
-        if call:
-            subagent_input = call.input if subagent_input is None else subagent_input
-            subagent_invocation_id = subagent_invocation_id or call.subagent_invocation_id
-        self._subagents[invocation_id] = _Subagent(name, subagent_invocation_id)
-        timestamp = self._time()
-
-        def update():
-            parent = self._scope(subagent_invocation_id)
-            child = _document(
-                self.run_id, f"{self.run_id}/subagent/{invocation_id}", name, "unknown"
-            )
-            self._documents[invocation_id] = child
-            parent.children.append(child)
-            parent.data.setdefault("subagent_trajectories", []).append(child.data)
-            _metadata(child.data)["started_at"] = timestamp
-            child.step(timestamp, "user", json.dumps(subagent_input or {}, ensure_ascii=False))
-            step = call.step if call else None
-            result = (
-                _observation(step, invocation_id)
-                if step is not None
-                else _observation(parent.step(timestamp, "system", f"Delegated to {name}."), None)
-            )
-            result["subagent_trajectory_ref"] = [{"trajectory_id": child.data["trajectory_id"]}]
-            self._delegations[invocation_id] = result
-
-        await self._write(update)
-
-    async def subagent_returned(
-        self,
-        invocation_id: str,
-        text: str,
+        call_id: str,
         reason: StopReason = "converged",
         *,
-        usage: SubagentUsage | None = None,
+        final_metrics: FinalMetrics | None = None,
     ) -> None:
-        self._check("subagent_returned")
-        child = self._subagents.get(invocation_id)
-        if child is None or child.reason is not None:
-            raise RecorderError(
-                f"subagent_returned: subagent {invocation_id!r} is {'unknown' if child is None else 'already returned'}"
-            )
-        child.reason = reason
-        timestamp = self._time()
-
-        def update():
-            doc = self._scope(invocation_id)
-            _metadata(doc.data).update(complete=True, stop_reason=reason, stopped_at=timestamp)
-            self._delegations[invocation_id].setdefault("content", text)
-            if not doc.usages:
-                counts = usage.model_dump(exclude_none=True) if usage else {}
-                doc.usages.append(counts)
-
-        await self._write(update)
+        """End a subagent's trajectory. `final_metrics` holds totals the runtime
+        reports when it doesn't show the subagent's responses."""
+        self._check("subagent_stopped")
+        child = self._subagents.get(call_id)
+        if child is None or child.stop_reason is not None:
+            state = "unknown" if child is None else "already stopped"
+            raise RecorderError(f"subagent_stopped: subagent {call_id!r} is {state}")
+        for grandchild_id, grandchild in self._subagents.items():
+            if grandchild.stop_reason is None and grandchild in child.children:
+                await self.subagent_stopped(grandchild_id, "abandoned")
+        child.stopped(reason, self._now())
+        if final_metrics is not None:
+            child.reported = _json(final_metrics)

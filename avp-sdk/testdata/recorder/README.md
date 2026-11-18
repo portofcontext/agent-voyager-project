@@ -7,22 +7,19 @@ Every SDK's Recorder passes these cases. Each file is one case:
 | `name`, `description` | What the case shows. |
 | `prices` | The models.dev prices to compute costs with, keyed `<provider>/<model id>`. |
 | `calls` | The Recorder calls to make, in order. |
-| `trajectory` | The completed native ATIF document. |
+| `trajectory` | The ATIF document the Recorder writes. |
+| `files` | The paths of the files written beside it, when there are any. |
 
 Each call has `call`, the Recorder method in snake_case, and its arguments by
-name. `t` is the clock, in milliseconds after the start, while the call runs.
-`raises: true` means the call must raise the Recorder's error and write nothing.
+name. ATIF arguments (`agent`, `tool_calls`, `observation_results`, `metrics`,
+`result`, `final_metrics`) are ATIF JSON. `t` is the clock, in milliseconds
+after the start, while the call runs. `raises: true` means the call must raise
+the Recorder's error and record nothing.
 
-Run each case with a Recorder whose `run_id` is `run-0`. Validate every
-published snapshot as ATIF, then compare the final document to `trajectory`:
+Run each case with a Recorder whose `run_id` is `run-0`. The Recorder must
+write exactly one document. Compare it to `trajectory`:
 
 - Compare timestamps as instants, independent of UTC spelling.
-- Omit unset optional ATIF fields; preserve explicit nulls in open JSON objects.
+- Omit unset optional fields; keep explicit nulls.
 - Compare numbers with a relative tolerance of 1e-9.
 - `"<any>"` matches text whose wording may differ between SDKs.
-
-The expected documents were captured independently from the previous ATIF
-converter before replacing it with native recording. They cover streaming,
-parallel tools, nested children, usage totals for children whose responses are
-unavailable, partial usage,
-interruption, invalid input, and structured output.

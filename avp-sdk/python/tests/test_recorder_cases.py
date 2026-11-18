@@ -9,75 +9,75 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import TypeAdapter
 
-from avp.commission import ModelRef
 from avp.descriptor import AgentDescriptor
-from avp.recorder import Recorder, RecorderError, UsageReport
-from avp.reports import ContentBlock, RunContext, SubagentUsage
-from avp.trajectory import Recording, final_output, parse_trajectory
+from avp.recorder import Recorder, RecorderError
+from avp.trajectory import (
+    Agent,
+    FinalMetrics,
+    Metrics,
+    ObservationResult,
+    Recording,
+    ToolCall,
+    final_output,
+    parse_trajectory,
+)
 from avp.utils.pricing import Prices
 
 CASES = Path(__file__).resolve().parents[2] / "testdata" / "recorder"
 START = datetime(2026, 1, 1, tzinfo=UTC)
-CONTENT = TypeAdapter(list[ContentBlock])
 
 
 async def _call(rec: Recorder, call: dict[str, Any]) -> None:
     name = call["call"]
-    usage = (
-        UsageReport.model_validate(call["usage"])
-        if call.get("usage") and name in ("response", "usage")
-        else None
-    )
     if name == "begin":
-        descriptor = AgentDescriptor.model_validate(call["descriptor"])
-        await rec.begin(call["received"], descriptor)
+        await rec.begin(call["received"], AgentDescriptor.model_validate(call["descriptor"]))
     elif name == "start":
-        await rec.start(RunContext.model_validate(call["started"]), meta=call.get("meta"))
-    elif name == "response":
-        await rec.response(
-            CONTENT.validate_python(call["content"]),
-            usage=usage,
-            model=ModelRef.model_validate(call["model"]) if "model" in call else None,
-            response_model=call.get("response_model"),
-            finish_reasons=call.get("finish_reasons"),
-            duration_ms=call.get("duration_ms"),
-            subagent_invocation_id=call.get("subagent_invocation_id"),
-            key=call.get("key"),
-            meta=call.get("meta"),
+        await rec.start(
+            Agent.model_validate(call["agent"]),
+            call["prompt"],
+            system_prompt=call.get("system_prompt"),
         )
-    elif name == "usage":
-        assert usage is not None
-        await rec.usage(usage, key=call.get("key"))
-    elif name == "close_response":
-        await rec.close_response()
-    elif name == "tool_returned":
-        await rec.tool_returned(call["call_id"], call["content"], is_error=call.get("is_error"))
-    elif name == "subagent_invoked":
-        await rec.subagent_invoked(call["invocation_id"], call["name"], call.get("subagent_input"))
-    elif name == "subagent_returned":
-        subagent_usage = call.get("usage")
-        await rec.subagent_returned(
-            call["invocation_id"],
-            call["text"],
+    elif name == "step":
+        await rec.step(
+            call["message"],
+            reasoning_content=call.get("reasoning_content"),
+            tool_calls=[ToolCall.model_validate(c) for c in call.get("tool_calls", [])] or None,
+            observation_results=[
+                ObservationResult.model_validate(r) for r in call.get("observation_results", [])
+            ]
+            or None,
+            metrics=Metrics.model_validate(call["metrics"]) if "metrics" in call else None,
+            model_name=call.get("model_name"),
+            extra=call.get("extra"),
+            subagent=call.get("subagent"),
+        )
+    elif name == "result":
+        await rec.result(ObservationResult.model_validate(call["result"]))
+    elif name == "subagent_started":
+        await rec.subagent_started(call["call_id"], call["name"], call["prompt"])
+    elif name == "subagent_stopped":
+        final_metrics = call.get("final_metrics")
+        await rec.subagent_stopped(
+            call["call_id"],
             call.get("reason", "converged"),
-            usage=SubagentUsage.model_validate(subagent_usage) if subagent_usage else None,
+            final_metrics=FinalMetrics.model_validate(final_metrics) if final_metrics else None,
         )
     elif name == "error":
-        await rec.error(call["code"], call["message"])
+        await rec.error(call["code"], call["message"], subagent=call.get("subagent"))
     elif name == "stop":
         await rec.stop(call["reason"], call.get("output"))
     else:
         raise AssertionError(f"unknown call {name!r}")
 
 
-def run_case(case: dict[str, Any]) -> dict[str, Any]:
-    snapshots: list[Recording] = []
+def run_case(case: dict[str, Any]) -> Recording:
+    """Make the case's calls and return the one Recording written."""
+    written: list[Recording] = []
     clock = [START]
 
-    async def sink(snapshot: Recording) -> None:
-        snapshots.append(snapshot)
+    async def sink(recording: Recording) -> None:
+        written.append(recording)
 
     rec = Recorder(
         sink,
@@ -89,26 +89,15 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
     async def calls() -> None:
         for call in case["calls"]:
             clock[0] = START + timedelta(milliseconds=call["t"])
-            written = len(snapshots)
             if call.get("raises"):
                 with pytest.raises(RecorderError):
                     await _call(rec, call)
-                assert len(snapshots) == written, f"a rejected {call['call']} published a snapshot"
             else:
                 await _call(rec, call)
 
     asyncio.run(calls())
-    started = next(
-        (c["started"] for c in case["calls"] if c["call"] == "start" and not c.get("raises")),
-        None,
-    )
-    if started and "tools" in started:
-        assert snapshots[-1].agent_start is not None
-        assert (
-            snapshots[-1].agent_start.model_dump(mode="json", exclude_none=True)["tools"]
-            == started["tools"]
-        )
-    return snapshots[-1].trajectory.to_json_dict()
+    assert len(written) == 1, f"the Recorder wrote {len(written)} documents, not 1"
+    return written[0]
 
 
 def _same(actual: Any, expected: Any, where: str = "") -> None:
@@ -133,9 +122,10 @@ def _same(actual: Any, expected: Any, where: str = "") -> None:
 @pytest.mark.parametrize("path", sorted(CASES.glob("*.json")), ids=lambda path: path.stem)
 def test_case(path: Path) -> None:
     case = json.loads(path.read_text())
-    actual = run_case(case)
+    recording = run_case(case)
+    actual = json.loads(recording.json())
     _same(actual, case["trajectory"], "trajectory")
-
+    assert sorted(recording.assets) == sorted(case.get("files", []))
     stop = next((c for c in reversed(case["calls"]) if c["call"] == "stop"), None)
-    if stop and any(c["call"] == "start" and not c.get("raises") for c in case["calls"]):
+    if stop and actual["extra"]["avp"].get("started_at"):
         assert final_output(parse_trajectory(actual)) == stop.get("output")

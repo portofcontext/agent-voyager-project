@@ -1,6 +1,6 @@
 {
   "name": "interrupted-with-running-subagent",
-  "description": "An interrupted stop keeps its reason when a subagent is abandoned. A second stop writes nothing.",
+  "description": "An interrupted stop keeps its reason when a subagent is abandoned. A second stop does nothing.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -35,64 +35,46 @@
     {
       "t": 1,
       "call": "start",
-      "started": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      }
+        }
+      },
+      "prompt": "Do the task."
     },
     {
-      "t": 10,
-      "call": "subagent_invoked",
-      "invocation_id": "sub-1",
-      "name": "researcher",
-      "subagent_input": {
-        "prompt": "Look."
-      }
+      "t": 100,
+      "call": "step",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "task-1",
+          "function_name": "Task",
+          "arguments": {}
+        }
+      ]
     },
     {
-      "t": 20,
+      "t": 110,
+      "call": "subagent_started",
+      "call_id": "task-1",
+      "name": "explorer",
+      "prompt": "{}"
+    },
+    {
+      "t": 500,
       "call": "stop",
       "reason": "interrupted"
     },
     {
-      "t": 21,
+      "t": 600,
       "call": "stop",
       "reason": "converged"
     }
@@ -100,112 +82,139 @@
   "trajectory": {
     "schema_version": "ATIF-v1.8",
     "session_id": "run-1",
-    "trajectory_id": "run-1/root",
+    "trajectory_id": "run-1",
     "agent": {
       "name": "case-agent",
       "version": "1.0.0",
       "model_name": "claude-test-1",
       "extra": {
         "avp": {
-          "provider": "anthropic"
-        }
-      },
-      "tool_definitions": [
-        {
-          "type": "function",
-          "function": {
-            "name": "read_file",
-            "parameters": {
-              "type": "object"
-            }
-          }
-        },
-        {
-          "type": "function",
-          "function": {
-            "name": "search",
-            "parameters": {
-              "type": "object"
-            }
-          }
-        },
-        {
-          "type": "function",
-          "function": {
-            "name": "Task",
-            "parameters": {
-              "type": "object"
-            }
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          },
+          "model": {
+            "provider": "anthropic"
           }
         }
-      ]
+      }
     },
     "steps": [
       {
         "step_id": 1,
-        "timestamp": "2026-01-01T00:00:00.001000Z",
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
         "source": "user",
         "message": "Do the task."
       },
       {
         "step_id": 2,
-        "timestamp": "2026-01-01T00:00:00.010000Z",
-        "source": "system",
-        "message": "Delegated to researcher.",
+        "timestamp": "2026-01-01T00:00:00.100000+00:00",
+        "source": "agent",
+        "message": "",
+        "tool_calls": [
+          {
+            "tool_call_id": "task-1",
+            "function_name": "Task",
+            "arguments": {}
+          }
+        ],
         "observation": {
           "results": [
             {
+              "source_call_id": "task-1",
+              "content": "The run ended before the tool returned.",
               "subagent_trajectory_ref": [
                 {
-                  "trajectory_id": "run-1/subagent/sub-1"
+                  "trajectory_id": "run-1/subagent/task-1"
                 }
               ],
-              "content": "The run ended while the subagent was still running."
+              "extra": {
+                "avp": {
+                  "duration_ms": 400,
+                  "finished_at": "2026-01-01T00:00:00.500000+00:00",
+                  "is_error": true
+                }
+              }
             }
           ]
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 99
+          }
         }
       }
     ],
+    "final_metrics": {
+      "total_steps": 2,
+      "extra": {
+        "avp": {
+          "total_responses": 1
+        }
+      }
+    },
     "extra": {
       "avp": {
-        "complete": true,
-        "started_at": "2026-01-01T00:00:00.001000Z",
+        "avp_version": "0.1",
+        "commission": {
+          "avp_version": "0.1",
+          "run_id": "run-1",
+          "model": {
+            "provider": "anthropic",
+            "id": "claude-test-1"
+          },
+          "prompt": "Do the task."
+        },
+        "started_at": "2026-01-01T00:00:00.001000+00:00",
+        "stopped_at": "2026-01-01T00:00:00.500000+00:00",
         "stop_reason": "interrupted",
-        "stopped_at": "2026-01-01T00:00:00.020000Z"
+        "output": null
       }
     },
     "subagent_trajectories": [
       {
         "schema_version": "ATIF-v1.8",
         "session_id": "run-1",
-        "trajectory_id": "run-1/subagent/sub-1",
+        "trajectory_id": "run-1/subagent/task-1",
         "agent": {
-          "name": "researcher",
-          "version": "unknown"
+          "name": "explorer",
+          "version": "unknown",
+          "model_name": "claude-test-1",
+          "extra": {
+            "avp": {
+              "model": {
+                "provider": "anthropic"
+              }
+            }
+          }
         },
         "steps": [
           {
             "step_id": 1,
-            "timestamp": "2026-01-01T00:00:00.010000Z",
+            "timestamp": "2026-01-01T00:00:00.110000+00:00",
             "source": "user",
-            "message": "{\"prompt\": \"Look.\"}"
+            "message": "{}"
           }
         ],
-        "extra": {
-          "avp": {
-            "complete": true,
-            "started_at": "2026-01-01T00:00:00.010000Z",
-            "stop_reason": "abandoned",
-            "stopped_at": "2026-01-01T00:00:00.020000Z"
+        "final_metrics": {
+          "total_steps": 1,
+          "extra": {
+            "avp": {
+              "total_responses": 0
+            }
           }
         },
-        "final_metrics": {
-          "total_steps": 1
+        "extra": {
+          "avp": {
+            "avp_version": "0.1",
+            "started_at": "2026-01-01T00:00:00.110000+00:00",
+            "stopped_at": "2026-01-01T00:00:00.500000+00:00",
+            "stop_reason": "abandoned"
+          }
         }
       }
-    ],
-    "final_metrics": {
-      "total_steps": 2
-    }
+    ]
   }
 }

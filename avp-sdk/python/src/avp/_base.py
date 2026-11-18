@@ -59,4 +59,4 @@ class OpenWireModel(BaseModel):
 
 
 TrajectorySink = Callable[["Recording"], Awaitable[None]]
-"""Receives the current ATIF document and assets after each Recorder update."""
+"""Receives the finished ATIF document and its files, once, when the run ends."""
