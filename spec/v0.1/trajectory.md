@@ -330,9 +330,9 @@ Each subagent the run starts MUST have its own trajectory in `subagent_trajector
 
 A reader, such as a supervisor, conforms to this spec if it follows every MUST and MUST NOT in this section.
 
-### 5.1 Plain ATIF is accepted
+### 5.1 AVP Trajectories are checked, plain ATIF is accepted
 
-A reader MUST accept ATIF documents without `extra.avp`.
+A Trajectory with `extra.avp.avp_version` is an AVP Trajectory. A reader MAY reject an AVP Trajectory that is missing a required `extra` field. A reader MUST accept a Trajectory without `extra.avp` as plain ATIF.
 
 ### 5.2 Unknown values are read safely
 
