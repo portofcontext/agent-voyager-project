@@ -75,8 +75,7 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
                         plan.prompt,
                         system_prompt=system_prompt if isinstance(system_prompt, str) else None,
                     )
-                    allowed = {d["function"]["name"] for d in started.tool_definitions or []}
-                    responses = Responses(rec, allowed)
+                    responses = Responses(rec)
                 elif isinstance(message, ResultMessage):
                     result = message
                 elif responses is not None:

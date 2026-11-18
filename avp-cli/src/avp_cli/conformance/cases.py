@@ -316,7 +316,12 @@ CASES: list[Case] = [
         commission=_commission,
         check=_one_step_per_response,
         responses=(
-            {"toolCalls": [{"name": "avp_conformance_missing", "arguments": "{}"}]},
+            # Reasoning first: a model with extended thinking on starts a
+            # tool-calling turn with it, and the mock rejects a turn sent back without.
+            {
+                "reasoning": "Calling the tool.",
+                "toolCalls": [{"name": "avp_conformance_missing", "arguments": "{}"}],
+            },
             {"content": "A scripted reply."},
         ),
     ),

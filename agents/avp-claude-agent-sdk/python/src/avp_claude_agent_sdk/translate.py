@@ -119,9 +119,8 @@ class Responses:
     called it stops. Those messages wait until that response is recorded.
     """
 
-    def __init__(self, rec: Recorder, allowed: set[str]):
+    def __init__(self, rec: Recorder):
         self.rec = rec
-        self.allowed = allowed
         self.open: dict[str | None, dict[str, Any]] = {}
         """Streaming responses, by the subagent call they belong to (None for the root)."""
         self.subagents: dict[str, dict[str, Any]] = {}
@@ -218,9 +217,6 @@ class Responses:
         native = state["message"]
         response = parts([state["blocks"][i] for i in sorted(state["blocks"])])
         calls = [p for p in response if isinstance(p, Call) and not p.server_side]
-        for call in calls:
-            if call.name not in self.allowed:
-                raise ValueError(f"Claude called disabled or undeclared tool {call.name!r}")
         stop = native.get("stop_reason")
         await self.rec.step(
             response,

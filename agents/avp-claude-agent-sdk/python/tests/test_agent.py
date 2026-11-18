@@ -280,19 +280,38 @@ def test_native_errors_are_reported(script, tmp_path, info, code):
     assert atif.meta(events)["stop_reason"] == "error"
 
 
-def test_incomplete_response_and_disabled_tool_fail(script, tmp_path):
+def test_incomplete_response_fails(script, tmp_path):
     script.messages = [init(), result()]
     _, events = run_cli(tmp_path, raises=True)
     assert atif.meta(events)["stop_reason"] == "error"
+
+
+def test_a_call_to_a_disabled_tool_records_claudes_refusal(script, tmp_path):
     script.messages = [
         init(),
         *response([{"type": "tool_use", "id": "call", "name": "Bash", "input": {}}]),
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call",
+                        "content": "No such tool available: Bash",
+                        "is_error": True,
+                    }
+                ],
+            },
+        },
+        *response(),
         result(),
     ]
-    _, events = run_cli(
-        tmp_path / "disabled", raises=True, agents={"avp-claude-agent-sdk": {"enabled_tools": []}}
-    )
-    assert "disabled" in atif.errors(events)[-1]["message"]
+    code, events = run_cli(tmp_path, agents={"avp-claude-agent-sdk": {"enabled_tools": []}})
+    assert code == 0
+    [returned] = atif.results(events)
+    assert atif.meta(returned)["is_error"]
+    assert (len(atif.responses(events)), atif.meta(events)["stop_reason"]) == (2, "converged")
 
 
 def test_cancellation_stops_and_returns_130(script, tmp_path):
