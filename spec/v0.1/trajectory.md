@@ -177,6 +177,7 @@ At `steps[].extra.avp`. The step's `model_name` is the model that produced the r
 |---|---|---|---|
 | `duration_ms` | integer | Yes, on agent steps | How long the model response took, in milliseconds, ending at the step's `timestamp`. 0 or more. |
 | `finish_reasons` | string[] | No | On agent steps, why the model stopped, exactly as the service reported it, for example `"end_turn"` or `"length"`. |
+| `message_metadata` | [Content metadata](#38-content-metadata)[] | No | On agent steps, data for parts of `message`. |
 | `error_code` | [Error code](#331-error-code) | Yes, on system steps that record an error | What kind of error. The step's `message` says what happened. |
 
 #### 3.3.1 Error code
@@ -210,6 +211,7 @@ At `steps[].observation.results[].extra.avp`.
 | `finished_at` | string | Yes, for tools the agent ran | When the result arrived, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. |
 | `is_error` | boolean | No | `true` when the call failed. |
 | `structured_content` | any | No | A result meant for programs, such as MCP's `structuredContent`, given beside `content`. For a tool the model service ran, a result that isn't text. |
+| `content_metadata` | [Content metadata](#38-content-metadata)[] | No | Data for parts of `content`. |
 
 ### 3.6 Metrics
 
@@ -234,7 +236,29 @@ At `final_metrics.extra.avp`, on the root trajectory and on each subagent trajec
 
 ### 3.8 Content metadata
 
-TBD.
+ATIF content parts can't hold extra fields, so data for one part of a step's `message` or a result's `content` is kept beside it, in `steps[].extra.avp.message_metadata` or `observation.results[].extra.avp.content_metadata`. Each is a list with an entry for each part that has such data. Entries can hold fields the model service added, such as Gemini's `thought_signature`, so the agent can pass them back to the service.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `part_index` | integer | Yes | The position of the part in `message` or `content`, from 0. `0` when the value is a string. |
+| `citations` | [Citation](#381-citation)[] | No | Sources the model cited in the part. |
+| `refusal` | boolean | No | `true` when the part is the model's text declining the task. |
+
+ATIF keeps a response's text, reasoning, and tool calls in separate fields, so their order within one response is not recorded.
+
+#### 3.8.1 Citation
+
+A source the model cited. Can hold fields the service added, such as Anthropic's `document_index`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | Yes | The kind of citation, as the model service names it, such as `url_citation`. |
+| `cited_text` | string | No | The text cited. |
+| `start_index` | integer | No | Where the cited part of the text starts. 0 or more. |
+| `end_index` | integer | No | Where it ends. 0 or more. |
+| `source_id` | string | No | The service's ID for the source. |
+| `source_url` | string | No | The source's URL. |
+| `source_title` | string | No | The source's title. |
 
 ### 3.9 Reasoning metadata
 
