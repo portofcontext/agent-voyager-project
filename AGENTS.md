@@ -34,23 +34,25 @@ Implement shared behavior in Python first, then TypeScript.
 
 - Import wire types from `avp.commission`, `avp.descriptor`, `avp.agent_start`,
   and `avp.trajectory`.
-- A Commission requires `avp_version`, `run_id`, `model`, and `prompt`. Its model
-  has `provider` and `id`, plus optional `base_url` and `credential` fields.
-- Agent settings live under `agents`, keyed by the Descriptor's `agent_name`.
-  An absent built-in allowlist allows all items; `[]` allows none.
-- Use secret references in Commissions. Include MCP configuration and skill
-  files inline.
 - Use native ATIF-v1.8 from the pinned Harbor models. Recorder input types
   live in `avp.reports`; do not introduce another event wire contract.
-- Use standard ATIF fields first; keep necessary execution metadata in `extra.avp`.
-- Save the resolved configuration exposed by the runtime in Agent Start, with paths to captured skill directories.
-  File runs contain `commission.json`, `descriptor.json`, `agent-start.json`, and
-  `trajectory.json`. Ordinary generated files and ATIF images need no manifest.
-- Record one ATIF agent step per model response, with per-response usage
-  and cost. Convert cumulative totals to deltas. Keep tool calls alongside
-  assistant content and match results by call ID.
+- For Commission, Descriptor, and Trajectory rules, read the
+  [specs](spec/v0.1/). Do not restate them here.
 - Test shared Recorder and run-plan behavior with `avp-sdk/testdata/`.
   Keep runtime-specific translation in the adapter.
+
+## Spec maintenance
+
+- Each spec has these sections: Overview, Example, Reference, Rules for
+  `<who>`, Out of scope.
+- State each rule once, in prose, in Rules. Never put one only in an example,
+  table, or note.
+- Link to a rule instead of restating it. This applies to other specs, the
+  spec README, guides, and this file.
+- Use MUST, SHOULD, and MAY in capitals, in the RFC 2119 sense. Each rule names
+  who it applies to.
+- Cut fields that nobody sets or reads. Use one name per concept.
+- Extend outside models (ATIF, MCP, Agent Skills). Never change them.
 
 ## Repository layout
 
