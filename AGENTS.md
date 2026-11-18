@@ -58,8 +58,8 @@ Implement shared behavior in Python first, then TypeScript.
 
 - `spec/v0.1/`: specs and generated schemas.
 - `avp-sdk/{python,typescript}/`: SDKs, with shared `data/` and `testdata/`.
-- `avp-cli/`: supervisor CLI, built-in agent Dockerfiles and source pins,
-  evaluations, and conformance cases.
+- `avp-cli/`: supervisor CLI, built-in agent Dockerfiles, evaluations, and
+  conformance cases.
 - `agents/<name>/<language>/`: runtime adapters.
 - `scripts/`: schema generation, SDK-data refresh, and packaging checks.
 - `testing/mcp/`: MCP fixtures.
@@ -69,6 +69,23 @@ Run commands from that directory or use `uv run --project <path>`.
 The CLI runs installed images through OpenSandbox with default-deny networking
 and its Credential Vault. Agents implement `ping`, `describe`, and
 `run --commission <path | JSON> --out <path | ->`.
+
+## Packages and built-in agents
+
+The SDKs, each adapter, and the CLI are separate packages. In the repo, an
+adapter uses the SDK source next to it, so you can work against unreleased
+SDK changes. A published package never does.
+
+- An adapter declares the SDK as a version range, such as
+  `agent-voyager-project>=0.1.0b3`. Point it at the local SDK only through
+  development settings that publishing drops: `[tool.uv.sources]` in Python,
+  npm workspaces in TypeScript. Never use a `file:` dependency.
+- Release the SDK version an adapter needs before releasing the adapter.
+- A Dockerfile in `avp-cli` is for a released agent only. It installs a pinned
+  version of the adapter's package and needs no build context.
+- To run unreleased code in a container, build a temporary image in a test or
+  script: write a Dockerfile there with the repo root as its context. Never add
+  one to the CLI package.
 
 ## Verification
 
