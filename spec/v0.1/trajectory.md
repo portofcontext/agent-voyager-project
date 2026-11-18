@@ -181,7 +181,16 @@ At `steps[].extra.avp`. The step's `model_name` is the model that produced the r
 
 #### 3.3.1 Error code
 
-TBD.
+| Code | Meaning |
+|---|---|
+| `invalid_commission` | The agent refused the Commission, as the Commission spec's [rules for agents](./commission.md#51-the-agent-checks-the-commission-before-the-run-starts) require. The message says which rule. |
+| `mcp_connect_failed` | An MCP server the Commission added didn't connect, so the run [didn't start](./commission.md#54-added-items-are-used-or-the-run-stops). The message names the server. |
+| `auth_error` | The model service rejected the agent's credentials. |
+| `rate_limit` | The model service refused a request because of a rate or usage limit. |
+| `context_limit` | A request was longer than the model's context window. |
+| `output_invalid` | The final output didn't match the Commission's `output_schema`. The output is in the trajectory's `extra.avp.output`. |
+| `agent_crash` | The agent failed, or the model service failed. Also used when someone stops the run from outside before it starts. |
+| `unknown` | Any other error. |
 
 ### 3.4 Tool call
 
