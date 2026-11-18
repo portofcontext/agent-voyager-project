@@ -114,7 +114,7 @@ transport.
 |---|---|
 | `ping` | `{"type": "pong", "avp_version": "0.1"}`, without loading the agent: checks installation and the AVP version it speaks |
 | `describe` | The agent's Descriptor as JSON |
-| `run` | ATIF JSON; atomic file snapshots, or one completed document on stdout with `-` |
+| `run` | One ATIF document, written when the run ends, to a file or to stdout with `-` |
 
 Paths default to stdout where `--out` is optional.
 

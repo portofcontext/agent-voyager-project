@@ -10,8 +10,7 @@ Every agent that follows AVP accepts the same Commission and produces the same T
 
 The supervisor sends one Commission at the start and nothing after it. The
 runtime owns model calls, tools, and its loop. Its adapter records native reports
-into ATIF and publishes document snapshots, so readers can follow the run or
-inspect it afterward.
+into ATIF and writes one document when the run ends.
 
 The Descriptor lists built-in tools, skills, and subagents before the run. The
 Commission selects and configures them. Agent Start records the resolved
@@ -52,7 +51,7 @@ In the [Commission example](./commission.md#2-example), run with OpenSandbox's [
 
 AVP reuses existing specs wherever one already fits:
 
-- **[ATIF](https://harborframework.com/docs/agents/atif)**: the trajectory format, shared with existing viewers and trace pipelines.
+- **[ATIF](https://github.com/harbor-framework/harbor/blob/9c7a39b991d7e2205019f6be0598cbd22d84bfc3/rfcs/0001-trajectory-format.md)**: the trajectory format, shared with existing viewers and trace pipelines.
 - **[MCP](https://modelcontextprotocol.io/specification)**: how a Commission names external tool servers, and the shape of tool definitions. The agent's own MCP client talks to those servers.
 - **[Agent Skills](https://agentskills.io/specification)**: the format of skills shipped in a Commission.
 - **[models.dev](https://models.dev)**: the provider and model IDs that name a model, and the prices AVP uses to compute each response's cost.

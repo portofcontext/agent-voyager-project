@@ -8,10 +8,9 @@ no export step, old AVP event envelope, or source-event archive.
 avp-pydantic-ai-cli run --commission commission.json --out trajectory.json
 ```
 
-File output is an atomically replaced JSON snapshot. Tools first appear in a
+The agent writes one ATIF document when the run ends. Tool calls are in a
 model-response step's `tool_calls`; their results are attached to that step's
-`observation`. The CLI follows these updates without replaying previous output.
-Stdout output is one completed document. File output also saves `commission.json`,
+`observation`. File output also saves `commission.json`,
 `descriptor.json`, and `agent-start.json` beside the trace. Keep those documents
 and referenced skill directories and image files together when moving a complete run.
 
