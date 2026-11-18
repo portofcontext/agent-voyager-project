@@ -118,15 +118,46 @@ At the trajectory's top-level `extra.avp`, and on each embedded subagent traject
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `avp_version` | string | Yes | The AVP version the Trajectory follows. `"0.1"` for this spec. |
-| `commission` | [Commission](./commission.md#31-commission), or any | No | The Commission as the agent received it. When what it received doesn't match the Commission spec, the JSON value it received, or the text when it isn't JSON. Absent when the run has no Commission. |
-| `started_at` | string | No | When the run started, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. It can be earlier than the first step, since the agent can do work before it records one. Absent when the agent [refused](#45-a-refused-run-has-no-model-responses) the Commission. |
-| `stopped_at` | string | No | When the run stopped, as an RFC 3339 timestamp. |
+| `commission` | [Commission](./commission.md#31-commission), or any | Yes, when the run has a Commission | The Commission exactly as the agent received it, including one it then refuses. When what it received doesn't match the Commission spec, the JSON value it received, or the text when it isn't JSON. Absent when the run has no Commission. |
+| `started_at` | string | Yes, unless the run was [refused](#45-a-refused-run-has-no-model-responses) | When the run started, as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp. It can be earlier than the first step, since the agent can do work before it records one. |
+| `stopped_at` | string | Yes | When the run stopped, as an RFC 3339 timestamp. |
 | `stop_reason` | [Stop reason](#38-stop-reason) | Yes | Why the run stopped. |
 | `output` | any | No | The run's result, when it differs from the last agent message or has a different JSON type, for example structured output. `null` means the run returned no result. Absent means the result is the last agent message. |
 
 ### 3.2 Agent
 
-TBD.
+At `agent.extra.avp`. An embedded subagent trajectory has its own. The values are what the run used: the agent's [Descriptor](./agent-descriptor.md) combined with the [Commission](./commission.md), which [limits the built-in items](./commission.md#52-agent-settings-limit-the-built-in-items), [adds its own](./commission.md#54-added-items-are-used-or-the-run-stops), and [replaces the system prompt](./commission.md#55-system_prompt-replaces-the-agents-own). The prompt, system prompt, model ID, and each tool's name, description, and input schema are in standard ATIF fields, so they are not repeated here.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `descriptor` | [Agent Descriptor](./agent-descriptor.md#31-descriptor) | Yes, on the root trajectory | The agent's Descriptor, unchanged. Absent on subagent trajectories. |
+| `model` | [Model](#321-model) | Yes, unless the run was [refused](#45-a-refused-run-has-no-model-responses) | The service that runs the model in `agent.model_name`. |
+| `tools` | map<string, [Tool](#322-tool)> | No | For each tool in `agent.tool_definitions`, keyed by its name, the fields ATIF's tool definition can't hold. |
+| `mcp_servers` | [MCP server](./agent-descriptor.md#33-mcp-server)[] | No | The MCP servers the run used, with their `status`. |
+| `skills` | [Skill](./agent-descriptor.md#34-skill)[] | No | The skills the run used. `source` points to the saved skill directory beside the Trajectory. |
+| `subagents` | [Subagent](./agent-descriptor.md#35-subagent)[] | No | The subagents available to the run. |
+
+For `tools`, `mcp_servers`, `skills`, and `subagents`, an absent list means the run has none of that item.
+
+#### 3.2.1 Model
+
+A [Commission Model](./commission.md#33-model) without `id` or `credential`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | string | Yes | The service that runs the model. |
+| `base_url` | string | No | The URL of the service's API. Absent means the service's default. |
+
+#### 3.2.2 Tool
+
+The [Tool](./agent-descriptor.md#32-tool) fields that ATIF's OpenAI-style tool definition can't hold. Absent fields mean the tool has none.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | No | The tool's display name. |
+| `outputSchema` | [JSON Schema](https://json-schema.org/draft/2020-12) | No | The shape of the tool's structured result. |
+| `annotations` | map<string, any> | No | The tool's [MCP annotations](https://modelcontextprotocol.io/specification/latest/server/tools#tool). |
+| `mcp_server_id` | string | No | The `id` of the MCP server in `mcp_servers` the tool comes from. Absent for any tool that does not come from an MCP server. |
 
 ### 3.3 Step
 
