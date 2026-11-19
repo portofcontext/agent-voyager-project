@@ -36,6 +36,17 @@ export async function run(
   const descriptor = await describe();
   const commission = await rec.begin(received, descriptor);
   if (!commission) return;
+  if (
+    !descriptor.supported_models?.some(
+      (model) => model.provider === commission.model.provider,
+    )
+  ) {
+    await rec.error(
+      "invalid_commission",
+      "Gemini CLI cannot call this provider",
+    );
+    return;
+  }
   if (commission.output_schema != null) {
     await rec.error(
       "invalid_commission",

@@ -251,6 +251,7 @@ test("native tool allowlists and custom system prompt replace the defaults", asy
 test("invalid Commission and unsupported structured output refuse before native generation", async (t: any) => {
   for (const c of [
     received({ output_schema: { type: "object" } }),
+    received({ model: { provider: "unknown", id: MODEL } }),
     received({
       agents: { "avp-gemini-cli": { enabled_tools: ["imaginary"] } },
     }),
