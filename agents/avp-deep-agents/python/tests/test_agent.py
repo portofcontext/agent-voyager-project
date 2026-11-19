@@ -228,6 +228,28 @@ def test_missing_secret_is_an_auth_error(tmp_path, monkeypatch):
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
 
 
+def test_missing_mcp_secret_remains_an_auth_error_after_another_server_connects(
+    script, tmp_path, monkeypatch
+):
+    monkeypatch.delenv("MISSING_AVP_KEY", raising=False)
+    model = script()
+    code, events = run_cli(
+        tmp_path,
+        mcp_servers=[
+            {"id": "fixture", "type": "stdio", "command": [sys.executable, str(FIXTURE)]},
+            {
+                "id": "auth",
+                "type": "http",
+                "url": "http://127.0.0.1:1/mcp",
+                "headers": {"Authorization": {"env": "MISSING_AVP_KEY"}},
+            },
+        ],
+    )
+    assert code == 0
+    assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
+    assert not model.requests
+
+
 @pytest.mark.parametrize(
     "server",
     [

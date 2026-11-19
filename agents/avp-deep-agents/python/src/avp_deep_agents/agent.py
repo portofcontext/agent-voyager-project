@@ -62,8 +62,13 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
             tools = []
             owners = {}
             for server in commission.mcp_servers or []:
+                try:
+                    connection = cm.connection(server)
+                except cm.MissingSecret as exc:
+                    await rec.error("auth_error", str(exc))
+                    return
                 connecting = server.id
-                session = await stack.enter_async_context(create_session(cm.connection(server)))
+                session = await stack.enter_async_context(create_session(connection))
                 await session.initialize()
                 listed = await load_mcp_tools(session, server_name=server.id, tool_name_prefix=True)
                 connecting = None
@@ -136,9 +141,6 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
     except asyncio.CancelledError:
         await rec.stop("interrupted")
         raise
-    except cm.MissingSecret as exc:
-        await rec.error("auth_error", str(exc))
-        await rec.stop("error")
     except Exception as exc:
         code = "mcp_connect_failed" if connecting else translate.error_code(exc)
         message = f"{connecting}: {exc}" if connecting else str(exc) or type(exc).__name__
