@@ -15,8 +15,8 @@ uv pip install --python /tmp/avp-harbor/bin/python \
 ```
 
 `--jobs` creates a new directory with Harbor's job/trial metadata and copies the
-original document byte for byte, plus its image assets and any Commission,
-Descriptor, and Agent Start documents with their referenced skill directories.
+original document byte for byte, plus its referenced image files and skill
+directories.
 It never reruns the agent
 or claims a verifier reward. `--conversations` invokes Harbor's text extractor
 directly and preserves its behavior: episodes end at each root agent response,

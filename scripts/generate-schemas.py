@@ -21,8 +21,8 @@ from pydantic import BaseModel, TypeAdapter
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp.reports import ContentBlock, ErrorCode, RunContext, StopReason, SubagentUsage, Usage
-from avp.trajectory import Trajectory
+from avp.recorder import Part, Usage
+from avp.trajectory import ErrorCode, StopReason, Trajectory
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "spec" / "v0.1"
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
@@ -70,19 +70,17 @@ def main() -> None:
             },
         )
 
-    class Reports(BaseModel):
+    class RecorderInputs(BaseModel):
         commission: Commission
         descriptor: AgentDescriptor
-        context: RunContext
         usage: Usage
-        subagent_usage: SubagentUsage
-        content: list[ContentBlock]
+        parts: list[Part]
         stop_reason: StopReason
         error_code: ErrorCode
 
-    inputs = Reports.model_json_schema()
-    inputs["$id"] = "https://www.agentvoyagerproject.com/sdk/reports.schema.json"
-    target = OUT_DIR.parent.parent / "avp-sdk/typescript/src/schemas/reports.json"
+    inputs = RecorderInputs.model_json_schema()
+    inputs["$id"] = "https://www.agentvoyagerproject.com/sdk/recorder.schema.json"
+    target = OUT_DIR.parent.parent / "avp-sdk/typescript/src/schemas/recorder.json"
     target.write_text(json.dumps(inputs, indent=2) + "\n")
     write_json(
         "avp.schema.json",

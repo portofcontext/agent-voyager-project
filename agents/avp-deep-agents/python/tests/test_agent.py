@@ -56,8 +56,7 @@ def test_text_usage_and_commission_replaces_prompt(script, tmp_path):
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (1, 0, 0, True)
+    ) == (1, 0, 0)
     system = next(m for m in model.requests[0] if isinstance(m, SystemMessage))
     assert system.text.startswith("SYSTEM\n\n## Skill: greeting")
     assert "SUPPORT" in system.text
@@ -67,7 +66,7 @@ def test_text_usage_and_commission_replaces_prompt(script, tmp_path):
     assert message["metrics"]["cached_tokens"] == 400
     assert message["metrics"]["completion_tokens"] == 50
     assert atif.meta(message["metrics"])["reasoning_output_tokens"] == 10
-    assert events["agent"]["model_name"] == "gpt-4o-mini-2024-07-18"
+    assert message["model_name"] == "gpt-4o-mini-2024-07-18"
     assert {
         "reason": atif.meta(events).get("stop_reason"),
         "output": atif.output(events),
@@ -89,8 +88,7 @@ def test_invalid_commission_never_calls_model(script, tmp_path, fields):
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "invalid_commission"
     assert not model.requests
 
@@ -142,7 +140,7 @@ def test_native_mcp_success_and_both_error_forms(script, tmp_path, mode):
     invoked = {item["tool_call_id"]: item for item in atif.calls(events)}
     returned = {item["source_call_id"]: item for item in atif.results(events)}
     assert set(invoked) == set(returned) == {call[0] for call in calls}
-    assert all(atif.mcp_server(tmp_path, item) == "fixture" for item in invoked.values())
+    assert all(atif.mcp_server(events, item) == "fixture" for item in invoked.values())
     assert "BOUNDARY" in str(returned["one"]["content"])
     if mode == "errors":
         assert atif.meta(returned["result"])["is_error"] is True
@@ -194,8 +192,34 @@ def test_native_refusal(script, tmp_path):
     script(response)
     _, events = run_cli(tmp_path)
     assert atif.responses(events)[0]["message"] == "Declined"
-    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["annotations"]["refusal"]
+    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["refusal"]
     assert atif.meta(events)["stop_reason"] == "refused"
+
+
+def test_native_citations(script, tmp_path):
+    response = reply()
+    response.content = [
+        {
+            "type": "text",
+            "text": "DONE",
+            "annotations": [
+                {
+                    "type": "citation",
+                    "url": "https://example.com",
+                    "title": "Source",
+                    "start_index": 0,
+                    "end_index": 4,
+                }
+            ],
+        }
+    ]
+    script(response)
+    code, events = run_cli(tmp_path)
+    assert code == 0
+    [citation] = atif.meta(atif.responses(events)[0])["message_metadata"][0]["citations"]
+    assert citation["source_url"] == "https://example.com"
+    assert citation["source_title"] == "Source"
+    assert (citation["start_index"], citation["end_index"]) == (0, 4)
 
 
 def test_missing_secret_is_an_auth_error(tmp_path, monkeypatch):
@@ -204,11 +228,17 @@ def test_missing_secret_is_an_auth_error(tmp_path, monkeypatch):
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "auth_error"
 
 
-def test_unreachable_mcp_stops_before_model(script, tmp_path):
+@pytest.mark.parametrize(
+    "server",
+    [
+        {"id": "bad", "type": "stdio", "command": ["/nonexistent/mcp"]},
+        {"id": "bad", "type": "http", "url": "http://127.0.0.1:1/mcp"},
+    ],
+)
+def test_unreachable_mcp_stops_before_model(script, tmp_path, server):
     model = script()
-    _, events = run_cli(
-        tmp_path, mcp_servers=[{"id": "bad", "type": "stdio", "command": ["/nonexistent/mcp"]}]
-    )
+    code, events = run_cli(tmp_path, mcp_servers=[server])
+    assert code == 0
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "mcp_connect_failed"
     assert not model.requests
 
@@ -253,7 +283,7 @@ def test_subagent_tools_remain_scoped_when_parent_disables_them(script, tmp_path
     _, events = run_cli(tmp_path, agents={"avp-deep-agents": {"enabled_tools": ["task"]}})
     started = events["agent"]
     assert [t["function"]["name"] for t in started["tool_definitions"]] == ["task"]
-    assert "read_file" in {t["name"] for t in atif.effective(tmp_path)["subagents"][0]["tools"]}
+    assert "read_file" in {t["name"] for t in atif.meta(events["agent"])["subagents"][0]["tools"]}
     call = next(c for c in atif.calls(events) if c["tool_call_id"] == "read")
     result = next(c for c in atif.results(events) if c["source_call_id"] == "read")
     child = atif.children(events)[0]
@@ -399,4 +429,4 @@ def test_cancellation_closes_the_native_run_as_interrupted(script, tmp_path):
     asyncio.run(scenario())
     events = events[-1]
     assert atif.meta(events)["stop_reason"] == "interrupted"
-    assert atif.meta(events)["complete"]
+    assert atif.meta(events)["stopped_at"]

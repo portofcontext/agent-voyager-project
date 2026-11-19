@@ -1,9 +1,14 @@
 /** ATIF documents. Accepts upstream producers without AVP extensions. */
 import { readFileSync } from "node:fs";
-import type { AgentStart, Commission, AgentDescriptor } from "./wire.js";
+import type { Tool } from "./descriptor.js";
 import { ajv } from "./validation.js";
 import type { Trajectory } from "./wire.js";
 export type {
+  Agent,
+  AgentModel,
+  AgentTool,
+  AgentAvpExtra,
+  Citation,
   Trajectory,
   Step,
   Metrics,
@@ -16,9 +21,6 @@ export type {
 export interface Recording {
   trajectory: Trajectory;
   assets: Map<string, Uint8Array>;
-  commission?: Commission;
-  descriptor?: AgentDescriptor;
-  agentStart?: AgentStart;
 }
 export type TrajectorySink = (snapshot: Recording) => Promise<void>;
 const schema = JSON.parse(
@@ -64,6 +66,27 @@ export function parseTrajectory(received: unknown): Trajectory {
     for (const child of doc?.subagent_trajectories ?? []) normalize(child);
   }
   normalize(value);
+  function codes(doc: any): void {
+    for (const step of doc?.steps ?? []) {
+      const extra = step.extra?.avp;
+      if (
+        typeof extra?.error_code === "string" &&
+        ![
+          "invalid_commission",
+          "mcp_connect_failed",
+          "auth_error",
+          "rate_limit",
+          "context_limit",
+          "output_invalid",
+          "agent_crash",
+          "unknown",
+        ].includes(extra.error_code)
+      )
+        extra.error_code = "unknown";
+    }
+    for (const child of doc?.subagent_trajectories ?? []) codes(child);
+  }
+  codes(value);
   if (!validate(value)) throw new TypeError(ajv.errorsText(validate.errors));
   function check(doc: any): void {
     const children = new Set<string>();
@@ -145,9 +168,33 @@ export function avpMetadata(value: {
 export function finalOutput(trajectory: Trajectory): any {
   const meta = avpMetadata(trajectory);
   if (Object.hasOwn(meta, "output")) return meta.output;
-  if (meta.complete === false) return null;
   return (
     [...trajectory.steps].reverse().find((step) => step.source === "agent")
       ?.message ?? null
   );
+}
+
+export type StopReason = import("./wire.js").TrajectoryAvpExtra["stop_reason"];
+export type ErrorCode = import("./wire.js").RecorderInputs["error_code"];
+export function toolDefinitions(
+  tools: Tool[],
+): [Record<string, unknown>[], Record<string, import("./wire.js").AgentTool>] {
+  const definitions: Record<string, unknown>[] = [],
+    details: Record<string, import("./wire.js").AgentTool> = {};
+  for (const tool of tools) {
+    const { name, description, inputSchema, ...rest } = tool;
+    definitions.push({
+      type: "function",
+      function: {
+        name,
+        parameters: inputSchema,
+        ...(description == null ? {} : { description }),
+      },
+    });
+    const fields = Object.fromEntries(
+      Object.entries(rest).filter(([, v]) => v != null),
+    );
+    if (Object.keys(fields).length) details[name] = fields;
+  }
+  return [definitions, details];
 }

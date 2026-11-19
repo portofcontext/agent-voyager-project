@@ -1,45 +1,39 @@
 /** Per-response native parts and reported costs become SDK reports. */
 import type {
-  Part,
+  Part as NativePart,
   StepFinishPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client";
-import type {
-  ContentBlock,
-  ErrorCode,
-  ToolResultBlock,
-  ImageBlock,
-  TextBlock,
-} from "@agent-voyager-project/sdk/reports";
-import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
-export function usage(finish: StepFinishPart): UsageReport {
+import type { Part, Image, Text } from "@agent-voyager-project/sdk/recorder";
+import type { Usage, Recorder } from "@agent-voyager-project/sdk/recorder";
+import type { ErrorCode } from "@agent-voyager-project/sdk/trajectory";
+export function usage(finish: StepFinishPart): Usage {
   const t = finish.tokens;
   return {
-    input_tokens: t.input + t.cache.read + t.cache.write,
-    output_tokens: t.output + t.reasoning,
-    cache_read_input_tokens: t.cache.read,
+    prompt_tokens: t.input + t.cache.read + t.cache.write,
+    completion_tokens: t.output + t.reasoning,
+    cached_tokens: t.cache.read,
     cache_creation_input_tokens: t.cache.write,
     reasoning_output_tokens: t.reasoning,
     cost_usd: finish.cost,
   };
 }
-export function block(part: Part): ContentBlock | undefined {
+export function block(part: NativePart): Part | undefined {
   if (part.type === "text")
     return part.synthetic || part.ignored
       ? undefined
       : { type: "text", text: part.text };
-  if (part.type === "reasoning")
-    return { type: "thinking", thinking: part.text };
+  if (part.type === "reasoning") return { type: "reasoning", text: part.text };
   if (part.type === "tool") {
     if (part.tool === "invalid")
       throw new Error(
         "OpenCode's repair tool obscures the model's original tool call",
       );
     return {
-      type: "tool_use",
+      type: "call",
       id: part.callID,
       name: part.tool,
-      input: part.state.input as Record<string, never>,
+      arguments: part.state.input as Record<string, never>,
     };
   }
   if (part.type === "file")
@@ -54,31 +48,24 @@ export function block(part: Part): ContentBlock | undefined {
 export function completed(part: ToolPart): boolean {
   return part.state.status === "completed" || part.state.status === "error";
 }
-export function result(part: ToolPart): ToolResultBlock["content"] {
+export function result(
+  part: ToolPart,
+  rec: Recorder,
+): string | (Text | Image)[] {
   if (part.state.status === "error") return part.state.error;
   if (part.state.status !== "completed")
     throw new Error("OpenCode tool has not returned");
-  const content: (TextBlock | ImageBlock)[] = [
-    { type: "text", text: part.state.output },
-  ];
+  const content: (Text | Image)[] = [{ type: "text", text: part.state.output }];
   for (const file of part.state.attachments ?? []) {
     if (!file.mime.startsWith("image/"))
       throw new Error(`unsupported OpenCode tool attachment: ${file.mime}`);
     const embedded = file.url.match(/^data:([^;,]+);base64,(.*)$/s);
-    if (embedded)
-      content.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: embedded[1]!,
-          data: embedded[2]!,
-        },
-      });
+    if (embedded) content.push(rec.imageBase64(embedded[2]!, embedded[1]!));
     else throw new Error(`unsupported OpenCode image location`);
   }
   return content;
 }
-export function start(part: Part): number | undefined {
+export function start(part: NativePart): number | undefined {
   return part.type === "tool" && "time" in part.state
     ? part.state.time.start
     : part.type === "text" || part.type === "reasoning"

@@ -1,6 +1,5 @@
-/** Publish run documents and referenced skill and image files. */
+/** Write the files a Trajectory references, and the Trajectory. */
 import {
-  readFileSync,
   existsSync,
   realpathSync,
   mkdirSync,
@@ -10,7 +9,6 @@ import {
 } from "node:fs";
 import { resolve, dirname, basename, relative, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 export function localPath(directory: string, name: string): string {
   if (
     !name ||
@@ -39,18 +37,4 @@ export function atomicWrite(path: string, content: Uint8Array): void {
   } finally {
     if (existsSync(temporary)) unlinkSync(temporary);
   }
-}
-export function writeDocument(
-  directory: string,
-  name: string,
-  data: unknown,
-  parse: (value: unknown) => unknown,
-): void {
-  const path = localPath(directory, name);
-  if (existsSync(path)) {
-    if (!isDeepStrictEqual(parse(JSON.parse(readFileSync(path, "utf8"))), data))
-      throw new Error(
-        `run document already exists with different content: ${name}`,
-      );
-  } else atomicWrite(path, Buffer.from(`${JSON.stringify(data, null, 2)}\n`));
 }

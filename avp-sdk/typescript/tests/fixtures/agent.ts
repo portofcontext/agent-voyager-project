@@ -17,7 +17,10 @@ process.exitCode = await main({
     const descriptor = describe();
     const commission = await rec.begin(received, descriptor);
     if (!commission) return;
-    await rec.start(planRun(commission, descriptor).started);
+    const plan = planRun(commission, descriptor);
+    await rec.start(plan.agent, plan.prompt, {
+      systemPrompt: plan.system_prompt,
+    });
     if (commission.prompt === "crash") throw new Error("fixture crash");
     if (commission.prompt === "wait") {
       process.stderr.write("ready\n");
@@ -28,7 +31,7 @@ process.exitCode = await main({
         throw error;
       }
     }
-    await rec.response([{ type: "text", text: "Hello." }]);
+    await rec.step([{ type: "text", text: "Hello." }]);
     await rec.stop("converged", "Hello.");
   },
 });

@@ -22,44 +22,43 @@ with tempfile.TemporaryDirectory() as temporary:
     directory = Path(temporary)
     source = directory / "trajectory.json"
     sys.path.insert(0, str(ROOT / "avp-sdk/python/src"))
-    from avp.agent_start import AgentStart
-    from avp.commission import ModelRef
+    from avp.commission import Commission
     from avp.descriptor import AgentDescriptor, Tool
-    from avp.recorder import Recorder, UsageReport
-    from avp.reports import RunContext, TextBlock, ToolUseBlock
+    from avp.recorder import Call, Recorder, Text, Usage
+    from avp.utils.run_plan import plan_run
 
     async def record():
         async def sink(snapshot):
             snapshot.write(source)
-            # Validate each live snapshot using upstream's separately installed model.
+            # Validate the completed trajectory using upstream's separately installed model.
             Trajectory.model_validate_json(source.read_text())
 
         recorder = Recorder(sink, run_id="ecosystem")
-        await recorder.begin(
-            None, AgentDescriptor(avp_version="0.1", agent_name="avp-example", agent_version="1")
+        descriptor = AgentDescriptor(
+            avp_version="0.1",
+            agent_name="avp-example",
+            agent_version="1",
+            tools=[Tool(name="add", inputSchema={"type": "object"})],
         )
-        await recorder.start(
-            RunContext(
-                prompt="What is 20 + 22?",
-                model=ModelRef(provider="test", id="fixture"),
-                tools=[Tool(name="add", inputSchema={"type": "object"})],
-                skills=[
-                    {
-                        "name": "math",
-                        "description": "Add numbers",
-                        "files": {"instructions.md": "Use add."},
-                    }
-                ],
-            )
+        skill = "---\nname: math\ndescription: Add numbers.\n---\nUse add."
+        commission = Commission(
+            avp_version="0.1",
+            run_id="ecosystem",
+            prompt="What is 20 + 22?",
+            model={"provider": "test", "id": "fixture"},
+            skills=[{"name": "math", "files": {"SKILL.md": skill}}],
         )
-        await recorder.response(
-            [ToolUseBlock(type="tool_use", id="call-1", name="add", input={"a": 20, "b": 22})],
-            usage=UsageReport(input_tokens=30, output_tokens=12),
+        await recorder.begin(commission.model_dump(mode="json", exclude_none=True), descriptor)
+        plan = plan_run(commission, descriptor)
+        await recorder.start(plan.agent, plan.prompt)
+        await recorder.step(
+            [Call(id="call-1", name="add", arguments={"a": 20, "b": 22})],
+            usage=Usage(prompt_tokens=30, completion_tokens=12),
         )
-        await recorder.tool_returned("call-1", "42")
-        await recorder.response(
-            [TextBlock(type="text", text="The answer is 42.")],
-            usage=UsageReport(input_tokens=45, output_tokens=6),
+        await recorder.result("call-1", "42")
+        await recorder.step(
+            [Text(text="The answer is 42.")],
+            usage=Usage(prompt_tokens=45, completion_tokens=6),
         )
         await recorder.stop("converged", {"answer": 42})
 
@@ -73,14 +72,7 @@ with tempfile.TemporaryDirectory() as temporary:
     jobs = directory / "jobs"
     copied = example.prepare(source, jobs)
     assert copied.read_bytes() == source.read_bytes()
-    assert (
-        AgentStart.model_validate_json((copied.parent / "agent-start.json").read_bytes()).run_id
-        == "ecosystem"
-    )
-    assert (copied.parent / "agent-start.json").read_bytes() == (
-        directory / "agent-start.json"
-    ).read_bytes()
-    assert (copied.parent / "skills/0-math/instructions.md").read_text() == "Use add."
+    assert (copied.parent / "skills/0-math/SKILL.md").read_text().endswith("Use add.")
     scanner = JobScanner(jobs)
     assert scanner.list_jobs() == ["avp-import"]
     assert scanner.list_trials("avp-import") == ["run"]

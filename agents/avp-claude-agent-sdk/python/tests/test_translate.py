@@ -41,10 +41,13 @@ def test_blocks_become_parts_in_order():
     assert [type(p) for p in parts] == [Reasoning, Reasoning, Call, ServerResult, Text, Call]
     assert parts[0] == Reasoning(text="Look it up.", signature="sig")
     assert parts[1] == Reasoning(encrypted_content="secret")
+    assert isinstance(parts[2], Call) and isinstance(parts[5], Call)
     assert parts[2].server_side and not parts[5].server_side
+    assert isinstance(parts[3], ServerResult)
     assert parts[3].structured_content == [
         {"type": "web_search_result", "url": "https://a.example"}
     ]
+    assert isinstance(parts[4], Text) and parts[4].citations is not None
     citation = parts[4].citations[0]
     assert (citation.source_url, citation.source_title, citation.cited_text) == (
         "https://a.example",
@@ -64,7 +67,7 @@ def test_server_tool_errors_are_errors():
             },
         ]
     )
-    assert result.is_error
+    assert isinstance(result, ServerResult) and result.is_error
 
 
 def test_unknown_blocks_are_refused():

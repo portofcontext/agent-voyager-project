@@ -7,7 +7,7 @@ import stat
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
 from avp.agent_cli import trajectory_sink
 from avp.descriptor import AgentDescriptor
@@ -82,8 +82,12 @@ def test_images_are_files_beside_the_trajectory(tmp_path):
     assert (tmp_path / name).read_bytes() == b"image fixture"
     assert parse_trajectory((tmp_path / "trajectory.json").read_text()) == recording.trajectory
     assert not list(tmp_path.glob(".trajectory.json.*"))
+
+    async def stdout():
+        await trajectory_sink(None)(recording)
+
     with pytest.raises(ValueError, match="--out"):
-        asyncio.run(trajectory_sink(None)(recording))
+        asyncio.run(stdout())
 
 
 @pytest.mark.parametrize("hidden", [True, False])
@@ -121,7 +125,7 @@ def test_secret_values_are_not_in_the_document(monkeypatch):
             written.append(recording)
 
         rec = Recorder(sink)
-        commission = {
+        commission: JsonValue = {
             "avp_version": "0.1",
             "run_id": "r",
             "prompt": "hi",

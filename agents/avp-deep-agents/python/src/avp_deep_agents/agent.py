@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from avp.agent_cli import TrajectorySink
 from avp.recorder import Recorder
+from avp.trajectory import tool_definitions
 from avp.utils.run_plan import plan_run
 from avp_deep_agents import commission as cm
 from avp_deep_agents import translate
@@ -50,6 +51,7 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
         )
         return
     plan = plan_run(commission, descriptor)
+    connecting = None
     try:
         try:
             native = model(commission)
@@ -60,24 +62,20 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
             tools = []
             owners = {}
             for server in commission.mcp_servers or []:
-                try:
-                    session = await stack.enter_async_context(create_session(cm.connection(server)))
-                    await session.initialize()
-                    listed = await load_mcp_tools(
-                        session, server_name=server.id, tool_name_prefix=True
-                    )
-                except cm.MissingSecret as exc:
-                    await rec.error("auth_error", str(exc))
-                    return
-                except Exception as exc:
-                    await rec.error("mcp_connect_failed", f"{server.id}: {exc}")
-                    return
+                connecting = server.id
+                session = await stack.enter_async_context(create_session(cm.connection(server)))
+                await session.initialize()
+                listed = await load_mcp_tools(session, server_name=server.id, tool_name_prefix=True)
+                connecting = None
                 for tool in listed:
                     recover_protocol_errors(tool)
                     owners[tool.name] = server.id
                     tools.append(tool)
             hidden = set(plan.turned_off.tools)
-            if not plan.started.subagents:
+            agent = plan.connected([])
+            assert agent.extra is not None and agent.extra.avp is not None
+            extra = agent.extra.avp
+            if not extra.subagents:
                 hidden.add("task")
             instructions = cm.instructions(commission)
             graph = cm.build(
@@ -100,26 +98,19 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
             declarations = [
                 declaration(t, owners.get(t.name)) for t in offered.values() if t.name not in hidden
             ]
-            servers = [
-                s.model_copy(update={"status": "connected"}) for s in plan.started.mcp_servers or []
-            ]
+            servers = extra.mcp_servers
             managed = [declaration(t, owners[t.name]) for t in tools]
             subagents = [
                 s.model_copy(
                     update={"tools": list(s.tools or []) + managed, "mcp_servers": servers or None}
                 )
-                for s in plan.started.subagents or []
+                for s in extra.subagents or []
             ]
-            await rec.start(
-                plan.started.model_copy(
-                    update={
-                        "system_prompt": instructions,
-                        "tools": declarations or None,
-                        "mcp_servers": servers or None,
-                        "subagents": subagents or None,
-                    }
-                )
-            )
+            definitions, details = tool_definitions(declarations)
+            agent.tool_definitions = definitions or None
+            extra.tools = details or None
+            extra.subagents = subagents or None
+            await rec.start(agent, plan.prompt, system_prompt=instructions)
             events = RecorderCallbacks(rec, commission.model, {s.name for s in subagents})
             with tracing_context(enabled=False):
                 result = await graph.ainvoke(
@@ -145,9 +136,13 @@ async def run(received: JsonValue, sink: TrajectorySink) -> None:
     except asyncio.CancelledError:
         await rec.stop("interrupted")
         raise
+    except cm.MissingSecret as exc:
+        await rec.error("auth_error", str(exc))
+        await rec.stop("error")
     except Exception as exc:
-        code = translate.error_code(exc)
-        await rec.error(code, str(exc) or type(exc).__name__)
+        code = "mcp_connect_failed" if connecting else translate.error_code(exc)
+        message = f"{connecting}: {exc}" if connecting else str(exc) or type(exc).__name__
+        await rec.error(code, message)
         await rec.stop("error")
         if code == "agent_crash":
             raise

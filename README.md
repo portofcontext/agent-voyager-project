@@ -10,8 +10,8 @@ ATIF trajectories let you run, compare, and inspect agents across different runt
 
 A supervisor sends one JSON **Commission** with the task, model, and resources.
 The agent records a native **ATIF trajectory** of model responses, tool calls,
-usage, cost, and outcome. An [Agent Start](spec/v0.1/agent-start.md) snapshot
-preserves the resolved configuration and full skill contents beside the trace.
+usage, cost, and outcome, with the configuration the run used. Referenced skill
+and image files are saved beside the trajectory.
 See the [ATIF guide](avp-sdk/docs/atif.md) for existing viewers and training-data tools.
 
 ```text
@@ -19,7 +19,7 @@ Supervisor ─── Commission ──▶ Agent
 Supervisor ◀── Trajectory ─── Agent
 ```
 
-See the [spec overview](spec/v0.1/README.md) for the four contracts and how
+See the [spec overview](spec/v0.1/README.md) for the three contracts and how
 they fit together.
 
 ## Try it
@@ -99,8 +99,7 @@ To integrate another runtime, start with the [SDK guide](avp-sdk/README.md),
 
 SDKs: [Python](avp-sdk/python/) and [TypeScript](avp-sdk/typescript/).
 Specs: [Commission](spec/v0.1/commission.md),
-[Agent Descriptor](spec/v0.1/agent-descriptor.md), and
-[Agent Start](spec/v0.1/agent-start.md), and [Trajectory](spec/v0.1/trajectory.md).
+[Agent Descriptor](spec/v0.1/agent-descriptor.md), and [Trajectory](spec/v0.1/trajectory.md).
 The CLI's `avp conformance` checks agents against the spec's rules.
 
 ## Develop

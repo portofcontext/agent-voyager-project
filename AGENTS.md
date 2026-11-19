@@ -1,6 +1,6 @@
 # Working on AVP
 
-AVP defines Commission, Agent Descriptor, Agent Start, and ATIF Trajectory specs. A supervisor sends
+AVP defines Commission, Agent Descriptor, and ATIF Trajectory specs. A supervisor sends
 one Commission; the agent runs it and records a Trajectory. The supervisor cannot
 send instructions during a run.
 
@@ -32,10 +32,9 @@ The reference tables in `spec/v0.1/` define the wire contracts. Implement them i
 `make bindings` for TypeScript types. Do not edit generated files by hand.
 Implement shared behavior in Python first, then TypeScript.
 
-- Import wire types from `avp.commission`, `avp.descriptor`, `avp.agent_start`,
-  and `avp.trajectory`.
+- Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`.
 - Use native ATIF-v1.8 from the pinned Harbor models. Recorder input types
-  live in `avp.reports`; do not introduce another event wire contract.
+  live in `avp.recorder`; do not introduce another event wire contract.
 - For Commission, Descriptor, and Trajectory rules, read the
   [specs](spec/v0.1/). Do not restate them here.
 - Test shared Recorder and run-plan behavior with `avp-sdk/testdata/`.

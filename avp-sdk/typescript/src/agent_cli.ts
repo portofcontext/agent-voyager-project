@@ -1,12 +1,10 @@
 import { dirname, basename } from "node:path";
-import { parseCommission } from "./commission.js";
-import { parseAgentStart } from "./agent_start.js";
-import { atomicWrite, localPath, writeDocument } from "./_files.js";
+import { atomicWrite, localPath } from "./_files.js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { parseDescriptor, type AgentDescriptor } from "./descriptor.js";
-import { avpMetadata, type TrajectorySink } from "./trajectory.js";
-import type { JsonValue } from "./reports.js";
+import { type TrajectorySink } from "./trajectory.js";
+import type { JsonValue } from "./recorder.js";
 export type { TrajectorySink } from "./trajectory.js";
 
 export type RunFn = (
@@ -35,28 +33,15 @@ export function trajectorySink(out?: string): TrajectorySink {
   return async (snapshot) => {
     const text = `${JSON.stringify(snapshot.trajectory, undefined, 2)}\n`;
     if (out === undefined) {
-      if (avpMetadata(snapshot.trajectory).complete) {
-        if (
-          [...snapshot.assets.keys()].some((name) => name.startsWith("images/"))
-        )
-          throw new Error("media requires --out with a file path");
-        await stdout(text);
-      }
+      if (snapshot.assets.size)
+        throw new Error(
+          "a Trajectory with referenced files needs --out with a file path",
+        );
+      await stdout(text);
       return;
     }
-    if (
-      ["commission.json", "descriptor.json", "agent-start.json"].includes(
-        basename(out),
-      )
-    )
-      throw new Error("trajectory path conflicts with a run document");
     const directory = dirname(out);
     mkdirSync(directory, { recursive: true });
-    for (const [name, document, parse] of [
-      ["commission.json", snapshot.commission, parseCommission],
-      ["descriptor.json", snapshot.descriptor, parseDescriptor],
-    ] as const)
-      if (document != null) writeDocument(directory, name, document, parse);
     for (const [name, bytes] of snapshot.assets) {
       const path = localPath(directory, name);
       if (path === localPath(directory, basename(out)))
@@ -67,13 +52,6 @@ export function trajectorySink(out?: string): TrajectorySink {
           `referenced file already exists with different content: ${name}`,
         );
     }
-    if (snapshot.agentStart)
-      writeDocument(
-        directory,
-        "agent-start.json",
-        snapshot.agentStart,
-        parseAgentStart,
-      );
     atomicWrite(out, Buffer.from(text));
   };
 }

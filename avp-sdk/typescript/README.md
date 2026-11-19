@@ -6,7 +6,7 @@ behavior are defined in the [SDK guide](../README.md), with Python as the refere
 The npm package is `@agent-voyager-project/sdk`. It uses ES modules and requires
 Node 22.12 or newer. Import data types and parsers from the `commission`,
 `descriptor`, and `trajectory` subpaths. `parseTrajectory` validates native
-ATIF documents. Recorder inputs are exported from `reports`.
+ATIF documents. Recorder inputs are exported from `recorder`.
 
 The agent CLI passes its run callback an `AbortSignal` for SIGINT and SIGTERM.
 The callback ends its Trajectory and rethrows the abort; the CLI exits with 130.

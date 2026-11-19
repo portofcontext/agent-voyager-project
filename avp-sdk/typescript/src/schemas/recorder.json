@@ -208,6 +208,43 @@
       "title": "AgentSettings",
       "type": "object"
     },
+    "Call": {
+      "additionalProperties": false,
+      "description": "A tool call. `server_side` when the model service runs the tool and\nreturns its result in the same response, as a `ServerResult`.",
+      "properties": {
+        "type": {
+          "const": "call",
+          "default": "call",
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "server_side": {
+          "default": false,
+          "title": "Server Side",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ],
+      "title": "Call",
+      "type": "object"
+    },
     "Citation": {
       "additionalProperties": true,
       "description": "A source the model cited. Keeps fields the service added.",
@@ -513,24 +550,36 @@
       "title": "EnvSecret",
       "type": "object"
     },
-    "ImageBlock": {
-      "additionalProperties": true,
-      "description": "An image.",
+    "Image": {
+      "additionalProperties": false,
+      "description": "An image saved beside the Trajectory. Made by `Recorder.image`.",
       "properties": {
         "type": {
           "const": "image",
+          "default": "image",
           "title": "Type",
           "type": "string"
         },
-        "source": {
-          "$ref": "#/$defs/Source"
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp"
+          ],
+          "title": "Media Type",
+          "type": "string"
         }
       },
       "required": [
-        "type",
-        "source"
+        "path",
+        "media_type"
       ],
-      "title": "ImageBlock",
+      "title": "Image",
       "type": "object"
     },
     "JsonValue": {},
@@ -832,42 +881,6 @@
       "title": "ModelPattern",
       "type": "object"
     },
-    "ModelRef": {
-      "additionalProperties": false,
-      "description": "A Model without its `credential`, as the Trajectory reports it.",
-      "properties": {
-        "provider": {
-          "description": "The service that runs the model, for example `\"anthropic\"`,\n`\"amazon-bedrock\"`, or `\"openrouter\"`. It decides which API the agent calls\nand how it authenticates.",
-          "pattern": "^[a-z0-9._-]+$",
-          "title": "Provider",
-          "type": "string"
-        },
-        "id": {
-          "description": "The model's ID at that service, as the agent sends it, for example\n`\"claude-sonnet-4-6\"`.",
-          "title": "Id",
-          "type": "string"
-        },
-        "base_url": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The URL of the service's API. Absent means the service's default.",
-          "title": "Base Url"
-        }
-      },
-      "required": [
-        "provider",
-        "id"
-      ],
-      "title": "ModelRef",
-      "type": "object"
-    },
     "ProxySecret": {
       "additionalProperties": false,
       "description": "A secret that a proxy outside the agent holds and adds to its requests.",
@@ -885,36 +898,22 @@
       "title": "ProxySecret",
       "type": "object"
     },
-    "RefusalBlock": {
-      "additionalProperties": true,
-      "description": "The model's text when it declined.",
+    "Reasoning": {
+      "additionalProperties": false,
+      "description": "A block of the model's reasoning: readable `text`, or `encrypted_content`\nwhen the service returned it encrypted.",
       "properties": {
         "type": {
-          "const": "refusal",
+          "const": "reasoning",
+          "default": "reasoning",
           "title": "Type",
           "type": "string"
         },
-        "refusal": {
-          "title": "Refusal",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "refusal"
-      ],
-      "title": "RefusalBlock",
-      "type": "object"
-    },
-    "RunContext": {
-      "additionalProperties": false,
-      "properties": {
-        "prompt": {
-          "description": "The prompt the run starts with.",
-          "title": "Prompt",
+        "text": {
+          "default": "",
+          "title": "Text",
           "type": "string"
         },
-        "system_prompt": {
+        "signature": {
           "anyOf": [
             {
               "type": "string"
@@ -924,187 +923,74 @@
             }
           ],
           "default": null,
-          "description": "The system prompt the run uses.",
-          "title": "System Prompt"
+          "title": "Signature"
         },
-        "model": {
-          "$ref": "#/$defs/ModelRef",
-          "description": "The model the run uses."
-        },
-        "tools": {
+        "encrypted_content": {
           "anyOf": [
             {
-              "items": {
-                "$ref": "#/$defs/Tool"
-              },
-              "type": "array"
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "The tools the run uses.",
-          "title": "Tools"
-        },
-        "mcp_servers": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/McpServer"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The MCP servers the run uses.",
-          "title": "Mcp Servers"
-        },
-        "skills": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/avp__descriptor__Skill"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The skills the run uses.",
-          "title": "Skills"
-        },
-        "subagents": {
-          "anyOf": [
-            {
-              "items": {
-                "$ref": "#/$defs/Subagent"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The subagents the run uses.",
-          "title": "Subagents"
+          "title": "Encrypted Content"
         }
       },
-      "required": [
-        "prompt",
-        "model"
-      ],
-      "title": "RunContext",
+      "title": "Reasoning",
       "type": "object"
     },
-    "ServerToolResultBlock": {
-      "additionalProperties": true,
-      "description": "The result of a `server_tool_use` call.",
+    "ServerResult": {
+      "additionalProperties": false,
+      "description": "The result of a server-side `Call`, from the same response.",
       "properties": {
         "type": {
-          "const": "server_tool_result",
+          "const": "server_result",
+          "default": "server_result",
           "title": "Type",
           "type": "string"
         },
-        "tool_use_id": {
-          "title": "Tool Use Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
+        "call_id": {
+          "title": "Call Id",
           "type": "string"
         },
         "content": {
-          "$ref": "#/$defs/JsonValue"
-        },
-        "is_error": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string"
             },
             {
-              "type": "null"
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Text"
+                  },
+                  {
+                    "$ref": "#/$defs/Image"
+                  }
+                ]
+              },
+              "type": "array"
             }
           ],
-          "default": null,
-          "title": "Is Error"
+          "title": "Content"
+        },
+        "is_error": {
+          "default": false,
+          "title": "Is Error",
+          "type": "boolean"
+        },
+        "structured_content": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
         }
       },
       "required": [
-        "type",
-        "tool_use_id",
-        "name",
+        "call_id",
         "content"
       ],
-      "title": "ServerToolResultBlock",
-      "type": "object"
-    },
-    "ServerToolUseBlock": {
-      "additionalProperties": true,
-      "description": "A call to a tool the model service runs itself, such as web search.",
-      "properties": {
-        "type": {
-          "const": "server_tool_use",
-          "title": "Type",
-          "type": "string"
-        },
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "input": {
-          "additionalProperties": {
-            "$ref": "#/$defs/JsonValue"
-          },
-          "title": "Input",
-          "type": "object"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "name",
-        "input"
-      ],
-      "title": "ServerToolUseBlock",
-      "type": "object"
-    },
-    "Source": {
-      "additionalProperties": true,
-      "description": "Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added.",
-      "properties": {
-        "type": {
-          "const": "base64",
-          "title": "Type",
-          "type": "string"
-        },
-        "media_type": {
-          "description": "The image's media type, such as `image/png`.",
-          "title": "Media Type",
-          "type": "string"
-        },
-        "data": {
-          "description": "The image, base64-encoded.",
-          "title": "Data",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "media_type",
-        "data"
-      ],
-      "title": "Source",
+      "title": "ServerResult",
       "type": "object"
     },
     "Subagent": {
@@ -1197,123 +1083,6 @@
       "title": "Subagent",
       "type": "object"
     },
-    "SubagentUsage": {
-      "additionalProperties": false,
-      "description": "A subagent's totals. A field is absent when the agent couldn't measure it.",
-      "properties": {
-        "input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Input Tokens"
-        },
-        "output_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Output Tokens"
-        },
-        "cache_read_input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cache Read Input Tokens"
-        },
-        "cache_creation_input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cache Creation Input Tokens"
-        },
-        "reasoning_output_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reasoning Output Tokens"
-        },
-        "cost_usd": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cost Usd"
-        },
-        "cost_source": {
-          "anyOf": [
-            {
-              "enum": [
-                "computed",
-                "reported",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cost Source"
-        },
-        "responses": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "How many model responses the subagent made.",
-          "title": "Responses"
-        }
-      },
-      "title": "SubagentUsage",
-      "type": "object"
-    },
     "Supervisor": {
       "additionalProperties": false,
       "description": "The supervisor that wrote the Commission.",
@@ -1343,12 +1112,13 @@
       "title": "Supervisor",
       "type": "object"
     },
-    "TextBlock": {
-      "additionalProperties": true,
-      "description": "Text from the model.",
+    "Text": {
+      "additionalProperties": false,
+      "description": "Text from the model or a tool.",
       "properties": {
         "type": {
           "const": "text",
+          "default": "text",
           "title": "Type",
           "type": "string"
         },
@@ -1370,60 +1140,17 @@
           ],
           "default": null,
           "title": "Citations"
+        },
+        "refusal": {
+          "default": false,
+          "title": "Refusal",
+          "type": "boolean"
         }
       },
       "required": [
-        "type",
         "text"
       ],
-      "title": "TextBlock",
-      "type": "object"
-    },
-    "ThinkingBlock": {
-      "additionalProperties": true,
-      "description": "The model's reasoning.",
-      "properties": {
-        "type": {
-          "const": "thinking",
-          "title": "Type",
-          "type": "string"
-        },
-        "thinking": {
-          "description": "The reasoning, or the service's encrypted reasoning when `redacted` is true.",
-          "title": "Thinking",
-          "type": "string"
-        },
-        "signature": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The service's token for passing the reasoning back to it.",
-          "title": "Signature"
-        },
-        "redacted": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Redacted"
-        }
-      },
-      "required": [
-        "type",
-        "thinking"
-      ],
-      "title": "ThinkingBlock",
+      "title": "Text",
       "type": "object"
     },
     "Tool": {
@@ -1522,135 +1249,21 @@
       "title": "Tool",
       "type": "object"
     },
-    "ToolResultBlock": {
-      "additionalProperties": true,
-      "description": "The result of a `tool_use` call, matched by `tool_use_id`.",
-      "properties": {
-        "type": {
-          "const": "tool_result",
-          "title": "Type",
-          "type": "string"
-        },
-        "tool_use_id": {
-          "title": "Tool Use Id",
-          "type": "string"
-        },
-        "content": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "items": {
-                "discriminator": {
-                  "mapping": {
-                    "image": "#/$defs/ImageBlock",
-                    "text": "#/$defs/TextBlock"
-                  },
-                  "propertyName": "type"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/$defs/TextBlock"
-                  },
-                  {
-                    "$ref": "#/$defs/ImageBlock"
-                  }
-                ]
-              },
-              "type": "array"
-            }
-          ],
-          "title": "Content"
-        },
-        "structured_content": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "$ref": "#/$defs/JsonValue"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "A result meant for programs, such as MCP's `structuredContent`.",
-          "title": "Structured Content"
-        },
-        "is_error": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Is Error"
-        }
-      },
-      "required": [
-        "type",
-        "tool_use_id",
-        "content"
-      ],
-      "title": "ToolResultBlock",
-      "type": "object"
-    },
-    "ToolUseBlock": {
-      "additionalProperties": true,
-      "description": "A call to a tool the agent runs.",
-      "properties": {
-        "type": {
-          "const": "tool_use",
-          "title": "Type",
-          "type": "string"
-        },
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "input": {
-          "additionalProperties": {
-            "$ref": "#/$defs/JsonValue"
-          },
-          "title": "Input",
-          "type": "object"
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "name",
-        "input"
-      ],
-      "title": "ToolUseBlock",
-      "type": "object"
-    },
     "Usage": {
       "additionalProperties": false,
-      "description": "Token counts and cost for one model response.",
+      "description": "One model response's usage. `prompt_tokens` includes cached and\ncache-creation tokens; `completion_tokens` includes reasoning tokens.\nWithout `cost_usd`, the Recorder prices the response.",
       "properties": {
-        "input_tokens": {
-          "description": "All input tokens, including those read from and written to the cache.",
+        "prompt_tokens": {
           "minimum": 0,
-          "title": "Input Tokens",
+          "title": "Prompt Tokens",
           "type": "integer"
         },
-        "output_tokens": {
-          "description": "All output tokens, including reasoning tokens.",
+        "completion_tokens": {
           "minimum": 0,
-          "title": "Output Tokens",
+          "title": "Completion Tokens",
           "type": "integer"
         },
-        "cache_read_input_tokens": {
+        "cached_tokens": {
           "anyOf": [
             {
               "minimum": 0,
@@ -1661,8 +1274,7 @@
             }
           ],
           "default": null,
-          "description": "The input tokens read from the cache. Included in `input_tokens`.",
-          "title": "Cache Read Input Tokens"
+          "title": "Cached Tokens"
         },
         "cache_creation_input_tokens": {
           "anyOf": [
@@ -1675,7 +1287,6 @@
             }
           ],
           "default": null,
-          "description": "The input tokens written to the cache. Included in `input_tokens`.",
           "title": "Cache Creation Input Tokens"
         },
         "reasoning_output_tokens": {
@@ -1689,31 +1300,24 @@
             }
           ],
           "default": null,
-          "description": "The output tokens the model spent on reasoning. Included in `output_tokens`.",
           "title": "Reasoning Output Tokens"
         },
         "cost_usd": {
-          "description": "The cost in US dollars, after any cache discount.",
-          "minimum": 0,
-          "title": "Cost Usd",
-          "type": "number"
-        },
-        "cost_source": {
-          "description": "Where `cost_usd` comes from.",
-          "enum": [
-            "computed",
-            "reported",
-            "unknown"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Cost Source",
-          "type": "string"
+          "default": null,
+          "title": "Cost Usd"
         }
       },
       "required": [
-        "input_tokens",
-        "output_tokens",
-        "cost_usd",
-        "cost_source"
+        "prompt_tokens",
+        "completion_tokens"
       ],
       "title": "Usage",
       "type": "object"
@@ -1792,58 +1396,40 @@
     "descriptor": {
       "$ref": "#/$defs/AgentDescriptor"
     },
-    "context": {
-      "$ref": "#/$defs/RunContext"
-    },
     "usage": {
       "$ref": "#/$defs/Usage"
     },
-    "subagent_usage": {
-      "$ref": "#/$defs/SubagentUsage"
-    },
-    "content": {
+    "parts": {
       "items": {
         "discriminator": {
           "mapping": {
-            "image": "#/$defs/ImageBlock",
-            "refusal": "#/$defs/RefusalBlock",
-            "server_tool_result": "#/$defs/ServerToolResultBlock",
-            "server_tool_use": "#/$defs/ServerToolUseBlock",
-            "text": "#/$defs/TextBlock",
-            "thinking": "#/$defs/ThinkingBlock",
-            "tool_result": "#/$defs/ToolResultBlock",
-            "tool_use": "#/$defs/ToolUseBlock"
+            "call": "#/$defs/Call",
+            "image": "#/$defs/Image",
+            "reasoning": "#/$defs/Reasoning",
+            "server_result": "#/$defs/ServerResult",
+            "text": "#/$defs/Text"
           },
           "propertyName": "type"
         },
         "oneOf": [
           {
-            "$ref": "#/$defs/TextBlock"
+            "$ref": "#/$defs/Text"
           },
           {
-            "$ref": "#/$defs/ThinkingBlock"
+            "$ref": "#/$defs/Image"
           },
           {
-            "$ref": "#/$defs/ImageBlock"
+            "$ref": "#/$defs/Reasoning"
           },
           {
-            "$ref": "#/$defs/ToolUseBlock"
+            "$ref": "#/$defs/Call"
           },
           {
-            "$ref": "#/$defs/ToolResultBlock"
-          },
-          {
-            "$ref": "#/$defs/ServerToolUseBlock"
-          },
-          {
-            "$ref": "#/$defs/ServerToolResultBlock"
-          },
-          {
-            "$ref": "#/$defs/RefusalBlock"
+            "$ref": "#/$defs/ServerResult"
           }
         ]
       },
-      "title": "Content",
+      "title": "Parts",
       "type": "array"
     },
     "stop_reason": {
@@ -1875,14 +1461,12 @@
   "required": [
     "commission",
     "descriptor",
-    "context",
     "usage",
-    "subagent_usage",
-    "content",
+    "parts",
     "stop_reason",
     "error_code"
   ],
-  "title": "Reports",
+  "title": "RecorderInputs",
   "type": "object",
-  "$id": "https://www.agentvoyagerproject.com/sdk/reports.schema.json"
+  "$id": "https://www.agentvoyagerproject.com/sdk/recorder.schema.json"
 }

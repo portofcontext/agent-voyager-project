@@ -82,8 +82,7 @@ def test_native_text_response_and_instructions(script, tmp_path):
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (1, 0, 0, True)
+    ) == (1, 0, 0)
     usage = atif.responses(events)[0]["metrics"]
     assert usage["prompt_tokens"] == 1000 and usage["completion_tokens"] == 50
     assert usage["cached_tokens"] == 400 and atif.meta(usage)["reasoning_output_tokens"] == 10
@@ -110,8 +109,7 @@ def test_invalid_commissions_are_refused_by_sdk(script, tmp_path, fields):
         len(atif.responses(events)),
         len(atif.calls(events)),
         len(atif.errors(events)),
-        atif.meta(events)["complete"],
-    ) == (0, 0, 1, True)
+    ) == (0, 0, 1)
     assert atif.meta(atif.errors(events)[-1])["error_code"] == "invalid_commission"
     assert not model.calls
 
@@ -142,7 +140,7 @@ def test_native_mcp_tools_and_error_results_pair(script, tmp_path, mode):
     results = {e["source_call_id"]: e for e in atif.results(events)}
     invoked = {e["tool_call_id"]: e for e in atif.calls(events)}
     assert set(results) == set(invoked)
-    assert all(atif.mcp_server(tmp_path, e) == "fixture" for e in invoked.values())
+    assert all(atif.mcp_server(events, e) == "fixture" for e in invoked.values())
     assert "BOUNDARY" in str(results["one"]["content"])
     if mode == "parallel":
         assert "SECOND" in str(results["two"]["content"])
@@ -199,7 +197,59 @@ def test_native_refusal_stops_refused(script, tmp_path):
     _, events = run_cli(tmp_path)
     assert atif.meta(events)["stop_reason"] == "refused"
     assert atif.responses(events)[0]["message"] == "Declined"
-    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["annotations"]["refusal"]
+    assert atif.meta(atif.responses(events)[0])["message_metadata"][0]["refusal"]
+
+
+def test_unknown_tool_returns_an_error_to_the_native_runner(script, tmp_path):
+    script([function_call("missing", {}, call_id="unknown")], [assistant_message("DONE")])
+    code, events = run_cli(tmp_path)
+    assert code == 0
+    assert len(atif.responses(events)) == 2
+    [result] = atif.results(events)
+    assert result["source_call_id"] == "unknown"
+    assert atif.meta(result)["is_error"] is True
+    assert atif.meta(events)["stop_reason"] == "converged"
+
+
+def test_native_citations_and_encrypted_reasoning(script, tmp_path):
+    from openai.types.responses import ResponseOutputMessage, ResponseReasoningItem
+
+    script(
+        [
+            ResponseReasoningItem(
+                id="reasoning", type="reasoning", summary=[], encrypted_content="encrypted"
+            ),
+            ResponseOutputMessage(
+                id="text",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[
+                    {
+                        "type": "output_text",
+                        "text": "DONE",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url": "https://example.com",
+                                "title": "Source",
+                                "start_index": 0,
+                                "end_index": 4,
+                            }
+                        ],
+                    }
+                ],
+            ),
+        ]
+    )
+    code, events = run_cli(tmp_path)
+    assert code == 0
+    metadata = atif.meta(atif.responses(events)[0])
+    assert metadata["reasoning_metadata"] == [{"encrypted_content": "encrypted"}]
+    [citation] = metadata["message_metadata"][0]["citations"]
+    assert citation["source_url"] == "https://example.com"
+    assert citation["source_title"] == "Source"
+    assert (citation["start_index"], citation["end_index"]) == (0, 4)
 
 
 def test_provider_quota_error_is_reported(script, tmp_path):

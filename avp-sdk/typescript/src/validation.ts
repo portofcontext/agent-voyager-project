@@ -5,7 +5,7 @@ import formats from "ajv-formats";
 export const ajv = new Ajv2020({ strict: false, allErrors: true });
 formats.default(ajv);
 const schema = JSON.parse(
-  readFileSync(new URL("./schemas/reports.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./schemas/recorder.json", import.meta.url), "utf8"),
 );
 // Python validates AgentName map keys; patternProperties alone leaves unmatched keys open.
 const agents = schema.$defs.Commission.properties.agents.anyOf.find(

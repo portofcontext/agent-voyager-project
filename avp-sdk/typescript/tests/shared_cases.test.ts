@@ -45,46 +45,33 @@ async function call(rec: Recorder, c: Record<string, any>): Promise<void> {
       await rec.begin(c.received, parseDescriptor(c.descriptor));
       break;
     case "start":
-      await rec.start(c.started, { meta: c.meta });
+      await rec.start(c.agent, c.prompt, { systemPrompt: c.system_prompt });
       break;
-    case "response":
-      await rec.response(c.content, {
+    case "step":
+      await rec.step(c.parts, {
         usage: c.usage,
-        model: c.model,
-        responseModel: c.response_model,
+        modelName: c.model_name,
         finishReasons: c.finish_reasons,
-        durationMs: c.duration_ms,
-        subagentInvocationId: c.subagent_invocation_id,
-        key: c.key,
-        meta: c.meta,
+        subagent: c.subagent,
       });
       break;
-    case "usage":
-      await rec.usage(c.usage, { key: c.key });
-      break;
-    case "close_response":
-      await rec.closeResponse();
-      break;
-    case "tool_returned":
-      await rec.toolReturned(c.call_id, c.content, {
+    case "result":
+      await rec.result(c.call_id, c.content, {
         isError: c.is_error,
         structuredContent: c.structured_content,
       });
       break;
-    case "subagent_invoked":
-      await rec.subagentInvoked(c.invocation_id, c.name, c.subagent_input, {
-        subagentInvocationId: c.subagent_invocation_id,
-      });
+    case "subagent_started":
+      await rec.subagentStarted(c.call_id, c.name, c.prompt);
       break;
-    case "subagent_returned":
-      await rec.subagentReturned(c.invocation_id, c.text, c.reason, {
+    case "subagent_stopped":
+      await rec.subagentStopped(c.call_id, c.reason, {
         usage: c.usage,
+        modelName: c.model_name,
       });
       break;
     case "error":
-      await rec.error(c.code, c.message, {
-        subagentInvocationId: c.subagent_invocation_id,
-      });
+      await rec.error(c.code, c.message, { subagent: c.subagent });
       break;
     case "stop":
       await rec.stop(c.reason, c.output);
@@ -127,12 +114,11 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
       } else await call(rec, command);
     }
     same(events.at(-1)!.trajectory, vector.trajectory);
-    const started = vector.calls.find(
-      (c: any) => c.call === "start" && !c.raises,
-    )?.started;
-    if (started?.tools) {
-      assert.deepEqual(events.at(-1)!.agentStart!.tools, started.tools);
-    }
+    assert.equal(events.length, 1);
+    assert.deepEqual(
+      [...events[0].assets.keys()].sort(),
+      (vector.files ?? []).sort(),
+    );
     const stop = [...vector.calls].reverse().find((c) => c.call === "stop");
     if (stop && vector.calls.some((c: any) => c.call === "start" && !c.raises))
       assert.deepEqual(
@@ -151,6 +137,9 @@ for (const name of readdirSync(new URL("run_plan/", cases)).filter((name) =>
     const commission = parseCommission(vector.commission);
     const descriptor = parseDescriptor(vector.descriptor);
     assert.equal(checkCommission(commission, descriptor), undefined);
-    same(planRun(commission, descriptor), vector.plan);
+    same(
+      JSON.parse(JSON.stringify(planRun(commission, descriptor))),
+      vector.plan,
+    );
   });
 }

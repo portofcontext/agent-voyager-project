@@ -7,13 +7,11 @@ import {
   bundledPrices,
   computeCost,
   fetchPrices,
-  findPrice,
   loadPrices,
   savePrices,
   type Prices,
 } from "../src/utils/pricing.js";
 
-const model = { provider: "p", id: "m" };
 function table(): Prices {
   return {
     source: "https://models.dev/api.json",
@@ -26,40 +24,28 @@ function table(): Prices {
   };
 }
 
-test("costs use the provider, response model, cache rates, and reported-cost precedence", () => {
+test("costs use the provider, response model, and cache rates", () => {
   const prices = table();
-  const tokens = {
-    inputTokens: 3_000_000,
-    outputTokens: 0,
-    cacheReadInputTokens: 1_000_000,
-    cacheCreationInputTokens: 1_000_000,
+  const metrics = {
+    prompt_tokens: 3_000_000,
+    completion_tokens: 0,
+    cached_tokens: 1_000_000,
+    extra: { avp: { cache_creation_input_tokens: 1_000_000 } },
   };
-  assert.deepEqual(computeCost(prices, model, tokens), [7.05, "computed"]);
-  assert.deepEqual(
-    computeCost(prices, model, { ...tokens, reportedCostUsd: 0 }),
-    [0, "reported"],
-  );
-  assert.deepEqual(
-    computeCost(prices, { ...model, provider: "other" }, tokens),
-    [0, "unknown"],
-  );
-  assert.deepEqual(
-    computeCost(prices, model, { ...tokens, responseModel: "dated" }),
-    [3, "computed"],
-  );
-  assert.equal(findPrice(prices, model, "missing"), prices.models["p/m"]);
-  assert.deepEqual(
-    computeCost(prices, { provider: "p", id: "plain" }, tokens),
-    [6, "computed"],
-  );
+  assert.equal(computeCost(prices, "p", "m", metrics), 7.05);
+  assert.equal(computeCost(prices, "other", "m", metrics), undefined);
+  assert.equal(computeCost(prices, "p", "dated", metrics), 3);
+  assert.equal(computeCost(prices, "p", "missing", metrics), undefined);
+  assert.equal(computeCost(prices, "p", "plain", metrics), 6);
+  assert.equal(computeCost(prices, "p", "m", {}), undefined);
   assert.throws(
     () =>
-      computeCost(prices, model, {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadInputTokens: 1,
+      computeCost(prices, "p", "m", {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        cached_tokens: 1,
       }),
-    /exceed input_tokens/,
+    /exceed prompt_tokens/,
   );
 });
 

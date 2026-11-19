@@ -1,5 +1,5 @@
 import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
-import type { JsonValue } from "@agent-voyager-project/sdk/reports";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 /** Real Gemini sessions, schedulers, tools, and MCP clients cross the Recorder. */
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
@@ -38,9 +38,7 @@ function capture(recording: Recording): Trajectory {
   return trajectory;
 }
 function effective(snapshots: Trajectory[]): any {
-  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
-  assert.ok(started);
-  return started;
+  return meta(snapshots.at(-1)!.agent);
 }
 const MODEL = "gemini-2.5-flash";
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -206,7 +204,7 @@ test("native filesystem loop keeps response usage, thoughts, tool IDs, and async
   );
   assert.equal(readFileSync(join(cwd, "out.txt"), "utf8"), "OK");
   assert.equal(atifResponses(snapshots).length, 2);
-  assert.equal(meta(latest(snapshots)).complete, true);
+  assert.ok(meta(latest(snapshots)).stopped_at);
   const first = atifResponses(snapshots)[0]!;
   assert.equal(first.metrics.prompt_tokens, 125);
   assert.equal(first.metrics.completion_tokens, 38);
@@ -242,9 +240,9 @@ test("native tool allowlists and custom system prompt replace the defaults", asy
     generator,
   );
   const started = latest(snapshots).agent;
-  assert.deepEqual(started.tool_definitions, []);
-  assert.deepEqual(effective(snapshots).skills, []);
-  assert.deepEqual(effective(snapshots).subagents, []);
+  assert.deepEqual(started.tool_definitions ?? [], []);
+  assert.deepEqual(effective(snapshots).skills ?? [], []);
+  assert.deepEqual(effective(snapshots).subagents ?? [], []);
   assert.ok(system.includes("ONLY_SYSTEM"));
   assert.ok(!system.includes("You are an interactive"));
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
@@ -338,9 +336,9 @@ test("native MCP connection and parallel tools preserve ownership and both error
   );
   assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
-    effective(snapshots).tools.find((tool: any) =>
-      tool.name.endsWith("Avptest_Echo"),
-    )?.mcp_server_id,
+    Object.entries<{ mcp_server_id?: string }>(effective(snapshots).tools).find(
+      ([name]) => name.endsWith("Avptest_Echo"),
+    )?.[1]?.mcp_server_id,
     "avptest",
   );
   assert.ok(
@@ -380,6 +378,7 @@ test("native subagent model calls roll up exactly once on their invocation", asy
   );
   assert.equal(atifChildren(snapshots).length, 1);
   const returned = atifChildren(snapshots)[0]!;
+  assert.equal(returned.steps[0]?.message, "Inspect this workspace.");
   assert.equal(meta(returned).usage_details, undefined);
   assert.equal(returned.final_metrics?.total_prompt_tokens, 120);
   assert.equal(returned.final_metrics?.total_completion_tokens, 8);
@@ -508,7 +507,7 @@ test("native Google HTTP client sends the proxy stand-in and records served mode
   assert.equal(requests[0]!.key, "standin-only");
   assert.match(requests[0]!.path, /gemini-2.5-flash:streamGenerateContent/);
   const message = atifResponses(snapshots)[0]!;
-  assert.equal(latest(snapshots).agent.model_name, "gemini-2.5-flash-001");
+  assert.equal(atifResponses(snapshots)[0].model_name, "gemini-2.5-flash-001");
   assert.equal(message.metrics.prompt_tokens, 120);
   assert.equal(message.metrics.completion_tokens, 11);
   assert.equal(message.metrics.cached_tokens, 80);
@@ -626,7 +625,7 @@ test("native shell execution uses the launcher's workspace", async (t: any) => {
     "NATIVE_SHELL",
   );
   const result = atifResults(snapshots)[0]!;
-  assert.equal(meta(result).is_error, false, JSON.stringify(result));
+  assert.equal(meta(result).is_error ?? false, false, JSON.stringify(result));
   assert.match(JSON.stringify(result.content), /NATIVE_SHELL/);
 });
 

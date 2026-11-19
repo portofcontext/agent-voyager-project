@@ -1,5 +1,5 @@
 import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
-import type { JsonValue } from "@agent-voyager-project/sdk/reports";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 /** Drive the pinned native server and validate its Recorder Trajectory. */
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
@@ -33,9 +33,7 @@ function capture(recording: Recording): Trajectory {
   return trajectory;
 }
 function effective(snapshots: Trajectory[]): any {
-  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
-  assert.ok(started);
-  return started;
+  return meta(snapshots.at(-1)!.agent);
 }
 const MODEL = "gpt-4.1";
 const fixture = fileURLToPath(
@@ -104,7 +102,6 @@ async function drive(
     },
   } as JsonValue;
   const snapshots: Trajectory[] = [];
-  let requestsAtStart: number | undefined;
   const previous = process.cwd();
   process.chdir(cwd);
   try {
@@ -112,8 +109,6 @@ async function drive(
       received,
       async (event) => {
         await delay(1);
-        if (meta(event.trajectory).started_at && requestsAtStart === undefined)
-          requestsAtStart = model.requests.length;
         snapshots.push(capture(event)!);
       },
       { signal: options.signal, env: options.env },
@@ -137,7 +132,6 @@ async function drive(
     cwd,
     requests: model.requests,
     headers: model.requestHeaders,
-    requestsAtStart,
   };
 }
 
@@ -194,7 +188,7 @@ test("native tool loop preserves response deltas, reported cost, and awaited sin
   ]);
   assert.equal(readFileSync(join(cwd, "answer.txt"), "utf8"), "OK");
   assert.equal(atifResponses(snapshots).length, 2);
-  assert.equal(meta(latest(snapshots)).complete, true);
+  assert.ok(meta(latest(snapshots)).stopped_at);
   const responses = atifResponses(snapshots);
   assert.equal(responses.length, 2);
   assert.deepEqual(
@@ -213,7 +207,7 @@ test("native tool loop preserves response deltas, reported cost, and awaited sin
     ),
   );
   assert.equal(atifResults(snapshots)[0]!.source_call_id, "write1");
-  assert.equal(meta(atifResults(snapshots)[0]!).is_error, false);
+  assert.equal(meta(atifResults(snapshots)[0]!).is_error ?? false, false);
   assert.equal(finalOutput(latest(snapshots)), "DONE");
   assert.equal(requests.length, 2);
 });
@@ -233,17 +227,15 @@ test("native allowlists expose no tools or child agents when disabled", async (t
     [{ text: "OK" }],
   );
   const started = latest(snapshots).agent;
-  assert.deepEqual(started.tool_definitions, []);
-  assert.deepEqual(effective(snapshots).subagents, []);
-  assert.deepEqual(effective(snapshots).skills, []);
+  assert.deepEqual(started.tool_definitions ?? [], []);
+  assert.deepEqual(effective(snapshots).subagents ?? [], []);
+  assert.deepEqual(effective(snapshots).skills ?? [], []);
   assert.ok(!requests[0]!.tools?.length);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
 test("the full assembled default prompt is recorded before the model request", async (t: any) => {
-  const { snapshots, requests, cwd, requestsAtStart } = await drive(t, {}, [
-    { text: "OK" },
-  ]);
+  const { snapshots, requests, cwd } = await drive(t, {}, [{ text: "OK" }]);
   const actual = system(requests[0]!);
   assert.match(actual, /You are opencode/);
   assert.ok(actual.includes(cwd));
@@ -252,12 +244,11 @@ test("the full assembled default prompt is recorded before the model request", a
     latest(snapshots).steps.find((s: any) => s.source === "system")?.message,
     actual,
   );
-  assert.equal(requestsAtStart, 0);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
 test("explicit instructions replace the entire native prompt on every parent response", async (t: any) => {
-  const { snapshots, requests, requestsAtStart } = await drive(
+  const { snapshots, requests } = await drive(
     t,
     {
       system_prompt: "ONLY_COMMISSION_INSTRUCTIONS",
@@ -291,24 +282,20 @@ test("explicit instructions replace the entire native prompt on every parent res
     latest(snapshots).steps.find((s: any) => s.source === "system")?.message,
     "ONLY_COMMISSION_INSTRUCTIONS",
   );
-  assert.equal(requestsAtStart, 0);
-  assert.equal(meta(atifResults(snapshots)[0]!).is_error, false);
+  assert.equal(meta(atifResults(snapshots)[0]!).is_error ?? false, false);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
 test("an empty system-prompt override sends no native system instructions", async (t: any) => {
-  const { snapshots, requests, requestsAtStart } = await drive(
-    t,
-    { system_prompt: "" },
-    [{ text: "OK" }],
-  );
+  const { snapshots, requests } = await drive(t, { system_prompt: "" }, [
+    { text: "OK" },
+  ]);
   assert.equal(requests.length, 1);
   assert.equal(system(requests[0]!), "");
   assert.equal(
     latest(snapshots).steps.find((s: any) => s.source === "system")?.message,
     "",
   );
-  assert.equal(requestsAtStart, 0);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
 
@@ -406,9 +393,9 @@ test("native MCP tools retain server ownership, parallel call IDs, and both erro
   );
   assert.equal(effective(snapshots).mcp_servers?.[0]?.status, "connected");
   assert.equal(
-    effective(snapshots).tools.find((tool: any) =>
-      tool.name.endsWith("Avptest_Echo"),
-    )?.mcp_server_id,
+    Object.entries<{ mcp_server_id?: string }>(effective(snapshots).tools).find(
+      ([name]) => name.endsWith("Avptest_Echo"),
+    )?.[1]?.mcp_server_id,
     "avptest",
   );
   assert.ok(

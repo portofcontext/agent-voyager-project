@@ -3,6 +3,7 @@
 import inspect
 
 import pytest
+from pydantic import BaseModel
 
 from avp._trajectory_extra import EXTRAS, Extra
 from avp._vendor import atif
@@ -10,7 +11,11 @@ from avp.trajectory import parse_trajectory
 
 
 def _models():
-    return [m for _, m in inspect.getmembers(atif, inspect.isclass) if "extra" in m.model_fields]
+    return [
+        m
+        for _, m in inspect.getmembers(atif, inspect.isclass)
+        if issubclass(m, BaseModel) and "extra" in m.model_fields
+    ]
 
 
 def test_every_vendored_extra_is_typed() -> None:
@@ -32,12 +37,14 @@ def _document(**extra):
 
 def test_plain_atif_and_other_keys_are_accepted() -> None:
     trajectory = parse_trajectory(_document(extra={"vendor": {"x": 1}}))
+    assert trajectory.steps[0].extra is not None
     assert trajectory.steps[0].extra["vendor"] == {"x": 1}
     assert "avp" not in trajectory.steps[0].extra
 
 
 def test_unknown_error_codes_read_as_unknown() -> None:
     step = parse_trajectory(_document(extra={"avp": {"error_code": "later", "new": 1}})).steps[0]
+    assert step.extra is not None and step.extra.avp is not None
     assert step.extra["avp"].error_code == "unknown"
     assert step.extra.avp.model_extra == {"new": 1}
 

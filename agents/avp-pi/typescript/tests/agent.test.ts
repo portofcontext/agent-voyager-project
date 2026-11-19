@@ -1,5 +1,5 @@
 import { trajectorySink } from "@agent-voyager-project/sdk/agent_cli";
-import type { JsonValue } from "@agent-voyager-project/sdk/reports";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 /** Native Pi sessions and MCP clients produce validated SDK Trajectories. */
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
@@ -35,9 +35,7 @@ function capture(recording: Recording): Trajectory {
   return trajectory;
 }
 function effective(snapshots: Trajectory[]): any {
-  const started = recordings.get(snapshots.at(-1)!)?.agentStart;
-  assert.ok(started);
-  return started;
+  return meta(snapshots.at(-1)!.agent);
 }
 const MODEL = "claude-haiku-4-5";
 const fixture = fileURLToPath(
@@ -72,9 +70,7 @@ function atifCalls(snapshots: Trajectory[]): any[] {
 }
 function mcpServer(snapshots: Trajectory[], call: any): string | undefined {
   assert.equal(meta(call).mcp_server_id, undefined);
-  return effective(snapshots).tools.find(
-    (t: any) => t.name === call.function_name,
-  )?.mcp_server_id;
+  return effective(snapshots).tools?.[call.function_name]?.mcp_server_id;
 }
 function atifResults(snapshots: Trajectory[]): any[] {
   return docs(latest(snapshots))
@@ -167,7 +163,7 @@ test("native responses retain reasoning, skills, replacement instructions, and p
     ],
   );
   assert.equal(atifResponses(snapshots).length, 1);
-  assert.equal(meta(latest(snapshots)).complete, true);
+  assert.ok(meta(latest(snapshots)).stopped_at);
   assert.ok(system?.startsWith("SYSTEM"));
   assert.ok(system?.includes("<available_skills>"));
   assert.ok(system?.includes("<name>greeting</name>"));
@@ -187,7 +183,7 @@ test("native responses retain reasoning, skills, replacement instructions, and p
   assert.equal(finalOutput(latest(snapshots)), "DONE");
 });
 
-test("native filesystem and bash tools complete with ordered asynchronous sink writes", async () => {
+test("native filesystem and bash tools pair in the completed trajectory", async () => {
   const { snapshots } = await scripted(
     received(),
     [
@@ -217,15 +213,13 @@ test("native filesystem and bash tools complete with ordered asynchronous sink w
   );
   assert.match(JSON.stringify(returns[1]!.content), /BOUNDARY/);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
-  for (const result of returns) {
-    const called = snapshots.findIndex((s) =>
-      atifCalls([s]).some((c) => c.tool_call_id === result.source_call_id),
+  assert.equal(snapshots.length, 1);
+  for (const result of returns)
+    assert.ok(
+      atifCalls(snapshots).some(
+        (call) => call.tool_call_id === result.source_call_id,
+      ),
     );
-    const returned = snapshots.findIndex((s) =>
-      atifResults([s]).some((r) => r.source_call_id === result.source_call_id),
-    );
-    assert.ok(called >= 0 && returned > called);
-  }
 });
 
 test("disabled built-ins are absent from the model and refused if called", async () => {
@@ -245,7 +239,7 @@ test("disabled built-ins are absent from the model and refused if called", async
       text(),
     ],
   );
-  assert.deepEqual(latest(snapshots).agent.tool_definitions, []);
+  assert.deepEqual(latest(snapshots).agent.tool_definitions ?? [], []);
   assert.equal(meta(atifResults(snapshots)[0]!).is_error, true);
   assert.equal(meta(latest(snapshots)).stop_reason, "converged");
 });
@@ -323,7 +317,7 @@ for (const fields of [
   test(`unusable Commission stops before any model call: ${JSON.stringify(fields)}`, async () => {
     const { snapshots, faux } = await scripted(received(fields), []);
     assert.equal(atifResponses(snapshots).length, 0);
-    assert.equal(meta(latest(snapshots)).complete, true);
+    assert.ok(meta(latest(snapshots)).stopped_at);
     assert.equal(
       meta(atifErrors(snapshots)[0]!).error_code,
       "invalid_commission",
@@ -541,10 +535,7 @@ test("native Anthropic HTTP requests use the proxy key and retain cache-inclusiv
     assert.equal(response.metrics.completion_tokens, 50);
     assert.equal(response.metrics.cached_tokens, 300);
     assert.equal(meta(response.metrics).cache_creation_input_tokens, 100);
-    assert.equal(
-      latest(snapshots).agent.model_name,
-      "claude-haiku-4-5-20251001",
-    );
+    assert.equal(response.model_name, "claude-haiku-4-5-20251001");
     assert.deepEqual(meta(response).finish_reasons, ["end_turn"]);
     assert.equal(meta(latest(snapshots)).stop_reason, "converged");
   } finally {

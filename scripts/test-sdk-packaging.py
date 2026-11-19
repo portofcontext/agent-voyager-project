@@ -129,13 +129,14 @@ class PackagingTests(unittest.TestCase):
                     f"""
 import sys
 sys.path.insert(0, {str(consumer)!r})
-from avp.agent_start import AgentStart
+from avp.recorder import Text, Usage
 from avp.utils.endpoints import bundled_endpoints, default_base_url, provider_auth
 from avp.utils.pricing import bundled_prices
 assert default_base_url(bundled_endpoints(), 'anthropic') == 'https://api.anthropic.com/v1'
 assert provider_auth(bundled_endpoints(), 'anthropic').header == 'x-api-key'
 assert bundled_prices().models['anthropic/claude-sonnet-4-5'].output > 0
-assert AgentStart(avp_version='0.1', run_id='r', prompt='hi', model={{"provider":'test','id':'m'}}).run_id == 'r'
+assert Text(text="hi").text == "hi"
+assert Usage(prompt_tokens=1, completion_tokens=2).completion_tokens == 2
 """,
                 ],
                 cwd=out,
@@ -184,20 +185,23 @@ import { bundledPrices } from '@agent-voyager-project/sdk/utils/pricing';
 import { bundledEndpoints, defaultBaseUrl, providerAuth } from '@agent-voyager-project/sdk/utils/endpoints';
 import { parseCommission } from '@agent-voyager-project/sdk/commission';
 import { Recorder } from '@agent-voyager-project/sdk/recorder';
-import { parseAgentStart } from '@agent-voyager-project/sdk/agent_start';
-assert.equal(parseAgentStart({avp_version:'0.1',run_id:'r',prompt:'hi',model:{provider:'test',id:'m'}}).run_id, 'r');
+import { planRun } from '@agent-voyager-project/sdk/utils/run_plan';
 assert.ok(bundledPrices().models['anthropic/claude-sonnet-4-5'].output > 0);
 assert.equal(defaultBaseUrl(bundledEndpoints(), 'anthropic'), 'https://api.anthropic.com/v1');
 assert.deepEqual(providerAuth(bundledEndpoints(), 'anthropic'), {header:'x-api-key',prefix:''});
 const commission = parseCommission({avp_version:'0.1',run_id:'r',prompt:'Hi',model:{provider:'p',id:'m'}});
 const snapshots = [];
 const rec = new Recorder(async recording => { snapshots.push(recording.trajectory); });
-await rec.start({prompt:commission.prompt,model:commission.model});
-await rec.response([{type:'text',text:'Hi'}]);
+const descriptor = {avp_version:'0.1',agent_name:'example',agent_version:'1'};
+await rec.begin(commission, descriptor);
+const plan = planRun(commission, descriptor);
+await rec.start(plan.agent, plan.prompt);
+await rec.step([{type:'text',text:'Hi'}]);
 await rec.stop('converged');
 assert.equal(snapshots.at(-1).schema_version, 'ATIF-v1.8');
 assert.equal(snapshots.at(-1).steps.at(-1).message, 'Hi');
-assert.equal(snapshots.at(-1).extra.avp.complete, true);
+assert.equal(snapshots.length, 1);
+assert.equal(snapshots[0].extra.avp.stop_reason, 'converged');
 """,
                 ],
                 cwd=consumer,

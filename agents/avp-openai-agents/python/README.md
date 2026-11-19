@@ -24,7 +24,7 @@ See the [SDK command line](../../../avp-sdk/README.md#the-agent-command-line).
   reflects the installed profile.
 - The framework supplies no built-in tools, skills, or subagents. Tools come
   from the Commission's stdio and HTTP MCP servers, using native SDK clients.
-  The started event records the actual names and schemas the Runner exposes.
+  The Trajectory records the actual names and schemas the Runner exposes.
 - `system_prompt` becomes the agent's instructions. Commissioned skill files
   follow those instructions, SKILL.md first.
 - `output_schema` uses a native SDK output schema, with JSON Schema validation
@@ -59,9 +59,8 @@ uses Anthropic.
 
 - Responses are reported when complete. Each raw response boundary has its own
   usage; the run's cumulative usage is not added again.
-- OpenAI annotations remain in text blocks' `openai` extension. Audio, files,
-  compaction, and other unsupported response item kinds fail visibly rather
-  than silently losing content or usage.
+- Audio, files, compaction, and other unsupported response item kinds fail
+  visibly rather than silently losing content or usage.
 - The agent does not add hosted tools or handoffs. Those are application
   features a caller would configure on its own SDK agent.
 - MCP images with inline data are recorded as images. Other unsupported tool

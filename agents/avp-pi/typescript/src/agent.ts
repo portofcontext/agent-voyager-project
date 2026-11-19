@@ -1,3 +1,4 @@
+import { toolDefinitions } from "@agent-voyager-project/sdk/trajectory";
 import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** Pi owns the loop; native events are serialized through the SDK Recorder. */
 import { mkdtempSync, rmSync } from "node:fs";
@@ -7,7 +8,7 @@ import { Recorder } from "@agent-voyager-project/sdk/recorder";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import type { Commission } from "@agent-voyager-project/sdk/commission";
 import type { Tool } from "@agent-voyager-project/sdk/descriptor";
-import type { JsonValue } from "@agent-voyager-project/sdk/reports";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
@@ -224,7 +225,9 @@ export async function run(
       return;
     }
     const names = [
-      ...(plan.started.tools ?? []).map((t) => t.name),
+      ...(plan.agent.tool_definitions ?? []).map(
+        (t) => (t.function as { name: string }).name,
+      ),
       ...mcp.definitions.map((t) => t.name),
     ];
     ({ session } = await createAgentSession({
@@ -267,23 +270,16 @@ export async function run(
           ? { mcp_server_id: managed.get(t.name)!.mcp_server_id }
           : {}),
       }));
-    await rec.start({
-      ...plan.started,
-      system_prompt: effectivePrompt,
-      tools: tools.length ? tools : undefined,
-      mcp_servers: plan.started.mcp_servers?.map((s) => ({
-        ...s,
-        status: "connected",
-      })),
-    });
+    const configured = plan.connected([]);
+    const [definitions, details] = toolDefinitions(tools);
+    configured.tool_definitions = definitions.length ? definitions : undefined;
+    configured.extra!.avp!.tools = Object.keys(details).length
+      ? details
+      : undefined;
+    await rec.start(configured, plan.prompt, { systemPrompt: effectivePrompt });
     const pending = new Set<string>();
-    let started = performance.now();
     let last: AssistantMessage | undefined;
     unsubscribe = session.subscribe((event) => {
-      const ended = performance.now();
-      if (event.type === "message_start" && event.message.role === "assistant")
-        started = ended;
-      const duration = Math.max(0, Math.trunc(ended - started));
       if (event.type === "message_end" && event.message.role === "assistant")
         last = event.message;
       reports = reports
@@ -307,12 +303,10 @@ export async function run(
                 "Pi deferred model responses cannot be recorded by this adapter",
               );
             const actual = message.responseModel ?? message.model;
-            await rec.response(translate.content(message.content), {
+            await rec.step(translate.parts(message.content, rec), {
               usage: translate.usage(message.usage),
-              responseModel:
-                actual !== commission.model.id ? actual : undefined,
+              modelName: actual !== commission.model.id ? actual : undefined,
               finishReasons: [message.rawStopReason ?? message.stopReason],
-              durationMs: duration,
             });
             for (const block of message.content)
               if (block.type === "toolCall") pending.add(block.id);
@@ -321,9 +315,9 @@ export async function run(
             pending.delete(event.toolCallId)
           ) {
             const structured = event.result.structuredContent;
-            await rec.toolReturned(
+            await rec.result(
               event.toolCallId,
-              translate.toolContent(event.result.content),
+              translate.toolContent(event.result.content, rec),
               {
                 isError: event.isError,
                 structuredContent:
@@ -339,9 +333,9 @@ export async function run(
             event.message.role === "toolResult" &&
             pending.delete(event.message.toolCallId)
           ) {
-            await rec.toolReturned(
+            await rec.result(
               event.message.toolCallId,
-              translate.toolContent(event.message.content),
+              translate.toolContent(event.message.content, rec),
               { isError: event.message.isError },
             );
           } else if (event.type === "compaction_start") {

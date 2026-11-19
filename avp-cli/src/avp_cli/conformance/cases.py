@@ -4,7 +4,7 @@ Descriptor says it lacks what the rule needs."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from pydantic import ValidationError
 
@@ -32,6 +32,7 @@ class TextResponse(TypedDict):
 
 class ToolCallResponse(TypedDict):
     toolCalls: list[ToolCall]
+    reasoning: NotRequired[str]
 
 
 Response = TextResponse | ToolCallResponse

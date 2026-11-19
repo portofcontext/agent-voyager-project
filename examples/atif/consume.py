@@ -46,37 +46,35 @@ def prepare(source: Path, destination: Path) -> Path:
                 assets(child)
 
     assets(trajectory.to_json_dict())
-    for name in ("commission.json", "descriptor.json", "agent-start.json"):
-        path = source.parent / name
-        if path.exists():
-            if not path.resolve().is_relative_to(source.parent.resolve()):
-                raise ValueError(f"Run document escapes the run directory: {name}")
-            shutil.copyfile(path, agent_dir / name)
-            if name == "agent-start.json":
-                started = json.loads(path.read_text())
-                for scope in [started, *(started.get("subagents") or [])]:
-                    for skill in scope.get("skills") or []:
-                        if not skill.get("path"):
-                            continue
-                        name = skill["path"]
-                        if (
-                            not isinstance(name, str)
-                            or any(p in {"", ".", ".."} for p in name.split("/"))
-                            or any(c in name for c in "\\:\x00")
-                        ):
-                            raise ValueError("Skill path must be relative to the run directory")
-                        relative = Path(name)
-                        directory = (source.parent / relative).resolve()
-                        if relative.is_absolute() or not directory.is_relative_to(
-                            source.parent.resolve()
-                        ):
-                            raise ValueError("Skill path escapes the run directory")
-                        if not directory.is_dir():
-                            raise ValueError(f"Missing skill directory: {relative}")
-                        for entry in directory.rglob("*"):
-                            if entry.is_symlink():
-                                raise ValueError("Skill directories cannot contain symlinks")
-                        shutil.copytree(directory, agent_dir / relative, dirs_exist_ok=True)
+
+    def skills(document):
+        avp = document.get("agent", {}).get("extra", {}).get("avp", {})
+        for scope in [avp, *(avp.get("subagents") or [])]:
+            for skill in scope.get("skills") or []:
+                if not skill.get("source"):
+                    continue
+                name = skill["source"]
+                if not isinstance(name, str) or not name.startswith("file:"):
+                    raise ValueError("Skill source must be a local file URI")
+                name = name[5:]
+                if any(p in {"", ".", ".."} for p in name.split("/")) or any(
+                    c in name for c in "\\:\x00"
+                ):
+                    raise ValueError("Skill path must be relative to the run directory")
+                relative = Path(name)
+                directory = (source.parent / relative).resolve()
+                if relative.is_absolute() or not directory.is_relative_to(source.parent.resolve()):
+                    raise ValueError("Skill path escapes the run directory")
+                if not directory.is_dir():
+                    raise ValueError(f"Missing skill directory: {relative}")
+                for entry in directory.rglob("*"):
+                    if entry.is_symlink():
+                        raise ValueError("Skill directories cannot contain symlinks")
+                shutil.copytree(directory, agent_dir / relative, dirs_exist_ok=True)
+        for child in document.get("subagent_trajectories") or []:
+            skills(child)
+
+    skills(trajectory.to_json_dict())
     agent = AgentConfig(name=trajectory.agent.name, model_name=trajectory.agent.model_name)
     task = TaskConfig(path=source.resolve())
     config = TrialConfig(task=task, trial_name="run", agent=agent)
@@ -85,13 +83,13 @@ def prepare(source: Path, destination: Path) -> Path:
         JobConfig(job_name=job.name, agents=[agent]).model_dump_json(indent=2)
     )
     meta = (trajectory.extra or {}).get("avp", {})
-    started = meta.get("started_at") or meta.get("requested_at")
+    started = meta.get("started_at")
     started = (
         datetime.fromisoformat(started.replace("Z", "+00:00")) if started else datetime.now(UTC)
     )
     stopped = meta.get("stopped_at")
     finished = datetime.fromisoformat(stopped.replace("Z", "+00:00")) if stopped else None
-    if meta.get("complete"):
+    if meta.get("stop_reason"):
         # The import time is only a fallback for documents without run timestamps.
         finished = finished or started
         result = TrialResult(
@@ -111,7 +109,7 @@ def prepare(source: Path, destination: Path) -> Path:
         started_at=started,
         finished_at=finished,
         n_total_trials=1,
-        stats=JobStats(n_completed_trials=int(bool(meta.get("complete")))),
+        stats=JobStats(n_completed_trials=int(bool(meta.get("stop_reason")))),
     )
     (job / "result.json").write_text(result.model_dump_json(indent=2))
     return agent_dir / "trajectory.json"

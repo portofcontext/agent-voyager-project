@@ -6,16 +6,13 @@ const root = new URL("../../../", import.meta.url);
 const schema = JSON.parse(
   await readFile(new URL("spec/v0.1/trajectory.schema.json", root), "utf8"),
 );
-const reports = JSON.parse(
+const inputs = JSON.parse(
   await readFile(
-    new URL("../src/schemas/reports.json", import.meta.url),
+    new URL("../src/schemas/recorder.json", import.meta.url),
     "utf8",
   ),
 );
 const trajectory = structuredClone(schema);
-const agentStart = JSON.parse(
-  await readFile(new URL("spec/v0.1/agent-start.schema.json", root), "utf8"),
-);
 const trajectoryRoot = trajectory.$ref
   ? {}
   : {
@@ -26,15 +23,9 @@ const trajectoryRoot = trajectory.$ref
       ),
     };
 schema.$defs = {
-  ...agentStart.$defs,
-  AgentStart: Object.fromEntries(
-    Object.entries(agentStart).filter(
-      ([k]) => !["$defs", "$id", "$schema"].includes(k),
-    ),
-  ),
-  ...reports.$defs,
-  Reports: Object.fromEntries(
-    Object.entries(reports).filter(
+  ...inputs.$defs,
+  RecorderInputs: Object.fromEntries(
+    Object.entries(inputs).filter(
       ([k]) => !["$defs", "$id", "$schema"].includes(k),
     ),
   ),
@@ -62,7 +53,7 @@ schema.title = "Trajectory";
 schema.$defs.avp__commission__Skill.title = "CommissionSkill";
 schema.$defs.avp__descriptor__Skill.title = "DescriptorSkill";
 const { $defs } = schema;
-// The object wrapper makes the generator emit definitions unused by the Event union.
+// The object wrapper makes the generator emit definitions unused by the Trajectory.
 const generated = await compile(
   {
     $defs,
@@ -73,8 +64,7 @@ const generated = await compile(
   },
   "WireTypes",
   {
-    bannerComment:
-      "// Generated from Python SDK reports and upstream ATIF schemas. Do not edit.",
+    bannerComment: "// Generated from Python SDK models. Do not edit.",
     unreachableDefinitions: true,
     unknownAny: true,
     style: { printWidth: 80, bracketSpacing: true, trailingComma: "all" },

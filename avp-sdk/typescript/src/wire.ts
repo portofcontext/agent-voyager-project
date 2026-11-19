@@ -1,275 +1,7 @@
-// Generated from Python SDK reports and upstream ATIF schemas. Do not edit.
+// Generated from Python SDK models. Do not edit.
 
 export type JsonValue = unknown;
 
-/**
- * A secret in a variable of the agent's environment.
- */
-export interface EnvSecret {
-  /**
-   * The name of a variable in the agent's environment that holds the secret,
-   * for example `"TEST_DB_PASSWORD"`.
-   */
-  env: string;
-}
-/**
- * An MCP server the agent comes with. Connection details stay inside the agent.
- */
-export interface McpServer {
-  /**
-   * Identifies the server. A Tool's `mcp_server_id` refers to it.
-   */
-  id: string;
-  /**
-   * A display name, when it differs from `id`.
-   */
-  name?: string | null;
-  /**
-   * What the server provides.
-   */
-  description?: string | null;
-  /**
-   * The result of the agent's attempt to connect.
-   */
-  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
-}
-/**
- * A Model without its `credential`, as the Trajectory reports it.
- */
-export interface ModelRef {
-  /**
-   * The service that runs the model, for example `"anthropic"`,
-   * `"amazon-bedrock"`, or `"openrouter"`. It decides which API the agent calls
-   * and how it authenticates.
-   */
-  provider: string;
-  /**
-   * The model's ID at that service, as the agent sends it, for example
-   * `"claude-sonnet-4-6"`.
-   */
-  id: string;
-  /**
-   * The URL of the service's API. Absent means the service's default.
-   */
-  base_url?: string | null;
-}
-/**
- * A secret that a proxy outside the agent holds and adds to its requests.
- */
-export interface ProxySecret {
-  /**
-   * The name of a credential that a proxy outside the agent holds. The proxy
-   * adds it to the agent's matching requests, so the agent never receives its
-   * value.
-   */
-  proxy: string;
-}
-/**
- * An HTTP MCP connection and its status at start; secrets remain references.
- */
-export interface StartedMcpHttp {
-  /**
-   * Identifies the server.
-   */
-  id: string;
-  /**
-   * A display name, when it differs from `id`.
-   */
-  name?: string | null;
-  /**
-   * What the server provides.
-   */
-  description?: string | null;
-  type: "http";
-  /**
-   * The server's URL.
-   */
-  url: string;
-  /**
-   * HTTP headers to send with each request. A Secret reference's secret is
-   * the header's entire value.
-   */
-  headers?: {
-    [k: string]: string | ProxySecret | EnvSecret;
-  } | null;
-  /**
-   * The reported connection status. Absent or null means not reported.
-   */
-  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
-}
-/**
- * A stdio MCP connection and its status at start; secrets remain references.
- */
-export interface StartedMcpStdio {
-  /**
-   * Identifies the server.
-   */
-  id: string;
-  /**
-   * A display name, when it differs from `id`.
-   */
-  name?: string | null;
-  /**
-   * What the server provides.
-   */
-  description?: string | null;
-  type: "stdio";
-  /**
-   * The program and its arguments, for example `["npx", "-y", "@example/db-mcp"]`.
-   *
-   * @minItems 1
-   */
-  command: [string, ...string[]];
-  /**
-   * Environment variables to set for the program, on top of those the
-   * agent's MCP client gives it.
-   */
-  env?: {
-    [k: string]: string | EnvSecret;
-  } | null;
-  /**
-   * The reported connection status. Absent or null means not reported.
-   */
-  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
-}
-/**
- * Skill metadata and a reference to its saved files.
- */
-export interface StartedSkill {
-  /**
-   * The skill's name.
-   */
-  name: string;
-  /**
-   * What the skill does and when to use it.
-   */
-  description: string;
-  /**
-   * A `file:` URI for the directory that contains the skill's `SKILL.md`, as
-   * the path appears inside the agent's environment.
-   */
-  source?: string | null;
-  /**
-   * Skill directory relative to agent-start.json, using / separators.
-   * Absent or null means no files were captured. The original source, when
-   * present, identifies the runtime directory and is not a portable reference.
-   */
-  path?: string | null;
-  [k: string]: unknown;
-}
-/**
- * A selected subagent's exposed configuration. No implicit inheritance.
- */
-export interface StartedSubagent {
-  /**
-   * The subagent's name.
-   */
-  name: string;
-  /**
-   * What the subagent does.
-   */
-  description?: string | null;
-  /**
-   * The effective system prompt; an empty string is an explicit empty prompt.
-   */
-  system_prompt?: string | null;
-  /**
-   * Resolved tools. Absent or null means not exposed; [] means none.
-   */
-  tools?: Tool[] | null;
-  /**
-   * Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.
-   */
-  skills?: StartedSkill[] | null;
-  /**
-   * Resolved MCP servers. Absent or null means not exposed; [] means none.
-   */
-  mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
-}
-/**
- * An MCP `Tool` object, with one added field. Other MCP fields are kept.
- */
-export interface Tool {
-  /**
-   * The tool's name, as the model calls it.
-   */
-  name: string;
-  /**
-   * A display name.
-   */
-  title?: string | null;
-  /**
-   * What the tool does, as the model sees it.
-   */
-  description?: string | null;
-  /**
-   * A JSON Schema for the tool's input, as the model sees it.
-   */
-  inputSchema: {
-    type: "object";
-    [k: string]: unknown;
-  };
-  /**
-   * A JSON Schema for the tool's structured output.
-   */
-  outputSchema?: {
-    type: "object";
-    [k: string]: unknown;
-  } | null;
-  /**
-   * The `id` of the MCP server the tool comes from. Absent for any tool that
-   * does not come from an MCP server.
-   */
-  mcp_server_id?: string | null;
-  [k: string]: unknown;
-}
-/**
- * Resolved configuration at start. See agent-start.md.
- */
-export interface AgentStart {
-  /**
-   * The AVP version this document follows.
-   */
-  avp_version: "0.1";
-  /**
-   * The run's nonempty ID, matching the ATIF session_id.
-   */
-  run_id: string;
-  /**
-   * The effective user prompt.
-   */
-  prompt: string;
-  /**
-   * The effective system prompt; an empty string is an explicit empty prompt.
-   */
-  system_prompt?: string | null;
-  model: ModelRef;
-  /**
-   * Full resolved tool definitions using MCP fields.
-   * Absent or null means not exposed; [] means none.
-   */
-  tools?: Tool[] | null;
-  /**
-   * Resolved MCP servers, with connection fields when exposed. Secrets remain references.
-   * Absent or null means not exposed; [] means none.
-   */
-  mcp_servers?: (StartedMcpHttp | StartedMcpStdio | McpServer)[] | null;
-  /**
-   * Selected skills with paths to their captured directories. Absent or null means not exposed; [] means none.
-   */
-  skills?: StartedSkill[] | null;
-  /**
-   * Selected subagents and their exposed configuration. Absent or null means not exposed; [] means none.
-   */
-  subagents?: StartedSubagent[] | null;
-  /**
-   * The requested JSON Schema for structured output, when supplied.
-   */
-  output_schema?: {
-    type: "object";
-    [k: string]: unknown;
-  } | null;
-}
 /**
  * What an agent comes with before any Commission.
  */
@@ -323,6 +55,64 @@ export interface ModelPattern {
    * A pattern for the model's `id`, for example `"claude-*"`.
    */
   id: string;
+}
+/**
+ * An MCP `Tool` object, with one added field. Other MCP fields are kept.
+ */
+export interface Tool {
+  /**
+   * The tool's name, as the model calls it.
+   */
+  name: string;
+  /**
+   * A display name.
+   */
+  title?: string | null;
+  /**
+   * What the tool does, as the model sees it.
+   */
+  description?: string | null;
+  /**
+   * A JSON Schema for the tool's input, as the model sees it.
+   */
+  inputSchema: {
+    type: "object";
+    [k: string]: unknown;
+  };
+  /**
+   * A JSON Schema for the tool's structured output.
+   */
+  outputSchema?: {
+    type: "object";
+    [k: string]: unknown;
+  } | null;
+  /**
+   * The `id` of the MCP server the tool comes from. Absent for any tool that
+   * does not come from an MCP server.
+   */
+  mcp_server_id?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * An MCP server the agent comes with. Connection details stay inside the agent.
+ */
+export interface McpServer {
+  /**
+   * Identifies the server. A Tool's `mcp_server_id` refers to it.
+   */
+  id: string;
+  /**
+   * A display name, when it differs from `id`.
+   */
+  name?: string | null;
+  /**
+   * What the server provides.
+   */
+  description?: string | null;
+  /**
+   * The result of the agent's attempt to connect.
+   */
+  status?: ("connected" | "failed" | "needs-auth" | "disabled") | null;
 }
 /**
  * The frontmatter of a skill's `SKILL.md`, as defined by Agent Skills, with
@@ -401,7 +191,20 @@ export interface AgentSettings {
   enabled_mcp_servers?: string[] | null;
 }
 /**
- * A source the model cited for a text block. Keeps fields the service added.
+ * A tool call. `server_side` when the model service runs the tool and
+ * returns its result in the same response, as a `ServerResult`.
+ */
+export interface Call {
+  type?: "call";
+  id: string;
+  name: string;
+  arguments: {
+    [k: string]: unknown;
+  };
+  server_side?: boolean;
+}
+/**
+ * A source the model cited. Keeps fields the service added.
  */
 export interface Citation {
   /**
@@ -413,7 +216,7 @@ export interface Citation {
    */
   cited_text?: string | null;
   /**
-   * Where the cited part of the block's `text` starts.
+   * Where the cited part of the text starts.
    */
   start_index?: number | null;
   /**
@@ -522,6 +325,27 @@ export interface Model {
   credential?: ProxySecret | EnvSecret | null;
 }
 /**
+ * A secret that a proxy outside the agent holds and adds to its requests.
+ */
+export interface ProxySecret {
+  /**
+   * The name of a credential that a proxy outside the agent holds. The proxy
+   * adds it to the agent's matching requests, so the agent never receives its
+   * value.
+   */
+  proxy: string;
+}
+/**
+ * A secret in a variable of the agent's environment.
+ */
+export interface EnvSecret {
+  /**
+   * The name of a variable in the agent's environment that holds the secret,
+   * for example `"TEST_DB_PASSWORD"`.
+   */
+  env: string;
+}
+/**
  * The supervisor that wrote the Commission.
  */
 export interface Supervisor {
@@ -611,204 +435,60 @@ export interface CommissionSkill {
   };
 }
 /**
- * An image.
+ * An image saved beside the Trajectory. Made by `Recorder.image`.
  */
-export interface ImageBlock {
-  type: "image";
-  source: Source;
-  [k: string]: unknown;
+export interface Image {
+  type?: "image";
+  path: string;
+  media_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 }
 /**
- * Where an image's data is. In v0.1 the data is always inline. Keeps fields the service added.
+ * A block of the model's reasoning: readable `text`, or `encrypted_content`
+ * when the service returned it encrypted.
  */
-export interface Source {
-  type: "base64";
-  /**
-   * The image's media type, such as `image/png`.
-   */
-  media_type: string;
-  /**
-   * The image, base64-encoded.
-   */
-  data: string;
-  [k: string]: unknown;
+export interface Reasoning {
+  type?: "reasoning";
+  text?: string;
+  signature?: string | null;
+  encrypted_content?: string | null;
 }
 /**
- * The model's text when it declined.
+ * The result of a server-side `Call`, from the same response.
  */
-export interface RefusalBlock {
-  type: "refusal";
-  refusal: string;
-  [k: string]: unknown;
-}
-export interface RunContext {
-  /**
-   * The prompt the run starts with.
-   */
-  prompt: string;
-  /**
-   * The system prompt the run uses.
-   */
-  system_prompt?: string | null;
-  model: ModelRef;
-  /**
-   * The tools the run uses.
-   */
-  tools?: Tool[] | null;
-  /**
-   * The MCP servers the run uses.
-   */
-  mcp_servers?: McpServer[] | null;
-  /**
-   * The skills the run uses.
-   */
-  skills?: DescriptorSkill[] | null;
-  /**
-   * The subagents the run uses.
-   */
-  subagents?: Subagent[] | null;
+export interface ServerResult {
+  type?: "server_result";
+  call_id: string;
+  content: string | (Text | Image)[];
+  is_error?: boolean;
+  structured_content?: unknown;
 }
 /**
- * The result of a `server_tool_use` call.
+ * Text from the model or a tool.
  */
-export interface ServerToolResultBlock {
-  type: "server_tool_result";
-  tool_use_id: string;
-  name: string;
-  content: unknown;
-  is_error?: boolean | null;
-  [k: string]: unknown;
+export interface Text {
+  type?: "text";
+  text: string;
+  citations?: Citation[] | null;
+  refusal?: boolean;
 }
 /**
- * A call to a tool the model service runs itself, such as web search.
+ * One model response's usage. `prompt_tokens` includes cached and
+ * cache-creation tokens; `completion_tokens` includes reasoning tokens.
+ * Without `cost_usd`, the Recorder prices the response.
  */
-export interface ServerToolUseBlock {
-  type: "server_tool_use";
-  id: string;
-  name: string;
-  input: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
-}
-/**
- * A subagent's totals. A field is absent when the agent couldn't measure it.
- */
-export interface SubagentUsage {
-  input_tokens?: number | null;
-  output_tokens?: number | null;
-  cache_read_input_tokens?: number | null;
+export interface Usage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cached_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
   reasoning_output_tokens?: number | null;
   cost_usd?: number | null;
-  cost_source?: ("computed" | "reported" | "unknown") | null;
-  /**
-   * How many model responses the subagent made.
-   */
-  responses?: number | null;
 }
-/**
- * Text from the model.
- */
-export interface TextBlock {
-  type: "text";
-  text: string;
-  citations?: Citation[] | null;
-  [k: string]: unknown;
-}
-/**
- * The model's reasoning.
- */
-export interface ThinkingBlock {
-  type: "thinking";
-  /**
-   * The reasoning, or the service's encrypted reasoning when `redacted` is true.
-   */
-  thinking: string;
-  /**
-   * The service's token for passing the reasoning back to it.
-   */
-  signature?: string | null;
-  redacted?: boolean | null;
-  [k: string]: unknown;
-}
-/**
- * The result of a `tool_use` call, matched by `tool_use_id`.
- */
-export interface ToolResultBlock {
-  type: "tool_result";
-  tool_use_id: string;
-  content: string | (TextBlock | ImageBlock)[];
-  /**
-   * A result meant for programs, such as MCP's `structuredContent`.
-   */
-  structured_content?: {
-    [k: string]: unknown;
-  } | null;
-  is_error?: boolean | null;
-  [k: string]: unknown;
-}
-/**
- * A call to a tool the agent runs.
- */
-export interface ToolUseBlock {
-  type: "tool_use";
-  id: string;
-  name: string;
-  input: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
-}
-/**
- * Token counts and cost for one model response.
- */
-export interface Usage {
-  /**
-   * All input tokens, including those read from and written to the cache.
-   */
-  input_tokens: number;
-  /**
-   * All output tokens, including reasoning tokens.
-   */
-  output_tokens: number;
-  /**
-   * The input tokens read from the cache. Included in `input_tokens`.
-   */
-  cache_read_input_tokens?: number | null;
-  /**
-   * The input tokens written to the cache. Included in `input_tokens`.
-   */
-  cache_creation_input_tokens?: number | null;
-  /**
-   * The output tokens the model spent on reasoning. Included in `output_tokens`.
-   */
-  reasoning_output_tokens?: number | null;
-  /**
-   * The cost in US dollars, after any cache discount.
-   */
-  cost_usd: number;
-  /**
-   * Where `cost_usd` comes from.
-   */
-  cost_source: "computed" | "reported" | "unknown";
-}
-export interface Reports {
+export interface RecorderInputs {
   commission: Commission;
   descriptor: AgentDescriptor;
-  context: RunContext;
   usage: Usage;
-  subagent_usage: SubagentUsage;
-  content: (
-    | TextBlock
-    | ThinkingBlock
-    | ImageBlock
-    | ToolUseBlock
-    | ToolResultBlock
-    | ServerToolUseBlock
-    | ServerToolResultBlock
-    | RefusalBlock
-  )[];
+  parts: (Text | Image | Reasoning | Call | ServerResult)[];
   stop_reason: "converged" | "refused" | "error" | "interrupted" | "abandoned";
   error_code:
     | "invalid_commission"
@@ -848,9 +528,84 @@ export interface Agent {
   /**
    * Custom agent configuration details
    */
-  extra?: {
+  extra?: AgentExtra | null;
+}
+export interface AgentExtra {
+  avp?: AgentAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `agent.extra.avp`: what the run used.
+ */
+export interface AgentAvpExtra {
+  /**
+   * The agent's Descriptor, unchanged. Absent on subagent trajectories.
+   */
+  descriptor?: AgentDescriptor | null;
+  /**
+   * The service that runs the model in `agent.model_name`.
+   */
+  model?: AgentModel | null;
+  /**
+   * For each tool in `agent.tool_definitions`, keyed by its name.
+   */
+  tools?: {
+    [k: string]: AgentTool;
+  } | null;
+  /**
+   * The MCP servers the run used, with their `status`.
+   */
+  mcp_servers?: McpServer[] | null;
+  /**
+   * The skills the run used. `source` points to the saved skill directory.
+   */
+  skills?: DescriptorSkill[] | null;
+  /**
+   * The subagents available to the run.
+   */
+  subagents?: Subagent[] | null;
+  [k: string]: unknown;
+}
+/**
+ * The service that runs the model in `agent.model_name`.
+ */
+export interface AgentModel {
+  /**
+   * The service that runs the model.
+   */
+  provider: string;
+  /**
+   * The URL of the service's API. Absent means the service's default.
+   */
+  base_url?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * The Tool fields that ATIF's OpenAI-style tool definition can't hold.
+ */
+export interface AgentTool {
+  /**
+   * The tool's display name.
+   */
+  title?: string | null;
+  /**
+   * The shape of the tool's structured result.
+   */
+  outputSchema?: {
+    type: "object";
     [k: string]: unknown;
   } | null;
+  /**
+   * The tool's MCP annotations.
+   */
+  annotations?: {
+    [k: string]: unknown;
+  } | null;
+  /**
+   * The `id` of the MCP server in `mcp_servers` the tool comes from.
+   */
+  mcp_server_id?: string | null;
+  [k: string]: unknown;
 }
 /**
  * Audio source specification for audio stored as files or at remote URLs.
@@ -882,6 +637,24 @@ export interface AudioSource {
    * Optional duration of the audio in seconds. Useful for cost accounting and dataset statistics; omit when unknown.
    */
   duration_sec?: number | null;
+}
+/**
+ * Data for one part of a step's `message` or a result's `content`.
+ */
+export interface ContentMetadata {
+  /**
+   * The position of the part in `message` or `content`, from 0. `0` when the value is a string.
+   */
+  part_index: number;
+  /**
+   * Sources the model cited in the part.
+   */
+  citations?: Citation[] | null;
+  /**
+   * `true` when the part is the model's text declining the task.
+   */
+  refusal?: boolean | null;
+  [k: string]: unknown;
 }
 /**
  * A single content part within a multimodal message.
@@ -918,6 +691,12 @@ export interface ImageSource {
   path: string;
 }
 /**
+ * An ATIF `extra` object. Keeps keys beside `avp`, and reads like a dict.
+ */
+export interface Extra {
+  [k: string]: unknown;
+}
+/**
  * Aggregate statistics for the entire trajectory.
  */
 export interface FinalMetrics {
@@ -944,9 +723,33 @@ export interface FinalMetrics {
   /**
    * Custom aggregate metrics
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: FinalMetricsExtra | null;
+}
+export interface FinalMetricsExtra {
+  avp?: FinalMetricsAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `final_metrics.extra.avp`.
+ */
+export interface FinalMetricsAvpExtra {
+  /**
+   * The total of `cache_creation_input_tokens`.
+   */
+  total_cache_creation_input_tokens?: number | null;
+  /**
+   * The total of `reasoning_output_tokens`.
+   */
+  total_reasoning_output_tokens?: number | null;
+  /**
+   * How many model responses were made.
+   */
+  total_responses?: number | null;
+  /**
+   * `false` when `total_cost_usd` leaves out responses whose cost is unknown.
+   */
+  cost_complete?: boolean | null;
+  [k: string]: unknown;
 }
 /**
  * LLM operational and confidence data.
@@ -983,9 +786,29 @@ export interface Metrics {
   /**
    * Other metrics
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: MetricsExtra | null;
+}
+export interface MetricsExtra {
+  avp?: MetricsAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `steps[].metrics.extra.avp`: the usage of one model response.
+ */
+export interface MetricsAvpExtra {
+  /**
+   * The input tokens written to the cache. Included in `prompt_tokens`.
+   */
+  cache_creation_input_tokens?: number | null;
+  /**
+   * The output tokens the model spent on reasoning. Included in `completion_tokens`.
+   */
+  reasoning_output_tokens?: number | null;
+  /**
+   * Where `cost_usd` comes from.
+   */
+  cost_source?: ("reported" | "computed") | null;
+  [k: string]: unknown;
 }
 /**
  * Environment feedback/result after actions or system events.
@@ -1015,9 +838,7 @@ export interface ObservationResult {
   /**
    * Custom observation-result-level metadata (e.g., confidence score, retrieval score, source document ID). Added in ATIF-v1.7.
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: ObservationResultExtra | null;
 }
 /**
  * Reference to a delegated subagent trajectory.
@@ -1055,9 +876,56 @@ export interface SubagentTrajectoryRef {
   /**
    * Custom metadata about the subagent execution
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: Extra | null;
+}
+export interface ObservationResultExtra {
+  avp?: ObservationResultAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `steps[].observation.results[].extra.avp`.
+ */
+export interface ObservationResultAvpExtra {
+  /**
+   * How long the tool took, in milliseconds, ending at `finished_at`.
+   */
+  duration_ms?: number | null;
+  /**
+   * When the result arrived, as an RFC 3339 timestamp.
+   */
+  finished_at?: string | null;
+  /**
+   * `true` when the call failed.
+   */
+  is_error?: boolean | null;
+  structured_content?: unknown;
+  /**
+   * Data for parts of `content`.
+   */
+  content_metadata?: ContentMetadata[] | null;
+  [k: string]: unknown;
+}
+/**
+ * Data for one block of the model's reasoning. Keeps fields the service added.
+ */
+export interface ReasoningMetadata {
+  /**
+   * Where the block's text starts in `reasoning_content`.
+   */
+  start?: number | null;
+  /**
+   * Where it ends. When `start` and `end` are absent, the block is all of `reasoning_content`.
+   */
+  end?: number | null;
+  /**
+   * The service's token for passing the reasoning back to it.
+   */
+  signature?: string | null;
+  /**
+   * The service's encrypted reasoning, when it returned the block encrypted.
+   */
+  encrypted_content?: string | null;
+  [k: string]: unknown;
 }
 /**
  * A single step in the trajectory.
@@ -1114,9 +982,7 @@ export interface Step {
   /**
    * Custom step-level metadata
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: StepExtra | null;
 }
 /**
  * A tool call within a step.
@@ -1139,9 +1005,51 @@ export interface ToolCall {
   /**
    * Custom tool-call-level metadata (e.g., timeout, retry count, tool version). Added in ATIF-v1.7.
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: ToolCallExtra | null;
+}
+export interface ToolCallExtra {
+  avp?: ToolCallAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `steps[].tool_calls[].extra.avp`.
+ */
+export interface ToolCallAvpExtra {
+  /**
+   * `true` when the model service ran the tool, not the agent.
+   */
+  server_side?: boolean | null;
+  [k: string]: unknown;
+}
+export interface StepExtra {
+  avp?: StepAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At `steps[].extra.avp`.
+ */
+export interface StepAvpExtra {
+  /**
+   * How long the model response took, in milliseconds.
+   */
+  duration_ms?: number | null;
+  /**
+   * Why the model stopped, exactly as the service reported it.
+   */
+  finish_reasons?: string[] | null;
+  /**
+   * Data for parts of `message`.
+   */
+  message_metadata?: ContentMetadata[] | null;
+  /**
+   * Data for blocks of the model's reasoning.
+   */
+  reasoning_metadata?: ReasoningMetadata[] | null;
+  /**
+   * What kind of error a system step records.
+   */
+  error_code?: string | null;
+  [k: string]: unknown;
 }
 /**
  * Agent Trajectory in ATIF (Agent Trajectory Interchange Format).
@@ -1190,11 +1098,37 @@ export interface Trajectory {
   /**
    * Custom root-level metadata
    */
-  extra?: {
-    [k: string]: unknown;
-  } | null;
+  extra?: TrajectoryExtra | null;
   /**
    * Array of embedded subagent trajectories. Each element is a complete, independently-valid ATIF Trajectory with its own schema_version, agent, and step_id sequence starting at 1. Enables single-file storage of multi-agent workflows: when a SubagentTrajectoryRef.trajectory_path is null, consumers resolve the reference by matching SubagentTrajectoryRef.trajectory_id against Trajectory.trajectory_id of entries in this array. Uniqueness rules: every embedded subagent MUST set `trajectory_id`, and `trajectory_id`s within this array MUST be unique. `session_id`, by contrast, is run-scoped and MAY collide across siblings (or match the parent) when all trajectories belong to the same logical run; embedded subagents MAY also omit `session_id` entirely to inherit the parent's run identity. Added in ATIF-v1.7.
    */
   subagent_trajectories?: Trajectory[] | null;
+}
+export interface TrajectoryExtra {
+  avp?: TrajectoryAvpExtra | null;
+  [k: string]: unknown;
+}
+/**
+ * At the trajectory's `extra.avp`, and on each embedded subagent trajectory.
+ */
+export interface TrajectoryAvpExtra {
+  /**
+   * The AVP version the Trajectory follows.
+   */
+  avp_version: "0.1";
+  commission?: unknown;
+  /**
+   * When the run started, as an RFC 3339 timestamp.
+   */
+  started_at?: string | null;
+  /**
+   * When the run stopped, as an RFC 3339 timestamp.
+   */
+  stopped_at: string;
+  /**
+   * Why the run stopped.
+   */
+  stop_reason: "converged" | "refused" | "error" | "interrupted" | "abandoned";
+  output?: unknown;
+  [k: string]: unknown;
 }

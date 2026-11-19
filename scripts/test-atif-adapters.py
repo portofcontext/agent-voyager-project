@@ -9,7 +9,6 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from avp.agent_start import AgentStart
 from avp.trajectory import parse_trajectory
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,17 +44,15 @@ def documents(root):
 def check(source: Path) -> str:
     root = parse_trajectory(source.read_text()).to_json_dict()
     SCHEMA.validate(root)
-    start = source.parent / "agent-start.json"
-    if start.exists():
-        started = AgentStart.model_validate_json(start.read_bytes())
-        assert started.run_id == root["session_id"]
-        for scope in [started, *(started.subagents or [])]:
-            for skill in scope.skills or []:
-                if skill.path:
-                    directory = (source.parent / skill.path).resolve()
-                    assert directory.is_relative_to(source.parent.resolve())
-                    assert directory.is_dir(), f"missing skill directory: {skill.path}"
     for doc in documents(root):
+        avp = doc["agent"].get("extra", {}).get("avp", {})
+        for scope in [avp, *(avp.get("subagents") or [])]:
+            for skill in scope.get("skills") or []:
+                if skill.get("source"):
+                    assert skill["source"].startswith("file:")
+                    directory = (source.parent / skill["source"][5:]).resolve()
+                    assert directory.is_relative_to(source.parent.resolve())
+                    assert directory.is_dir(), f"missing skill directory: {skill['source']}"
         assert [s["step_id"] for s in doc["steps"]] == list(range(1, len(doc["steps"]) + 1))
         for step in doc["steps"]:
             if step["source"] == "agent":
@@ -92,7 +89,7 @@ def main() -> None:
                 ) from error
         assert counts.keys() == AGENTS, f"Missing adapter outputs: {AGENTS - counts.keys()}"
         for name, count in sorted(counts.items()):
-            print(f"ATIF {name}: {count} native test trajectories and Agent Start documents passed")
+            print(f"ATIF {name}: {count} native test trajectories passed")
 
 
 if __name__ == "__main__":

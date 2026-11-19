@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -54,7 +54,7 @@ test("CLI writes complete and refused trajectories, with paths or inline JSON", 
   }
 });
 
-test("ping does not load the agent, and the file sink reopens for each event", async () => {
+test("ping does not load the agent, and the file sink writes when the run ends", async () => {
   const dir = await mkdtemp(join(tmpdir(), "avp-cli-"));
   try {
     assert.equal(
@@ -70,18 +70,21 @@ test("ping does not load the agent, and the file sink reopens for each event", a
       0,
     );
     const path = join(dir, "trajectory.json");
-    const archive = join(dir, "archived.json");
     const rec = new Recorder(trajectorySink(path));
-    await rec.start({ prompt: "Hi", model: { provider: "p", id: "m" } });
-    await rename(path, archive);
+    await rec.start(
+      {
+        name: "example",
+        version: "1",
+        model_name: "m",
+        extra: { avp: { model: { provider: "p" } } },
+      },
+      "Hi",
+    );
+    await assert.rejects(readFile(path), { code: "ENOENT" });
     await rec.stop("converged");
     assert.equal(
-      avpMetadata(document(await readFile(archive, "utf8"))).complete,
-      false,
-    );
-    assert.equal(
-      avpMetadata(document(await readFile(path, "utf8"))).complete,
-      true,
+      avpMetadata(document(await readFile(path, "utf8"))).stop_reason,
+      "converged",
     );
   } finally {
     await rm(dir, { recursive: true });

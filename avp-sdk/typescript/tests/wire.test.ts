@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseCommission } from "../src/commission.js";
 import { parseDescriptor } from "../src/descriptor.js";
-import { Recorder, type UsageReport } from "../src/recorder.js";
+import { Recorder } from "../src/recorder.js";
 import {
   finalOutput,
   parseTrajectory,
@@ -93,38 +93,56 @@ test("external ATIF needs no AVP extensions and rejects broken call references",
   value.steps[0].observation.results[0].source_call_id = "missing";
   assert.throws(() => parseTrajectory(value), /unmatched/);
 });
-test("Recorder omits empty response metadata and rejects invalid usage without emitting events", async () => {
+test("Recorder writes once and rejects unknown subagents", async () => {
   const events: Recording[] = [];
-  let nextId = 0;
   const rec = new Recorder(
     async (event) => {
       events.push(event);
     },
-    { runId: "", newId: () => `id-${++nextId}` },
+    { runId: "r" },
   );
-  assert.equal(rec.runId, "id-1");
-  await rec.start({ prompt: "Hi", model: { provider: "p", id: "m" } });
-  await rec.response([{ type: "text", text: "Hi" }], { meta: {} });
-  assert.ok(
-    !Object.hasOwn(
-      events[1].trajectory.steps[1].extra?.avp ?? {},
-      "annotations",
-    ),
+  await rec.start(
+    {
+      name: "example",
+      version: "1",
+      model_name: "m",
+      extra: { avp: { model: { provider: "p" } } },
+    },
+    "Hi",
   );
-  for (const usage of [
-    { input_tokens: -1, output_tokens: 0 },
-    { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1 },
-    { input_tokens: 0, output_tokens: 0, cost_source: "reported" },
-  ] as UsageReport[]) {
-    await assert.rejects(
-      rec.response([{ type: "text", text: "Bad" }], { usage }),
-    );
-    assert.equal(events.length, 2);
-  }
-  await assert.rejects(
-    rec.subagentInvoked("s", "helper", undefined, {
-      subagentInvocationId: "missing",
-    }),
+  await rec.step([{ type: "text", text: "Hi" }]);
+  assert.equal(events.length, 0);
+  await assert.rejects(rec.subagentStarted("s", "helper", "task"));
+  await rec.stop("converged", "Hi");
+  assert.equal(events.length, 1);
+  assert.equal(
+    events[0].trajectory.steps[1].extra?.avp?.message_metadata,
+    undefined,
+  );
+});
+
+test("typed AVP extras retain extensions and normalize unknown error codes", () => {
+  const value = {
+    schema_version: "ATIF-v1.8",
+    session_id: "s",
+    agent: { name: "a", version: "1" },
+    steps: [
+      {
+        step_id: 1,
+        source: "system",
+        message: "boom",
+        extra: { vendor: { x: 1 }, avp: { error_code: "later", new: 1 } },
+      },
+    ],
+  };
+  const parsed = parseTrajectory(value);
+  assert.deepEqual(parsed.steps[0].extra, {
+    vendor: { x: 1 },
+    avp: { error_code: "unknown", new: 1 },
+  });
+  assert.throws(
+    () => parseTrajectory({ ...value, extra: { avp: { avp_version: "0.1" } } }),
+    /stop_reason/,
   );
 });
 
@@ -150,7 +168,7 @@ test("upstream semantics match Python reference models", async () => {
   }
 });
 
-test("final output preserves explicit null and falsey values and excludes partial replies", () => {
+test("final output preserves explicit null and falsey values", () => {
   const doc = parseTrajectory({
     schema_version: "ATIF-v1.8",
     session_id: "r",
@@ -158,10 +176,15 @@ test("final output preserves explicit null and falsey values and excludes partia
     steps: [{ step_id: 1, source: "agent", message: "42" }],
   });
   assert.equal(finalOutput(doc), "42");
-  doc.extra = { avp: { complete: false } };
-  assert.equal(finalOutput(doc), null);
   for (const value of [null, false, 0, "", { answer: 42 }]) {
-    doc.extra = { avp: { complete: true, output: value } };
+    doc.extra = {
+      avp: {
+        avp_version: "0.1",
+        stopped_at: "2026-01-01T00:00:00Z",
+        stop_reason: "converged",
+        output: value,
+      },
+    };
     assert.deepEqual(finalOutput(parseTrajectory(doc)), value);
   }
 });

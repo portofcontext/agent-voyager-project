@@ -2,38 +2,32 @@
 import type {
   AssistantMessage,
   ToolResultMessage,
-  Usage,
+  Usage as PiUsage,
 } from "@earendil-works/pi-ai";
-import type {
-  ContentBlock,
-  ErrorCode,
-  ImageBlock,
-  TextBlock,
-} from "@agent-voyager-project/sdk/reports";
-import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
+import type { Part, Image, Text } from "@agent-voyager-project/sdk/recorder";
+import type { Usage, Recorder } from "@agent-voyager-project/sdk/recorder";
+import type { ErrorCode } from "@agent-voyager-project/sdk/trajectory";
 
 type PiBlock =
   AssistantMessage["content"][number] | ToolResultMessage["content"][number];
 
-export function content(blocks: readonly PiBlock[]): ContentBlock[] {
+export function parts(blocks: readonly PiBlock[], rec: Recorder): Part[] {
   return blocks.map((b) => {
     switch (b.type) {
       case "text":
         return { type: "text", text: b.text };
       case "thinking":
         return {
-          type: "thinking",
-          thinking: b.thinking,
+          type: "reasoning",
+          ...(b.redacted
+            ? { encrypted_content: b.thinking }
+            : { text: b.thinking }),
           ...(b.thinkingSignature ? { signature: b.thinkingSignature } : {}),
-          ...(b.redacted ? { redacted: true } : {}),
         };
       case "toolCall":
-        return { type: "tool_use", id: b.id, name: b.name, input: b.arguments };
+        return { type: "call", id: b.id, name: b.name, arguments: b.arguments };
       case "image":
-        return {
-          type: "image",
-          source: { type: "base64", media_type: b.mimeType, data: b.data },
-        };
+        return rec.imageBase64(b.data, b.mimeType);
       default:
         throw new TypeError(`unsupported Pi content: ${JSON.stringify(b)}`);
     }
@@ -42,15 +36,16 @@ export function content(blocks: readonly PiBlock[]): ContentBlock[] {
 
 export function toolContent(
   blocks: ToolResultMessage["content"],
-): (TextBlock | ImageBlock)[] {
-  return content(blocks) as (TextBlock | ImageBlock)[];
+  rec: Recorder,
+): (Text | Image)[] {
+  return parts(blocks, rec) as (Text | Image)[];
 }
 
-export function usage(u: Usage): UsageReport {
+export function usage(u: PiUsage): Usage {
   return {
-    input_tokens: u.input + u.cacheRead + u.cacheWrite,
-    output_tokens: u.output,
-    cache_read_input_tokens: u.cacheRead,
+    prompt_tokens: u.input + u.cacheRead + u.cacheWrite,
+    completion_tokens: u.output,
+    cached_tokens: u.cacheRead,
     cache_creation_input_tokens: u.cacheWrite,
     ...(u.reasoning === undefined
       ? {}
