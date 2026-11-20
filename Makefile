@@ -11,6 +11,7 @@ OPENCODE_DIR := agents/avp-opencode/typescript
 .PHONY: help
 help:
 	@echo "make check          all free SDK, CLI, and adapter checks"
+	@echo "make atif-adapters-check  validate native adapter traces as ATIF"
 	@echo "make cli-check      CLI format, lint, types, and tests (sandboxes when available)"
 	@echo "make test           Python tests in each standalone project"
 	@echo "make test-docker    CLI integration tests against a real container engine"
@@ -76,7 +77,8 @@ check-agent:
 	@cd agents/$(NAME)/python && $(UV) run ruff format --check . && $(UV) run ruff check . && $(UV) run ty check && $(UV) run pytest -q
 
 .PHONY: pi-build pi-check
-pi-build:
+pi-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(PI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(PI_DIR) run build
 
@@ -86,7 +88,8 @@ pi-check: pi-build
 	@npm --prefix $(PI_DIR) test
 
 .PHONY: gemini-cli-build gemini-cli-check
-gemini-cli-build:
+gemini-cli-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(GEMINI_CLI_DIR) ci --no-audit --no-fund
 	@npm --prefix $(GEMINI_CLI_DIR) run build
 
@@ -96,7 +99,8 @@ gemini-cli-check: gemini-cli-build
 	@npm --prefix $(GEMINI_CLI_DIR) test
 
 .PHONY: opencode-build opencode-check
-opencode-build:
+opencode-build: sdk-typescript-install
+	cd avp-sdk/typescript && npm run build
 	@npm --prefix $(OPENCODE_DIR) ci --ignore-scripts --no-audit --no-fund
 	@npm --prefix $(OPENCODE_DIR) run build
 
@@ -185,6 +189,10 @@ release-sdk-typescript:
 release-cli:
 	@$(UV) run --project avp-sdk/python python scripts/release.py tag cli
 
+.PHONY: atif-adapters-check
+atif-adapters-check: sdk-python-check
+	@$(UV) run --project avp-sdk/python python scripts/test-atif-adapters.py
+
 .PHONY: check
-check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check codex-check pydantic-ai-check claude-check openai-agents-check deep-agents-check pi-check gemini-cli-check opencode-check build-skill
+check: format-check lint release-check sdk-data-check sdk-python-check sdk-typescript-check cli-check atif-adapters-check build-skill
 	@echo "All free checks passed."

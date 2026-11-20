@@ -1,6 +1,6 @@
 # Working on AVP
 
-AVP defines Commission, Agent Descriptor, and Trajectory specs. A supervisor sends
+AVP defines Commission, Agent Descriptor, and ATIF Trajectory specs. A supervisor sends
 one Commission; the agent runs it and records a Trajectory. The supervisor cannot
 send instructions during a run.
 
@@ -33,25 +33,32 @@ The reference tables in `spec/v0.1/` define the wire contracts. Implement them i
 Implement shared behavior in Python first, then TypeScript.
 
 - Import wire types from `avp.commission`, `avp.descriptor`, and `avp.trajectory`.
-- A Commission requires `avp_version`, `run_id`, `model`, and `prompt`. Its model
-  has `provider` and `id`, plus optional `base_url` and `credential` fields.
-- Agent settings live under `agents`, keyed by the Descriptor's `agent_name`.
-  An absent built-in allowlist allows all items; `[]` allows none.
-- Use secret references in Commissions. Include MCP configuration and skill
-  files inline.
-- Use the event envelope defined in the Trajectory spec.
-- Record one `assistant_message` per model response, with per-response usage
-  and cost. Convert cumulative totals to deltas. Keep tool calls alongside
-  assistant content and match results by call ID.
+- Use native ATIF-v1.8 from the pinned Harbor models. Recorder input types
+  live in `avp.recorder`; do not introduce another event wire contract.
+- For Commission, Descriptor, and Trajectory rules, read the
+  [specs](spec/v0.1/). Do not restate them here.
 - Test shared Recorder and run-plan behavior with `avp-sdk/testdata/`.
   Keep runtime-specific translation in the adapter.
+
+## Spec maintenance
+
+- Each spec has these sections: Overview, Example, Reference, Rules for
+  `<who>`, Out of scope.
+- State each rule once, in prose, in Rules. Never put one only in an example,
+  table, or note.
+- Link to a rule instead of restating it. This applies to other specs, the
+  spec README, guides, and this file.
+- Use MUST, SHOULD, and MAY in capitals, in the RFC 2119 sense. Each rule names
+  who it applies to.
+- Cut fields that nobody sets or reads. Use one name per concept.
+- Extend outside models (ATIF, MCP, Agent Skills). Never change them.
 
 ## Repository layout
 
 - `spec/v0.1/`: specs and generated schemas.
 - `avp-sdk/{python,typescript}/`: SDKs, with shared `data/` and `testdata/`.
-- `avp-cli/`: supervisor CLI, built-in agent Dockerfiles and source pins,
-  evaluations, and conformance cases.
+- `avp-cli/`: supervisor CLI, built-in agent Dockerfiles, evaluations, and
+  conformance cases.
 - `agents/<name>/<language>/`: runtime adapters.
 - `scripts/`: schema generation, SDK-data refresh, and packaging checks.
 - `testing/mcp/`: MCP fixtures.
@@ -61,6 +68,23 @@ Run commands from that directory or use `uv run --project <path>`.
 The CLI runs installed images through OpenSandbox with default-deny networking
 and its Credential Vault. Agents implement `ping`, `describe`, and
 `run --commission <path | JSON> --out <path | ->`.
+
+## Packages and built-in agents
+
+The SDKs, each adapter, and the CLI are separate packages. In the repo, an
+adapter uses the SDK source next to it, so you can work against unreleased
+SDK changes. A published package never does.
+
+- An adapter declares the SDK as a version range, such as
+  `agent-voyager-project>=0.1.0b3`. Point it at the local SDK only through
+  development settings that publishing drops: `[tool.uv.sources]` in Python,
+  npm workspaces in TypeScript. Never use a `file:` dependency.
+- Release the SDK version an adapter needs before releasing the adapter.
+- A Dockerfile in `avp-cli` is for a released agent only. It installs a pinned
+  version of the adapter's package and needs no build context.
+- To run unreleased code in a container, build a temporary image in a test or
+  script: write a Dockerfile there with the repo root as its context. Never add
+  one to the CLI package.
 
 ## Verification
 

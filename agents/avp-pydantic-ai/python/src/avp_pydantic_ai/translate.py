@@ -1,12 +1,11 @@
-"""Pydantic AI messages -> AVP shapes.
+"""Pydantic AI messages -> ATIF objects.
 
-One `ModelResponse` (one model call) is one AVP response. Only translation
-lives here; event order, tool pairing, and cost are the Recorder's job.
+One `ModelResponse` (one model call) is one agent step. Only translation lives
+here; step order, result placement, and cost are the Recorder's job.
 """
 
-import base64
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pydantic_ai import (
@@ -14,7 +13,6 @@ from pydantic_ai import (
     ModelHTTPError,
     ModelRequestPart,
     ModelResponse,
-    ModelResponsePart,
     NativeToolCallPart,
     NativeToolReturnPart,
     RequestUsage,
@@ -35,81 +33,60 @@ from pydantic_ai.messages import (
 )
 from pydantic_core import to_jsonable_python
 
-from avp.recorder import UsageReport
+from avp.recorder import Call, Image, Part, Reasoning, ServerResult, Text, Usage
 from avp.trajectory import Citation as AVPCitation
-from avp.trajectory import (
-    ContentBlock,
-    ErrorCode,
-    ImageBlock,
-    ServerToolResultBlock,
-    ServerToolUseBlock,
-    Source,
-    TextBlock,
-    ThinkingBlock,
-    ToolUseBlock,
-)
+from avp.trajectory import ErrorCode
+
+SaveImage = Callable[[bytes, str], Image]
+"""Saves an image beside the Trajectory (`Recorder.image`)."""
 
 
-def content(parts: Sequence[ModelResponsePart]) -> list[ContentBlock]:
-    """A response's parts as content blocks. Tool calls the agent runs (output
-    tools included) become `tool_use` blocks; tools the model service runs
-    become `server_tool_use` and `server_tool_result`."""
-    blocks: list[ContentBlock] = []
-    for part in parts:
+def parts(response: ModelResponse, image: SaveImage) -> list[Part]:
+    """A response's parts, in order. Tool calls the agent runs (output tools
+    included) are calls; tools the model service runs are server-side calls
+    with their results."""
+    result: list[Part] = []
+    for part in response.parts:
         if isinstance(part, TextPart):
-            blocks.append(
-                TextBlock(type="text", text=part.content, citations=_citations(part.citations))
-            )
+            result.append(Text(text=part.content, citations=_citations(part.citations)))
         elif isinstance(part, ThinkingPart):
-            blocks.append(
-                ThinkingBlock(
-                    type="thinking",
-                    thinking=part.content,
-                    signature=part.signature,
-                    redacted=True if not part.content and part.signature else None,
-                )
-            )
+            if part.content:
+                result.append(Reasoning(text=part.content, signature=part.signature))
+            elif part.signature:
+                # Anthropic's redacted thinking: the signature holds the encrypted block.
+                result.append(Reasoning(encrypted_content=part.signature))
         elif isinstance(part, ToolCallPart):
-            blocks.append(
-                ToolUseBlock(
-                    type="tool_use", id=part.tool_call_id, name=part.tool_name, input=_args(part)
-                )
-            )
+            result.append(Call(id=part.tool_call_id, name=part.tool_name, arguments=_args(part)))
         elif isinstance(part, NativeToolCallPart):
-            blocks.append(
-                ServerToolUseBlock(
-                    type="server_tool_use",
+            result.append(
+                Call(
                     id=part.tool_call_id,
                     name=part.tool_name,
-                    input=_args(part),
+                    arguments=_args(part),
+                    server_side=True,
                 )
             )
         elif isinstance(part, NativeToolReturnPart):
-            blocks.append(
-                ServerToolResultBlock(
-                    type="server_tool_result",
-                    tool_use_id=part.tool_call_id,
-                    name=part.tool_name,
-                    content=to_jsonable_python(part.content, fallback=str),
-                    is_error=True if part.outcome != "success" else None,
+            content = to_jsonable_python(part.content, fallback=str)
+            result.append(
+                ServerResult(
+                    call_id=part.tool_call_id,
+                    content=_text(content),
+                    is_error=part.outcome != "success",
+                    structured_content=None if isinstance(content, str) else content,
                 )
             )
         elif isinstance(part, FilePart) and part.content.media_type.startswith("image/"):
-            source = Source(
-                type="base64",
-                media_type=part.content.media_type,
-                data=base64.b64encode(part.content.data).decode(),
-            )
-            blocks.append(ImageBlock(type="image", source=source))
-        # Left out, because AVP has no block for them:
+            result.append(image(part.content.data, part.content.media_type))
+        # Left out, because ATIF has no part for them:
         # - CompactionPart: the service's summary of earlier context.
         # - SpeechPart: audio the model spoke, with its transcript.
         # - FilePart that isn't an image, such as a generated PDF.
-    return blocks
+    return result
 
 
 def _citations(citations: list[Citation] | None) -> list[AVPCitation] | None:
-    """One AVP citation per source of each Pydantic AI citation."""
+    """One citation per source of each Pydantic AI citation."""
     result = []
     for citation in citations or []:
         anchor = citation.anchor if isinstance(citation.anchor, ContentCitationAnchor) else None
@@ -137,15 +114,15 @@ def _args(part: BaseToolCallPart) -> dict[str, Any]:
         return {"_raw": part.args}
 
 
-def usage(native: RequestUsage) -> UsageReport | None:
+def usage(native: RequestUsage) -> Usage | None:
     """One response's usage. Pydantic AI's `input_tokens` already includes
-    cache reads and writes, as AVP's does."""
+    cache reads and writes, as the Recorder's `prompt_tokens` does."""
     if not (native.input_tokens or native.output_tokens):
         return None
-    return UsageReport(
-        input_tokens=native.input_tokens,
-        output_tokens=native.output_tokens,
-        cache_read_input_tokens=native.cache_read_tokens or None,
+    return Usage(
+        prompt_tokens=native.input_tokens,
+        completion_tokens=native.output_tokens,
+        cached_tokens=native.cache_read_tokens or None,
         cache_creation_input_tokens=native.cache_write_tokens or None,
         reasoning_output_tokens=native.output_reasoning_tokens or None,
     )
@@ -155,8 +132,8 @@ def finish_reasons(response: ModelResponse) -> list[str] | None:
     return [response.finish_reason] if response.finish_reason else None
 
 
-def tool_results(parts: Sequence[ModelRequestPart]) -> list[tuple[str, str, bool]]:
-    """`(call_id, output, is_error)` for each tool result in a request. Any
+def results(parts: Sequence[ModelRequestPart]) -> list[tuple[str, str, bool]]:
+    """`(call_id, content, is_error)` for each tool result in a request. Any
     outcome but `success`, such as `failed` or `retried`, is an error."""
     return [
         (part.tool_call_id, _text(part.content), part.outcome not in (None, "success"))

@@ -145,7 +145,7 @@ def _scorer(cases: dict[str, Case]) -> Scorer:
 
     def score(input: ScorerInput) -> Score:
         run = input.run
-        problems = [f"not a valid event: {i}" for i in run.invalid_trajectory]
+        problems = [f"not a valid ATIF document: {i}" for i in run.invalid_trajectory]
         if not run.trajectory and not run.invalid_trajectory:
             problems.append("the agent wrote no Trajectory")
         if run.exit_code != 0:

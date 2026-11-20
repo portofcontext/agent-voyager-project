@@ -1,12 +1,8 @@
 /** Translate per-response native values; cache is input and reasoning is output. */
-import type { Part } from "@google/gemini-cli-core";
-import type {
-  ContentBlock,
-  ErrorCode,
-  TextBlock,
-  ImageBlock,
-} from "@agent-voyager-project/sdk/trajectory";
-import type { UsageReport } from "@agent-voyager-project/sdk/recorder";
+import type { Part as NativePart } from "@google/gemini-cli-core";
+import type { Part, Text, Image } from "@agent-voyager-project/sdk/recorder";
+import type { Usage, Recorder } from "@agent-voyager-project/sdk/recorder";
+import type { ErrorCode } from "@agent-voyager-project/sdk/trajectory";
 export interface GeminiUsage {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
@@ -14,23 +10,25 @@ export interface GeminiUsage {
   thoughtsTokenCount?: number;
   toolUsePromptTokenCount?: number;
 }
-export function usage(value?: GeminiUsage): UsageReport {
+export function usage(value?: GeminiUsage): Usage {
   if (!value || value.promptTokenCount === undefined)
     throw new Error("Gemini response has no input usage metadata");
   return {
-    input_tokens: value.promptTokenCount + (value.toolUsePromptTokenCount ?? 0),
-    output_tokens:
+    prompt_tokens:
+      value.promptTokenCount + (value.toolUsePromptTokenCount ?? 0),
+    completion_tokens:
       (value.candidatesTokenCount ?? 0) + (value.thoughtsTokenCount ?? 0),
-    cache_read_input_tokens: value.cachedContentTokenCount ?? 0,
+    cached_tokens: value.cachedContentTokenCount ?? 0,
     ...(value.thoughtsTokenCount == null
       ? {}
       : { reasoning_output_tokens: value.thoughtsTokenCount }),
   };
 }
 export function toolContent(
-  parts: readonly Part[],
-): (TextBlock | ImageBlock)[] {
-  const out: (TextBlock | ImageBlock)[] = [];
+  parts: readonly NativePart[],
+  rec: Recorder,
+): (Text | Image)[] {
+  const out: (Text | Image)[] = [];
   for (const p of parts) {
     if (p.functionResponse) {
       const response = p.functionResponse.response ?? {};
@@ -46,31 +44,21 @@ export function toolContent(
       for (const inner of p.functionResponse.parts ?? []) {
         const d = inner.inlineData;
         if (d?.data && d.mimeType?.startsWith("image/"))
-          out.push({
-            type: "image",
-            source: { type: "base64", media_type: d.mimeType, data: d.data },
-          });
+          out.push(rec.imageBase64(d.data, d.mimeType));
         else throw new Error("unsupported Gemini function response content");
       }
     } else if (p.text !== undefined) out.push({ type: "text", text: p.text });
     else if (p.inlineData?.data && p.inlineData.mimeType?.startsWith("image/"))
-      out.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: p.inlineData.mimeType,
-          data: p.inlineData.data,
-        },
-      });
+      out.push(rec.imageBase64(p.inlineData.data, p.inlineData.mimeType));
     else throw new Error("unsupported Gemini tool content");
   }
   return out;
 }
-export function append(content: ContentBlock[], block: ContentBlock): void {
+export function append(content: Part[], block: Part): void {
   const last = content.at(-1);
   if (last?.type === "text" && block.type === "text") last.text += block.text;
-  else if (last?.type === "thinking" && block.type === "thinking")
-    last.thinking += `\n${block.thinking}`;
+  else if (last?.type === "reasoning" && block.type === "reasoning")
+    last.text = `${last.text ?? ""}\n${block.text ?? ""}`;
   else content.push(block);
 }
 export function errorCode(error: unknown): ErrorCode {

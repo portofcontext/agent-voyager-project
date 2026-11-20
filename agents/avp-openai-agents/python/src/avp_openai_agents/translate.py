@@ -2,39 +2,36 @@
 
 import json
 
-from avp.recorder import UsageReport
-from avp.trajectory import ImageBlock, RefusalBlock, Source, TextBlock, ThinkingBlock, ToolUseBlock
+from avp.recorder import Call, Reasoning, Text, Usage
+from avp.trajectory import Citation
 
 
-def content(items):
+def _citation(annotation):
+    named = {"url": "source_url", "title": "source_title", "file_id": "source_id"}
+    raw = annotation.model_dump(mode="json", exclude_none=True)
+    return Citation.model_validate({named.get(k, k): v for k, v in raw.items()})
+
+
+def parts(items):
     blocks = []
     for item in items:
         if item.type == "message":
             for part in item.content:
                 if part.type == "output_text":
-                    blocks.append(
-                        TextBlock(
-                            type="text",
-                            text=part.text,
-                            openai=part.model_dump(mode="json", exclude_none=True),
-                        )
-                    )
+                    citations = [_citation(a) for a in part.annotations]
+                    blocks.append(Text(text=part.text, citations=citations or None))
                 elif part.type == "refusal":
-                    blocks.append(RefusalBlock(type="refusal", refusal=part.refusal))
+                    blocks.append(Text(refusal=True, text=part.refusal))
                 else:
                     raise ValueError(f"unsupported OpenAI content: {part.type}")
         elif item.type == "function_call":
             arguments = json.loads(item.arguments)
-            blocks.append(
-                ToolUseBlock(type="tool_use", id=item.call_id, name=item.name, input=arguments)
-            )
+            blocks.append(Call(id=item.call_id, name=item.name, arguments=arguments))
         elif item.type == "reasoning":
             blocks.append(
-                ThinkingBlock(
-                    type="thinking",
-                    thinking="\n".join(p.text for p in item.summary or []),
-                    signature=item.encrypted_content,
-                    openai=item.model_dump(mode="json", exclude_none=True),
+                Reasoning(
+                    text="\n".join(p.text for p in item.summary or []),
+                    encrypted_content=item.encrypted_content,
                 )
             )
         else:
@@ -45,10 +42,10 @@ def content(items):
 def usage(native):
     if native is None:
         raise ValueError("OpenAI response has no per-response usage")
-    return UsageReport(
-        input_tokens=native.input_tokens,
-        output_tokens=native.output_tokens,
-        cache_read_input_tokens=getattr(native.input_tokens_details, "cached_tokens", None),
+    return Usage(
+        prompt_tokens=native.input_tokens,
+        completion_tokens=native.output_tokens,
+        cached_tokens=getattr(native.input_tokens_details, "cached_tokens", None),
         cache_creation_input_tokens=getattr(
             native.input_tokens_details, "cache_write_tokens", None
         ),
@@ -56,27 +53,18 @@ def usage(native):
     )
 
 
-def tool_output(raw):
+def tool_output(raw, rec):
     if isinstance(raw, str):
         return raw
     blocks = []
     for part in raw:
         if part["type"] in ("text", "input_text"):
-            blocks.append(TextBlock(type="text", text=part["text"]))
+            blocks.append(Text(text=part["text"]))
         elif part["type"] == "input_image" and part["image_url"].startswith("data:"):
             header, data = part["image_url"].split(",", 1)
-            blocks.append(
-                ImageBlock(
-                    type="image",
-                    source=Source(
-                        type="base64",
-                        media_type=header.removeprefix("data:").split(";")[0],
-                        data=data,
-                    ),
-                )
-            )
+            blocks.append(rec.image_base64(data, header.removeprefix("data:").split(";")[0]))
         else:
-            blocks.append(TextBlock(type="text", text=json.dumps(part)))
+            blocks.append(Text(text=json.dumps(part)))
     return blocks
 
 

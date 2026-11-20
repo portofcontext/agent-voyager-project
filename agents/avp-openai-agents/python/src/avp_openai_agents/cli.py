@@ -2,12 +2,12 @@
 
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.agent_cli import main as agent_main
 from avp_openai_agents.descriptor import describe
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     from avp_openai_agents.agent import run as run_agent
 
     await run_agent(received, sink)

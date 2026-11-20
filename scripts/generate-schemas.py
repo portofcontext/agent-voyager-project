@@ -8,7 +8,7 @@ in the SDK's environment:
 Writes to `spec/v0.1/`, next to the specs they describe:
 
     commission.schema.json        the Commission
-    trajectory.schema.json        one trajectory Event
+    trajectory.schema.json        one ATIF trajectory
     agent-descriptor.schema.json  the Agent Descriptor
     avp.schema.json               a bundle: oneOf the three above
 """
@@ -17,11 +17,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from avp.commission import Commission
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import Event
+from avp.recorder import Part, Usage
+from avp.trajectory import ErrorCode, StopReason, Trajectory
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "spec" / "v0.1"
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
@@ -36,9 +37,9 @@ SCHEMAS: list[tuple[str, Any, str, str]] = [
     ),
     (
         "trajectory.schema.json",
-        Event,
-        "AVP v0.1 Trajectory Event",
-        "One CloudEvents 1.0 event of the trajectory an agent emits. See trajectory.md.",
+        Trajectory,
+        "ATIF Trajectory",
+        "Harbor ATIF document. See trajectory.md.",
     ),
     (
         "agent-descriptor.schema.json",
@@ -69,13 +70,25 @@ def main() -> None:
             },
         )
 
+    class RecorderInputs(BaseModel):
+        commission: Commission
+        descriptor: AgentDescriptor
+        usage: Usage
+        parts: list[Part]
+        stop_reason: StopReason
+        error_code: ErrorCode
+
+    inputs = RecorderInputs.model_json_schema()
+    inputs["$id"] = "https://www.agentvoyagerproject.com/sdk/recorder.schema.json"
+    target = OUT_DIR.parent.parent / "avp-sdk/typescript/src/schemas/recorder.json"
+    target.write_text(json.dumps(inputs, indent=2) + "\n")
     write_json(
         "avp.schema.json",
         {
             "$schema": SCHEMA_DRAFT,
             "$id": f"{SCHEMA_BASE}/avp.schema.json",
             "title": "AVP v0.1",
-            "description": "Any AVP v0.1 wire object: a Commission, a trajectory Event, or an Agent Descriptor.",
+            "description": "Any AVP v0.1 wire object: a Commission, an ATIF document, or an Agent Descriptor.",
             "oneOf": [{"$ref": name} for name, *_ in SCHEMAS],
         },
     )

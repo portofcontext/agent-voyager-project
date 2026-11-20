@@ -1,21 +1,19 @@
-"""Codex response items to AVP content; the Recorder handles event order and cost."""
+"""Codex's raw response items and tool results to Recorder calls.
+
+Codex reports each model response's items and then its usage; a response is
+recorded as one step at that boundary. Only translation lives here; step
+order, result placement, and cost are the Recorder's job.
+"""
 
 import json
-import time
+from typing import Any
 
 from openai_codex.models import Notification, UnknownNotification
 
-from avp.recorder import Recorder, UsageReport
-from avp.trajectory import (
-    ContentBlock,
-    ErrorCode,
-    ImageBlock,
-    RefusalBlock,
-    Source,
-    TextBlock,
-    ThinkingBlock,
-    ToolUseBlock,
-)
+from avp.recorder import Call, Image, Part, Reasoning, Recorder, Text, Usage
+from avp.trajectory import ErrorCode
+
+TOOL_OUTPUTS = {"function_call_output", "custom_tool_call_output", "tool_search_output"}
 
 
 def notification_params(event: Notification) -> dict:
@@ -35,27 +33,26 @@ def notification_params(event: Notification) -> dict:
     return event.payload.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-def content(item: dict) -> list[ContentBlock]:
+def parts(item: dict[str, Any]) -> list[Part]:
+    """A response item as Recorder parts. Messages from other roles have none."""
     kind = item["type"]
     if kind == "message":
         if item["role"] != "assistant":
             return []
-        blocks = []
+        result: list[Part] = []
         for part in item["content"]:
             if part["type"] == "output_text":
-                blocks.append(TextBlock(type="text", text=part["text"], codex=part))
+                result.append(Text(text=part["text"]))
             elif part["type"] == "refusal":
-                blocks.append(RefusalBlock(type="refusal", refusal=part["refusal"]))
+                result.append(Text(text=part["refusal"], refusal=True))
             else:
                 raise ValueError(f"unsupported Codex assistant content: {part['type']}")
-        return blocks
+        return result
     if kind == "reasoning":
         return [
-            ThinkingBlock(
-                type="thinking",
-                thinking="\n".join(part["text"] for part in item.get("summary", [])),
-                signature=item.get("encrypted_content"),
-                codex=item,
+            Reasoning(
+                text="\n".join(part["text"] for part in item.get("summary", [])),
+                encrypted_content=item.get("encrypted_content"),
             )
         ]
     if kind in {"function_call", "custom_tool_call", "tool_search_call"}:
@@ -72,62 +69,62 @@ def content(item: dict) -> list[ContentBlock]:
         name = "tool_search" if kind == "tool_search_call" else item["name"]
         if namespace := item.get("namespace"):
             name = f"{namespace}.{name}"
-        return [ToolUseBlock(type="tool_use", id=item["call_id"], name=name, input=arguments)]
+        return [Call(id=item["call_id"], name=name, arguments=arguments)]
     raise ValueError(f"unsupported Codex response item: {kind}")
 
 
-def usage(native: dict) -> UsageReport:
-    return UsageReport(
-        input_tokens=native["inputTokens"],
-        output_tokens=native["outputTokens"],
-        cache_read_input_tokens=native.get("cachedInputTokens"),
+def usage(native: dict[str, Any]) -> Usage:
+    """Codex's usage. As in the Responses API, input tokens include cached
+    tokens and output tokens include reasoning tokens."""
+    return Usage(
+        prompt_tokens=native["inputTokens"],
+        completion_tokens=native["outputTokens"],
+        cached_tokens=native.get("cachedInputTokens"),
         cache_creation_input_tokens=native.get("cacheWriteInputTokens"),
         reasoning_output_tokens=native.get("reasoningOutputTokens"),
     )
 
 
-def tool_content(output):
+def content(output: Any, rec: Recorder) -> str | list[Text | Image]:
+    """A tool result's content: its text and images. Other parts are kept as JSON text."""
     if isinstance(output, str):
         return output
-    result = []
+    result: list[Text | Image] = []
     for part in output:
         if part["type"] in {"text", "input_text"}:
-            result.append(TextBlock(type="text", text=part["text"]))
+            result.append(Text(text=part["text"]))
         elif part["type"] == "image":
-            result.append(
-                ImageBlock(
-                    type="image",
-                    source=Source(type="base64", media_type=part["mimeType"], data=part["data"]),
-                )
-            )
+            result.append(rec.image_base64(part["data"], part["mimeType"]))
         else:
-            result.append(TextBlock(type="text", text=json.dumps(part)))
+            result.append(Text(text=json.dumps(part)))
     return result
 
 
 class Responses:
-    """One raw response boundary is one Recorder response, including its tool calls."""
+    """Reports Codex's responses and tool results to the Recorder, in order.
 
-    def __init__(self, recorder: Recorder, model_id: str, disabled: list[str]) -> None:
-        self.recorder = recorder
-        self.model_id = model_id
-        self.response_model = model_id
-        self.disabled = set(disabled)
-        self.blocks: list[ContentBlock] = []
-        self.results: list[dict] = []
-        self.statuses: dict[str, dict] = {}
+    A tool can return before its response's usage arrives. Those results wait
+    until that response is recorded.
+    """
+
+    def __init__(self, rec: Recorder) -> None:
+        self.rec = rec
+        self.model_name: str | None = None
+        """The model Codex rerouted to, if it did."""
+        self.parts: list[Part] = []
+        self.results: list[dict[str, Any]] = []
+        self.statuses: dict[str, dict[str, Any]] = {}
         self.calls: set[str] = set()
-        self.completed = 0
+        self.responses = 0
         self.output = ""
         self.refused = False
-        self.requested = time.monotonic()
 
-    async def accept(self, method: str, params: dict) -> None:
+    async def accept(self, method: str, params: dict[str, Any]) -> None:
         if method == "model/rerouted":
-            self.response_model = params["toModel"]
+            self.model_name = params["toModel"]
         elif method == "thread/compacted":
             raise ValueError("Codex context compaction accounting is not supported")
-        elif method == "error" and params.get("willRetry") and self.blocks:
+        elif method == "error" and params.get("willRetry") and self.parts:
             raise ValueError("Codex retried a partial response without a usage boundary")
         elif method == "item/completed":
             item = params["item"]
@@ -137,49 +134,29 @@ class Responses:
                 self.statuses[item["id"]] = item
         elif method == "rawResponseItem/completed":
             item = params["item"]
-            if item["type"] in {
-                "function_call_output",
-                "custom_tool_call_output",
-                "tool_search_output",
-            }:
-                if self.blocks:
+            if item["type"] in TOOL_OUTPUTS:
+                if self.parts:
                     self.results.append(item)
                 else:
-                    await self.result(item)
-            else:
-                blocks = content(item)
-                if item["type"] == "message" and item["role"] == "assistant":
-                    self.output = "".join(
-                        block.text if isinstance(block, TextBlock) else block.refusal
-                        for block in blocks
-                        if isinstance(block, (TextBlock, RefusalBlock))
-                    )
-                for block in blocks:
-                    if isinstance(block, ToolUseBlock):
-                        if block.name in self.disabled:
-                            raise ValueError(f"Codex called the disabled tool {block.name!r}")
-                        self.calls.add(block.id)
-                    elif isinstance(block, RefusalBlock):
-                        self.refused = True
-                    self.blocks.append(block)
+                    await self._result(item)
+                return
+            response = parts(item)
+            if item["type"] == "message" and item["role"] == "assistant":
+                self.output = "".join(p.text for p in response if isinstance(p, Text))
+            self.refused |= any(isinstance(p, Text) and p.refusal for p in response)
+            self.calls.update(p.id for p in response if isinstance(p, Call))
+            self.parts += response
         elif method == "rawResponse/completed":
-            now = time.monotonic()
-            await self.recorder.response(
-                self.blocks,
-                usage=usage(params["usage"]),
-                response_model=self.response_model
-                if self.response_model != self.model_id
-                else None,
-                duration_ms=int((now - self.requested) * 1000),
+            await self.rec.step(
+                self.parts, usage=usage(params["usage"]), model_name=self.model_name
             )
-            self.blocks = []
-            self.completed += 1
-            self.requested = now
-            for result in self.results:
-                await self.result(result)
-            self.results = []
+            self.parts = []
+            self.responses += 1
+            waiting, self.results = self.results, []
+            for item in waiting:
+                await self._result(item)
 
-    async def result(self, item: dict) -> None:
+    async def _result(self, item: dict[str, Any]) -> None:
         status = self.statuses.pop(item["call_id"], {})
         failed = status.get("status") in {"failed", "declined"} or status.get(
             "exitCode", 0
@@ -198,18 +175,20 @@ class Responses:
             failed = failed or bool(result.get("isError"))
         else:
             output = item["output"]
-        await self.recorder.tool_returned(
-            item["call_id"], tool_content(output), structured_content=structured, is_error=failed
+        await self.rec.result(
+            item["call_id"],
+            content(output, self.rec),
+            is_error=failed,
+            structured_content=structured,
         )
         self.calls.discard(item["call_id"])
-        self.requested = time.monotonic()
 
     def finish(self) -> None:
-        if not self.completed or self.blocks or self.results or self.calls:
+        if not self.responses or self.parts or self.results or self.calls:
             raise ValueError("Codex ended without complete raw response boundaries and usage")
 
 
-def error_code(error: dict) -> ErrorCode:
+def error_code(error: dict[str, Any]) -> ErrorCode:
     info = error.get("codexErrorInfo")
     if isinstance(info, dict):
         for detail in info.values():

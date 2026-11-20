@@ -4,7 +4,7 @@ import test from "node:test";
 import { Recorder, RecorderError } from "../src/recorder.js";
 import { parseCommission } from "../src/commission.js";
 import { parseDescriptor } from "../src/descriptor.js";
-import type { Event } from "../src/trajectory.js";
+import { finalOutput, type Recording } from "../src/trajectory.js";
 import { checkCommission } from "../src/utils/preflight.js";
 import { planRun } from "../src/utils/run_plan.js";
 
@@ -29,7 +29,15 @@ function same(actual: unknown, expected: unknown): void {
     assert.deepEqual(Object.keys(actual).sort(), Object.keys(expected).sort());
     for (const [key, value] of Object.entries(expected))
       same((actual as Record<string, unknown>)[key], value);
-  } else assert.deepEqual(actual, expected);
+  } else if (typeof expected === "string" && expected.startsWith("2026-01-01T"))
+    assert.equal(Date.parse(String(actual)), Date.parse(expected));
+  else if (
+    typeof expected === "string" &&
+    expected.startsWith("{") &&
+    typeof actual === "string"
+  )
+    same(JSON.parse(actual), JSON.parse(expected));
+  else assert.deepEqual(actual, expected);
 }
 async function call(rec: Recorder, c: Record<string, any>): Promise<void> {
   switch (c.call) {
@@ -37,46 +45,33 @@ async function call(rec: Recorder, c: Record<string, any>): Promise<void> {
       await rec.begin(c.received, parseDescriptor(c.descriptor));
       break;
     case "start":
-      await rec.start(c.started, { meta: c.meta });
+      await rec.start(c.agent, c.prompt, { systemPrompt: c.system_prompt });
       break;
-    case "response":
-      await rec.response(c.content, {
+    case "step":
+      await rec.step(c.parts, {
         usage: c.usage,
-        model: c.model,
-        responseModel: c.response_model,
+        modelName: c.model_name,
         finishReasons: c.finish_reasons,
-        durationMs: c.duration_ms,
-        subagentInvocationId: c.subagent_invocation_id,
-        key: c.key,
-        meta: c.meta,
+        subagent: c.subagent,
       });
       break;
-    case "usage":
-      await rec.usage(c.usage, { key: c.key });
-      break;
-    case "close_response":
-      await rec.closeResponse();
-      break;
-    case "tool_returned":
-      await rec.toolReturned(c.call_id, c.content, {
+    case "result":
+      await rec.result(c.call_id, c.content, {
         isError: c.is_error,
         structuredContent: c.structured_content,
       });
       break;
-    case "subagent_invoked":
-      await rec.subagentInvoked(c.invocation_id, c.name, c.subagent_input, {
-        subagentInvocationId: c.subagent_invocation_id,
-      });
+    case "subagent_started":
+      await rec.subagentStarted(c.call_id, c.name, c.prompt);
       break;
-    case "subagent_returned":
-      await rec.subagentReturned(c.invocation_id, c.text, c.reason, {
+    case "subagent_stopped":
+      await rec.subagentStopped(c.call_id, c.reason, {
         usage: c.usage,
+        modelName: c.model_name,
       });
       break;
     case "error":
-      await rec.error(c.code, c.message, {
-        subagentInvocationId: c.subagent_invocation_id,
-      });
+      await rec.error(c.code, c.message, { subagent: c.subagent });
       break;
     case "stop":
       await rec.stop(c.reason, c.output);
@@ -92,7 +87,7 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
     const vector = JSON.parse(
       readFileSync(new URL(`recorder/${name}`, cases), "utf8"),
     );
-    const events: Event[] = [];
+    const events: Recording[] = [];
     let clock = start;
     let id = 0;
     const rec = new Recorder(
@@ -118,14 +113,18 @@ for (const name of readdirSync(new URL("recorder/", cases)).filter((name) =>
         assert.equal(events.length, written);
       } else await call(rec, command);
     }
-    assert.equal(new Set(events.map((event) => event.id)).size, events.length);
-    same(
-      events.map(({ id: _id, time, ...event }) => ({
-        ...event,
-        t: Date.parse(time) - start,
-      })),
-      vector.events,
+    same(events.at(-1)!.trajectory, vector.trajectory);
+    assert.equal(events.length, 1);
+    assert.deepEqual(
+      [...events[0].assets.keys()].sort(),
+      (vector.files ?? []).sort(),
     );
+    const stop = [...vector.calls].reverse().find((c) => c.call === "stop");
+    if (stop && vector.calls.some((c: any) => c.call === "start" && !c.raises))
+      assert.deepEqual(
+        finalOutput(events.at(-1)!.trajectory),
+        stop.output ?? null,
+      );
   });
 }
 for (const name of readdirSync(new URL("run_plan/", cases)).filter((name) =>
@@ -138,6 +137,9 @@ for (const name of readdirSync(new URL("run_plan/", cases)).filter((name) =>
     const commission = parseCommission(vector.commission);
     const descriptor = parseDescriptor(vector.descriptor);
     assert.equal(checkCommission(commission, descriptor), undefined);
-    same(planRun(commission, descriptor), vector.plan);
+    same(
+      JSON.parse(JSON.stringify(planRun(commission, descriptor))),
+      vector.plan,
+    );
   });
 }

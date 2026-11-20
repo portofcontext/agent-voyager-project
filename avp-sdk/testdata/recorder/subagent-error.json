@@ -1,6 +1,6 @@
 {
   "name": "subagent-error",
-  "description": "A subagent that ends in error makes its tool call's tool_returned an error. A subagent whose responses weren't reported keeps its subagent_usage.",
+  "description": "A subagent that stops in error makes its call's result an error. A subagent whose responses the runtime hides keeps the totals it reported.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -35,103 +35,193 @@
     {
       "t": 1,
       "call": "start",
-      "started": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      }
+        }
+      },
+      "prompt": "Do the task."
     },
     {
-      "t": 10,
-      "call": "response",
-      "content": [
+      "t": 100,
+      "call": "step",
+      "parts": [
         {
-          "type": "tool_use",
-          "id": "call-1",
+          "type": "call",
+          "id": "task-1",
           "name": "Task",
-          "input": {
-            "prompt": "Find it."
+          "arguments": {
+            "prompt": "Try."
           }
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100
-      },
-      "duration_ms": 9
-    },
-    {
-      "t": 11,
-      "call": "subagent_invoked",
-      "invocation_id": "call-1",
-      "name": "researcher"
-    },
-    {
-      "t": 20,
-      "call": "subagent_returned",
-      "invocation_id": "call-1",
-      "text": "rate limited",
-      "reason": "error",
-      "usage": {
-        "input_tokens": 500,
-        "output_tokens": 20,
-        "responses": 1
+        "prompt_tokens": 100,
+        "completion_tokens": 10
       }
     },
     {
-      "t": 21,
-      "call": "tool_returned",
-      "call_id": "call-1",
-      "content": "rate limited"
+      "t": 110,
+      "call": "subagent_started",
+      "call_id": "task-1",
+      "name": "worker",
+      "prompt": "Try."
     },
     {
-      "t": 30,
+      "t": 400,
+      "call": "subagent_stopped",
+      "call_id": "task-1",
+      "reason": "error",
+      "usage": {
+        "prompt_tokens": 70,
+        "completion_tokens": 7
+      }
+    },
+    {
+      "t": 410,
+      "call": "result",
+      "call_id": "task-1",
+      "content": "The worker failed."
+    },
+    {
+      "t": 600,
+      "call": "step",
+      "parts": [
+        {
+          "type": "text",
+          "text": "It failed."
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 120,
+        "completion_tokens": 12
+      }
+    },
+    {
+      "t": 700,
       "call": "stop",
-      "reason": "converged"
+      "reason": "error",
+      "output": "It failed."
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "run_requested",
-      "data": {
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          },
+          "model": {
+            "provider": "anthropic"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
+        "source": "user",
+        "message": "Do the task."
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.100000+00:00",
+        "source": "agent",
+        "message": "",
+        "tool_calls": [
+          {
+            "tool_call_id": "task-1",
+            "function_name": "Task",
+            "arguments": {
+              "prompt": "Try."
+            }
+          }
+        ],
+        "observation": {
+          "results": [
+            {
+              "source_call_id": "task-1",
+              "content": "The worker failed.",
+              "subagent_trajectory_ref": [
+                {
+                  "trajectory_id": "run-1/subagent/task-1"
+                }
+              ],
+              "extra": {
+                "avp": {
+                  "duration_ms": 310,
+                  "finished_at": "2026-01-01T00:00:00.410000+00:00",
+                  "is_error": true
+                }
+              }
+            }
+          ]
+        },
+        "metrics": {
+          "prompt_tokens": 100,
+          "completion_tokens": 10,
+          "cost_usd": 0.00045,
+          "extra": {
+            "avp": {
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 99
+          }
+        }
+      },
+      {
+        "step_id": 3,
+        "timestamp": "2026-01-01T00:00:00.600000+00:00",
+        "source": "agent",
+        "message": "It failed.",
+        "metrics": {
+          "prompt_tokens": 120,
+          "completion_tokens": 12,
+          "cost_usd": 0.00054,
+          "extra": {
+            "avp": {
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 190
+          }
+        }
+      }
+    ],
+    "final_metrics": {
+      "total_prompt_tokens": 290,
+      "total_completion_tokens": 29,
+      "total_cost_usd": 0.001305,
+      "total_steps": 3
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
         "commission": {
           "avp_version": "0.1",
           "run_id": "run-1",
@@ -140,168 +230,52 @@
             "id": "claude-test-1"
           },
           "prompt": "Do the task."
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_started",
-      "data": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
         },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
-            }
-          }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      },
-      "t": 1
+        "started_at": "2026-01-01T00:00:00.001000+00:00",
+        "stopped_at": "2026-01-01T00:00:00.700000+00:00",
+        "stop_reason": "error"
+      }
     },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "tool_use",
-            "id": "call-1",
-            "name": "Task",
-            "input": {
-              "prompt": "Find it."
+    "subagent_trajectories": [
+      {
+        "schema_version": "ATIF-v1.8",
+        "session_id": "run-1",
+        "trajectory_id": "run-1/subagent/task-1",
+        "agent": {
+          "name": "worker",
+          "version": "unknown",
+          "model_name": "claude-test-1",
+          "extra": {
+            "avp": {
+              "model": {
+                "provider": "anthropic"
+              }
             }
           }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
         },
-        "duration_ms": 9,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.0045,
-          "cost_source": "computed"
+        "steps": [
+          {
+            "step_id": 1,
+            "timestamp": "2026-01-01T00:00:00.110000+00:00",
+            "source": "user",
+            "message": "Try."
+          }
+        ],
+        "final_metrics": {
+          "total_prompt_tokens": 70,
+          "total_completion_tokens": 7,
+          "total_cost_usd": 0.000315,
+          "total_steps": 1
+        },
+        "extra": {
+          "avp": {
+            "avp_version": "0.1",
+            "started_at": "2026-01-01T00:00:00.110000+00:00",
+            "stopped_at": "2026-01-01T00:00:00.400000+00:00",
+            "stop_reason": "error"
+          }
         }
-      },
-      "t": 10
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "tool_invoked",
-      "data": {
-        "tool_call_id": "call-1",
-        "tool_name": "Task",
-        "tool_input": {
-          "prompt": "Find it."
-        }
-      },
-      "t": 10
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "subagent_invoked",
-      "data": {
-        "subagent_name": "researcher",
-        "invocation_id": "call-1",
-        "subagent_input": {
-          "prompt": "Find it."
-        }
-      },
-      "t": 11
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "subagent_returned",
-      "data": {
-        "subagent_name": "researcher",
-        "invocation_id": "call-1",
-        "duration_ms": 9,
-        "subagent_reason": "error",
-        "subagent_result_text": "rate limited",
-        "subagent_usage": {
-          "input_tokens": 500,
-          "output_tokens": 20,
-          "responses": 1
-        }
-      },
-      "t": 20
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "tool_returned",
-      "data": {
-        "tool_call_id": "call-1",
-        "tool_name": "Task",
-        "duration_ms": 11,
-        "tool_result": {
-          "type": "tool_result",
-          "tool_use_id": "call-1",
-          "content": "rate limited",
-          "is_error": true
-        }
-      },
-      "t": 21
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_stopped",
-      "data": {
-        "reason": "converged"
-      },
-      "t": 30
-    }
-  ]
+      }
+    ]
+  }
 }

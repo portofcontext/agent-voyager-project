@@ -1,5 +1,8 @@
+import { pathToFileURL } from "node:url";
+import { toolDefinitions } from "@agent-voyager-project/sdk/trajectory";
+import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** Observe Gemini's session, scheduler, and generator; never drive its tool loop. */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as core from "@google/gemini-cli-core";
@@ -8,17 +11,12 @@ import { getToolCallContext } from "@google/gemini-cli-core/dist/src/utils/toolC
 import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
 import type { Commission } from "@agent-voyager-project/sdk/commission";
 import type {
-  ContentBlock,
-  EventSink,
+  Part,
   JsonValue,
-  SubagentUsage,
-} from "@agent-voyager-project/sdk/trajectory";
+  Usage,
+} from "@agent-voyager-project/sdk/recorder";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
-import {
-  computeCost,
-  loadPrices,
-  type Prices,
-} from "@agent-voyager-project/sdk/utils/pricing";
+import { loadPrices } from "@agent-voyager-project/sdk/utils/pricing";
 import { credential, MissingSecret } from "./commission.js";
 import { describe, tools, skills, subagents } from "./descriptor.js";
 import { configure, isolated } from "./native.js";
@@ -30,7 +28,7 @@ export interface RunOptions {
 }
 export async function run(
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   options: RunOptions = {},
 ): Promise<void> {
   const prices = await loadPrices();
@@ -38,6 +36,17 @@ export async function run(
   const descriptor = await describe();
   const commission = await rec.begin(received, descriptor);
   if (!commission) return;
+  if (
+    !descriptor.supported_models?.some(
+      (model) => model.provider === commission.model.provider,
+    )
+  ) {
+    await rec.error(
+      "invalid_commission",
+      "Gemini CLI cannot call this provider",
+    );
+    return;
+  }
   if (commission.output_schema != null) {
     await rec.error(
       "invalid_commission",
@@ -104,21 +113,39 @@ export async function run(
             );
             return;
           }
-          await rec.start({
-            ...plan.started,
-            system_prompt: core.getCoreSystemPrompt(
+          const capturedSkills = skills(config, true).map((skill, index) => {
+            if (skill.source) return skill;
+            const native = config
+              .getSkillManager()
+              .getSkills()
+              .find((item) => item.name === skill.name)!;
+            const directory = join(scratch, "captured-skills", String(index));
+            mkdirSync(directory, { recursive: true });
+            writeFileSync(join(directory, "SKILL.md"), native.body ?? "");
+            return { ...skill, source: pathToFileURL(directory).href };
+          });
+          const configured = plan.connected([]);
+          const [definitions, details] = toolDefinitions(declared);
+          configured.tool_definitions = definitions.length
+            ? definitions
+            : undefined;
+          configured.extra!.avp!.tools = Object.keys(details).length
+            ? details
+            : undefined;
+          configured.extra!.avp!.skills = capturedSkills.length
+            ? capturedSkills
+            : undefined;
+          configured.extra!.avp!.subagents = subagents(
+            config,
+            commission.model.id,
+          );
+          await rec.start(configured, plan.prompt, {
+            systemPrompt: core.getCoreSystemPrompt(
               config,
               config.getSystemInstructionMemory(),
             ),
-            tools: declared,
-            skills: skills(config),
-            subagents: subagents(config, commission.model.id),
-            mcp_servers: plan.started.mcp_servers?.map((server) => ({
-              ...server,
-              status: "connected",
-            })),
           });
-          const observer = new Observer(rec, config, commission, prices);
+          const observer = new Observer(rec, config, commission);
           const observedGenerator = observer.generator(
             config.getContentGenerator(),
           );
@@ -212,23 +239,20 @@ interface Child {
   output: number;
   cache: number;
   reasoning: number;
-  cost: number;
-  priced: boolean;
+  model?: string;
   responses: number;
 }
 class Observer {
   failure?: string;
   adapterFailure?: string;
   lastText = "";
-  private content: ContentBlock[] = [];
+  private content: Part[] = [];
   private responseModel?: string;
-  private opened = performance.now();
   private frames = new Map<string, Child>();
   constructor(
     private rec: Recorder,
     private config: core.Config,
     private commission: Commission,
-    private prices: Prices,
   ) {}
   client(client: core.GeminiClient): core.GeminiClient {
     const self = this;
@@ -315,27 +339,19 @@ class Observer {
     } catch (error) {
       this.fail(String(error));
     }
-    const [cost, source] = computeCost(
-      this.prices,
-      { provider: "google", id: model },
-      {
-        inputTokens: u.input_tokens,
-        outputTokens: u.output_tokens,
-        cacheReadInputTokens: u.cache_read_input_tokens ?? undefined,
-        responseModel: response?.modelVersion,
-      },
-    );
-    child.input += u.input_tokens;
-    child.output += u.output_tokens;
-    child.cache += u.cache_read_input_tokens ?? 0;
+    child.model = response?.modelVersion ?? model;
+    child.input += u.prompt_tokens;
+    child.output += u.completion_tokens;
+    child.cache += u.cached_tokens ?? 0;
     child.reasoning += u.reasoning_output_tokens ?? 0;
     child.responses++;
-    child.cost += cost;
-    child.priced &&= source === "computed";
   }
   async completed(calls: readonly core.CompletedToolCall[]): Promise<void> {
     for (const call of calls) {
-      const content = translate.toolContent(call.response.responseParts);
+      const content = translate.toolContent(
+        call.response.responseParts,
+        this.rec,
+      );
       const child = this.frames.get(call.request.callId);
       const progress = isSubagentProgress(call.response.resultDisplay)
         ? call.response.resultDisplay
@@ -350,43 +366,37 @@ class Observer {
           progress.terminateReason !== "GOAL");
       if (child) {
         this.frames.delete(call.request.callId);
-        const usage: SubagentUsage = {
-          input_tokens: child.input,
-          output_tokens: child.output,
-          cache_read_input_tokens: child.cache,
+        const usage: Usage = {
+          prompt_tokens: child.input,
+          completion_tokens: child.output,
+          cached_tokens: child.cache,
           reasoning_output_tokens: child.reasoning,
-          responses: child.responses,
-          cost_source: child.priced ? "computed" : "unknown",
-          ...(child.priced ? { cost_usd: child.cost } : {}),
         };
-        const text = content
-          .map((block) => (block.type === "text" ? block.text : ""))
-          .join("");
-        await this.rec.subagentReturned(
+        await this.rec.subagentStopped(
           call.request.callId,
-          text,
           interrupted ? "interrupted" : isError ? "error" : "converged",
-          { usage: child.responses ? usage : undefined },
+          {
+            usage: child.responses ? usage : undefined,
+            modelName: child.model,
+          },
         );
       }
-      await this.rec.toolReturned(call.request.callId, content, { isError });
+      await this.rec.result(call.request.callId, content, { isError });
     }
   }
   private async *stream(
     stream: AsyncGenerator<core.ServerGeminiStreamEvent>,
   ): AsyncGenerator<core.ServerGeminiStreamEvent> {
-    this.opened = performance.now();
     for await (const event of stream) {
       switch (event.type) {
         case "retry":
           this.content = [];
           this.failure = undefined;
-          this.opened = performance.now();
           break;
         case "thought":
           translate.append(this.content, {
-            type: "thinking",
-            thinking: [event.value.subject, event.value.description]
+            type: "reasoning",
+            text: [event.value.subject, event.value.description]
               .filter(Boolean)
               .join("\n"),
           });
@@ -396,48 +406,44 @@ class Observer {
           break;
         case "tool_call_request":
           this.content.push({
-            type: "tool_use",
+            type: "call",
             id: event.value.callId,
             name: event.value.name,
-            input: event.value.args as Record<string, JsonValue>,
+            arguments: event.value.args as Record<string, JsonValue>,
           });
           break;
         case "finished": {
           const content = this.content;
           this.content = [];
-          await this.rec.response(content, {
+          await this.rec.step(content, {
             usage: translate.usage(event.value.usageMetadata),
-            responseModel: this.responseModel,
+            modelName: this.responseModel,
             finishReasons: event.value.reason
               ? [event.value.reason]
               : undefined,
-            durationMs: Math.max(
-              0,
-              Math.trunc(performance.now() - this.opened),
-            ),
           });
-          await this.rec.closeResponse();
           this.failure = undefined;
           this.lastText = content
             .flatMap((block) => (block.type === "text" ? [block.text] : []))
             .join("");
           for (const block of content) {
-            if (block.type !== "tool_use" || block.name !== "invoke_agent")
+            if (block.type !== "call" || block.name !== "invoke_agent")
               continue;
-            const name = String(block.input.agent_name ?? "");
+            const name = String(block.arguments.agent_name ?? "");
             if (!this.config.getAgentRegistry().getDefinition(name)) continue;
-            await this.rec.subagentInvoked(block.id, name, block.input);
+            await this.rec.subagentStarted(
+              block.id,
+              name,
+              String(block.arguments.prompt ?? ""),
+            );
             this.frames.set(block.id, {
               input: 0,
               output: 0,
               cache: 0,
               reasoning: 0,
-              cost: 0,
-              priced: true,
               responses: 0,
             });
           }
-          this.opened = performance.now();
           break;
         }
         case "error":

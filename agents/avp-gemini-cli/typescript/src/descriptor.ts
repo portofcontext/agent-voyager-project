@@ -1,7 +1,8 @@
 /** Describe the native default catalog without connecting to a model. */
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
+import { pathToFileURL } from "node:url";
 import * as core from "@google/gemini-cli-core";
 import { CompleteTaskTool } from "@google/gemini-cli-core/dist/src/tools/complete-task.js";
 import {
@@ -42,11 +43,17 @@ export function tools(config: core.Config, model: string): Tool[] {
     );
   });
 }
-export function skills(config: core.Config) {
+export function skills(config: core.Config, captureSources = false) {
   return config
     .getSkillManager()
     .getSkills()
-    .map((s) => ({ name: s.name, description: s.description }));
+    .map((s) => ({
+      name: s.name,
+      description: s.description,
+      ...(captureSources && isAbsolute(s.location)
+        ? { source: pathToFileURL(dirname(s.location)).href }
+        : {}),
+    }));
 }
 export function subagents(config: core.Config, model: string): Subagent[] {
   const registry = config.getToolRegistry();

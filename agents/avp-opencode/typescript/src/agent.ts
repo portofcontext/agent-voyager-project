@@ -1,12 +1,12 @@
+import { toolDefinitions } from "@agent-voyager-project/sdk/trajectory";
+import { pathToFileURL } from "node:url";
+import type { TrajectorySink } from "@agent-voyager-project/sdk/trajectory";
 /** The native OpenCode server owns model calls, tools, and the loop. */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
 import { Recorder, RecorderError } from "@agent-voyager-project/sdk/recorder";
-import type {
-  EventSink,
-  JsonValue,
-} from "@agent-voyager-project/sdk/trajectory";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 import { loadPrices } from "@agent-voyager-project/sdk/utils/pricing";
 import { planRun } from "@agent-voyager-project/sdk/utils/run_plan";
 import {
@@ -27,7 +27,7 @@ export interface RunOptions {
 }
 export async function run(
   received: JsonValue,
-  sink: EventSink,
+  sink: TrajectorySink,
   options: RunOptions = {},
 ): Promise<void> {
   const clock = new EventClock();
@@ -115,8 +115,12 @@ export async function run(
       commission.model.provider,
       commission.model.id,
     );
-    const allowed = new Set(plan.started.tools?.map((t) => t.name) ?? []);
-    if (!plan.started.subagents?.length) allowed.delete("task");
+    const allowed = new Set(
+      plan.agent.tool_definitions?.map(
+        (t) => (t.function as { name: string }).name,
+      ) ?? [],
+    );
+    if (!plan.agent.extra?.avp?.subagents?.length) allowed.delete("task");
     const enabled = offered.filter((t) => allowed.has(t.name));
     if (
       commission.skills?.length &&
@@ -140,12 +144,24 @@ export async function run(
       env,
       new Set(offered.map((t) => t.name)),
     );
-    const skills = (await nativeSkills(client))
-      .filter((s) => plan.started.skills?.some((item) => item.name === s.name))
-      .map(({ name, description }) => ({
-        name,
-        description: description ?? "",
-      }));
+    const selectedSkills = (await nativeSkills(client)).filter((s) =>
+      plan.agent.extra?.avp?.skills?.some((item) => item.name === s.name),
+    );
+    const skills = selectedSkills.map(
+      ({ name, description, location, content }, index) => {
+        let directory = dirname(location);
+        if (!isAbsolute(location)) {
+          directory = join(scratch, "captured-skills", String(index));
+          mkdirSync(directory, { recursive: true });
+          writeFileSync(join(directory, "SKILL.md"), content);
+        }
+        return {
+          name,
+          description: description ?? "",
+          source: pathToFileURL(directory).href,
+        };
+      },
+    );
     if (
       commission.skills?.some((s) => !skills.some((n) => n.name === s.name))
     ) {
@@ -164,7 +180,9 @@ export async function run(
         off,
         enabled.map((t) => t.name),
       ),
-    ).filter((a) => plan.started.subagents?.some((s) => s.name === a.name));
+    ).filter((a) =>
+      plan.agent.extra?.avp?.subagents?.some((s) => s.name === a.name),
+    );
     const outputTool = commission.output_schema
       ? {
           name: "StructuredOutput",
@@ -177,18 +195,20 @@ export async function run(
       : undefined;
     if (!prompt.ready)
       throw new Error("OpenCode did not load the bundled system-prompt hook");
-    const settings = {
-      ...plan.started,
-      tools: [...enabled, ...mcpTools, ...(outputTool ? [outputTool] : [])],
-      skills,
-      subagents: agents,
-      mcp_servers: plan.started.mcp_servers?.map((s) => ({
-        ...s,
-        status: "connected" as const,
-      })),
-    };
+    const settings = plan.connected([]);
+    const [definitions, details] = toolDefinitions([
+      ...enabled,
+      ...mcpTools,
+      ...(outputTool ? [outputTool] : []),
+    ]);
+    settings.tool_definitions = definitions.length ? definitions : undefined;
+    settings.extra!.avp!.tools = Object.keys(details).length
+      ? details
+      : undefined;
+    settings.extra!.avp!.skills = skills.length ? skills : undefined;
+    settings.extra!.avp!.subagents = agents.length ? agents : undefined;
     startRun = (system) =>
-      (started ??= rec.start({ ...settings, system_prompt: system }));
+      (started ??= rec.start(settings, plan.prompt, { systemPrompt: system }));
     if (interrupted) {
       await startRun(commission.system_prompt ?? undefined);
       await rec.stop("interrupted");

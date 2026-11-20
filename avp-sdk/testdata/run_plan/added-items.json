@@ -100,48 +100,60 @@
     ]
   },
   "plan": {
-    "started": {
-      "prompt": "Do the task.",
-      "system_prompt": "Use this prompt instead.",
-      "model": {
-        "provider": "anthropic",
-        "id": "claude-test-1"
-      },
-      "tools": [
+    "prompt": "Do the task.",
+    "system_prompt": "Use this prompt instead.",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "tool_definitions": [
         {
-          "name": "read_file",
-          "inputSchema": {
-            "type": "object"
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "parameters": {
+              "type": "object"
+            }
           }
         },
         {
-          "name": "bash",
-          "inputSchema": {
-            "type": "object"
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "parameters": {
+              "type": "object"
+            }
           }
         }
       ],
-      "mcp_servers": [
-        {
-          "id": "issues",
-          "name": "Issue tracker"
+      "extra": {
+        "avp": {
+          "model": {
+            "provider": "anthropic"
+          },
+          "mcp_servers": [
+            {
+              "id": "issues",
+              "name": "Issue tracker"
+            }
+          ],
+          "skills": [
+            {
+              "name": "triage",
+              "description": "How to triage an issue."
+            }
+          ],
+          "subagents": [
+            {
+              "name": "researcher",
+              "description": "Finds things."
+            },
+            {
+              "name": "writer"
+            }
+          ]
         }
-      ],
-      "skills": [
-        {
-          "name": "triage",
-          "description": "How to triage an issue."
-        }
-      ],
-      "subagents": [
-        {
-          "name": "researcher",
-          "description": "Finds things."
-        },
-        {
-          "name": "writer"
-        }
-      ]
+      }
     },
     "turned_off": {
       "tools": [

@@ -2,46 +2,43 @@
 
 import json
 
-from avp.recorder import UsageReport
-from avp.trajectory import ImageBlock, RefusalBlock, Source, TextBlock, ThinkingBlock, ToolUseBlock
+from avp.recorder import Call, Reasoning, Text, Usage
+from avp.trajectory import Citation
 
 
-def content(message):
+def _citation(raw):
+    named = {"url": "source_url", "title": "source_title"}
+    return Citation.model_validate({named.get(k, k): v for k, v in raw.items()})
+
+
+def parts(message, rec):
     blocks = []
     for part in message.content_blocks:
         kind = part["type"]
         if kind == "text":
-            blocks.append(TextBlock(type="text", text=part["text"], langchain=part))
+            citations = [_citation(a) for a in part.get("annotations", [])]
+            blocks.append(Text(text=part["text"], citations=citations or None))
         elif kind == "reasoning":
             blocks.append(
-                ThinkingBlock(
-                    type="thinking",
-                    thinking=part.get("reasoning", ""),
+                Reasoning(
+                    text=part.get("reasoning", ""),
                     signature=part.get("extras", {}).get("signature"),
-                    langchain=part,
                 )
             )
         elif kind in ("tool_call", "invalid_tool_call"):
             continue
         elif kind == "image" and part.get("base64"):
-            blocks.append(
-                ImageBlock(
-                    type="image",
-                    source=Source(type="base64", media_type=part["mime_type"], data=part["base64"]),
-                )
-            )
+            blocks.append(rec.image_base64(part["base64"], part["mime_type"]))
         elif kind == "non_standard" and (part.get("value") or {}).get("type") == "refusal":
-            blocks.append(RefusalBlock(type="refusal", refusal=part["value"]["refusal"]))
+            blocks.append(Text(refusal=True, text=part["value"]["refusal"]))
         else:
             raise ValueError(f"unsupported LangChain content: {kind}")
     if refusal := message.additional_kwargs.get("refusal"):
-        blocks.append(RefusalBlock(type="refusal", refusal=refusal))
+        blocks.append(Text(refusal=True, text=refusal))
     if message.invalid_tool_calls:
         raise ValueError("Deep Agents returned invalid tool arguments")
     for call in message.tool_calls:
-        blocks.append(
-            ToolUseBlock(type="tool_use", id=call["id"], name=call["name"], input=call["args"])
-        )
+        blocks.append(Call(id=call["id"], name=call["name"], arguments=call["args"]))
     return blocks
 
 
@@ -52,33 +49,28 @@ def usage(native):
     written = details.get("cache_creation") or details.get(
         "ephemeral_5m_input_tokens", 0
     ) + details.get("ephemeral_1h_input_tokens", 0)
-    return UsageReport(
-        input_tokens=native["input_tokens"],
-        output_tokens=native["output_tokens"],
-        cache_read_input_tokens=details.get("cache_read"),
+    return Usage(
+        prompt_tokens=native["input_tokens"],
+        completion_tokens=native["output_tokens"],
+        cached_tokens=details.get("cache_read"),
         cache_creation_input_tokens=written or None,
         reasoning_output_tokens=native.get("output_token_details", {}).get("reasoning"),
     )
 
 
-def tool_content(raw):
+def tool_content(raw, rec):
     if isinstance(raw, str):
         return raw
     blocks = []
     for part in raw:
         if isinstance(part, str):
-            blocks.append(TextBlock(type="text", text=part))
+            blocks.append(Text(text=part))
         elif part["type"] == "text":
-            blocks.append(TextBlock(type="text", text=part["text"]))
+            blocks.append(Text(text=part["text"]))
         elif part["type"] == "image" and part.get("base64"):
-            blocks.append(
-                ImageBlock(
-                    type="image",
-                    source=Source(type="base64", media_type=part["mime_type"], data=part["base64"]),
-                )
-            )
+            blocks.append(rec.image_base64(part["base64"], part["mime_type"]))
         else:
-            blocks.append(TextBlock(type="text", text=json.dumps(part)))
+            blocks.append(Text(text=json.dumps(part)))
     return blocks
 
 

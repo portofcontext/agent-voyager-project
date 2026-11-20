@@ -1,7 +1,6 @@
 """The native Runner owns the loop; each completed response goes to the Recorder."""
 
 import asyncio
-import time
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -12,9 +11,9 @@ from agents.tool import get_function_tool_origin
 from openai.types.responses import ResponseCompletedEvent, ResponseIncompleteEvent
 from pydantic import JsonValue
 
-from avp.agent_cli import EventSink
+from avp.agent_cli import TrajectorySink
 from avp.descriptor import Tool
-from avp.recorder import Recorder
+from avp.recorder import Call, Recorder, Text
 from avp.utils.run_plan import plan_run
 from avp_openai_agents import commission as cm
 from avp_openai_agents import translate
@@ -26,7 +25,7 @@ def model(commission):
     return cm.model(commission)
 
 
-async def run(received: JsonValue, sink: EventSink) -> None:
+async def run(received: JsonValue, sink: TrajectorySink) -> None:
     descriptor = describe()
     rec = Recorder(sink)
     commission = await rec.begin(received, descriptor)
@@ -85,41 +84,32 @@ async def run(received: JsonValue, sink: EventSink) -> None:
                         mcp_server_id=origin.mcp_server_name if origin else None,
                     )
                 )
-            await rec.start(
-                plan.started.model_copy(
-                    update={
-                        "system_prompt": instructions,
-                        "tools": declarations or None,
-                        "mcp_servers": [
-                            s.model_copy(update={"status": "connected"})
-                            for s in plan.started.mcp_servers or []
-                        ]
-                        or None,
-                    }
-                )
-            )
+            await rec.start(plan.connected(declarations), plan.prompt, system_prompt=instructions)
             run = Runner.run_streamed(
                 agent,
                 commission.prompt,
                 max_turns=None,
-                run_config=RunConfig(tracing_disabled=True),
+                run_config=RunConfig(
+                    tracing_disabled=True, tool_not_found_behavior="return_error_to_model"
+                ),
             )
-            started = time.monotonic()
             refused = False
             async for event in run.stream_events():
                 if event.type == "raw_response_event":
-                    kind = event.data.type
-                    if kind == "response.created":
-                        started = time.monotonic()
-                    elif isinstance(event.data, (ResponseCompletedEvent, ResponseIncompleteEvent)):
+                    if isinstance(event.data, (ResponseCompletedEvent, ResponseIncompleteEvent)):
                         response = event.data.response
-                        blocks = translate.content(response.output)
-                        refused |= any(b.type == "refusal" for b in blocks)
+                        blocks = translate.parts(response.output)
+                        for block in blocks:
+                            if isinstance(block, Call) and block.name not in {
+                                t.name for t in tools
+                            }:
+                                reports[block.id] = {"is_error": True}
+                        refused |= any(isinstance(b, Text) and b.refusal for b in blocks)
                         incomplete = response.incomplete_details
-                        await rec.response(
+                        await rec.step(
                             blocks,
                             usage=translate.usage(response.usage),
-                            response_model=response.model
+                            model_name=response.model
                             if response.model != commission.model.id
                             else None,
                             finish_reasons=[incomplete.reason]
@@ -127,16 +117,15 @@ async def run(received: JsonValue, sink: EventSink) -> None:
                             else [response.status]
                             if response.status
                             else None,
-                            duration_ms=int((time.monotonic() - started) * 1000),
                         )
                 elif event.type == "run_item_stream_event" and isinstance(
                     event.item, ToolCallOutputItem
                 ):
                     item = event.item
                     raw: Any = item.raw_item
-                    await rec.tool_returned(
+                    await rec.result(
                         raw["call_id"],
-                        translate.tool_output(raw["output"]),
+                        translate.tool_output(raw["output"], rec),
                         **reports.pop(raw["call_id"], {}),
                     )
             output = run.final_output

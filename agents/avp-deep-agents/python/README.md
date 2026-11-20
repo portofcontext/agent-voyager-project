@@ -12,7 +12,7 @@ From this directory:
 uv sync --locked
 uv run avp-deep-agents-cli ping
 uv run avp-deep-agents-cli describe
-uv run avp-deep-agents-cli run --commission commission.json --out trajectory.ndjson
+uv run avp-deep-agents-cli run --commission commission.json --out trajectory.json
 ```
 
 Install the built-in agent with the CLI:
@@ -34,7 +34,7 @@ The Descriptor reads tools from the native graph: `ls`, `read_file`, `write_file
 `edit_file`, `delete`, `glob`, `grep`, `execute`, and `task`. It declares the native
 `general-purpose` subagent with its own filesystem and shell tools. Commissioned
 MCP tools are connected through LangChain's MCP clients, with their actual names
-and schemas reported in `agent_started`.
+and schemas reported in the ATIF effective configuration.
 
 The local shell backend uses the launcher's working directory. Virtual file
 paths such as `/notes.txt` resolve under that directory; shell commands run there
@@ -53,7 +53,7 @@ as in the Pydantic AI reference agent. An explicit `system_prompt` replaces the
 parent harness instructions. JSON Schema output uses native provider structured
 output and is validated before the run reports success.
 
-Each completed native chat-model call produces one `assistant_message`, including
+Each completed native chat-model call produces one ATIF agent step, including
 child calls under their subagent invocation ID. Cache counts are already included
 in LangChain input usage. Child responses are recorded individually, without
 adding a second subagent usage total. Tool results preserve MCP error status and

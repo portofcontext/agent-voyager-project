@@ -11,7 +11,7 @@ description: >
 
 A supervisor sends one Commission; the agent's existing runtime does the work
 and streams its Trajectory. There is no mid-run supervisor push channel.
-Read the [spec overview](spec/v0.1/README.md) before constructing wire objects.
+Read the [spec overview](spec/v0.1/README.md) before creating AVP documents.
 
 ## Run an agent
 
@@ -49,7 +49,9 @@ and inspect results. Saved Commissions and the TUI are not implemented yet.
 Compare correctness, cost, and response counts separately. Preserve the run's
 Commission and Trajectory as evidence. Reduce per-response usage and cost once;
 do not add runtime totals or count subagent usage twice. See the
-[Trajectory spec](spec/v0.1/trajectory.md).
+[Trajectory spec](spec/v0.1/trajectory.md). The completed trajectory records the
+configuration the run used. Keep it and its referenced skill and image files
+together when moving a run.
 
 ## Integrate a runtime
 

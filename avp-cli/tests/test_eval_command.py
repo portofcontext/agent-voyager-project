@@ -22,8 +22,8 @@ data = json.load(sys.stdin)
 run, config = data["run"], data["config"]
 missing = [w for w in run["item"]["words"] if w.lower() not in run["output"].lower()]
 reasons = [f"missing {w!r}" for w in missing]
-if len(run["trajectory"]) > config["max_events"]:
-    reasons.append("too many events")
+if len((run["trajectory"] or {}).get("steps", [])) > config["max_steps"]:
+    reasons.append("too many steps")
 value = 1 - len(missing) / len(run["item"]["words"])
 json.dump({"value": value, "passed": not reasons, "reasons": reasons}, sys.stdout)
 """
@@ -35,7 +35,7 @@ def run_with(output: JsonValue, words: list[str] | None = None) -> Run:
         agent="pd",
         commission="inline-1",
         exit_code=0,
-        trajectory=[],
+        trajectory=None,
         invalid_trajectory=[],
         output=output,
         reason="converged",
@@ -72,7 +72,7 @@ def test_a_passing_and_a_failing_run(tmp_path: Path) -> None:
     script(tmp_path, WORDS)
     fields: dict[str, JsonValue] = {
         "command": [sys.executable, "score.py"],
-        "config": {"max_events": 3},
+        "config": {"max_steps": 3},
     }
     assert scored(tmp_path, fields, run_with("Paris, France")).score == Score(value=1, passed=True)
     assert scored(tmp_path, fields, run_with("Paris")).score == Score(

@@ -12,7 +12,7 @@ import typer
 
 from avp._base import AVP_VERSION
 from avp.agent_cli.run import DescribeFn, RunFn, get_descriptor, read_commission
-from avp.agent_cli.sink import ndjson_sink
+from avp.agent_cli.sink import trajectory_sink
 
 
 async def _interruptible(task: Awaitable[None]) -> None:
@@ -65,10 +65,10 @@ def main(
     @app.command("run")
     def run_command(
         commission: Annotated[str, typer.Option(help="A path, or inline JSON.")],
-        out: Annotated[str, typer.Option(help="Where to write the NDJSON, or -.")],
+        out: Annotated[str, typer.Option(help="Where to write the ATIF document, or -.")],
     ) -> None:
         """Run a Commission."""
-        sink = ndjson_sink(None if out == "-" else Path(out))
+        sink = trajectory_sink(None if out == "-" else Path(out))
         try:
             asyncio.run(_interruptible(run(read_commission(commission), sink)))
         except asyncio.CancelledError:

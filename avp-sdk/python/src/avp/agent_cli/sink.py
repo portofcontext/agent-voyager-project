@@ -1,25 +1,23 @@
-"""Writing events as NDJSON."""
+"""Write the run's ATIF document once, when the run ends."""
 
 import sys
 from pathlib import Path
 
-from avp._base import EventSink
-from avp.trajectory import Event
+from avp._base import TrajectorySink
+from avp.trajectory import Recording
 
 
-def ndjson_sink(out: Path | None) -> EventSink:
-    """Write each event as one JSON line to `out`, or to stdout. Reopens the file
-    per event so a reader following it sees each event at once."""
-    if out is not None:
-        out.write_text("")
+def trajectory_sink(out: Path | None) -> TrajectorySink:
+    """Write to `out`, or to stdout when it is None. Stdout can't carry the
+    referenced files, so a run with images or skill files needs a path."""
 
-    async def sink(event: Event) -> None:
-        line = event.model_dump_json(exclude_none=True) + "\n"
-        if out is None:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-        else:
-            with out.open("a") as file:
-                file.write(line)
+    async def sink(recording: Recording) -> None:
+        if out is not None:
+            recording.write(out)
+            return
+        if recording.assets:
+            raise ValueError("a Trajectory with referenced files needs --out with a file path")
+        sys.stdout.write(recording.json() + "\n")
+        sys.stdout.flush()
 
     return sink

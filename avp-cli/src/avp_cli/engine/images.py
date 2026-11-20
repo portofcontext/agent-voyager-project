@@ -89,7 +89,8 @@ def pull(reference: str, tag: str, progress: Callable[[int], None] | None = None
                 layers[layer] = current
                 if progress:
                     progress(sum(layers.values()))
-        engine.images.get(pinned).tag(tag)
+        name, _, version = tag.rpartition(":") if ":" in tag.rsplit("/", 1)[-1] else (tag, "", "")
+        engine.images.get(pinned).tag(name, tag=version or None)
     except APIError as exc:
         raise Failed(f"couldn't pull {reference}: {exc.explanation or exc}") from None
     # The image can have other names already, when its content was here before.

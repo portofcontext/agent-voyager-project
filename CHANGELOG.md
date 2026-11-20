@@ -4,9 +4,18 @@
 
 ### Fixed
 
+- Claude records parent calls before applying early tool results and subagent
+  events, and avoids double-counting aggregate and per-response child usage.
+
 - Both SDK run plans preserve an explicitly empty system prompt.
 
 ### Added
+
+- Trajectories record the configuration the runtime used in ATIF fields and
+  typed `extra.avp` objects. Referenced skill directories and image files are
+  saved beside the trajectory, preserving text and binary files byte for byte.
+- A Harbor integration example uses saved ATIF runs directly for training
+  extraction and the job viewer.
 
 - `avp update` installs the newest CLI release, and `avp agent update`
   reinstalls the built-in agents whose versions the CLI changed.
@@ -43,6 +52,18 @@
   and the single price snapshot, bundled in its npm package.
 
 ### Changed
+
+- Breaking: native ATIF-v1.8 replaces AVP's trajectory event stream in both SDKs,
+  all eight adapters, and the CLI. File output writes one completed `trajectory.json`
+  atomically; stdout emits the same document when it has no referenced files.
+  Python uses pinned Harbor models, and TypeScript derives its wire types from them. The legacy event
+  schema, exporter, CloudEvents wrapper, and AVP-specific OpenTelemetry
+  converter are removed. Existing NDJSON runs require an older SDK to read.
+- Traces use standard ATIF messages, tool calls, observations, reasoning, usage,
+  and child trajectories, with AVP extensions for run outcomes and execution
+  metadata. SDK output readers recover the final answer or a distinct typed
+  result. CLI evaluation and sharing read ATIF, derive partial
+  usage without counting children twice, and preserve unknown values.
 
 - Agents install the published SDK betas and build from their own directories.
 

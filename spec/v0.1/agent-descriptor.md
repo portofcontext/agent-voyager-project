@@ -12,7 +12,9 @@ This spec defines the Descriptor's fields and the rules an agent follows when it
 
 A Descriptor describes one version of an agent, identified by `agent_name` and `agent_version`. Anything a supervisor sets for one run belongs on the [Commission](./commission.md) instead.
 
-The [Trajectory](./trajectory.md) spec defines when an agent sends its Descriptor during a run: in `agent_described`, the second event. A Descriptor is also useful before a run. A supervisor that manages several agents can read their Descriptors to get the same summary of each one, and to write Commissions that fit them.
+The Descriptor is read before a run to choose and configure an agent. The
+[Trajectory](./trajectory.md) records the Descriptor and the configuration the
+run used.
 
 ## 2. Example
 
@@ -88,6 +90,9 @@ A Tool is an [MCP `Tool`](https://modelcontextprotocol.io/specification/latest/s
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `mcp_server_id` | string | No | The `id` of the [MCP server](#33-mcp-server) the tool comes from. Absent for any tool that does not come from an MCP server. |
+
+This identifies MCP ownership, not execution location. Native tools omit it;
+MCP tools include it whether the server runs locally over stdio or over HTTP.
 
 ### 3.3 MCP server
 

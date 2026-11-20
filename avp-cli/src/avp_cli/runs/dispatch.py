@@ -17,8 +17,8 @@ from avp_cli.sandbox import sandboxes
 
 Watch = Callable[[Path, Callable[[], sandboxes.Result]], sandboxes.Result]
 """Wraps the agent's command while it runs: called with the Trajectory's path
-and the command, it runs the command and returns its result. `avp run` prints
-the events as they arrive."""
+and the command, it runs the command and returns its result. `avp run` shows
+the elapsed time."""
 
 
 @dataclass(frozen=True)

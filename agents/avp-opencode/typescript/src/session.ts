@@ -7,7 +7,7 @@ import type {
   ToolPart,
 } from "@opencode-ai/sdk/v2/client";
 import type { Recorder } from "@agent-voyager-project/sdk/recorder";
-import type { JsonValue } from "@agent-voyager-project/sdk/trajectory";
+import type { JsonValue } from "@agent-voyager-project/sdk/recorder";
 import * as translate from "./translate.js";
 interface Message {
   session: string;
@@ -161,23 +161,17 @@ export class SessionEvents {
       info.time.created,
       ...parts.map((p) => translate.start(p.part) ?? fallback),
     );
-    const options = {
-      key: step.finish?.id ?? `aborted:${info.id}`,
-      model: { provider: info.providerID, id: info.modelID },
-      usage: step.finish ? translate.usage(step.finish) : undefined,
-      finishReasons: [step.finish?.reason ?? "aborted"],
-      durationMs: Math.max(0, done - info.time.created),
-      subagentInvocationId: parent,
-    };
-    // Pin each call's own native start time; the Recorder then calculates tool
-    // durations from native starts/ends even when parallel results arrive later.
-    for (const p of parts)
-      await this.clock.at(translate.start(p.part) ?? done, () =>
-        this.rec.response([p.block!], options),
-      );
-    if (parts.length)
-      await this.clock.at(done, () => this.rec.response([], options));
-    await this.rec.closeResponse();
+    await this.clock.at(done, () =>
+      this.rec.step(
+        parts.map((p) => p.block!),
+        {
+          modelName: info.modelID,
+          usage: step.finish ? translate.usage(step.finish) : undefined,
+          finishReasons: [step.finish?.reason ?? "aborted"],
+          subagent: parent,
+        },
+      ),
+    );
     const tools = step.parts.filter((p): p is ToolPart => p.type === "tool");
     for (const tool of tools) {
       this.pending.set(tool.callID, { part: tool, parent });
@@ -194,11 +188,10 @@ export class SessionEvents {
     if (!this.subagents.has(name)) return;
     if (!this.frames.has(tool.callID)) {
       await this.clock.at(translate.start(tool), () =>
-        this.rec.subagentInvoked(
+        this.rec.subagentStarted(
           tool.callID,
           name,
-          tool.state.input as Record<string, JsonValue>,
-          { subagentInvocationId: parent },
+          String(tool.state.input.prompt ?? ""),
         ),
       );
       this.frames.add(tool.callID);
@@ -221,25 +214,14 @@ export class SessionEvents {
       );
       const last = messages.at(-1);
       isError ||= !!last?.info?.error;
-      const content = translate.result(tool);
-      const text =
-        this.text(last) ||
-        (typeof content === "string"
-          ? content
-          : content
-              .filter((b) => b.type === "text")
-              .map((b) => b.text)
-              .join(""));
       await this.clock.at(translate.end(tool), () =>
-        this.rec.subagentReturned(
-          tool.callID,
-          text,
-          isError ? "error" : "converged",
-        ),
+        this.rec.subagentStopped(tool.callID, isError ? "error" : "converged"),
       );
     }
     await this.clock.at(translate.end(tool), () =>
-      this.rec.toolReturned(tool.callID, translate.result(tool), { isError }),
+      this.rec.result(tool.callID, translate.result(tool, this.rec), {
+        isError,
+      }),
     );
   }
   private text(m?: Message): string {

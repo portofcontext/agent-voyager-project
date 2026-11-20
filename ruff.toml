@@ -1,7 +1,7 @@
 # Shared Python style. Each project runs Ruff in its own environment.
 target-version = "py311"
 line-length = 100
-extend-exclude = [".venv", ".pytest_cache"]
+extend-exclude = [".venv", ".pytest_cache", "avp-sdk/python/src/avp/_vendor"]
 
 [lint]
 # Curated ruleset: catch unused imports / unused vars / common bugs / style.

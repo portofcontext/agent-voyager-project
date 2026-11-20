@@ -4,13 +4,13 @@ Descriptor says it lacks what the rule needs."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from pydantic import ValidationError
 
 from avp.commission import AgentSettings, Commission, McpServerHttp, McpServerStdio, Model, Skill
 from avp.descriptor import AgentDescriptor
-from avp.trajectory import ErrorOccurredEvent
+from avp.trajectory import Trajectory, avp_metadata
 from avp_cli.eval.scoring import Run
 
 Level = Literal["MUST", "SHOULD"]
@@ -32,6 +32,7 @@ class TextResponse(TypedDict):
 
 class ToolCallResponse(TypedDict):
     toolCalls: list[ToolCall]
+    reasoning: NotRequired[str]
 
 
 Response = TextResponse | ToolCallResponse
@@ -75,22 +76,39 @@ RUN_ID = "set-by-the-engine"
 """A Commission must have a `run_id`, and the engine replaces it for each run."""
 
 
+def _avp(run: Run) -> tuple[Trajectory | None, list[str]]:
+    """The run's Trajectory, or the problem when it isn't an AVP Trajectory."""
+    doc = run.trajectory
+    if doc is None:
+        # Every case already fails an invalid document, with its contents.
+        return None, [] if run.invalid_trajectory else ["the agent wrote no ATIF document"]
+    if not avp_metadata(doc):
+        return None, ["the document has no extra.avp, so it isn't an AVP Trajectory"]
+    return doc, []
+
+
 def _ended_before_start(code: str, message_names: str | None = None) -> Callable[[Run], list[str]]:
-    """The run never started: `run_requested`, `agent_described`, then
-    `error_occurred` with `code`, and nothing else."""
+    """A run that ends before it starts has one system step with the error
+    code, `stop_reason` `error`, no `started_at`, and no agent steps."""
 
     def check(run: Run) -> list[str]:
-        expected = ["run_requested", "agent_described", "error_occurred"]
-        types = [e.type for e in run.trajectory]
-        if types != expected:
-            return [f"the events are {', '.join(types) or 'none'}; expected {', '.join(expected)}"]
-        error = run.trajectory[2]
-        if not isinstance(error, ErrorOccurredEvent):
-            return []
-        if error.data.error_code != code:
-            return [f"error_occurred has the code {error.data.error_code}, not {code}"]
-        if message_names and message_names not in error.data.error_message:
-            return [f"error_occurred's message doesn't name {message_names}"]
+        doc, problems = _avp(run)
+        if doc is None:
+            return problems
+        meta = avp_metadata(doc)
+        if (
+            meta.get("stop_reason") != "error"
+            or meta.get("started_at")
+            or any(s.source == "agent" for s in doc.steps)
+        ):
+            return ["expected the run to end with `error` before it started"]
+        errors = [s for s in doc.steps if avp_metadata(s).get("error_code") == code]
+        if not errors:
+            return [f"no error with code {code}"]
+        if len(doc.steps) != 1:
+            return [f"expected one system step, found {len(doc.steps)} steps"]
+        if message_names and message_names not in str(errors[-1].message):
+            return [f"error message doesn't name {message_names}"]
         return []
 
     return check
@@ -220,35 +238,93 @@ def _connect_failure(name: str, about: str, commission: Callable[[Context], Comm
     )
 
 
-def _events_in_order(run: Run) -> list[str]:
-    """A run that started: `run_requested`, `agent_described`, `agent_started`,
-    the run's other events with at least one `assistant_message`, and
-    `agent_stopped` last and only once."""
-    types = [e.type for e in run.trajectory]
-    start = ["run_requested", "agent_described", "agent_started"]
-    problems = []
-    if types[:3] != start:
-        problems.append(
-            f"the events start {', '.join(types[:3]) or 'with none'}; expected {', '.join(start)}"
-        )
-    if not types or types[-1] != "agent_stopped" or types.count("agent_stopped") != 1:
-        problems.append(
-            f"agent_stopped isn't last and only once in {', '.join(types) or 'no events'}"
-        )
-    if "assistant_message" not in types:
-        problems.append(f"no assistant_message in {', '.join(types) or 'no events'}")
+def _avp_document(run: Run) -> list[str]:
+    """Parsing checks ATIF and the extras' types; this checks the fields the
+    reference requires of a run that started."""
+    doc, problems = _avp(run)
+    if doc is None:
+        return problems
+    meta = avp_metadata(doc)
+    if meta.get("stop_reason") != "converged":
+        problems.append(f"expected `stop_reason` `converged`, found {meta.get('stop_reason')}")
+    if not meta.get("started_at"):
+        problems.append("no `started_at`")
+    if "model" not in avp_metadata(doc.agent):
+        problems.append("no `agent.extra.avp.model`")
     return problems
+
+
+def _prompts_first(run: Run) -> list[str]:
+    doc, problems = _avp(run)
+    if doc is None:
+        return problems
+    steps = doc.steps
+    if steps and steps[0].source == "system":
+        if avp_metadata(steps[0]).get("error_code"):
+            return ["the first system step is an error, not the system prompt"]
+        steps = steps[1:]
+    if not steps or steps[0].source != "user":
+        return ["the prompt isn't the first `user` step"]
+    if steps[0].message != PROMPTS_FIRST_PROMPT:
+        return ["the first `user` step isn't the Commission's prompt"]
+    if any(s.source == "system" and not avp_metadata(s).get("error_code") for s in steps):
+        return ["a system prompt step comes after the prompt"]
+    return []
+
+
+def _one_step_per_response(run: Run) -> list[str]:
+    doc, problems = _avp(run)
+    if doc is None:
+        return problems
+    agent = [s for s in doc.steps if s.source == "agent"]
+    if len(agent) != 2:
+        return [f"expected 2 agent steps for 2 model responses, found {len(agent)}"]
+    return [
+        f"step {s.step_id} has `llm_call_count` {s.llm_call_count}, not 1"
+        for s in agent
+        if s.llm_call_count != 1
+    ]
+
+
+PROMPTS_FIRST_PROMPT = "[avp-conformance prompts-first]"
+"""The case's prompt, which `Case.prompt` gives cases with responses."""
 
 
 CASES: list[Case] = [
     Case(
-        name="events-in-order",
-        rule="trajectory.4.1",
+        name="avp-document",
+        rule="trajectory.4",
         level="MUST",
-        about="A run with one model response sends its events in the fixed order",
+        about="A run writes a valid ATIF document with the AVP extras",
         commission=_commission,
-        check=_events_in_order,
+        check=_avp_document,
         responses=({"content": "A scripted reply."},),
+    ),
+    Case(
+        name="prompts-first",
+        rule="trajectory.4.2.1",
+        level="MUST",
+        about="The system prompt is the first step and the prompt the first `user` step",
+        commission=lambda context: _commission(context, system_prompt="Be brief."),
+        check=_prompts_first,
+        responses=({"content": "A scripted reply."},),
+    ),
+    Case(
+        name="one-step-per-response",
+        rule="trajectory.4.2.2",
+        level="MUST",
+        about="Each model response is one agent step with `llm_call_count` 1",
+        commission=_commission,
+        check=_one_step_per_response,
+        responses=(
+            # Reasoning first: a model with extended thinking on starts a
+            # tool-calling turn with it, and the mock rejects a turn sent back without.
+            {
+                "reasoning": "Calling the tool.",
+                "toolCalls": [{"name": "avp_conformance_missing", "arguments": "{}"}],
+            },
+            {"content": "A scripted reply."},
+        ),
     ),
     _refusal("agents-without-entry", "`agents` has no entry for the agent", _agents_without_entry),
     _refusal("version-differs", "the agent's entry has another `version`", _version_differs),

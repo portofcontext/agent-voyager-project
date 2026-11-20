@@ -54,7 +54,7 @@ The image bundles the SDK and provider dependencies. A model credential
 - Responses are reported when complete, not streamed.
 - Pydantic AI's native tools (web search, code execution) are not offered.
 - Compaction, speech, and files that aren't images have no AVP content block,
-  so they are left out of `assistant_message`.
+  so they are left out of ATIF agent step.
 
 ## Development
 

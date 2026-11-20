@@ -2,8 +2,8 @@
 
 The AVP SDKs (Python and TypeScript) have two goals:
 
-- **Define the wire:** types for the Commission, the Agent Descriptor, and
-  Trajectory events, matching the specs' schemas.
+- **Define the data formats:** types for the Commission, Agent Descriptor, and
+  ATIF trajectory with its `extra.avp` fields, matching the specs' schemas.
 - **Share the common work:** code that every agent runner or supervisor would
   otherwise write itself, such as checking a Commission, writing a Trajectory,
   and pricing a response.
@@ -14,12 +14,12 @@ in either language.
 ## Source of truth
 
 The spec documents in [`spec/v0.1/`](../spec/v0.1/) come first. A change to the
-wire starts there, never in an SDK or a schema.
+data format starts there, never in an SDK or a schema.
 
 The Python SDK comes second, because the rest is generated from it:
 
-1. Each spec's reference tables define its fields.
-2. The Python SDK's Pydantic models are written from those tables.
+1. The Commission, Descriptor, and Trajectory reference tables define their fields. The Trajectory tables cover only `extra.avp`; ATIF defines the rest.
+2. Python implements those tables and includes a copy of the Harbor ATIF models, with each `extra` typed by AVP's models.
 3. The models generate `spec/v0.1/*.schema.json` (`make schemas`).
 4. TypeScript takes its types from those schemas.
 
@@ -32,21 +32,16 @@ A new feature is built and decided in Python first, then copied to TypeScript.
 
 | Part | What it does | Python |
 |---|---|---|
-| Wire types | The Commission, the Agent Descriptor, and Trajectory events, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
+| Data types | The Commission, the Agent Descriptor, and ATIF trajectories with typed `extra.avp`, validated as the schemas define them | `avp.commission`, `avp.descriptor`, `avp.trajectory` |
 | Recorder | Writes an agent's Trajectory to the spec's rules, described below | `avp.recorder` |
 | Commission checks | The refusal cases in the Commission spec that need only the Commission and the agent's Descriptor | `avp.utils.preflight` |
 | Run plan | What a run uses and what it turns off, from the Commission and the agent's Descriptor, described below | `avp.utils.run_plan` |
-| Pricing | `cost_usd` and `cost_source` for a response, from models.dev prices | `avp.utils.pricing` |
+| Pricing | A response's `cost_usd` from models.dev prices | `avp.utils.pricing` |
 | Endpoints | A provider's default `base_url` and API-key header, for sandbox egress, credential proxies, and metering | `avp.utils.endpoints` |
 | Agent command line | The command line every agent answers, described below | `avp.agent_cli` |
 
-Supervisor tools, built in Python first and in the other SDKs when a supervisor
-needs them:
-
-| Part | What it does | Python |
-|---|---|---|
-| OpenTelemetry | A Trajectory as spans with GenAI attributes, and as OTLP/JSON | `avp.utils.otel` |
-| CloudEvents | One event as a CloudEvent | `avp.utils.cloudevents` |
+Trajectories use ATIF directly. See the [ATIF guide](docs/atif.md) for reading
+them with the SDK and existing ecosystem tools.
 
 ### Shared provider data
 
@@ -88,12 +83,13 @@ its package isn't known; a proxy can't add that key.
 Every agent combines its Descriptor with the Commission before the run starts:
 the agent settings limit its built-in items (an absent list allows all, `[]`
 allows none), the Commission adds its own MCP servers and skills, and its
-`system_prompt` replaces the agent's. Each legacy agent wrote this itself, in
-its own way. The run plan does it once and returns:
+`system_prompt` replaces the agent's. The run plan does it once and returns:
 
-- `started`: what the run uses, as `agent_started` data. The agent configures
-  its runtime from it, adds each MCP server's status and tools after
-  connecting, and sends it as `agent_started`.
+- `prompt` and `system_prompt`: what the run starts with.
+- `agent`: the Trajectory's ATIF `agent`, with the model, tool definitions, and
+  `extra.avp`. The adapter configures its runtime from it, connects the MCP
+  servers, and passes `plan.connected(tools)` to `Recorder.start`, which adds
+  the servers' tools and statuses.
 - `turned_off`: the built-in items the run may not use, which the agent hides
   from the model and refuses to run.
 
@@ -117,35 +113,40 @@ transport.
 |---|---|
 | `ping` | `{"type": "pong", "avp_version": "0.1"}`, without loading the agent: checks installation and the AVP version it speaks |
 | `describe` | The agent's Descriptor as JSON |
-| `run` | The Trajectory as NDJSON, one event per line, to a file or to stdout with `-` |
+| `run` | One ATIF document, written when the run ends, to a file or to stdout with `-` |
 
 Paths default to stdout where `--out` is optional.
 
-`run` hands the Commission, as received, and an event sink to the agent. The
-agent writes every event, through the Recorder or by hand.
+`run` hands the Commission and a `TrajectorySink` to the adapter. When the run
+ends, the Recorder passes the sink one `Recording`: the ATIF document and the
+files it references, such as images and skill directories. A file sink writes
+those files, then the document beside them. Stdout can't carry files, so a run
+that has them needs a path.
 
 Exit codes: `0` when the Trajectory is complete, a refusal included; `130` when
 SIGINT or SIGTERM interrupted the run; anything else is a crash.
 
 ## The Recorder
 
-Every agent must turn its runtime's events into a Trajectory that follows the
-Trajectory spec's rules for agents. Those rules are the same for every agent
-and easy to get wrong, so the Recorder implements them once. The agent reports
-what its runtime did; the Recorder decides which events to write and in what
-order:
+The Recorder builds a run's Trajectory from the ATIF objects the adapter
+reports, and writes it once when the run ends. The adapter reports an ATIF
+`Agent` at start, then each model response as its parts in order (`Text`,
+`Image`, `Reasoning`, `Call`, `ServerResult`) with its `Usage`, and each tool
+result by its call ID. The Recorder builds the ATIF step from them: the
+message, the reasoning joined with each block's offsets, citations placed on
+their part, and the metrics. It adds what the adapter shouldn't track: step
+IDs, timestamps, durations, computed costs, results placed on the step that
+holds their call, subagent trajectories, totals, and error results for work
+still running at the end. It also checks the
+Commission and records it, with the Descriptor, in `extra.avp`.
 
-- `run_requested`, `agent_described`, and refusing a Commission that doesn't
-  match the spec or fails the Commission checks.
-- One `assistant_message` per model response, merging a streamed response and
-  pricing it.
-- A `tool_invoked` for each `tool_use` block, paired with its `tool_returned`.
-- Subagents closed as `abandoned` when the run stops while they still run.
-- One `agent_stopped`, or an `error_occurred` when the run ends before it starts.
+`avp.recorder` holds the Recorder, and `avp.trajectory` the ATIF models with
+their typed extras, `parse_trajectory`, `final_output`, and `Recording`. Both
+SDKs run the same cases in [`testdata/recorder/`](testdata/recorder/).
 
-Using it is optional: an agent can write its events by hand. Whether an agent
-conforms is for `avp conformance` to judge, not the Recorder. Each SDK's
-Recorder passes the shared test cases in [`testdata/recorder/`](testdata/recorder/).
+`final_output(trajectory)` returns `extra.avp.output` when present, and
+otherwise the last agent message. Files the run generates are ordinary files
+saved by the runtime or deployment; the SDK has no artifact API.
 
 ## Out of scope
 

@@ -1,11 +1,11 @@
 [project]
 name = "avp-claude-agent-sdk"
-version = "0.2.4"
+version = "0.2.5"
 description = "AVP agent over Claude Code through the Claude Agent SDK."
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
-dependencies = ["agent-voyager-project @ https://github.com/portofcontext/agent-voyager-project/releases/download/sdk-python-v0.1.0b2/agent_voyager_project-0.1.0b2-py3-none-any.whl", "claude-agent-sdk==0.2.87", "jsonschema>=4"]
+dependencies = ["agent-voyager-project>=0.1.0b3", "claude-agent-sdk==0.2.87", "jsonschema>=4"]
 
 [project.scripts]
 avp-claude-agent-sdk-cli = "avp_claude_agent_sdk.cli:main"
@@ -21,7 +21,12 @@ build-backend = "uv_build"
 module-name = "avp_claude_agent_sdk"
 
 [tool.ty.environment]
+extra-paths = ["../../../testing/atif"]
 python-version = "3.11"
 
 [tool.pytest.ini_options]
+pythonpath = ["../../../testing/atif"]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+agent-voyager-project = { path = "../../../avp-sdk/python", editable = true }

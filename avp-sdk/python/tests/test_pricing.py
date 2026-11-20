@@ -3,8 +3,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from avp.commission import ModelRef
+from avp.trajectory import Metrics
 from avp.utils import pricing
-from avp.utils.pricing import ModelPrice, Prices, compute_cost, find_price, load_prices, save_prices
+from avp.utils.pricing import ModelPrice, Prices, compute_cost, load_prices, save_prices
 
 
 def prices(fetched: datetime, **models: ModelPrice) -> Prices:
@@ -25,52 +26,45 @@ def test_bundled_snapshot_ships_with_the_package():
     assert bundled.models["anthropic/claude-sonnet-4-5"].output > 0
 
 
-def test_find_price_prefers_response_model_then_falls_back_to_model_id():
-    dated = TABLE.model_copy(
-        update={
-            "models": {
-                **TABLE.models,
-                "anthropic/claude_sonnet-2026": ModelPrice(input=1, output=1),
-            }
-        }
-    )
-    assert find_price(dated, SONNET, "claude_sonnet-2026") == ModelPrice(input=1, output=1)
-    assert (
-        find_price(TABLE, SONNET, "claude_sonnet-2026") == TABLE.models["anthropic/claude_sonnet"]
-    )
-    assert find_price(TABLE, ModelRef(provider="openrouter", id="claude_sonnet")) is None
-
-
-def test_compute_cost_follows_the_spec_order():
+def test_compute_cost_uses_the_price_for_the_provider_and_model():
     m = 1_000_000
-    assert compute_cost(TABLE, SONNET, reported_cost_usd=0.5, input_tokens=m, output_tokens=m) == (
-        0.5,
-        "reported",
+    assert (
+        compute_cost(
+            TABLE, "anthropic", "claude_sonnet", Metrics(prompt_tokens=m, completion_tokens=m)
+        )
+        == 18.0
     )
-    assert compute_cost(TABLE, SONNET, input_tokens=m, output_tokens=m) == (18.0, "computed")
-    missing = ModelRef(provider="anthropic", id="nope")
-    assert compute_cost(TABLE, missing, input_tokens=m, output_tokens=m) == (0.0, "unknown")
-    assert compute_cost(TABLE, SONNET, input_tokens=0, output_tokens=0) == (0.0, "computed")
+    assert (
+        compute_cost(
+            TABLE, "openrouter", "claude_sonnet", Metrics(prompt_tokens=m, completion_tokens=m)
+        )
+        is None
+    )
+    assert compute_cost(TABLE, "anthropic", "claude_sonnet", Metrics(prompt_tokens=m)) is None
+    assert (
+        compute_cost(
+            TABLE, "anthropic", "claude_sonnet", Metrics(prompt_tokens=0, completion_tokens=0)
+        )
+        == 0.0
+    )
 
 
 def test_compute_cost_prices_cache_tokens():
-    cost, _ = compute_cost(
-        TABLE,
-        SONNET,
-        input_tokens=3_000_000,
-        output_tokens=0,
-        cache_read_input_tokens=1_000_000,
-        cache_creation_input_tokens=1_000_000,
+    metrics = Metrics(
+        prompt_tokens=1_000_000,
+        completion_tokens=0,
+        cached_tokens=400_000,
+        extra={"avp": {"cache_creation_input_tokens": 100_000}},
     )
-    assert cost == pytest.approx(3 + 0.3 + 3.75)
-    # No cache prices of its own: cache tokens cost the input price.
-    gpt = ModelRef(provider="openai", id="gpt")
-    cost, _ = compute_cost(
-        TABLE, gpt, input_tokens=2_000_000, output_tokens=0, cache_read_input_tokens=1_000_000
-    )
-    assert cost == pytest.approx(4.0)
+    cost = compute_cost(TABLE, "anthropic", "claude_sonnet", metrics)
+    assert cost == pytest.approx((500_000 * 3 + 400_000 * 0.3 + 100_000 * 3.75) / 1_000_000)
     with pytest.raises(ValueError):
-        compute_cost(TABLE, SONNET, input_tokens=1, output_tokens=0, cache_read_input_tokens=2)
+        compute_cost(
+            TABLE,
+            "anthropic",
+            "claude_sonnet",
+            Metrics(prompt_tokens=1, completion_tokens=0, cached_tokens=2),
+        )
 
 
 @pytest.fixture

@@ -28,6 +28,14 @@ def archive(name: str, *, link: bool = False) -> bytes:
             content = b"agent source"
             member.size = len(content)
             output.addfile(member, io.BytesIO(content))
+        for extra in (
+            "avp-sdk/python/README.md",
+            "avp-sdk/data/test.json",
+            "spec/v0.1/trajectory.schema.json",
+        ):
+            member = tarfile.TarInfo("agent-voyager-project-test/" + extra)
+            member.size = 2
+            output.addfile(member, io.BytesIO(b"{}"))
     return buffer.getvalue()
 
 
@@ -35,7 +43,7 @@ def download(monkeypatch: pytest.MonkeyPatch, content: bytes, digest: str | None
     source = builtins.Catalog(
         commit="test",
         sha256=digest or hashlib.sha256(content).hexdigest(),
-        agents={"pydantic-ai": builtins.Agent("avp-pydantic-ai", "1.0", "agents/example")},
+        agents={"pydantic-ai": builtins.Agent("avp-pydantic-ai", "1.0", "agents/example/python")},
     )
     monkeypatch.setattr(builtins, "catalog", lambda: source)
 
@@ -49,9 +57,9 @@ def download(monkeypatch: pytest.MonkeyPatch, content: bytes, digest: str | None
 def test_verified_source_and_packaged_dockerfile_form_the_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    download(monkeypatch, archive("agent-voyager-project-test/agents/example/main.py"))
+    download(monkeypatch, archive("agent-voyager-project-test/agents/example/python/main.py"))
     with builtins.context("pydantic-ai") as directory:
-        assert (directory / "main.py").read_text() == "agent source"
+        assert (directory / "agents/example/python/main.py").read_text() == "agent source"
         assert (directory / "Dockerfile").read_bytes() == (
             builtins.PACKAGE / "dockerfiles/pydantic-ai.Dockerfile"
         ).read_bytes()
@@ -67,8 +75,8 @@ def test_checksum_mismatch_stops_before_extraction(monkeypatch: pytest.MonkeyPat
 @pytest.mark.parametrize(
     ("name", "link", "message"),
     [
-        ("agent-voyager-project-test/agents/example/../../outside", False, "unsafe path"),
-        ("agent-voyager-project-test/agents/example/link", True, "link or special file"),
+        ("agent-voyager-project-test/agents/example/python/../../outside", False, "unsafe path"),
+        ("agent-voyager-project-test/agents/example/python/link", True, "link or special file"),
         ("agent-voyager-project-test/agents/other/main.py", False, "does not contain"),
     ],
 )
@@ -104,7 +112,9 @@ def test_failed_pull_points_to_a_source_build(monkeypatch: pytest.MonkeyPatch) -
         commit="test",
         sha256="0" * 64,
         agents={
-            "pydantic-ai": builtins.Agent("avp-pydantic-ai", "1.0", "agents/example", "pinned")
+            "pydantic-ai": builtins.Agent(
+                "avp-pydantic-ai", "1.0", "agents/example/python", "pinned"
+            )
         },
     )
     monkeypatch.setattr(builtins, "catalog", lambda: pinned)

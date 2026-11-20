@@ -6,7 +6,6 @@ export type {
   CommissionSkill as Skill,
   EnvSecret,
   Model,
-  ModelRef,
   ProxySecret,
   Supervisor,
   McpServerHttp,

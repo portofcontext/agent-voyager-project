@@ -99,7 +99,7 @@ def test_the_scorer_is_the_built_in_callable(tmp_path: Path) -> None:
         agent="pd",
         commission="inline-1",
         exit_code=0,
-        trajectory=[],
+        trajectory=None,
         invalid_trajectory=[],
         item=config.dataset[0],
     )

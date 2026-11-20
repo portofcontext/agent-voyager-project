@@ -1,0 +1,220 @@
+[
+  {
+    "name": "user model fields",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "user",
+          "message": "hi",
+          "metrics": {}
+        }
+      ]
+    }
+  },
+  {
+    "name": "deterministic metrics",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": "dispatch",
+          "llm_call_count": 0,
+          "metrics": {}
+        }
+      ]
+    }
+  },
+  {
+    "name": "deterministic delegation",
+    "valid": true,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": "dispatch",
+          "llm_call_count": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "text requires text",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": [
+            {
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "wrong media kind",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": [
+            {
+              "type": "audio",
+              "source": {
+                "media_type": "image/png",
+                "path": "x.png"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "audio alias",
+    "valid": true,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "user",
+          "message": [
+            {
+              "type": "audio",
+              "source": {
+                "media_type": "audio/mp3",
+                "path": "x.mp3"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid timestamp",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": "hi",
+          "timestamp": "yesterday"
+        }
+      ]
+    }
+  },
+  {
+    "name": "unresolvable reference",
+    "valid": false,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": "hi",
+          "observation": {
+            "results": [
+              {
+                "subagent_trajectory_ref": [
+                  {
+                    "session_id": "s"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "external reference",
+    "valid": true,
+    "trajectory": {
+      "schema_version": "ATIF-v1.8",
+      "session_id": "external",
+      "agent": {
+        "name": "external",
+        "version": "1"
+      },
+      "steps": [
+        {
+          "step_id": 1,
+          "source": "agent",
+          "message": "hi",
+          "observation": {
+            "results": [
+              {
+                "subagent_trajectory_ref": [
+                  {
+                    "trajectory_path": "child.json"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

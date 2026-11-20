@@ -24,7 +24,7 @@ lockfile, tests, and command line. Built-in agents' Dockerfiles live in
 
 ## Translate native events
 
-- Record one `assistant_message` per model response, including its content,
+- Record one ATIF agent step per model response, including its content,
   tool calls, and final usage.
 - Convert cumulative usage to per-response deltas. Include cache and reasoning
   tokens as the spec defines them. Count subagent usage once.
@@ -35,7 +35,7 @@ lockfile, tests, and command line. Built-in agents' Dockerfiles live in
 - Stop the runtime on cancellation and close the Trajectory with the matching
   reason. Fix invalid Recorder reports; do not suppress their errors.
 
-Follow the [Trajectory spec](spec/v0.1/trajectory.md) for event fields and order.
+Follow the [Trajectory spec](spec/v0.1/trajectory.md) for ATIF fields and delivery.
 Adapter integration tests should pass native runtime events through the Recorder
 and check the resulting Trajectory.
 
@@ -46,12 +46,12 @@ The CLI starts a fresh OpenSandbox sandbox for each command. Commissions refer t
 secrets by name; the Credential Vault adds proxy credentials to outgoing requests.
 
 From the repository root, build and check an adapter using its Dockerfile and
-source directory:
+repository root as the build context:
 
 ```sh
 uv run --project avp-cli avp agent install pd \
   avp-cli/src/avp_cli/agents/dockerfiles/pydantic-ai.Dockerfile \
-  --context agents/avp-pydantic-ai/python
+  --context .
 uv run --project avp-cli avp agent describe pd
 uv run --project avp-cli avp conformance check --agent pd
 ```

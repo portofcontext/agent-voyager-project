@@ -1,5 +1,4 @@
-import type { ModelRef } from "../commission.js";
-import type { CostSource } from "../trajectory.js";
+import type { Metrics } from "../trajectory.js";
 import { ajv } from "../validation.js";
 
 import * as modelsDev from "./_models_dev.js";
@@ -105,44 +104,31 @@ export function loadPrices(
   });
 }
 
-export function findPrice(
-  prices: Prices,
-  model: ModelRef,
-  responseModel?: string | null,
-): ModelPrice | undefined {
-  for (const id of [responseModel, model.id]) {
-    if (id && Object.hasOwn(prices.models, `${model.provider}/${id}`))
-      return prices.models[`${model.provider}/${id}`];
-  }
-}
-export interface CostOptions {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadInputTokens?: number;
-  cacheCreationInputTokens?: number;
-  responseModel?: string | null;
-  reportedCostUsd?: number | null;
-}
 export function computeCost(
   prices: Prices,
-  model: ModelRef,
-  options: CostOptions,
-): [number, CostSource] {
-  if (options.reportedCostUsd != null)
-    return [options.reportedCostUsd, "reported"];
-  const price = findPrice(prices, model, options.responseModel);
-  if (!price) return [0, "unknown"];
-  const read = options.cacheReadInputTokens ?? 0;
-  const write = options.cacheCreationInputTokens ?? 0;
-  const uncached = options.inputTokens - read - write;
+  provider: string,
+  modelName: string,
+  metrics: Metrics,
+): number | undefined {
+  const price = prices.models[`${provider}/${modelName}`];
+  if (
+    !price ||
+    metrics.prompt_tokens == null ||
+    metrics.completion_tokens == null
+  )
+    return;
+  const read = metrics.cached_tokens ?? 0;
+  const write = metrics.extra?.avp?.cache_creation_input_tokens ?? 0;
+  const uncached = metrics.prompt_tokens - read - write;
   if (uncached < 0)
-    throw new RangeError("cache read and creation tokens exceed input_tokens");
-  return [
+    throw new RangeError(
+      "cached and cache creation tokens exceed prompt_tokens",
+    );
+  return (
     (uncached * price.input +
       read * (price.cache_read ?? price.input) +
       write * (price.cache_write ?? price.input) +
-      options.outputTokens * price.output) /
-      1_000_000,
-    "computed",
-  ];
+      metrics.completion_tokens * price.output) /
+    1_000_000
+  );
 }

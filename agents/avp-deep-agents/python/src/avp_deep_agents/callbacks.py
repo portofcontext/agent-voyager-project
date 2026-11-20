@@ -1,13 +1,12 @@
 """Observe native graph callbacks; the Recorder owns event order and accounting."""
 
 import asyncio
-import time
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import ToolMessage
 from langchain_core.outputs import ChatGeneration
 
-from avp.trajectory import ToolUseBlock
+from avp.recorder import Call, Text
 from avp_deep_agents import translate
 
 
@@ -20,7 +19,7 @@ class RecorderCallbacks(AsyncCallbackHandler):
         self.model = model
         self.subagent_names = subagent_names
         self.parents = {}
-        self.started = {}
+        self.started = set()
         self.calls = {}
         self.frames = {}
         self.pending = {}
@@ -52,7 +51,7 @@ class RecorderCallbacks(AsyncCallbackHandler):
         if (kwargs.get("metadata") or {}).get("lc_source") == "summarization":
             raise ValueError("Deep Agents context compaction cannot be recorded by this adapter")
         self.parents[run_id] = parent_run_id
-        self.started[run_id] = time.monotonic()
+        self.started.add(run_id)
         if messages:
             await self.settle(messages[0])
 
@@ -61,9 +60,9 @@ class RecorderCallbacks(AsyncCallbackHandler):
         if not isinstance(generation, ChatGeneration):
             raise ValueError("Deep Agents did not return a chat-model response")
         message = generation.message
-        blocks = translate.content(message)
+        blocks = translate.parts(message, self.rec)
         scope = self.frame(parent_run_id)
-        if any(b.type == "refusal" for b in blocks):
+        if any(isinstance(b, Text) and b.refusal for b in blocks):
             self.refused.add(scope)
         metadata = message.response_metadata
         actual = metadata.get("model_name") or metadata.get("model")
@@ -71,19 +70,19 @@ class RecorderCallbacks(AsyncCallbackHandler):
             metadata.get("finish_reason") or metadata.get("stop_reason") or metadata.get("status")
         )
         async with self.lock:
-            await self.rec.response(
+            await self.rec.step(
                 blocks,
                 usage=translate.usage(message.usage_metadata),
-                response_model=actual if actual and actual != self.model.id else None,
+                model_name=actual if actual and actual != self.model.id else None,
                 finish_reasons=[finish] if finish else None,
-                duration_ms=int((time.monotonic() - self.started.pop(run_id)) * 1000),
-                subagent_invocation_id=scope,
+                subagent=scope,
             )
-            self.pending.update({b.id: b.input for b in blocks if isinstance(b, ToolUseBlock)})
+            self.pending.update({b.id: b.arguments for b in blocks if isinstance(b, Call)})
+        self.started.discard(run_id)
         self.parents.pop(run_id, None)
 
     async def on_llm_error(self, error, *, run_id, **kwargs):
-        self.started.pop(run_id, None)
+        self.started.discard(run_id)
         self.parents.pop(run_id, None)
 
     async def on_tool_start(
@@ -104,10 +103,10 @@ class RecorderCallbacks(AsyncCallbackHandler):
         args = inputs or self.pending[tool_call_id]
         if serialized["name"] == "task" and args.get("subagent_type") in self.subagent_names:
             async with self.lock:
-                await self.rec.subagent_invoked(
+                await self.rec.subagent_started(
                     tool_call_id,
                     args["subagent_type"],
-                    subagent_invocation_id=self.frame(parent_run_id),
+                    args["description"],
                 )
             self.frames[run_id] = tool_call_id
 
@@ -120,11 +119,11 @@ class RecorderCallbacks(AsyncCallbackHandler):
                 reason = (
                     "error" if is_error else "refused" if call_id in self.refused else "converged"
                 )
-                await self.rec.subagent_returned(call_id, str(content), reason)
+                await self.rec.subagent_stopped(call_id, reason)
                 self.frames.pop(run_id)
-            await self.rec.tool_returned(
+            await self.rec.result(
                 call_id,
-                translate.tool_content(content),
+                translate.tool_content(content, self.rec),
                 is_error=is_error,
                 structured_content=structured,
             )
@@ -163,9 +162,9 @@ class RecorderCallbacks(AsyncCallbackHandler):
                 and message.tool_call_id not in self.returned
             ):
                 async with self.lock:
-                    await self.rec.tool_returned(
+                    await self.rec.result(
                         message.tool_call_id,
-                        translate.tool_content(message.content),
+                        translate.tool_content(message.content, self.rec),
                         is_error=message.status == "error",
                     )
                     self.returned.add(message.tool_call_id)

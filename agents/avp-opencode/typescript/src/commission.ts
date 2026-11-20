@@ -100,7 +100,10 @@ export function configuration(
     skill: {
       "*": "deny",
       ...Object.fromEntries(
-        (plan.started.skills ?? []).map((item) => [item.name, "allow"]),
+        (plan.agent.extra?.avp?.skills ?? []).map((item) => [
+          item.name,
+          "allow",
+        ]),
       ),
     },
   };
@@ -176,7 +179,7 @@ export function configuration(
           task: {
             "*": "deny",
             ...Object.fromEntries(
-              (plan.started.subagents ?? []).map((item) => [
+              (plan.agent.extra?.avp?.subagents ?? []).map((item) => [
                 item.name,
                 "allow",
               ]),

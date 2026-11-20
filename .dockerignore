@@ -1,0 +1,14 @@
+**
+!agents/
+!agents/**
+!avp-sdk/
+!avp-sdk/**
+!spec/
+!spec/v0.1/
+!spec/v0.1/**
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache

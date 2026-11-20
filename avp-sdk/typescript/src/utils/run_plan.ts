@@ -1,7 +1,6 @@
 import type { Commission } from "../commission.js";
-import type { AgentDescriptor, Skill } from "../descriptor.js";
-import type { AgentStarted } from "../trajectory.js";
-import { parseDefinition } from "../validation.js";
+import type { AgentDescriptor, Skill, Tool } from "../descriptor.js";
+import { toolDefinitions, type Agent } from "../trajectory.js";
 import { frontmatterValue } from "./skill_md.js";
 
 export interface TurnedOff {
@@ -10,9 +9,35 @@ export interface TurnedOff {
   skills: string[];
   mcp_servers: string[];
 }
-export interface RunPlan {
-  started: AgentStarted;
-  turned_off: TurnedOff;
+export class RunPlan {
+  constructor(
+    public prompt: string,
+    public system_prompt: string | null | undefined,
+    public agent: Agent,
+    public turned_off: TurnedOff,
+  ) {}
+  connected(
+    tools: Tool[],
+    status: Record<
+      string,
+      "connected" | "failed" | "needs-auth" | "disabled"
+    > = {},
+  ): Agent {
+    const agent = structuredClone(this.agent),
+      extra = agent.extra?.avp;
+    if (!extra) throw new Error("the plan's agent has no extra.avp");
+    const [definitions, details] = toolDefinitions(tools);
+    const allTools = { ...extra.tools, ...details };
+    if (Object.keys(allTools).length) extra.tools = allTools;
+    if (extra.mcp_servers?.length)
+      extra.mcp_servers = extra.mcp_servers.map((s) => ({
+        ...s,
+        status: status[s.id] ?? "connected",
+      }));
+    const allDefinitions = [...(agent.tool_definitions ?? []), ...definitions];
+    if (allDefinitions.length) agent.tool_definitions = allDefinitions;
+    return agent;
+  }
 }
 
 export function planRun(
@@ -49,18 +74,32 @@ export function planRun(
   const subagents = (descriptor.subagents ?? []).filter((s) =>
     allowed(settings.enabled_subagents, s.name),
   );
-  const { credential: _credential, ...model } = commission.model;
-  return {
-    started: parseDefinition("AgentStarted", {
-      prompt: commission.prompt,
-      system_prompt: commission.system_prompt ?? descriptor.system_prompt,
-      model,
-      tools: tools.length ? tools : undefined,
-      mcp_servers: servers.length ? servers : undefined,
-      skills: skills.length ? skills : undefined,
-      subagents: subagents.length ? subagents : undefined,
-    }),
-    turned_off: {
+  const [definitions, details] = toolDefinitions(tools);
+  const agent: Agent = {
+    name: descriptor.agent_name,
+    version: descriptor.agent_version,
+    model_name: commission.model.id,
+    ...(definitions.length ? { tool_definitions: definitions } : {}),
+    extra: {
+      avp: {
+        model: {
+          provider: commission.model.provider,
+          ...(commission.model.base_url == null
+            ? {}
+            : { base_url: commission.model.base_url }),
+        },
+        ...(Object.keys(details).length ? { tools: details } : {}),
+        ...(servers.length ? { mcp_servers: servers } : {}),
+        ...(skills.length ? { skills } : {}),
+        ...(subagents.length ? { subagents } : {}),
+      },
+    },
+  };
+  return new RunPlan(
+    commission.prompt,
+    commission.system_prompt ?? descriptor.system_prompt ?? null,
+    agent,
+    {
       tools: (descriptor.tools ?? [])
         .filter((t) => !toolOn(t))
         .map((t) => t.name),
@@ -74,5 +113,5 @@ export function planRun(
         .filter((s) => !allowed(settings.enabled_mcp_servers, s.id))
         .map((s) => s.id),
     },
-  };
+  );
 }

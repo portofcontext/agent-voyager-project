@@ -1,0 +1,312 @@
+{
+  "name": "response-parts",
+  "description": "Several reasoning blocks join with their offsets, an encrypted block keeps its place, two text parts make a list message, and citations and a refusal are placed on their part.",
+  "prices": {
+    "anthropic/claude-test-1": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write": 3.75
+    },
+    "anthropic/claude-test-1-20260101": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  },
+  "calls": [
+    {
+      "t": 0,
+      "call": "begin",
+      "received": {
+        "avp_version": "0.1",
+        "run_id": "run-1",
+        "model": {
+          "provider": "anthropic",
+          "id": "claude-test-1"
+        },
+        "prompt": "Do the task."
+      },
+      "descriptor": {
+        "avp_version": "0.1",
+        "agent_name": "case-agent",
+        "agent_version": "1.0.0"
+      }
+    },
+    {
+      "t": 1,
+      "call": "start",
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
+            }
+          }
+        }
+      },
+      "prompt": "Do the task."
+    },
+    {
+      "t": 400,
+      "call": "step",
+      "finish_reasons": [
+        "end_turn"
+      ],
+      "parts": [
+        {
+          "type": "reasoning",
+          "text": "First, look.",
+          "signature": "sig-a"
+        },
+        {
+          "type": "reasoning",
+          "encrypted_content": "sealed"
+        },
+        {
+          "type": "reasoning",
+          "text": "Then answer."
+        },
+        {
+          "type": "text",
+          "text": "Here is the answer."
+        },
+        {
+          "type": "text",
+          "text": "Source: the docs.",
+          "citations": [
+            {
+              "type": "url_citation",
+              "source_url": "https://example.com",
+              "start_index": 8,
+              "end_index": 16
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "I won't share the key.",
+          "refusal": true
+        },
+        {
+          "type": "call",
+          "id": "s1",
+          "name": "web_search",
+          "arguments": {
+            "q": "x"
+          },
+          "server_side": true
+        },
+        {
+          "type": "server_result",
+          "call_id": "s1",
+          "content": [
+            {
+              "type": "text",
+              "text": "a result",
+              "citations": [
+                {
+                  "type": "url_citation",
+                  "source_url": "https://example.com"
+                }
+              ]
+            }
+          ],
+          "structured_content": {
+            "hits": 1
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "cached_tokens": 40,
+        "cache_creation_input_tokens": 10,
+        "reasoning_output_tokens": 5
+      }
+    },
+    {
+      "t": 500,
+      "call": "stop",
+      "reason": "converged",
+      "output": "Here is the answer.\nSource: the docs."
+    }
+  ],
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          },
+          "model": {
+            "provider": "anthropic"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
+        "source": "user",
+        "message": "Do the task."
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.400000+00:00",
+        "source": "agent",
+        "message": [
+          {
+            "type": "text",
+            "text": "Here is the answer."
+          },
+          {
+            "type": "text",
+            "text": "Source: the docs."
+          },
+          {
+            "type": "text",
+            "text": "I won't share the key."
+          }
+        ],
+        "reasoning_content": "First, look.\n\nThen answer.",
+        "tool_calls": [
+          {
+            "tool_call_id": "s1",
+            "function_name": "web_search",
+            "arguments": {
+              "q": "x"
+            },
+            "extra": {
+              "avp": {
+                "server_side": true
+              }
+            }
+          }
+        ],
+        "observation": {
+          "results": [
+            {
+              "source_call_id": "s1",
+              "content": "a result",
+              "extra": {
+                "avp": {
+                  "structured_content": {
+                    "hits": 1
+                  },
+                  "content_metadata": [
+                    {
+                      "part_index": 0,
+                      "citations": [
+                        {
+                          "type": "url_citation",
+                          "source_url": "https://example.com"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "metrics": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 40,
+          "cost_usd": 0.0004995,
+          "extra": {
+            "avp": {
+              "cache_creation_input_tokens": 10,
+              "reasoning_output_tokens": 5,
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 399,
+            "finish_reasons": [
+              "end_turn"
+            ],
+            "message_metadata": [
+              {
+                "part_index": 1,
+                "citations": [
+                  {
+                    "type": "url_citation",
+                    "start_index": 8,
+                    "end_index": 16,
+                    "source_url": "https://example.com"
+                  }
+                ]
+              },
+              {
+                "part_index": 2,
+                "refusal": true
+              }
+            ],
+            "reasoning_metadata": [
+              {
+                "start": 0,
+                "end": 12,
+                "signature": "sig-a"
+              },
+              {
+                "encrypted_content": "sealed"
+              },
+              {
+                "start": 14,
+                "end": 26
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "final_metrics": {
+      "total_prompt_tokens": 100,
+      "total_completion_tokens": 20,
+      "total_cached_tokens": 40,
+      "total_cost_usd": 0.0004995,
+      "total_steps": 2,
+      "extra": {
+        "avp": {
+          "total_cache_creation_input_tokens": 10,
+          "total_reasoning_output_tokens": 5,
+          "total_responses": 1
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
+        "commission": {
+          "avp_version": "0.1",
+          "run_id": "run-1",
+          "model": {
+            "provider": "anthropic",
+            "id": "claude-test-1"
+          },
+          "prompt": "Do the task."
+        },
+        "started_at": "2026-01-01T00:00:00.001000+00:00",
+        "stopped_at": "2026-01-01T00:00:00.500000+00:00",
+        "stop_reason": "converged",
+        "output": "Here is the answer.\nSource: the docs."
+      }
+    }
+  }
+}

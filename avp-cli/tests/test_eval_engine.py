@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from conftest import DESCRIPTOR, Described, no_sandbox
+from conftest import DESCRIPTOR, Described, atif, no_sandbox
 from opensandbox.models.sandboxes import Host, Volume
 from pydantic import JsonValue
 
@@ -31,16 +31,7 @@ ANSWERS = {"paris": "Paris", "tokyo": "Kyoto", "lima": "Lima"}
 
 
 def stopped(run_id: str, output: str) -> str:
-    return json.dumps(
-        {
-            "avp_version": "0.1",
-            "id": "1",
-            "type": "agent_stopped",
-            "time": "2026-01-01T00:00:00Z",
-            "run_id": run_id,
-            "data": {"reason": "converged", "output": output},
-        }
-    )
+    return json.dumps(atif(run_id=run_id, output=output))
 
 
 class Fake:

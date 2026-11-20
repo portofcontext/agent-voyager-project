@@ -1,6 +1,6 @@
 {
   "name": "plain-response",
-  "description": "One response with text, then a converged stop with output. The response is priced from the Commission's model.",
+  "description": "One response with reasoning, a citation, and computed cost. The output is the last agent message, so it isn't repeated.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -35,79 +35,150 @@
     {
       "t": 1,
       "call": "start",
-      "started": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      }
+        }
+      },
+      "prompt": "Do the task.",
+      "system_prompt": "Be brief."
     },
     {
-      "t": 10,
-      "call": "response",
-      "content": [
+      "t": 1201,
+      "call": "step",
+      "parts": [
+        {
+          "type": "reasoning",
+          "text": "The task is small.",
+          "signature": "sig-1"
+        },
         {
           "type": "text",
-          "text": "Done."
+          "text": "Done.",
+          "citations": [
+            {
+              "type": "url_citation",
+              "source_url": "https://example.com"
+            }
+          ]
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "reasoning_output_tokens": 10
       },
-      "duration_ms": 9,
       "finish_reasons": [
         "end_turn"
       ]
     },
     {
-      "t": 11,
+      "t": 1300,
       "call": "stop",
       "reason": "converged",
       "output": "Done."
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "run_requested",
-      "data": {
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          },
+          "model": {
+            "provider": "anthropic"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
+        "source": "system",
+        "message": "Be brief."
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
+        "source": "user",
+        "message": "Do the task."
+      },
+      {
+        "step_id": 3,
+        "timestamp": "2026-01-01T00:00:01.201000+00:00",
+        "source": "agent",
+        "message": "Done.",
+        "reasoning_content": "The task is small.",
+        "metrics": {
+          "prompt_tokens": 120,
+          "completion_tokens": 30,
+          "cost_usd": 0.00081,
+          "extra": {
+            "avp": {
+              "reasoning_output_tokens": 10,
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 1200,
+            "finish_reasons": [
+              "end_turn"
+            ],
+            "message_metadata": [
+              {
+                "part_index": 0,
+                "citations": [
+                  {
+                    "type": "url_citation",
+                    "source_url": "https://example.com"
+                  }
+                ]
+              }
+            ],
+            "reasoning_metadata": [
+              {
+                "signature": "sig-1"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "final_metrics": {
+      "total_prompt_tokens": 120,
+      "total_completion_tokens": 30,
+      "total_cost_usd": 0.00081,
+      "total_steps": 3,
+      "extra": {
+        "avp": {
+          "total_reasoning_output_tokens": 10,
+          "total_responses": 1
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
         "commission": {
           "avp_version": "0.1",
           "run_id": "run-1",
@@ -116,107 +187,11 @@
             "id": "claude-test-1"
           },
           "prompt": "Do the task."
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_started",
-      "data": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
         },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
-            }
-          }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      },
-      "t": 1
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "Done."
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "finish_reasons": [
-          "end_turn"
-        ],
-        "duration_ms": 9,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.0045,
-          "cost_source": "computed"
-        }
-      },
-      "t": 10
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_stopped",
-      "data": {
-        "reason": "converged",
-        "output": "Done."
-      },
-      "t": 11
+        "started_at": "2026-01-01T00:00:00.001000+00:00",
+        "stopped_at": "2026-01-01T00:00:01.300000+00:00",
+        "stop_reason": "converged"
+      }
     }
-  ]
+  }
 }

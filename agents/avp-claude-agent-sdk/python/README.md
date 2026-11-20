@@ -54,8 +54,14 @@ uses the launcher's CA settings for credential-proxy connections.
   `converged` stop. Invalid output reports `output_invalid`.
 - Raw message boundaries produce separate model responses. Anthropic cache
   reads and writes are included in AVP input tokens; session totals are not
-  added again. Foreground and background subagent responses retain their parent
-  invocation IDs.
+  added again. Eager tool results and child events wait for their parent
+  response's completion so its usage stays attached to a single response.
+  Foreground and background subagent responses retain their parent invocation
+  IDs. When a foreground child reports only a total in its Agent result,
+  the Recorder saves that usage, including cache tokens. It does not add the total
+  again if individual child responses were recorded. Background children may not
+  report a token breakdown; those counts stay unknown instead of being guessed
+  from a total.
 
 ## Authentication
 
@@ -74,7 +80,7 @@ uses the launcher's CA settings for credential-proxy connections.
 - Responses are reported when complete. Context compaction fails visibly
   because its response accounting has not been established.
 - The native default system prompt is model-dependent and is not exported;
-  only a Commission's replacement is reported in `agent_started`.
+  only a Commission's replacement is reported in the ATIF effective configuration.
 - Claude's MCP status API does not export input schemas. Those tools use the
   spec's object-schema fallback, preserving the descriptions and annotations
   the SDK does expose.

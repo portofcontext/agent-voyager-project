@@ -33,7 +33,7 @@ disabled, so startup needs no additional network access.
 
 The run plan limits built-ins using Pi's native tool allowlist. Added MCP servers
 use Pi's MCP client, with one connection held for each server and native custom
-tools registered in the session. `agent_started` records the active tool names
+tools registered in the session. the ATIF effective configuration records the active tool names
 and schemas, including server ownership. Names receive a hash suffix when they collide after sanitization or exceed
 the provider's name limit. A server
 that cannot connect stops the run before a model call.
@@ -53,7 +53,7 @@ context files, skills, and prompt templates are not discovered. Sessions and
 settings are in memory; install telemetry, cache warming, and automatic
 compaction are off.
 
-Each complete model response produces one `assistant_message`; input usage
+Each complete model response produces one ATIF agent step; input usage
 includes the cache reads and writes Pi reports separately. AVP's shared prices
 supply the response cost. Native error or aborted messages are not reported as
 successful responses. Recorder writes are serialized so an asynchronous sink

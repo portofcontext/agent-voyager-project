@@ -1,6 +1,6 @@
 {
   "name": "cost-sources",
-  "description": "Cost: reported when the runtime gives one; computed from response_model's price, else model.id's; cache tokens at their own prices; unknown with 0 for an unpriced model or a response with no usage.",
+  "description": "A reported cost is used as is; otherwise the price for the provider and the step's model_name, with cache tokens at their own prices; a model models.dev doesn't list has no cost, so the total is incomplete.",
   "prices": {
     "anthropic/claude-test-1": {
       "input": 3.0,
@@ -35,156 +35,238 @@
     {
       "t": 1,
       "call": "start",
-      "started": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
+      "agent": {
+        "name": "ignored",
+        "version": "ignored",
+        "model_name": "claude-test-1",
+        "extra": {
+          "avp": {
+            "model": {
+              "provider": "anthropic"
             }
           }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      }
+        }
+      },
+      "prompt": "Do the task."
     },
     {
-      "t": 10,
-      "call": "response",
-      "content": [
+      "t": 100,
+      "call": "step",
+      "parts": [
         {
           "type": "text",
           "text": "a"
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100,
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
         "cost_usd": 0.5
-      },
-      "duration_ms": 1
+      }
     },
     {
-      "t": 11,
-      "call": "response",
-      "content": [
+      "t": 200,
+      "call": "step",
+      "parts": [
         {
           "type": "text",
           "text": "b"
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100
-      },
-      "response_model": "claude-test-1-20260101",
-      "duration_ms": 1
+        "prompt_tokens": 1000,
+        "completion_tokens": 100,
+        "cached_tokens": 600,
+        "cache_creation_input_tokens": 200
+      }
     },
     {
-      "t": 12,
-      "call": "response",
-      "content": [
+      "t": 300,
+      "call": "step",
+      "parts": [
         {
           "type": "text",
           "text": "c"
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100
+        "prompt_tokens": 1000,
+        "completion_tokens": 100
       },
-      "response_model": "claude-test-1-unlisted",
-      "duration_ms": 1
+      "model_name": "claude-test-1-20260101"
     },
     {
-      "t": 13,
-      "call": "response",
-      "content": [
+      "t": 400,
+      "call": "step",
+      "parts": [
         {
           "type": "text",
           "text": "d"
         }
       ],
       "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100,
-        "cache_read_input_tokens": 600,
-        "cache_creation_input_tokens": 200,
-        "reasoning_output_tokens": 40
+        "prompt_tokens": 1000,
+        "completion_tokens": 100
       },
-      "duration_ms": 1
+      "model_name": "claude-unlisted"
     },
     {
-      "t": 14,
-      "call": "response",
-      "content": [
+      "t": 500,
+      "call": "step",
+      "parts": [
         {
           "type": "text",
           "text": "e"
         }
-      ],
-      "usage": {
-        "input_tokens": 1000,
-        "output_tokens": 100
-      },
-      "model": {
-        "provider": "anthropic",
-        "id": "unpriced"
-      },
-      "duration_ms": 1
+      ]
     },
     {
-      "t": 15,
-      "call": "response",
-      "content": [
-        {
-          "type": "text",
-          "text": "f"
-        }
-      ],
-      "duration_ms": 1
-    },
-    {
-      "t": 16,
+      "t": 600,
       "call": "stop",
-      "reason": "converged"
+      "reason": "converged",
+      "output": "e"
     }
   ],
-  "events": [
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "run_requested",
-      "data": {
+  "trajectory": {
+    "schema_version": "ATIF-v1.8",
+    "session_id": "run-1",
+    "trajectory_id": "run-1",
+    "agent": {
+      "name": "case-agent",
+      "version": "1.0.0",
+      "model_name": "claude-test-1",
+      "extra": {
+        "avp": {
+          "descriptor": {
+            "avp_version": "0.1",
+            "agent_name": "case-agent",
+            "agent_version": "1.0.0"
+          },
+          "model": {
+            "provider": "anthropic"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "step_id": 1,
+        "timestamp": "2026-01-01T00:00:00.001000+00:00",
+        "source": "user",
+        "message": "Do the task."
+      },
+      {
+        "step_id": 2,
+        "timestamp": "2026-01-01T00:00:00.100000+00:00",
+        "source": "agent",
+        "message": "a",
+        "metrics": {
+          "prompt_tokens": 100,
+          "completion_tokens": 10,
+          "cost_usd": 0.5,
+          "extra": {
+            "avp": {
+              "cost_source": "reported"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 99
+          }
+        }
+      },
+      {
+        "step_id": 3,
+        "timestamp": "2026-01-01T00:00:00.200000+00:00",
+        "source": "agent",
+        "message": "b",
+        "metrics": {
+          "prompt_tokens": 1000,
+          "completion_tokens": 100,
+          "cached_tokens": 600,
+          "cost_usd": 0.00303,
+          "extra": {
+            "avp": {
+              "cache_creation_input_tokens": 200,
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 100
+          }
+        }
+      },
+      {
+        "step_id": 4,
+        "timestamp": "2026-01-01T00:00:00.300000+00:00",
+        "source": "agent",
+        "model_name": "claude-test-1-20260101",
+        "message": "c",
+        "metrics": {
+          "prompt_tokens": 1000,
+          "completion_tokens": 100,
+          "cost_usd": 0.0015,
+          "extra": {
+            "avp": {
+              "cost_source": "computed"
+            }
+          }
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 100
+          }
+        }
+      },
+      {
+        "step_id": 5,
+        "timestamp": "2026-01-01T00:00:00.400000+00:00",
+        "source": "agent",
+        "model_name": "claude-unlisted",
+        "message": "d",
+        "metrics": {
+          "prompt_tokens": 1000,
+          "completion_tokens": 100
+        },
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 100
+          }
+        }
+      },
+      {
+        "step_id": 6,
+        "timestamp": "2026-01-01T00:00:00.500000+00:00",
+        "source": "agent",
+        "message": "e",
+        "llm_call_count": 1,
+        "extra": {
+          "avp": {
+            "duration_ms": 100
+          }
+        }
+      }
+    ],
+    "final_metrics": {
+      "total_cost_usd": 0.50453,
+      "total_steps": 6,
+      "extra": {
+        "avp": {
+          "total_responses": 5,
+          "cost_complete": false
+        }
+      }
+    },
+    "extra": {
+      "avp": {
+        "avp_version": "0.1",
         "commission": {
           "avp_version": "0.1",
           "run_id": "run-1",
@@ -193,233 +275,11 @@
             "id": "claude-test-1"
           },
           "prompt": "Do the task."
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_described",
-      "data": {
-        "descriptor": {
-          "avp_version": "0.1",
-          "agent_name": "case-agent",
-          "agent_version": "1.0.0"
-        }
-      },
-      "t": 0
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_started",
-      "data": {
-        "prompt": "Do the task.",
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
         },
-        "tools": [
-          {
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object"
-            }
-          },
-          {
-            "name": "search",
-            "inputSchema": {
-              "type": "object"
-            },
-            "mcp_server_id": "docs"
-          },
-          {
-            "name": "Task",
-            "inputSchema": {
-              "type": "object"
-            }
-          }
-        ],
-        "mcp_servers": [
-          {
-            "id": "docs",
-            "name": "Docs",
-            "status": "connected"
-          }
-        ],
-        "subagents": [
-          {
-            "name": "researcher",
-            "description": "Finds things."
-          }
-        ]
-      },
-      "t": 1
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "a"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.5,
-          "cost_source": "reported"
-        }
-      },
-      "t": 10
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "b"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "response_model": "claude-test-1-20260101",
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.0015,
-          "cost_source": "computed"
-        }
-      },
-      "t": 11
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "c"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "response_model": "claude-test-1-unlisted",
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.0045,
-          "cost_source": "computed"
-        }
-      },
-      "t": 12
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "d"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cache_read_input_tokens": 600,
-          "cache_creation_input_tokens": 200,
-          "reasoning_output_tokens": 40,
-          "cost_usd": 0.00303,
-          "cost_source": "computed"
-        }
-      },
-      "t": 13
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "e"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "unpriced"
-        },
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 1000,
-          "output_tokens": 100,
-          "cost_usd": 0.0,
-          "cost_source": "unknown"
-        }
-      },
-      "t": 14
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "assistant_message",
-      "data": {
-        "content": [
-          {
-            "type": "text",
-            "text": "f"
-          }
-        ],
-        "model": {
-          "provider": "anthropic",
-          "id": "claude-test-1"
-        },
-        "duration_ms": 1,
-        "usage": {
-          "input_tokens": 0,
-          "output_tokens": 0,
-          "cost_usd": 0.0,
-          "cost_source": "unknown"
-        }
-      },
-      "t": 15
-    },
-    {
-      "avp_version": "0.1",
-      "run_id": "run-1",
-      "type": "agent_stopped",
-      "data": {
-        "reason": "converged"
-      },
-      "t": 16
+        "started_at": "2026-01-01T00:00:00.001000+00:00",
+        "stopped_at": "2026-01-01T00:00:00.600000+00:00",
+        "stop_reason": "converged"
+      }
     }
-  ]
+  }
 }

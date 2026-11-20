@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from avp.commission import Commission
-from avp.descriptor import AgentDescriptor
+from avp.descriptor import AgentDescriptor, Tool
 from avp.utils.preflight import check_commission
 from avp.utils.run_plan import plan_run
 
@@ -28,3 +28,30 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
 def test_case(path: Path) -> None:
     case = json.loads(path.read_text())
     assert run_case(case) == case["plan"]
+
+
+def test_connected_adds_server_tools_and_statuses() -> None:
+    commission = Commission.model_validate(
+        {
+            "avp_version": "0.1",
+            "run_id": "r1",
+            "model": {"provider": "anthropic", "id": "m"},
+            "prompt": "hi",
+            "mcp_servers": [
+                {"id": "a", "type": "stdio", "command": ["a"]},
+                {"id": "b", "type": "stdio", "command": ["b"]},
+            ],
+        }
+    )
+    descriptor = AgentDescriptor(avp_version="0.1", agent_name="x", agent_version="1")
+    tool = Tool.model_validate(
+        {"name": "add", "inputSchema": {"type": "object"}, "mcp_server_id": "a"}
+    )
+    agent = plan_run(commission, descriptor).connected([tool], {"b": "failed"})
+    assert agent.tool_definitions == [
+        {"type": "function", "function": {"name": "add", "parameters": {"type": "object"}}}
+    ]
+    avp = agent.extra.avp if agent.extra else None
+    assert avp is not None and avp.tools and avp.mcp_servers
+    assert avp.tools["add"].mcp_server_id == "a"
+    assert [(s.id, s.status) for s in avp.mcp_servers] == [("a", "connected"), ("b", "failed")]

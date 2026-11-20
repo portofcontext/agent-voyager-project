@@ -14,8 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from avp.commission import ModelRef
-from avp.trajectory import CostSource
+from avp.trajectory import Metrics
 from avp.utils import _models_dev
 from avp.utils._models_dev import Snapshot
 
@@ -100,51 +99,29 @@ def load_prices(path: Path | None = None, *, max_age: timedelta | None = None) -
     )
 
 
-def find_price(
-    prices: Prices, model: ModelRef, response_model: str | None = None
-) -> ModelPrice | None:
-    """The price for `response_model` at `model.provider`, or for `model.id`
-    when models.dev doesn't list `response_model`. None when it lists neither."""
-    for model_id in (response_model, model.id):
-        if model_id and (price := prices.models.get(f"{model.provider}/{model_id}")):
-            return price
-    return None
+def compute_cost(prices: Prices, provider: str, model_name: str, metrics: Metrics) -> float | None:
+    """A response's `cost_usd` from the models.dev price for `provider` and
+    `model_name`, applied to the response's `metrics`. None when models.dev
+    doesn't list the model or the metrics have no `prompt_tokens` and
+    `completion_tokens`.
 
-
-def compute_cost(
-    prices: Prices,
-    model: ModelRef,
-    *,
-    input_tokens: int,
-    output_tokens: int,
-    cache_read_input_tokens: int = 0,
-    cache_creation_input_tokens: int = 0,
-    response_model: str | None = None,
-    reported_cost_usd: float | None = None,
-) -> tuple[float, CostSource]:
-    """A response's `cost_usd` and `cost_source`, in the Trajectory spec's order:
-
-    1. `reported_cost_usd` when the service or runtime reported one: `reported`.
-    2. Otherwise the price from `find_price`, applied to the token counts: `computed`.
-    3. Otherwise `0` and `unknown`.
-
-    Token counts follow `Usage`: `input_tokens` includes the cache reads and
-    writes. Cache tokens without a price of their own cost the input price.
+    Cached and cache creation tokens are part of `prompt_tokens`. Without a
+    price of their own they cost the input price.
     """
-    if reported_cost_usd is not None:
-        return reported_cost_usd, "reported"
-    price = find_price(prices, model, response_model)
-    if price is None:
-        return 0.0, "unknown"
-    uncached = input_tokens - cache_read_input_tokens - cache_creation_input_tokens
+    price = prices.models.get(f"{provider}/{model_name}")
+    if price is None or metrics.prompt_tokens is None or metrics.completion_tokens is None:
+        return None
+    avp = metrics.extra.avp if metrics.extra is not None else None
+    cache_read_tokens = metrics.cached_tokens or 0
+    cache_write_tokens = (avp.cache_creation_input_tokens if avp else None) or 0
+    uncached = metrics.prompt_tokens - cache_read_tokens - cache_write_tokens
     if uncached < 0:
-        raise ValueError("cache read and creation tokens exceed input_tokens")
+        raise ValueError("cached and cache creation tokens exceed prompt_tokens")
     cache_read = price.input if price.cache_read is None else price.cache_read
     cache_write = price.input if price.cache_write is None else price.cache_write
-    cost = (
+    return (
         uncached * price.input
-        + cache_read_input_tokens * cache_read
-        + cache_creation_input_tokens * cache_write
-        + output_tokens * price.output
+        + cache_read_tokens * cache_read
+        + cache_write_tokens * cache_write
+        + metrics.completion_tokens * price.output
     ) / 1_000_000
-    return cost, "computed"
